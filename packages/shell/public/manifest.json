@@ -1,12 +1,21 @@
 {
+  "id": "/",
   "name": "Orchardist",
   "short_name": "Orchardist",
   "description": "Browser-first workbench for parallel AI coding agents — one chat per git worktree, every worktree running live.",
   "start_url": "/",
   "display": "standalone",
+  "display_override": [
+    "window-controls-overlay"
+  ],
   "background_color": "#32302f",
   "theme_color": "#32302f",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
   ]
 }

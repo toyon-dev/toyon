@@ -4,7 +4,7 @@
 // v0.1 runs under bun (dev-mode); packaged single-binary distribution comes later.
 
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, existsSync, openSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { readFileSync, existsSync, openSync, mkdirSync, writeFileSync, chmodSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -77,11 +77,46 @@ const url = branded
 const appUrl = `http://orchardist.localhost:${port}/#token=${token}`;
 
 const CHROMIUMS = ["Google Chrome", "Arc", "Brave Browser", "Microsoft Edge", "Chromium"];
+// each browser's profile root under ~/Library/Application Support
+const DATA_DIRS: Record<string, string> = {
+  "Google Chrome": "Google/Chrome",
+  "Arc": "Arc/User Data",
+  "Brave Browser": "BraveSoftware/Brave-Browser",
+  "Microsoft Edge": "Microsoft Edge",
+  "Chromium": "Chromium",
+};
+
+// Chromium's web-app id: sha256 of the manifest id URL (our manifest sets id "/", so it's the
+// origin), first 16 bytes, hex digits mapped onto a–p
+function pwaAppId(url: string): string {
+  const idUrl = new URL("/", url).href;
+  const hex = new Bun.CryptoHasher("sha256").update(idUrl).digest("hex").slice(0, 32);
+  return [...hex].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join("");
+}
+const appId = pwaAppId(appUrl);
+
+// an installed PWA gets window-controls-overlay (no OS title bar; our top bar is the title bar);
+// a plain --app window can't. Detect the install by its manifest cache in any profile.
+function pwaInstalledIn(browser: string): boolean {
+  const root = join(homedir(), "Library", "Application Support", DATA_DIRS[browser] ?? browser);
+  if (!existsSync(root)) return false;
+  for (const profile of readdirSync(root, { withFileTypes: true })) {
+    if (!profile.isDirectory()) continue;
+    const wa = join(root, profile.name, "Web Applications");
+    if (existsSync(join(wa, "Manifest Resources", appId)) || existsSync(join(wa, `_crx_${appId}`))) return true;
+  }
+  return false;
+}
 
 function openAppWindow(): boolean {
   for (const app of CHROMIUMS) {
     if (spawnSync("open", ["-Ra", app]).status === 0) {
-      spawn("open", ["-na", app, "--args", `--app=${appUrl}`], { stdio: "ignore" }).unref();
+      const flag = pwaInstalledIn(app) ? `--app-id=${appId}` : `--app=${appUrl}`;
+      spawn("open", ["-na", app, "--args", flag], { stdio: "ignore" }).unref();
+      if (!flag.startsWith("--app-id")) {
+        console.log(`tip: install Orchardist as an app (⋮ menu → Install, or the install button in the top bar when opened in a tab)`);
+        console.log(`     — installed, it gets a native-style title bar; \`orchardist --app\` then launches the installed app`);
+      }
       return true;
     }
   }
@@ -133,9 +168,18 @@ fi
 
 TOKEN=$(cat "$HOME/.orchardist/token" 2>/dev/null)
 URL="http://orchardist.localhost:${port}/#token=$TOKEN"
-for APP in ${CHROMIUMS.map((a) => `"${a}"`).join(" ")}; do
-  if open -Ra "$APP" 2>/dev/null; then exec open -na "$APP" --args --app="$URL"; fi
-done
+APP_ID="${appId}"
+# installed PWA (native-style title bar) if any profile has it, else a plain app window
+launch() { # $1 = browser name, $2 = data dir
+  local root="$HOME/Library/Application Support/$2" p
+  for p in "$root"/*/; do
+    if [ -d "$p/Web Applications/Manifest Resources/$APP_ID" ] || [ -d "$p/Web Applications/_crx_$APP_ID" ]; then
+      exec open -na "$1" --args --app-id="$APP_ID"
+    fi
+  done
+  exec open -na "$1" --args --app="$URL"
+}
+${CHROMIUMS.map((a) => `if open -Ra "${a}" 2>/dev/null; then launch "${a}" "${DATA_DIRS[a]}"; fi`).join("\n")}
 exec open "$URL"
 `,
   );

@@ -704,6 +704,24 @@ body.resizing .row-resize { background: var(--bg3); }
   min-height: 32px;
 }
 .status-bar { position: relative; }
+/* installed PWA with window-controls-overlay: the browser drops its title bar and only the
+   traffic lights float top-left, so the top bar becomes the title bar — draggable, inset past
+   the controls (env(titlebar-area-*) comes from the OS), controls themselves stay clickable */
+@media (display-mode: window-controls-overlay) {
+  .status-bar.top-bar {
+    -webkit-app-region: drag;
+    app-region: drag;
+    padding-left: calc(env(titlebar-area-x, 0px) + 10px);
+    padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 10px);
+    min-height: max(32px, env(titlebar-area-height, 32px));
+  }
+  .status-bar.top-bar button,
+  .status-bar.top-bar input,
+  .status-bar.top-bar .rb-center {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+}
 /* Safari-style: nav+path anchored to the window center — never moves when
    docks collapse/resize (chrome that shifts underfoot reads as breakage) */
 .rb-center {

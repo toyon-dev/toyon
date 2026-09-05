@@ -86,34 +86,51 @@ const DATA_DIRS: Record<string, string> = {
   "Chromium": "Chromium",
 };
 
-// Chromium's web-app id: sha256 of the manifest id URL (our manifest sets id "/", so it's the
-// origin), first 16 bytes, hex digits mapped onto a–p
-function pwaAppId(url: string): string {
-  const idUrl = new URL("/", url).href;
-  const hex = new Bun.CryptoHasher("sha256").update(idUrl).digest("hex").slice(0, 32);
-  return [...hex].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join("");
-}
-const appId = pwaAppId(appUrl);
-
-// an installed PWA gets window-controls-overlay (no OS title bar; our top bar is the title bar);
-// a plain --app window can't. Detect the install by its manifest cache in any profile.
-function pwaInstalledIn(browser: string): boolean {
+// An installed PWA gets window-controls-overlay (no OS title bar; our top bar is the title bar);
+// a plain --app window can't. Chromium keys installed apps by an opaque id, so find ours: the
+// browser's sync DB stores `web_apps-dt-<id>` immediately followed by the manifest id (our
+// origin). Cached per browser once found; the cache is trusted only while the app's manifest
+// resources dir still exists (i.e. it hasn't been uninstalled).
+const manifestId = new URL("/", appUrl).href;
+const pwaCacheDir = join(homedir(), ".orchardist", "pwa");
+function profilesOf(browser: string): string[] {
   const root = join(homedir(), "Library", "Application Support", DATA_DIRS[browser] ?? browser);
-  if (!existsSync(root)) return false;
-  for (const profile of readdirSync(root, { withFileTypes: true })) {
-    if (!profile.isDirectory()) continue;
-    const wa = join(root, profile.name, "Web Applications");
-    if (existsSync(join(wa, "Manifest Resources", appId)) || existsSync(join(wa, `_crx_${appId}`))) return true;
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(root, d.name));
+}
+function pwaStillInstalled(browser: string, id: string): boolean {
+  return profilesOf(browser).some((p) => existsSync(join(p, "Web Applications", "Manifest Resources", id)));
+}
+function findPwaId(browser: string): string | null {
+  const cache = join(pwaCacheDir, `${browser.replace(/\W+/g, "-")}.id`);
+  if (existsSync(cache)) {
+    const id = readFileSync(cache, "utf8").trim();
+    if (/^[a-p]{32}$/.test(id) && pwaStillInstalled(browser, id)) return id;
   }
-  return false;
+  const re = new RegExp(`web_apps-dt-([a-p]{32})[\\s\\S]{0,16}?${manifestId.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`);
+  for (const p of profilesOf(browser)) {
+    const dir = join(p, "Sync Data", "LevelDB");
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir)) {
+      if (!/\.(log|ldb)$/.test(f)) continue;
+      const m = re.exec(readFileSync(join(dir, f), "latin1"));
+      if (m && pwaStillInstalled(browser, m[1]!)) {
+        mkdirSync(pwaCacheDir, { recursive: true });
+        writeFileSync(cache, m[1]!);
+        return m[1]!;
+      }
+    }
+  }
+  return null;
 }
 
 function openAppWindow(): boolean {
   for (const app of CHROMIUMS) {
     if (spawnSync("open", ["-Ra", app]).status === 0) {
-      const flag = pwaInstalledIn(app) ? `--app-id=${appId}` : `--app=${appUrl}`;
+      const id = findPwaId(app);
+      const flag = id ? `--app-id=${id}` : `--app=${appUrl}`;
       spawn("open", ["-na", app, "--args", flag], { stdio: "ignore" }).unref();
-      if (!flag.startsWith("--app-id")) {
+      if (!id) {
         console.log(`tip: install Orchardist as an app (⋮ menu → Install, or the install button in the top bar when opened in a tab)`);
         console.log(`     — installed, it gets a native-style title bar; \`orchardist --app\` then launches the installed app`);
       }
@@ -168,15 +185,30 @@ fi
 
 TOKEN=$(cat "$HOME/.orchardist/token" 2>/dev/null)
 URL="http://orchardist.localhost:${port}/#token=$TOKEN"
-APP_ID="${appId}"
-# installed PWA (native-style title bar) if any profile has it, else a plain app window
-launch() { # $1 = browser name, $2 = data dir
-  local root="$HOME/Library/Application Support/$2" p
+MANIFEST_ID="${manifestId}"
+CACHE_DIR="$HOME/.orchardist/pwa"
+# installed PWA (native-style title bar) if any profile has it, else a plain app window.
+# The app id lives in the browser's sync DB right before the manifest id; cache it once found.
+find_pwa_id() { # $1 = data dir, $2 = cache file
+  local root="$HOME/Library/Application Support/$1" id p f
+  if [ -f "$2" ]; then
+    id=$(tr -d '[:space:]' < "$2")
+    for p in "$root"/*/; do [ -d "$p/Web Applications/Manifest Resources/$id" ] && { echo "$id"; return; }; done
+  fi
   for p in "$root"/*/; do
-    if [ -d "$p/Web Applications/Manifest Resources/$APP_ID" ] || [ -d "$p/Web Applications/_crx_$APP_ID" ]; then
-      exec open -na "$1" --args --app-id="$APP_ID"
-    fi
+    for f in "$p/Sync Data/LevelDB/"*.log "$p/Sync Data/LevelDB/"*.ldb; do
+      [ -f "$f" ] || continue
+      # the record straddles newline bytes, so flatten before the line-based grep
+      id=$(LC_ALL=C tr '\\n\\0' '  ' < "$f" | LC_ALL=C grep -aoE "web_apps-dt-[a-p]{32}.{0,16}$MANIFEST_ID" 2>/dev/null | head -1 | LC_ALL=C sed -E 's/^web_apps-dt-([a-p]{32}).*/\\1/')
+      if [ -n "$id" ] && [ -d "$p/Web Applications/Manifest Resources/$id" ]; then
+        mkdir -p "$CACHE_DIR" && printf '%s' "$id" > "$2"; echo "$id"; return
+      fi
+    done
   done
+}
+launch() { # $1 = browser name, $2 = data dir
+  local id; id=$(find_pwa_id "$2" "$CACHE_DIR/$(echo "$1" | tr -c 'A-Za-z0-9\n' '-').id")
+  if [ -n "$id" ]; then exec open -na "$1" --args --app-id="$id"; fi
   exec open -na "$1" --args --app="$URL"
 }
 ${CHROMIUMS.map((a) => `if open -Ra "${a}" 2>/dev/null; then launch "${a}" "${DATA_DIRS[a]}"; fi`).join("\n")}

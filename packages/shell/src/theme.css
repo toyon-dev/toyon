@@ -27,6 +27,12 @@ html, body, #root {
   color: var(--fg1);
   font: 14px/1.5 var(--font-ui);
 }
+/* the app is a fixed workbench: panels scroll internally, the document itself never should.
+   Without this an installed-PWA window rubber-bands the whole UI on trackpad overscroll. */
+html, body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 
 button {
   background: none;

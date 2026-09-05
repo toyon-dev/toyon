@@ -8,6 +8,9 @@ export interface ManagedProc {
   state: ProcState;
   child?: ChildProcess;
   logs: string[];
+  env: Record<string, string>;
+  restarts: number;
+  lastStart: number;
 }
 
 export type ProcListener = (proc: ProcState) => void;
@@ -29,21 +32,25 @@ export class WorktreeProcs {
     const mp: ManagedProc = {
       state: { name, command, port, status: "starting" },
       logs: [],
+      env: extraEnv,
+      restarts: 0,
+      lastStart: 0,
     };
     this.procs.set(name, mp);
-    this.spawnProc(mp, extraEnv);
+    this.spawnProc(mp);
     return mp.state;
   }
 
-  private spawnProc(mp: ManagedProc, extraEnv: Record<string, string>) {
+  private spawnProc(mp: ManagedProc) {
     if (this.stopped) return;
     const { name, command, port } = mp.state;
+    mp.lastStart = Date.now();
     // detached => own process group, so kill(-pid) reaps script children too
     const child = spawn("sh", ["-c", command], {
       cwd: this.worktreePath,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PORT: String(port), FORCE_COLOR: "0", ...extraEnv },
+      env: { ...process.env, PORT: String(port), FORCE_COLOR: "0", ...mp.env },
     });
     mp.child = child;
     mp.state.pid = child.pid;
@@ -66,6 +73,20 @@ export class WorktreeProcs {
       if (this.stopped || mp.state.status === "stopped") return;
       mp.state.status = code === 0 ? "stopped" : "crashed";
       this.onProc({ ...mp.state });
+      // crash auto-restart with backoff; a healthy minute resets the counter
+      if (mp.state.status === "crashed") {
+        if (Date.now() - mp.lastStart > 60_000) mp.restarts = 0;
+        if (mp.restarts < 5) {
+          mp.restarts += 1;
+          const delay = Math.min(30_000, 1000 * 2 ** (mp.restarts - 1));
+          this.onLog(name, `crashed (exit ${code}) — restarting in ${delay / 1000}s (attempt ${mp.restarts}/5)`);
+          setTimeout(() => {
+            if (!this.stopped && mp.state.status === "crashed") this.spawnProc(mp);
+          }, delay);
+        } else {
+          this.onLog(name, `crashed (exit ${code}) — giving up after 5 attempts; restart manually`);
+        }
+      }
     });
 
     // "running" once the port accepts connections
@@ -95,8 +116,15 @@ export class WorktreeProcs {
   restart(name: string) {
     const mp = this.procs.get(name);
     if (!mp) return;
-    this.killProc(mp);
-    setTimeout(() => this.spawnProc(mp, {}), 300);
+    mp.restarts = 0;
+    if (mp.state.status === "crashed") {
+      this.spawnProc(mp);
+    } else {
+      // mark stopped first so the exit handler doesn't schedule a crash-restart
+      mp.state.status = "stopped";
+      this.killProc(mp);
+      setTimeout(() => this.spawnProc(mp), 300);
+    }
   }
 
   private killProc(mp: ManagedProc) {

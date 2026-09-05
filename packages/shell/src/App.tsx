@@ -125,7 +125,7 @@ export function App() {
         {state.rightOpen && <div className="dock-resize" onPointerDown={startDrag("right")} />}
         <RightDock state={state} active={active} sock={sock} dispatch={dispatch} width={rightW} />
       </div>
-      <StatusBar state={state} active={active} dispatch={dispatch} />
+      <StatusBar state={state} active={active} dispatch={dispatch} sock={sock} />
       {state.toast && (
         <div className={`toast ${state.toast.ok ? "ok" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
           {state.toast.message}
@@ -1079,7 +1079,7 @@ function PanelIcon({ side, filled }: { side: "left" | "right"; filled: boolean }
   );
 }
 
-function StatusBar({ state, active, dispatch }: { state: State; active: WorktreeStatus | null; dispatch: Dispatch }) {
+function StatusBar({ state, active, dispatch, sock }: { state: State; active: WorktreeStatus | null; dispatch: Dispatch; sock: Sock }) {
   const [installEvt, setInstallEvt] = useState<{ prompt: () => Promise<unknown> } | null>(null);
   useEffect(() => {
     // already running as an app (--app window or installed PWA): don't offer install
@@ -1120,14 +1120,15 @@ function StatusBar({ state, active, dispatch }: { state: State; active: Worktree
         <>
           <span className="branch">{active.worktree.branch}</span>
           {active.procs.map((p) => (
-            <span
+            <button
               key={p.name}
               className="proc"
-              title={`${p.command} — ${p.status} on :${p.port}`}
+              title={`${p.command} — ${p.status} on :${p.port} · click to restart`}
+              onClick={() => sock?.send({ t: "restart-proc", worktreeId: active.worktree.id, proc: p.name })}
             >
               <span className={`dot ${p.status === "running" ? "running" : p.status === "crashed" ? "crashed" : "starting"}`} />
               {p.name}
-            </span>
+            </button>
           ))}
         </>
       )}

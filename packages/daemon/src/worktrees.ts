@@ -244,9 +244,18 @@ export class Manager {
 
   // ---- worktrees ----
 
-  async createWorktree(repoId: string, prompt: string, baseWorktreeId?: string): Promise<WorktreeInfo> {
+  async createWorktree(
+    repoId: string,
+    prompt: string,
+    baseWorktreeId?: string,
+    variant?: { group: string; index: number; of: number },
+  ): Promise<WorktreeInfo> {
     const repo = this.repo(repoId);
-    const slug = slugify(prompt);
+    // variants share a name base so they read as siblings in the list
+    let slug = variant ? `${slugify(prompt, false)}-v${variant.index}` : slugify(prompt);
+    if (variant && git(repo.path, "show-ref", "--verify", `refs/heads/orchard/${slug}`).ok) {
+      slug = `${slug}-${shortId().slice(0, 3)}`;
+    }
     const branch = `orchard/${slug}`;
 
     // fork point: main's branch by default, or the base worktree's branch (stacking)
@@ -257,12 +266,12 @@ export class Manager {
     if (fromMain) {
       const claimed = await this.claimSpare(repoId, branch, slug);
       if (claimed) {
+        if (variant) claimed.variant = variant;
+        saveState(this.state);
         this.hub.worktreesChanged();
         const agent = this.agentFor(claimed.id) ?? this.makeAgent(claimed);
         agent.send(prompt);
-        void quickName(prompt, repo.path).then((name) => {
-          if (name) this.renameWorktree(claimed.id, name).catch(() => {});
-        });
+        this.scheduleNaming(claimed, prompt, repo, variant);
         return claimed;
       }
     }
@@ -282,6 +291,7 @@ export class Manager {
       proxyPort: await allocatePort(),
       title: slug,
       createdAt: Date.now(),
+      ...(variant ? { variant } : {}),
     };
     this.state.worktrees.push(wt);
     saveState(this.state);
@@ -292,11 +302,31 @@ export class Manager {
     const rtAgent = this.makeAgent(wt);
     this.pendingAgents.set(wt.id, rtAgent);
     rtAgent.send(prompt);
-    // a cheap async naming pass replaces the prompt-prefix slug when it lands
-    void quickName(prompt, repo.path).then((name) => {
-      if (name) this.renameWorktree(wt.id, name).catch(() => {});
-    });
+    this.scheduleNaming(wt, prompt, repo, variant);
     return wt;
+  }
+
+  /** Async pretty-naming: solo worktrees rename directly; variant groups rename together
+   * (index 1 runs the Haiku call, then every sibling becomes <name>-v<index>). */
+  private scheduleNaming(
+    wt: WorktreeInfo,
+    prompt: string,
+    repo: RepoInfo,
+    variant?: { group: string; index: number; of: number },
+  ) {
+    if (!variant) {
+      void quickName(prompt, repo.path).then((name) => {
+        if (name) this.renameWorktree(wt.id, name).catch(() => {});
+      });
+      return;
+    }
+    if (variant.index !== 1) return; // sibling 1 names the whole group
+    void quickName(prompt, repo.path).then(async (name) => {
+      if (!name) return;
+      for (const sibling of this.state.worktrees.filter((w) => w.variant?.group === variant.group)) {
+        await this.renameWorktree(sibling.id, `${name}-v${sibling.variant!.index}`).catch(() => {});
+      }
+    });
   }
 
   setLanded(worktreeId: string, landed: boolean) {
@@ -558,8 +588,8 @@ function shortId(): string {
   return randomBytes(5).toString("hex");
 }
 
-function slugify(prompt: string): string {
+function slugify(prompt: string, withRandom = true): string {
   const words = prompt.toLowerCase().replace(/[^a-z0-9\s-]/g, "").split(/\s+/).filter(Boolean).slice(0, 4);
   const base = words.join("-").slice(0, 40) || "task";
-  return `${base}-${randomBytes(2).toString("hex")}`;
+  return withRandom ? `${base}-${randomBytes(2).toString("hex")}` : base;
 }

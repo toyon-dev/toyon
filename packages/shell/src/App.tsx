@@ -387,6 +387,14 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 {w.worktree.kind === "combined" ? "⧉ " : ""}
                 {w.worktree.title}
               </span>
+              {w.worktree.variant && (
+                <span
+                  className="row-badge variant-badge"
+                  title={`variant ${w.worktree.variant.index} of ${w.worktree.variant.of} — same prompt, independent attempt`}
+                >
+                  v{w.worktree.variant.index}/{w.worktree.variant.of}
+                </span>
+              )}
               {(w.behind ?? 0) > 0 && (
                 <span
                   className="row-badge behind-badge clickable"
@@ -572,10 +580,16 @@ function Center({ state, active, dispatch, sock, repo }: {
           onSubmit={(text, variants, batch) => {
             if (batch) {
               sock?.send({ t: "batch-worktrees", repoId: repo.id, prompt: text });
-            } else {
+            } else if (variants > 1) {
+              const group = Math.random().toString(36).slice(2, 10);
               for (let i = 0; i < variants; i++) {
-                sock?.send({ t: "create-worktree", repoId: repo.id, prompt: text });
+                sock?.send({
+                  t: "create-worktree", repoId: repo.id, prompt: text,
+                  variant: { group, index: i + 1, of: variants },
+                });
               }
+            } else {
+              sock?.send({ t: "create-worktree", repoId: repo.id, prompt: text });
             }
             dispatch({ a: "show-prompt", v: false });
           }}

@@ -39,6 +39,8 @@ export interface WorktreeInfo {
   landed?: boolean;
   /** for kind "combined": the worktrees this graft was made from */
   sources?: string[];
+  /** set when spawned as one of N parallel attempts at the same prompt */
+  variant?: { group: string; index: number; of: number };
 }
 
 export type ProcStatus = "starting" | "running" | "crashed" | "stopped";
@@ -103,7 +105,7 @@ export type ServerMsg =
 export type ClientMsg =
   | { t: "subscribe"; worktreeId: string }
   | { t: "chat"; worktreeId: string; text: string }
-  | { t: "create-worktree"; repoId: string; prompt: string; baseWorktreeId?: string }
+  | { t: "create-worktree"; repoId: string; prompt: string; baseWorktreeId?: string; variant?: { group: string; index: number; of: number } }
   | { t: "batch-worktrees"; repoId: string; prompt: string }
   | { t: "remove-worktree"; worktreeId: string }
   | { t: "restart-proc"; worktreeId: string; proc: string }

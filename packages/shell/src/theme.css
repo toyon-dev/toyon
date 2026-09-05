@@ -399,6 +399,7 @@ button {
 .ahead-badge { color: var(--aqua); }
 .behind-badge { color: var(--yellow); }
 .landed-badge { color: var(--aqua); }
+.variant-badge { color: #d3869b; }
 .land-btns { display: flex; gap: 6px; }
 .land-row { display: flex; gap: 6px; padding: 2px 12px 6px; }
 

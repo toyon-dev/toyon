@@ -32,10 +32,29 @@ export class AgentSession {
     return this.queue.length;
   }
 
+  get queueItems(): string[] {
+    return [...this.queue];
+  }
+
+  /** notified whenever the pending queue changes (send/consume/unqueue/stop) */
+  onQueueChange: (() => void) | null = null;
+
+  private queueChanged() {
+    this.onQueueChange?.();
+  }
+
+  unqueue(index: number) {
+    if (index >= 0 && index < this.queue.length) {
+      this.queue.splice(index, 1);
+      this.queueChanged();
+    }
+  }
+
   /** Interrupt the running turn and drop anything queued. Context up to the
    * interrupt persists in the session; the next message resumes from there. */
   stop() {
     this.queue = [];
+    this.queueChanged();
     if (!this.running) return;
     this.interrupted = true;
     void this.current?.interrupt?.()?.catch?.(() => {});
@@ -79,6 +98,7 @@ export class AgentSession {
 
   send(text: string) {
     this.queue.push(text);
+    this.queueChanged();
     if (!this.running) void this.drain();
   }
 
@@ -88,6 +108,7 @@ export class AgentSession {
     try {
       while (this.queue.length > 0) {
         const text = this.queue.shift()!;
+        this.queueChanged();
         await this.runTurn(text);
         if (this.interrupted) break;
       }

@@ -104,6 +104,7 @@ export type ServerMsg =
   | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string }
   | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean; removeIds?: string[]; suggestion?: string }
   | { t: "files"; worktreeId: string; paths: string[] }
+  | { t: "queue"; worktreeId: string; items: string[] }
   | { t: "error"; message: string };
 
 export type ClientMsg =
@@ -126,6 +127,7 @@ export type ClientMsg =
   | { t: "reveal"; worktreeId: string; path?: string }
   | { t: "stop-agent"; worktreeId: string }
   | { t: "pick-variant"; worktreeId: string }
+  | { t: "unqueue"; worktreeId: string; index: number }
   | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 

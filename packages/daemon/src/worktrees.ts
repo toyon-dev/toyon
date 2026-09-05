@@ -26,6 +26,7 @@ export interface HubEvents {
   worktreesChanged(): void;
   /** the repo's default branch moved: badges + git-status need refreshing */
   repoTick(repoId: string): void;
+  queue(worktreeId: string, items: string[]): void;
 }
 
 interface Runtime {
@@ -420,7 +421,7 @@ export class Manager {
   private makeAgent(wt: WorktreeInfo): AgentSession {
     const existing = this.runtimes.get(wt.id)?.agent ?? this.pendingAgents.get(wt.id);
     if (existing) return existing;
-    return new AgentSession(
+    const agent = new AgentSession(
       wt.id,
       wt.path,
       () => this.state.sessions[wt.id],
@@ -431,6 +432,8 @@ export class Manager {
       (event, seq) => this.hub.agent(wt.id, seq, event),
       (status) => this.hub.agentStatus(wt.id, status),
     );
+    agent.onQueueChange = () => this.hub.queue(wt.id, agent.queueItems);
+    return agent;
   }
 
   private async startRuntime(wt: WorktreeInfo, repo: RepoInfo) {

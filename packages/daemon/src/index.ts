@@ -35,6 +35,7 @@ const hubEvents: HubEvents = {
     }
   },
   agentStatus: () => worktreesChangedRef?.(),
+  queue: (worktreeId, items) => broadcastRef?.({ t: "queue", worktreeId, items }),
   worktreesChanged: () => worktreesChangedRef?.(),
   repoTick: (repoId) => {
     // main moved: refresh badges + git status for every worktree of the repo

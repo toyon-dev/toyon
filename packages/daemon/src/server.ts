@@ -120,6 +120,9 @@ export function startServer(opts: {
           events: events.slice(-1000),
         };
         ws.send(JSON.stringify(backfill));
+        ws.send(JSON.stringify({
+          t: "queue", worktreeId: msg.worktreeId, items: agent?.queueItems ?? [],
+        } satisfies ServerMsg));
         sendGitStatus(msg.worktreeId, ws);
         break;
       }
@@ -277,6 +280,10 @@ export function startServer(opts: {
       }
       case "pick-variant": {
         await manager.pickVariant(msg.worktreeId);
+        break;
+      }
+      case "unqueue": {
+        manager.agentFor(msg.worktreeId)?.unqueue(msg.index);
         break;
       }
       case "reveal": {

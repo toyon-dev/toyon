@@ -261,6 +261,20 @@ button {
   max-width: 92%;
   white-space: pre-wrap;
 }
+
+.queued-msg {
+  opacity: 0.65;
+  border: 1px dashed var(--bg3);
+  background: var(--bg1);
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.queued-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--yellow); flex-shrink: 0; }
+.queued-text { flex: 1; overflow-wrap: break-word; min-width: 0; }
+.queued-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.queued-actions button { color: var(--fg-dim); padding: 0 3px; border-radius: 3px; }
+.queued-actions button:hover { color: var(--fg1); background: var(--bg3); }
 .msg-assistant { font-size: 13px; white-space: pre-wrap; color: var(--fg1); max-width: 100%; overflow-wrap: break-word; }
 
 /* markdown chat rendering */

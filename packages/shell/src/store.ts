@@ -21,6 +21,7 @@ export interface State {
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
   prefill: { worktreeId: string; text: string } | null;
   files: Record<string, string[]>;
+  queues: Record<string, string[]>;
   showQuickOpen: boolean;
   showPrompt: boolean;
   leftOpen: boolean;
@@ -39,6 +40,7 @@ export const initial: State = {
   toast: null,
   prefill: null,
   files: {},
+  queues: {},
   showQuickOpen: false,
   showPrompt: false,
   leftOpen: true,
@@ -151,6 +153,8 @@ function onServer(s: State, msg: ServerMsg): State {
       };
     case "files":
       return { ...s, files: { ...s.files, [msg.worktreeId]: msg.paths } };
+    case "queue":
+      return { ...s, queues: { ...s.queues, [msg.worktreeId]: msg.items } };
     case "error":
       return { ...s, toast: { ok: false, message: msg.message } };
   }

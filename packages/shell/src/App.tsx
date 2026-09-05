@@ -912,7 +912,7 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
           ))}
           {active?.agent === "working" && (
           <div className="msg-thinking working-row">
-            working…{(active.queued ?? 0) > 0 && ` · ${active.queued} queued`}
+            working…
             <button
               className="stop-btn"
               title="Stop the agent (context up to here is kept; queued messages dropped)"
@@ -922,6 +922,30 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
             </button>
           </div>
         )}
+        {active &&
+          (state.queues[active.worktree.id] ?? []).map((text, i) => (
+            <div key={`q-${i}`} className="msg-user queued-msg">
+              <span className="queued-tag">queued</span>
+              <span className="queued-text">{text}</span>
+              <span className="queued-actions">
+                <button
+                  title="Edit — removes from queue, puts it back in the input"
+                  onClick={() => {
+                    sock?.send({ t: "unqueue", worktreeId: active.worktree.id, index: i });
+                    setText(text);
+                  }}
+                >
+                  ✎
+                </button>
+                <button
+                  title="Remove from queue"
+                  onClick={() => sock?.send({ t: "unqueue", worktreeId: active.worktree.id, index: i })}
+                >
+                  ✕
+                </button>
+              </span>
+            </div>
+          ))}
         </div>
         {showJump && (
           <button className="jump-down" onClick={jumpDown} title="Jump to latest">

@@ -226,6 +226,8 @@ button {
 .ctx-menu button.danger { color: var(--red); }
 .ctx-menu button:disabled { color: var(--fg-dim); cursor: default; }
 
+.chat-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
+
 .chat-log {
   flex: 1;
   overflow-y: auto;
@@ -234,6 +236,21 @@ button {
   flex-direction: column;
   gap: 10px;
 }
+
+.jump-down {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg2);
+  border: 1px solid var(--bg3);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--fg1);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.jump-down:hover { border-color: var(--orange); color: var(--orange); }
 
 .msg-user {
   background: var(--bg2);

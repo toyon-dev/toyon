@@ -652,13 +652,38 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
     }
   }, [state.prefill, active?.worktree.id]);
 
-  // pin to bottom while streaming
+  // pin to bottom while streaming; offer a jump-down pill when scrolled up
+  const atBottomRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
   useEffect(() => {
     const el = logRef.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+    if (!el) return;
+    if (atBottomRef.current) {
       el.scrollTop = el.scrollHeight;
+      setShowJump(false);
+    } else if (items.length > 0) {
+      setShowJump(true);
     }
   }, [items]);
+  useEffect(() => {
+    atBottomRef.current = true;
+    setShowJump(false);
+  }, [active?.worktree.id]);
+
+  const onScroll = () => {
+    const el = logRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    atBottomRef.current = atBottom;
+    if (atBottom) setShowJump(false);
+  };
+
+  const jumpDown = () => {
+    const el = logRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    atBottomRef.current = true;
+    setShowJump(false);
+  };
 
   const send = () => {
     if (!active || !text.trim()) return;
@@ -678,11 +703,18 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
   return (
     <div className={`right-dock ${state.rightOpen ? "" : "collapsed"}`}>
       <WtSwitcher state={state} dispatch={dispatch} sock={sock} />
-      <div className="chat-log" ref={logRef}>
-        {items.map((item, i) => (
-          <ChatItemView key={i} item={item} />
-        ))}
-        {active?.agent === "working" && <div className="msg-thinking">working…</div>}
+      <div className="chat-wrap">
+        <div className="chat-log" ref={logRef} onScroll={onScroll}>
+          {items.map((item, i) => (
+            <ChatItemView key={i} item={item} />
+          ))}
+          {active?.agent === "working" && <div className="msg-thinking">working…</div>}
+        </div>
+        {showJump && (
+          <button className="jump-down" onClick={jumpDown} title="Jump to latest">
+            ↓ new messages
+          </button>
+        )}
       </div>
       <div className="chat-input">
         <textarea

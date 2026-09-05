@@ -517,7 +517,7 @@ function WtRail({ state, dispatch, sock }: {
     <div className={`wt-rail ${graftMode || menu ? "hold" : ""}`}>
       <div className="rail-panel">
       {(
-        <div className="wt-list rail-list">
+        <div className="rail-list">
           {state.worktrees.map((w, i) => (
             <button
               key={w.worktree.id}
@@ -1569,8 +1569,6 @@ const KEY_ROWS: Array<[string, string]> = [
   ["⌘B", "changes panel"],
   ["⌘J", "chat panel"],
   ["⌘⇧F", "zen — full-bleed preview"],
-  ["esc", "close / cancel / exit zen"],
-  ["enter", "send · shift+enter newline"],
 ];
 function KeysHelp({ onClose }: { onClose: () => void }) {
   useEffect(() => {
@@ -1583,7 +1581,10 @@ function KeysHelp({ onClose }: { onClose: () => void }) {
       <div className="keys-card" onClick={(e) => e.stopPropagation()}>
         {KEY_ROWS.map(([k, d]) => (
           <div className="keys-row" key={k}>
-            <span className="keys-k">{k}</span>
+            <span className="keys-k">
+              {/^[⌘⇧⌥⌃]+/.test(k) && <span className="keys-mod">{k.match(/^[⌘⇧⌥⌃]+/)![0]}</span>}
+              {k.replace(/^[⌘⇧⌥⌃]+/, "")}
+            </span>
             <span className="keys-d">{d}</span>
           </div>
         ))}

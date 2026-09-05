@@ -77,6 +77,17 @@ button {
   padding: 2px 0;
   text-align: center;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.keys-mod {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1;
+  position: relative;
+  top: -0.5px;
 }
 .keys-d { color: var(--fg-muted); }
 
@@ -371,23 +382,6 @@ body.resizing .row-resize { background: var(--bg3); }
 .wt-rail .wt-item .branch { white-space: nowrap; }
 .dirty-badge { color: var(--yellow); }
 
-.wt-switcher { border-bottom: 1px solid var(--bg2); flex-shrink: 0; }
-.wt-current {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 9px 12px;
-  font-size: 13px;
-  color: var(--fg1);
-  text-align: left;
-}
-.wt-current:hover { background: var(--bg2); }
-.wt-current .branch { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wt-current .branch.helper { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-dim); }
-.wt-current .chevron { color: var(--fg-dim); transition: transform 0.12s; }
-.wt-current .chevron.up { transform: rotate(180deg); }
-.wt-list { max-height: 40vh; overflow-y: auto; border-top: 1px solid var(--bg2); background: var(--bg0); }
 
 .dock-empty { padding: 4px 12px; font-size: 12px; color: var(--fg-dim); }
 

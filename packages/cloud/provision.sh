@@ -7,8 +7,9 @@
 #   provision.sh destroy <app-name>  delete the app and its volume so nothing keeps billing
 #
 # Needs: flyctl (https://fly.io/docs/flyctl/install/), `fly auth login`, and an
-# Anthropic API key for `up`: either ANTHROPIC_API_KEY in the environment or the
-# file ~/.orchardist/cloud/anthropic.key (mode 600). No local Docker: the image is
+# agent auth for `up`: either ~/.orchardist/cloud/claude-oauth.token (from
+# `claude setup-token`, bills your Claude plan) or ~/.orchardist/cloud/anthropic.key
+# (API key, pay-as-you-go). Env vars CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_API_KEY also work. No local Docker: the image is
 # built remotely. Region, VM size and proxy port range are knobs below.
 set -euo pipefail
 
@@ -96,11 +97,19 @@ case "$cmd" in
   up)
     mkdir -p "$state_dir"; chmod 700 "$state_dir"
     # bring-your-own-key: env var, else a file you wrote yourself (never pasted into a chat/log)
+    # Auth for the agent inside the VM, in order of preference:
+    #   1. claude-oauth.token  — from `claude setup-token`; bills your Claude plan
+    #   2. anthropic.key       — API key; pay-as-you-go credits
+    oauth_file="$state_dir/claude-oauth.token"
     key_file="$state_dir/anthropic.key"
+    CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN:-}"
+    [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -f "$oauth_file" ] && CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '[:space:]' < "$oauth_file")"
     if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f "$key_file" ]; then
       ANTHROPIC_API_KEY="$(tr -d '[:space:]' < "$key_file")"
     fi
-    : "${ANTHROPIC_API_KEY:?put your Anthropic API key in $key_file (chmod 600) or export ANTHROPIC_API_KEY}"
+    if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+      echo "need either $oauth_file (claude setup-token) or $key_file (API key), mode 600" >&2; exit 1
+    fi
     if [ ! -f "$token_file" ]; then
       openssl rand -hex 32 > "$token_file"; chmod 600 "$token_file"
     fi
@@ -109,10 +118,21 @@ case "$cmd" in
     fly apps list --json 2>/dev/null | grep -q "\"Name\": *\"$app\"" || fly apps create "$app"
     fly volumes list -a "$app" --json 2>/dev/null | grep -q '"orch_data"' \
       || fly volumes create orch_data -a "$app" --region "$REGION" --size "$VOL_GB" --yes
-    fly secrets set -a "$app" --stage \
-      ORCHARDIST_TOKEN="$token" \
-      ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
-      ${DEMO_REPO_URL:+DEMO_REPO_URL="$DEMO_REPO_URL"}
+    if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+      echo "agent auth: Claude plan (setup-token)"
+      fly secrets set -a "$app" --stage \
+        ORCHARDIST_TOKEN="$token" \
+        CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
+        ${DEMO_REPO_URL:+DEMO_REPO_URL="$DEMO_REPO_URL"}
+      # an API key on the machine would take precedence over the plan token
+      fly secrets list -a "$app" 2>/dev/null | grep -q ANTHROPIC_API_KEY && fly secrets unset -a "$app" --stage ANTHROPIC_API_KEY
+    else
+      echo "agent auth: API key (credits)"
+      fly secrets set -a "$app" --stage \
+        ORCHARDIST_TOKEN="$token" \
+        ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+        ${DEMO_REPO_URL:+DEMO_REPO_URL="$DEMO_REPO_URL"}
+    fi
     fly deploy "$ROOT" --config "$HERE/fly.toml" --dockerfile "$HERE/Dockerfile" \
       --remote-only --ha=false --yes
     # public IPs are not always auto-allocated for a config-driven first deploy

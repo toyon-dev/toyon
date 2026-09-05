@@ -333,7 +333,7 @@ export class Manager {
     if (!wts.every((w) => w.repoId === repoId)) throw new Error("worktrees must belong to one repo");
     const repo = this.repo(repoId);
 
-    const slug = `combo-${wts.map((w) => w.title.split("-")[0]).join("-")}`.slice(0, 32) + `-${shortId().slice(0, 4)}`;
+    const slug = `graft-${wts.map((w) => w.title.split("-")[0]).join("-")}`.slice(0, 32) + `-${shortId().slice(0, 4)}`;
     const branch = `orchard/${slug}`;
     const wtPath = join(WORKTREES_DIR, repo.name, slug);
 
@@ -344,7 +344,7 @@ export class Manager {
         git(wtPath, "merge", "--abort");
         git(repo.path, "worktree", "remove", "--force", wtPath);
         git(repo.path, "branch", "-D", branch);
-        throw new Error(`branches conflict — resolve before combining (${m.err.slice(0, 200)})`);
+        throw new Error(`branches conflict — these worktrees can't be grafted cleanly (${m.err.slice(0, 200)})`);
       }
     });
 

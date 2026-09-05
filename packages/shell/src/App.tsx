@@ -175,15 +175,28 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
 function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
   const [open, setOpen] = useState(true);
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
   const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
 
   const toggleSel = (w: WorktreeStatus) => {
     if (w.worktree.kind === "main") return;
+    setGraftMode(true);
     setSel((s) =>
       s.includes(w.worktree.id) ? s.filter((x) => x !== w.worktree.id) : [...s, w.worktree.id],
     );
   };
+
+  const cancelGraft = () => {
+    setGraftMode(false);
+    setSel([]);
+  };
+
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && cancelGraft();
+    if (graftMode) window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [graftMode]);
 
   useEffect(() => {
     if (!menu) return;
@@ -236,7 +249,7 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               key={w.worktree.id}
               className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""}`}
               onClick={(e) => {
-                if (e.shiftKey) toggleSel(w);
+                if (graftMode || e.shiftKey) toggleSel(w);
                 else dispatch({ a: "activate", id: w.worktree.id });
               }}
               onDoubleClick={() => rename(w)}
@@ -244,8 +257,17 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, id: w.worktree.id });
               }}
-              title={`⌘${i + 1} · ${w.worktree.branch} · shift-click to select for combine`}
+              title={`⌘${i + 1} · ${w.worktree.branch}${graftMode ? " · click to select" : " · shift-click to graft"}`}
             >
+              {graftMode && w.worktree.kind !== "main" && (
+                <input
+                  type="checkbox"
+                  className="graft-check"
+                  checked={sel.includes(w.worktree.id)}
+                  readOnly
+                  tabIndex={-1}
+                />
+              )}
               <span className={`dot ${dotClass(w)}`} />
               <span className="branch">
                 {w.worktree.kind === "combined" ? "⧉ " : ""}
@@ -266,16 +288,22 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               </span>
             </button>
           ))}
-          {sel.length >= 2 && (
-            <button
-              className="new-wt combine-btn"
-              onClick={() => {
-                sock?.send({ t: "combine", worktreeIds: sel });
-                setSel([]);
-              }}
-            >
-              ⧉ preview {sel.length} combined
-            </button>
+          {graftMode && (
+            <div className="graft-row">
+              <button
+                className="new-wt combine-btn"
+                disabled={sel.length < 2}
+                onClick={() => {
+                  sock?.send({ t: "combine", worktreeIds: sel });
+                  cancelGraft();
+                }}
+              >
+                ⧉ graft {sel.length >= 2 ? `${sel.length} worktrees` : "— pick 2+"}
+              </button>
+              <button className="new-wt graft-cancel" onClick={cancelGraft}>
+                cancel esc
+              </button>
+            </div>
           )}
           <button className="new-wt" onClick={() => dispatch({ a: "show-prompt", v: true })}>
             + new worktree ⌘K
@@ -287,6 +315,14 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
           {menuWt.worktree.kind !== "main" ? (
             <>
               <button onClick={() => rename(menuWt)}>rename…</button>
+              <button
+                onClick={() => {
+                  setGraftMode(true);
+                  setSel((s) => (s.includes(menuWt.worktree.id) ? s : [...s, menuWt.worktree.id]));
+                }}
+              >
+                graft with…
+              </button>
               <button onClick={() => sock?.send({ t: "merge-main", worktreeId: menuWt.worktree.id })}>
                 merge into main
               </button>

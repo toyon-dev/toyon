@@ -100,6 +100,11 @@ button {
 .new-wt:hover { color: var(--orange); }
 .combine-btn { color: var(--aqua); }
 .combine-btn:hover { color: var(--aqua); background: var(--bg2); }
+.combine-btn:disabled { color: var(--fg-dim); cursor: default; }
+.graft-row { display: flex; border-top: 1px solid var(--bg2); }
+.graft-row .new-wt { width: auto; flex: 1; }
+.graft-cancel { text-align: right; }
+.graft-check { accent-color: var(--aqua); pointer-events: none; margin: 0; }
 
 .wt-item.sel { background: var(--bg2); box-shadow: inset 2px 0 0 var(--aqua); }
 .wt-item .row-badge { font: 10px var(--font-mono); flex-shrink: 0; }

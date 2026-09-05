@@ -199,7 +199,7 @@ export function startServer(opts: {
         const wt = await manager.combineWorktrees(msg.worktreeIds);
         ws.send(JSON.stringify({
           t: "shipped", worktreeId: wt.id, ok: true,
-          message: `combined preview: ${wt.title} (local merge, nothing pushed)`,
+          message: `grafted: ${wt.title} — local merge of ${msg.worktreeIds.length} branches, nothing pushed`,
         } satisfies ServerMsg));
         break;
       }

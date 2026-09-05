@@ -151,7 +151,19 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
 
 function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
   const [open, setOpen] = useState(true);
+  const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", close);
+    };
+  }, [menu]);
 
   const rename = (w: WorktreeStatus) => {
     if (w.worktree.kind === "main") return;
@@ -160,6 +172,16 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
       sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
     }
   };
+
+  const remove = (w: WorktreeStatus) => {
+    if (w.worktree.kind === "main") return;
+    const ok = window.confirm(
+      `Remove worktree "${w.worktree.title}"?\n\nThis deletes its directory and branch (${w.worktree.branch}). Unmerged changes are lost.`,
+    );
+    if (ok) sock?.send({ t: "remove-worktree", worktreeId: w.worktree.id });
+  };
+
+  const menuWt = menu ? state.worktrees.find((w) => w.worktree.id === menu.id) ?? null : null;
 
   return (
     <div className="wt-switcher">
@@ -184,7 +206,11 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""}`}
               onClick={() => dispatch({ a: "activate", id: w.worktree.id })}
               onDoubleClick={() => rename(w)}
-              title={`⌘${i + 1} · ${w.worktree.branch} · double-click to rename`}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({ x: e.clientX, y: e.clientY, id: w.worktree.id });
+              }}
+              title={`⌘${i + 1} · ${w.worktree.branch} · right-click for actions`}
             >
               <span className={`dot ${dotClass(w)}`} />
               <span className="branch">{w.worktree.title}</span>
@@ -193,6 +219,24 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
           <button className="new-wt" onClick={() => dispatch({ a: "show-prompt", v: true })}>
             + new worktree ⌘K
           </button>
+        </div>
+      )}
+      {menu && menuWt && (
+        <div className="ctx-menu" style={{ left: Math.min(menu.x, window.innerWidth - 180), top: menu.y }}>
+          {menuWt.worktree.kind !== "main" ? (
+            <>
+              <button onClick={() => rename(menuWt)}>rename…</button>
+              <button onClick={() => sock?.send({ t: "merge-main", worktreeId: menuWt.worktree.id })}>
+                merge into main
+              </button>
+              <button onClick={() => sock?.send({ t: "ship", worktreeId: menuWt.worktree.id })}>
+                push + PR
+              </button>
+              <button className="danger" onClick={() => remove(menuWt)}>remove…</button>
+            </>
+          ) : (
+            <button disabled>main — no actions</button>
+          )}
         </div>
       )}
     </div>

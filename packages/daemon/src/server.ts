@@ -185,6 +185,7 @@ export function startServer(opts: {
         if (wt.kind === "main") throw new Error("ship from a worktree, not main");
         const repo = manager.repo(wt.repoId);
         const result = shipWorktree(wt.path, wt.branch, repo.defaultBranch, wt.title);
+        if (result.prCreated && result.url) manager.setPrUrl(wt.id, result.url);
         ws.send(JSON.stringify({
           t: "shipped", worktreeId: wt.id, ok: result.ok, url: result.url, message: result.message,
         } satisfies ServerMsg));

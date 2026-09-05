@@ -73,6 +73,8 @@ export interface ShipResult {
   ok: boolean;
   url?: string;
   message: string;
+  /** a real PR was created via gh (vs a compare-page URL) */
+  prCreated?: boolean;
 }
 
 /** User-initiated commit of everything in the worktree, with the user's message. */
@@ -167,7 +169,10 @@ export function shipWorktree(worktreePath: string, branch: string, defaultBr: st
   });
   if (gh.status === 0) {
     const url = (gh.stdout ?? "").trim().split("\n").pop() ?? "";
-    return { ok: true, url, message: `PR created: ${url}` };
+    return { ok: true, url, message: `PR created: ${url}`, prCreated: true };
+  }
+  if ((gh.stderr ?? "").includes("already exists")) {
+    return { ok: true, message: `pushed ${branch} — existing PR updated` };
   }
   const compare = compareUrl(remote.out, defaultBr, branch);
   return compare

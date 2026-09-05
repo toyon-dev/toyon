@@ -41,6 +41,8 @@ export interface WorktreeInfo {
   sources?: string[];
   /** set when spawned as one of N parallel attempts at the same prompt */
   variant?: { group: string; index: number; of: number };
+  /** open PR created from this worktree (via gh) */
+  prUrl?: string;
 }
 
 export type ProcStatus = "starting" | "running" | "crashed" | "stopped";

@@ -181,18 +181,32 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
                 <>
                   <button
                     className="ship-btn"
-                    title="Merge into main locally (no push)"
+                    title={
+                      active.worktree.prUrl
+                        ? "Merge locally — the open PR will show as merged once main is pushed"
+                        : "Merge into main locally (no push)"
+                    }
                     onClick={() => sock?.send({ t: "merge-main", worktreeId: active.worktree.id })}
                   >
                     merge
                   </button>
-                  <button
-                    className="ship-btn"
-                    title="Push and open a PR"
-                    onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
-                  >
-                    pr ↗
-                  </button>
+                  {active.worktree.prUrl ? (
+                    <button
+                      className="ship-btn pr-open"
+                      title={`PR open — click to view · ${active.worktree.prUrl}`}
+                      onClick={() => window.open(active.worktree.prUrl, "_blank")}
+                    >
+                      pr open ↗
+                    </button>
+                  ) : (
+                    <button
+                      className="ship-btn"
+                      title="Push and open a PR"
+                      onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
+                    >
+                      pr ↗
+                    </button>
+                  )}
                 </>
               )}
             </span>

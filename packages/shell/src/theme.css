@@ -356,6 +356,8 @@ button {
   padding: 1px 8px;
 }
 .ship-btn:hover { border-color: var(--orange); }
+.ship-btn.pr-open { color: var(--aqua); }
+.ship-btn.pr-open:hover { border-color: var(--aqua); }
 
 .deep-link {
   font: 11px var(--font-mono);

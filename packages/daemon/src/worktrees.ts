@@ -329,6 +329,14 @@ export class Manager {
     });
   }
 
+  setPrUrl(worktreeId: string, url: string) {
+    const wt = this.state.worktrees.find((w) => w.id === worktreeId);
+    if (!wt) return;
+    wt.prUrl = url;
+    saveState(this.state);
+    this.hub.worktreesChanged();
+  }
+
   setLanded(worktreeId: string, landed: boolean) {
     const wt = this.state.worktrees.find((w) => w.id === worktreeId);
     if (!wt || wt.landed === landed || (landed && wt.kind === "main")) return;

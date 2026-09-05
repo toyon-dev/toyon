@@ -108,6 +108,8 @@ button {
 
 .wt-item.sel { background: var(--bg2); box-shadow: inset 2px 0 0 var(--aqua); }
 .wt-item .row-badge { font: 10px var(--font-mono); flex-shrink: 0; }
+.wt-item .row-badge.clickable { padding: 1px 4px; border-radius: 3px; }
+.wt-item .row-badge.clickable:hover { background: var(--bg3); }
 .wt-item .wt-more {
   visibility: hidden;
   color: var(--fg-dim);

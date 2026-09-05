@@ -288,8 +288,32 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 {w.worktree.kind === "combined" ? "⧉ " : ""}
                 {w.worktree.title}
               </span>
-              {(w.ahead ?? 0) > 0 && <span className="row-badge ahead-badge">↑{w.ahead}</span>}
-              {(w.behind ?? 0) > 0 && <span className="row-badge behind-badge">↓{w.behind}</span>}
+              {(w.ahead ?? 0) > 0 && (
+                <span
+                  className="row-badge ahead-badge clickable"
+                  title={`${w.ahead} commit(s) ahead — click to merge into main`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Merge ${w.worktree.title} (${w.ahead} commit(s)) into main?`)) {
+                      sock?.send({ t: "merge-main", worktreeId: w.worktree.id });
+                    }
+                  }}
+                >
+                  ↑{w.ahead}
+                </span>
+              )}
+              {(w.behind ?? 0) > 0 && (
+                <span
+                  className="row-badge behind-badge clickable"
+                  title={`${w.behind} commit(s) behind — click to sync from main`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sock?.send({ t: "sync-main", worktreeId: w.worktree.id });
+                  }}
+                >
+                  ↓{w.behind}
+                </span>
+              )}
               <span
                 className="wt-more"
                 title="Actions"
@@ -337,6 +361,12 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 }}
               >
                 graft with…
+              </button>
+              <button onClick={() => sock?.send({ t: "merge-main", worktreeId: menuWt.worktree.id })}>
+                merge into main
+              </button>
+              <button onClick={() => sock?.send({ t: "ship", worktreeId: menuWt.worktree.id })}>
+                push + PR
               </button>
               <button className="danger" onClick={() => remove(menuWt)}>remove…</button>
             </>

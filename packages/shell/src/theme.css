@@ -593,13 +593,14 @@ body.resizing .row-resize { background: var(--bg3); }
    docks collapse/resize (chrome that shifts underfoot reads as breakage) */
 .rb-center {
   position: absolute;
-  left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 4px;
-  width: min(520px, 44vw);
+  width: min(520px, 40vw);
+  transition: left 0.15s ease;
 }
+body.resizing .rb-center { transition: none; }
 .rb-center .rb-path { flex: 1; min-width: 0; }
 .status-bar .toggle:hover, .status-bar .toggle.on { color: var(--fg1); }
 .status-bar .toggle.icon { display: grid; place-items: center; padding: 2px; border-radius: 4px; }

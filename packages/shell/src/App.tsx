@@ -146,6 +146,7 @@ export function App() {
   // resizable docks, widths persisted per browser
   const [leftW, setLeftW] = useState(() => clampW(Number(localStorage.getItem("orch-lw")), 220));
   const [rightW, setRightW] = useState(() => clampW(Number(localStorage.getItem("orch-rw")), 380));
+  const railPx = railWide ? 232 : 44;
   const startDrag = (side: "left" | "right") => (e: React.PointerEvent) => {
     e.preventDefault();
     document.body.classList.add("resizing");
@@ -155,7 +156,8 @@ export function App() {
         setLeftW(w);
         localStorage.setItem("orch-lw", String(w));
       } else {
-        const w = clampW(window.innerWidth - ev.clientX, 380);
+        // the worktree rail sits between the chat dock and the window edge
+        const w = clampW(window.innerWidth - railPx - ev.clientX, 380);
         setRightW(w);
         localStorage.setItem("orch-rw", String(w));
       }
@@ -169,9 +171,20 @@ export function App() {
     window.addEventListener("pointerup", up);
   };
 
+  // nav cluster stays centered over the preview column
+  const [winW, setWinW] = useState(window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const leftPx = state.leftOpen ? leftW + 5 : 0;
+  const rightPx = (state.rightOpen ? rightW + 5 : 0) + railPx;
+  const navCenter = leftPx + (winW - leftPx - rightPx) / 2;
+
   return (
     <div className="app">
-      <StatusBar state={state} active={active} dispatch={dispatch} sock={sock} />
+      <StatusBar state={state} active={active} dispatch={dispatch} sock={sock} navCenter={navCenter} />
       <div className="docks">
         <LeftDock state={state} dispatch={dispatch} sock={sock} width={leftW} />
         {state.leftOpen && <div className="dock-resize" onPointerDown={startDrag("left")} />}
@@ -1523,7 +1536,7 @@ function PanelIcon({ side, filled }: { side: "left" | "right"; filled: boolean }
   );
 }
 
-function StatusBar({ state, active, dispatch, sock }: { state: State; active: WorktreeStatus | null; dispatch: Dispatch; sock: Sock }) {
+function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State; active: WorktreeStatus | null; dispatch: Dispatch; sock: Sock; navCenter: number }) {
   const [installEvt, setInstallEvt] = useState<{ prompt: () => Promise<unknown> } | null>(null);
   useEffect(() => {
     // already running as an app (--app window or installed PWA): don't offer install
@@ -1574,7 +1587,7 @@ function StatusBar({ state, active, dispatch, sock }: { state: State; active: Wo
       >
         <PanelIcon side="left" filled={state.leftOpen} />
       </button>
-      <div className="rb-center">
+      <div className="rb-center" style={{ left: navCenter }}>
       <button className="rb-btn" disabled={!ready} title="Back" onClick={() => id && previewBus.post(id, { type: "back" })}>‹</button>
       <button className="rb-btn" disabled={!ready} title="Forward" onClick={() => id && previewBus.post(id, { type: "forward" })}>›</button>
       <button className="rb-btn" disabled={!ready} title="Reload preview" onClick={() => id && previewBus.post(id, { type: "reload" })}>⟳</button>

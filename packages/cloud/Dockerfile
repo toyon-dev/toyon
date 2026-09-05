@@ -3,10 +3,12 @@
 # packages/shell/dist and packages/bridge/dist relative to its own source.
 #
 # glibc base so the agent SDK / esbuild / rollup pick their -linux-x64 builds.
+# bubblewrap + socat: Claude Code sandboxes Bash by default and refuses to run
+# without them (SandboxSettings.failIfUnavailable defaults to true).
 FROM oven/bun:1-debian
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git curl ca-certificates openssh-client \
+ && apt-get install -y --no-install-recommends git curl ca-certificates openssh-client bubblewrap socat \
  && rm -rf /var/lib/apt/lists/*
 
 # Claude Code refuses bypassPermissions as root, so everything runs as `orch`.

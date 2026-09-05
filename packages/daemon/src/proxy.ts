@@ -5,6 +5,7 @@
 // - serves the bridge script itself at /__orchardist/bridge.js
 
 import type { ServerWebSocket } from "bun";
+import { BRIDGE_VERSION } from "@orchardist/shared";
 
 interface BridgeData {
   upstream?: WebSocket;
@@ -44,7 +45,7 @@ export function startProxy(opts: {
 
       if (url.pathname === "/__orchardist/bridge.js") {
         return new Response(opts.bridgeScript(), {
-          headers: { "content-type": "text/javascript" },
+          headers: { "content-type": "text/javascript", "cache-control": "no-store" },
         });
       }
 
@@ -133,7 +134,8 @@ export function startProxy(opts: {
 }
 
 function injectBridge(html: string): string {
-  const tag = `<script src="/__orchardist/bridge.js"></script>`;
+  // version-busted URL: every bridge bump is a guaranteed cache miss
+  const tag = `<script src="/__orchardist/bridge.js?v=${BRIDGE_VERSION}"></script>`;
   if (html.includes("</head>")) return html.replace("</head>", `${tag}</head>`);
   if (html.includes("<body")) return html.replace(/<body([^>]*)>/, `<body$1>${tag}`);
   return html + tag;

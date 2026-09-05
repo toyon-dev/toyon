@@ -251,6 +251,7 @@ export class Manager {
     prompt: string,
     baseWorktreeId?: string,
     variant?: { group: string; index: number; of: number },
+    context?: string,
   ): Promise<WorktreeInfo> {
     const repo = this.repo(repoId);
     // variants share a name base so they read as siblings in the list
@@ -265,8 +266,9 @@ export class Manager {
     const fromMain = !base || base.kind === "main";
 
     // perspective-diverse variants: same goal, different emphasis per attempt
-    const agentPrompt =
+    let agentPrompt =
       variant && variant.of >= 2 ? `${prompt}\n\n${VARIANT_LENSES[(variant.index - 1) % VARIANT_LENSES.length]}` : prompt;
+    if (context) agentPrompt = `${agentPrompt}\n\n${context}`;
 
     // fast path: claim the pre-warmed spare (main-based tasks only)
     if (fromMain) {

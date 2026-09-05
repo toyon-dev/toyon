@@ -23,7 +23,7 @@ const SYSTEM_APPEND = [
 export class AgentSession {
   status: AgentStatus = "idle";
   private seq = 0;
-  private queue: string[] = [];
+  private queue: Array<{ text: string; context?: string }> = [];
   private running = false;
   private current: { interrupt?: () => Promise<void> } | null = null;
   private interrupted = false;
@@ -33,7 +33,7 @@ export class AgentSession {
   }
 
   get queueItems(): string[] {
-    return [...this.queue];
+    return this.queue.map((q) => q.text);
   }
 
   /** notified whenever the pending queue changes (send/consume/unqueue/stop) */
@@ -96,8 +96,10 @@ export class AgentSession {
     this.onStatus(s);
   }
 
-  send(text: string) {
-    this.queue.push(text);
+  /** context (live-page state, picked elements) reaches the agent's prompt but
+   * never the visible transcript */
+  send(text: string, context?: string) {
+    this.queue.push({ text, context });
     this.queueChanged();
     if (!this.running) void this.drain();
   }
@@ -107,9 +109,9 @@ export class AgentSession {
     this.setStatus("working");
     try {
       while (this.queue.length > 0) {
-        const text = this.queue.shift()!;
+        const item = this.queue.shift()!;
         this.queueChanged();
-        await this.runTurn(text);
+        await this.runTurn(item.text, item.context);
         if (this.interrupted) break;
       }
       if (this.interrupted) {
@@ -131,13 +133,13 @@ export class AgentSession {
     }
   }
 
-  private async runTurn(text: string) {
+  private async runTurn(text: string, context?: string) {
     this.emit({ type: "user-message", text, ts: Date.now() });
     this.emit({ type: "turn-start", ts: Date.now() });
 
     const resume = this.getSessionId();
     const stream = query({
-      prompt: text,
+      prompt: context ? `${text}\n\n${context}` : text,
       options: {
         cwd: this.cwd,
         permissionMode: "bypassPermissions",

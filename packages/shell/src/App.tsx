@@ -48,6 +48,15 @@ export function App() {
           sockRef.current?.send({ t: "list-files", worktreeId: state.activeId });
           dispatch({ a: "quick-open", v: true });
         }
+      } else if (e.metaKey && e.key === "e") {
+        e.preventDefault();
+        if (state.picking) {
+          if (state.activeId) previewBus.post(state.activeId, { type: "pick-cancel" });
+          dispatch({ a: "set-picking", v: false });
+        } else if (state.activeId) {
+          previewBus.post(state.activeId, { type: "pick-start" });
+          dispatch({ a: "set-picking", v: true });
+        }
       } else if (e.metaKey && e.key === "b") {
         e.preventDefault();
         dispatch({ a: "toggle-left" });
@@ -61,7 +70,7 @@ export function App() {
       }
     };
     window.addEventListener("keydown", onKey);
-    // chords forwarded from inside the preview iframe by the bridge script
+    // (⌘E arrives from the iframe too, via the bridge chord forwarding)
     const onMsg = (e: MessageEvent) => {
       const d = e.data;
       if (d && d.__orchardist && d.type === "key" && d.meta) {
@@ -73,7 +82,7 @@ export function App() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("message", onMsg);
     };
-  }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.activeId]);
+  }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.activeId, state.picking]);
 
   // ship results: open PR/compare URLs, auto-dismiss toasts
   const openedRef = useRef<string | null>(null);
@@ -153,6 +162,17 @@ export function App() {
 
 type Sock = DaemonSocket | null;
 type Dispatch = (a: Parameters<typeof reducer>[1]) => void;
+
+// module-level bridge to post into preview iframes (registered by Center)
+export const previewBus = {
+  post: (_id: string, _msg: Record<string, unknown>) => {},
+};
+
+function relFile(file: string, worktreePath?: string): string {
+  if (worktreePath && file.startsWith(worktreePath + "/")) return file.slice(worktreePath.length + 1);
+  const i = file.lastIndexOf("/src/");
+  return i >= 0 ? file.slice(i + 1) : file;
+}
 
 function clampW(n: number, fallback: number): number {
   if (!Number.isFinite(n) || n <= 0) return fallback;
@@ -262,6 +282,8 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
                 state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
               }
               onContextMenu={(e) => fileCtx(e, f.path, true)}
+              onMouseEnter={() => state.activeId && previewBus.post(state.activeId, { type: "highlight-file", path: f.path })}
+              onMouseLeave={() => state.activeId && previewBus.post(state.activeId, { type: "highlight-clear" })}
             >
               <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
               <span className="path">{f.path}</span>
@@ -293,6 +315,8 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
                 state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
               }
               onContextMenu={(e) => fileCtx(e, f.path, false)}
+              onMouseEnter={() => state.activeId && previewBus.post(state.activeId, { type: "highlight-file", path: f.path })}
+              onMouseLeave={() => state.activeId && previewBus.post(state.activeId, { type: "highlight-clear" })}
             >
               <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
               <span className="path">{f.path}</span>
@@ -607,14 +631,43 @@ function Center({ state, active, dispatch, sock, repo }: {
   const [mounted, setMounted] = useState<string[]>([]);
   const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
 
-  // attribute bridge messages (hmr etc.) to their worktree via event.source
+  // let the rest of the shell post commands into preview iframes
+  useEffect(() => {
+    previewBus.post = (id, m) =>
+      frameRefs.current.get(id)?.contentWindow?.postMessage({ __orchardist: true, ...m }, "*");
+  }, []);
+
+  // attribute bridge messages to their worktree via event.source
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       const d = e.data;
       if (!d || !d.__orchardist) return;
       for (const [id, frame] of frameRefs.current) {
         if (frame.contentWindow === e.source) {
-          if (d.type === "hmr" || d.type === "loaded") dispatch({ a: "hmr", id });
+          if (d.type === "hmr") dispatch({ a: "hmr", id });
+          else if (d.type === "loaded") {
+            dispatch({ a: "hmr", id });
+            dispatch({ a: "page", id, url: d.url, title: d.title, fresh: true });
+          } else if (d.type === "navigated") dispatch({ a: "page", id, url: d.url });
+          else if (d.type === "page-error") {
+            const where = d.source ? ` (${relFile(String(d.source))}:${d.line ?? "?"})` : "";
+            dispatch({ a: "page", id, error: `${d.message}${where}` });
+          } else if (d.type === "picked") {
+            dispatch({
+              a: "picked",
+              pick: {
+                worktreeId: id,
+                component: d.component ?? null,
+                file: d.file ?? null,
+                line: d.line ?? null,
+                tag: String(d.tag ?? ""),
+                classes: String(d.classes ?? ""),
+                text: String(d.text ?? ""),
+                html: String(d.html ?? ""),
+                route: String(d.route ?? ""),
+              },
+            });
+          } else if (d.type === "pick-cancel") dispatch({ a: "set-picking", v: false });
           return;
         }
       }
@@ -961,18 +1014,45 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
     setShowJump(false);
   };
 
+  // ambient context: what the user is looking at, attached invisibly to every send
+  const pick = state.pick && active && state.pick.worktreeId === active.worktree.id ? state.pick : null;
+  const buildContext = (): string | undefined => {
+    if (!active) return undefined;
+    const parts: string[] = [];
+    const pc = state.pageCtx[active.worktree.id];
+    if (pc?.url) {
+      try {
+        const u = new URL(pc.url);
+        parts.push(`current route: ${u.pathname}${u.search}`);
+      } catch {}
+    }
+    if (pc?.title) parts.push(`page title: ${pc.title}`);
+    if (pc?.errors.length) parts.push(`recent console errors:\n${pc.errors.map((e) => `- ${e}`).join("\n")}`);
+    if (pick) {
+      const where = pick.file ? ` defined at ${relFile(pick.file, active.worktree.path)}${pick.line ? `:${pick.line}` : ""}` : "";
+      parts.push(
+        `user-selected element (via the element picker): ${pick.component ? `<${pick.component}> component` : `<${pick.tag}>`}${where}${pick.text ? `, text "${pick.text}"` : ""}\nits HTML: ${pick.html}`,
+      );
+    }
+    if (parts.length === 0) return undefined;
+    return `[Live preview context, attached automatically — this is what the user is looking at right now:\n${parts.join("\n")}]`;
+  };
+
   const send = () => {
     if (!active || !text.trim()) return;
+    const context = buildContext();
     if (spawnNew) {
       sock?.send({
         t: "create-worktree",
         repoId: active.worktree.repoId,
         prompt: text.trim(),
         baseWorktreeId: active.worktree.id,
+        context,
       });
     } else {
-      sock?.send({ t: "chat", worktreeId: active.worktree.id, text: text.trim() });
+      sock?.send({ t: "chat", worktreeId: active.worktree.id, text: text.trim(), context });
     }
+    if (pick) dispatch({ a: "clear-pick" });
     setText("");
   };
 
@@ -1028,6 +1108,19 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
         )}
       </div>
       <div className="chat-input">
+        {pick && (
+          <div className="pick-chip" title={pick.html}>
+            <span className="pick-target">
+              ⌖ {pick.component ? `<${pick.component}>` : `<${pick.tag}>`}
+              {pick.file && (
+                <span className="pick-file">
+                  {" "}· {relFile(pick.file, active!.worktree.path)}{pick.line ? `:${pick.line}` : ""}
+                </span>
+              )}
+            </span>
+            <button title="Remove attachment" onClick={() => dispatch({ a: "clear-pick" })}>✕</button>
+          </div>
+        )}
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -1137,6 +1230,23 @@ function StatusBar({ state, active, dispatch, sock }: { state: State; active: Wo
         title="Toggle worktrees panel (⌘B)"
       >
         <PanelIcon side="left" filled={state.leftOpen} />
+      </button>
+      <button
+        className={`toggle icon pick-toggle ${state.picking ? "on picking" : ""}`}
+        disabled={!active}
+        title="Pick an element on the page for the chat (⌘E)"
+        onClick={() => {
+          if (!active) return;
+          if (state.picking) {
+            previewBus.post(active.worktree.id, { type: "pick-cancel" });
+            dispatch({ a: "set-picking", v: false });
+          } else {
+            previewBus.post(active.worktree.id, { type: "pick-start" });
+            dispatch({ a: "set-picking", v: true });
+          }
+        }}
+      >
+        ⌖
       </button>
       {installEvt && (
         <button

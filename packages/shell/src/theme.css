@@ -478,6 +478,27 @@ body.resizing iframe { pointer-events: none; }
 }
 .status-bar .toggle:hover, .status-bar .toggle.on { color: var(--fg1); }
 .status-bar .toggle.icon { display: grid; place-items: center; padding: 2px; border-radius: 4px; }
+.status-bar .pick-toggle { font-size: 14px; line-height: 1; width: 20px; height: 20px; }
+.status-bar .pick-toggle.picking { color: var(--orange); background: var(--bg2); }
+.status-bar .pick-toggle:disabled { color: var(--bg3); cursor: default; }
+
+.pick-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: var(--bg0);
+  border: 1px solid var(--bg3);
+  border-left: 3px solid var(--orange);
+  border-radius: 4px;
+  font: 11.5px var(--font-mono);
+  color: var(--fg1);
+}
+.pick-chip .pick-target { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-chip .pick-file { color: var(--fg-dim); }
+.pick-chip button { color: var(--fg-dim); }
+.pick-chip button:hover { color: var(--fg1); }
 .status-bar .toggle.icon:hover { background: var(--bg2); }
 .status-bar .branch { color: var(--orange); }
 .status-bar .grow { flex: 1; }

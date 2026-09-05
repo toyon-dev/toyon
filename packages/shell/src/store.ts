@@ -27,6 +27,21 @@ export interface State {
   turnHmr: Record<string, boolean>;
   /** bumped to request a preview reload for a worktree */
   reloadReq: { id: string; n: number } | null;
+  /** live page state per worktree (route, title, recent errors) — ambient chat context */
+  pageCtx: Record<string, { url?: string; title?: string; errors: string[] }>;
+  /** armed element picker + last picked element (pending chat attachment) */
+  picking: boolean;
+  pick: {
+    worktreeId: string;
+    component: string | null;
+    file: string | null;
+    line: number | null;
+    tag: string;
+    classes: string;
+    text: string;
+    html: string;
+    route: string;
+  } | null;
   showQuickOpen: boolean;
   showPrompt: boolean;
   leftOpen: boolean;
@@ -49,6 +64,9 @@ export const initial: State = {
   turnEdits: {},
   turnHmr: {},
   reloadReq: null,
+  pageCtx: {},
+  picking: false,
+  pick: null,
   showQuickOpen: false,
   showPrompt: false,
   leftOpen: true,
@@ -64,6 +82,10 @@ export type Action =
   | { a: "clear-prefill" }
   | { a: "quick-open"; v: boolean }
   | { a: "hmr"; id: string }
+  | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
+  | { a: "set-picking"; v: boolean }
+  | { a: "picked"; pick: NonNullable<State["pick"]> }
+  | { a: "clear-pick" }
   | { a: "show-prompt"; v: boolean }
   | { a: "toggle-left" }
   | { a: "toggle-right" };
@@ -84,6 +106,21 @@ export function reducer(s: State, action: Action): State {
       return { ...s, showQuickOpen: action.v };
     case "hmr":
       return { ...s, turnHmr: { ...s.turnHmr, [action.id]: true } };
+    case "page": {
+      const cur = s.pageCtx[action.id] ?? { errors: [] };
+      const next = {
+        url: action.url ?? cur.url,
+        title: action.title ?? cur.title,
+        errors: action.fresh ? [] : action.error ? [...cur.errors.slice(-2), action.error] : cur.errors,
+      };
+      return { ...s, pageCtx: { ...s.pageCtx, [action.id]: next } };
+    }
+    case "set-picking":
+      return { ...s, picking: action.v };
+    case "picked":
+      return { ...s, picking: false, pick: action.pick };
+    case "clear-pick":
+      return { ...s, pick: null };
     case "show-prompt":
       return { ...s, showPrompt: action.v };
     case "toggle-left":

@@ -345,14 +345,19 @@ body.resizing .row-resize { background: var(--bg3); }
 .rail-list { max-height: none; flex: 1; overflow-y: auto; border-top: none; background: var(--bg1); padding-top: 6px; }
 .nw-mini { display: none; }
 
+/* identical row heights in both modes so dots never shift during the peek */
+.wt-rail .wt-item { height: 33px; padding: 0 12px; align-items: center; }
+.wt-rail .new-wt { height: 33px; padding: 0 12px; align-items: center; }
+
 /* compact (not hovered, nothing held open): dots only */
 .wt-rail:not(:hover):not(.hold) .wt-item .branch,
 .wt-rail:not(:hover):not(.hold) .wt-item .row-badge,
 .wt-rail:not(:hover):not(.hold) .wt-item .wt-more,
 .wt-rail:not(:hover):not(.hold) .graft-check,
 .wt-rail:not(:hover):not(.hold) .nw-full { display: none; }
-.wt-rail:not(:hover):not(.hold) .wt-item { justify-content: center; padding: 8px 0; }
-.wt-rail:not(:hover):not(.hold) .nw-mini { display: block; width: 100%; text-align: center; font-size: 15px; }
+.wt-rail:not(:hover):not(.hold) .wt-item { justify-content: center; padding: 0; }
+.wt-rail:not(:hover):not(.hold) .new-wt { padding: 0; }
+.wt-rail:not(:hover):not(.hold) .nw-mini { display: block; width: 100%; text-align: center; font-size: 15px; line-height: 1; }
 .wt-rail .wt-item .branch { white-space: nowrap; }
 .dirty-badge { color: var(--yellow); }
 

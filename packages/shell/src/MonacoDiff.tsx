@@ -67,15 +67,26 @@ export default function MonacoDiff({ before, after, path, onSave }: {
       hideUnchangedRegions: { enabled: !unchanged },
     });
     editor.setModel({ original, modified });
+    // diff computation is async: the editor first paints unfolded, then collapses.
+    // stay invisible until the first diff pass so it appears already settled.
+    let reveal = () => {
+      el.style.opacity = "1";
+      reveal = () => {};
+    };
     if (unchanged) {
       editor.getModifiedEditor().setScrollTop(0);
+      reveal();
     } else {
+      el.style.opacity = "0";
       const sub = editor.onDidUpdateDiff(() => {
         sub.dispose();
         const first = editor.getLineChanges()?.[0];
         const line = first?.modifiedStartLineNumber || first?.modifiedEndLineNumber || 1;
         editor.getModifiedEditor().revealLineInCenter(line);
+        reveal();
       });
+      // safety: never stay hidden if the diff event doesn't fire
+      setTimeout(() => reveal(), 400);
     }
     const cmd = editor.getModifiedEditor().addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,

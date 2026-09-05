@@ -113,14 +113,7 @@ export function App() {
 
   const repo = state.repos[0] ?? null;
 
-  // far-right worktree rail: wide (names+badges) or narrow (dots), persisted
-  const [railWide, setRailWide] = useState(() => localStorage.getItem("orch-rail") === "wide");
-  const toggleRail = () => {
-    setRailWide((w) => {
-      localStorage.setItem("orch-rail", w ? "narrow" : "wide");
-      return !w;
-    });
-  };
+  // far-right worktree rail: 44px dot strip, hover peeks the full panel
 
   // route follows you across variant siblings: comparing the same screen is
   // the whole point of variants, so switching carries the current path over
@@ -150,7 +143,7 @@ export function App() {
   // resizable docks, widths persisted per browser
   const [leftW, setLeftW] = useState(() => clampW(Number(localStorage.getItem("orch-lw")), 220));
   const [rightW, setRightW] = useState(() => clampW(Number(localStorage.getItem("orch-rw")), 380));
-  const railPx = railWide ? 232 : 44;
+  const railPx = 44;
   const startDrag = (side: "left" | "right") => (e: React.PointerEvent) => {
     e.preventDefault();
     document.body.classList.add("resizing");
@@ -195,7 +188,7 @@ export function App() {
         <Center state={state} active={active} dispatch={dispatch} sock={sock} repo={repo} />
         {state.rightOpen && <div className="dock-resize" onPointerDown={startDrag("right")} />}
         <RightDock state={state} active={active} sock={sock} dispatch={dispatch} width={rightW} />
-        <WtRail state={state} dispatch={dispatch} sock={sock} wide={railWide} onToggleWide={toggleRail} />
+        <WtRail state={state} dispatch={dispatch} sock={sock} />
       </div>
       {state.toast && (
         <div className={`toast ${state.toast.ok ? "ok" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
@@ -453,8 +446,8 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
   );
 }
 
-function WtRail({ state, dispatch, sock, wide, onToggleWide }: {
-  state: State; dispatch: Dispatch; sock: Sock; wide: boolean; onToggleWide: () => void;
+function WtRail({ state, dispatch, sock }: {
+  state: State; dispatch: Dispatch; sock: Sock;
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; land?: boolean } | null>(null);
   const [graftMode, setGraftMode] = useState(false);
@@ -463,7 +456,6 @@ function WtRail({ state, dispatch, sock, wide, onToggleWide }: {
   const toggleSel = (w: WorktreeStatus) => {
     if (w.worktree.kind === "main") return;
     setGraftMode(true);
-    if (!wide) onToggleWide(); // selecting needs names visible
     setSel((s) =>
       s.includes(w.worktree.id) ? s.filter((x) => x !== w.worktree.id) : [...s, w.worktree.id],
     );
@@ -522,16 +514,8 @@ function WtRail({ state, dispatch, sock, wide, onToggleWide }: {
   const menuWt = menu ? state.worktrees.find((w) => w.worktree.id === menu.id) ?? null : null;
 
   return (
-    <div className={`wt-rail ${wide ? "pinned" : ""}`}>
+    <div className={`wt-rail ${graftMode || menu ? "hold" : ""}`}>
       <div className="rail-panel">
-      <button
-        className="rail-head"
-        onClick={onToggleWide}
-        title={wide ? "Unpin — collapse to dots (hover to peek)" : "Pin open"}
-      >
-        <span className="branch helper">worktrees · {state.worktrees.length}</span>
-        <span className="chevron">{wide ? "»" : "«"}</span>
-      </button>
       {(
         <div className="wt-list rail-list">
           {state.worktrees.map((w, i) => (
@@ -546,7 +530,7 @@ function WtRail({ state, dispatch, sock, wide, onToggleWide }: {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, id: w.worktree.id });
               }}
-              title={`${wide ? "" : `${w.worktree.title} · `}⌘${i + 1} · ${w.worktree.branch}${graftMode ? " · click to select" : " · shift-click to graft"}`}
+              title={`⌘${i + 1} · ${w.worktree.branch}${(w.dirty ?? 0) > 0 ? ` · ${w.dirty} uncommitted` : ""}${graftMode ? " · click to select" : " · shift-click to graft"}`}
             >
               {graftMode && w.worktree.kind !== "main" && (
                 <input
@@ -573,6 +557,20 @@ function WtRail({ state, dispatch, sock, wide, onToggleWide }: {
                 >
                   <span className="num">v{w.worktree.variant.index}/{w.worktree.variant.of}</span>
                   <span className="act">pick</span>
+                </span>
+              )}
+              {(w.dirty ?? 0) > 0 && (
+                <span
+                  className="row-badge dirty-badge clickable"
+                  title={`${w.dirty} uncommitted file(s) — click to view changes`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dispatch({ a: "activate", id: w.worktree.id });
+                    if (!state.leftOpen) dispatch({ a: "toggle-left" });
+                  }}
+                >
+                  <span className="num">~{w.dirty}</span>
+                  <span className="act">view</span>
                 </span>
               )}
               {(w.behind ?? 0) > 0 && (

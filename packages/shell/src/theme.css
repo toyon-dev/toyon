@@ -318,7 +318,6 @@ body.resizing .row-resize { background: var(--bg3); }
   position: relative;
   overflow: visible;
 }
-.wt-rail.pinned { width: 232px; }
 .rail-panel {
   position: absolute;
   top: 0;
@@ -334,7 +333,8 @@ body.resizing .row-resize { background: var(--bg3); }
   z-index: 25;
   transition: width 0.12s ease, box-shadow 0.12s ease;
 }
-.wt-rail:not(.pinned):hover .rail-panel {
+.wt-rail:hover .rail-panel,
+.wt-rail.hold .rail-panel {
   width: 232px;
   box-shadow: -10px 0 28px rgba(0, 0, 0, 0.4);
   /* let the shadow escape left only — never over the top bar */
@@ -342,33 +342,19 @@ body.resizing .row-resize { background: var(--bg3); }
   /* hover intent: brief pause before expanding; collapse stays instant */
   transition: width 0.12s ease 50ms, box-shadow 0.12s ease 50ms;
 }
-.rail-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 12px;
-  color: var(--fg-dim);
-  border-bottom: 1px solid var(--bg2);
-  flex-shrink: 0;
-  min-height: 34px;
-}
-.rail-head:hover { color: var(--fg1); background: var(--bg2); }
-.rail-head .helper { flex: 1; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
-.rail-list { max-height: none; flex: 1; overflow-y: auto; border-top: none; background: var(--bg1); }
+.rail-list { max-height: none; flex: 1; overflow-y: auto; border-top: none; background: var(--bg1); padding-top: 6px; }
 .nw-mini { display: none; }
 
-/* compact (unpinned + not hovered): dots only */
-.wt-rail:not(.pinned):not(:hover) .rail-head { justify-content: center; padding: 9px 0; }
-.wt-rail:not(.pinned):not(:hover) .rail-head .helper,
-.wt-rail:not(.pinned):not(:hover) .wt-item .branch,
-.wt-rail:not(.pinned):not(:hover) .wt-item .row-badge,
-.wt-rail:not(.pinned):not(:hover) .wt-item .wt-more,
-.wt-rail:not(.pinned):not(:hover) .graft-check,
-.wt-rail:not(.pinned):not(:hover) .nw-full { display: none; }
-.wt-rail:not(.pinned):not(:hover) .wt-item { justify-content: center; padding: 8px 0; }
-.wt-rail:not(.pinned):not(:hover) .nw-mini { display: block; width: 100%; text-align: center; font-size: 15px; }
-.wt-rail .wt-item .branch,
-.rail-head .helper { white-space: nowrap; }
+/* compact (not hovered, nothing held open): dots only */
+.wt-rail:not(:hover):not(.hold) .wt-item .branch,
+.wt-rail:not(:hover):not(.hold) .wt-item .row-badge,
+.wt-rail:not(:hover):not(.hold) .wt-item .wt-more,
+.wt-rail:not(:hover):not(.hold) .graft-check,
+.wt-rail:not(:hover):not(.hold) .nw-full { display: none; }
+.wt-rail:not(:hover):not(.hold) .wt-item { justify-content: center; padding: 8px 0; }
+.wt-rail:not(:hover):not(.hold) .nw-mini { display: block; width: 100%; text-align: center; font-size: 15px; }
+.wt-rail .wt-item .branch { white-space: nowrap; }
+.dirty-badge { color: var(--yellow); }
 
 .wt-switcher { border-bottom: 1px solid var(--bg2); flex-shrink: 0; }
 .wt-current {

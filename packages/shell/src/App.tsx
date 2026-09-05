@@ -28,6 +28,11 @@ export function App() {
     if (state.activeId && sock) sock.send({ t: "subscribe", worktreeId: state.activeId });
   }, [state.activeId, state.connected]);
 
+  // window/app title follows the active worktree
+  useEffect(() => {
+    document.title = active ? `${active.worktree.title} — orchardist` : "orchardist";
+  }, [active?.worktree.title]);
+
   // keyboard: cmd+1..9 switch tabs, cmd+k new worktree, cmd+b/j toggle docks, esc closes
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

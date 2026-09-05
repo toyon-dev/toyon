@@ -214,7 +214,8 @@ export class Manager {
       branch: repo.defaultBranch,
       kind: "main",
       proxyPort: await allocatePort(),
-      title: "main",
+      // titled by repo so multi-repo lists don't show identical "main" rows
+      title: repo.name,
       createdAt: Date.now(),
     };
     this.state.worktrees.push(main);

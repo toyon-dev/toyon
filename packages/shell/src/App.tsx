@@ -125,8 +125,8 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
       <div className="dock-section-title changes-head">
         <span>
           changes{files.length > 0 ? ` · ${files.length}` : ""}
-          {ahead > 0 && <span className="ahead-badge" title={`${ahead} commit(s) ahead of main`}> ↑{ahead}</span>}
           {behind > 0 && <span className="behind-badge" title={`${behind} commit(s) behind main`}> ↓{behind}</span>}
+          {ahead > 0 && <span className="ahead-badge" title={`${ahead} commit(s) ahead of main`}> ↑{ahead}</span>}
           {active?.worktree.landed && <span className="landed-badge" title="Merged into main"> ✓ landed</span>}
         </span>
       </div>
@@ -291,6 +291,19 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 {w.worktree.kind === "combined" ? "⧉ " : ""}
                 {w.worktree.title}
               </span>
+              {(w.behind ?? 0) > 0 && (
+                <span
+                  className="row-badge behind-badge clickable"
+                  title={`${w.behind} commit(s) behind main — click to sync`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sock?.send({ t: "sync-main", worktreeId: w.worktree.id });
+                  }}
+                >
+                  <span className="num">↓{w.behind}</span>
+                  <span className="act">sync</span>
+                </span>
+              )}
               {(w.ahead ?? 0) > 0 && (
                 <span
                   className="row-badge ahead-badge clickable"
@@ -303,19 +316,6 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 >
                   <span className="num">↑{w.ahead}</span>
                   <span className="act">land</span>
-                </span>
-              )}
-              {(w.behind ?? 0) > 0 && (
-                <span
-                  className="row-badge behind-badge clickable"
-                  title={`${w.behind} commit(s) behind main — click to sync`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    sock?.send({ t: "sync-main", worktreeId: w.worktree.id });
-                  }}
-                >
-                  <span className="num">↓{w.behind}</span>
-                  <span className="act">sync</span>
                 </span>
               )}
               <span

@@ -4,7 +4,7 @@
 // v0.1 runs under bun (dev-mode); packaged single-binary distribution comes later.
 
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, existsSync, openSync, mkdirSync, writeFileSync, chmodSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync, openSync, mkdirSync, writeFileSync, chmodSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -144,6 +144,7 @@ function installApp() {
   const appDir = join(homedir(), "Applications", "Orchardist.app");
   const macos = join(appDir, "Contents", "MacOS");
   const resources = join(appDir, "Contents", "Resources");
+  rmSync(appDir, { recursive: true, force: true }); // ours to regenerate; stale files break the signature
   mkdirSync(macos, { recursive: true });
   mkdirSync(resources, { recursive: true });
   writeFileSync(
@@ -156,12 +157,15 @@ function installApp() {
   <key>CFBundleIdentifier</key><string>dev.orchardist.app</string>
   <key>CFBundleVersion</key><string>0.0.1</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>launch</string>
+  <key>CFBundleExecutable</key><string>Orchardist</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
 </dict></plist>
 `,
   );
-  const launcher = join(macos, "launch");
+  // The launch logic is a shell script; the bundle's main executable is a tiny Mach-O that execs
+  // it. Gatekeeper on recent macOS refuses script-main-executable bundles as "damaged" even when
+  // ad-hoc signed; a real binary is accepted. Falls back to the script if clang is unavailable.
+  const launcher = join(resources, "launch.sh");
   const daemonEntry = join(here, "../../daemon/src/index.ts");
   writeFileSync(
     launcher,
@@ -216,6 +220,33 @@ exec open "$URL"
 `,
   );
   chmodSync(launcher, 0o755);
+  const stub = join(macos, "Orchardist");
+  const cSrc = join(homedir(), ".orchardist", "launcher.c");
+  writeFileSync(
+    cSrc,
+    `#include <mach-o/dyld.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <libgen.h>
+int main(int argc, char **argv) {
+  char self[4096]; uint32_t n = sizeof(self);
+  if (_NSGetExecutablePath(self, &n) != 0) return 1;
+  char script[4600];
+  snprintf(script, sizeof(script), "%s/../Resources/launch.sh", dirname(self));
+  execl("/bin/bash", "bash", script, (char *)0);
+  return 1;
+}
+`,
+  );
+  const cc = spawnSync("clang", ["-O2", "-o", stub, cSrc], { stdio: "ignore" });
+  if (cc.status !== 0) {
+    // no compiler: ship the script as the executable (works on older macOS)
+    writeFileSync(stub, `#!/bin/bash\nexec /bin/bash "$(dirname "$0")/../Resources/launch.sh"\n`);
+    chmodSync(stub, 0o755);
+  }
 
   // best-effort icon: rasterize the shell's SVG -> iconset -> icns
   try {
@@ -242,7 +273,8 @@ exec open "$URL"
 
 if (wantsInstallApp) {
   installApp();
-  openAppWindow();
+  // launch through the bundle we just wrote, so a Gatekeeper problem shows up now, not later
+  spawn("open", ["-a", join(homedir(), "Applications", "Orchardist.app")], { stdio: "ignore" }).unref();
 } else if (wantsAppWindow) {
   console.log(`orchardist → app window (${appUrl.split("#")[0]})`);
   if (!openAppWindow()) {

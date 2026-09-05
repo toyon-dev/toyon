@@ -322,8 +322,9 @@ button {
 .toast {
   position: fixed;
   bottom: 38px;
-  right: 12px;
-  max-width: 420px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 480px;
   background: var(--bg1);
   border: 1px solid var(--bg3);
   border-left: 3px solid var(--aqua);

@@ -196,8 +196,13 @@ export function startServer(opts: {
         if (wt.kind === "main") throw new Error("main doesn't sync with itself");
         const repo = manager.repo(wt.repoId);
         const result = syncFromMain(wt.path, repo.defaultBranch);
+        const suggestion = result.ok
+          ? undefined
+          : `Merge ${repo.defaultBranch} into this branch and resolve the conflicts, then verify the app still works.`;
         ws.send(JSON.stringify({
-          t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message,
+          t: "shipped", worktreeId: wt.id, ok: result.ok,
+          message: result.ok ? result.message : `sync conflicts with ${repo.defaultBranch} — prompt prefilled in chat`,
+          suggestion,
         } satisfies ServerMsg));
         sendGitStatus(wt.id, ws);
         break;

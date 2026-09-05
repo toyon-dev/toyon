@@ -269,7 +269,6 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 if (graftMode || e.shiftKey) toggleSel(w);
                 else dispatch({ a: "activate", id: w.worktree.id });
               }}
-              onDoubleClick={() => rename(w)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, id: w.worktree.id });
@@ -347,9 +346,11 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               </button>
             </div>
           )}
-          <button className="new-wt" onClick={() => dispatch({ a: "show-prompt", v: true })}>
-            + new worktree ⌘K
-          </button>
+          {!graftMode && (
+            <button className="new-wt" onClick={() => dispatch({ a: "show-prompt", v: true })}>
+              + new worktree ⌘K
+            </button>
+          )}
         </div>
       )}
       {menu && menuWt && menu.land && (
@@ -514,6 +515,15 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
   const isMain = active?.worktree.kind === "main";
   const [spawnNew, setSpawnNew] = useState(isMain);
   useEffect(() => setSpawnNew(active?.worktree.kind === "main"), [active?.worktree.id]);
+
+  // conflict resolutions etc. arrive as chat prefills
+  useEffect(() => {
+    if (state.prefill && active && state.prefill.worktreeId === active.worktree.id) {
+      setText(state.prefill.text);
+      setSpawnNew(false);
+      dispatch({ a: "clear-prefill" });
+    }
+  }, [state.prefill, active?.worktree.id]);
 
   // pin to bottom while streaming
   useEffect(() => {

@@ -94,7 +94,7 @@ export type ServerMsg =
   | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }> }
   | { t: "git-status"; worktreeId: string; files: GitFileStatus[]; ahead?: number; behind?: number }
   | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string }
-  | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean; removeIds?: string[] }
+  | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean; removeIds?: string[]; suggestion?: string }
   | { t: "error"; message: string };
 
 export type ClientMsg =

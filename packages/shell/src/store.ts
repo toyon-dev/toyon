@@ -19,6 +19,7 @@ export interface State {
   logs: Record<string, string[]>;
   diff: { worktreeId: string; path: string; before: string; after: string } | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
+  prefill: { worktreeId: string; text: string } | null;
   showPrompt: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
@@ -34,6 +35,7 @@ export const initial: State = {
   logs: {},
   diff: null,
   toast: null,
+  prefill: null,
   showPrompt: false,
   leftOpen: true,
   rightOpen: true,
@@ -45,6 +47,7 @@ export type Action =
   | { a: "activate"; id: string }
   | { a: "close-diff" }
   | { a: "dismiss-toast" }
+  | { a: "clear-prefill" }
   | { a: "show-prompt"; v: boolean }
   | { a: "toggle-left" }
   | { a: "toggle-right" };
@@ -59,6 +62,8 @@ export function reducer(s: State, action: Action): State {
       return { ...s, diff: null };
     case "dismiss-toast":
       return { ...s, toast: null };
+    case "clear-prefill":
+      return { ...s, prefill: null };
     case "show-prompt":
       return { ...s, showPrompt: action.v };
     case "toggle-left":
@@ -124,6 +129,9 @@ function onServer(s: State, msg: ServerMsg): State {
     case "shipped":
       return {
         ...s,
+        // a suggestion prefills that worktree's chat and focuses it
+        activeId: msg.suggestion ? msg.worktreeId : s.activeId,
+        prefill: msg.suggestion ? { worktreeId: msg.worktreeId, text: msg.suggestion } : s.prefill,
         toast: {
           ok: msg.ok,
           message: msg.message,

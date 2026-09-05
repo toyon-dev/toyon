@@ -264,6 +264,10 @@ export class Manager {
     const base = baseWorktreeId ? this.state.worktrees.find((w) => w.id === baseWorktreeId) : undefined;
     const fromMain = !base || base.kind === "main";
 
+    // perspective-diverse variants: same goal, different emphasis per attempt
+    const agentPrompt =
+      variant && variant.of >= 2 ? `${prompt}\n\n${VARIANT_LENSES[(variant.index - 1) % VARIANT_LENSES.length]}` : prompt;
+
     // fast path: claim the pre-warmed spare (main-based tasks only)
     if (fromMain) {
       const claimed = await this.claimSpare(repoId, branch, slug);
@@ -272,7 +276,7 @@ export class Manager {
         saveState(this.state);
         this.hub.worktreesChanged();
         const agent = this.agentFor(claimed.id) ?? this.makeAgent(claimed);
-        agent.send(prompt);
+        agent.send(agentPrompt);
         this.scheduleNaming(claimed, prompt, repo, variant);
         return claimed;
       }
@@ -303,7 +307,7 @@ export class Manager {
     void this.setupAndStart(wt, repo, base?.path ?? repo.path).then(() => this.hub.worktreesChanged());
     const rtAgent = this.makeAgent(wt);
     this.pendingAgents.set(wt.id, rtAgent);
-    rtAgent.send(prompt);
+    rtAgent.send(agentPrompt);
     this.scheduleNaming(wt, prompt, repo, variant);
     return wt;
   }
@@ -615,6 +619,12 @@ export class Manager {
 function shortId(): string {
   return randomBytes(5).toString("hex");
 }
+
+const VARIANT_LENSES = [
+  "(You are attempt 1 of several parallel attempts at this task. Take the straightforward, balanced approach — the version most people would expect.)",
+  "(You are attempt 2 of several parallel attempts at this task. Take a bolder visual/design-led approach — prioritize form, polish, and delight.)",
+  "(You are attempt 3 of several parallel attempts at this task. Take a function-led approach — prioritize capability, detail, and edge cases over visual flair.)",
+];
 
 function slugify(prompt: string, withRandom = true): string {
   const words = prompt.toLowerCase().replace(/[^a-z0-9\s-]/g, "").split(/\s+/).filter(Boolean).slice(0, 4);

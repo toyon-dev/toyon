@@ -161,7 +161,7 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
           )}
         </div>
       )}
-      {clean && <div className="dock-empty">nothing uncommitted on {active?.worktree.title ?? "—"}</div>}
+      {clean && <div className="dock-empty">clean</div>}
       {files.length > 0 && (
         <div className="commit-box">
           <input
@@ -190,7 +190,7 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
       {(gitInfo?.committed?.length ?? 0) > 0 && (
         <>
           <div className="dock-section-title" title="Committed on this branch, not yet on main">
-            committed, not landed · {gitInfo!.committed!.length}
+            committed · {gitInfo!.committed!.length}
           </div>
           {gitInfo!.committed!.map((f) => (
             <button

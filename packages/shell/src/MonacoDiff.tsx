@@ -5,9 +5,13 @@ import { useEffect, useRef } from "react";
 import * as monaco from "monaco-editor";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
+import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 
 (self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
-  getWorker: () => new editorWorker(),
+  // ts/tsx models route language requests (inlay hints, hover) to the TS worker;
+  // everything else gets the base editor worker
+  getWorker: (_id: string, label: string) =>
+    label === "typescript" || label === "javascript" ? new tsWorker() : new editorWorker(),
 };
 
 monaco.editor.defineTheme("gruvbox-soft", {

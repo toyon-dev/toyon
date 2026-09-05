@@ -108,7 +108,7 @@ export function App() {
               }}
             >
               {state.toast.removeIds.length > 1
-                ? `remove graft + ${state.toast.removeIds.length - 1} source worktree(s)`
+                ? `clean up ${state.toast.removeIds.length} worktrees`
                 : "remove worktree"}
             </button>
           )}

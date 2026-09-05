@@ -198,13 +198,18 @@ export function startServer(opts: {
         const repo = manager.repo(wt.repoId);
         const result = mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch, wt.title);
         if (result.ok) manager.setLanded(wt.id, true);
-        // landing a graft lands all its sources too — offer to clean up the lot
-        const removeIds =
-          result.ok && wt.kind === "combined"
-            ? [wt.id, ...(wt.sources ?? []).filter((id) => manager.worktree(id))]
-            : result.ok
-              ? [wt.id]
-              : undefined;
+        // landing a graft lands its sources; landing a variant ends the tournament —
+        // in both cases offer to clean up the whole family
+        let removeIds: string[] | undefined;
+        if (result.ok && wt.kind === "combined") {
+          removeIds = [wt.id, ...(wt.sources ?? []).filter((id) => manager.worktree(id))];
+        } else if (result.ok && wt.variant) {
+          removeIds = manager.state.worktrees
+            .filter((w) => w.variant?.group === wt.variant!.group)
+            .map((w) => w.id);
+        } else if (result.ok) {
+          removeIds = [wt.id];
+        }
         ws.send(JSON.stringify({
           t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message, merged: result.ok, removeIds,
         } satisfies ServerMsg));

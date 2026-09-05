@@ -67,6 +67,9 @@ export function App() {
           previewBus.post(state.activeId, { type: "pick-start" });
           dispatch({ a: "set-picking", v: true });
         }
+      } else if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        dispatch({ a: "toggle-zen" });
       } else if (e.metaKey && e.key === "b") {
         e.preventDefault();
         dispatch({ a: "toggle-left" });
@@ -74,7 +77,8 @@ export function App() {
         e.preventDefault();
         dispatch({ a: "toggle-right" });
       } else if (e.key === "Escape") {
-        if (state.showQuickOpen) dispatch({ a: "quick-open", v: false });
+        if (state.zen) dispatch({ a: "toggle-zen" });
+        else if (state.showQuickOpen) dispatch({ a: "quick-open", v: false });
         else if (state.showPrompt) dispatch({ a: "show-prompt", v: false });
         else if (state.diff) dispatch({ a: "close-diff" });
       }
@@ -84,7 +88,7 @@ export function App() {
     const onMsg = (e: MessageEvent) => {
       const d = e.data;
       if (d && d.__orchardist && d.type === "key" && d.meta) {
-        window.dispatchEvent(new KeyboardEvent("keydown", { key: d.key, metaKey: true }));
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: d.key, metaKey: true, shiftKey: !!d.shift }));
       }
     };
     window.addEventListener("message", onMsg);
@@ -92,7 +96,7 @@ export function App() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("message", onMsg);
     };
-  }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.activeId, state.picking]);
+  }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.activeId, state.picking, state.zen]);
 
   // ship results: open PR/compare URLs, auto-dismiss toasts
   const openedRef = useRef<string | null>(null);
@@ -183,7 +187,7 @@ export function App() {
   const navCenter = leftPx + (winW - leftPx - rightPx) / 2;
 
   return (
-    <div className="app">
+    <div className={`app ${state.zen ? "zen" : ""}`}>
       <StatusBar state={state} active={active} dispatch={dispatch} sock={sock} navCenter={navCenter} />
       <div className="docks">
         <LeftDock state={state} dispatch={dispatch} sock={sock} width={leftW} />

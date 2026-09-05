@@ -42,6 +42,13 @@ button {
   height: 100%;
 }
 
+/* zen: full-bleed preview, all chrome hidden (⌘⇧F, esc exits) */
+.app.zen .status-bar,
+.app.zen .left-dock,
+.app.zen .right-dock,
+.app.zen .wt-rail,
+.app.zen .dock-resize { display: none; }
+
 .docks {
   display: flex;
   min-height: 0;

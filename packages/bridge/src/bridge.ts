@@ -41,6 +41,11 @@ window.addEventListener(
       e.preventDefault();
       e.stopPropagation();
       post({ type: "key", key: e.key, meta: true });
+    } else if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "f") {
+      // zen toggle works even with the preview focused
+      e.preventDefault();
+      e.stopPropagation();
+      post({ type: "key", key: "F", meta: true, shift: true });
     }
   },
   true,

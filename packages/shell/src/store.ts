@@ -50,6 +50,8 @@ export interface State {
   showPrompt: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
+  /** full-bleed preview: all chrome hidden */
+  zen: boolean;
 }
 
 export const initial: State = {
@@ -76,6 +78,7 @@ export const initial: State = {
   showPrompt: false,
   leftOpen: true,
   rightOpen: true,
+  zen: false,
 };
 
 export type Action =
@@ -93,7 +96,8 @@ export type Action =
   | { a: "clear-pick" }
   | { a: "show-prompt"; v: boolean }
   | { a: "toggle-left" }
-  | { a: "toggle-right" };
+  | { a: "toggle-right" }
+  | { a: "toggle-zen" };
 
 export function reducer(s: State, action: Action): State {
   switch (action.a) {
@@ -132,6 +136,12 @@ export function reducer(s: State, action: Action): State {
       return { ...s, leftOpen: !s.leftOpen };
     case "toggle-right":
       return { ...s, rightOpen: !s.rightOpen };
+    case "toggle-zen":
+      return {
+        ...s,
+        zen: !s.zen,
+        toast: !s.zen ? { ok: true, message: "zen — esc or ⌘⇧F to exit" } : s.toast,
+      };
     case "server":
       return onServer(s, action.msg);
   }

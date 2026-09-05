@@ -43,11 +43,22 @@ export function App() {
     document.title = active ? `${active.worktree.title} — orchardist` : "orchardist";
   }, [active?.worktree.title]);
 
+  // remember the selection across reloads
+  useEffect(() => {
+    if (state.activeId) {
+      try {
+        localStorage.setItem("orch-active", state.activeId);
+      } catch {}
+    }
+  }, [state.activeId]);
+
   // keyboard: cmd+1..9 switch tabs, cmd+k new worktree, cmd+b/j toggle docks, esc closes
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey && e.key >= "1" && e.key <= "9") {
-        const wt = state.worktrees[Number(e.key) - 1];
+        // ⌘9 always lands on the last worktree (macOS tab convention), whatever the count
+        const n = Number(e.key);
+        const wt = n === 9 ? state.worktrees[state.worktrees.length - 1] : state.worktrees[n - 1];
         if (wt) { e.preventDefault(); dispatch({ a: "activate", id: wt.worktree.id }); }
       } else if (e.metaKey && e.key === "k") {
         e.preventDefault();
@@ -514,7 +525,7 @@ function WtRail({ state, dispatch, sock }: {
   const menuWt = menu ? state.worktrees.find((w) => w.worktree.id === menu.id) ?? null : null;
 
   return (
-    <div className={`wt-rail ${graftMode || menu ? "hold" : ""}`}>
+    <div className={`wt-rail ${graftMode || menu ? "hold" : ""} ${state.connected ? "" : "offline"}`}>
       <div className="rail-panel">
       {(
         <div className="rail-list">
@@ -671,6 +682,13 @@ function WtRail({ state, dispatch, sock }: {
           )}
         </div>
       )}
+      <div
+        className={`rail-foot ${state.connected ? "" : "off"}`}
+        title={state.connected ? "Connected to daemon" : "Reconnecting to daemon"}
+      >
+        <span className="conn-dot" />
+        <span className="nw-full conn-label">{state.connected ? "connected" : "reconnecting…"}</span>
+      </div>
       {menu && menuWt && menu.land && (
         <div className="ctx-menu" style={{ left: Math.min(menu.x, window.innerWidth - 180), top: menu.y }}>
           <button onClick={() => sock?.send({ t: "merge-main", worktreeId: menuWt.worktree.id })}>
@@ -949,6 +967,8 @@ function Center({ state, active, dispatch, sock, repo }: {
               sock?.send({ t: "create-worktree", repoId: repo.id, prompt: text });
             }
             dispatch({ a: "show-prompt", v: false });
+            // the agent starts talking in the chat panel — make sure it's on screen
+            if (!state.rightOpen) dispatch({ a: "toggle-right" });
           }}
           onClose={() => dispatch({ a: "show-prompt", v: false })}
         />
@@ -1562,7 +1582,7 @@ function toolHint(item: Extract<ChatItem, { kind: "tool" }>): string {
 }
 
 const KEY_ROWS: Array<[string, string]> = [
-  ["⌘1–9", "switch worktree"],
+  ["⌘1–9", "switch worktree · ⌘9 is always the last"],
   ["⌘K", "new worktree (variants · batch)"],
   ["⌘P", "jump to file"],
   ["⌘E", "pick an element on the page"],
@@ -1657,9 +1677,9 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
         <PanelIcon side="left" filled={state.leftOpen} />
       </button>
       <div className="rb-center" style={{ left: navCenter }}>
-      <button className="rb-btn" disabled={!ready} title="Back" onClick={() => id && previewBus.post(id, { type: "back" })}>‹</button>
-      <button className="rb-btn" disabled={!ready} title="Forward" onClick={() => id && previewBus.post(id, { type: "forward" })}>›</button>
-      <button className="rb-btn" disabled={!ready} title="Reload preview" onClick={() => id && previewBus.post(id, { type: "reload" })}>⟳</button>
+      <button className="rb-btn rb-nav" disabled={!ready} title="Back" onClick={() => id && previewBus.post(id, { type: "back" })}>‹</button>
+      <button className="rb-btn rb-nav" disabled={!ready} title="Forward" onClick={() => id && previewBus.post(id, { type: "forward" })}>›</button>
+      <button className="rb-btn rb-nav rb-reload" disabled={!ready} title="Reload preview" onClick={() => id && previewBus.post(id, { type: "reload" })}>⟳</button>
       <input
         className="rb-path"
         value={ready ? val : ""}
@@ -1703,18 +1723,15 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
             {p.name} {p.status}
           </button>
         ))}
-      <span title={state.connected ? "Connected to daemon" : "Reconnecting to daemon"}>
-        {state.connected ? "●" : "○"}
-      </span>
+      <button className="toggle icon keys-btn" title="Keyboard shortcuts" onClick={() => setShowKeys(true)}>
+        ?
+      </button>
       <button
         className="toggle icon keys-btn"
         title="Zen — full-bleed preview (⌘⇧F · esc exits)"
         onClick={() => dispatch({ a: "toggle-zen" })}
       >
         ⛶
-      </button>
-      <button className="toggle icon keys-btn" title="Keyboard shortcuts" onClick={() => setShowKeys(true)}>
-        ?
       </button>
       {showKeys && <KeysHelp onClose={() => setShowKeys(false)} />}
       <button

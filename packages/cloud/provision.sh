@@ -116,8 +116,9 @@ case "$cmd" in
     fly deploy "$ROOT" --config "$HERE/fly.toml" --dockerfile "$HERE/Dockerfile" \
       --remote-only --ha=false --yes
     # public IPs are not always auto-allocated for a config-driven first deploy
-    fly ips list -a "$app" 2>/dev/null | grep -q 'v4' || fly ips allocate-v4 --shared -a "$app"
-    fly ips list -a "$app" 2>/dev/null | grep -q 'v6' || fly ips allocate-v6 -a "$app"
+    ips="$(fly ips list -a "$app" --json 2>/dev/null || true)"
+    echo "$ips" | grep -q '"Type": *"v4"' || fly ips allocate-v4 --shared -a "$app"
+    echo "$ips" | grep -q '"Type": *"v6"' || fly ips allocate-v6 -a "$app"
     echo "waiting for /health…"
     for i in $(seq 1 60); do
       if curl -fsS "https://$app.fly.dev/health" >/dev/null 2>&1; then break; fi

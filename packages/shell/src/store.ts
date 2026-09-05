@@ -50,6 +50,8 @@ export interface State {
   showPrompt: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
+  /** one-shot: auto-close the changes panel if the session starts on a clean main */
+  leftAuto: boolean;
   /** full-bleed preview: all chrome hidden */
   zen: boolean;
 }
@@ -78,6 +80,7 @@ export const initial: State = {
   showPrompt: false,
   leftOpen: true,
   rightOpen: true,
+  leftAuto: true,
   zen: false,
 };
 
@@ -133,7 +136,7 @@ export function reducer(s: State, action: Action): State {
     case "show-prompt":
       return { ...s, showPrompt: action.v };
     case "toggle-left":
-      return { ...s, leftOpen: !s.leftOpen };
+      return { ...s, leftOpen: !s.leftOpen, leftAuto: false };
     case "toggle-right":
       return { ...s, rightOpen: !s.rightOpen };
     case "toggle-zen":
@@ -150,10 +153,17 @@ export function reducer(s: State, action: Action): State {
 function onServer(s: State, msg: ServerMsg): State {
   switch (msg.t) {
     case "hello": {
+      // restore the previously selected worktree across reloads
+      let stored: string | null = null;
+      try {
+        stored = localStorage.getItem("orch-active");
+      } catch {}
       const activeId =
         s.activeId && msg.worktrees.some((w) => w.worktree.id === s.activeId)
           ? s.activeId
-          : msg.worktrees[0]?.worktree.id ?? null;
+          : stored && msg.worktrees.some((w) => w.worktree.id === stored)
+            ? stored
+            : msg.worktrees[0]?.worktree.id ?? null;
       return { ...s, repos: msg.repos, worktrees: msg.worktrees, activeId };
     }
     case "repos":
@@ -214,8 +224,20 @@ function onServer(s: State, msg: ServerMsg): State {
       const changedRanges = Object.fromEntries(
         Object.entries(s.changedRanges).filter(([k]) => !k.startsWith(msg.worktreeId + ":")),
       );
+      // session opened on a clean main: nothing to show — close the changes panel once
+      let leftOpen = s.leftOpen;
+      let leftAuto = s.leftAuto;
+      if (s.leftAuto && msg.worktreeId === s.activeId) {
+        const wt = s.worktrees.find((w) => w.worktree.id === msg.worktreeId);
+        if (wt?.worktree.kind === "main" && msg.files.length === 0 && (msg.committed?.length ?? 0) === 0) {
+          leftOpen = false;
+        }
+        leftAuto = false;
+      }
       return {
         ...s,
+        leftOpen,
+        leftAuto,
         changedRanges,
         git: {
           ...s.git,

@@ -75,6 +75,9 @@ button {
 .keys-d { color: var(--fg-muted); }
 
 /* zen: full-bleed preview, all chrome hidden (⌘⇧F, esc exits) */
+/* hiding the bar removes a grid child — collapse to one full-height row so
+   .docks doesn't re-slot into the auto track (grid re-slotting, round two) */
+.app.zen { grid-template-rows: 1fr; }
 .app.zen .status-bar,
 .app.zen .left-dock,
 .app.zen .right-dock,

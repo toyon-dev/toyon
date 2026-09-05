@@ -12,6 +12,9 @@
     "packages/bridge": {
       "name": "@orchardist/bridge",
       "version": "0.0.1",
+      "dependencies": {
+        "@orchardist/shared": "workspace:*",
+      },
     },
     "packages/cli": {
       "name": "orchardist",

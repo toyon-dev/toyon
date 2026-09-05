@@ -5,5 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "bun build src/bridge.ts --outfile dist/bridge.js --minify"
+  },
+  "dependencies": {
+    "@orchardist/shared": "workspace:*"
   }
 }

@@ -170,9 +170,19 @@ body.resizing iframe { pointer-events: none; }
 .combine-btn { color: var(--aqua); }
 .combine-btn:hover { color: var(--aqua); background: var(--bg2); }
 .combine-btn:disabled { color: var(--fg-dim); cursor: default; }
-.graft-row { display: flex; border-top: 1px solid var(--bg2); }
-.graft-row .new-wt { width: auto; flex: 1; }
-.graft-cancel { text-align: right; }
+.graft-row { display: flex; border-top: 1px solid var(--bg2); align-items: center; padding: 4px 6px; gap: 2px; }
+.bulk-btn {
+  font-size: 12px;
+  color: var(--fg-muted);
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.bulk-btn:hover { background: var(--bg2); color: var(--fg1); }
+.bulk-btn:disabled { color: var(--bg3); cursor: default; background: none; }
+.bulk-btn.danger { color: var(--red); }
+.bulk-btn.danger:hover { background: var(--bg2); color: var(--red); }
+.bulk-btn.combine-btn { color: var(--aqua); }
 .graft-check { accent-color: var(--aqua); pointer-events: none; margin: 0; }
 
 .wt-item.sel { background: var(--bg2); box-shadow: inset 2px 0 0 var(--aqua); }

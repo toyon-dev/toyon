@@ -616,18 +616,49 @@ function WtRail({ state, dispatch, sock }: {
           {graftMode && (
             <div className="graft-row">
               <button
-                className="new-wt combine-btn"
+                className="bulk-btn combine-btn"
                 disabled={sel.length < 2}
+                title="Preview these worktrees merged together (local octopus merge)"
                 onClick={() => {
                   sock?.send({ t: "combine", worktreeIds: sel });
                   cancelGraft();
                 }}
               >
-                ⧉ graft {sel.length >= 2 ? `${sel.length} worktrees` : "— pick 2+"}
+                ⧉ graft {sel.length}
               </button>
-              <button className="new-wt graft-cancel" onClick={cancelGraft}>
-                <span>cancel</span>
-                <span className="kbd-hint">esc</span>
+              <button
+                className="bulk-btn"
+                disabled={!sel.some((id) => (state.worktrees.find((w) => w.worktree.id === id)?.behind ?? 0) > 0)}
+                title="Pull main into every selected worktree that's behind"
+                onClick={() => {
+                  for (const id of sel) {
+                    const w = state.worktrees.find((x) => x.worktree.id === id);
+                    if ((w?.behind ?? 0) > 0) sock?.send({ t: "sync-main", worktreeId: id });
+                  }
+                  cancelGraft();
+                }}
+              >
+                ↓ sync
+              </button>
+              <button
+                className="bulk-btn danger"
+                disabled={sel.length === 0}
+                title="Remove all selected worktrees (branches and changes deleted)"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Remove ${sel.length} worktree(s)?\n\nTheir directories and branches are deleted. Unmerged changes are lost.`,
+                    )
+                  ) {
+                    for (const id of sel) sock?.send({ t: "remove-worktree", worktreeId: id });
+                    cancelGraft();
+                  }
+                }}
+              >
+                remove…
+              </button>
+              <button className="bulk-btn" title="Cancel (esc)" onClick={cancelGraft}>
+                ✕
               </button>
             </div>
           )}

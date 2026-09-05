@@ -1038,6 +1038,21 @@ function PanelIcon({ side, filled }: { side: "left" | "right"; filled: boolean }
 }
 
 function StatusBar({ state, active, dispatch }: { state: State; active: WorktreeStatus | null; dispatch: Dispatch }) {
+  const [installEvt, setInstallEvt] = useState<{ prompt: () => Promise<unknown> } | null>(null);
+  useEffect(() => {
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallEvt(e as unknown as { prompt: () => Promise<unknown> });
+    };
+    const onInstalled = () => setInstallEvt(null);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
   return (
     <div className="status-bar">
       <button
@@ -1054,6 +1069,15 @@ function StatusBar({ state, active, dispatch }: { state: State; active: Worktree
       >
         <PanelIcon side="right" filled={state.rightOpen} />
       </button>
+      {installEvt && (
+        <button
+          className="toggle"
+          title="Install Orchardist as an app (own window, dock icon)"
+          onClick={() => void installEvt.prompt()}
+        >
+          ⇣ install app
+        </button>
+      )}
       <span className="grow" />
       {active && (
         <>

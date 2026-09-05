@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#32302f"/>
+  <!-- trunk -->
+  <path d="M256 448 L256 288" stroke="#a89984" stroke-width="26" stroke-linecap="round"/>
+  <!-- branches -->
+  <path d="M256 340 L166 260 M256 340 L346 260 M256 300 L256 230" stroke="#a89984" stroke-width="20" stroke-linecap="round"/>
+  <!-- canopy leaves -->
+  <circle cx="150" cy="222" r="58" fill="#b8bb26"/>
+  <circle cx="256" cy="176" r="66" fill="#98971a"/>
+  <circle cx="362" cy="222" r="58" fill="#b8bb26"/>
+  <!-- fruit: different fruit on different branches -->
+  <circle cx="150" cy="238" r="22" fill="#fe8019"/>
+  <circle cx="268" cy="190" r="22" fill="#fb4934"/>
+  <circle cx="352" cy="240" r="22" fill="#fabd2f"/>
+</svg>

@@ -244,6 +244,10 @@ button {
 }
 .chat-input textarea:focus { border-color: var(--bg3); }
 .chat-hint { font-size: 11px; color: var(--fg-dim); margin-top: 4px; }
+.spawn-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.spawn-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.spawn-row input { accent-color: var(--orange); }
+.spawn-row b { color: var(--fg-muted); font-weight: 600; }
 
 /* ---- changes header / ship / deep links / toast ---- */
 .changes-head { display: flex; justify-content: space-between; align-items: baseline; padding-right: 8px; }

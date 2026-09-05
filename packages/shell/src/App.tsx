@@ -285,6 +285,12 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
   const logRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("");
 
+  // spawn-a-worktree default: on for main (protect the working copy),
+  // off on worktrees (continue that conversation); user can override per tab
+  const isMain = active?.worktree.kind === "main";
+  const [spawnNew, setSpawnNew] = useState(isMain);
+  useEffect(() => setSpawnNew(active?.worktree.kind === "main"), [active?.worktree.id]);
+
   // pin to bottom while streaming
   useEffect(() => {
     const el = logRef.current;
@@ -295,7 +301,16 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
 
   const send = () => {
     if (!active || !text.trim()) return;
-    sock?.send({ t: "chat", worktreeId: active.worktree.id, text: text.trim() });
+    if (spawnNew) {
+      sock?.send({
+        t: "create-worktree",
+        repoId: active.worktree.repoId,
+        prompt: text.trim(),
+        baseWorktreeId: active.worktree.id,
+      });
+    } else {
+      sock?.send({ t: "chat", worktreeId: active.worktree.id, text: text.trim() });
+    }
     setText("");
   };
 
@@ -318,10 +333,24 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
               send();
             }
           }}
-          placeholder={active ? `message agent on ${active.worktree.title}…` : "no worktree selected"}
+          placeholder={
+            !active
+              ? "no worktree selected"
+              : spawnNew
+                ? "describe a change — starts an agent in a new worktree…"
+                : `message agent on ${active.worktree.title}…`
+          }
           disabled={!active}
         />
-        <div className="chat-hint">enter to send · shift+enter newline · ⌘K new worktree</div>
+        <div className="chat-hint spawn-row">
+          <label title={isMain ? "Unchecked: the agent edits your main working copy directly" : "Checked: fork a new worktree from this one instead of continuing here"}>
+            <input type="checkbox" checked={spawnNew} onChange={(e) => setSpawnNew(e.target.checked)} />
+            <span>
+              new worktree from <b>{active?.worktree.title ?? "—"}</b>
+            </span>
+          </label>
+          <span>enter to send · ⌘K</span>
+        </div>
       </div>
     </div>
   );

@@ -93,7 +93,7 @@ export type ServerMsg =
 export type ClientMsg =
   | { t: "subscribe"; worktreeId: string }
   | { t: "chat"; worktreeId: string; text: string }
-  | { t: "create-worktree"; repoId: string; prompt: string }
+  | { t: "create-worktree"; repoId: string; prompt: string; baseWorktreeId?: string }
   | { t: "remove-worktree"; worktreeId: string }
   | { t: "restart-proc"; worktreeId: string; proc: string }
   | { t: "git-status"; worktreeId: string }

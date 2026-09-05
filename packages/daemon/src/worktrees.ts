@@ -114,14 +114,18 @@ export class Manager {
 
   // ---- worktrees ----
 
-  async createWorktree(repoId: string, prompt: string): Promise<WorktreeInfo> {
+  async createWorktree(repoId: string, prompt: string, baseWorktreeId?: string): Promise<WorktreeInfo> {
     const repo = this.repo(repoId);
     const slug = slugify(prompt);
     const branch = `orchard/${slug}`;
     const wtPath = join(WORKTREES_DIR, repo.name, slug);
 
+    // fork point: main's branch by default, or the base worktree's branch (stacking)
+    const base = baseWorktreeId ? this.state.worktrees.find((w) => w.id === baseWorktreeId) : undefined;
+    const baseBranch = base && base.kind !== "main" ? base.branch : repo.defaultBranch;
+
     await withRepoLock(repo.path, () => {
-      gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch);
+      gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, baseBranch);
     });
 
     const wt: WorktreeInfo = {
@@ -139,7 +143,7 @@ export class Manager {
     this.hub.worktreesChanged();
 
     // setup + procs warm in the background; agent starts immediately
-    void this.setupAndStart(wt, repo).then(() => this.hub.worktreesChanged());
+    void this.setupAndStart(wt, repo, base?.path ?? repo.path).then(() => this.hub.worktreesChanged());
     const rtAgent = this.makeAgent(wt);
     this.pendingAgents.set(wt.id, rtAgent);
     rtAgent.send(prompt);
@@ -174,9 +178,9 @@ export class Manager {
 
   private pendingAgents = new Map<string, AgentSession>();
 
-  private async setupAndStart(wt: WorktreeInfo, repo: RepoInfo) {
-    // CoW-clone node_modules from the main checkout (APFS); harmless no-op elsewhere
-    const srcNm = join(repo.path, "node_modules");
+  private async setupAndStart(wt: WorktreeInfo, repo: RepoInfo, depsSource = repo.path) {
+    // CoW-clone node_modules from the base checkout (APFS); harmless no-op elsewhere
+    const srcNm = join(depsSource, "node_modules");
     const dstNm = join(wt.path, "node_modules");
     if (existsSync(srcNm) && !existsSync(dstNm)) {
       const r = spawnSync("cp", ["-Rc", srcNm, dstNm]);

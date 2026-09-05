@@ -132,7 +132,7 @@ export function startServer(opts: {
         break;
       }
       case "create-worktree": {
-        await manager.createWorktree(msg.repoId, msg.prompt);
+        await manager.createWorktree(msg.repoId, msg.prompt, msg.baseWorktreeId);
         break;
       }
       case "remove-worktree": {

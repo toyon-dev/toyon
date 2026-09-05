@@ -722,9 +722,41 @@ function Center({ state, active, dispatch, sock, repo }: {
   const logs = active ? state.logs[active.worktree.id] ?? [] : [];
   const frames = state.worktrees.filter((w) => mounted.includes(w.worktree.id));
 
+  // editor pane: draggable height + full-height toggle, persisted
+  const centerRef = useRef<HTMLDivElement>(null);
+  const [diffH, setDiffH] = useState(() => {
+    const n = Number(localStorage.getItem("orch-dh"));
+    return Number.isFinite(n) && n >= 120 ? n : 0; // 0 = default 45%
+  });
+  const [diffFull, setDiffFull] = useState(() => localStorage.getItem("orch-dfull") === "1");
+  const toggleFull = () => {
+    setDiffFull((f) => {
+      localStorage.setItem("orch-dfull", f ? "0" : "1");
+      return !f;
+    });
+  };
+  const startDiffDrag = (e: React.PointerEvent) => {
+    e.preventDefault();
+    document.body.classList.add("resizing");
+    const move = (ev: PointerEvent) => {
+      const rect = centerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const h = Math.min(Math.max(rect.bottom - ev.clientY, 120), rect.height - 80);
+      setDiffH(h);
+      localStorage.setItem("orch-dh", String(Math.round(h)));
+    };
+    const up = () => {
+      document.body.classList.remove("resizing");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   return (
-    <div className="center">
-      <div className="preview-area">
+    <div className="center" ref={centerRef}>
+      <div className="preview-area" style={{ display: state.diff && diffFull ? "none" : undefined }}>
         {frames.map((w) => (
           <iframe
             key={w.worktree.id}
@@ -751,7 +783,18 @@ function Center({ state, active, dispatch, sock, repo }: {
           </div>
         )}
       </div>
-      {state.diff && <DiffView diff={state.diff} state={state} dispatch={dispatch} sock={sock} />}
+      {state.diff && (
+        <DiffView
+          diff={state.diff}
+          state={state}
+          dispatch={dispatch}
+          sock={sock}
+          height={diffFull ? "100%" : diffH > 0 ? diffH : "45%"}
+          full={diffFull}
+          onToggleFull={toggleFull}
+          onDragStart={startDiffDrag}
+        />
+      )}
       {state.showQuickOpen && active && (
         <QuickOpen
           paths={state.files[active.worktree.id] ?? []}
@@ -787,15 +830,25 @@ function Center({ state, active, dispatch, sock, repo }: {
   );
 }
 
-function DiffView({ diff, state, dispatch, sock }: {
+function DiffView({ diff, state, dispatch, sock, height, full, onToggleFull, onDragStart }: {
   diff: NonNullable<State["diff"]>; state: State; dispatch: Dispatch; sock: Sock;
+  height: number | string; full: boolean; onToggleFull: () => void;
+  onDragStart: (e: React.PointerEvent) => void;
 }) {
   const wt = state.worktrees.find((w) => w.worktree.id === diff.worktreeId);
   const absPath = wt ? `${wt.worktree.path}/${diff.path}` : diff.path;
   return (
-    <div className="diff-pane">
+    <div className="diff-pane" style={{ height }}>
+      {!full && <div className="row-resize" onPointerDown={onDragStart} />}
       <div className="file-head" style={{ padding: "6px 16px", display: "flex", gap: 12 }}>
         <span style={{ flex: 1, font: "12px var(--font-mono)", color: "var(--fg-muted)" }}>{diff.path}</span>
+        <button
+          className="deep-link"
+          onClick={onToggleFull}
+          title={full ? "Split view — show the preview above" : "Full height — hide the preview"}
+        >
+          {full ? "◫ split" : "⬒ full"}
+        </button>
         <OpenInMenu
           absPath={absPath}
           onReveal={() => sock?.send({ t: "reveal", worktreeId: diff.worktreeId, path: diff.path })}
@@ -1253,6 +1306,14 @@ function ChatItemView({ item, onPickHover }: {
       return <div className="msg-thinking">{item.text}</div>;
     case "error":
       return <div className="msg-assistant" style={{ color: "var(--red)" }}>{item.text}</div>;
+    case "blocked":
+      return (
+        <div className="blocked-row" title={item.reason}>
+          <span className="blocked-tag">blocked</span>
+          <span className="tool-name">{item.tool}</span>
+          <span className="tool-hint">{item.path}</span>
+        </div>
+      );
     case "tool": {
       const hint = toolHint(item);
       return (

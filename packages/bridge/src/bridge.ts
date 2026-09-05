@@ -223,8 +223,9 @@ function highlightFile(path: string, ranges: Array<[number, number]> | null) {
     if (!src || !fileMatches(src.file, path)) continue;
     if (ranges && ranges.length > 0) {
       const line = src.line ?? -1;
-      // JSX callsite within (or right at the edge of) a changed span
-      if (!ranges.some(([a, b]) => line >= a - 1 && line <= b + 1)) continue;
+      // fiber lines mark the opening tag; changes often land on attribute lines
+      // below it — treat the element as spanning ~8 lines when intersecting
+      if (!ranges.some(([a, b]) => line >= a - 8 && line <= b + 1)) continue;
     }
     const rect = el.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {

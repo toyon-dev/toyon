@@ -167,12 +167,23 @@ body.resizing iframe { pointer-events: none; }
 .preview-area iframe { width: 100%; height: 100%; border: none; background: #fff; }
 .diff-pane {
   height: 45%;
-  min-height: 160px;
+  min-height: 120px;
   position: relative;
   border-top: 1px solid var(--bg2);
   background: var(--bg0);
   flex-shrink: 0;
 }
+.row-resize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 5;
+}
+.row-resize:hover { background: var(--bg3); }
+body.resizing .row-resize { background: var(--bg3); }
 .center .empty {
   height: 100%;
   display: grid;
@@ -376,6 +387,17 @@ body.resizing iframe { pointer-events: none; }
   color: var(--fg-muted);
 }
 .tool-row .spinner { color: var(--yellow); }
+.blocked-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px;
+  font: 12px var(--font-mono);
+  color: var(--fg-muted);
+  background: var(--bg0);
+  border-left: 2px solid var(--red);
+}
+.blocked-row .blocked-tag { color: var(--red); text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
+.blocked-row .tool-name { color: var(--fg-muted); }
+.blocked-row .tool-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-dim); }
 
 .chat-input {
   border-top: 1px solid var(--bg2);

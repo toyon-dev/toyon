@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentEvent, AgentStatus, PickMeta } from "@orchardist/shared";
 import { TRANSCRIPTS_DIR } from "./paths.ts";
+import { buildScope, type Scope } from "./scope.ts";
 
 export type AgentEventListener = (event: AgentEvent, seq: number) => void;
 export type AgentStatusListener = (status: AgentStatus) => void;
@@ -27,6 +28,7 @@ export class AgentSession {
   private running = false;
   private current: { interrupt?: () => Promise<void> } | null = null;
   private interrupted = false;
+  private scope: Scope | null = null;
 
   get queueLength() {
     return this.queue.length;
@@ -138,11 +140,19 @@ export class AgentSession {
     this.emit({ type: "turn-start", ts: Date.now() });
 
     const resume = this.getSessionId();
+    this.scope ??= buildScope(this.cwd, (b) =>
+      this.emit({ type: "agent-blocked", tool: b.tool, path: b.path, reason: b.reason, ts: Date.now() }),
+    );
     const stream = query({
       prompt: context ? `${text}\n\n${context}` : text,
       options: {
         cwd: this.cwd,
+        // no prompt surface exists, so bypass is the no-questions mode; the
+        // sandbox + hook from scope.ts are what actually confine the agent
         permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        sandbox: this.scope.sandbox,
+        hooks: this.scope.hooks,
         systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM_APPEND },
         includePartialMessages: true,
         ...(resume ? { resume } : {}),

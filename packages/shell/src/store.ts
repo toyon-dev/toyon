@@ -7,7 +7,8 @@ export type ChatItem =
   | { kind: "assistant"; text: string }
   | { kind: "thinking"; text: string }
   | { kind: "tool"; id: string; name: string; input: unknown; output?: string; isError?: boolean; done: boolean }
-  | { kind: "error"; text: string };
+  | { kind: "error"; text: string }
+  | { kind: "blocked"; tool: string; path: string; reason: string };
 
 export interface State {
   connected: boolean;
@@ -276,6 +277,8 @@ function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
     }
     case "agent-error":
       return [...items, { kind: "error", text: event.message }];
+    case "agent-blocked":
+      return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     default:
       return items;
   }

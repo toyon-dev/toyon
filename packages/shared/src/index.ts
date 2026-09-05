@@ -99,7 +99,8 @@ export type AgentEvent =
   | { type: "tool-end"; toolId: string; output?: string; isError?: boolean }
   | { type: "turn-end"; stopReason: string; ts: number }
   | { type: "session-info"; sessionId: string; model?: string }
-  | { type: "agent-error"; message: string; ts: number };
+  | { type: "agent-error"; message: string; ts: number }
+  | { type: "agent-blocked"; tool: string; path: string; reason: string; ts: number };
 
 // ---- WebSocket protocol ----
 

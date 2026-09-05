@@ -135,6 +135,27 @@ export function startServer(opts: {
         await manager.createWorktree(msg.repoId, msg.prompt, msg.baseWorktreeId);
         break;
       }
+      case "batch-worktrees": {
+        const repo = manager.repo(msg.repoId);
+        ws.send(JSON.stringify({
+          t: "shipped", worktreeId: "", ok: true, message: "batch: planning tasks…",
+        } satisfies ServerMsg));
+        // plan + spawn in the background so the socket stays responsive
+        void (async () => {
+          const { planTasks } = await import("./agent.ts");
+          const tasks = (await planTasks(msg.prompt, repo.path)) ?? [msg.prompt];
+          for (const task of tasks) {
+            try {
+              await manager.createWorktree(msg.repoId, task);
+            } catch {}
+          }
+          ws.send(JSON.stringify({
+            t: "shipped", worktreeId: "", ok: true,
+            message: `batch: ${tasks.length} worktree(s) started`,
+          } satisfies ServerMsg));
+        })();
+        break;
+      }
       case "remove-worktree": {
         await manager.removeWorktree(msg.worktreeId);
         break;

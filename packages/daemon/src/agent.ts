@@ -185,6 +185,42 @@ export async function quickName(taskPrompt: string, cwd: string): Promise<string
   return null;
 }
 
+/** One-shot planner: split a high-level request into independent tasks (1-5). Null on failure. */
+export async function planTasks(request: string, cwd: string): Promise<string[] | null> {
+  try {
+    const stream = query({
+      prompt: [
+        "Split this request into independent coding tasks that could each be done in a separate git branch by a separate engineer.",
+        "Reply with ONLY a JSON array of task description strings (1 to 5 items), nothing else.",
+        "If the request is really one task, reply with a single-item array.",
+        `Request: ${request.slice(0, 2000)}`,
+      ].join("\n"),
+      options: {
+        cwd,
+        model: "claude-haiku-4-5-20251001",
+        maxTurns: 1,
+        allowedTools: [],
+        permissionMode: "bypassPermissions",
+        systemPrompt: "You are a task-planning assistant. Reply with only the requested JSON.",
+      },
+    });
+    for await (const msg of stream) {
+      const m = msg as Record<string, any>;
+      if (m.type === "result" && m.subtype === "success") {
+        const text = String(m.result ?? "");
+        const start = text.indexOf("[");
+        const end = text.lastIndexOf("]");
+        if (start === -1 || end <= start) return null;
+        const arr = JSON.parse(text.slice(start, end + 1));
+        if (!Array.isArray(arr)) return null;
+        const tasks = arr.filter((x) => typeof x === "string" && x.trim()).slice(0, 5);
+        return tasks.length > 0 ? tasks : null;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 function summarizeToolResult(content: unknown): string {
   if (typeof content === "string") return truncate(content);
   if (Array.isArray(content)) {

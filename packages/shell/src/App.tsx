@@ -569,9 +569,13 @@ function Center({ state, active, dispatch, sock, repo }: {
       )}
       {state.showPrompt && repo && (
         <PromptOverlay
-          onSubmit={(text, variants) => {
-            for (let i = 0; i < variants; i++) {
-              sock?.send({ t: "create-worktree", repoId: repo.id, prompt: text });
+          onSubmit={(text, variants, batch) => {
+            if (batch) {
+              sock?.send({ t: "batch-worktrees", repoId: repo.id, prompt: text });
+            } else {
+              for (let i = 0; i < variants; i++) {
+                sock?.send({ t: "create-worktree", repoId: repo.id, prompt: text });
+              }
             }
             dispatch({ a: "show-prompt", v: false });
           }}
@@ -728,15 +732,20 @@ function fuzzyScore(hay: string, needle: string): number {
 }
 
 function PromptOverlay({ onSubmit, onClose }: {
-  onSubmit: (t: string, variants: number) => void;
+  onSubmit: (t: string, variants: number, batch: boolean) => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState("");
   const [variants, setVariants] = useState(1);
+  const [batch, setBatch] = useState(false);
   return (
     <div className="prompt-overlay" onClick={onClose}>
       <div className="prompt-box" onClick={(e) => e.stopPropagation()}>
-        <div className="title">new worktree — describe the change; an agent starts on it immediately</div>
+        <div className="title">
+          {batch
+            ? "batch — an agent splits this into separate worktrees, one per task"
+            : "new worktree — describe the change; an agent starts on it immediately"}
+        </div>
         <textarea
           autoFocus
           value={text}
@@ -744,25 +753,37 @@ function PromptOverlay({ onSubmit, onClose }: {
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && text.trim()) {
               e.preventDefault();
-              onSubmit(text.trim(), variants);
+              onSubmit(text.trim(), variants, batch);
             }
           }}
-          placeholder="make the header sticky and add a dark mode toggle"
+          placeholder={
+            batch
+              ? "fix the header overflow, add a dark mode toggle, and update the footer copy"
+              : "make the header sticky and add a dark mode toggle"
+          }
         />
         <div className="variants-row">
-          <span title="Run the same prompt in N parallel worktrees — compare the attempts, keep the best">
-            variants
-          </span>
-          {[1, 2, 3].map((n) => (
-            <button
-              key={n}
-              className={`variant-chip ${variants === n ? "on" : ""}`}
-              onClick={() => setVariants(n)}
-            >
-              {n}
-            </button>
-          ))}
-          {variants > 1 && <span className="variants-hint">{variants} agents, same prompt — keep the best</span>}
+          <label title="An agent decomposes the request into independent tasks and starts a worktree for each">
+            <input type="checkbox" checked={batch} onChange={(e) => setBatch(e.target.checked)} />
+            <span>batch</span>
+          </label>
+          {!batch && (
+            <>
+              <span title="Run the same prompt in N parallel worktrees — compare the attempts, keep the best">
+                · variants
+              </span>
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  className={`variant-chip ${variants === n ? "on" : ""}`}
+                  onClick={() => setVariants(n)}
+                >
+                  {n}
+                </button>
+              ))}
+              {variants > 1 && <span className="variants-hint">{variants} agents, same prompt</span>}
+            </>
+          )}
         </div>
       </div>
     </div>

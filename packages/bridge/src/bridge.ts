@@ -20,6 +20,20 @@ window.addEventListener("unhandledrejection", (e) => {
   post({ type: "page-error", message: `unhandled rejection: ${String(e.reason)}` });
 });
 
+// forward Orchardist chords to the shell even when the preview has focus
+const CHORD_KEYS = new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "k", "p", "b", "j"]);
+window.addEventListener(
+  "keydown",
+  (e) => {
+    if (e.metaKey && !e.ctrlKey && !e.altKey && CHORD_KEYS.has(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+      post({ type: "key", key: e.key, meta: true });
+    }
+  },
+  true,
+);
+
 // SPA navigation reporting
 const origPush = history.pushState.bind(history);
 history.pushState = (...args) => {

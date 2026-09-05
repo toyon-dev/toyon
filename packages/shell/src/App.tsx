@@ -56,7 +56,18 @@ export function App() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // chords forwarded from inside the preview iframe by the bridge script
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data;
+      if (d && d.__orchardist && d.type === "key" && d.meta) {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: d.key, metaKey: true }));
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("message", onMsg);
+    };
   }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.activeId]);
 
   // ship results: open PR/compare URLs, auto-dismiss toasts

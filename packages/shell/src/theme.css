@@ -347,10 +347,10 @@ body.resizing .row-resize { background: var(--bg3); }
   flex-direction: column;
 }
 
-/* ---- far-right worktree rail: 44px dot strip, hover peeks the full panel
+/* ---- far-right worktree rail: 40px dot strip, hover peeks the full panel
    as an overlay (no reflow), pin (« ») keeps it wide ---- */
 .wt-rail {
-  width: 44px;
+  width: 40px;
   flex-shrink: 0;
   position: relative;
   overflow: visible;
@@ -361,7 +361,7 @@ body.resizing .row-resize { background: var(--bg3); }
   right: 0;
   bottom: 0;
   width: 100%;
-  min-width: 44px;
+  min-width: 40px;
   display: flex;
   flex-direction: column;
   background: var(--bg1);
@@ -384,15 +384,15 @@ body.resizing .row-resize { background: var(--bg3); }
 /* daemon connection, pinned to the foot of the rail (distinct from worktree dots: smaller, muted) */
 .rail-foot {
   flex-shrink: 0;
-  /* 38px: centers the dot on the composer's bottom row (10px pad + ~18px row) so it lines up with the element picker */
-  height: 38px;
+  /* 40px: centers the dot on the composer's bottom row (10px pad + 20px picker box) so it lines up with the element picker */
+  height: 40px;
   display: flex;
   align-items: center;
-  /* dot on the right, 19px in: the rail panel is right-anchored, so the dot stays put
-     in the 44px column while the label slides in from the left on expand */
+  /* dot on the right, 17px in: the rail panel is right-anchored, so the dot stays put
+     in the 40px column while the label slides in from the left on expand */
   justify-content: flex-end;
   gap: 8px;
-  padding: 0 19px 0 12px;
+  padding: 0 17px 0 12px;
   font-size: 11px;
   color: var(--fg-dim);
   white-space: nowrap;
@@ -603,12 +603,16 @@ body.resizing .row-resize { background: var(--bg3); }
 .chat-input textarea:focus { border-color: var(--bg3); }
 .chat-hint { font-size: 11px; color: var(--fg-dim); margin-top: 4px; }
 .spawn-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+/* same 20px box as the status-bar icons, flush with the textarea's right edge
+   (the chat toggle in the bar is 4px further right — the nearby edge wins) */
 .composer-pick {
-  font-size: 14px;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  display: grid;
+  place-items: center;
   color: var(--fg-dim);
-  padding: 0 6px;
   border-radius: 4px;
-  line-height: 1.3;
 }
 .composer-pick:hover { color: var(--fg1); background: var(--bg2); }
 .composer-pick.rb-on { color: var(--orange); background: var(--bg2); }
@@ -771,7 +775,9 @@ body.resizing .rb-center { transition: none; }
 .status-bar .toggle.icon.on { background: var(--bg2); }
 .status-bar .branch { color: var(--orange); }
 .status-bar .grow { flex: 1; }
-.status-bar .bar-tools { display: flex; align-items: center; gap: 14px; }
+/* columns: zen centers over the 40px rail (bar pad 10 + 20px box → center 20px); with the
+   20px gap the chat toggle's center lands at 60px = rail 40 + dock pad 10 + picker half 10 */
+.status-bar .bar-tools { display: flex; align-items: center; gap: 20px; }
 .status-bar .proc { display: flex; gap: 4px; align-items: center; }
 
 /* ---- new worktree prompt overlay ---- */

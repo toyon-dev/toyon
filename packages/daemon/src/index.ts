@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT } from "@orchardist/shared";
 import { Manager, type HubEvents } from "./worktrees.ts";
 import { startServer } from "./server.ts";
+import { statusFiles } from "./git.ts";
 import { loadOrCreateToken } from "./state.ts";
 import { ensureDirs } from "./paths.ts";
 
@@ -21,7 +22,18 @@ let worktreesChangedRef: (() => void) | null = null;
 const hubEvents: HubEvents = {
   proc: (worktreeId, proc) => broadcastRef?.({ t: "proc", worktreeId, proc }),
   log: (worktreeId, proc, line) => broadcastRef?.({ t: "log", worktreeId, proc, line }),
-  agent: (worktreeId, seq, event) => broadcastRef?.({ t: "agent", worktreeId, seq, event }),
+  agent: (worktreeId, seq, event) => {
+    broadcastRef?.({ t: "agent", worktreeId, seq, event });
+    // keep the changes list live while the agent edits
+    if (event.type === "tool-end" || event.type === "turn-end") {
+      const wt = manager.worktree(worktreeId);
+      if (wt) {
+        try {
+          broadcastRef?.({ t: "git-status", worktreeId, files: statusFiles(wt.path) });
+        } catch {}
+      }
+    }
+  },
   agentStatus: () => worktreesChangedRef?.(),
   worktreesChanged: () => worktreesChangedRef?.(),
 };

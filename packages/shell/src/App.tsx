@@ -126,7 +126,10 @@ function Center({ state, active, dispatch, sock, repo }: {
   repo: State["repos"][number] | null;
 }) {
   if (state.diff) {
-    const lines = lineDiff(state.diff.before, state.diff.after);
+    const lines =
+      state.diff.before === "" && state.diff.after === ""
+        ? [{ kind: "hunk" as const, text: "@@ file is empty or could not be read @@" }]
+        : lineDiff(state.diff.before, state.diff.after);
     return (
       <div className="center">
         <div className="diff-view">

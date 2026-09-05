@@ -30,12 +30,18 @@ export function defaultBranch(path: string): string {
 }
 
 export function statusFiles(worktreePath: string): GitFileStatus[] {
-  const r = gitOrThrow(worktreePath, "status", "--porcelain");
-  if (!r) return [];
-  return r.split("\n").map((line) => ({
-    xy: line.slice(0, 2),
-    path: line.slice(3).replace(/^"(.*)"$/, "$1"),
-  }));
+  // no trim: porcelain lines for unstaged changes start with a significant space
+  const r = spawnSync("git", ["status", "--porcelain"], {
+    cwd: worktreePath, encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
+  });
+  if (r.status !== 0) throw new Error(`git status failed: ${r.stderr}`);
+  return (r.stdout ?? "")
+    .split("\n")
+    .filter((line) => line.length > 3)
+    .map((line) => ({
+      xy: line.slice(0, 2),
+      path: line.slice(3).replace(/^"(.*)"$/, "$1").replace(/ -> .*$/, ""),
+    }));
 }
 
 /** File content at merge-base with the default branch (empty string for new files). */

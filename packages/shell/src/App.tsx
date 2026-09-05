@@ -119,13 +119,24 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
   );
 }
 
-function WtSwitcher({ state, dispatch }: { state: State; dispatch: Dispatch }) {
-  const [open, setOpen] = useState(false);
+function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
+  const [open, setOpen] = useState(true);
   const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
+
+  const rename = (w: WorktreeStatus) => {
+    if (w.worktree.kind === "main") return;
+    const title = window.prompt("Rename worktree (also renames its branch):", w.worktree.title);
+    if (title && title.trim()) {
+      sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
+    }
+  };
+
   return (
     <div className="wt-switcher">
       <button className="wt-current" onClick={() => setOpen(!open)} title="Switch worktree (⌘1–9)">
-        {active ? (
+        {open ? (
+          <span className="branch helper">worktrees · {state.worktrees.length}</span>
+        ) : active ? (
           <>
             <span className={`dot ${dotClass(active)}`} />
             <span className="branch">{active.worktree.title}</span>
@@ -141,23 +152,15 @@ function WtSwitcher({ state, dispatch }: { state: State; dispatch: Dispatch }) {
             <button
               key={w.worktree.id}
               className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""}`}
-              onClick={() => {
-                dispatch({ a: "activate", id: w.worktree.id });
-                setOpen(false);
-              }}
-              title={`⌘${i + 1} · ${w.worktree.branch}`}
+              onClick={() => dispatch({ a: "activate", id: w.worktree.id })}
+              onDoubleClick={() => rename(w)}
+              title={`⌘${i + 1} · ${w.worktree.branch} · double-click to rename`}
             >
               <span className={`dot ${dotClass(w)}`} />
               <span className="branch">{w.worktree.title}</span>
             </button>
           ))}
-          <button
-            className="new-wt"
-            onClick={() => {
-              setOpen(false);
-              dispatch({ a: "show-prompt", v: true });
-            }}
-          >
+          <button className="new-wt" onClick={() => dispatch({ a: "show-prompt", v: true })}>
             + new worktree ⌘K
           </button>
         </div>
@@ -298,7 +301,7 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
 
   return (
     <div className={`right-dock ${state.rightOpen ? "" : "collapsed"}`}>
-      <WtSwitcher state={state} dispatch={dispatch} />
+      <WtSwitcher state={state} dispatch={dispatch} sock={sock} />
       <div className="chat-log" ref={logRef}>
         {items.map((item, i) => (
           <ChatItemView key={i} item={item} />

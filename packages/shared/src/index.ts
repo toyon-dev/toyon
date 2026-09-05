@@ -99,6 +99,7 @@ export type ClientMsg =
   | { t: "git-status"; worktreeId: string }
   | { t: "file-diff"; worktreeId: string; path: string }
   | { t: "ship"; worktreeId: string }
+  | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 
 export const DAEMON_DEFAULT_PORT = 4141;

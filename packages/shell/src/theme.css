@@ -43,14 +43,14 @@ button {
 }
 
 .docks {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   min-height: 0;
 }
 
 /* ---- left dock ---- */
 .left-dock {
   width: 220px;
+  flex-shrink: 0;
   background: var(--bg1);
   border-right: 1px solid var(--bg2);
   display: flex;
@@ -114,7 +114,7 @@ button {
 .git-file .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
 
 /* ---- center ---- */
-.center { position: relative; min-width: 0; background: var(--bg0); }
+.center { position: relative; flex: 1; min-width: 0; background: var(--bg0); }
 .center iframe { width: 100%; height: 100%; border: none; background: #fff; }
 .center .empty {
   height: 100%;
@@ -149,6 +149,7 @@ button {
 /* ---- right dock (worktree switcher + chat) ---- */
 .right-dock {
   width: 380px;
+  flex-shrink: 0;
   background: var(--bg1);
   border-left: 1px solid var(--bg2);
   display: flex;
@@ -168,6 +169,7 @@ button {
 }
 .wt-current:hover { background: var(--bg2); }
 .wt-current .branch { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt-current .branch.helper { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-dim); }
 .wt-current .chevron { color: var(--fg-dim); transition: transform 0.12s; }
 .wt-current .chevron.up { transform: rotate(180deg); }
 .wt-list { max-height: 40vh; overflow-y: auto; border-top: 1px solid var(--bg2); background: var(--bg0); }

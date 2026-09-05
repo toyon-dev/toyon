@@ -170,6 +170,10 @@ export function startServer(opts: {
         sendGitStatus(wt.id, ws);
         break;
       }
+      case "rename-worktree": {
+        await manager.renameWorktree(msg.worktreeId, msg.title);
+        break;
+      }
       case "confirm-config": {
         manager.confirmConfig(msg.repoId, msg.config);
         break;

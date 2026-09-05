@@ -6,10 +6,10 @@ import type {
   AgentEvent, AgentStatus, OrchardistConfig, ProcState, RepoInfo, WorktreeInfo, WorktreeStatus,
 } from "@orchardist/shared";
 import { detectConfig } from "./config.ts";
-import { defaultBranch, gitOrThrow, isGitRepo, repoRoot, withRepoLock } from "./git.ts";
+import { defaultBranch, git, gitOrThrow, isGitRepo, repoRoot, withRepoLock } from "./git.ts";
 import { allocatePort } from "./ports.ts";
 import { startProxy, type WorktreeProxy } from "./proxy.ts";
-import { AgentSession } from "./agent.ts";
+import { AgentSession, quickName } from "./agent.ts";
 import { WorktreeProcs } from "./supervisor.ts";
 import { loadState, saveState, type PersistedState } from "./state.ts";
 import { WORKTREES_DIR } from "./paths.ts";
@@ -143,7 +143,33 @@ export class Manager {
     const rtAgent = this.makeAgent(wt);
     this.pendingAgents.set(wt.id, rtAgent);
     rtAgent.send(prompt);
+    // a cheap async naming pass replaces the prompt-prefix slug when it lands
+    void quickName(prompt, repo.path).then((name) => {
+      if (name) this.renameWorktree(wt.id, name).catch(() => {});
+    });
     return wt;
+  }
+
+  async renameWorktree(worktreeId: string, title: string) {
+    const wt = this.state.worktrees.find((w) => w.id === worktreeId);
+    if (!wt || wt.kind === "main") return;
+    const repo = this.repo(wt.repoId);
+    const clean = title.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    if (!clean) return;
+    await withRepoLock(repo.path, () => {
+      let branch = `orchard/${clean}`;
+      if (branch !== wt.branch) {
+        // avoid collisions with an existing branch
+        for (let n = 2; !git(wt.path, "branch", "-m", wt.branch, branch).ok; n++) {
+          if (n > 5) return;
+          branch = `orchard/${clean}-${n}`;
+        }
+        wt.branch = branch;
+      }
+      wt.title = clean;
+    });
+    saveState(this.state);
+    this.hub.worktreesChanged();
   }
 
   private pendingAgents = new Map<string, AgentSession>();

@@ -154,6 +154,36 @@ export class AgentSession {
   }
 }
 
+/** One-shot Haiku call: name a task in 2-4 kebab-case words. Returns null on any failure. */
+export async function quickName(taskPrompt: string, cwd: string): Promise<string | null> {
+  try {
+    const stream = query({
+      prompt: `Name this coding task in 2 to 4 lowercase kebab-case words (like "sticky-header" or "dark-mode-toggle"). Reply with ONLY the name, nothing else.\n\nTask: ${taskPrompt.slice(0, 500)}`,
+      options: {
+        cwd,
+        model: "claude-haiku-4-5-20251001",
+        maxTurns: 1,
+        allowedTools: [],
+        permissionMode: "bypassPermissions",
+        systemPrompt: "You are a naming assistant. Reply with only the requested name.",
+      },
+    });
+    for await (const msg of stream) {
+      const m = msg as Record<string, any>;
+      if (m.type === "result" && m.subtype === "success") {
+        const name = String(m.result ?? "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9-]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 30);
+        if (name && name.length >= 3) return name;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 function summarizeToolResult(content: unknown): string {
   if (typeof content === "string") return truncate(content);
   if (Array.isArray(content)) {

@@ -77,6 +77,9 @@ export interface GitFileStatus {
   path: string;
   /** two-char porcelain XY code, e.g. "M ", " M", "A ", "??" */
   xy: string;
+  /** lines added / deleted; absent for binary files and untracked directories */
+  add?: number;
+  del?: number;
 }
 
 // ---- Agent stream events (ACP-shaped) ----

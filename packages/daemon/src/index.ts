@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT } from "@orchardist/shared";
 import { Manager, type HubEvents } from "./worktrees.ts";
 import { startServer } from "./server.ts";
-import { statusFiles } from "./git.ts";
+import { statusFilesWithCounts } from "./git.ts";
 import { loadOrCreateToken } from "./state.ts";
 import { ensureDirs } from "./paths.ts";
 import { cloud } from "./cloud.ts";
@@ -30,7 +30,7 @@ const hubEvents: HubEvents = {
       const wt = manager.worktree(worktreeId);
       if (wt) {
         try {
-          broadcastRef?.({ t: "git-status", worktreeId, files: statusFiles(wt.path) });
+          broadcastRef?.({ t: "git-status", worktreeId, files: statusFilesWithCounts(wt.path) });
         } catch {}
       }
     }

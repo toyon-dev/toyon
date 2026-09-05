@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -8,7 +8,7 @@ import type {
 import { detectConfig } from "./config.ts";
 import {
   aheadBehind, committedFiles, defaultBranch, git, gitOrThrow, isGitRepo, lockfileHash,
-  repoRoot, statusFiles, withRepoLock,
+  repoRoot, statusFiles, statusFilesWithCounts, withRepoLock,
 } from "./git.ts";
 import { watchDefaultBranch } from "./watcher.ts";
 import { allocateProxyPort, releasePort, reservePort } from "./ports.ts";
@@ -108,6 +108,7 @@ export class Manager {
   private async ensureSpare(repoId: string) {
     if (this.spares.has(repoId)) return;
     const repo = this.repo(repoId);
+    if (repo.needsSetup) return; // don't run guessed setup commands
     const entry = { worktreeId: "", lockHash: "", refreshing: null as Promise<void> | null, ready: false };
     this.spares.set(repoId, entry);
     try {
@@ -233,15 +234,21 @@ export class Manager {
     repo.config = config;
     repo.needsSetup = false;
     saveState(this.state);
-    // restart procs for this repo's worktrees under the new config
-    for (const wt of this.state.worktrees.filter((w) => w.repoId === repoId)) {
+    // persist next to the code so it's shared/committed and future registers skip the card
+    try {
+      writeFileSync(join(repo.path, "orchardist.json"), JSON.stringify(config, null, 2) + "\n");
+    } catch {}
+    // (re)start procs for this repo's worktrees under the confirmed config
+    for (const wt of this.state.worktrees.filter((w) => w.repoId === repoId && w.kind !== "spare")) {
       const rt = this.runtimes.get(wt.id);
       if (rt) {
         rt.procs.stopAll();
+        rt.proxy.stop();
         this.runtimes.delete(wt.id);
-        void this.startRuntime(wt, repo);
       }
+      void this.startRuntime(wt, repo);
     }
+    void this.ensureSpare(repoId).then(() => this.hub.worktreesChanged());
     this.hub.worktreesChanged();
   }
 
@@ -468,10 +475,13 @@ export class Manager {
       (proc, line) => this.hub.log(wt.id, proc, line),
     );
 
+    // unconfirmed detection: no procs until the user confirms the config card
+    const procEntries = repo.needsSetup ? {} : repo.config.procs;
+
     // start non-preview procs first so the preview proc can get their URLs
-    const previewName = repo.config.preview ?? (repo.config.procs["web"] ? "web" : Object.keys(repo.config.procs)[0]);
+    const previewName = repo.config.preview ?? (procEntries["web"] ? "web" : Object.keys(procEntries)[0]);
     const extraEnv: Record<string, string> = {};
-    for (const [name, cmd] of Object.entries(repo.config.procs)) {
+    for (const [name, cmd] of Object.entries(procEntries)) {
       if (name === previewName) continue;
       const st = await procs.start(name, cmd);
       const urlVar = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_URL`;
@@ -482,8 +492,8 @@ export class Manager {
         extraEnv["VITE_API_URL"] = extraEnv[urlVar];
       }
     }
-    if (previewName && repo.config.procs[previewName]) {
-      await procs.start(previewName, repo.config.procs[previewName]!, extraEnv);
+    if (previewName && procEntries[previewName]) {
+      await procs.start(previewName, procEntries[previewName]!, extraEnv);
     }
 
     const proxy = startProxy({
@@ -574,7 +584,7 @@ export class Manager {
     const wt = this.worktree(worktreeId);
     if (!wt || wt.kind === "spare") return null;
     try {
-      const files = statusFiles(wt.path);
+      const files = statusFilesWithCounts(wt.path);
       const defaultBr = this.repo(wt.repoId).defaultBranch;
       const counts = wt.kind === "main" ? {} : aheadBehind(wt.path, defaultBr);
       const ahead = (counts as { ahead?: number }).ahead ?? 0;

@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import type { WorktreeStatus } from "@orchardist/shared";
+import type { GitFileStatus, WorktreeStatus } from "@orchardist/shared";
 import { DaemonSocket, hasToken } from "./ws.ts";
 import { initial, reducer, type ChatItem, type State } from "./store.ts";
 
@@ -324,8 +324,9 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
               onMouseEnter={() => hoverFile(f.path, true)}
               onMouseLeave={() => hoverFile(f.path, false)}
             >
-              <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
+              <span className={`xy ${xyClass(f.xy)}`}>{xyLetter(f.xy)}</span>
               <span className="path">{f.path}</span>
+              <LineCounts f={f} />
             </button>
           ))}
           <div className="commit-box">
@@ -357,8 +358,9 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
               onMouseEnter={() => hoverFile(f.path, true)}
               onMouseLeave={() => hoverFile(f.path, false)}
             >
-              <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
+              <span className={`xy ${xyClass(f.xy)}`}>{xyLetter(f.xy)}</span>
               <span className="path">{f.path}</span>
+              <LineCounts f={f} />
             </button>
           ))}
         </>
@@ -661,6 +663,25 @@ function xyClass(xy: string): string {
   return "";
 }
 
+/** Porcelain XY → one letter. The tool commits with `add -A`, so staged vs unstaged
+ * is not a distinction the user can act on, and untracked is just "new". */
+function xyLetter(xy: string): string {
+  if (xy === "??") return "A";
+  if (xy === "UU" || xy === "AA" || xy === "DD" || xy.includes("U")) return "C";
+  const code = xy.trim()[0] ?? "";
+  return code === "T" ? "M" : code || "·";
+}
+
+function LineCounts({ f }: { f: GitFileStatus }) {
+  if (f.add === undefined && f.del === undefined) return null;
+  return (
+    <span className="counts">
+      {f.add ? <span className="add">+{f.add}</span> : null}
+      {f.del ? <span className="del">−{f.del}</span> : null}
+    </span>
+  );
+}
+
 function Center({ state, active, dispatch, sock, repo }: {
   state: State; active: WorktreeStatus | null; dispatch: Dispatch; sock: Sock;
   repo: State["repos"][number] | null;
@@ -815,6 +836,10 @@ function Center({ state, active, dispatch, sock, repo }: {
           onDragStart={startDiffDrag}
         />
       )}
+      {(() => {
+        const activeRepo = active ? state.repos.find((r) => r.id === active.worktree.repoId) : null;
+        return activeRepo?.needsSetup ? <ConfigCard key={activeRepo.id} repo={activeRepo} sock={sock} /> : null;
+      })()}
       {state.showQuickOpen && active && (
         <QuickOpen
           paths={state.files[active.worktree.id] ?? []}
@@ -956,6 +981,75 @@ function OpenInMenu({ absPath, onReveal }: { absPath: string; onReveal?: () => v
         </div>
       )}
     </span>
+  );
+}
+
+function ConfigCard({ repo, sock }: { repo: State["repos"][number]; sock: Sock }) {
+  const [procs, setProcs] = useState<Array<{ name: string; cmd: string }>>(() =>
+    Object.entries(repo.config.procs).map(([name, cmd]) => ({ name, cmd })),
+  );
+  const [setup, setSetup] = useState(() => (repo.config.setup ?? []).join("\n"));
+  const [exclusive, setExclusive] = useState(repo.config.exclusive ?? false);
+
+  const start = () => {
+    const config = {
+      procs: Object.fromEntries(procs.filter((p) => p.name.trim() && p.cmd.trim()).map((p) => [p.name.trim(), p.cmd.trim()])),
+      setup: setup.split("\n").map((l) => l.trim()).filter(Boolean),
+      ...(exclusive ? { exclusive: true } : {}),
+    };
+    sock?.send({ t: "confirm-config", repoId: repo.id, config });
+  };
+
+  return (
+    <div className="prompt-overlay">
+      <div className="prompt-box config-card" onClick={(e) => e.stopPropagation()}>
+        <div className="title">
+          first run for <b>{repo.name}</b> — confirm how it runs. Each command must listen on <code>$PORT</code>.
+        </div>
+        <div className="cfg-section">processes</div>
+        {procs.map((p, i) => (
+          <div className="cfg-proc" key={i}>
+            <input
+              className="cfg-name"
+              value={p.name}
+              placeholder="name"
+              onChange={(e) => setProcs(procs.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+            />
+            <input
+              className="cfg-cmd"
+              value={p.cmd}
+              placeholder="bun run dev · uvicorn main:app --reload --port $PORT · ./start.sh"
+              onChange={(e) => setProcs(procs.map((x, j) => (j === i ? { ...x, cmd: e.target.value } : x)))}
+            />
+            <button title="Remove" onClick={() => setProcs(procs.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <button className="new-wt" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
+          + add process
+        </button>
+        <div className="cfg-section">setup (run once per new worktree)</div>
+        <textarea
+          className="cfg-setup"
+          value={setup}
+          onChange={(e) => setSetup(e.target.value)}
+          placeholder={"bun install\ncp ../../.env .env"}
+        />
+        <label className="cfg-exclusive" title="For apps that can't take $PORT: only the focused worktree's processes run">
+          <input type="checkbox" checked={exclusive} onChange={(e) => setExclusive(e.target.checked)} />
+          <span>exclusive — commands can't honor $PORT, run only the focused worktree</span>
+        </label>
+        <div className="cfg-actions">
+          <span className="cfg-note">saved to orchardist.json in the repo</span>
+          <button
+            className="ship-btn"
+            disabled={procs.every((p) => !p.name.trim() || !p.cmd.trim())}
+            onClick={start}
+          >
+            start ▸
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

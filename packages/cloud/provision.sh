@@ -6,8 +6,9 @@
 #   provision.sh url <app-name>      print the shell URL again (reads the token secret file)
 #   provision.sh destroy <app-name>  delete the app and its volume so nothing keeps billing
 #
-# Needs: flyctl (https://fly.io/docs/flyctl/install/), `fly auth login`, and
-# ANTHROPIC_API_KEY in the environment for `up`. No local Docker: the image is
+# Needs: flyctl (https://fly.io/docs/flyctl/install/), `fly auth login`, and an
+# Anthropic API key for `up`: either ANTHROPIC_API_KEY in the environment or the
+# file ~/.orchardist/cloud/anthropic.key (mode 600). No local Docker: the image is
 # built remotely. Region, VM size and proxy port range are knobs below.
 set -euo pipefail
 
@@ -96,8 +97,13 @@ TOML
 
 case "$cmd" in
   up)
-    : "${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY (bring-your-own-key) before provisioning}"
-    mkdir -p "$state_dir"
+    mkdir -p "$state_dir"; chmod 700 "$state_dir"
+    # bring-your-own-key: env var, else a file you wrote yourself (never pasted into a chat/log)
+    key_file="$state_dir/anthropic.key"
+    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f "$key_file" ]; then
+      ANTHROPIC_API_KEY="$(tr -d '[:space:]' < "$key_file")"
+    fi
+    : "${ANTHROPIC_API_KEY:?put your Anthropic API key in $key_file (chmod 600) or export ANTHROPIC_API_KEY}"
     if [ ! -f "$token_file" ]; then
       openssl rand -hex 32 > "$token_file"; chmod 600 "$token_file"
     fi

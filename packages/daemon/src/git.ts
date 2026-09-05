@@ -94,15 +94,59 @@ function requireClean(worktreePath: string): ShipResult | null {
   return null;
 }
 
+type LineCounts = Pick<GitFileStatus, "add" | "del">;
+
+/** `git diff --numstat` for the given range, keyed by path. Binary files map to {}. */
+function numstat(worktreePath: string, ...range: string[]): Map<string, LineCounts> {
+  const out = new Map<string, LineCounts>();
+  const r = git(worktreePath, "diff", "--numstat", "--no-renames", ...range);
+  if (!r.ok) return out;
+  for (const line of r.out.split("\n")) {
+    const [a, d, ...rest] = line.split("\t");
+    const path = rest.join("\t").replace(/^"(.*)"$/, "$1");
+    if (!path) continue;
+    out.set(path, a === "-" || d === "-" ? {} : { add: Number(a), del: Number(d) });
+  }
+  return out;
+}
+
+/** Line count of an untracked file (all insertions). Undefined for binaries and directories. */
+function untrackedLines(worktreePath: string, file: string): LineCounts {
+  try {
+    const buf = readFileSync(join(worktreePath, file));
+    if (buf.subarray(0, 8000).includes(0)) return {};
+    if (buf.length === 0) return { add: 0, del: 0 };
+    let n = 0;
+    for (const b of buf) if (b === 10) n++;
+    if (buf[buf.length - 1] !== 10) n++;
+    return { add: n, del: 0 };
+  } catch {
+    return {};
+  }
+}
+
+/** Uncommitted files with +/- line counts vs HEAD (staged and unstaged combined). */
+export function statusFilesWithCounts(worktreePath: string): GitFileStatus[] {
+  const files = statusFiles(worktreePath);
+  if (files.length === 0) return files;
+  const counts = files.some((f) => f.xy !== "??") ? numstat(worktreePath, "HEAD") : new Map<string, LineCounts>();
+  return files.map((f) => ({
+    ...f,
+    ...(f.xy === "??" ? untrackedLines(worktreePath, f.path) : counts.get(f.path) ?? {}),
+  }));
+}
+
 /** Files changed between merge-base with main and HEAD (committed, not yet landed). */
 export function committedFiles(worktreePath: string, defaultBr: string): GitFileStatus[] {
   const base = git(worktreePath, "merge-base", "HEAD", defaultBr);
   if (!base.ok || !base.out) return [];
   const r = git(worktreePath, "diff", "--name-status", base.out, "HEAD");
   if (!r.ok || !r.out) return [];
+  const counts = numstat(worktreePath, base.out, "HEAD");
   return r.out.split("\n").filter(Boolean).map((line) => {
     const [status, ...rest] = line.split("\t");
-    return { xy: (status ?? "M").slice(0, 1) + " ", path: rest[rest.length - 1] ?? "" };
+    const path = rest[rest.length - 1] ?? "";
+    return { xy: (status ?? "M").slice(0, 1) + " ", path, ...(counts.get(path) ?? {}) };
   });
 }
 

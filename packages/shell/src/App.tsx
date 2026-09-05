@@ -109,6 +109,40 @@ export function App() {
 
   const repo = state.repos[0] ?? null;
 
+  // far-right worktree rail: wide (names+badges) or narrow (dots), persisted
+  const [railWide, setRailWide] = useState(() => localStorage.getItem("orch-rail") !== "narrow");
+  const toggleRail = () => {
+    setRailWide((w) => {
+      localStorage.setItem("orch-rail", w ? "narrow" : "wide");
+      return !w;
+    });
+  };
+
+  // route follows you across variant siblings: comparing the same screen is
+  // the whole point of variants, so switching carries the current path over
+  const prevActiveRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prevId = prevActiveRef.current;
+    prevActiveRef.current = state.activeId;
+    if (!prevId || !state.activeId || prevId === state.activeId) return;
+    const prev = state.worktrees.find((w) => w.worktree.id === prevId);
+    const next = state.worktrees.find((w) => w.worktree.id === state.activeId);
+    const g = prev?.worktree.variant?.group;
+    if (!g || next?.worktree.variant?.group !== g) return;
+    const pathOf = (id: string) => {
+      try {
+        const u = state.pageCtx[id]?.url;
+        return u ? new URL(u).pathname + new URL(u).search : "/";
+      } catch {
+        return "/";
+      }
+    };
+    const from = pathOf(prevId);
+    if (from !== pathOf(state.activeId)) {
+      previewBus.post(state.activeId, { type: "navigate", path: from });
+    }
+  }, [state.activeId]);
+
   // resizable docks, widths persisted per browser
   const [leftW, setLeftW] = useState(() => clampW(Number(localStorage.getItem("orch-lw")), 220));
   const [rightW, setRightW] = useState(() => clampW(Number(localStorage.getItem("orch-rw")), 380));
@@ -144,6 +178,7 @@ export function App() {
         <Center state={state} active={active} dispatch={dispatch} sock={sock} repo={repo} />
         {state.rightOpen && <div className="dock-resize" onPointerDown={startDrag("right")} />}
         <RightDock state={state} active={active} sock={sock} dispatch={dispatch} width={rightW} />
+        <WtRail state={state} dispatch={dispatch} sock={sock} wide={railWide} onToggleWide={toggleRail} />
       </div>
       {state.toast && (
         <div className={`toast ${state.toast.ok ? "ok" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
@@ -401,16 +436,17 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
   );
 }
 
-function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
-  const [open, setOpen] = useState(true);
+function WtRail({ state, dispatch, sock, wide, onToggleWide }: {
+  state: State; dispatch: Dispatch; sock: Sock; wide: boolean; onToggleWide: () => void;
+}) {
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; land?: boolean } | null>(null);
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
-  const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
 
   const toggleSel = (w: WorktreeStatus) => {
     if (w.worktree.kind === "main") return;
     setGraftMode(true);
+    if (!wide) onToggleWide(); // selecting needs names visible
     setSel((s) =>
       s.includes(w.worktree.id) ? s.filter((x) => x !== w.worktree.id) : [...s, w.worktree.id],
     );
@@ -469,22 +505,17 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
   const menuWt = menu ? state.worktrees.find((w) => w.worktree.id === menu.id) ?? null : null;
 
   return (
-    <div className="wt-switcher">
-      <button className="wt-current" onClick={() => setOpen(!open)} title="Switch worktree (⌘1–9)">
-        {open ? (
-          <span className="branch helper">worktrees · {state.worktrees.length}</span>
-        ) : active ? (
-          <>
-            <span className={`dot ${dotClass(active)}`} />
-            <span className="branch">{active.worktree.title}</span>
-          </>
-        ) : (
-          <span className="branch">no worktree</span>
-        )}
-        <span className={`chevron ${open ? "up" : ""}`}>▾</span>
+    <div className={`wt-rail ${wide ? "" : "narrow"}`}>
+      <button
+        className="rail-head"
+        onClick={onToggleWide}
+        title={wide ? "Collapse to dots" : "Expand worktrees"}
+      >
+        {wide && <span className="branch helper">worktrees · {state.worktrees.length}</span>}
+        <span className="chevron">{wide ? "»" : "«"}</span>
       </button>
-      {open && (
-        <div className="wt-list">
+      {(
+        <div className="wt-list rail-list">
           {state.worktrees.map((w, i) => (
             <button
               key={w.worktree.id}
@@ -497,7 +528,7 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, id: w.worktree.id });
               }}
-              title={`⌘${i + 1} · ${w.worktree.branch}${graftMode ? " · click to select" : " · shift-click to graft"}`}
+              title={`${wide ? "" : `${w.worktree.title} · `}⌘${i + 1} · ${w.worktree.branch}${graftMode ? " · click to select" : " · shift-click to graft"}`}
             >
               {graftMode && w.worktree.kind !== "main" && (
                 <input
@@ -585,9 +616,9 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
             </div>
           )}
           {!graftMode && (
-            <button className="new-wt" onClick={() => dispatch({ a: "show-prompt", v: true })}>
-              <span>+ new worktree</span>
-              <span className="kbd-hint">⌘K</span>
+            <button className="new-wt" title="New worktree (⌘K)" onClick={() => dispatch({ a: "show-prompt", v: true })}>
+              <span>{wide ? "+ new worktree" : "+"}</span>
+              {wide && <span className="kbd-hint">⌘K</span>}
             </button>
           )}
         </div>
@@ -1274,7 +1305,6 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
 
   return (
     <div className={`right-dock ${state.rightOpen ? "" : "collapsed"}`} style={{ width }}>
-      <WtSwitcher state={state} dispatch={dispatch} sock={sock} />
       <div className="chat-wrap">
         <div className="chat-log" ref={logRef} onScroll={onScroll}>
           {items.map((item, i) => (
@@ -1388,6 +1418,23 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
               new worktree from <b>{active?.worktree.title ?? "—"}</b>
             </span>
           </label>
+          <button
+            className={`composer-pick ${state.picking ? "rb-on" : ""}`}
+            disabled={!active}
+            title="Pick an element on the page to attach (⌘E)"
+            onClick={() => {
+              if (!active) return;
+              if (state.picking) {
+                previewBus.post(active.worktree.id, { type: "pick-cancel" });
+                dispatch({ a: "set-picking", v: false });
+              } else {
+                previewBus.post(active.worktree.id, { type: "pick-start" });
+                dispatch({ a: "set-picking", v: true });
+              }
+            }}
+          >
+            ⌖
+          </button>
         </div>
       </div>
     </div>
@@ -1518,12 +1565,6 @@ function StatusBar({ state, active, dispatch, sock }: { state: State; active: Wo
     previewBus.post(id, { type: "navigate", path: clean });
     setEditing(false);
   };
-  const variantSiblings = active?.worktree.variant
-    ? state.worktrees.filter(
-        (w) => w.worktree.variant?.group === active.worktree.variant!.group && w.worktree.id !== id,
-      )
-    : [];
-
   return (
     <div className="status-bar top-bar">
       <button
@@ -1533,6 +1574,7 @@ function StatusBar({ state, active, dispatch, sock }: { state: State; active: Wo
       >
         <PanelIcon side="left" filled={state.leftOpen} />
       </button>
+      <div className="rb-center">
       <button className="rb-btn" disabled={!ready} title="Back" onClick={() => id && previewBus.post(id, { type: "back" })}>‹</button>
       <button className="rb-btn" disabled={!ready} title="Forward" onClick={() => id && previewBus.post(id, { type: "forward" })}>›</button>
       <button className="rb-btn" disabled={!ready} title="Reload preview" onClick={() => id && previewBus.post(id, { type: "reload" })}>⟳</button>
@@ -1554,34 +1596,7 @@ function StatusBar({ state, active, dispatch, sock }: { state: State; active: Wo
         }}
         spellCheck={false}
       />
-      {variantSiblings.length > 0 && (
-        <button
-          className="rb-btn rb-variants"
-          title={`Open ${path} in the other ${variantSiblings.length} variant(s) too — compare the same screen`}
-          onClick={() => {
-            for (const s of variantSiblings) previewBus.post(s.worktree.id, { type: "navigate", path });
-          }}
-        >
-          ⇒ variants
-        </button>
-      )}
-      <button
-        className={`rb-btn ${state.picking ? "rb-on" : ""}`}
-        disabled={!ready}
-        title="Pick an element on the page for the chat (⌘E)"
-        onClick={() => {
-          if (!id) return;
-          if (state.picking) {
-            previewBus.post(id, { type: "pick-cancel" });
-            dispatch({ a: "set-picking", v: false });
-          } else {
-            previewBus.post(id, { type: "pick-start" });
-            dispatch({ a: "set-picking", v: true });
-          }
-        }}
-      >
-        ⌖
-      </button>
+      </div>
       {installEvt && (
         <button
           className="toggle"
@@ -1592,22 +1607,20 @@ function StatusBar({ state, active, dispatch, sock }: { state: State; active: Wo
         </button>
       )}
       <span className="grow" />
-      {active && (
-        <>
-          <span className="branch">{active.worktree.branch}</span>
-          {active.procs.map((p) => (
-            <button
-              key={p.name}
-              className="proc"
-              title={`${p.command} — ${p.status} on :${p.port} · click to restart`}
-              onClick={() => sock?.send({ t: "restart-proc", worktreeId: active.worktree.id, proc: p.name })}
-            >
-              <span className={`dot ${p.status === "running" ? "running" : p.status === "crashed" ? "crashed" : "starting"}`} />
-              {p.name}
-            </button>
-          ))}
-        </>
-      )}
+      {/* procs surface only when something needs attention — healthy is silence */}
+      {active?.procs
+        .filter((p) => p.status !== "running")
+        .map((p) => (
+          <button
+            key={p.name}
+            className="proc"
+            title={`${p.command} — ${p.status} on :${p.port} · click to restart`}
+            onClick={() => sock?.send({ t: "restart-proc", worktreeId: active.worktree.id, proc: p.name })}
+          >
+            <span className={`dot ${p.status === "crashed" ? "crashed" : "starting"}`} />
+            {p.name} {p.status}
+          </button>
+        ))}
       <span title={state.connected ? "Connected to daemon" : "Reconnecting to daemon"}>
         {state.connected ? "●" : "○"}
       </span>

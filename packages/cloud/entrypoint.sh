@@ -39,9 +39,16 @@ export default defineConfig({
   },
 });
 EOF
+    # explicit config: without orchardist.json the daemon treats the detected
+    # procs as a guess and starts nothing until the (unbuilt) first-run card confirms
+    cat > "$REPO/orchardist.json" <<EOF
+{ "procs": { "web": "bun run dev" }, "setup": ["bun install"] }
+EOF
+    (cd "$REPO" && bun install)
     cd "$REPO" && git init -q && git add -A && git commit -qm "vite react-ts starter" && cd /app
+  else
+    (cd "$REPO" && bun install)
   fi
-  (cd "$REPO" && bun install)
 fi
 
 exec bun run packages/daemon/src/index.ts "$REPO"

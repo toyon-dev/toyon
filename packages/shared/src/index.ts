@@ -146,3 +146,7 @@ export type ClientMsg =
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 
 export const DAEMON_DEFAULT_PORT = 4141;
+
+/** bump when bridge.ts changes behavior — the shell auto-reloads frames
+ * announcing an older version (persistent iframes keep stale bridges) */
+export const BRIDGE_VERSION = 2;

@@ -2,6 +2,8 @@
 // Reports navigation/errors/HMR to the shell; runs the element picker and
 // file-highlight overlays; forwards Orchardist keyboard chords.
 
+import { BRIDGE_VERSION } from "@orchardist/shared";
+
 const post = (msg: Record<string, unknown>) => {
   try {
     window.parent.postMessage({ __orchardist: true, ...msg }, "*");
@@ -10,7 +12,7 @@ const post = (msg: Record<string, unknown>) => {
   }
 };
 
-post({ type: "loaded", url: location.href, title: document.title });
+post({ type: "loaded", url: location.href, title: document.title, v: BRIDGE_VERSION });
 
 // vite announces applied hot updates on window — relay so the shell knows
 // whether an agent's changes were HMR-covered or need a reload
@@ -217,10 +219,14 @@ function fileMatches(srcFile: string, path: string): boolean {
 function highlightFile(path: string, ranges: Array<[number, number]> | null) {
   clearOverlay();
   let count = 0;
+  let fileMatched = 0;
+  let withSource = 0;
   for (const el of Array.from(document.querySelectorAll("*"))) {
     if (count >= 40) break;
     const src = sourceOf(fiberOf(el));
+    if (src) withSource++;
     if (!src || !fileMatches(src.file, path)) continue;
+    fileMatched++;
     if (ranges && ranges.length > 0) {
       const line = src.line ?? -1;
       // fiber lines mark the opening tag; changes often land on attribute lines
@@ -232,6 +238,10 @@ function highlightFile(path: string, ranges: Array<[number, number]> | null) {
       drawBox(rect);
       count++;
     }
+  }
+  if (count === 0) {
+    // nothing lit up — tell the shell why so misses are diagnosable
+    post({ type: "highlight-miss", path, fileMatched, withSource, ranges });
   }
 }
 

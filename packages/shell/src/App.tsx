@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import type { WorktreeStatus } from "@orchardist/shared";
+import { BRIDGE_VERSION } from "@orchardist/shared";
 import { DaemonSocket, hasToken } from "./ws.ts";
 import { initial, reducer, type ChatItem, type State } from "./store.ts";
 
@@ -662,6 +663,7 @@ function Center({ state, active, dispatch, sock, repo }: {
   }, []);
 
   // attribute bridge messages to their worktree via event.source
+  const staleReloaded = useRef(new Set<string>());
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       const d = e.data;
@@ -670,8 +672,19 @@ function Center({ state, active, dispatch, sock, repo }: {
         if (frame.contentWindow === e.source) {
           if (d.type === "hmr") dispatch({ a: "hmr", id });
           else if (d.type === "loaded") {
+            // persistent iframes keep old bridges — reload once on version skew
+            if (d.v !== BRIDGE_VERSION && !staleReloaded.current.has(id)) {
+              staleReloaded.current.add(id);
+              frame.src = frame.src;
+              return;
+            }
             dispatch({ a: "hmr", id });
             dispatch({ a: "page", id, url: d.url, title: d.title, fresh: true });
+          } else if (d.type === "highlight-miss") {
+            console.warn(
+              `[orchardist] highlight miss on ${d.path}: ${d.fileMatched} elements from this file, ` +
+              `${d.withSource} elements with source info on page, ranges=${JSON.stringify(d.ranges)}`,
+            );
           } else if (d.type === "navigated") dispatch({ a: "page", id, url: d.url });
           else if (d.type === "page-error") {
             const where = d.source ? ` (${relFile(String(d.source))}:${d.line ?? "?"})` : "";
@@ -1374,6 +1387,17 @@ function StatusBar({ state, active, dispatch, sock }: { state: State; active: Wo
         title="Toggle worktrees panel (⌘B)"
       >
         <PanelIcon side="left" filled={state.leftOpen} />
+      </button>
+      <button
+        className="toggle icon pick-toggle"
+        disabled={!active}
+        title="Reload preview"
+        onClick={() => {
+          if (!active) return;
+          previewBus.post(active.worktree.id, { type: "reload" });
+        }}
+      >
+        ⟳
       </button>
       <button
         className={`toggle icon pick-toggle ${state.picking ? "on picking" : ""}`}

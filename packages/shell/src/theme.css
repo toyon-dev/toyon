@@ -42,6 +42,38 @@ button {
   height: 100%;
 }
 
+/* ---- keyboard shortcuts help ---- */
+.keys-btn { font-size: 12px; width: 20px; height: 20px; }
+.keys-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(40, 40, 40, 0.7);
+  display: grid;
+  place-items: center;
+  z-index: 60;
+}
+.keys-card {
+  display: flex;
+  gap: 36px;
+  background: var(--bg1);
+  border: 1px solid var(--bg3);
+  border-radius: 8px;
+  padding: 18px 26px 22px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
+}
+.keys-col { min-width: 250px; }
+.keys-row { display: flex; gap: 14px; padding: 3px 0; font-size: 12.5px; align-items: baseline; }
+.keys-k {
+  font: 11px var(--font-mono);
+  color: var(--fg1);
+  background: var(--bg0);
+  border: 1px solid var(--bg2);
+  border-radius: 4px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.keys-d { color: var(--fg-muted); }
+
 /* zen: full-bleed preview, all chrome hidden (⌘⇧F, esc exits) */
 .app.zen .status-bar,
 .app.zen .left-dock,

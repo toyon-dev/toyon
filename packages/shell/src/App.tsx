@@ -1532,6 +1532,60 @@ function toolHint(item: Extract<ChatItem, { kind: "tool" }>): string {
   return typeof v === "string" ? v : "";
 }
 
+const KEY_ROWS: Array<[string, string]> = [
+  ["⌘1–9", "switch worktree"],
+  ["⌘K", "new worktree (variants · batch)"],
+  ["⌘P", "jump to file"],
+  ["⌘E", "pick an element on the page"],
+  ["⌘B", "changes panel"],
+  ["⌘J", "chat panel"],
+  ["⌘⇧F", "zen — full-bleed preview"],
+  ["esc", "close / cancel / exit zen"],
+  ["enter", "send · shift+enter newline"],
+];
+const GESTURE_ROWS: Array<[string, string]> = [
+  ["shift-click worktree", "select for grafting"],
+  ["right-click / ⋯", "worktree actions"],
+  ["click ↓ badge", "sync from main"],
+  ["click ↑ badge", "land (merge / PR)"],
+  ["click v1/3 badge", "pick this variant"],
+  ["hover changed file", "highlight it on the page"],
+  ["hover diff line", "highlight what it renders"],
+  ["drag panel edges", "resize docks / editor"],
+];
+
+function KeysHelp({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return (
+    <div className="keys-overlay" onClick={onClose}>
+      <div className="keys-card" onClick={(e) => e.stopPropagation()}>
+        <div className="keys-col">
+          <div className="cfg-section">keyboard</div>
+          {KEY_ROWS.map(([k, d]) => (
+            <div className="keys-row" key={k}>
+              <span className="keys-k">{k}</span>
+              <span className="keys-d">{d}</span>
+            </div>
+          ))}
+        </div>
+        <div className="keys-col">
+          <div className="cfg-section">mouse</div>
+          {GESTURE_ROWS.map(([k, d]) => (
+            <div className="keys-row" key={k}>
+              <span className="keys-k">{k}</span>
+              <span className="keys-d">{d}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PanelIcon({ side, filled }: { side: "left" | "right"; filled: boolean }) {
   const bar = side === "left" ? { x: 1.5, width: 4.5 } : { x: 10, width: 4.5 };
   return (
@@ -1544,6 +1598,7 @@ function PanelIcon({ side, filled }: { side: "left" | "right"; filled: boolean }
 }
 
 function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State; active: WorktreeStatus | null; dispatch: Dispatch; sock: Sock; navCenter: number }) {
+  const [showKeys, setShowKeys] = useState(false);
   const [installEvt, setInstallEvt] = useState<{ prompt: () => Promise<unknown> } | null>(null);
   useEffect(() => {
     // already running as an app (--app window or installed PWA): don't offer install
@@ -1644,6 +1699,10 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
       <span title={state.connected ? "Connected to daemon" : "Reconnecting to daemon"}>
         {state.connected ? "●" : "○"}
       </span>
+      <button className="toggle icon keys-btn" title="Keyboard shortcuts" onClick={() => setShowKeys(true)}>
+        ?
+      </button>
+      {showKeys && <KeysHelp onClose={() => setShowKeys(false)} />}
       <button
         className={`toggle icon ${state.rightOpen ? "on" : ""}`}
         onClick={() => dispatch({ a: "toggle-right" })}

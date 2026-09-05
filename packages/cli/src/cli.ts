@@ -232,6 +232,11 @@ exec open "$URL"
       spawnSync("iconutil", ["-c", "icns", iconset, "-o", join(resources, "AppIcon.icns")], { stdio: "ignore" });
     }
   } catch {}
+  // Gatekeeper refuses an unsigned bundle outright ("damaged, move to Trash"); an ad-hoc signature
+  // is enough for a local wrapper. Must run after the last write into the bundle.
+  spawnSync("xattr", ["-cr", appDir], { stdio: "ignore" });
+  const signed = spawnSync("codesign", ["--force", "--deep", "-s", "-", appDir], { stdio: "ignore" }).status === 0;
+  if (!signed) console.warn("warning: could not codesign the app bundle; macOS may refuse to open it");
   console.log(`installed ${appDir} — launch "Orchardist" from Spotlight or drag it to the Dock`);
 }
 

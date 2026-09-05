@@ -45,7 +45,7 @@ export function startProxy(opts: {
       if (target == null) {
         return new Response(waitingPage(), {
           status: 503,
-          headers: { "content-type": "text/html", "retry-after": "2" },
+          headers: { "content-type": "text/html; charset=utf-8", "retry-after": "2" },
         });
       }
 
@@ -76,7 +76,7 @@ export function startProxy(opts: {
       } catch {
         return new Response(waitingPage(), {
           status: 502,
-          headers: { "content-type": "text/html", "retry-after": "2" },
+          headers: { "content-type": "text/html; charset=utf-8", "retry-after": "2" },
         });
       }
 
@@ -134,7 +134,7 @@ function injectBridge(html: string): string {
 }
 
 function waitingPage(): string {
-  return `<!doctype html><html><head><meta http-equiv="refresh" content="2"><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="2"><style>
   body{background:#32302f;color:#a89984;font:14px/1.6 ui-monospace,monospace;display:grid;place-items:center;height:100vh;margin:0}
   </style></head><body><div>starting dev server…</div></body></html>`;
 }

@@ -222,9 +222,12 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
     const close = () => setMenu(null);
     window.addEventListener("click", close);
     window.addEventListener("keydown", close);
+    // clicks inside the preview iframe never bubble here, but they do steal focus
+    window.addEventListener("blur", close);
     return () => {
       window.removeEventListener("click", close);
       window.removeEventListener("keydown", close);
+      window.removeEventListener("blur", close);
     };
   }, [menu]);
 
@@ -266,7 +269,7 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
           {state.worktrees.map((w, i) => (
             <button
               key={w.worktree.id}
-              className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""}`}
+              className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""} ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
               onClick={(e) => {
                 if (graftMode || e.shiftKey) toggleSel(w);
                 else dispatch({ a: "activate", id: w.worktree.id });

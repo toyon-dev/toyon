@@ -121,6 +121,8 @@ button {
   flex-shrink: 0;
 }
 .wt-item:hover .wt-more { visibility: visible; }
+.wt-item.menu-open { background: var(--bg2); }
+.wt-item.menu-open .wt-more { visibility: visible; color: var(--fg1); background: var(--bg3); }
 .wt-item .wt-more:hover { color: var(--fg1); background: var(--bg3); }
 
 .git-file {

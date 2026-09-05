@@ -52,6 +52,7 @@ export default function MonacoDiff({ before, after, path, onSave }: {
     if (!el) return;
     const original = monaco.editor.createModel(before, undefined, monaco.Uri.file(`/before/${path}`));
     const modified = monaco.editor.createModel(after, undefined, monaco.Uri.file(`/after/${path}`));
+    const unchanged = before === after;
     const editor = monaco.editor.createDiffEditor(el, {
       readOnly: false,
       originalEditable: false,
@@ -62,9 +63,20 @@ export default function MonacoDiff({ before, after, path, onSave }: {
       minimap: { enabled: false },
       fontSize: 12,
       renderOverviewRuler: false,
-      hideUnchangedRegions: { enabled: true },
+      // collapsing an entirely-unchanged file hides everything — plain view instead
+      hideUnchangedRegions: { enabled: !unchanged },
     });
     editor.setModel({ original, modified });
+    if (unchanged) {
+      editor.getModifiedEditor().setScrollTop(0);
+    } else {
+      const sub = editor.onDidUpdateDiff(() => {
+        sub.dispose();
+        const first = editor.getLineChanges()?.[0];
+        const line = first?.modifiedStartLineNumber || first?.modifiedEndLineNumber || 1;
+        editor.getModifiedEditor().revealLineInCenter(line);
+      });
+    }
     const cmd = editor.getModifiedEditor().addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
       () => saveRef.current(modified.getValue()),

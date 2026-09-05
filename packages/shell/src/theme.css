@@ -96,8 +96,18 @@ button {
   font-size: 13px;
   text-align: left;
   width: 100%;
+  display: flex;
+  align-items: baseline;
 }
 .new-wt:hover { color: var(--orange); }
+.new-wt .kbd-hint {
+  margin-left: auto;
+  font: 10px var(--font-mono);
+  color: var(--fg-dim);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.new-wt:hover .kbd-hint { opacity: 0.7; }
 .combine-btn { color: var(--aqua); }
 .combine-btn:hover { color: var(--aqua); background: var(--bg2); }
 .combine-btn:disabled { color: var(--fg-dim); cursor: default; }

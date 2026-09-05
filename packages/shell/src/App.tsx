@@ -476,13 +476,15 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 ⧉ graft {sel.length >= 2 ? `${sel.length} worktrees` : "— pick 2+"}
               </button>
               <button className="new-wt graft-cancel" onClick={cancelGraft}>
-                cancel esc
+                <span>cancel</span>
+                <span className="kbd-hint">esc</span>
               </button>
             </div>
           )}
           {!graftMode && (
             <button className="new-wt" onClick={() => dispatch({ a: "show-prompt", v: true })}>
-              + new worktree ⌘K
+              <span>+ new worktree</span>
+              <span className="kbd-hint">⌘K</span>
             </button>
           )}
         </div>

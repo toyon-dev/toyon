@@ -59,6 +59,17 @@ button {
 }
 .left-dock.collapsed, .right-dock.collapsed { display: none; }
 
+.dock-resize {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.1s;
+}
+.dock-resize:hover { background: var(--bg3); }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing iframe { pointer-events: none; }
+
 .dock-section-title {
   font-size: 11px;
   text-transform: uppercase;

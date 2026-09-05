@@ -90,12 +90,40 @@ export function App() {
 
   const repo = state.repos[0] ?? null;
 
+  // resizable docks, widths persisted per browser
+  const [leftW, setLeftW] = useState(() => clampW(Number(localStorage.getItem("orch-lw")), 220));
+  const [rightW, setRightW] = useState(() => clampW(Number(localStorage.getItem("orch-rw")), 380));
+  const startDrag = (side: "left" | "right") => (e: React.PointerEvent) => {
+    e.preventDefault();
+    document.body.classList.add("resizing");
+    const move = (ev: PointerEvent) => {
+      if (side === "left") {
+        const w = clampW(ev.clientX, 220);
+        setLeftW(w);
+        localStorage.setItem("orch-lw", String(w));
+      } else {
+        const w = clampW(window.innerWidth - ev.clientX, 380);
+        setRightW(w);
+        localStorage.setItem("orch-rw", String(w));
+      }
+    };
+    const up = () => {
+      document.body.classList.remove("resizing");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   return (
     <div className="app">
       <div className="docks">
-        <LeftDock state={state} dispatch={dispatch} sock={sock} />
+        <LeftDock state={state} dispatch={dispatch} sock={sock} width={leftW} />
+        {state.leftOpen && <div className="dock-resize" onPointerDown={startDrag("left")} />}
         <Center state={state} active={active} dispatch={dispatch} sock={sock} repo={repo} />
-        <RightDock state={state} active={active} sock={sock} dispatch={dispatch} />
+        {state.rightOpen && <div className="dock-resize" onPointerDown={startDrag("right")} />}
+        <RightDock state={state} active={active} sock={sock} dispatch={dispatch} width={rightW} />
       </div>
       <StatusBar state={state} active={active} dispatch={dispatch} />
       {state.toast && (
@@ -126,7 +154,12 @@ export function App() {
 type Sock = DaemonSocket | null;
 type Dispatch = (a: Parameters<typeof reducer>[1]) => void;
 
-function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
+function clampW(n: number, fallback: number): number {
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.max(n, 170), Math.floor(window.innerWidth * 0.5));
+}
+
+function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Dispatch; sock: Sock; width: number }) {
   const gitInfo = state.activeId ? state.git[state.activeId] : undefined;
   const files = gitInfo?.files ?? [];
   const ahead = gitInfo?.ahead ?? 0;
@@ -163,7 +196,7 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
   };
 
   return (
-    <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`}>
+    <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`} style={{ width }}>
       {(behind > 0 || ahead > 0 || active?.worktree.landed) && (
         <div className="dock-section-title changes-head">
           <span>
@@ -843,7 +876,7 @@ function PromptOverlay({ onSubmit, onClose }: {
   );
 }
 
-function RightDock({ state, active, sock, dispatch }: { state: State; active: WorktreeStatus | null; sock: Sock; dispatch: Dispatch }) {
+function RightDock({ state, active, sock, dispatch, width }: { state: State; active: WorktreeStatus | null; sock: Sock; dispatch: Dispatch; width: number }) {
   const items = active ? state.chats[active.worktree.id] ?? [] : [];
   const logRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("");
@@ -912,7 +945,7 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
   };
 
   return (
-    <div className={`right-dock ${state.rightOpen ? "" : "collapsed"}`}>
+    <div className={`right-dock ${state.rightOpen ? "" : "collapsed"}`} style={{ width }}>
       <WtSwitcher state={state} dispatch={dispatch} sock={sock} />
       <div className="chat-wrap">
         <div className="chat-log" ref={logRef} onScroll={onScroll}>
@@ -1073,13 +1106,6 @@ function StatusBar({ state, active, dispatch }: { state: State; active: Worktree
       >
         <PanelIcon side="left" filled={state.leftOpen} />
       </button>
-      <button
-        className={`toggle icon ${state.rightOpen ? "on" : ""}`}
-        onClick={() => dispatch({ a: "toggle-right" })}
-        title="Toggle chat panel (⌘J)"
-      >
-        <PanelIcon side="right" filled={state.rightOpen} />
-      </button>
       {installEvt && (
         <button
           className="toggle"
@@ -1108,6 +1134,13 @@ function StatusBar({ state, active, dispatch }: { state: State; active: Worktree
       <span title={state.connected ? "Connected to daemon" : "Reconnecting to daemon"}>
         {state.connected ? "●" : "○"}
       </span>
+      <button
+        className={`toggle icon ${state.rightOpen ? "on" : ""}`}
+        onClick={() => dispatch({ a: "toggle-right" })}
+        title="Toggle chat panel (⌘J)"
+      >
+        <PanelIcon side="right" filled={state.rightOpen} />
+      </button>
     </div>
   );
 }

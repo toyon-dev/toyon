@@ -37,9 +37,6 @@ write_fly_toml() {
 app = "$app"
 primary_region = "$REGION"
 
-[build]
-  dockerfile = "packages/cloud/Dockerfile"
-
 [env]
   ORCHARDIST_CLOUD = "1"
   ORCHARDIST_PORT = "$DAEMON_PORT"

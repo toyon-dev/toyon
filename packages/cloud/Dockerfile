@@ -13,13 +13,12 @@ RUN apt-get update \
 RUN useradd --create-home --uid 1001 --shell /bin/bash orch
 
 WORKDIR /app
-COPY --chown=orch:orch . .
+COPY . .
 
-USER orch
-# fresh install inside the image: never copy a macOS node_modules in
-RUN bun install --frozen-lockfile && bun run build
+# fresh install inside the image (never copy a macOS node_modules in); done as
+# root because bun needs a writable HOME for its cache, then handed to orch
+RUN bun install --frozen-lockfile && bun run build && chown -R orch:orch /app
 
-USER root
 COPY packages/cloud/entrypoint.sh /entrypoint.sh
 RUN chmod 0755 /entrypoint.sh
 

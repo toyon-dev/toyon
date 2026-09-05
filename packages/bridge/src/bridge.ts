@@ -294,6 +294,16 @@ window.addEventListener("message", (e) => {
     case "reload":
       location.reload();
       break;
+    case "navigate":
+      // full navigation: always correct regardless of the app's router (or lack of one)
+      location.assign(String(d.path ?? "/"));
+      break;
+    case "back":
+      history.back();
+      break;
+    case "forward":
+      history.forward();
+      break;
     case "pick-start":
       startPicking();
       break;

@@ -6,6 +6,7 @@ import { startServer } from "./server.ts";
 import { statusFiles } from "./git.ts";
 import { loadOrCreateToken } from "./state.ts";
 import { ensureDirs } from "./paths.ts";
+import { cloud } from "./cloud.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SHELL_DIST = join(here, "../../shell/dist");
@@ -64,11 +65,18 @@ if (repoArg) {
   }
 }
 
-const shellUrl = branded
-  ? `http://orchardist.localhost/#token=${token}`
-  : `http://orchardist.localhost:${port}/#token=${token}`;
-console.log(`orchardist daemon on ${shellUrl}`);
-console.log(`         (fallback: http://127.0.0.1:${port}/#token=${token})`);
+if (cloud.enabled) {
+  const range = cloud.proxyPorts ? `${cloud.proxyPorts.from}-${cloud.proxyPorts.to}` : "ephemeral";
+  const where = cloud.publicHost ? `https://${cloud.publicHost}/` : `http://0.0.0.0:${port}/`;
+  console.log(`orchardist daemon (cloud mode) on ${where}  proxy ports: ${range}`);
+  console.log(`         token is seeded from ORCHARDIST_TOKEN; not printed`);
+} else {
+  const shellUrl = branded
+    ? `http://orchardist.localhost/#token=${token}`
+    : `http://orchardist.localhost:${port}/#token=${token}`;
+  console.log(`orchardist daemon on ${shellUrl}`);
+  console.log(`         (fallback: http://127.0.0.1:${port}/#token=${token})`);
+}
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

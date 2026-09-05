@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ClientMsg, ServerMsg } from "@orchardist/shared";
 import type { Manager } from "./worktrees.ts";
 import { aheadBehind, changedRanges, commitWorktree, committedFiles, fileBefore, mergeToMain, shipWorktree, statusFiles, syncFromMain } from "./git.ts";
+import { cloud } from "./cloud.ts";
 
 const VERSION = "0.0.1";
 
@@ -30,22 +31,26 @@ export function startServer(opts: {
   };
 
   const serverConfig = {
-    hostname: "127.0.0.1",
+    hostname: cloud.bindHost,
     async fetch(req: Request, srv: import("bun").Server<WsData>) {
       const url = new URL(req.url);
 
-      // the port-80 listener binds wildcard (macOS allows low ports unprivileged
-      // only on 0.0.0.0) — so enforce loopback peers on every request
-      const ip = srv.requestIP(req)?.address ?? "";
-      if (ip !== "127.0.0.1" && ip !== "::1" && !ip.startsWith("::ffff:127.")) {
-        return new Response("forbidden", { status: 403 });
-      }
+      // Cloud mode sits behind the host's TLS edge: peers and Host headers are
+      // remote by design, and the bearer token on /ws and /register is the auth.
+      if (!cloud.enabled) {
+        // the port-80 listener binds wildcard (macOS allows low ports unprivileged
+        // only on 0.0.0.0) — so enforce loopback peers on every request
+        const ip = srv.requestIP(req)?.address ?? "";
+        if (ip !== "127.0.0.1" && ip !== "::1" && !ip.startsWith("::ffff:127.")) {
+          return new Response("forbidden", { status: 403 });
+        }
 
-      // DNS-rebinding defense: loopback hosts only. *.localhost is safe —
-      // browsers hardwire it to loopback and public DNS cannot serve it (RFC 6761).
-      const host = (req.headers.get("host") ?? "").split(":")[0] ?? "";
-      if (host !== "127.0.0.1" && host !== "localhost" && !host.endsWith(".localhost")) {
-        return new Response("forbidden", { status: 403 });
+        // DNS-rebinding defense: loopback hosts only. *.localhost is safe —
+        // browsers hardwire it to loopback and public DNS cannot serve it (RFC 6761).
+        const host = (req.headers.get("host") ?? "").split(":")[0] ?? "";
+        if (host !== "127.0.0.1" && host !== "localhost" && !host.endsWith(".localhost")) {
+          return new Response("forbidden", { status: 403 });
+        }
       }
 
       if (url.pathname === "/ws") {
@@ -120,7 +125,7 @@ export function startServer(opts: {
   // best-effort port 80 so the branded http://orchardist.localhost works portless
   // (macOS allows unprivileged low-port binds; failure is fine, :4141 remains)
   let branded = false;
-  if (opts.port !== 80) {
+  if (opts.port !== 80 && !cloud.enabled) {
     try {
       // wildcard bind is required for unprivileged :80 on macOS; the loopback
       // peer check in fetch() keeps it effectively local-only
@@ -311,8 +316,9 @@ export function startServer(opts: {
         if (!wt) return;
         const repo = manager.repo(wt.repoId);
         const ranges = changedRanges(wt.path, repo.defaultBranch, msg.path);
+        const lineOffset = await manager.lineOffset(wt.id, msg.path);
         ws.send(JSON.stringify({
-          t: "changed-ranges", worktreeId: wt.id, path: msg.path, ranges,
+          t: "changed-ranges", worktreeId: wt.id, path: msg.path, ranges, lineOffset,
         } satisfies ServerMsg));
         break;
       }
@@ -324,8 +330,13 @@ export function startServer(opts: {
         if (target !== resolve(wt.path) && !target.startsWith(resolve(wt.path) + "/")) {
           throw new Error("path escapes worktree");
         }
+        // Finder reveal is macOS-only; elsewhere there is no viewer-side filesystem.
+        // An unhandled spawn 'error' (missing `open`) would take the daemon down.
+        if (process.platform !== "darwin") throw new Error("reveal is only available on macOS");
         const { spawn } = await import("node:child_process");
-        spawn("open", ["-R", target], { stdio: "ignore" }).unref();
+        const child = spawn("open", ["-R", target], { stdio: "ignore" });
+        child.on("error", () => {});
+        child.unref();
         break;
       }
       case "discard-file": {

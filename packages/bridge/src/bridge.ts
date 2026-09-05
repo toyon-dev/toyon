@@ -2,8 +2,6 @@
 // Reports navigation/errors/HMR to the shell; runs the element picker and
 // file-highlight overlays; forwards Orchardist keyboard chords.
 
-import { BRIDGE_VERSION } from "@orchardist/shared";
-
 const post = (msg: Record<string, unknown>) => {
   try {
     window.parent.postMessage({ __orchardist: true, ...msg }, "*");
@@ -12,7 +10,7 @@ const post = (msg: Record<string, unknown>) => {
   }
 };
 
-post({ type: "loaded", url: location.href, title: document.title, v: BRIDGE_VERSION });
+post({ type: "loaded", url: location.href, title: document.title });
 
 // vite announces applied hot updates on window — relay so the shell knows
 // whether an agent's changes were HMR-covered or need a reload
@@ -215,24 +213,44 @@ function fileMatches(srcFile: string, path: string): boolean {
   return srcFile.endsWith(path) || path.endsWith(shortFile(srcFile));
 }
 
-/** ranges = changed line spans (new-file numbering); null/empty = whole file */
-function highlightFile(path: string, ranges: Array<[number, number]> | null) {
-  clearOverlay();
-  let count = 0;
-  let fileMatched = 0;
+/** ranges = changed line spans (post-offset numbering); null/empty = whole file.
+ * A single one-line range means "the element this line belongs to": exact match,
+ * else the nearest element opening above (attribute/handler lines). Multi-line
+ * ranges use an ~8-line span intersect (fiber lines mark opening tags only). */
+function matchElements(path: string, ranges: Array<[number, number]> | null) {
+  const fromFile: Array<{ el: Element; line: number }> = [];
   let withSource = 0;
   for (const el of Array.from(document.querySelectorAll("*"))) {
-    if (count >= 40) break;
     const src = sourceOf(fiberOf(el));
     if (src) withSource++;
     if (!src || !fileMatches(src.file, path)) continue;
-    fileMatched++;
-    if (ranges && ranges.length > 0) {
-      const line = src.line ?? -1;
-      // fiber lines mark the opening tag; changes often land on attribute lines
-      // below it — treat the element as spanning ~8 lines when intersecting
-      if (!ranges.some(([a, b]) => line >= a - 8 && line <= b + 1)) continue;
-    }
+    fromFile.push({ el, line: src.line ?? -1 });
+  }
+  if (!ranges || ranges.length === 0) return { matched: fromFile, fromFile, withSource };
+
+  const precise = ranges.length === 1 && ranges[0]![0] === ranges[0]![1];
+  if (precise) {
+    const target = ranges[0]![0];
+    const exact = fromFile.filter((c) => c.line === target);
+    if (exact.length > 0) return { matched: exact, fromFile, withSource };
+    // nearest element opening above the hovered line
+    const above = fromFile.filter((c) => c.line > 0 && c.line < target);
+    above.sort((x, y) => y.line - x.line);
+    return { matched: above.slice(0, 1), fromFile, withSource };
+  }
+
+  const matched = fromFile.filter((c) =>
+    ranges.some(([a, b]) => c.line >= a - 8 && c.line <= b + 1),
+  );
+  return { matched, fromFile, withSource };
+}
+
+function highlightFile(path: string, ranges: Array<[number, number]> | null) {
+  clearOverlay();
+  const { matched, fromFile, withSource } = matchElements(path, ranges);
+  let count = 0;
+  for (const { el } of matched) {
+    if (count >= 40) break;
     const rect = el.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       drawBox(rect);
@@ -241,8 +259,30 @@ function highlightFile(path: string, ranges: Array<[number, number]> | null) {
   }
   if (count === 0) {
     // nothing lit up — tell the shell why so misses are diagnosable
-    post({ type: "highlight-miss", path, fileMatched, withSource, ranges });
+    post({ type: "highlight-miss", path, fileMatched: fromFile.length, withSource, ranges });
   }
+}
+
+// ---- headless self-test hook: #__orchtest=src/App.tsx@27-27 ----
+if (location.hash.startsWith("#__orchtest=")) {
+  const spec = decodeURIComponent(location.hash.slice("#__orchtest=".length));
+  const [path, span] = spec.split("@");
+  const ranges: Array<[number, number]> | null = span
+    ? [[Number(span.split("-")[0]), Number(span.split("-")[1] ?? span.split("-")[0])]]
+    : null;
+  setTimeout(() => {
+    const { matched, fromFile, withSource } = matchElements(String(path), ranges);
+    const out = document.createElement("pre");
+    out.id = "__orchtest";
+    out.textContent = JSON.stringify(
+      {
+        path, ranges, withSource, fileMatched: fromFile.length,
+        matched: matched.map((m) => ({ tag: m.el.tagName.toLowerCase(), line: m.line, text: m.el.textContent?.slice(0, 30) })),
+      },
+      null, 1,
+    );
+    document.body.appendChild(out);
+  }, 1500);
 }
 
 // ---- commands from the shell ----

@@ -5,7 +5,7 @@
 // - serves the bridge script itself at /__orchardist/bridge.js
 
 import type { ServerWebSocket } from "bun";
-import { BRIDGE_VERSION } from "@orchardist/shared";
+import { cloud } from "./cloud.ts";
 
 interface BridgeData {
   upstream?: WebSocket;
@@ -38,7 +38,8 @@ export function startProxy(opts: {
 
   const server = Bun.serve<BridgeData, string>({
     port: opts.port,
-    hostname: "127.0.0.1",
+    // loopback locally; cloud mode exposes each proxy as its own public TLS port
+    hostname: cloud.bindHost,
     async fetch(req, srv) {
       const url = new URL(req.url);
       target = opts.getTarget();
@@ -135,7 +136,7 @@ export function startProxy(opts: {
 
 function injectBridge(html: string): string {
   // version-busted URL: every bridge bump is a guaranteed cache miss
-  const tag = `<script src="/__orchardist/bridge.js?v=${BRIDGE_VERSION}"></script>`;
+  const tag = `<script src="/__orchardist/bridge.js"></script>`;
   if (html.includes("</head>")) return html.replace("</head>", `${tag}</head>`);
   if (html.includes("<body")) return html.replace(/<body([^>]*)>/, `<body$1>${tag}`);
   return html + tag;

@@ -11,7 +11,7 @@ import {
   repoRoot, statusFiles, withRepoLock,
 } from "./git.ts";
 import { watchDefaultBranch } from "./watcher.ts";
-import { allocatePort } from "./ports.ts";
+import { allocateProxyPort, releasePort, reservePort } from "./ports.ts";
 import { startProxy, type WorktreeProxy } from "./proxy.ts";
 import { AgentSession, quickName } from "./agent.ts";
 import { WorktreeProcs } from "./supervisor.ts";
@@ -52,6 +52,7 @@ export class Manager {
     this.state.worktrees = this.state.worktrees.filter(
       (wt) => existsSync(wt.path) && this.state.repos.some((r) => r.id === wt.repoId),
     );
+    for (const wt of this.state.worktrees) reservePort(wt.proxyPort);
     for (const wt of this.state.worktrees) {
       const repo = this.repo(wt.repoId);
       await this.startRuntime(wt, repo);
@@ -121,7 +122,7 @@ export class Manager {
         path: wtPath,
         branch: repo.defaultBranch,
         kind: "spare",
-        proxyPort: await allocatePort(),
+        proxyPort: await allocateProxyPort(),
         title: slug,
         createdAt: Date.now(),
       };
@@ -213,7 +214,7 @@ export class Manager {
       path: root,
       branch: repo.defaultBranch,
       kind: "main",
-      proxyPort: await allocatePort(),
+      proxyPort: await allocateProxyPort(),
       // titled by repo so multi-repo lists don't show identical "main" rows
       title: repo.name,
       createdAt: Date.now(),
@@ -297,7 +298,7 @@ export class Manager {
       path: wtPath,
       branch,
       kind: "worktree",
-      proxyPort: await allocatePort(),
+      proxyPort: await allocateProxyPort(),
       title: slug,
       createdAt: Date.now(),
       ...(variant ? { variant } : {}),
@@ -393,12 +394,26 @@ export class Manager {
   private pendingAgents = new Map<string, AgentSession>();
 
   private async setupAndStart(wt: WorktreeInfo, repo: RepoInfo, depsSource = repo.path) {
-    // CoW-clone node_modules from the base checkout (APFS); harmless no-op elsewhere
+    // Clone node_modules from the base checkout. Copy-on-write where the fs
+    // allows it: `cp -c` (APFS clonefile), then GNU `--reflink=auto` (btrfs/XFS),
+    // then a plain recursive copy (ext4). The log line records
+    // which path ran and how long the fallback copy takes per worktree.
     const srcNm = join(depsSource, "node_modules");
     const dstNm = join(wt.path, "node_modules");
     if (existsSync(srcNm) && !existsSync(dstNm)) {
-      const r = spawnSync("cp", ["-Rc", srcNm, dstNm]);
-      if (r.status !== 0) spawnSync("cp", ["-R", srcNm, dstNm]);
+      const started = Date.now();
+      const attempts: [string, string[]][] = [
+        ["clonefile", ["-Rc", srcNm, dstNm]],
+        ["reflink", ["-R", "--reflink=auto", srcNm, dstNm]],
+        ["copy", ["-R", srcNm, dstNm]],
+      ];
+      for (const [how, args] of attempts) {
+        if (spawnSync("cp", args, { stdio: "ignore" }).status === 0) {
+          this.hub.log(wt.id, "setup", `deps via ${how} in ${Date.now() - started}ms`);
+          break;
+        }
+        try { spawnSync("rm", ["-rf", dstNm]); } catch {}
+      }
     }
     for (const cmd of repo.config.setup ?? []) {
       const r = spawnSync("sh", ["-c", cmd], { cwd: wt.path, encoding: "utf8" });
@@ -420,6 +435,7 @@ export class Manager {
     });
     this.state.worktrees = this.state.worktrees.filter((w) => w.id !== worktreeId);
     delete this.state.sessions[worktreeId];
+    releasePort(wt.proxyPort);
     saveState(this.state);
     this.hub.worktreesChanged();
   }
@@ -515,6 +531,44 @@ export class Manager {
     }
   }
 
+  /** Some Vite/plugin-react pipelines compute JSX source lines AFTER prepending
+   * the refresh preamble, so fiber lineNumbers = file line + constant K.
+   * Derive K by anchoring one distinctive JSX text literal from disk against
+   * the `lineNumber:` in its served jsxDEV call. 0 when underivable. */
+  async lineOffset(worktreeId: string, path: string): Promise<number> {
+    try {
+      const rt = this.runtimes.get(worktreeId);
+      const wt = this.worktree(worktreeId);
+      if (!rt || !wt) return 0;
+      const repo = this.repo(wt.repoId);
+      const previewName =
+        repo.config.preview ?? (repo.config.procs["web"] ? "web" : Object.keys(repo.config.procs)[0]);
+      const st = rt.procs.states().find((p) => p.name === previewName) ?? rt.procs.states()[0];
+      if (!st || st.status !== "running") return 0;
+      const host = st.host?.includes(":") ? `[${st.host}]` : (st.host ?? "127.0.0.1");
+      const res = await fetch(`http://${host}:${st.port}/${path}`, {
+        signal: AbortSignal.timeout(1500),
+        headers: { accept: "*/*" },
+      });
+      if (!res.ok) return 0;
+      const served = await res.text();
+      const disk = readFileSync(join(wt.path, path), "utf8").split("\n");
+      for (let i = 0; i < disk.length; i++) {
+        const m = disk[i]!.match(/>([^<>{}\n]{6,60})</);
+        const anchor = m?.[1]?.trim();
+        if (!anchor || anchor.length < 6) continue;
+        const at = served.indexOf(JSON.stringify(anchor).slice(1, -1));
+        if (at < 0) continue;
+        const ln = served.slice(at, at + 400).match(/lineNumber:\s*(\d+)/);
+        if (!ln) continue;
+        return Number(ln[1]) - (i + 1);
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
+  }
+
   /** git-status payload for one worktree (used by subscribe, edits, and ref ticks) */
   gitStatusMsg(worktreeId: string): Extract<ServerMsg, { t: "git-status" }> | null {
     const wt = this.worktree(worktreeId);
@@ -585,7 +639,7 @@ export class Manager {
       path: wtPath,
       branch,
       kind: "combined",
-      proxyPort: await allocatePort(),
+      proxyPort: await allocateProxyPort(),
       title: slug,
       createdAt: Date.now(),
       sources: wts.map((w) => w.id),

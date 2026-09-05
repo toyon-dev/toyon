@@ -26,6 +26,10 @@
         "@orchardist/shared": "workspace:*",
       },
     },
+    "packages/cloud": {
+      "name": "@orchardist/cloud",
+      "version": "0.0.1",
+    },
     "packages/daemon": {
       "name": "@orchardist/daemon",
       "version": "0.0.1",
@@ -188,6 +192,8 @@
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 
     "@orchardist/bridge": ["@orchardist/bridge@workspace:packages/bridge"],
+
+    "@orchardist/cloud": ["@orchardist/cloud@workspace:packages/cloud"],
 
     "@orchardist/daemon": ["@orchardist/daemon@workspace:packages/daemon"],
 

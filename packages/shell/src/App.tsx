@@ -2,11 +2,20 @@ import { Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import type { WorktreeStatus } from "@orchardist/shared";
-import { BRIDGE_VERSION } from "@orchardist/shared";
 import { DaemonSocket, hasToken } from "./ws.ts";
 import { initial, reducer, type ChatItem, type State } from "./store.ts";
 
 const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
+
+// Preview iframes hit the worktree's proxy port. Locally that is always
+// loopback (the daemon binds 127.0.0.1); in cloud mode the same port is a
+// public TLS port on the host that served this page, so follow the page's origin.
+function previewUrl(proxyPort: number): string {
+  const h = location.hostname;
+  const local = h === "127.0.0.1" || h === "localhost" || h.endsWith(".localhost");
+  if (local) return `http://127.0.0.1:${proxyPort}/`;
+  return `${location.protocol}//${h}:${proxyPort}/`;
+}
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initial);
@@ -169,6 +178,11 @@ export const previewBus = {
   post: (_id: string, _msg: Record<string, unknown>) => {},
 };
 
+// fiber lineNumbers may be preamble-shifted (daemon derives the offset per file)
+function shiftRanges(cr: { ranges: Array<[number, number]>; offset: number }): Array<[number, number]> {
+  return cr.ranges.map(([a, b]) => [a + cr.offset, b + cr.offset]);
+}
+
 function relFile(file: string, worktreePath?: string): string {
   if (worktreePath && file.startsWith(worktreePath + "/")) return file.slice(worktreePath.length + 1);
   const i = file.lastIndexOf("/src/");
@@ -228,7 +242,7 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
     hoverPathRef.current = path;
     const cached = state.changedRanges[`${state.activeId}:${path}`];
     if (cached) {
-      previewBus.post(state.activeId, { type: "highlight-file", path, ranges: cached });
+      previewBus.post(state.activeId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
     } else {
       sock?.send({ t: "changed-ranges", worktreeId: state.activeId, path });
     }
@@ -236,8 +250,8 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
   useEffect(() => {
     const path = hoverPathRef.current;
     if (!path || !state.activeId) return;
-    const ranges = state.changedRanges[`${state.activeId}:${path}`];
-    if (ranges) previewBus.post(state.activeId, { type: "highlight-file", path, ranges });
+    const cached = state.changedRanges[`${state.activeId}:${path}`];
+    if (cached) previewBus.post(state.activeId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
   }, [state.changedRanges]);
 
   return (
@@ -663,7 +677,6 @@ function Center({ state, active, dispatch, sock, repo }: {
   }, []);
 
   // attribute bridge messages to their worktree via event.source
-  const staleReloaded = useRef(new Set<string>());
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       const d = e.data;
@@ -672,12 +685,6 @@ function Center({ state, active, dispatch, sock, repo }: {
         if (frame.contentWindow === e.source) {
           if (d.type === "hmr") dispatch({ a: "hmr", id });
           else if (d.type === "loaded") {
-            // persistent iframes keep old bridges — reload once on version skew
-            if (d.v !== BRIDGE_VERSION && !staleReloaded.current.has(id)) {
-              staleReloaded.current.add(id);
-              frame.src = frame.src;
-              return;
-            }
             dispatch({ a: "hmr", id });
             dispatch({ a: "page", id, url: d.url, title: d.title, fresh: true });
           } else if (d.type === "highlight-miss") {
@@ -777,7 +784,7 @@ function Center({ state, active, dispatch, sock, repo }: {
               if (el) frameRefs.current.set(w.worktree.id, el);
               else frameRefs.current.delete(w.worktree.id);
             }}
-            src={`http://127.0.0.1:${w.worktree.proxyPort}/`}
+            src={previewUrl(w.worktree.proxyPort)}
             title={w.worktree.title}
             style={{ display: w.worktree.id === state.activeId ? "block" : "none" }}
           />
@@ -850,6 +857,13 @@ function DiffView({ diff, state, dispatch, sock, height, full, onToggleFull, onD
 }) {
   const wt = state.worktrees.find((w) => w.worktree.id === diff.worktreeId);
   const absPath = wt ? `${wt.worktree.path}/${diff.path}` : diff.path;
+  // warm the line-offset/ranges cache so line-hover highlights align
+  useEffect(() => {
+    if (!state.changedRanges[`${diff.worktreeId}:${diff.path}`]) {
+      sock?.send({ t: "changed-ranges", worktreeId: diff.worktreeId, path: diff.path });
+    }
+  }, [diff.worktreeId, diff.path]);
+  const lineOff = state.changedRanges[`${diff.worktreeId}:${diff.path}`]?.offset ?? 0;
   return (
     <div className="diff-pane" style={{ height }}>
       {!full && <div className="row-resize" onPointerDown={onDragStart} />}
@@ -878,7 +892,12 @@ function DiffView({ diff, state, dispatch, sock, height, full, onToggleFull, onD
           }
           onLineHover={(line) => {
             if (line == null) previewBus.post(diff.worktreeId, { type: "highlight-clear" });
-            else previewBus.post(diff.worktreeId, { type: "highlight-file", path: diff.path, ranges: [[line, line]] });
+            else
+              previewBus.post(diff.worktreeId, {
+                type: "highlight-file",
+                path: diff.path,
+                ranges: [[line + lineOff, line + lineOff]],
+              });
           }}
         />
       </Suspense>

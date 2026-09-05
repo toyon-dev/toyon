@@ -1,0 +1,9 @@
+{
+  "name": "@orchardist/cloud",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Spike: run the Orchardist daemon in a Fly Machine per user. No accounts, no billing.",
+  "scripts": {
+    "provision": "./provision.sh"
+  }
+}

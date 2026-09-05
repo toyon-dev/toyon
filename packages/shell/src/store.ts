@@ -45,7 +45,7 @@ export interface State {
     selector: string;
   } | null;
   /** changed line ranges cache, keyed `${worktreeId}:${path}` */
-  changedRanges: Record<string, Array<[number, number]>>;
+  changedRanges: Record<string, { ranges: Array<[number, number]>; offset: number }>;
   showQuickOpen: boolean;
   showPrompt: boolean;
   leftOpen: boolean;
@@ -216,7 +216,10 @@ function onServer(s: State, msg: ServerMsg): State {
     case "changed-ranges":
       return {
         ...s,
-        changedRanges: { ...s.changedRanges, [`${msg.worktreeId}:${msg.path}`]: msg.ranges },
+        changedRanges: {
+          ...s.changedRanges,
+          [`${msg.worktreeId}:${msg.path}`]: { ranges: msg.ranges, offset: msg.lineOffset },
+        },
       };
     case "file-diff":
       return { ...s, diff: msg };

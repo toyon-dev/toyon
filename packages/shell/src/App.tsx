@@ -110,7 +110,7 @@ export function App() {
   const repo = state.repos[0] ?? null;
 
   // far-right worktree rail: wide (names+badges) or narrow (dots), persisted
-  const [railWide, setRailWide] = useState(() => localStorage.getItem("orch-rail") !== "narrow");
+  const [railWide, setRailWide] = useState(() => localStorage.getItem("orch-rail") === "wide");
   const toggleRail = () => {
     setRailWide((w) => {
       localStorage.setItem("orch-rail", w ? "narrow" : "wide");
@@ -518,13 +518,14 @@ function WtRail({ state, dispatch, sock, wide, onToggleWide }: {
   const menuWt = menu ? state.worktrees.find((w) => w.worktree.id === menu.id) ?? null : null;
 
   return (
-    <div className={`wt-rail ${wide ? "" : "narrow"}`}>
+    <div className={`wt-rail ${wide ? "pinned" : ""}`}>
+      <div className="rail-panel">
       <button
         className="rail-head"
         onClick={onToggleWide}
-        title={wide ? "Collapse to dots" : "Expand worktrees"}
+        title={wide ? "Unpin — collapse to dots (hover to peek)" : "Pin open"}
       >
-        {wide && <span className="branch helper">worktrees · {state.worktrees.length}</span>}
+        <span className="branch helper">worktrees · {state.worktrees.length}</span>
         <span className="chevron">{wide ? "»" : "«"}</span>
       </button>
       {(
@@ -630,8 +631,9 @@ function WtRail({ state, dispatch, sock, wide, onToggleWide }: {
           )}
           {!graftMode && (
             <button className="new-wt" title="New worktree (⌘K)" onClick={() => dispatch({ a: "show-prompt", v: true })}>
-              <span>{wide ? "+ new worktree" : "+"}</span>
-              {wide && <span className="kbd-hint">⌘K</span>}
+              <span className="nw-full">+ new worktree</span>
+              <span className="nw-mini">+</span>
+              <span className="kbd-hint nw-full">⌘K</span>
             </button>
           )}
         </div>
@@ -688,6 +690,7 @@ function WtRail({ state, dispatch, sock, wide, onToggleWide }: {
           ) : null}
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -22,6 +22,7 @@ if [ ! -d "$REPO/.git" ]; then
   if [ -n "${DEMO_REPO_URL:-}" ]; then
     echo "cloning $DEMO_REPO_URL"
     git clone --depth 50 "$DEMO_REPO_URL" "$REPO"
+    (cd "$REPO" && bun install)
   else
     # Vite React starter, scaffolded fresh so the spike needs no GitHub access.
     echo "scaffolding vite react-ts starter"
@@ -40,14 +41,12 @@ export default defineConfig({
 });
 EOF
     # explicit config: without orchardist.json the daemon treats the detected
-    # procs as a guess and starts nothing until the (unbuilt) first-run card confirms
+    # procs as a guess and starts nothing until the first-run card confirms
     cat > "$REPO/orchardist.json" <<EOF
 { "procs": { "web": "bun run dev" }, "setup": ["bun install"] }
 EOF
     (cd "$REPO" && bun install)
-    cd "$REPO" && git init -q && git add -A && git commit -qm "vite react-ts starter" && cd /app
-  else
-    (cd "$REPO" && bun install)
+    (cd "$REPO" && git init -q && git add -A && git commit -qm "vite react-ts starter")
   fi
 fi
 

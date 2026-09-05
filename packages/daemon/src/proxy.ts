@@ -9,6 +9,8 @@ import type { ServerWebSocket } from "bun";
 interface BridgeData {
   upstream?: WebSocket;
   queue: (string | Uint8Array)[];
+  upstreamUrl: string;
+  protocol?: string;
 }
 
 export interface WorktreeProxy {
@@ -52,13 +54,9 @@ export function startProxy(opts: {
         const proto = req.headers.get("sec-websocket-protocol") ?? undefined;
         const upstreamUrl = `ws://127.0.0.1:${target}${url.pathname}${url.search}`;
         const ok = srv.upgrade(req, {
-          data: { queue: [], upstream: undefined },
+          data: { queue: [], upstream: undefined, upstreamUrl, protocol: proto },
         });
-        if (ok) {
-          // upstream is dialed in websocket.open (we need the ws handle first)
-          pendingUpstreams.set(req, { url: upstreamUrl, protocol: proto });
-          return undefined as unknown as Response;
-        }
+        if (ok) return undefined as unknown as Response;
         return new Response("upgrade failed", { status: 400 });
       }
 
@@ -95,9 +93,8 @@ export function startProxy(opts: {
     },
     websocket: {
       open(ws: ServerWebSocket<BridgeData>) {
-        const pending = takePending();
-        if (!pending) { ws.close(1011, "no upstream"); return; }
-        const upstream = new WebSocket(pending.url, pending.protocol ? [pending.protocol] : []);
+        const { upstreamUrl, protocol } = ws.data;
+        const upstream = new WebSocket(upstreamUrl, protocol ? [protocol] : []);
         upstream.binaryType = "arraybuffer";
         ws.data.upstream = upstream;
         upstream.onopen = () => {
@@ -121,19 +118,6 @@ export function startProxy(opts: {
       },
     },
   });
-
-  // FIFO handoff of upstream info between fetch() upgrade and websocket.open().
-  // Bun calls open() synchronously after a successful upgrade in the same task,
-  // so a simple queue keeps request<->upstream pairing correct.
-  const pendingQueue: Array<{ url: string; protocol?: string }> = [];
-  const pendingUpstreams = {
-    set(_req: Request, info: { url: string; protocol?: string }) {
-      pendingQueue.push(info);
-    },
-  };
-  function takePending() {
-    return pendingQueue.shift();
-  }
 
   return {
     port: opts.port,

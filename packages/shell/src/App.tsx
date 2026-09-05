@@ -1543,17 +1543,6 @@ const KEY_ROWS: Array<[string, string]> = [
   ["esc", "close / cancel / exit zen"],
   ["enter", "send · shift+enter newline"],
 ];
-const GESTURE_ROWS: Array<[string, string]> = [
-  ["shift-click worktree", "select for grafting"],
-  ["right-click / ⋯", "worktree actions"],
-  ["click ↓ badge", "sync from main"],
-  ["click ↑ badge", "land (merge / PR)"],
-  ["click v1/3 badge", "pick this variant"],
-  ["hover changed file", "highlight it on the page"],
-  ["hover diff line", "highlight what it renders"],
-  ["drag panel edges", "resize docks / editor"],
-];
-
 function KeysHelp({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -1563,24 +1552,12 @@ function KeysHelp({ onClose }: { onClose: () => void }) {
   return (
     <div className="keys-overlay" onClick={onClose}>
       <div className="keys-card" onClick={(e) => e.stopPropagation()}>
-        <div className="keys-col">
-          <div className="cfg-section">keyboard</div>
-          {KEY_ROWS.map(([k, d]) => (
-            <div className="keys-row" key={k}>
-              <span className="keys-k">{k}</span>
-              <span className="keys-d">{d}</span>
-            </div>
-          ))}
-        </div>
-        <div className="keys-col">
-          <div className="cfg-section">mouse</div>
-          {GESTURE_ROWS.map(([k, d]) => (
-            <div className="keys-row" key={k}>
-              <span className="keys-k">{k}</span>
-              <span className="keys-d">{d}</span>
-            </div>
-          ))}
-        </div>
+        {KEY_ROWS.map(([k, d]) => (
+          <div className="keys-row" key={k}>
+            <span className="keys-k">{k}</span>
+            <span className="keys-d">{d}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1699,6 +1676,13 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
       <span title={state.connected ? "Connected to daemon" : "Reconnecting to daemon"}>
         {state.connected ? "●" : "○"}
       </span>
+      <button
+        className="toggle icon keys-btn"
+        title="Zen — full-bleed preview (⌘⇧F · esc exits)"
+        onClick={() => dispatch({ a: "toggle-zen" })}
+      >
+        ⛶
+      </button>
       <button className="toggle icon keys-btn" title="Keyboard shortcuts" onClick={() => setShowKeys(true)}>
         ?
       </button>

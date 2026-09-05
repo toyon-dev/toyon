@@ -53,23 +53,29 @@ button {
   z-index: 60;
 }
 .keys-card {
-  display: flex;
-  gap: 36px;
   background: var(--bg1);
   border: 1px solid var(--bg3);
   border-radius: 8px;
-  padding: 18px 26px 22px;
+  padding: 16px 24px;
   box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
+  font: 13px var(--font-ui);
+  color: var(--fg1);
 }
-.keys-col { min-width: 250px; }
-.keys-row { display: flex; gap: 14px; padding: 3px 0; font-size: 12.5px; align-items: baseline; }
+.keys-row {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 3px 0;
+}
 .keys-k {
   font: 11px var(--font-mono);
   color: var(--fg1);
   background: var(--bg0);
   border: 1px solid var(--bg2);
   border-radius: 4px;
-  padding: 1px 7px;
+  padding: 2px 0;
+  text-align: center;
   white-space: nowrap;
 }
 .keys-d { color: var(--fg-muted); }

@@ -35,6 +35,8 @@ export interface WorktreeInfo {
   proxyPort: number;
   title: string;
   createdAt: number;
+  /** merged into main and no new work since */
+  landed?: boolean;
 }
 
 export type ProcStatus = "starting" | "running" | "crashed" | "stopped";
@@ -100,6 +102,7 @@ export type ClientMsg =
   | { t: "file-diff"; worktreeId: string; path: string }
   | { t: "ship"; worktreeId: string }
   | { t: "merge-main"; worktreeId: string }
+  | { t: "commit"; worktreeId: string; message: string }
   | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 

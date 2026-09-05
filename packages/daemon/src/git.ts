@@ -58,12 +58,19 @@ export interface ShipResult {
   message: string;
 }
 
-function commitAll(worktreePath: string, title: string): ShipResult | null {
-  if (statusFiles(worktreePath).length === 0) return null;
+/** User-initiated commit of everything in the worktree, with the user's message. */
+export function commitWorktree(worktreePath: string, message: string): ShipResult {
+  if (statusFiles(worktreePath).length === 0) return { ok: false, message: "nothing to commit" };
   git(worktreePath, "add", "-A");
-  const c = git(worktreePath, "commit", "-m", `orchardist: ${title}`);
-  if (!c.ok && !c.err.includes("nothing to commit")) {
-    return { ok: false, message: `commit failed: ${c.err}` };
+  const c = git(worktreePath, "commit", "-m", message);
+  if (!c.ok) return { ok: false, message: `commit failed: ${c.err.slice(0, 200)}` };
+  return { ok: true, message: `committed: ${message}` };
+}
+
+/** Landing requires committed work — the tool never commits on the user's behalf. */
+function requireClean(worktreePath: string): ShipResult | null {
+  if (statusFiles(worktreePath).length > 0) {
+    return { ok: false, message: "uncommitted changes — commit them first (or ask the agent to finish up)" };
   }
   return null;
 }
@@ -75,8 +82,8 @@ export function aheadBehind(worktreePath: string, defaultBr: string): { ahead: n
 }
 
 /** Merge the worktree's branch into the default branch in the main checkout. Local-only, no remote. */
-export function mergeToMain(worktreePath: string, branch: string, repoPath: string, defaultBr: string, title: string): ShipResult {
-  const cErr = commitAll(worktreePath, title);
+export function mergeToMain(worktreePath: string, branch: string, repoPath: string, defaultBr: string, _title: string): ShipResult {
+  const cErr = requireClean(worktreePath);
   if (cErr) return cErr;
 
   const { ahead } = aheadBehind(worktreePath, defaultBr);
@@ -95,8 +102,8 @@ export function mergeToMain(worktreePath: string, branch: string, repoPath: stri
 }
 
 /** Commit everything, push, and open a PR (gh) or return the compare URL. */
-export function shipWorktree(worktreePath: string, branch: string, defaultBr: string, title: string): ShipResult {
-  const cErr = commitAll(worktreePath, title);
+export function shipWorktree(worktreePath: string, branch: string, defaultBr: string, _title: string): ShipResult {
+  const cErr = requireClean(worktreePath);
   if (cErr) return cErr;
   const ahead = git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
   if (ahead.ok && ahead.out === "0") {

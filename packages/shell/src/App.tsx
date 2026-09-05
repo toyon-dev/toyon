@@ -104,7 +104,16 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
   const behind = gitInfo?.behind ?? 0;
   const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
   const isWt = active && active.worktree.kind !== "main";
-  const landable = isWt && (files.length > 0 || ahead > 0);
+  const clean = files.length === 0;
+  const [commitMsg, setCommitMsg] = useState("");
+  useEffect(() => setCommitMsg(""), [state.activeId]);
+
+  const commit = () => {
+    if (!active || !commitMsg.trim()) return;
+    sock?.send({ t: "commit", worktreeId: active.worktree.id, message: commitMsg.trim() });
+    setCommitMsg("");
+  };
+
   return (
     <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`}>
       <div className="dock-section-title changes-head">
@@ -112,19 +121,20 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
           changes{files.length > 0 ? ` · ${files.length}` : ""}
           {ahead > 0 && <span className="ahead-badge" title={`${ahead} commit(s) ahead of main`}> ↑{ahead}</span>}
           {behind > 0 && <span className="behind-badge" title={`${behind} commit(s) behind main`}> ↓{behind}</span>}
+          {active?.worktree.landed && <span className="landed-badge" title="Merged into main"> ✓ landed</span>}
         </span>
-        {landable && (
+        {isWt && clean && ahead > 0 && (
           <span className="land-btns">
             <button
               className="ship-btn"
-              title="Commit and merge into main locally (no push)"
+              title="Merge into main locally (no push)"
               onClick={() => sock?.send({ t: "merge-main", worktreeId: active.worktree.id })}
             >
               merge
             </button>
             <button
               className="ship-btn"
-              title="Commit, push, open a PR"
+              title="Push and open a PR"
               onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
             >
               pr ↗
@@ -132,7 +142,20 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
           </span>
         )}
       </div>
-      {files.length === 0 && <div className="dock-empty">no changes on {active?.worktree.title ?? "—"}</div>}
+      {clean && <div className="dock-empty">no changes on {active?.worktree.title ?? "—"}</div>}
+      {files.length > 0 && (
+        <div className="commit-box">
+          <input
+            value={commitMsg}
+            onChange={(e) => setCommitMsg(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && commit()}
+            placeholder="commit message…"
+          />
+          <button className="ship-btn" disabled={!commitMsg.trim()} onClick={commit} title="git add -A && git commit">
+            commit
+          </button>
+        </div>
+      )}
       {files.map((f) => (
         <button
           key={f.path}
@@ -245,6 +268,7 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
 
 function dotClass(w: WorktreeStatus): string {
   if (w.agent === "working") return "working";
+  if (w.worktree.landed) return "landed";
   if (w.procs.some((p) => p.status === "crashed")) return "crashed";
   if (w.procs.some((p) => p.status === "running")) return "running";
   if (w.procs.some((p) => p.status === "starting")) return "starting";

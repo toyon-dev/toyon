@@ -154,6 +154,14 @@ export class Manager {
     return wt;
   }
 
+  setLanded(worktreeId: string, landed: boolean) {
+    const wt = this.state.worktrees.find((w) => w.id === worktreeId);
+    if (!wt || wt.landed === landed || (landed && wt.kind === "main")) return;
+    wt.landed = landed;
+    saveState(this.state);
+    this.hub.worktreesChanged();
+  }
+
   async renameWorktree(worktreeId: string, title: string) {
     const wt = this.state.worktrees.find((w) => w.id === worktreeId);
     if (!wt || wt.kind === "main") return;

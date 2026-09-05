@@ -87,6 +87,7 @@ button {
 .dot.working { background: var(--yellow); animation: pulse 1.2s ease-in-out infinite; }
 .dot.crashed { background: var(--red); }
 .dot.idle { background: var(--bg3); }
+.dot.landed { background: var(--aqua); }
 @keyframes pulse { 50% { opacity: 0.3; } }
 
 .new-wt {
@@ -323,7 +324,23 @@ button {
 
 .ahead-badge { color: var(--aqua); }
 .behind-badge { color: var(--yellow); }
+.landed-badge { color: var(--aqua); }
 .land-btns { display: flex; gap: 6px; }
+
+.commit-box { display: flex; gap: 6px; padding: 4px 12px 8px; }
+.commit-box input {
+  flex: 1;
+  background: var(--bg0);
+  border: 1px solid var(--bg2);
+  border-radius: 4px;
+  color: var(--fg1);
+  font: 12px var(--font-mono);
+  padding: 3px 8px;
+  outline: none;
+  min-width: 0;
+}
+.commit-box input:focus { border-color: var(--bg3); }
+.commit-box .ship-btn:disabled { color: var(--fg-dim); border-color: var(--bg2); cursor: default; }
 
 /* ---- status bar ---- */
 .status-bar {

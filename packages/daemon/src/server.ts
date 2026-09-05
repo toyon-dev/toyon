@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ClientMsg, ServerMsg } from "@orchardist/shared";
 import type { Manager } from "./worktrees.ts";
-import { aheadBehind, fileBefore, mergeToMain, shipWorktree, statusFiles } from "./git.ts";
+import { aheadBehind, commitWorktree, fileBefore, mergeToMain, shipWorktree, statusFiles } from "./git.ts";
 
 const VERSION = "0.0.1";
 
@@ -176,8 +176,21 @@ export function startServer(opts: {
         if (wt.kind === "main") throw new Error("merge from a worktree, not main");
         const repo = manager.repo(wt.repoId);
         const result = mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch, wt.title);
+        if (result.ok) manager.setLanded(wt.id, true);
         ws.send(JSON.stringify({
           t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message, merged: result.ok,
+        } satisfies ServerMsg));
+        sendGitStatus(wt.id, ws);
+        break;
+      }
+      case "commit": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) throw new Error("unknown worktree");
+        const message = msg.message.trim();
+        if (!message) throw new Error("commit message required");
+        const result = commitWorktree(wt.path, message);
+        ws.send(JSON.stringify({
+          t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message,
         } satisfies ServerMsg));
         sendGitStatus(wt.id, ws);
         break;
@@ -199,6 +212,10 @@ export function startServer(opts: {
     try {
       const files = statusFiles(wt.path);
       const counts = wt.kind === "main" ? {} : aheadBehind(wt.path, manager.repo(wt.repoId).defaultBranch);
+      // new work after landing clears the landed state
+      if (wt.landed && (files.length > 0 || (counts as { ahead?: number }).ahead)) {
+        manager.setLanded(wt.id, false);
+      }
       ws.send(JSON.stringify({ t: "git-status", worktreeId, files, ...counts } satisfies ServerMsg));
     } catch {
       // worktree may still be setting up

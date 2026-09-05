@@ -37,6 +37,12 @@ export function App() {
       } else if (e.metaKey && e.key === "k") {
         e.preventDefault();
         dispatch({ a: "show-prompt", v: true });
+      } else if (e.metaKey && e.key === "p") {
+        e.preventDefault();
+        if (state.activeId) {
+          sockRef.current?.send({ t: "list-files", worktreeId: state.activeId });
+          dispatch({ a: "quick-open", v: true });
+        }
       } else if (e.metaKey && e.key === "b") {
         e.preventDefault();
         dispatch({ a: "toggle-left" });
@@ -44,13 +50,14 @@ export function App() {
         e.preventDefault();
         dispatch({ a: "toggle-right" });
       } else if (e.key === "Escape") {
-        if (state.diff) dispatch({ a: "close-diff" });
-        if (state.showPrompt) dispatch({ a: "show-prompt", v: false });
+        if (state.showQuickOpen) dispatch({ a: "quick-open", v: false });
+        else if (state.showPrompt) dispatch({ a: "show-prompt", v: false });
+        else if (state.diff) dispatch({ a: "close-diff" });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state.worktrees, state.diff, state.showPrompt]);
+  }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.activeId]);
 
   // ship results: open PR/compare URLs, auto-dismiss toasts
   const openedRef = useRef<string | null>(null);
@@ -122,71 +129,74 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
 
   return (
     <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`}>
-      <div className="dock-section-title changes-head">
-        <span>
-          uncommitted{files.length > 0 ? ` · ${files.length}` : ""}
-          {behind > 0 && <span className="behind-badge" title={`${behind} commit(s) behind main`}> ↓{behind}</span>}
-          {ahead > 0 && <span className="ahead-badge" title={`${ahead} commit(s) ahead of main`}> ↑{ahead}</span>}
-          {active?.worktree.landed && <span className="landed-badge" title="Merged into main"> ✓ landed</span>}
-        </span>
-      </div>
-      {isWt && clean && (behind > 0 || ahead > 0) && (
-        <div className="land-row">
-          {behind > 0 && (
-            <button
-              className="ship-btn"
-              title={`Pull ${behind} commit(s) from main into this worktree`}
-              onClick={() => sock?.send({ t: "sync-main", worktreeId: active.worktree.id })}
-            >
-              sync ↓
-            </button>
-          )}
-          {ahead > 0 && (
-            <>
-              <button
-                className="ship-btn"
-                title="Merge into main locally (no push)"
-                onClick={() => sock?.send({ t: "merge-main", worktreeId: active.worktree.id })}
-              >
-                merge
-              </button>
-              <button
-                className="ship-btn"
-                title="Push and open a PR"
-                onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
-              >
-                pr ↗
-              </button>
-            </>
+      {(behind > 0 || ahead > 0 || active?.worktree.landed) && (
+        <div className="dock-section-title changes-head">
+          <span>
+            {behind > 0 && <span className="behind-badge" title={`${behind} commit(s) behind main`}>↓{behind} </span>}
+            {ahead > 0 && <span className="ahead-badge" title={`${ahead} commit(s) ahead of main`}>↑{ahead} </span>}
+            {active?.worktree.landed && <span className="landed-badge" title="Merged into main">✓ landed</span>}
+          </span>
+          {isWt && clean && (behind > 0 || ahead > 0) && (
+            <span className="land-btns">
+              {behind > 0 && (
+                <button
+                  className="ship-btn"
+                  title={`Pull ${behind} commit(s) from main into this worktree`}
+                  onClick={() => sock?.send({ t: "sync-main", worktreeId: active.worktree.id })}
+                >
+                  sync ↓
+                </button>
+              )}
+              {ahead > 0 && (
+                <>
+                  <button
+                    className="ship-btn"
+                    title="Merge into main locally (no push)"
+                    onClick={() => sock?.send({ t: "merge-main", worktreeId: active.worktree.id })}
+                  >
+                    merge
+                  </button>
+                  <button
+                    className="ship-btn"
+                    title="Push and open a PR"
+                    onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
+                  >
+                    pr ↗
+                  </button>
+                </>
+              )}
+            </span>
           )}
         </div>
       )}
-      {clean && <div className="dock-empty">clean</div>}
       {files.length > 0 && (
-        <div className="commit-box">
-          <input
-            value={commitMsg}
-            onChange={(e) => setCommitMsg(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && commit()}
-            placeholder="commit message…"
-          />
-          <button className="ship-btn" disabled={!commitMsg.trim()} onClick={commit} title="git add -A && git commit">
-            commit
-          </button>
-        </div>
+        <>
+          <div className="dock-section-title">uncommitted · {files.length}</div>
+          {files.map((f) => (
+            <button
+              key={f.path}
+              className="git-file"
+              onClick={() =>
+                state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
+              }
+            >
+              <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
+              <span className="path">{f.path}</span>
+            </button>
+          ))}
+          <div className="commit-box">
+            <input
+              value={commitMsg}
+              onChange={(e) => setCommitMsg(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && commit()}
+              placeholder="commit message…"
+            />
+            <button className="ship-btn" disabled={!commitMsg.trim()} onClick={commit} title="git add -A && git commit">
+              commit
+            </button>
+          </div>
+        </>
       )}
-      {files.map((f) => (
-        <button
-          key={f.path}
-          className="git-file"
-          onClick={() =>
-            state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
-          }
-        >
-          <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
-          <span className="path">{f.path}</span>
-        </button>
-      ))}
       {(gitInfo?.committed?.length ?? 0) > 0 && (
         <>
           <div className="dock-section-title" title="Committed on this branch, not yet on main">
@@ -206,6 +216,7 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
           ))}
         </>
       )}
+      {clean && (gitInfo?.committed?.length ?? 0) === 0 && <div className="dock-empty">clean</div>}
     </div>
   );
 }
@@ -482,6 +493,16 @@ function Center({ state, active, dispatch, sock, repo }: {
         </div>
       )}
       {state.diff && <DiffView diff={state.diff} state={state} dispatch={dispatch} sock={sock} />}
+      {state.showQuickOpen && active && (
+        <QuickOpen
+          paths={state.files[active.worktree.id] ?? []}
+          onPick={(path) => {
+            sock?.send({ t: "file-diff", worktreeId: active.worktree.id, path });
+            dispatch({ a: "quick-open", v: false });
+          }}
+          onClose={() => dispatch({ a: "quick-open", v: false })}
+        />
+      )}
       {state.showPrompt && repo && (
         <PromptOverlay
           onSubmit={(text) => {
@@ -524,6 +545,68 @@ function DiffView({ diff, state, dispatch, sock }: {
       </Suspense>
     </div>
   );
+}
+
+function QuickOpen({ paths, onPick, onClose }: {
+  paths: string[];
+  onPick: (path: string) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [idx, setIdx] = useState(0);
+
+  const results = useMemo(() => {
+    if (!q.trim()) return paths.slice(0, 50);
+    const needle = q.toLowerCase();
+    const scored: Array<{ p: string; score: number }> = [];
+    for (const p of paths) {
+      const s = fuzzyScore(p.toLowerCase(), needle);
+      if (s > 0) scored.push({ p, score: s });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 50).map((x) => x.p);
+  }, [q, paths]);
+
+  useEffect(() => setIdx(0), [q]);
+
+  return (
+    <div className="prompt-overlay" onClick={onClose}>
+      <div className="prompt-box quick-open" onClick={(e) => e.stopPropagation()}>
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, results.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Enter" && results[idx]) { e.preventDefault(); onPick(results[idx]!); }
+          }}
+          placeholder="jump to file…"
+        />
+        <div className="qo-list">
+          {results.map((p, i) => (
+            <button key={p} className={`qo-item ${i === idx ? "active" : ""}`} onClick={() => onPick(p)}>
+              {p}
+            </button>
+          ))}
+          {results.length === 0 && <div className="dock-empty">no matches</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// subsequence match; bonuses for consecutive hits and path-segment starts
+function fuzzyScore(hay: string, needle: string): number {
+  let score = 0, hi = 0, streak = 0;
+  for (const ch of needle) {
+    const found = hay.indexOf(ch, hi);
+    if (found === -1) return 0;
+    streak = found === hi ? streak + 1 : 1;
+    score += streak + (found === 0 || hay[found - 1] === "/" || hay[found - 1] === "." ? 3 : 0);
+    hi = found + 1;
+  }
+  return score + Math.max(0, 40 - hay.length / 4);
 }
 
 function PromptOverlay({ onSubmit, onClose }: { onSubmit: (t: string) => void; onClose: () => void }) {

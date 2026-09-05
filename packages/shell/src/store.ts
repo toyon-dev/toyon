@@ -20,6 +20,8 @@ export interface State {
   diff: { worktreeId: string; path: string; before: string; after: string } | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
   prefill: { worktreeId: string; text: string } | null;
+  files: Record<string, string[]>;
+  showQuickOpen: boolean;
   showPrompt: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
@@ -36,6 +38,8 @@ export const initial: State = {
   diff: null,
   toast: null,
   prefill: null,
+  files: {},
+  showQuickOpen: false,
   showPrompt: false,
   leftOpen: true,
   rightOpen: true,
@@ -48,6 +52,7 @@ export type Action =
   | { a: "close-diff" }
   | { a: "dismiss-toast" }
   | { a: "clear-prefill" }
+  | { a: "quick-open"; v: boolean }
   | { a: "show-prompt"; v: boolean }
   | { a: "toggle-left" }
   | { a: "toggle-right" };
@@ -64,6 +69,8 @@ export function reducer(s: State, action: Action): State {
       return { ...s, toast: null };
     case "clear-prefill":
       return { ...s, prefill: null };
+    case "quick-open":
+      return { ...s, showQuickOpen: action.v };
     case "show-prompt":
       return { ...s, showPrompt: action.v };
     case "toggle-left":
@@ -142,6 +149,8 @@ function onServer(s: State, msg: ServerMsg): State {
           removeIds: msg.merged && msg.ok ? msg.removeIds ?? [msg.worktreeId] : undefined,
         },
       };
+    case "files":
+      return { ...s, files: { ...s.files, [msg.worktreeId]: msg.paths } };
     case "error":
       return { ...s, toast: { ok: false, message: msg.message } };
   }

@@ -231,6 +231,18 @@ export function startServer(opts: {
         await manager.renameWorktree(msg.worktreeId, msg.title);
         break;
       }
+      case "list-files": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) throw new Error("unknown worktree");
+        // tracked + untracked (respecting .gitignore)
+        const { spawnSync } = await import("node:child_process");
+        const r = spawnSync("git", ["ls-files", "-co", "--exclude-standard"], {
+          cwd: wt.path, encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
+        });
+        const paths = (r.stdout ?? "").split("\n").filter(Boolean);
+        ws.send(JSON.stringify({ t: "files", worktreeId: wt.id, paths } satisfies ServerMsg));
+        break;
+      }
       case "write-file": {
         const wt = manager.worktree(msg.worktreeId);
         if (!wt) throw new Error("unknown worktree");

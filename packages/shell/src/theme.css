@@ -435,6 +435,32 @@ button {
   padding: 14px;
 }
 .prompt-box .title { font-size: 12px; color: var(--fg-dim); margin-bottom: 8px; }
+.prompt-box.quick-open { padding: 8px; }
+.prompt-box.quick-open input {
+  width: 100%;
+  background: var(--bg0);
+  border: 1px solid var(--bg2);
+  border-radius: 6px;
+  color: var(--fg1);
+  font: 13px var(--font-mono);
+  padding: 8px 10px;
+  outline: none;
+}
+.qo-list { max-height: 50vh; overflow-y: auto; margin-top: 6px; }
+.qo-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: 12px var(--font-mono);
+  color: var(--fg-muted);
+  padding: 4px 10px;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qo-item:hover { background: var(--bg2); }
+.qo-item.active { background: var(--bg2); color: var(--fg1); box-shadow: inset 2px 0 0 var(--orange); }
 .prompt-box textarea {
   width: 100%;
   background: var(--bg0);

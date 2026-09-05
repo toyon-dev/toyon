@@ -38,7 +38,7 @@ button {
 
 .app {
   display: grid;
-  grid-template-rows: 1fr 26px;
+  grid-template-rows: auto 1fr;
   height: 100%;
 }
 
@@ -538,13 +538,15 @@ body.resizing .row-resize { background: var(--bg3); }
 .status-bar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
   background: var(--bg1);
-  border-top: 1px solid var(--bg2);
-  padding: 0 10px;
+  border-bottom: 1px solid var(--bg2);
+  padding: 4px 10px;
   font: 11px var(--font-mono);
   color: var(--fg-dim);
+  min-height: 32px;
 }
+.status-bar .rb-path { max-width: 420px; }
 .status-bar .toggle:hover, .status-bar .toggle.on { color: var(--fg1); }
 .status-bar .toggle.icon { display: grid; place-items: center; padding: 2px; border-radius: 4px; }
 .status-bar .pick-toggle { font-size: 14px; line-height: 1; width: 20px; height: 20px; }

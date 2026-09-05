@@ -137,6 +137,7 @@ export function App() {
 
   return (
     <div className="app">
+      <StatusBar state={state} active={active} dispatch={dispatch} sock={sock} />
       <div className="docks">
         <LeftDock state={state} dispatch={dispatch} sock={sock} width={leftW} />
         {state.leftOpen && <div className="dock-resize" onPointerDown={startDrag("left")} />}
@@ -144,7 +145,6 @@ export function App() {
         {state.rightOpen && <div className="dock-resize" onPointerDown={startDrag("right")} />}
         <RightDock state={state} active={active} sock={sock} dispatch={dispatch} width={rightW} />
       </div>
-      <StatusBar state={state} active={active} dispatch={dispatch} sock={sock} />
       {state.toast && (
         <div className={`toast ${state.toast.ok ? "ok" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
           {state.toast.message}
@@ -798,7 +798,6 @@ function Center({ state, active, dispatch, sock, repo }: {
   return (
     <div className="center" ref={centerRef}>
       <div className="preview-area" style={{ display: state.diff && diffFull ? "none" : undefined }}>
-        {active && activeReady && <RouteBar state={state} active={active} dispatch={dispatch} />}
         <div className="frames-wrap">
         {frames.map((w) => (
           <iframe
@@ -984,90 +983,6 @@ function OpenInMenu({ absPath, onReveal }: { absPath: string; onReveal?: () => v
         </div>
       )}
     </span>
-  );
-}
-
-function RouteBar({ state, active, dispatch }: {
-  state: State; active: WorktreeStatus; dispatch: Dispatch;
-}) {
-  const id = active.worktree.id;
-  const url = state.pageCtx[id]?.url;
-  const path = useMemo(() => {
-    if (!url) return "/";
-    try {
-      const u = new URL(url);
-      return u.pathname + u.search;
-    } catch {
-      return "/";
-    }
-  }, [url]);
-
-  const [val, setVal] = useState(path);
-  const [editing, setEditing] = useState(false);
-  useEffect(() => {
-    if (!editing) setVal(path);
-  }, [path, id, editing]);
-
-  const go = (p: string) => {
-    const clean = p.trim().startsWith("/") ? p.trim() : `/${p.trim()}`;
-    previewBus.post(id, { type: "navigate", path: clean });
-    setEditing(false);
-  };
-
-  const variantSiblings = active.worktree.variant
-    ? state.worktrees.filter(
-        (w) => w.worktree.variant?.group === active.worktree.variant!.group && w.worktree.id !== id,
-      )
-    : [];
-
-  return (
-    <div className="route-bar">
-      <button className="rb-btn" title="Back" onClick={() => previewBus.post(id, { type: "back" })}>‹</button>
-      <button className="rb-btn" title="Forward" onClick={() => previewBus.post(id, { type: "forward" })}>›</button>
-      <button className="rb-btn" title="Reload preview" onClick={() => previewBus.post(id, { type: "reload" })}>⟳</button>
-      <input
-        className="rb-path"
-        value={val}
-        onFocus={() => setEditing(true)}
-        onBlur={() => setEditing(false)}
-        onChange={(e) => setVal(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") go(val);
-          if (e.key === "Escape") {
-            setVal(path);
-            setEditing(false);
-            (e.target as HTMLInputElement).blur();
-          }
-        }}
-        spellCheck={false}
-      />
-      {variantSiblings.length > 0 && (
-        <button
-          className="rb-btn rb-variants"
-          title={`Open ${path} in the other ${variantSiblings.length} variant(s) too — compare the same screen`}
-          onClick={() => {
-            for (const s of variantSiblings) previewBus.post(s.worktree.id, { type: "navigate", path });
-          }}
-        >
-          ⇒ variants
-        </button>
-      )}
-      <button
-        className={`rb-btn ${state.picking ? "rb-on" : ""}`}
-        title="Pick an element for the chat (⌘E)"
-        onClick={() => {
-          if (state.picking) {
-            previewBus.post(id, { type: "pick-cancel" });
-            dispatch({ a: "set-picking", v: false });
-          } else {
-            previewBus.post(id, { type: "pick-start" });
-            dispatch({ a: "set-picking", v: true });
-          }
-        }}
-      >
-        ⌖
-      </button>
-    </div>
   );
 }
 
@@ -1579,14 +1494,93 @@ function StatusBar({ state, active, dispatch, sock }: { state: State; active: Wo
     };
   }, []);
 
+  // route section (merged from the old preview route bar)
+  const id = active?.worktree.id ?? null;
+  const url = id ? state.pageCtx[id]?.url : undefined;
+  const path = useMemo(() => {
+    if (!url) return "/";
+    try {
+      const u = new URL(url);
+      return u.pathname + u.search;
+    } catch {
+      return "/";
+    }
+  }, [url]);
+  const [val, setVal] = useState(path);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setVal(path);
+  }, [path, id, editing]);
+  const ready = !!active && active.procs.some((p) => p.status === "running" || p.status === "starting");
+  const go = (p: string) => {
+    if (!id) return;
+    const clean = p.trim().startsWith("/") ? p.trim() : `/${p.trim()}`;
+    previewBus.post(id, { type: "navigate", path: clean });
+    setEditing(false);
+  };
+  const variantSiblings = active?.worktree.variant
+    ? state.worktrees.filter(
+        (w) => w.worktree.variant?.group === active.worktree.variant!.group && w.worktree.id !== id,
+      )
+    : [];
+
   return (
-    <div className="status-bar">
+    <div className="status-bar top-bar">
       <button
         className={`toggle icon ${state.leftOpen ? "on" : ""}`}
         onClick={() => dispatch({ a: "toggle-left" })}
         title="Toggle worktrees panel (⌘B)"
       >
         <PanelIcon side="left" filled={state.leftOpen} />
+      </button>
+      <button className="rb-btn" disabled={!ready} title="Back" onClick={() => id && previewBus.post(id, { type: "back" })}>‹</button>
+      <button className="rb-btn" disabled={!ready} title="Forward" onClick={() => id && previewBus.post(id, { type: "forward" })}>›</button>
+      <button className="rb-btn" disabled={!ready} title="Reload preview" onClick={() => id && previewBus.post(id, { type: "reload" })}>⟳</button>
+      <input
+        className="rb-path"
+        value={ready ? val : ""}
+        disabled={!ready}
+        placeholder={ready ? "/" : "—"}
+        onFocus={() => setEditing(true)}
+        onBlur={() => setEditing(false)}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") go(val);
+          if (e.key === "Escape") {
+            setVal(path);
+            setEditing(false);
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        spellCheck={false}
+      />
+      {variantSiblings.length > 0 && (
+        <button
+          className="rb-btn rb-variants"
+          title={`Open ${path} in the other ${variantSiblings.length} variant(s) too — compare the same screen`}
+          onClick={() => {
+            for (const s of variantSiblings) previewBus.post(s.worktree.id, { type: "navigate", path });
+          }}
+        >
+          ⇒ variants
+        </button>
+      )}
+      <button
+        className={`rb-btn ${state.picking ? "rb-on" : ""}`}
+        disabled={!ready}
+        title="Pick an element on the page for the chat (⌘E)"
+        onClick={() => {
+          if (!id) return;
+          if (state.picking) {
+            previewBus.post(id, { type: "pick-cancel" });
+            dispatch({ a: "set-picking", v: false });
+          } else {
+            previewBus.post(id, { type: "pick-start" });
+            dispatch({ a: "set-picking", v: true });
+          }
+        }}
+      >
+        ⌖
       </button>
       {installEvt && (
         <button

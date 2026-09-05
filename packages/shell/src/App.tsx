@@ -815,6 +815,27 @@ function buildCommands(state: State, dispatch: Dispatch, sock: Sock, active: Wor
   return cmds;
 }
 
+function filterCommands(commands: Command[], q: string): Command[] {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return commands;
+  const scored: Array<{ c: Command; score: number }> = [];
+  for (const c of commands) {
+    const s = fuzzyScore(c.label.toLowerCase(), needle);
+    if (s > 0) scored.push({ c, score: s });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((x) => x.c);
+}
+
+function CommandRow({ c, active, onRun }: { c: Command; active: boolean; onRun: () => void }) {
+  return (
+    <button className={`qo-item cmd-item ${active ? "active" : ""}`} onClick={onRun}>
+      <span className="cmd-label">{c.label}</span>
+      {c.hint && <span className="cmd-hint">{c.hint}</span>}
+    </button>
+  );
+}
+
 function CommandPalette({ commands, onClose }: { commands: Command[]; onClose: () => void }) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
@@ -825,17 +846,7 @@ function CommandPalette({ commands, onClose }: { commands: Command[]; onClose: (
     const f = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(f);
   }, []);
-  const results = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return commands;
-    const scored: Array<{ c: Command; score: number }> = [];
-    for (const c of commands) {
-      const s = fuzzyScore(c.label.toLowerCase(), needle);
-      if (s > 0) scored.push({ c, score: s });
-    }
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map((x) => x.c);
-  }, [q, commands]);
+  const results = useMemo(() => filterCommands(commands, q), [q, commands]);
   useEffect(() => setIdx(0), [q]);
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(".qo-item.active")?.scrollIntoView({ block: "nearest" });
@@ -857,12 +868,7 @@ function CommandPalette({ commands, onClose }: { commands: Command[]; onClose: (
           placeholder="run a command…"
         />
         <div className="qo-list" ref={listRef}>
-          {results.map((c, i) => (
-            <button key={c.id} className={`qo-item cmd-item ${i === idx ? "active" : ""}`} onClick={() => run(c)}>
-              <span className="cmd-label">{c.label}</span>
-              {c.hint && <span className="cmd-hint">{c.hint}</span>}
-            </button>
-          ))}
+          {results.map((c, i) => <CommandRow key={c.id} c={c} active={i === idx} onRun={() => run(c)} />)}
           {results.length === 0 && <div className="dock-empty">no matching command</div>}
         </div>
       </div>
@@ -1070,6 +1076,7 @@ function Center({ state, active, dispatch, sock, repo }: {
       {state.showQuickOpen && active && (
         <QuickOpen
           paths={state.files[active.worktree.id] ?? []}
+          commands={buildCommands(state, dispatch, sock, active, repo)}
           onPick={(path) => {
             sock?.send({ t: "file-diff", worktreeId: active.worktree.id, path });
             dispatch({ a: "quick-open", v: false });
@@ -1303,15 +1310,19 @@ function ConfigCard({ repo, sock }: { repo: State["repos"][number]; sock: Sock }
   );
 }
 
-function QuickOpen({ paths, onPick, onClose }: {
+/** ⌘P: fuzzy file jump; a leading `>` switches the same box to the command palette (editor convention) */
+function QuickOpen({ paths, commands, onPick, onClose }: {
   paths: string[];
+  commands: Command[];
   onPick: (path: string) => void;
   onClose: () => void;
 }) {
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
+  const cmdMode = q.startsWith(">");
 
   const results = useMemo(() => {
+    if (cmdMode) return [];
     if (!q.trim()) return paths.slice(0, 50);
     const needle = q.toLowerCase();
     const scored: Array<{ p: string; score: number }> = [];
@@ -1321,7 +1332,10 @@ function QuickOpen({ paths, onPick, onClose }: {
     }
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, 50).map((x) => x.p);
-  }, [q, paths]);
+  }, [q, paths, cmdMode]);
+  const cmdResults = useMemo(() => (cmdMode ? filterCommands(commands, q.slice(1)) : []), [q, commands, cmdMode]);
+  const count = cmdMode ? cmdResults.length : results.length;
+  const runCmd = (c: Command) => { onClose(); c.run(); };
 
   useEffect(() => setIdx(0), [q]);
 
@@ -1333,19 +1347,25 @@ function QuickOpen({ paths, onPick, onClose }: {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, results.length - 1)); }
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, count - 1)); }
             else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
-            else if (e.key === "Enter" && results[idx]) { e.preventDefault(); onPick(results[idx]!); }
+            else if (e.key === "Enter") {
+              e.preventDefault();
+              if (cmdMode) { if (cmdResults[idx]) runCmd(cmdResults[idx]!); }
+              else if (results[idx]) onPick(results[idx]!);
+            }
           }}
-          placeholder="jump to file…"
+          placeholder="jump to file · type > for commands"
         />
         <div className="qo-list">
-          {results.map((p, i) => (
-            <button key={p} className={`qo-item ${i === idx ? "active" : ""}`} onClick={() => onPick(p)}>
-              {p}
-            </button>
-          ))}
-          {results.length === 0 && <div className="dock-empty">no matches</div>}
+          {cmdMode
+            ? cmdResults.map((c, i) => <CommandRow key={c.id} c={c} active={i === idx} onRun={() => runCmd(c)} />)
+            : results.map((p, i) => (
+                <button key={p} className={`qo-item ${i === idx ? "active" : ""}`} onClick={() => onPick(p)}>
+                  {p}
+                </button>
+              ))}
+          {count === 0 && <div className="dock-empty">{cmdMode ? "no matching command" : "no matches"}</div>}
         </div>
       </div>
     </div>

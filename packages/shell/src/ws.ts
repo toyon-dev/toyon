@@ -14,6 +14,10 @@ function getToken(): string {
   }
 }
 
+export function hasToken(): boolean {
+  return getToken() !== "";
+}
+
 export class DaemonSocket {
   private ws: WebSocket | null = null;
   private queue: string[] = [];

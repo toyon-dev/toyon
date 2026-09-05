@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import type { WorktreeStatus } from "@orchardist/shared";
-import { DaemonSocket } from "./ws.ts";
+import { DaemonSocket, hasToken } from "./ws.ts";
 import { initial, reducer, type ChatItem, type State } from "./store.ts";
 
 const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
@@ -591,7 +591,9 @@ function Center({ state, active, dispatch, sock, repo }: {
       {!activeReady && !state.diff && (
         <div className="empty">
           {!state.connected
-            ? "connecting to daemon…"
+            ? hasToken()
+              ? "connecting to daemon…"
+              : "no access token for this address —\nrun `orchardist` in your repo, or open the full URL\n(with #token=…) printed in ~/.orchardist/daemon.log"
             : !active
               ? "no worktrees yet — run `orchardist` inside a git repo"
               : logs.length > 0

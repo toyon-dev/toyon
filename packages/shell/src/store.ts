@@ -15,7 +15,7 @@ export interface State {
   worktrees: WorktreeStatus[];
   activeId: string | null;
   chats: Record<string, ChatItem[]>;
-  git: Record<string, { files: GitFileStatus[]; ahead?: number; behind?: number }>;
+  git: Record<string, { files: GitFileStatus[]; committed?: GitFileStatus[]; ahead?: number; behind?: number }>;
   logs: Record<string, string[]>;
   diff: { worktreeId: string; path: string; before: string; after: string } | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
@@ -122,7 +122,10 @@ function onServer(s: State, msg: ServerMsg): State {
     case "git-status":
       return {
         ...s,
-        git: { ...s.git, [msg.worktreeId]: { files: msg.files, ahead: msg.ahead, behind: msg.behind } },
+        git: {
+          ...s.git,
+          [msg.worktreeId]: { files: msg.files, committed: msg.committed, ahead: msg.ahead, behind: msg.behind },
+        },
       };
     case "file-diff":
       return { ...s, diff: msg };

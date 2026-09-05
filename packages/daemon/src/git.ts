@@ -75,6 +75,18 @@ function requireClean(worktreePath: string): ShipResult | null {
   return null;
 }
 
+/** Files changed between merge-base with main and HEAD (committed, not yet landed). */
+export function committedFiles(worktreePath: string, defaultBr: string): GitFileStatus[] {
+  const base = git(worktreePath, "merge-base", "HEAD", defaultBr);
+  if (!base.ok || !base.out) return [];
+  const r = git(worktreePath, "diff", "--name-status", base.out, "HEAD");
+  if (!r.ok || !r.out) return [];
+  return r.out.split("\n").filter(Boolean).map((line) => {
+    const [status, ...rest] = line.split("\t");
+    return { xy: (status ?? "M").slice(0, 1) + " ", path: rest[rest.length - 1] ?? "" };
+  });
+}
+
 export function aheadBehind(worktreePath: string, defaultBr: string): { ahead: number; behind: number } {
   const a = git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
   const b = git(worktreePath, "rev-list", "--count", `HEAD..${defaultBr}`);

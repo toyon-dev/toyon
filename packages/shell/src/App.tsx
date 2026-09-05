@@ -124,7 +124,7 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
     <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`}>
       <div className="dock-section-title changes-head">
         <span>
-          changes{files.length > 0 ? ` · ${files.length}` : ""}
+          uncommitted{files.length > 0 ? ` · ${files.length}` : ""}
           {behind > 0 && <span className="behind-badge" title={`${behind} commit(s) behind main`}> ↓{behind}</span>}
           {ahead > 0 && <span className="ahead-badge" title={`${ahead} commit(s) ahead of main`}> ↑{ahead}</span>}
           {active?.worktree.landed && <span className="landed-badge" title="Merged into main"> ✓ landed</span>}
@@ -161,7 +161,7 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
           )}
         </div>
       )}
-      {clean && <div className="dock-empty">no changes on {active?.worktree.title ?? "—"}</div>}
+      {clean && <div className="dock-empty">nothing uncommitted on {active?.worktree.title ?? "—"}</div>}
       {files.length > 0 && (
         <div className="commit-box">
           <input
@@ -187,6 +187,25 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
           <span className="path">{f.path}</span>
         </button>
       ))}
+      {(gitInfo?.committed?.length ?? 0) > 0 && (
+        <>
+          <div className="dock-section-title" title="Committed on this branch, not yet on main">
+            committed, not landed · {gitInfo!.committed!.length}
+          </div>
+          {gitInfo!.committed!.map((f) => (
+            <button
+              key={`c-${f.path}`}
+              className="git-file"
+              onClick={() =>
+                state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
+              }
+            >
+              <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
+              <span className="path">{f.path}</span>
+            </button>
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -370,14 +389,14 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
       )}
       {menu && menuWt && !menu.land && (
         <div className="ctx-menu" style={{ left: Math.min(menu.x, window.innerWidth - 180), top: menu.y }}>
-          {!state.leftOpen && (
+          {((menuWt.dirty ?? 0) > 0 || (menuWt.ahead ?? 0) > 0 || !state.leftOpen) && (
             <button
               onClick={() => {
                 dispatch({ a: "activate", id: menuWt.worktree.id });
-                dispatch({ a: "toggle-left" });
+                if (!state.leftOpen) dispatch({ a: "toggle-left" });
               }}
             >
-              view changes
+              view changes{(menuWt.dirty ?? 0) > 0 ? ` (${menuWt.dirty})` : ""}
             </button>
           )}
           {menuWt.worktree.kind !== "main" ? (

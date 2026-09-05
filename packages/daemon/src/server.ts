@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ClientMsg, ServerMsg } from "@orchardist/shared";
 import type { Manager } from "./worktrees.ts";
-import { aheadBehind, commitWorktree, fileBefore, mergeToMain, shipWorktree, statusFiles, syncFromMain } from "./git.ts";
+import { aheadBehind, commitWorktree, committedFiles, fileBefore, mergeToMain, shipWorktree, statusFiles, syncFromMain } from "./git.ts";
 
 const VERSION = "0.0.1";
 
@@ -243,12 +243,15 @@ export function startServer(opts: {
     if (!wt) return;
     try {
       const files = statusFiles(wt.path);
-      const counts = wt.kind === "main" ? {} : aheadBehind(wt.path, manager.repo(wt.repoId).defaultBranch);
+      const defaultBr = manager.repo(wt.repoId).defaultBranch;
+      const counts = wt.kind === "main" ? {} : aheadBehind(wt.path, defaultBr);
+      const ahead = (counts as { ahead?: number }).ahead ?? 0;
+      const committed = wt.kind !== "main" && ahead > 0 ? committedFiles(wt.path, defaultBr) : undefined;
       // new work after landing clears the landed state
-      if (wt.landed && (files.length > 0 || (counts as { ahead?: number }).ahead)) {
+      if (wt.landed && (files.length > 0 || ahead > 0)) {
         manager.setLanded(wt.id, false);
       }
-      ws.send(JSON.stringify({ t: "git-status", worktreeId, files, ...counts } satisfies ServerMsg));
+      ws.send(JSON.stringify({ t: "git-status", worktreeId, files, committed, ...counts } satisfies ServerMsg));
     } catch {
       // worktree may still be setting up
     }

@@ -61,6 +61,8 @@ export interface WorktreeStatus {
   /** commits ahead/behind the default branch (cached, ~10s freshness) */
   ahead?: number;
   behind?: number;
+  /** uncommitted file count (cached, ~10s freshness) */
+  dirty?: number;
 }
 
 export interface GitFileStatus {
@@ -92,7 +94,7 @@ export type ServerMsg =
   | { t: "log"; worktreeId: string; proc: string; line: string }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
   | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }> }
-  | { t: "git-status"; worktreeId: string; files: GitFileStatus[]; ahead?: number; behind?: number }
+  | { t: "git-status"; worktreeId: string; files: GitFileStatus[]; committed?: GitFileStatus[]; ahead?: number; behind?: number }
   | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string }
   | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean; removeIds?: string[]; suggestion?: string }
   | { t: "error"; message: string };

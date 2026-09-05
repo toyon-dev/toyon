@@ -6,7 +6,7 @@ import type {
   AgentEvent, AgentStatus, OrchardistConfig, ProcState, RepoInfo, WorktreeInfo, WorktreeStatus,
 } from "@orchardist/shared";
 import { detectConfig } from "./config.ts";
-import { aheadBehind, defaultBranch, git, gitOrThrow, isGitRepo, repoRoot, withRepoLock } from "./git.ts";
+import { aheadBehind, defaultBranch, git, gitOrThrow, isGitRepo, repoRoot, statusFiles, withRepoLock } from "./git.ts";
 import { allocatePort } from "./ports.ts";
 import { startProxy, type WorktreeProxy } from "./proxy.ts";
 import { AgentSession, quickName } from "./agent.ts";
@@ -293,14 +293,14 @@ export class Manager {
 
   // ---- queries ----
 
-  private countsCache = new Map<string, { ahead: number; behind: number; at: number }>();
+  private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
 
-  private counts(wt: WorktreeInfo): { ahead?: number; behind?: number } {
-    if (wt.kind === "main") return {};
+  private counts(wt: WorktreeInfo): { ahead?: number; behind?: number; dirty?: number } {
     const cached = this.countsCache.get(wt.id);
     if (cached && Date.now() - cached.at < 10_000) return cached;
     try {
-      const fresh = { ...aheadBehind(wt.path, this.repo(wt.repoId).defaultBranch), at: Date.now() };
+      const ab = wt.kind === "main" ? {} : aheadBehind(wt.path, this.repo(wt.repoId).defaultBranch);
+      const fresh = { ...ab, dirty: statusFiles(wt.path).length, at: Date.now() };
       this.countsCache.set(wt.id, fresh);
       return fresh;
     } catch {
@@ -312,13 +312,14 @@ export class Manager {
     return this.state.worktrees.map((wt) => {
       const rt = this.runtimes.get(wt.id);
       const pending = this.pendingAgents.get(wt.id);
-      const { ahead, behind } = this.counts(wt);
+      const { ahead, behind, dirty } = this.counts(wt);
       return {
         worktree: wt,
         procs: rt?.procs.states() ?? [],
         agent: rt?.agent.status ?? pending?.status ?? "idle",
         ahead,
         behind,
+        dirty,
       };
     });
   }

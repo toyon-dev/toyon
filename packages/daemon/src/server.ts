@@ -29,15 +29,15 @@ export function startServer(opts: {
     worktreesChanged: () => broadcast({ t: "worktrees", worktrees: manager.statuses() }),
   };
 
-  const server = Bun.serve<WsData, string>({
-    port: opts.port,
+  const serverConfig = {
     hostname: "127.0.0.1",
-    async fetch(req, srv) {
+    async fetch(req: Request, srv: import("bun").Server<WsData>) {
       const url = new URL(req.url);
 
-      // DNS-rebinding defense: only accept loopback Host headers
-      const host = (req.headers.get("host") ?? "").split(":")[0];
-      if (host !== "127.0.0.1" && host !== "localhost") {
+      // DNS-rebinding defense: loopback hosts only. *.localhost is safe —
+      // browsers hardwire it to loopback and public DNS cannot serve it (RFC 6761).
+      const host = (req.headers.get("host") ?? "").split(":")[0] ?? "";
+      if (host !== "127.0.0.1" && host !== "localhost" && !host.endsWith(".localhost")) {
         return new Response("forbidden", { status: 403 });
       }
 
@@ -52,7 +52,7 @@ export function startServer(opts: {
       }
 
       if (url.pathname === "/health") {
-        return Response.json({ ok: true, version: VERSION });
+        return Response.json({ ok: true, version: VERSION, branded });
       }
 
       // CLI: register a repo with the running daemon
@@ -107,7 +107,18 @@ export function startServer(opts: {
         }
       },
     },
-  });
+  };
+
+  const server = Bun.serve<WsData, string>({ ...serverConfig, port: opts.port });
+  // best-effort port 80 so the branded http://orchardist.localhost works portless
+  // (macOS allows unprivileged low-port binds; failure is fine, :4141 remains)
+  let branded = false;
+  if (opts.port !== 80) {
+    try {
+      Bun.serve<WsData, string>({ ...serverConfig, port: 80 });
+      branded = true;
+    } catch {}
+  }
 
   async function handle(msg: ClientMsg, ws: import("bun").ServerWebSocket<WsData>) {
     switch (msg.t) {
@@ -340,5 +351,5 @@ export function startServer(opts: {
     if (msg) ws.send(JSON.stringify(msg));
   }
 
-  return { server, hub };
+  return { server, hub, branded };
 }

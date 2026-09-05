@@ -48,7 +48,7 @@ const hubEvents: HubEvents = {
 };
 
 const manager = new Manager(hubEvents, BRIDGE_JS);
-const { hub } = startServer({ port, token, manager, shellDist: SHELL_DIST });
+const { hub, branded } = startServer({ port, token, manager, shellDist: SHELL_DIST });
 broadcastRef = hub.broadcast;
 worktreesChangedRef = hub.worktreesChanged;
 
@@ -64,7 +64,11 @@ if (repoArg) {
   }
 }
 
-console.log(`orchardist daemon on http://127.0.0.1:${port}/#token=${token}`);
+const shellUrl = branded
+  ? `http://orchardist.localhost/#token=${token}`
+  : `http://orchardist.localhost:${port}/#token=${token}`;
+console.log(`orchardist daemon on ${shellUrl}`);
+console.log(`         (fallback: http://127.0.0.1:${port}/#token=${token})`);
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

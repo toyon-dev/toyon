@@ -57,6 +57,14 @@ if (!res.ok) {
   process.exit(1);
 }
 
-const url = `${base}/#token=${token}`;
+// prefer the branded URL; browsers hardwire *.localhost to loopback
+let branded = false;
+try {
+  const h = (await (await fetch(`${base}/health`)).json()) as { branded?: boolean };
+  branded = h.branded === true;
+} catch {}
+const url = branded
+  ? `http://orchardist.localhost/#token=${token}`
+  : `http://orchardist.localhost:${port}/#token=${token}`;
 console.log(`orchardist → ${url}`);
 spawn("open", [url], { stdio: "ignore" }).unref();

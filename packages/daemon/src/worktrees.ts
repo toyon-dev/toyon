@@ -333,7 +333,12 @@ export class Manager {
     if (!wts.every((w) => w.repoId === repoId)) throw new Error("worktrees must belong to one repo");
     const repo = this.repo(repoId);
 
-    const slug = `graft-${wts.map((w) => w.title.split("-")[0]).join("-")}`.slice(0, 32) + `-${shortId().slice(0, 4)}`;
+    // graft names are the recipe: graft-<a>+<b>; random suffix only on collision
+    const parts = wts.map((w) => w.title.split("-")[0]).join("+");
+    let slug = `graft-${parts}`.slice(0, 40);
+    if (git(repo.path, "show-ref", "--verify", `refs/heads/orchard/${slug}`).ok) {
+      slug = `${slug.slice(0, 34)}-${shortId().slice(0, 4)}`;
+    }
     const branch = `orchard/${slug}`;
     const wtPath = join(WORKTREES_DIR, repo.name, slug);
 

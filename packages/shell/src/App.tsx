@@ -338,15 +338,6 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               >
                 graft with…
               </button>
-              <button onClick={() => sock?.send({ t: "sync-main", worktreeId: menuWt.worktree.id })}>
-                sync with main
-              </button>
-              <button onClick={() => sock?.send({ t: "merge-main", worktreeId: menuWt.worktree.id })}>
-                merge into main
-              </button>
-              <button onClick={() => sock?.send({ t: "ship", worktreeId: menuWt.worktree.id })}>
-                push + PR
-              </button>
               <button className="danger" onClick={() => remove(menuWt)}>remove…</button>
             </>
           ) : (

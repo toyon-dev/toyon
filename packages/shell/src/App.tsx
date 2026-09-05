@@ -346,6 +346,15 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
     }
   };
 
+  const pickVariant = (w: WorktreeStatus) => {
+    const v = w.worktree.variant;
+    if (!v) return;
+    const others = v.of - 1;
+    if (window.confirm(`Keep "${w.worktree.title}" and remove ${others} sibling variant(s)? Their branches and changes are deleted.`)) {
+      sock?.send({ t: "pick-variant", worktreeId: w.worktree.id });
+    }
+  };
+
   const remove = (w: WorktreeStatus) => {
     if (w.worktree.kind === "main") return;
     const ok = window.confirm(
@@ -403,10 +412,15 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               </span>
               {w.worktree.variant && (
                 <span
-                  className="row-badge variant-badge"
-                  title={`variant ${w.worktree.variant.index} of ${w.worktree.variant.of} — same prompt, independent attempt`}
+                  className="row-badge variant-badge clickable"
+                  title={`variant ${w.worktree.variant.index} of ${w.worktree.variant.of} — click to keep this one and remove the others`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    pickVariant(w);
+                  }}
                 >
-                  v{w.worktree.variant.index}/{w.worktree.variant.of}
+                  <span className="num">v{w.worktree.variant.index}/{w.worktree.variant.of}</span>
+                  <span className="act">pick</span>
                 </span>
               )}
               {(w.behind ?? 0) > 0 && (
@@ -501,6 +515,11 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
           {menuWt.worktree.kind !== "main" ? (
             <>
               <button onClick={() => rename(menuWt)}>rename…</button>
+              {menuWt.worktree.variant && (
+                <button onClick={() => pickVariant(menuWt)}>
+                  keep this variant…
+                </button>
+              )}
               <button
                 onClick={() => {
                   setGraftMode(true);

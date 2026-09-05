@@ -329,6 +329,20 @@ export class Manager {
     });
   }
 
+  /** Declare a variant the winner: remove its siblings, drop its variant badge. */
+  async pickVariant(worktreeId: string) {
+    const wt = this.state.worktrees.find((w) => w.id === worktreeId);
+    if (!wt?.variant) return;
+    const group = wt.variant.group;
+    const siblings = this.state.worktrees.filter((w) => w.variant?.group === group && w.id !== worktreeId);
+    for (const sibling of siblings) {
+      await this.removeWorktree(sibling.id).catch(() => {});
+    }
+    delete wt.variant;
+    saveState(this.state);
+    this.hub.worktreesChanged();
+  }
+
   setPrUrl(worktreeId: string, url: string) {
     const wt = this.state.worktrees.find((w) => w.id === worktreeId);
     if (!wt) return;

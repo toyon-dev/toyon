@@ -275,6 +275,10 @@ export function startServer(opts: {
         manager.agentFor(msg.worktreeId)?.stop();
         break;
       }
+      case "pick-variant": {
+        await manager.pickVariant(msg.worktreeId);
+        break;
+      }
       case "reveal": {
         const wt = manager.worktree(msg.worktreeId);
         if (!wt) throw new Error("unknown worktree");

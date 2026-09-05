@@ -125,6 +125,7 @@ export type ClientMsg =
   | { t: "discard-file"; worktreeId: string; path: string }
   | { t: "reveal"; worktreeId: string; path?: string }
   | { t: "stop-agent"; worktreeId: string }
+  | { t: "pick-variant"; worktreeId: string }
   | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 

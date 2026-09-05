@@ -18,6 +18,7 @@ export interface State {
   git: Record<string, GitFileStatus[]>;
   logs: Record<string, string[]>;
   diff: { worktreeId: string; path: string; before: string; after: string } | null;
+  toast: { ok: boolean; message: string; url?: string } | null;
   showPrompt: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
@@ -32,6 +33,7 @@ export const initial: State = {
   git: {},
   logs: {},
   diff: null,
+  toast: null,
   showPrompt: false,
   leftOpen: true,
   rightOpen: true,
@@ -42,6 +44,7 @@ export type Action =
   | { a: "connected"; v: boolean }
   | { a: "activate"; id: string }
   | { a: "close-diff" }
+  | { a: "dismiss-toast" }
   | { a: "show-prompt"; v: boolean }
   | { a: "toggle-left" }
   | { a: "toggle-right" };
@@ -54,6 +57,8 @@ export function reducer(s: State, action: Action): State {
       return { ...s, activeId: action.id, diff: null };
     case "close-diff":
       return { ...s, diff: null };
+    case "dismiss-toast":
+      return { ...s, toast: null };
     case "show-prompt":
       return { ...s, showPrompt: action.v };
     case "toggle-left":
@@ -113,8 +118,10 @@ function onServer(s: State, msg: ServerMsg): State {
       return { ...s, git: { ...s.git, [msg.worktreeId]: msg.files } };
     case "file-diff":
       return { ...s, diff: msg };
+    case "shipped":
+      return { ...s, toast: { ok: msg.ok, message: msg.message, url: msg.url } };
     case "error":
-      return s; // surfaced via console for now
+      return { ...s, toast: { ok: false, message: msg.message } };
   }
 }
 

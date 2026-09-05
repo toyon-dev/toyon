@@ -87,6 +87,7 @@ export type ServerMsg =
   | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }> }
   | { t: "git-status"; worktreeId: string; files: GitFileStatus[] }
   | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string }
+  | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string }
   | { t: "error"; message: string };
 
 export type ClientMsg =
@@ -97,6 +98,7 @@ export type ClientMsg =
   | { t: "restart-proc"; worktreeId: string; proc: string }
   | { t: "git-status"; worktreeId: string }
   | { t: "file-diff"; worktreeId: string; path: string }
+  | { t: "ship"; worktreeId: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 
 export const DAEMON_DEFAULT_PORT = 4141;

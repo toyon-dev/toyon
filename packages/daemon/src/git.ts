@@ -52,6 +52,57 @@ export function fileBefore(worktreePath: string, defaultBr: string, file: string
   return r.ok ? r.out : "";
 }
 
+export interface ShipResult {
+  ok: boolean;
+  url?: string;
+  message: string;
+}
+
+/** Commit everything, push, and open a PR (gh) or return the compare URL. */
+export function shipWorktree(worktreePath: string, branch: string, defaultBr: string, title: string): ShipResult {
+  const dirty = statusFiles(worktreePath).length > 0;
+  if (dirty) {
+    git(worktreePath, "add", "-A");
+    const c = git(worktreePath, "commit", "-m", `orchardist: ${title}`);
+    if (!c.ok && !c.err.includes("nothing to commit")) {
+      return { ok: false, message: `commit failed: ${c.err}` };
+    }
+  }
+  const ahead = git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
+  if (ahead.ok && ahead.out === "0") {
+    return { ok: false, message: "nothing to ship — no commits ahead of " + defaultBr };
+  }
+
+  const remote = git(worktreePath, "remote", "get-url", "origin");
+  if (!remote.ok) {
+    return { ok: true, message: `committed locally on ${branch} — no 'origin' remote configured, nothing pushed` };
+  }
+
+  const push = git(worktreePath, "push", "-u", "origin", branch);
+  if (!push.ok) return { ok: false, message: `push failed: ${push.err.slice(0, 300)}` };
+
+  // gh if present -> real PR; else GitHub compare URL (user is logged in there)
+  const gh = spawnSync("gh", ["pr", "create", "--fill", "--head", branch], {
+    cwd: worktreePath, encoding: "utf8",
+  });
+  if (gh.status === 0) {
+    const url = (gh.stdout ?? "").trim().split("\n").pop() ?? "";
+    return { ok: true, url, message: `PR created: ${url}` };
+  }
+  const compare = compareUrl(remote.out, defaultBr, branch);
+  return compare
+    ? { ok: true, url: compare, message: "pushed — opening PR page" }
+    : { ok: true, message: `pushed ${branch} to origin` };
+}
+
+function compareUrl(remoteUrl: string, base: string, branch: string): string | null {
+  const m =
+    remoteUrl.match(/^git@github\.com:(.+?)(?:\.git)?$/) ??
+    remoteUrl.match(/^https:\/\/github\.com\/(.+?)(?:\.git)?$/);
+  if (!m) return null;
+  return `https://github.com/${m[1]}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch)}?expand=1`;
+}
+
 // Per-repo mutex for daemon-initiated mutations of shared git state
 // (branch create/delete, worktree add/remove, spare refresh). Agent commits in
 // their own worktrees need no coordination (separate indexes).

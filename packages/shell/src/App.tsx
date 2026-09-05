@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useReducer, useRef, useState } from "react";
 import type { WorktreeStatus } from "@orchardist/shared";
 import { DaemonSocket } from "./ws.ts";
 import { initial, reducer, type ChatItem, type State } from "./store.ts";
-import { lineDiff } from "./diff.ts";
+
+const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initial);
@@ -49,6 +50,19 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [state.worktrees, state.diff, state.showPrompt]);
 
+  // ship results: open PR/compare URLs, auto-dismiss toasts
+  const openedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const toast = state.toast;
+    if (!toast) return;
+    if (toast.ok && toast.url && openedRef.current !== toast.url) {
+      openedRef.current = toast.url;
+      window.open(toast.url, "_blank");
+    }
+    const timer = setTimeout(() => dispatch({ a: "dismiss-toast" }), toast.ok ? 5000 : 12000);
+    return () => clearTimeout(timer);
+  }, [state.toast]);
+
   const repo = state.repos[0] ?? null;
 
   return (
@@ -56,9 +70,14 @@ export function App() {
       <div className="docks">
         <LeftDock state={state} dispatch={dispatch} sock={sock} />
         <Center state={state} active={active} dispatch={dispatch} sock={sock} repo={repo} />
-        <RightDock state={state} active={active} sock={sock} />
+        <RightDock state={state} active={active} sock={sock} dispatch={dispatch} />
       </div>
       <StatusBar state={state} active={active} dispatch={dispatch} />
+      {state.toast && (
+        <div className={`toast ${state.toast.ok ? "ok" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
+          {state.toast.message}
+        </div>
+      )}
     </div>
   );
 }
@@ -68,40 +87,80 @@ type Dispatch = (a: Parameters<typeof reducer>[1]) => void;
 
 function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
   const files = state.activeId ? state.git[state.activeId] ?? [] : [];
+  const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
   return (
     <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`}>
-      <div className="dock-section-title">worktrees</div>
-      {state.worktrees.map((w, i) => (
+      <div className="dock-section-title changes-head">
+        <span>changes{files.length > 0 ? ` · ${files.length}` : ""}</span>
+        {active && active.worktree.kind !== "main" && files.length > 0 && (
+          <button
+            className="ship-btn"
+            title="Commit, push, open PR"
+            onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
+          >
+            ship ↗
+          </button>
+        )}
+      </div>
+      {files.length === 0 && <div className="dock-empty">no changes on {active?.worktree.title ?? "—"}</div>}
+      {files.map((f) => (
         <button
-          key={w.worktree.id}
-          className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""}`}
-          onClick={() => dispatch({ a: "activate", id: w.worktree.id })}
-          title={`⌘${i + 1} · ${w.worktree.branch}`}
+          key={f.path}
+          className="git-file"
+          onClick={() =>
+            state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
+          }
         >
-          <span className={`dot ${dotClass(w)}`} />
-          <span className="branch">{w.worktree.title}</span>
+          <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
+          <span className="path">{f.path}</span>
         </button>
       ))}
-      <button className="new-wt" onClick={() => dispatch({ a: "show-prompt", v: true })}>
-        + new worktree ⌘K
-      </button>
+    </div>
+  );
+}
 
-      {files.length > 0 && (
-        <>
-          <div className="dock-section-title">changes · {files.length}</div>
-          {files.map((f) => (
+function WtSwitcher({ state, dispatch }: { state: State; dispatch: Dispatch }) {
+  const [open, setOpen] = useState(false);
+  const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
+  return (
+    <div className="wt-switcher">
+      <button className="wt-current" onClick={() => setOpen(!open)} title="Switch worktree (⌘1–9)">
+        {active ? (
+          <>
+            <span className={`dot ${dotClass(active)}`} />
+            <span className="branch">{active.worktree.title}</span>
+          </>
+        ) : (
+          <span className="branch">no worktree</span>
+        )}
+        <span className={`chevron ${open ? "up" : ""}`}>▾</span>
+      </button>
+      {open && (
+        <div className="wt-list">
+          {state.worktrees.map((w, i) => (
             <button
-              key={f.path}
-              className="git-file"
-              onClick={() =>
-                state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
-              }
+              key={w.worktree.id}
+              className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""}`}
+              onClick={() => {
+                dispatch({ a: "activate", id: w.worktree.id });
+                setOpen(false);
+              }}
+              title={`⌘${i + 1} · ${w.worktree.branch}`}
             >
-              <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
-              <span className="path">{f.path}</span>
+              <span className={`dot ${dotClass(w)}`} />
+              <span className="branch">{w.worktree.title}</span>
             </button>
           ))}
-        </>
+          <button
+            className="new-wt"
+            onClick={() => {
+              setOpen(false);
+              dispatch({ a: "show-prompt", v: true });
+            }}
+          >
+            + new worktree ⌘K
+          </button>
+        </div>
       )}
     </div>
   );
@@ -160,7 +219,7 @@ function Center({ state, active, dispatch, sock, repo }: {
                 : "starting dev servers…"}
         </div>
       )}
-      {state.diff && <DiffView diff={state.diff} dispatch={dispatch} />}
+      {state.diff && <DiffView diff={state.diff} state={state} dispatch={dispatch} />}
       {state.showPrompt && repo && (
         <PromptOverlay
           onSubmit={(text) => {
@@ -174,23 +233,23 @@ function Center({ state, active, dispatch, sock, repo }: {
   );
 }
 
-function DiffView({ diff, dispatch }: { diff: NonNullable<State["diff"]>; dispatch: Dispatch }) {
-  const lines =
-    diff.before === "" && diff.after === ""
-      ? [{ kind: "hunk" as const, text: "@@ file is empty or could not be read @@" }]
-      : lineDiff(diff.before, diff.after);
+function DiffView({ diff, state, dispatch }: {
+  diff: NonNullable<State["diff"]>; state: State; dispatch: Dispatch;
+}) {
+  const wt = state.worktrees.find((w) => w.worktree.id === diff.worktreeId);
+  const absPath = wt ? `${wt.worktree.path}/${diff.path}` : diff.path;
   return (
-    <div className="diff-view" style={{ position: "absolute", inset: 0, background: "var(--bg0)" }}>
-      <div className="file-head">
-        <span>{diff.path}</span>
-        <button onClick={() => dispatch({ a: "close-diff" })}>esc ✕</button>
+    <div style={{ position: "absolute", inset: 0, background: "var(--bg0)" }}>
+      <div className="file-head" style={{ padding: "6px 16px", display: "flex", gap: 12 }}>
+        <span style={{ flex: 1, font: "12px var(--font-mono)", color: "var(--fg-muted)" }}>{diff.path}</span>
+        <a className="deep-link" href={`zed://file${absPath}`} title="Open in Zed">zed</a>
+        <a className="deep-link" href={`vscode://file${absPath}`} title="Open in VS Code">code</a>
+        <a className="deep-link" href={`cursor://file${absPath}`} title="Open in Cursor">cursor</a>
+        <button onClick={() => dispatch({ a: "close-diff" })} title="Close (esc)">✕</button>
       </div>
-      {lines.map((l, i) => (
-        <div key={i} className={`diff-line ${l.kind}`}>
-          {l.kind === "add" ? "+ " : l.kind === "del" ? "- " : "  "}
-          {l.text}
-        </div>
-      ))}
+      <Suspense fallback={<div className="empty">loading diff…</div>}>
+        <MonacoDiff before={diff.before} after={diff.after} path={diff.path} />
+      </Suspense>
     </div>
   );
 }
@@ -218,7 +277,7 @@ function PromptOverlay({ onSubmit, onClose }: { onSubmit: (t: string) => void; o
   );
 }
 
-function RightDock({ state, active, sock }: { state: State; active: WorktreeStatus | null; sock: Sock }) {
+function RightDock({ state, active, sock, dispatch }: { state: State; active: WorktreeStatus | null; sock: Sock; dispatch: Dispatch }) {
   const items = active ? state.chats[active.worktree.id] ?? [] : [];
   const logRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("");
@@ -239,6 +298,7 @@ function RightDock({ state, active, sock }: { state: State; active: WorktreeStat
 
   return (
     <div className={`right-dock ${state.rightOpen ? "" : "collapsed"}`}>
+      <WtSwitcher state={state} dispatch={dispatch} />
       <div className="chat-log" ref={logRef}>
         {items.map((item, i) => (
           <ChatItemView key={i} item={item} />
@@ -297,28 +357,53 @@ function toolHint(item: Extract<ChatItem, { kind: "tool" }>): string {
   return typeof v === "string" ? v : "";
 }
 
+function PanelIcon({ side, filled }: { side: "left" | "right"; filled: boolean }) {
+  const bar = side === "left" ? { x: 1.5, width: 4.5 } : { x: 10, width: 4.5 };
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      {filled && <rect {...bar} y="3.7" height="8.6" rx="0.8" fill="currentColor" opacity="0.75" />}
+      {!filled && <line x1={side === "left" ? 6 : 10} y1="3" x2={side === "left" ? 6 : 10} y2="13" stroke="currentColor" strokeWidth="1.2" />}
+    </svg>
+  );
+}
+
 function StatusBar({ state, active, dispatch }: { state: State; active: WorktreeStatus | null; dispatch: Dispatch }) {
   return (
     <div className="status-bar">
-      <button className={`toggle ${state.leftOpen ? "on" : ""}`} onClick={() => dispatch({ a: "toggle-left" })}>
-        ⌘B docks
+      <button
+        className={`toggle icon ${state.leftOpen ? "on" : ""}`}
+        onClick={() => dispatch({ a: "toggle-left" })}
+        title="Toggle worktrees panel (⌘B)"
+      >
+        <PanelIcon side="left" filled={state.leftOpen} />
       </button>
-      <button className={`toggle ${state.rightOpen ? "on" : ""}`} onClick={() => dispatch({ a: "toggle-right" })}>
-        ⌘J chat
+      <button
+        className={`toggle icon ${state.rightOpen ? "on" : ""}`}
+        onClick={() => dispatch({ a: "toggle-right" })}
+        title="Toggle chat panel (⌘J)"
+      >
+        <PanelIcon side="right" filled={state.rightOpen} />
       </button>
       <span className="grow" />
       {active && (
         <>
           <span className="branch">{active.worktree.branch}</span>
           {active.procs.map((p) => (
-            <span key={p.name} className="proc">
+            <span
+              key={p.name}
+              className="proc"
+              title={`${p.command} — ${p.status} on :${p.port}`}
+            >
               <span className={`dot ${p.status === "running" ? "running" : p.status === "crashed" ? "crashed" : "starting"}`} />
-              {p.name}:{p.port}
+              {p.name}
             </span>
           ))}
         </>
       )}
-      <span>{state.connected ? "connected" : "reconnecting…"}</span>
+      <span title={state.connected ? "Connected to daemon" : "Reconnecting to daemon"}>
+        {state.connected ? "●" : "○"}
+      </span>
     </div>
   );
 }

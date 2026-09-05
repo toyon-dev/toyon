@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ClientMsg, ServerMsg } from "@orchardist/shared";
 import type { Manager } from "./worktrees.ts";
-import { fileBefore, statusFiles } from "./git.ts";
+import { fileBefore, shipWorktree, statusFiles } from "./git.ts";
 
 const VERSION = "0.0.1";
 
@@ -156,6 +156,18 @@ export function startServer(opts: {
         const after = (await afterFile.exists()) ? await afterFile.text() : "";
         const out: ServerMsg = { t: "file-diff", worktreeId: msg.worktreeId, path: msg.path, before, after };
         ws.send(JSON.stringify(out));
+        break;
+      }
+      case "ship": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) throw new Error("unknown worktree");
+        if (wt.kind === "main") throw new Error("ship from a worktree, not main");
+        const repo = manager.repo(wt.repoId);
+        const result = shipWorktree(wt.path, wt.branch, repo.defaultBranch, wt.title);
+        ws.send(JSON.stringify({
+          t: "shipped", worktreeId: wt.id, ok: result.ok, url: result.url, message: result.message,
+        } satisfies ServerMsg));
+        sendGitStatus(wt.id, ws);
         break;
       }
       case "confirm-config": {

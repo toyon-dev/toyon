@@ -146,7 +146,7 @@ button {
 .diff-line.ctx { color: var(--fg-muted); }
 .diff-line.hunk { color: var(--blue); padding-top: 8px; }
 
-/* ---- right dock (chat) ---- */
+/* ---- right dock (worktree switcher + chat) ---- */
 .right-dock {
   width: 380px;
   background: var(--bg1);
@@ -154,6 +154,25 @@ button {
   display: flex;
   flex-direction: column;
 }
+
+.wt-switcher { border-bottom: 1px solid var(--bg2); flex-shrink: 0; }
+.wt-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--fg1);
+  text-align: left;
+}
+.wt-current:hover { background: var(--bg2); }
+.wt-current .branch { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt-current .chevron { color: var(--fg-dim); transition: transform 0.12s; }
+.wt-current .chevron.up { transform: rotate(180deg); }
+.wt-list { max-height: 40vh; overflow-y: auto; border-top: 1px solid var(--bg2); background: var(--bg0); }
+
+.dock-empty { padding: 4px 12px; font-size: 12px; color: var(--fg-dim); }
 
 .chat-log {
   flex: 1;
@@ -224,6 +243,45 @@ button {
 .chat-input textarea:focus { border-color: var(--bg3); }
 .chat-hint { font-size: 11px; color: var(--fg-dim); margin-top: 4px; }
 
+/* ---- changes header / ship / deep links / toast ---- */
+.changes-head { display: flex; justify-content: space-between; align-items: baseline; padding-right: 8px; }
+.ship-btn {
+  font-size: 11px;
+  color: var(--orange);
+  border: 1px solid var(--bg3);
+  border-radius: 4px;
+  padding: 1px 8px;
+}
+.ship-btn:hover { border-color: var(--orange); }
+
+.deep-link {
+  font: 11px var(--font-mono);
+  color: var(--fg-dim);
+  text-decoration: none;
+  border: 1px solid var(--bg2);
+  border-radius: 4px;
+  padding: 1px 7px;
+  align-self: center;
+}
+.deep-link:hover { color: var(--blue); border-color: var(--bg3); }
+
+.toast {
+  position: fixed;
+  bottom: 38px;
+  right: 12px;
+  max-width: 420px;
+  background: var(--bg1);
+  border: 1px solid var(--bg3);
+  border-left: 3px solid var(--aqua);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 30;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.toast.err { border-left-color: var(--red); }
+
 /* ---- status bar ---- */
 .status-bar {
   display: flex;
@@ -236,6 +294,8 @@ button {
   color: var(--fg-dim);
 }
 .status-bar .toggle:hover, .status-bar .toggle.on { color: var(--fg1); }
+.status-bar .toggle.icon { display: grid; place-items: center; padding: 2px; border-radius: 4px; }
+.status-bar .toggle.icon:hover { background: var(--bg2); }
 .status-bar .branch { color: var(--orange); }
 .status-bar .grow { flex: 1; }
 .status-bar .proc { display: flex; gap: 4px; align-items: center; }

@@ -79,7 +79,7 @@ button {
 }
 .wt-item:hover { background: var(--bg2); }
 .wt-item.active { color: var(--fg1); background: var(--bg2); box-shadow: inset 2px 0 0 var(--orange); }
-.wt-item .branch { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt-item .branch { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 
 .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dot.running { background: var(--green); }
@@ -98,6 +98,20 @@ button {
   width: 100%;
 }
 .new-wt:hover { color: var(--orange); }
+.combine-btn { color: var(--aqua); }
+.combine-btn:hover { color: var(--aqua); background: var(--bg2); }
+
+.wt-item.sel { background: var(--bg2); box-shadow: inset 2px 0 0 var(--aqua); }
+.wt-item .row-badge { font: 10px var(--font-mono); flex-shrink: 0; }
+.wt-item .wt-more {
+  visibility: hidden;
+  color: var(--fg-dim);
+  padding: 0 2px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.wt-item:hover .wt-more { visibility: visible; }
+.wt-item .wt-more:hover { color: var(--fg1); background: var(--bg3); }
 
 .git-file {
   display: flex;

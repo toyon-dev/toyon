@@ -23,7 +23,7 @@ export interface RepoInfo {
   needsSetup: boolean;
 }
 
-export type WorktreeKind = "main" | "worktree" | "spare";
+export type WorktreeKind = "main" | "worktree" | "spare" | "combined";
 
 export interface WorktreeInfo {
   id: string;
@@ -56,6 +56,9 @@ export interface WorktreeStatus {
   worktree: WorktreeInfo;
   procs: ProcState[];
   agent: AgentStatus;
+  /** commits ahead/behind the default branch (cached, ~10s freshness) */
+  ahead?: number;
+  behind?: number;
 }
 
 export interface GitFileStatus {
@@ -103,6 +106,7 @@ export type ClientMsg =
   | { t: "ship"; worktreeId: string }
   | { t: "merge-main"; worktreeId: string }
   | { t: "commit"; worktreeId: string; message: string }
+  | { t: "combine"; worktreeIds: string[] }
   | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 

@@ -175,7 +175,15 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
 function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
   const [open, setOpen] = useState(true);
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const [sel, setSel] = useState<string[]>([]);
   const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
+
+  const toggleSel = (w: WorktreeStatus) => {
+    if (w.worktree.kind === "main") return;
+    setSel((s) =>
+      s.includes(w.worktree.id) ? s.filter((x) => x !== w.worktree.id) : [...s, w.worktree.id],
+    );
+  };
 
   useEffect(() => {
     if (!menu) return;
@@ -226,19 +234,49 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
           {state.worktrees.map((w, i) => (
             <button
               key={w.worktree.id}
-              className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""}`}
-              onClick={() => dispatch({ a: "activate", id: w.worktree.id })}
+              className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""}`}
+              onClick={(e) => {
+                if (e.shiftKey) toggleSel(w);
+                else dispatch({ a: "activate", id: w.worktree.id });
+              }}
               onDoubleClick={() => rename(w)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, id: w.worktree.id });
               }}
-              title={`⌘${i + 1} · ${w.worktree.branch} · right-click for actions`}
+              title={`⌘${i + 1} · ${w.worktree.branch} · shift-click to select for combine`}
             >
               <span className={`dot ${dotClass(w)}`} />
-              <span className="branch">{w.worktree.title}</span>
+              <span className="branch">
+                {w.worktree.kind === "combined" ? "⧉ " : ""}
+                {w.worktree.title}
+              </span>
+              {(w.ahead ?? 0) > 0 && <span className="row-badge ahead-badge">↑{w.ahead}</span>}
+              {(w.behind ?? 0) > 0 && <span className="row-badge behind-badge">↓{w.behind}</span>}
+              <span
+                className="wt-more"
+                title="Actions"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const r = (e.target as HTMLElement).getBoundingClientRect();
+                  setMenu({ x: r.left - 140, y: r.bottom + 4, id: w.worktree.id });
+                }}
+              >
+                ⋯
+              </span>
             </button>
           ))}
+          {sel.length >= 2 && (
+            <button
+              className="new-wt combine-btn"
+              onClick={() => {
+                sock?.send({ t: "combine", worktreeIds: sel });
+                setSel([]);
+              }}
+            >
+              ⧉ preview {sel.length} combined
+            </button>
+          )}
           <button className="new-wt" onClick={() => dispatch({ a: "show-prompt", v: true })}>
             + new worktree ⌘K
           </button>

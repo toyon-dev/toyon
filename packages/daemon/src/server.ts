@@ -195,6 +195,14 @@ export function startServer(opts: {
         sendGitStatus(wt.id, ws);
         break;
       }
+      case "combine": {
+        const wt = await manager.combineWorktrees(msg.worktreeIds);
+        ws.send(JSON.stringify({
+          t: "shipped", worktreeId: wt.id, ok: true,
+          message: `combined preview: ${wt.title} (local merge, nothing pushed)`,
+        } satisfies ServerMsg));
+        break;
+      }
       case "rename-worktree": {
         await manager.renameWorktree(msg.worktreeId, msg.title);
         break;

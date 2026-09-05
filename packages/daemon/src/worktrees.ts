@@ -6,7 +6,7 @@ import type {
   AgentEvent, AgentStatus, OrchardistConfig, ProcState, RepoInfo, WorktreeInfo, WorktreeStatus,
 } from "@orchardist/shared";
 import { detectConfig } from "./config.ts";
-import { defaultBranch, git, gitOrThrow, isGitRepo, repoRoot, withRepoLock } from "./git.ts";
+import { aheadBehind, defaultBranch, git, gitOrThrow, isGitRepo, repoRoot, withRepoLock } from "./git.ts";
 import { allocatePort } from "./ports.ts";
 import { startProxy, type WorktreeProxy } from "./proxy.ts";
 import { AgentSession, quickName } from "./agent.ts";
@@ -293,16 +293,76 @@ export class Manager {
 
   // ---- queries ----
 
+  private countsCache = new Map<string, { ahead: number; behind: number; at: number }>();
+
+  private counts(wt: WorktreeInfo): { ahead?: number; behind?: number } {
+    if (wt.kind === "main") return {};
+    const cached = this.countsCache.get(wt.id);
+    if (cached && Date.now() - cached.at < 10_000) return cached;
+    try {
+      const fresh = { ...aheadBehind(wt.path, this.repo(wt.repoId).defaultBranch), at: Date.now() };
+      this.countsCache.set(wt.id, fresh);
+      return fresh;
+    } catch {
+      return cached ?? {};
+    }
+  }
+
   statuses(): WorktreeStatus[] {
     return this.state.worktrees.map((wt) => {
       const rt = this.runtimes.get(wt.id);
       const pending = this.pendingAgents.get(wt.id);
+      const { ahead, behind } = this.counts(wt);
       return {
         worktree: wt,
         procs: rt?.procs.states() ?? [],
         agent: rt?.agent.status ?? pending?.status ?? "idle",
+        ahead,
+        behind,
       };
     });
+  }
+
+  /** Ephemeral local octopus merge of several worktree branches, as its own preview worktree. */
+  async combineWorktrees(worktreeIds: string[]): Promise<WorktreeInfo> {
+    const wts = worktreeIds
+      .map((id) => this.state.worktrees.find((w) => w.id === id))
+      .filter((w): w is WorktreeInfo => !!w && w.kind !== "main");
+    if (wts.length < 2) throw new Error("select at least two worktrees to combine");
+    const repoId = wts[0]!.repoId;
+    if (!wts.every((w) => w.repoId === repoId)) throw new Error("worktrees must belong to one repo");
+    const repo = this.repo(repoId);
+
+    const slug = `combo-${wts.map((w) => w.title.split("-")[0]).join("-")}`.slice(0, 32) + `-${shortId().slice(0, 4)}`;
+    const branch = `orchard/${slug}`;
+    const wtPath = join(WORKTREES_DIR, repo.name, slug);
+
+    await withRepoLock(repo.path, () => {
+      gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch);
+      const m = git(wtPath, "merge", "--no-edit", ...wts.map((w) => w.branch));
+      if (!m.ok) {
+        git(wtPath, "merge", "--abort");
+        git(repo.path, "worktree", "remove", "--force", wtPath);
+        git(repo.path, "branch", "-D", branch);
+        throw new Error(`branches conflict — resolve before combining (${m.err.slice(0, 200)})`);
+      }
+    });
+
+    const wt: WorktreeInfo = {
+      id: shortId(),
+      repoId,
+      path: wtPath,
+      branch,
+      kind: "combined",
+      proxyPort: await allocatePort(),
+      title: slug,
+      createdAt: Date.now(),
+    };
+    this.state.worktrees.push(wt);
+    saveState(this.state);
+    this.hub.worktreesChanged();
+    void this.setupAndStart(wt, repo, wts[0]!.path).then(() => this.hub.worktreesChanged());
+    return wt;
   }
 
   runtime(worktreeId: string): Runtime | undefined {

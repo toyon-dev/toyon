@@ -782,10 +782,8 @@ function PromptOverlay({ onSubmit, onClose }: {
             <span>batch</span>
           </label>
           {!batch && (
-            <span className="variants-right">
-              <span title="Run the same prompt in N parallel worktrees — compare the attempts, keep the best">
-                variants
-              </span>
+            <>
+              <span title="Run the same prompt in N parallel worktrees — keep the best">· variants</span>
               {[1, 2, 3].map((n) => (
                 <button
                   key={n}
@@ -795,8 +793,7 @@ function PromptOverlay({ onSubmit, onClose }: {
                   {n}
                 </button>
               ))}
-              {variants > 1 && <span className="variants-hint">{variants} agents, same prompt</span>}
-            </span>
+            </>
           )}
         </div>
       </div>

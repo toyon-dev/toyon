@@ -1,5 +1,22 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { GitFileStatus } from "@orchardist/shared";
+
+const LOCKFILES = [
+  "bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+  "uv.lock", "poetry.lock", "requirements.txt", "Cargo.lock",
+];
+
+/** Combined hash of all present lockfiles — spare deps re-setup only when this changes. */
+export function lockfileHash(dir: string): string {
+  const h = createHash("sha1");
+  for (const f of LOCKFILES) {
+    try { h.update(readFileSync(join(dir, f))); } catch {}
+  }
+  return h.digest("hex");
+}
 
 export function git(cwd: string, ...args: string[]): { ok: boolean; out: string; err: string } {
   const r = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });

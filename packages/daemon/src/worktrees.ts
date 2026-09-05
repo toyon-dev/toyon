@@ -3,10 +3,14 @@ import { spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import type {
-  AgentEvent, AgentStatus, OrchardistConfig, ProcState, RepoInfo, WorktreeInfo, WorktreeStatus,
+  AgentEvent, AgentStatus, OrchardistConfig, ProcState, RepoInfo, ServerMsg, WorktreeInfo, WorktreeStatus,
 } from "@orchardist/shared";
 import { detectConfig } from "./config.ts";
-import { aheadBehind, defaultBranch, git, gitOrThrow, isGitRepo, repoRoot, statusFiles, withRepoLock } from "./git.ts";
+import {
+  aheadBehind, committedFiles, defaultBranch, git, gitOrThrow, isGitRepo, lockfileHash,
+  repoRoot, statusFiles, withRepoLock,
+} from "./git.ts";
+import { watchDefaultBranch } from "./watcher.ts";
 import { allocatePort } from "./ports.ts";
 import { startProxy, type WorktreeProxy } from "./proxy.ts";
 import { AgentSession, quickName } from "./agent.ts";
@@ -20,6 +24,8 @@ export interface HubEvents {
   agent(worktreeId: string, seq: number, event: AgentEvent): void;
   agentStatus(worktreeId: string, status: AgentStatus): void;
   worktreesChanged(): void;
+  /** the repo's default branch moved: badges + git-status need refreshing */
+  repoTick(repoId: string): void;
 }
 
 interface Runtime {
@@ -50,6 +56,128 @@ export class Manager {
       await this.startRuntime(wt, repo);
     }
     saveState(this.state);
+    for (const repo of this.state.repos) {
+      this.startWatcher(repo);
+      this.adoptOrCreateSpare(repo.id);
+    }
+  }
+
+  // ---- ref watcher + spare pool ----
+
+  private spares = new Map<string, {
+    worktreeId: string;
+    lockHash: string;
+    refreshing: Promise<void> | null;
+    ready: boolean;
+  }>();
+  private watchers = new Map<string, () => void>();
+
+  private startWatcher(repo: RepoInfo) {
+    if (this.watchers.has(repo.id)) return;
+    this.watchers.set(
+      repo.id,
+      watchDefaultBranch(repo.path, repo.defaultBranch, () => {
+        this.countsCache.clear();
+        this.hub.repoTick(repo.id);
+        void this.refreshSpare(repo.id);
+      }),
+    );
+  }
+
+  /** Reuse a persisted spare from a previous daemon run, else warm a fresh one. */
+  private adoptOrCreateSpare(repoId: string) {
+    const persisted = this.state.worktrees.filter((w) => w.repoId === repoId && w.kind === "spare");
+    // keep at most one; stale extras are removed
+    for (const extra of persisted.slice(1)) void this.removeWorktree(extra.id, true);
+    const spare = persisted[0];
+    if (spare) {
+      this.spares.set(repoId, {
+        worktreeId: spare.id,
+        lockHash: lockfileHash(spare.path),
+        refreshing: null,
+        ready: true,
+      });
+      void this.refreshSpare(repoId); // main may have moved while the daemon was down
+    } else {
+      void this.ensureSpare(repoId);
+    }
+  }
+
+  private async ensureSpare(repoId: string) {
+    if (this.spares.has(repoId)) return;
+    const repo = this.repo(repoId);
+    const entry = { worktreeId: "", lockHash: "", refreshing: null as Promise<void> | null, ready: false };
+    this.spares.set(repoId, entry);
+    try {
+      const slug = `spare-${shortId().slice(0, 4)}`;
+      const wtPath = join(WORKTREES_DIR, repo.name, slug);
+      await withRepoLock(repo.path, () => {
+        gitOrThrow(repo.path, "worktree", "add", "--detach", wtPath, repo.defaultBranch);
+      });
+      const wt: WorktreeInfo = {
+        id: shortId(),
+        repoId,
+        path: wtPath,
+        branch: repo.defaultBranch,
+        kind: "spare",
+        proxyPort: await allocatePort(),
+        title: slug,
+        createdAt: Date.now(),
+      };
+      entry.worktreeId = wt.id;
+      this.state.worktrees.push(wt);
+      saveState(this.state);
+      await this.setupAndStart(wt, repo); // CoW deps + setup + warm servers
+      entry.lockHash = lockfileHash(wt.path);
+      entry.ready = true;
+    } catch {
+      this.spares.delete(repoId);
+    }
+  }
+
+  private async refreshSpare(repoId: string) {
+    const entry = this.spares.get(repoId);
+    if (!entry || !entry.ready || entry.refreshing) return;
+    const repo = this.repo(repoId);
+    const wt = this.worktree(entry.worktreeId);
+    if (!wt || wt.kind !== "spare") return;
+    entry.refreshing = (async () => {
+      await withRepoLock(repo.path, () => {
+        git(wt.path, "reset", "--hard", repo.defaultBranch);
+      });
+      const h = lockfileHash(wt.path);
+      if (h !== entry.lockHash) {
+        entry.lockHash = h;
+        for (const cmd of repo.config.setup ?? []) {
+          spawnSync("sh", ["-c", cmd], { cwd: wt.path, encoding: "utf8" });
+        }
+      }
+    })().finally(() => {
+      entry.refreshing = null;
+    });
+    await entry.refreshing;
+  }
+
+  /** Claim the warm spare for a new task: branch it, hand it to an agent, warm the next. */
+  private async claimSpare(repoId: string, branch: string, slug: string): Promise<WorktreeInfo | null> {
+    const entry = this.spares.get(repoId);
+    if (!entry?.ready) return null;
+    this.spares.delete(repoId);
+    // a refresh in flight serializes in front of the agent's first action
+    if (entry.refreshing) await entry.refreshing;
+    const wt = this.worktree(entry.worktreeId);
+    if (!wt || wt.kind !== "spare") return null;
+    const repo = this.repo(repoId);
+    await withRepoLock(repo.path, () => {
+      gitOrThrow(wt.path, "switch", "-c", branch);
+    });
+    wt.kind = "worktree";
+    wt.branch = branch;
+    wt.title = slug;
+    wt.createdAt = Date.now();
+    saveState(this.state);
+    void this.ensureSpare(repoId).then(() => this.hub.worktreesChanged());
+    return wt;
   }
 
   // ---- repos ----
@@ -91,6 +219,8 @@ export class Manager {
     this.state.worktrees.push(main);
     saveState(this.state);
     await this.startRuntime(main, repo);
+    this.startWatcher(repo);
+    void this.ensureSpare(repo.id);
     this.hub.worktreesChanged();
     return repo;
   }
@@ -118,12 +248,27 @@ export class Manager {
     const repo = this.repo(repoId);
     const slug = slugify(prompt);
     const branch = `orchard/${slug}`;
-    const wtPath = join(WORKTREES_DIR, repo.name, slug);
 
     // fork point: main's branch by default, or the base worktree's branch (stacking)
     const base = baseWorktreeId ? this.state.worktrees.find((w) => w.id === baseWorktreeId) : undefined;
-    const baseBranch = base && base.kind !== "main" ? base.branch : repo.defaultBranch;
+    const fromMain = !base || base.kind === "main";
 
+    // fast path: claim the pre-warmed spare (main-based tasks only)
+    if (fromMain) {
+      const claimed = await this.claimSpare(repoId, branch, slug);
+      if (claimed) {
+        this.hub.worktreesChanged();
+        const agent = this.agentFor(claimed.id) ?? this.makeAgent(claimed);
+        agent.send(prompt);
+        void quickName(prompt, repo.path).then((name) => {
+          if (name) this.renameWorktree(claimed.id, name).catch(() => {});
+        });
+        return claimed;
+      }
+    }
+
+    const wtPath = join(WORKTREES_DIR, repo.name, slug);
+    const baseBranch = fromMain ? repo.defaultBranch : base!.branch;
     await withRepoLock(repo.path, () => {
       gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, baseBranch);
     });
@@ -201,9 +346,9 @@ export class Manager {
     await this.startRuntime(wt, repo);
   }
 
-  async removeWorktree(worktreeId: string) {
+  async removeWorktree(worktreeId: string, allowSpare = false) {
     const wt = this.state.worktrees.find((w) => w.id === worktreeId);
-    if (!wt || wt.kind === "main") return;
+    if (!wt || wt.kind === "main" || (wt.kind === "spare" && !allowSpare)) return;
     const repo = this.repo(wt.repoId);
     const rt = this.runtimes.get(worktreeId);
     rt?.procs.stopAll();
@@ -308,8 +453,25 @@ export class Manager {
     }
   }
 
+  /** git-status payload for one worktree (used by subscribe, edits, and ref ticks) */
+  gitStatusMsg(worktreeId: string): Extract<ServerMsg, { t: "git-status" }> | null {
+    const wt = this.worktree(worktreeId);
+    if (!wt || wt.kind === "spare") return null;
+    try {
+      const files = statusFiles(wt.path);
+      const defaultBr = this.repo(wt.repoId).defaultBranch;
+      const counts = wt.kind === "main" ? {} : aheadBehind(wt.path, defaultBr);
+      const ahead = (counts as { ahead?: number }).ahead ?? 0;
+      const committed = wt.kind !== "main" && ahead > 0 ? committedFiles(wt.path, defaultBr) : undefined;
+      if (wt.landed && (files.length > 0 || ahead > 0)) this.setLanded(wt.id, false);
+      return { t: "git-status", worktreeId, files, committed, ...counts };
+    } catch {
+      return null;
+    }
+  }
+
   statuses(): WorktreeStatus[] {
-    return this.state.worktrees.map((wt) => {
+    return this.state.worktrees.filter((wt) => wt.kind !== "spare").map((wt) => {
       const rt = this.runtimes.get(wt.id);
       const pending = this.pendingAgents.get(wt.id);
       const { ahead, behind, dirty } = this.counts(wt);
@@ -384,6 +546,7 @@ export class Manager {
   }
 
   shutdown() {
+    for (const stop of this.watchers.values()) stop();
     for (const rt of this.runtimes.values()) {
       rt.procs.stopAll();
       rt.proxy.stop();

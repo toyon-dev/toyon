@@ -36,6 +36,14 @@ const hubEvents: HubEvents = {
   },
   agentStatus: () => worktreesChangedRef?.(),
   worktreesChanged: () => worktreesChangedRef?.(),
+  repoTick: (repoId) => {
+    // main moved: refresh badges + git status for every worktree of the repo
+    worktreesChangedRef?.();
+    for (const wt of manager.state.worktrees.filter((w) => w.repoId === repoId)) {
+      const msg = manager.gitStatusMsg(wt.id);
+      if (msg) broadcastRef?.(msg);
+    }
+  },
 };
 
 const manager = new Manager(hubEvents, BRIDGE_JS);

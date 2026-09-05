@@ -262,22 +262,8 @@ export function startServer(opts: {
   }
 
   function sendGitStatus(worktreeId: string, ws: import("bun").ServerWebSocket<WsData>) {
-    const wt = manager.worktree(worktreeId);
-    if (!wt) return;
-    try {
-      const files = statusFiles(wt.path);
-      const defaultBr = manager.repo(wt.repoId).defaultBranch;
-      const counts = wt.kind === "main" ? {} : aheadBehind(wt.path, defaultBr);
-      const ahead = (counts as { ahead?: number }).ahead ?? 0;
-      const committed = wt.kind !== "main" && ahead > 0 ? committedFiles(wt.path, defaultBr) : undefined;
-      // new work after landing clears the landed state
-      if (wt.landed && (files.length > 0 || ahead > 0)) {
-        manager.setLanded(wt.id, false);
-      }
-      ws.send(JSON.stringify({ t: "git-status", worktreeId, files, committed, ...counts } satisfies ServerMsg));
-    } catch {
-      // worktree may still be setting up
-    }
+    const msg = manager.gitStatusMsg(worktreeId);
+    if (msg) ws.send(JSON.stringify(msg));
   }
 
   return { server, hub };

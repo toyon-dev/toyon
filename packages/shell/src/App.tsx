@@ -1044,6 +1044,8 @@ function PanelIcon({ side, filled }: { side: "left" | "right"; filled: boolean }
 function StatusBar({ state, active, dispatch }: { state: State; active: WorktreeStatus | null; dispatch: Dispatch }) {
   const [installEvt, setInstallEvt] = useState<{ prompt: () => Promise<unknown> } | null>(null);
   useEffect(() => {
+    // already running as an app (--app window or installed PWA): don't offer install
+    if (window.matchMedia("(display-mode: standalone)").matches) return;
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setInstallEvt(e as unknown as { prompt: () => Promise<unknown> });

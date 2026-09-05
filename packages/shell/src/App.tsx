@@ -125,42 +125,31 @@ function Center({ state, active, dispatch, sock, repo }: {
   state: State; active: WorktreeStatus | null; dispatch: Dispatch; sock: Sock;
   repo: State["repos"][number] | null;
 }) {
-  if (state.diff) {
-    const lines =
-      state.diff.before === "" && state.diff.after === ""
-        ? [{ kind: "hunk" as const, text: "@@ file is empty or could not be read @@" }]
-        : lineDiff(state.diff.before, state.diff.after);
-    return (
-      <div className="center">
-        <div className="diff-view">
-          <div className="file-head">
-            <span>{state.diff.path}</span>
-            <button onClick={() => dispatch({ a: "close-diff" })}>esc ✕</button>
-          </div>
-          {lines.map((l, i) => (
-            <div key={i} className={`diff-line ${l.kind}`}>
-              {l.kind === "add" ? "+ " : l.kind === "del" ? "- " : "  "}
-              {l.text}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  // one persistent iframe per visited worktree: switching is a display toggle
+  // (instant, and each preview keeps its app state + HMR socket while hidden)
+  const [mounted, setMounted] = useState<string[]>([]);
+  const activeReady =
+    active && active.procs.length > 0 && active.procs.some((p) => p.status !== "stopped");
+  useEffect(() => {
+    if (active && activeReady && !mounted.includes(active.worktree.id)) {
+      setMounted((m) => [...m, active.worktree.id]);
+    }
+  }, [active?.worktree.id, activeReady]);
 
   const logs = active ? state.logs[active.worktree.id] ?? [] : [];
-  const showIframe =
-    active && active.procs.length > 0 && active.procs.some((p) => p.status !== "stopped");
+  const frames = state.worktrees.filter((w) => mounted.includes(w.worktree.id));
 
   return (
     <div className="center">
-      {showIframe ? (
+      {frames.map((w) => (
         <iframe
-          key={active!.worktree.id}
-          src={`http://127.0.0.1:${active!.worktree.proxyPort}/`}
-          title="preview"
+          key={w.worktree.id}
+          src={`http://127.0.0.1:${w.worktree.proxyPort}/`}
+          title={w.worktree.title}
+          style={{ display: w.worktree.id === state.activeId && !state.diff ? "block" : "none" }}
         />
-      ) : (
+      ))}
+      {!activeReady && !state.diff && (
         <div className="empty">
           {!state.connected
             ? "connecting to daemon…"
@@ -171,6 +160,7 @@ function Center({ state, active, dispatch, sock, repo }: {
                 : "starting dev servers…"}
         </div>
       )}
+      {state.diff && <DiffView diff={state.diff} dispatch={dispatch} />}
       {state.showPrompt && repo && (
         <PromptOverlay
           onSubmit={(text) => {
@@ -180,6 +170,27 @@ function Center({ state, active, dispatch, sock, repo }: {
           onClose={() => dispatch({ a: "show-prompt", v: false })}
         />
       )}
+    </div>
+  );
+}
+
+function DiffView({ diff, dispatch }: { diff: NonNullable<State["diff"]>; dispatch: Dispatch }) {
+  const lines =
+    diff.before === "" && diff.after === ""
+      ? [{ kind: "hunk" as const, text: "@@ file is empty or could not be read @@" }]
+      : lineDiff(diff.before, diff.after);
+  return (
+    <div className="diff-view" style={{ position: "absolute", inset: 0, background: "var(--bg0)" }}>
+      <div className="file-head">
+        <span>{diff.path}</span>
+        <button onClick={() => dispatch({ a: "close-diff" })}>esc ✕</button>
+      </div>
+      {lines.map((l, i) => (
+        <div key={i} className={`diff-line ${l.kind}`}>
+          {l.kind === "add" ? "+ " : l.kind === "del" ? "- " : "  "}
+          {l.text}
+        </div>
+      ))}
     </div>
   );
 }

@@ -107,6 +107,9 @@ export type AgentEvent =
 
 // ---- WebSocket protocol ----
 
+/** one content-search match: path + 1-based line + the (trimmed) line text */
+export type SearchHit = { path: string; line: number; text: string };
+
 export type ServerMsg =
   | { t: "hello"; version: string; repos: RepoInfo[]; worktrees: WorktreeStatus[] }
   | { t: "repos"; repos: RepoInfo[] }
@@ -119,6 +122,7 @@ export type ServerMsg =
   | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string }
   | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean; removeIds?: string[]; suggestion?: string }
   | { t: "files"; worktreeId: string; paths: string[] }
+  | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
   | { t: "queue"; worktreeId: string; items: string[] }
   | { t: "changed-ranges"; worktreeId: string; path: string; ranges: Array<[number, number]>; lineOffset: number }
   | { t: "error"; message: string };
@@ -139,6 +143,7 @@ export type ClientMsg =
   | { t: "sync-main"; worktreeId: string }
   | { t: "write-file"; worktreeId: string; path: string; content: string }
   | { t: "list-files"; worktreeId: string }
+  | { t: "search"; worktreeId: string; query: string }
   | { t: "discard-file"; worktreeId: string; path: string }
   | { t: "reveal"; worktreeId: string; path?: string }
   | { t: "stop-agent"; worktreeId: string }

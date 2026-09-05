@@ -43,7 +43,7 @@ button {
 }
 
 /* ---- keyboard shortcuts help ---- */
-.keys-btn { font-size: 12px; width: 20px; height: 20px; }
+.keys-btn { width: 20px; height: 20px; }
 .keys-overlay {
   position: fixed;
   inset: 0;
@@ -91,7 +91,7 @@ button {
 }
 .keys-d { color: var(--fg-muted); }
 
-/* zen: full-bleed preview, all chrome hidden (⌘⇧F, esc exits) */
+/* zen: full-bleed preview, all chrome hidden (⌘., esc exits) */
 /* hiding the bar removes a grid child — collapse to one full-height row so
    .docks doesn't re-slot into the auto track (grid re-slotting, round two) */
 .app.zen { grid-template-rows: 1fr; }
@@ -118,14 +118,27 @@ button {
 }
 .left-dock.collapsed, .right-dock.collapsed { display: none; }
 
+/* zero-width in layout: the dock's own 1px border is the only seam you see.
+   The grab strip lives inside the panel and only shows on hover / while dragging */
 .dock-resize {
-  width: 5px;
+  position: relative;
+  width: 0;
   flex-shrink: 0;
+  z-index: 1;
+}
+.dock-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
   cursor: col-resize;
   background: transparent;
   transition: background 0.1s;
 }
-.dock-resize:hover { background: var(--bg3); }
+.dock-resize.left::after { right: 0; }
+.dock-resize.right::after { left: 0; }
+.dock-resize:hover::after, .dock-resize.active::after { background: var(--bg3); }
 body.resizing { cursor: col-resize; user-select: none; }
 body.resizing iframe { pointer-events: none; }
 
@@ -258,8 +271,7 @@ body.resizing iframe { pointer-events: none; }
 }
 .rb-btn:hover { color: var(--fg1); background: var(--bg2); }
 /* back/forward/reload: same 20px box as the status-bar icons so the row reads as one size */
-.rb-nav { width: 20px; height: 20px; padding: 0; display: grid; place-items: center; font-size: 17px; line-height: 1; }
-.rb-reload { font-size: 14px; }
+.rb-nav { width: 20px; height: 20px; padding: 0; display: grid; place-items: center; line-height: 1; }
 .rb-nav:disabled { color: var(--bg3); cursor: default; background: none; }
 .rb-btn.rb-on { color: var(--orange); background: var(--bg2); }
 .rb-variants { font-size: 11px; color: #d3869b; }
@@ -361,9 +373,10 @@ body.resizing .row-resize { background: var(--bg3); }
 .wt-rail:hover .rail-panel,
 .wt-rail.hold .rail-panel {
   width: 232px;
-  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.4);
+  /* a step above the page, not a floating dialog: tight blur, low alpha */
+  box-shadow: -6px 0 18px rgba(0, 0, 0, 0.3);
   /* let the shadow escape left only — never over the top bar */
-  clip-path: inset(0 0 0 -48px);
+  clip-path: inset(0 0 0 -32px);
   /* hover intent: brief pause before expanding; collapse stays instant */
   transition: width 0.12s ease 50ms, box-shadow 0.12s ease 50ms;
 }
@@ -375,9 +388,11 @@ body.resizing .row-resize { background: var(--bg3); }
   height: 38px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* dot on the right, 19px in: the rail panel is right-anchored, so the dot stays put
+     in the 44px column while the label slides in from the left on expand */
+  justify-content: flex-end;
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 19px 0 12px;
   font-size: 11px;
   color: var(--fg-dim);
   white-space: nowrap;
@@ -391,7 +406,6 @@ body.resizing .row-resize { background: var(--bg3); }
 }
 .rail-foot.off .conn-dot { background: transparent; border: 1px solid var(--orange); box-sizing: border-box; }
 .rail-foot.off { color: var(--orange); }
-.wt-rail:hover .rail-foot, .wt-rail.hold .rail-foot { justify-content: flex-start; }
 /* stale rail while the socket is down */
 .wt-rail.offline .rail-list { opacity: 0.45; }
 .nw-mini { display: none; }
@@ -735,8 +749,11 @@ body.resizing .rb-center { transition: none; }
 }
 .pick-chip.in-chat:hover { border-color: var(--orange); }
 .status-bar .toggle.icon:hover { background: var(--bg2); }
+/* semantic dock icons carry no open/closed fill — the highlight is the state */
+.status-bar .toggle.icon.on { background: var(--bg2); }
 .status-bar .branch { color: var(--orange); }
 .status-bar .grow { flex: 1; }
+.status-bar .bar-tools { display: flex; align-items: center; gap: 14px; }
 .status-bar .proc { display: flex; gap: 4px; align-items: center; }
 
 /* ---- new worktree prompt overlay ---- */
@@ -839,6 +856,17 @@ body.resizing .rb-center { transition: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* command palette rows: label left, chord hint right */
+.cmd-item { display: flex; align-items: center; gap: 12px; }
+.cmd-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cmd-hint { font: 11px var(--font-ui); color: var(--fg-dim); flex-shrink: 0; }
+.qo-item.active .cmd-hint { color: var(--fg-muted); }
+/* search hits: location on top, matched line beneath */
+.sr-item { white-space: normal; padding: 5px 10px; }
+.sr-loc { display: block; font-size: 11px; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-line { color: var(--orange); }
+.sr-text { display: block; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qo-item.active .sr-loc, .qo-item.active .sr-text { color: var(--fg1); }
 .qo-item:hover { background: var(--bg2); }
 .qo-item.active { background: var(--bg2); color: var(--fg1); box-shadow: inset 2px 0 0 var(--orange); }
 .prompt-box textarea {
@@ -853,3 +881,27 @@ body.resizing .rb-center { transition: none; }
   resize: none;
   outline: none;
 }
+
+/* ---- tooltip (one instance, delegated via data-tip; see Tooltip.tsx) ---- */
+.tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  pointer-events: none;
+  max-width: 320px;
+  padding: 4px 8px;
+  font: 12px/1.4 var(--font-ui);
+  color: var(--fg1);
+  background: var(--bg0);
+  border: 1px solid var(--bg3);
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  animation: tooltip-in 90ms ease-out;
+}
+.tooltip[data-side="above"] { animation-name: tooltip-in-above; }
+.tooltip-key { margin-left: 12px; color: var(--fg-muted); }
+@keyframes tooltip-in { from { opacity: 0; transform: translateY(-2px); } }
+@keyframes tooltip-in-above { from { opacity: 0; transform: translateY(2px); } }

@@ -33,7 +33,7 @@ history.pushState = (...args) => {
 window.addEventListener("popstate", () => post({ type: "navigated", url: location.href }));
 
 // forward Orchardist chords to the shell even when the preview has focus
-const CHORD_KEYS = new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "k", "p", "b", "j", "e"]);
+const CHORD_KEYS = new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "k", "p", "b", "j", "e", "."]);
 window.addEventListener(
   "keydown",
   (e) => {
@@ -41,11 +41,12 @@ window.addEventListener(
       e.preventDefault();
       e.stopPropagation();
       post({ type: "key", key: e.key, meta: true });
-    } else if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "f") {
-      // zen toggle works even with the preview focused
+    } else if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "p")) {
+      // ⌘⇧F search-in-files and ⌘⇧P command palette work even with the preview focused
+      // (plain ⌘F stays the page's own find)
       e.preventDefault();
       e.stopPropagation();
-      post({ type: "key", key: "F", meta: true, shift: true });
+      post({ type: "key", key: e.key.toUpperCase(), meta: true, shift: true });
     }
   },
   true,

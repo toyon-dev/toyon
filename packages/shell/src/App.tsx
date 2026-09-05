@@ -1,9 +1,10 @@
 import { Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import type { GitFileStatus, WorktreeStatus } from "@orchardist/shared";
+import type { GitFileStatus, RepoInfo, SearchHit, WorktreeStatus } from "@orchardist/shared";
 import { DaemonSocket, hasToken } from "./ws.ts";
 import { initial, reducer, type ChatItem, type State } from "./store.ts";
+import { Tooltips, tip } from "./Tooltip.tsx";
 
 const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
 
@@ -63,7 +64,7 @@ export function App() {
       } else if (e.metaKey && e.key === "k") {
         e.preventDefault();
         dispatch({ a: "show-prompt", v: true });
-      } else if (e.metaKey && e.key === "p") {
+      } else if (e.metaKey && !e.shiftKey && e.key === "p") {
         e.preventDefault();
         if (state.activeId) {
           sockRef.current?.send({ t: "list-files", worktreeId: state.activeId });
@@ -80,6 +81,12 @@ export function App() {
         }
       } else if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
+        if (state.activeId) dispatch({ a: "show-search", v: !state.showSearch });
+      } else if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        dispatch({ a: "show-commands", v: !state.showCommands });
+      } else if (e.metaKey && e.key === ".") {
+        e.preventDefault();
         dispatch({ a: "toggle-zen" });
       } else if (e.metaKey && e.key === "b") {
         e.preventDefault();
@@ -87,9 +94,15 @@ export function App() {
       } else if (e.metaKey && e.key === "j") {
         e.preventDefault();
         dispatch({ a: "toggle-right" });
+      } else if (e.metaKey && e.key === "/") {
+        e.preventDefault();
+        dispatch({ a: "show-keys", v: !state.showKeys });
       } else if (e.key === "Escape") {
-        if (state.zen) dispatch({ a: "toggle-zen" });
+        if (state.showKeys) dispatch({ a: "show-keys", v: false });
+        else if (state.zen) dispatch({ a: "toggle-zen" });
         else if (state.showQuickOpen) dispatch({ a: "quick-open", v: false });
+        else if (state.showSearch) dispatch({ a: "show-search", v: false });
+        else if (state.showCommands) dispatch({ a: "show-commands", v: false });
         else if (state.showPrompt) dispatch({ a: "show-prompt", v: false });
         else if (state.diff) dispatch({ a: "close-diff" });
       }
@@ -107,7 +120,7 @@ export function App() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("message", onMsg);
     };
-  }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.activeId, state.picking, state.zen]);
+  }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.showSearch, state.showCommands, state.activeId, state.picking, state.zen, state.showKeys]);
 
   // ship results: open PR/compare URLs, auto-dismiss toasts
   const openedRef = useRef<string | null>(null);
@@ -158,6 +171,8 @@ export function App() {
   const startDrag = (side: "left" | "right") => (e: React.PointerEvent) => {
     e.preventDefault();
     document.body.classList.add("resizing");
+    const handle = e.currentTarget;
+    handle.classList.add("active");
     const move = (ev: PointerEvent) => {
       if (side === "left") {
         const w = clampW(ev.clientX, 220);
@@ -172,6 +187,7 @@ export function App() {
     };
     const up = () => {
       document.body.classList.remove("resizing");
+      handle.classList.remove("active");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
@@ -192,12 +208,13 @@ export function App() {
 
   return (
     <div className={`app ${state.zen ? "zen" : ""}`}>
+      <Tooltips />
       <StatusBar state={state} active={active} dispatch={dispatch} sock={sock} navCenter={navCenter} />
       <div className="docks">
         <LeftDock state={state} dispatch={dispatch} sock={sock} width={leftW} />
-        {state.leftOpen && <div className="dock-resize" onPointerDown={startDrag("left")} />}
+        {state.leftOpen && <div className="dock-resize left" onPointerDown={startDrag("left")} />}
         <Center state={state} active={active} dispatch={dispatch} sock={sock} repo={repo} />
-        {state.rightOpen && <div className="dock-resize" onPointerDown={startDrag("right")} />}
+        {state.rightOpen && <div className="dock-resize right" onPointerDown={startDrag("right")} />}
         <RightDock state={state} active={active} sock={sock} dispatch={dispatch} width={rightW} />
         <WtRail state={state} dispatch={dispatch} sock={sock} />
       </div>
@@ -315,16 +332,16 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
       {(behind > 0 || ahead > 0 || active?.worktree.landed) && (
         <div className="dock-section-title changes-head">
           <span>
-            {behind > 0 && <span className="behind-badge" title={`${behind} commit(s) behind main`}>↓{behind} </span>}
-            {ahead > 0 && <span className="ahead-badge" title={`${ahead} commit(s) ahead of main`}>↑{ahead} </span>}
-            {active?.worktree.landed && <span className="landed-badge" title="Merged into main">✓ landed</span>}
+            {behind > 0 && <span className="behind-badge" data-tip={`${behind} commit(s) behind main`}>↓{behind} </span>}
+            {ahead > 0 && <span className="ahead-badge" data-tip={`${ahead} commit(s) ahead of main`}>↑{ahead} </span>}
+            {active?.worktree.landed && <span className="landed-badge" data-tip="Merged into main">✓ landed</span>}
           </span>
           {isWt && clean && (behind > 0 || ahead > 0) && (
             <span className="land-btns">
               {behind > 0 && (
                 <button
                   className="ship-btn"
-                  title={`Pull ${behind} commit(s) from main into this worktree`}
+                  data-tip={`Pull ${behind} commit(s) from main into this worktree`}
                   onClick={() => sock?.send({ t: "sync-main", worktreeId: active.worktree.id })}
                 >
                   sync ↓
@@ -334,7 +351,7 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
                 <>
                   <button
                     className="ship-btn"
-                    title={
+                    data-tip={
                       active.worktree.prUrl
                         ? "Merge locally — the open PR will show as merged once main is pushed"
                         : "Merge into main locally (no push)"
@@ -346,7 +363,7 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
                   {active.worktree.prUrl ? (
                     <button
                       className="ship-btn pr-open"
-                      title={`PR open — click to view · ${active.worktree.prUrl}`}
+                      data-tip={`PR open — click to view · ${active.worktree.prUrl}`}
                       onClick={() => window.open(active.worktree.prUrl, "_blank")}
                     >
                       pr open ↗
@@ -354,7 +371,7 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
                   ) : (
                     <button
                       className="ship-btn"
-                      title="Push and open a PR"
+                      data-tip="Push and open a PR"
                       onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
                     >
                       pr ↗
@@ -392,7 +409,7 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
               onKeyDown={(e) => e.key === "Enter" && commit()}
               placeholder="commit message…"
             />
-            <button className="ship-btn" disabled={!commitMsg.trim()} onClick={commit} title="git add -A && git commit">
+            <button className="ship-btn" disabled={!commitMsg.trim()} onClick={commit} data-tip="git add -A && git commit">
               commit
             </button>
           </div>
@@ -400,7 +417,7 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
       )}
       {(gitInfo?.committed?.length ?? 0) > 0 && (
         <>
-          <div className="dock-section-title" title="Committed on this branch, not yet on main">
+          <div className="dock-section-title" data-tip="Committed on this branch, not yet on main">
             committed · {gitInfo!.committed!.length}
           </div>
           {gitInfo!.committed!.map((f) => (
@@ -497,30 +514,7 @@ function WtRail({ state, dispatch, sock }: {
     };
   }, [menu]);
 
-  const rename = (w: WorktreeStatus) => {
-    if (w.worktree.kind === "main") return;
-    const title = window.prompt("Rename worktree (also renames its branch):", w.worktree.title);
-    if (title && title.trim()) {
-      sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
-    }
-  };
-
-  const pickVariant = (w: WorktreeStatus) => {
-    const v = w.worktree.variant;
-    if (!v) return;
-    const others = v.of - 1;
-    if (window.confirm(`Keep "${w.worktree.title}" and remove ${others} sibling variant(s)? Their branches and changes are deleted.`)) {
-      sock?.send({ t: "pick-variant", worktreeId: w.worktree.id });
-    }
-  };
-
-  const remove = (w: WorktreeStatus) => {
-    if (w.worktree.kind === "main") return;
-    const ok = window.confirm(
-      `Remove worktree "${w.worktree.title}"?\n\nThis deletes its directory and branch (${w.worktree.branch}). Unmerged changes are lost.`,
-    );
-    if (ok) sock?.send({ t: "remove-worktree", worktreeId: w.worktree.id });
-  };
+  const { rename, pickVariant, remove } = wtActions(sock);
 
   const menuWt = menu ? state.worktrees.find((w) => w.worktree.id === menu.id) ?? null : null;
 
@@ -541,7 +535,8 @@ function WtRail({ state, dispatch, sock }: {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, id: w.worktree.id });
               }}
-              title={`⌘${i + 1} · ${w.worktree.branch}${(w.dirty ?? 0) > 0 ? ` · ${w.dirty} uncommitted` : ""}${graftMode ? " · click to select" : " · shift-click to graft"}`}
+              data-tip-key={keyHint(i, state.worktrees.length)}
+              data-tip={`${w.worktree.branch}${(w.dirty ?? 0) > 0 ? ` · ${w.dirty} uncommitted` : ""}${graftMode ? " · click to select" : " · shift-click to graft"}`}
             >
               {graftMode && w.worktree.kind !== "main" && (
                 <input
@@ -560,7 +555,7 @@ function WtRail({ state, dispatch, sock }: {
               {w.worktree.variant && (
                 <span
                   className="row-badge variant-badge clickable"
-                  title={`variant ${w.worktree.variant.index} of ${w.worktree.variant.of} — click to keep this one and remove the others`}
+                  data-tip={`variant ${w.worktree.variant.index} of ${w.worktree.variant.of} — click to keep this one and remove the others`}
                   onClick={(e) => {
                     e.stopPropagation();
                     pickVariant(w);
@@ -573,7 +568,7 @@ function WtRail({ state, dispatch, sock }: {
               {(w.dirty ?? 0) > 0 && (
                 <span
                   className="row-badge dirty-badge clickable"
-                  title={`${w.dirty} uncommitted file(s) — click to view changes`}
+                  data-tip={`${w.dirty} uncommitted file(s) — click to view changes`}
                   onClick={(e) => {
                     e.stopPropagation();
                     dispatch({ a: "activate", id: w.worktree.id });
@@ -587,7 +582,7 @@ function WtRail({ state, dispatch, sock }: {
               {(w.behind ?? 0) > 0 && (
                 <span
                   className="row-badge behind-badge clickable"
-                  title={`${w.behind} commit(s) behind main — click to sync`}
+                  data-tip={`${w.behind} commit(s) behind main — click to sync`}
                   onClick={(e) => {
                     e.stopPropagation();
                     sock?.send({ t: "sync-main", worktreeId: w.worktree.id });
@@ -600,7 +595,7 @@ function WtRail({ state, dispatch, sock }: {
               {(w.ahead ?? 0) > 0 && (
                 <span
                   className="row-badge ahead-badge clickable"
-                  title={`${w.ahead} commit(s) ahead of main — land it`}
+                  data-tip={`${w.ahead} commit(s) ahead of main — land it`}
                   onClick={(e) => {
                     e.stopPropagation();
                     const r = (e.target as HTMLElement).getBoundingClientRect();
@@ -613,7 +608,7 @@ function WtRail({ state, dispatch, sock }: {
               )}
               <span
                 className="wt-more"
-                title="Actions"
+                {...tip("Actions")}
                 onClick={(e) => {
                   e.stopPropagation();
                   const r = (e.target as HTMLElement).getBoundingClientRect();
@@ -629,7 +624,7 @@ function WtRail({ state, dispatch, sock }: {
               <button
                 className="bulk-btn combine-btn"
                 disabled={sel.length < 2}
-                title="Preview these worktrees merged together (local octopus merge)"
+                data-tip="Preview these worktrees merged together (local octopus merge)"
                 onClick={() => {
                   sock?.send({ t: "combine", worktreeIds: sel });
                   cancelGraft();
@@ -640,7 +635,7 @@ function WtRail({ state, dispatch, sock }: {
               <button
                 className="bulk-btn"
                 disabled={!sel.some((id) => (state.worktrees.find((w) => w.worktree.id === id)?.behind ?? 0) > 0)}
-                title="Pull main into every selected worktree that's behind"
+                data-tip="Pull main into every selected worktree that's behind"
                 onClick={() => {
                   for (const id of sel) {
                     const w = state.worktrees.find((x) => x.worktree.id === id);
@@ -654,7 +649,7 @@ function WtRail({ state, dispatch, sock }: {
               <button
                 className="bulk-btn danger"
                 disabled={sel.length === 0}
-                title="Remove all selected worktrees (branches and changes deleted)"
+                data-tip="Remove all selected worktrees (branches and changes deleted)"
                 onClick={() => {
                   if (
                     window.confirm(
@@ -668,13 +663,13 @@ function WtRail({ state, dispatch, sock }: {
               >
                 remove…
               </button>
-              <button className="bulk-btn" title="Cancel (esc)" onClick={cancelGraft}>
+              <button className="bulk-btn" {...tip("Cancel", "esc")} onClick={cancelGraft}>
                 ✕
               </button>
             </div>
           )}
           {!graftMode && (
-            <button className="new-wt" title="New worktree (⌘K)" onClick={() => dispatch({ a: "show-prompt", v: true })}>
+            <button className="new-wt" data-tip="New worktree" data-tip-key="⌘K" onClick={() => dispatch({ a: "show-prompt", v: true })}>
               <span className="nw-full">+ new worktree</span>
               <span className="nw-mini">+</span>
               <span className="kbd-hint nw-full">⌘K</span>
@@ -684,10 +679,10 @@ function WtRail({ state, dispatch, sock }: {
       )}
       <div
         className={`rail-foot ${state.connected ? "" : "off"}`}
-        title={state.connected ? "Connected to daemon" : "Reconnecting to daemon"}
+        data-tip={state.connected ? "Connected to daemon" : "Reconnecting to daemon"}
       >
-        <span className="conn-dot" />
         <span className="nw-full conn-label">{state.connected ? "connected" : "reconnecting…"}</span>
+        <span className="conn-dot" />
       </div>
       {menu && menuWt && menu.land && (
         <div className="ctx-menu" style={{ left: Math.min(menu.x, window.innerWidth - 180), top: menu.y }}>
@@ -741,6 +736,135 @@ function WtRail({ state, dispatch, sock }: {
           ) : null}
         </div>
       )}
+      </div>
+    </div>
+  );
+}
+
+/** confirm-then-send worktree actions, shared by the rail's context menu and the ⌘⇧P palette */
+function wtActions(sock: Sock) {
+  return {
+    rename(w: WorktreeStatus) {
+      if (w.worktree.kind === "main") return;
+      const title = window.prompt("Rename worktree (also renames its branch):", w.worktree.title);
+      if (title && title.trim()) {
+        sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
+      }
+    },
+    pickVariant(w: WorktreeStatus) {
+      const v = w.worktree.variant;
+      if (!v) return;
+      const others = v.of - 1;
+      if (window.confirm(`Keep "${w.worktree.title}" and remove ${others} sibling variant(s)? Their branches and changes are deleted.`)) {
+        sock?.send({ t: "pick-variant", worktreeId: w.worktree.id });
+      }
+    },
+    remove(w: WorktreeStatus) {
+      if (w.worktree.kind === "main") return;
+      const ok = window.confirm(
+        `Remove worktree "${w.worktree.title}"?\n\nThis deletes its directory and branch (${w.worktree.branch}). Unmerged changes are lost.`,
+      );
+      if (ok) sock?.send({ t: "remove-worktree", worktreeId: w.worktree.id });
+    },
+  };
+}
+
+type Command = { id: string; label: string; hint?: string; run: () => void };
+
+/** everything the UI can do, as typeable commands — chords first, then the context-menu long tail */
+function buildCommands(state: State, dispatch: Dispatch, sock: Sock, active: WorktreeStatus | null, repo: RepoInfo | null): Command[] {
+  const cmds: Command[] = [];
+  const add = (id: string, label: string, run: () => void, hint?: string) => cmds.push({ id, label, hint, run });
+  const wt = active;
+  const id = wt?.worktree.id;
+
+  if (repo) add("new", "new worktree…", () => dispatch({ a: "show-prompt", v: true }), "⌘K");
+  if (id) {
+    add("jump", "jump to file…", () => { sock?.send({ t: "list-files", worktreeId: id }); dispatch({ a: "quick-open", v: true }); }, "⌘P");
+    add("search", "search in files…", () => dispatch({ a: "show-search", v: true }), "⌘⇧F");
+    add("pick", state.picking ? "cancel element picker" : "pick an element on the page", () => {
+      if (state.picking) { previewBus.post(id, { type: "pick-cancel" }); dispatch({ a: "set-picking", v: false }); }
+      else { previewBus.post(id, { type: "pick-start" }); dispatch({ a: "set-picking", v: true }); }
+    }, "⌘E");
+    add("reload", "reload preview", () => previewBus.post(id, { type: "reload" }));
+  }
+  add("left", `${state.leftOpen ? "hide" : "show"} changes panel`, () => dispatch({ a: "toggle-left" }), "⌘B");
+  add("right", `${state.rightOpen ? "hide" : "show"} chat panel`, () => dispatch({ a: "toggle-right" }), "⌘J");
+  add("zen", state.zen ? "exit zen" : "zen — full-bleed preview", () => dispatch({ a: "toggle-zen" }), "⌘.");
+  add("keys", "keyboard shortcuts", () => dispatch({ a: "show-keys", v: true }), "⌘/");
+
+  if (wt && id) {
+    const acts = wtActions(sock);
+    const t = wt.worktree.title;
+    if (wt.agent === "working") add("stop", `stop agent — ${t}`, () => sock?.send({ t: "stop-agent", worktreeId: id }));
+    for (const p of wt.procs) add(`restart:${p.name}`, `restart ${p.name} (${p.status})`, () => sock?.send({ t: "restart-proc", worktreeId: id, proc: p.name }));
+    add("reveal", `reveal in Finder — ${t}`, () => sock?.send({ t: "reveal", worktreeId: id }));
+    if ((wt.behind ?? 0) > 0) add("sync", `sync main into ${t} (${wt.behind} behind)`, () => sock?.send({ t: "sync-main", worktreeId: id }));
+    if (wt.worktree.kind !== "main") {
+      add("rename", `rename worktree — ${t}…`, () => acts.rename(wt));
+      if (wt.worktree.variant) add("keep", `keep this variant — ${t}…`, () => acts.pickVariant(wt));
+      add("merge", `merge ${t} into main`, () => sock?.send({ t: "merge-main", worktreeId: id }));
+      add("ship", `push + PR — ${t}`, () => sock?.send({ t: "ship", worktreeId: id }));
+      add("remove", `remove worktree — ${t}…`, () => acts.remove(wt));
+    }
+  }
+  state.worktrees.forEach((w, i) => {
+    if (w.worktree.id === id) return;
+    add(`go:${w.worktree.id}`, `switch to ${w.worktree.title}`, () => dispatch({ a: "activate", id: w.worktree.id }), keyHint(i, state.worktrees.length)?.trim());
+  });
+  return cmds;
+}
+
+function CommandPalette({ commands, onClose }: { commands: Command[]; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const [idx, setIdx] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+    const f = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(f);
+  }, []);
+  const results = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return commands;
+    const scored: Array<{ c: Command; score: number }> = [];
+    for (const c of commands) {
+      const s = fuzzyScore(c.label.toLowerCase(), needle);
+      if (s > 0) scored.push({ c, score: s });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((x) => x.c);
+  }, [q, commands]);
+  useEffect(() => setIdx(0), [q]);
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>(".qo-item.active")?.scrollIntoView({ block: "nearest" });
+  }, [idx]);
+  const run = (c: Command) => { onClose(); c.run(); };
+  return (
+    <div className="prompt-overlay" onClick={onClose}>
+      <div className="prompt-box quick-open" onClick={(e) => e.stopPropagation()}>
+        <input
+          ref={inputRef}
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, results.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Enter" && results[idx]) { e.preventDefault(); run(results[idx]!); }
+          }}
+          placeholder="run a command…"
+        />
+        <div className="qo-list" ref={listRef}>
+          {results.map((c, i) => (
+            <button key={c.id} className={`qo-item cmd-item ${i === idx ? "active" : ""}`} onClick={() => run(c)}>
+              <span className="cmd-label">{c.label}</span>
+              {c.hint && <span className="cmd-hint">{c.hint}</span>}
+            </button>
+          ))}
+          {results.length === 0 && <div className="dock-empty">no matching command</div>}
+        </div>
       </div>
     </div>
   );
@@ -877,6 +1001,8 @@ function Center({ state, active, dispatch, sock, repo }: {
   const startDiffDrag = (e: React.PointerEvent) => {
     e.preventDefault();
     document.body.classList.add("resizing");
+    const handle = e.currentTarget;
+    handle.classList.add("active");
     const move = (ev: PointerEvent) => {
       const rect = centerRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -886,6 +1012,7 @@ function Center({ state, active, dispatch, sock, repo }: {
     };
     const up = () => {
       document.body.classList.remove("resizing");
+      handle.classList.remove("active");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
@@ -950,6 +1077,26 @@ function Center({ state, active, dispatch, sock, repo }: {
           onClose={() => dispatch({ a: "quick-open", v: false })}
         />
       )}
+      {state.showSearch && active && (
+        <SearchPalette
+          worktreeId={active.worktree.id}
+          results={state.search?.worktreeId === active.worktree.id ? state.search : null}
+          onQuery={(q) => sock?.send({ t: "search", worktreeId: active.worktree.id, query: q })}
+          onPick={(hit) => {
+            dispatch({ a: "goto-line", v: { worktreeId: active.worktree.id, path: hit.path, line: hit.line } });
+            sock?.send({ t: "file-diff", worktreeId: active.worktree.id, path: hit.path });
+            if (!state.leftOpen) dispatch({ a: "toggle-left" });
+            dispatch({ a: "show-search", v: false });
+          }}
+          onClose={() => dispatch({ a: "show-search", v: false })}
+        />
+      )}
+      {state.showCommands && (
+        <CommandPalette
+          commands={buildCommands(state, dispatch, sock, active, repo)}
+          onClose={() => dispatch({ a: "show-commands", v: false })}
+        />
+      )}
       {state.showPrompt && repo && (
         <PromptOverlay
           onSubmit={(text, variants, batch) => {
@@ -999,7 +1146,7 @@ function DiffView({ diff, state, dispatch, sock, height, full, onToggleFull, onD
         <button
           className="deep-link"
           onClick={onToggleFull}
-          title={full ? "Split view — show the preview above" : "Full height — hide the preview"}
+          data-tip={full ? "Split view — show the preview above" : "Full height — hide the preview"}
         >
           {full ? "◫ split" : "⬒ full"}
         </button>
@@ -1007,13 +1154,14 @@ function DiffView({ diff, state, dispatch, sock, height, full, onToggleFull, onD
           absPath={absPath}
           onReveal={() => sock?.send({ t: "reveal", worktreeId: diff.worktreeId, path: diff.path })}
         />
-        <button onClick={() => dispatch({ a: "close-diff" })} title="Close (esc)">✕</button>
+        <button onClick={() => dispatch({ a: "close-diff" })} {...tip("Close", "esc")}>✕</button>
       </div>
       <Suspense fallback={<div className="empty">loading diff…</div>}>
         <MonacoDiff
           before={diff.before}
           after={diff.after}
           path={diff.path}
+          line={diff.line}
           onSave={(content) =>
             sock?.send({ t: "write-file", worktreeId: diff.worktreeId, path: diff.path, content })
           }
@@ -1123,7 +1271,7 @@ function ConfigCard({ repo, sock }: { repo: State["repos"][number]; sock: Sock }
               placeholder="bun run dev · uvicorn main:app --reload --port $PORT · ./start.sh"
               onChange={(e) => setProcs(procs.map((x, j) => (j === i ? { ...x, cmd: e.target.value } : x)))}
             />
-            <button title="Remove" onClick={() => setProcs(procs.filter((_, j) => j !== i))}>✕</button>
+            <button {...tip("Remove")} onClick={() => setProcs(procs.filter((_, j) => j !== i))}>✕</button>
           </div>
         ))}
         <button className="new-wt" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
@@ -1136,7 +1284,7 @@ function ConfigCard({ repo, sock }: { repo: State["repos"][number]; sock: Sock }
           onChange={(e) => setSetup(e.target.value)}
           placeholder={"bun install\ncp ../../.env .env"}
         />
-        <label className="cfg-exclusive" title="For apps that can't take $PORT: only the focused worktree's processes run">
+        <label className="cfg-exclusive" data-tip="For apps that can't take $PORT: only the focused worktree's processes run">
           <input type="checkbox" checked={exclusive} onChange={(e) => setExclusive(e.target.checked)} />
           <span>exclusive — commands can't honor $PORT, run only the focused worktree</span>
         </label>
@@ -1249,13 +1397,13 @@ function PromptOverlay({ onSubmit, onClose }: {
           }
         />
         <div className="variants-row">
-          <label title="An agent decomposes the request into independent tasks and starts a worktree for each">
+          <label data-tip="An agent decomposes the request into independent tasks and starts a worktree for each">
             <input type="checkbox" checked={batch} onChange={(e) => setBatch(e.target.checked)} />
             <span>batch</span>
           </label>
           {!batch && (
             <span className="variants-right">
-              <span title="Run the same prompt in N parallel worktrees — keep the best">variants</span>
+              <span data-tip="Run the same prompt in N parallel worktrees — keep the best">variants</span>
               {[1, 2, 3].map((n) => (
                 <button
                   key={n}
@@ -1399,7 +1547,7 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
             working…
             <button
               className="stop-btn"
-              title="Stop the agent (context up to here is kept; queued messages dropped)"
+              data-tip="Stop the agent (context up to here is kept; queued messages dropped)"
               onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
             >
               ■ stop
@@ -1413,7 +1561,7 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
               <span className="queued-text">{text}</span>
               <span className="queued-actions">
                 <button
-                  title="Edit — removes from queue, puts it back in the input"
+                  {...tip("Edit — removes from queue, puts it back in the input")}
                   onClick={() => {
                     sock?.send({ t: "unqueue", worktreeId: active.worktree.id, index: i });
                     setText(text);
@@ -1422,7 +1570,7 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
                   ✎
                 </button>
                 <button
-                  title="Remove from queue"
+                  {...tip("Remove from queue")}
                   onClick={() => sock?.send({ t: "unqueue", worktreeId: active.worktree.id, index: i })}
                 >
                   ✕
@@ -1432,7 +1580,7 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
           ))}
         </div>
         {showJump && (
-          <button className="jump-down" onClick={jumpDown} title="Jump to latest">
+          <button className="jump-down" onClick={jumpDown} data-tip="Jump to latest">
             ↓ new messages
           </button>
         )}
@@ -1441,7 +1589,7 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
         {pick && (
           <div
             className="pick-chip"
-            title={pick.html}
+            data-tip={pick.html}
             onMouseEnter={() =>
               previewBus.post(active!.worktree.id, {
                 type: "highlight-selector",
@@ -1459,7 +1607,7 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
                 </span>
               )}
             </span>
-            <button title="Remove attachment" onClick={() => dispatch({ a: "clear-pick" })}>✕</button>
+            <button {...tip("Remove attachment")} onClick={() => dispatch({ a: "clear-pick" })}>✕</button>
           </div>
         )}
         <textarea
@@ -1481,7 +1629,7 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
           disabled={!active}
         />
         <div className="chat-hint spawn-row">
-          <label title={isMain ? "Unchecked: the agent edits your main working copy directly" : "Checked: fork a new worktree from this one instead of continuing here"}>
+          <label data-tip={isMain ? "Unchecked: the agent edits your main working copy directly" : "Checked: fork a new worktree from this one instead of continuing here"}>
             <input type="checkbox" checked={spawnNew} onChange={(e) => setSpawnNew(e.target.checked)} />
             <span>
               new worktree from <b>{active?.worktree.title ?? "—"}</b>
@@ -1490,7 +1638,7 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
           <button
             className={`composer-pick ${state.picking ? "rb-on" : ""}`}
             disabled={!active}
-            title="Pick an element on the page to attach (⌘E)"
+            {...tip("Pick an element on the page to attach", "⌘E")}
             onClick={() => {
               if (!active) return;
               if (state.picking) {
@@ -1530,7 +1678,7 @@ function ChatItemView({ item, onPickHover }: {
           {item.pick && (
             <div
               className="pick-chip in-chat"
-              title="Hover to highlight on the page"
+              data-tip="Hover to highlight on the page"
               onMouseEnter={() => onPickHover?.(item.pick!, true)}
               onMouseLeave={() => onPickHover?.(item.pick!, false)}
             >
@@ -1552,7 +1700,7 @@ function ChatItemView({ item, onPickHover }: {
       return <div className="msg-assistant" style={{ color: "var(--red)" }}>{item.text}</div>;
     case "blocked":
       return (
-        <div className="blocked-row" title={item.reason}>
+        <div className="blocked-row" data-tip={item.reason}>
           <span className="blocked-tag">blocked</span>
           <span className="tool-name">{item.tool}</span>
           <span className="tool-hint">{item.path}</span>
@@ -1581,6 +1729,84 @@ function toolHint(item: Extract<ChatItem, { kind: "tool" }>): string {
   return typeof v === "string" ? v : "";
 }
 
+/** ⌘⇧F: content search across the active worktree (git grep in the daemon, debounced) */
+function SearchPalette({ worktreeId, results, onQuery, onPick, onClose }: {
+  worktreeId: string;
+  results: { query: string; hits: SearchHit[]; truncated: boolean } | null;
+  onQuery: (q: string) => void;
+  onPick: (hit: SearchHit) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [idx, setIdx] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // focus on open — the chord may arrive while the preview iframe or Monaco holds focus,
+  // and autoFocus alone loses that race, so take it explicitly on the next frame too
+  useEffect(() => {
+    inputRef.current?.focus();
+    const f = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(f);
+  }, []);
+
+  // debounce the round trip; short queries would match everything
+  useEffect(() => {
+    const t = q.trim();
+    if (t.length < 2) return;
+    const h = setTimeout(() => onQuery(t), 150);
+    return () => clearTimeout(h);
+  }, [q, worktreeId]);
+  useEffect(() => setIdx(0), [results?.query]);
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>(".qo-item.active")?.scrollIntoView({ block: "nearest" });
+  }, [idx]);
+
+  const stale = !results || results.query.trim() !== q.trim();
+  const hits = results && q.trim().length >= 2 ? results.hits : [];
+  return (
+    <div className="prompt-overlay" onClick={onClose}>
+      <div className="prompt-box quick-open" onClick={(e) => e.stopPropagation()}>
+        <input
+          ref={inputRef}
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, hits.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Enter" && hits[idx]) { e.preventDefault(); onPick(hits[idx]!); }
+          }}
+          placeholder="search in files…"
+        />
+        <div className="qo-list" ref={listRef}>
+          {hits.map((h, i) => (
+            <button
+              key={`${h.path}:${h.line}`}
+              className={`qo-item sr-item ${i === idx ? "active" : ""}`}
+              onClick={() => onPick(h)}
+              title={`${h.path}:${h.line}`}
+            >
+              <span className="sr-loc">{h.path}<span className="sr-line">:{h.line}</span></span>
+              <span className="sr-text">{h.text}</span>
+            </button>
+          ))}
+          {q.trim().length < 2 && <div className="dock-empty">type at least two characters</div>}
+          {q.trim().length >= 2 && !stale && hits.length === 0 && <div className="dock-empty">no matches</div>}
+          {q.trim().length >= 2 && stale && hits.length === 0 && <div className="dock-empty">searching…</div>}
+          {results?.truncated && !stale && <div className="dock-empty">showing the first {hits.length} — narrow the search</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** the ⌘N chord that reaches worktree i, if any: ⌘1–8 by position, ⌘9 always the last one */
+function keyHint(i: number, count: number): string | undefined {
+  if (i === count - 1) return "⌘9";
+  return i < 8 ? `⌘${i + 1}` : undefined;
+}
+
 const KEY_ROWS: Array<[string, string]> = [
   ["⌘1–9", "switch worktree · ⌘9 is always the last"],
   ["⌘K", "new worktree (variants · batch)"],
@@ -1588,14 +1814,12 @@ const KEY_ROWS: Array<[string, string]> = [
   ["⌘E", "pick an element on the page"],
   ["⌘B", "changes panel"],
   ["⌘J", "chat panel"],
-  ["⌘⇧F", "zen — full-bleed preview"],
+  ["⌘⇧F", "search in files"],
+  ["⌘⇧P", "command palette"],
+  ["⌘.", "zen — full-bleed preview"],
+  ["⌘/", "this list"],
 ];
 function KeysHelp({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
   return (
     <div className="keys-overlay" onClick={onClose}>
       <div className="keys-card" onClick={(e) => e.stopPropagation()}>
@@ -1613,19 +1837,27 @@ function KeysHelp({ onClose }: { onClose: () => void }) {
   );
 }
 
-function PanelIcon({ side, filled }: { side: "left" | "right"; filled: boolean }) {
-  const bar = side === "left" ? { x: 1.5, width: 4.5 } : { x: 10, width: 4.5 };
+/* every status-bar glyph comes from here — same 16px box, same 1.3 stroke — so
+   the row reads as one family (font glyphs each brought their own weight) */
+type IconName = "branch" | "chat" | "help" | "zen" | "back" | "forward" | "reload";
+const ICON_PATHS: Record<IconName, string> = {
+  branch: "M4.5 5.1v5.8 M11.5 6.6c0 2.6-7 1.6-7 4.3 M4.5 1.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M4.5 10.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M11.5 3.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z",
+  chat: "M2.5 3.5a1.5 1.5 0 0 1 1.5-1.5h8a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H7l-3.2 2.6V11H4a1.5 1.5 0 0 1-1.5-1.5z",
+  help: "M6 6a2.1 2.1 0 1 1 3.9.8c0 1.4-1.9 1.7-1.9 3 M8 12.6h.01",
+  zen: "M2.5 6V3.5a1 1 0 0 1 1-1H6 M10 2.5h2.5a1 1 0 0 1 1 1V6 M13.5 10v2.5a1 1 0 0 1-1 1H10 M6 13.5H3.5a1 1 0 0 1-1-1V10",
+  back: "M9.5 3.5 5 8l4.5 4.5",
+  forward: "M6.5 3.5 11 8l-4.5 4.5",
+  reload: "M13.5 2.5v3.5H10 M12.4 9.2a4.8 4.8 0 1 1-1-4.9l2.1 1.7",
+};
+function Icon({ name }: { name: IconName }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      {filled && <rect {...bar} y="3.7" height="8.6" rx="0.8" fill="currentColor" opacity="0.75" />}
-      {!filled && <line x1={side === "left" ? 6 : 10} y1="3" x2={side === "left" ? 6 : 10} y2="13" stroke="currentColor" strokeWidth="1.2" />}
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d={ICON_PATHS[name]} />
     </svg>
   );
 }
 
 function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State; active: WorktreeStatus | null; dispatch: Dispatch; sock: Sock; navCenter: number }) {
-  const [showKeys, setShowKeys] = useState(false);
   const [installEvt, setInstallEvt] = useState<{ prompt: () => Promise<unknown> } | null>(null);
   useEffect(() => {
     // already running as an app (--app window or installed PWA): don't offer install
@@ -1672,14 +1904,14 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
       <button
         className={`toggle icon ${state.leftOpen ? "on" : ""}`}
         onClick={() => dispatch({ a: "toggle-left" })}
-        title="Toggle worktrees panel (⌘B)"
+        {...tip("Changes panel", "⌘B")}
       >
-        <PanelIcon side="left" filled={state.leftOpen} />
+        <Icon name="branch" />
       </button>
       <div className="rb-center" style={{ left: navCenter }}>
-      <button className="rb-btn rb-nav" disabled={!ready} title="Back" onClick={() => id && previewBus.post(id, { type: "back" })}>‹</button>
-      <button className="rb-btn rb-nav" disabled={!ready} title="Forward" onClick={() => id && previewBus.post(id, { type: "forward" })}>›</button>
-      <button className="rb-btn rb-nav rb-reload" disabled={!ready} title="Reload preview" onClick={() => id && previewBus.post(id, { type: "reload" })}>⟳</button>
+      <button className="rb-btn rb-nav" disabled={!ready} {...tip("Back")} onClick={() => id && previewBus.post(id, { type: "back" })}><Icon name="back" /></button>
+      <button className="rb-btn rb-nav" disabled={!ready} {...tip("Forward")} onClick={() => id && previewBus.post(id, { type: "forward" })}><Icon name="forward" /></button>
+      <button className="rb-btn rb-nav rb-reload" disabled={!ready} {...tip("Reload preview")} onClick={() => id && previewBus.post(id, { type: "reload" })}><Icon name="reload" /></button>
       <input
         className="rb-path"
         value={ready ? val : ""}
@@ -1702,7 +1934,7 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
       {installEvt && (
         <button
           className="toggle"
-          title="Install Orchardist as an app (own window, dock icon)"
+          data-tip="Install Orchardist as an app (own window, dock icon)"
           onClick={() => void installEvt.prompt()}
         >
           ⇣ install app
@@ -1716,31 +1948,34 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
           <button
             key={p.name}
             className="proc"
-            title={`${p.command} — ${p.status} on :${p.port} · click to restart`}
+            data-tip={`${p.command} — ${p.status} on :${p.port} · click to restart`}
             onClick={() => sock?.send({ t: "restart-proc", worktreeId: active.worktree.id, proc: p.name })}
           >
             <span className={`dot ${p.status === "crashed" ? "crashed" : "starting"}`} />
             {p.name} {p.status}
           </button>
         ))}
-      <button className="toggle icon keys-btn" title="Keyboard shortcuts" onClick={() => setShowKeys(true)}>
-        ?
-      </button>
-      <button
-        className="toggle icon keys-btn"
-        title="Zen — full-bleed preview (⌘⇧F · esc exits)"
-        onClick={() => dispatch({ a: "toggle-zen" })}
-      >
-        ⛶
-      </button>
-      {showKeys && <KeysHelp onClose={() => setShowKeys(false)} />}
-      <button
-        className={`toggle icon ${state.rightOpen ? "on" : ""}`}
-        onClick={() => dispatch({ a: "toggle-right" })}
-        title="Toggle chat panel (⌘J)"
-      >
-        <PanelIcon side="right" filled={state.rightOpen} />
-      </button>
+      {/* right cluster: help · chat toggle · zen (zen last — it hides everything, so it sits at the edge) */}
+      <span className="bar-tools">
+        <button className="toggle icon keys-btn" {...tip("Keyboard shortcuts", "⌘/")} onClick={() => dispatch({ a: "show-keys", v: true })}>
+          <Icon name="help" />
+        </button>
+        <button
+          className={`toggle icon ${state.rightOpen ? "on" : ""}`}
+          onClick={() => dispatch({ a: "toggle-right" })}
+          {...tip("Chat panel", "⌘J")}
+        >
+          <Icon name="chat" />
+        </button>
+        <button
+          className="toggle icon keys-btn"
+          {...tip("Zen — full-bleed preview, esc exits", "⌘.")}
+          onClick={() => dispatch({ a: "toggle-zen" })}
+        >
+          <Icon name="zen" />
+        </button>
+      </span>
+      {state.showKeys && <KeysHelp onClose={() => dispatch({ a: "show-keys", v: false })} />}
     </div>
   );
 }

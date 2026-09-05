@@ -1,5 +1,5 @@
 import type {
-  AgentEvent, GitFileStatus, RepoInfo, ServerMsg, WorktreeStatus,
+  AgentEvent, GitFileStatus, RepoInfo, SearchHit, ServerMsg, WorktreeStatus,
 } from "@orchardist/shared";
 
 export type ChatItem =
@@ -18,7 +18,7 @@ export interface State {
   chats: Record<string, ChatItem[]>;
   git: Record<string, { files: GitFileStatus[]; committed?: GitFileStatus[]; ahead?: number; behind?: number }>;
   logs: Record<string, string[]>;
-  diff: { worktreeId: string; path: string; before: string; after: string } | null;
+  diff: { worktreeId: string; path: string; before: string; after: string; line?: number } | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
   prefill: { worktreeId: string; text: string } | null;
   files: Record<string, string[]>;
@@ -47,6 +47,11 @@ export interface State {
   /** changed line ranges cache, keyed `${worktreeId}:${path}` */
   changedRanges: Record<string, { ranges: Array<[number, number]>; offset: number }>;
   showQuickOpen: boolean;
+  /** ⌘⇧F content search palette + last results for the active worktree */
+  showSearch: boolean;
+  search: { worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean } | null;
+  /** a search hit was picked: reveal this line once its file-diff arrives */
+  gotoLine: { worktreeId: string; path: string; line: number } | null;
   showPrompt: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
@@ -54,6 +59,10 @@ export interface State {
   leftAuto: boolean;
   /** full-bleed preview: all chrome hidden */
   zen: boolean;
+  /** keyboard shortcuts overlay (⌘/ or the ? button) */
+  showKeys: boolean;
+  /** ⌘⇧P command palette */
+  showCommands: boolean;
 }
 
 export const initial: State = {
@@ -77,11 +86,16 @@ export const initial: State = {
   pick: null,
   changedRanges: {},
   showQuickOpen: false,
+  showSearch: false,
+  search: null,
+  gotoLine: null,
   showPrompt: false,
   leftOpen: true,
   rightOpen: true,
   leftAuto: true,
   zen: false,
+  showKeys: false,
+  showCommands: false,
 };
 
 export type Action =
@@ -92,6 +106,8 @@ export type Action =
   | { a: "dismiss-toast" }
   | { a: "clear-prefill" }
   | { a: "quick-open"; v: boolean }
+  | { a: "show-search"; v: boolean }
+  | { a: "goto-line"; v: { worktreeId: string; path: string; line: number } | null }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
   | { a: "set-picking"; v: boolean }
@@ -100,7 +116,9 @@ export type Action =
   | { a: "show-prompt"; v: boolean }
   | { a: "toggle-left" }
   | { a: "toggle-right" }
-  | { a: "toggle-zen" };
+  | { a: "toggle-zen" }
+  | { a: "show-keys"; v: boolean }
+  | { a: "show-commands"; v: boolean };
 
 export function reducer(s: State, action: Action): State {
   switch (action.a) {
@@ -116,6 +134,10 @@ export function reducer(s: State, action: Action): State {
       return { ...s, prefill: null };
     case "quick-open":
       return { ...s, showQuickOpen: action.v };
+    case "show-search":
+      return { ...s, showSearch: action.v };
+    case "goto-line":
+      return { ...s, gotoLine: action.v };
     case "hmr":
       return { ...s, turnHmr: { ...s.turnHmr, [action.id]: true } };
     case "page": {
@@ -145,6 +167,10 @@ export function reducer(s: State, action: Action): State {
         zen: !s.zen,
         toast: !s.zen ? { ok: true, message: "zen — esc or ⌘⇧F to exit" } : s.toast,
       };
+    case "show-keys":
+      return { ...s, showKeys: action.v };
+    case "show-commands":
+      return { ...s, showCommands: action.v };
     case "server":
       return onServer(s, action.msg);
   }
@@ -253,8 +279,11 @@ function onServer(s: State, msg: ServerMsg): State {
           [`${msg.worktreeId}:${msg.path}`]: { ranges: msg.ranges, offset: msg.lineOffset },
         },
       };
-    case "file-diff":
-      return { ...s, diff: msg };
+    case "file-diff": {
+      const g = s.gotoLine;
+      const line = g && g.worktreeId === msg.worktreeId && g.path === msg.path ? g.line : undefined;
+      return { ...s, diff: { ...msg, line }, gotoLine: null };
+    }
     case "shipped":
       return {
         ...s,
@@ -270,6 +299,8 @@ function onServer(s: State, msg: ServerMsg): State {
       };
     case "files":
       return { ...s, files: { ...s.files, [msg.worktreeId]: msg.paths } };
+    case "search-results":
+      return { ...s, search: { worktreeId: msg.worktreeId, query: msg.query, hits: msg.hits, truncated: msg.truncated } };
     case "queue":
       return { ...s, queues: { ...s.queues, [msg.worktreeId]: msg.items } };
     case "error":

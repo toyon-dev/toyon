@@ -299,6 +299,32 @@ export function startServer(opts: {
         ws.send(JSON.stringify({ t: "files", worktreeId: wt.id, paths } satisfies ServerMsg));
         break;
       }
+      case "search": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) throw new Error("unknown worktree");
+        const q = msg.query.trim();
+        const MAX = 300;
+        const hits: import("@orchardist/shared").SearchHit[] = [];
+        let truncated = false;
+        if (q.length >= 2) {
+          const { spawnSync } = await import("node:child_process");
+          // fixed-string, case-insensitive, binaries skipped; tracked + untracked (not ignored)
+          const r = spawnSync(
+            "git",
+            ["grep", "-n", "-I", "-i", "-F", "--untracked", "--no-color", `--max-count=${MAX}`, "-e", q, "--"],
+            { cwd: wt.path, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+          );
+          for (const row of (r.stdout ?? "").split("\n")) {
+            if (!row) continue;
+            const m = /^(.+?):(\d+):(.*)$/.exec(row);
+            if (!m) continue;
+            if (hits.length >= MAX) { truncated = true; break; }
+            hits.push({ path: m[1]!, line: Number(m[2]), text: m[3]!.trim().slice(0, 200) });
+          }
+        }
+        ws.send(JSON.stringify({ t: "search-results", worktreeId: wt.id, query: msg.query, hits, truncated } satisfies ServerMsg));
+        break;
+      }
       case "stop-agent": {
         manager.agentFor(msg.worktreeId)?.stop();
         break;

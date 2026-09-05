@@ -367,6 +367,16 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
       )}
       {menu && menuWt && !menu.land && (
         <div className="ctx-menu" style={{ left: Math.min(menu.x, window.innerWidth - 180), top: menu.y }}>
+          {!state.leftOpen && (
+            <button
+              onClick={() => {
+                dispatch({ a: "activate", id: menuWt.worktree.id });
+                dispatch({ a: "toggle-left" });
+              }}
+            >
+              view changes
+            </button>
+          )}
           {menuWt.worktree.kind !== "main" ? (
             <>
               <button onClick={() => rename(menuWt)}>rename…</button>
@@ -387,7 +397,7 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               <button className="danger" onClick={() => remove(menuWt)}>remove…</button>
             </>
           ) : (
-            <button disabled>main — no actions</button>
+            state.leftOpen && <button disabled>main — no actions</button>
           )}
         </div>
       )}

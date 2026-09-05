@@ -138,6 +138,25 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
     setCommitMsg("");
   };
 
+  const [fileMenu, setFileMenu] = useState<{ x: number; y: number; path: string; canDiscard: boolean } | null>(null);
+  useEffect(() => {
+    if (!fileMenu) return;
+    const close = () => setFileMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", close);
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", close);
+      window.removeEventListener("blur", close);
+    };
+  }, [fileMenu]);
+
+  const fileCtx = (e: React.MouseEvent, path: string, canDiscard: boolean) => {
+    e.preventDefault();
+    setFileMenu({ x: e.clientX, y: e.clientY, path, canDiscard });
+  };
+
   return (
     <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`}>
       {(behind > 0 || ahead > 0 || active?.worktree.landed) && (
@@ -190,6 +209,7 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
               onClick={() =>
                 state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
               }
+              onContextMenu={(e) => fileCtx(e, f.path, true)}
             >
               <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
               <span className="path">{f.path}</span>
@@ -220,6 +240,7 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
               onClick={() =>
                 state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
               }
+              onContextMenu={(e) => fileCtx(e, f.path, false)}
             >
               <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
               <span className="path">{f.path}</span>
@@ -228,6 +249,37 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
         </>
       )}
       {clean && (gitInfo?.committed?.length ?? 0) === 0 && <div className="dock-empty">clean</div>}
+      {fileMenu && active && (
+        <div className="ctx-menu" style={{ left: fileMenu.x, top: fileMenu.y }}>
+          {EDITORS.map((ed) => (
+            <button
+              key={ed.scheme}
+              onClick={() => {
+                window.location.href = `${ed.scheme}://file${active.worktree.path}/${fileMenu.path}`;
+              }}
+            >
+              open in {ed.label}
+            </button>
+          ))}
+          <button
+            onClick={() => sock?.send({ t: "reveal", worktreeId: active.worktree.id, path: fileMenu.path })}
+          >
+            reveal in Finder
+          </button>
+          {fileMenu.canDiscard && (
+            <button
+              className="danger"
+              onClick={() => {
+                if (window.confirm(`Discard uncommitted changes to ${fileMenu.path}?`)) {
+                  sock?.send({ t: "discard-file", worktreeId: active.worktree.id, path: fileMenu.path });
+                }
+              }}
+            >
+              discard changes…
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -421,6 +473,9 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               view changes{(menuWt.dirty ?? 0) > 0 ? ` (${menuWt.dirty})` : ""}
             </button>
           )}
+          <button onClick={() => sock?.send({ t: "reveal", worktreeId: menuWt.worktree.id })}>
+            reveal in Finder
+          </button>
           {menuWt.worktree.kind !== "main" ? (
             <>
               <button onClick={() => rename(menuWt)}>rename…</button>
@@ -440,9 +495,7 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               </button>
               <button className="danger" onClick={() => remove(menuWt)}>remove…</button>
             </>
-          ) : (
-            state.leftOpen && <button disabled>main — no actions</button>
-          )}
+          ) : null}
         </div>
       )}
     </div>
@@ -516,8 +569,10 @@ function Center({ state, active, dispatch, sock, repo }: {
       )}
       {state.showPrompt && repo && (
         <PromptOverlay
-          onSubmit={(text) => {
-            sock?.send({ t: "create-worktree", repoId: repo.id, prompt: text });
+          onSubmit={(text, variants) => {
+            for (let i = 0; i < variants; i++) {
+              sock?.send({ t: "create-worktree", repoId: repo.id, prompt: text });
+            }
             dispatch({ a: "show-prompt", v: false });
           }}
           onClose={() => dispatch({ a: "show-prompt", v: false })}
@@ -536,12 +591,10 @@ function DiffView({ diff, state, dispatch, sock }: {
     <div style={{ position: "absolute", inset: 0, background: "var(--bg0)" }}>
       <div className="file-head" style={{ padding: "6px 16px", display: "flex", gap: 12 }}>
         <span style={{ flex: 1, font: "12px var(--font-mono)", color: "var(--fg-muted)" }}>{diff.path}</span>
-        <span style={{ font: "11px var(--font-mono)", color: "var(--fg-dim)", alignSelf: "center" }}>
-          editable · ⌘S saves
-        </span>
-        <a className="deep-link" href={`zed://file${absPath}`} title="Open in Zed">zed</a>
-        <a className="deep-link" href={`vscode://file${absPath}`} title="Open in VS Code">code</a>
-        <a className="deep-link" href={`cursor://file${absPath}`} title="Open in Cursor">cursor</a>
+        <OpenInMenu
+          absPath={absPath}
+          onReveal={() => sock?.send({ t: "reveal", worktreeId: diff.worktreeId, path: diff.path })}
+        />
         <button onClick={() => dispatch({ a: "close-diff" })} title="Close (esc)">✕</button>
       </div>
       <Suspense fallback={<div className="empty">loading diff…</div>}>
@@ -555,6 +608,60 @@ function DiffView({ diff, state, dispatch, sock }: {
         />
       </Suspense>
     </div>
+  );
+}
+
+const EDITORS: Array<{ label: string; scheme: string }> = [
+  { label: "Zed", scheme: "zed" },
+  { label: "VS Code", scheme: "vscode" },
+  { label: "Cursor", scheme: "cursor" },
+];
+
+function OpenInMenu({ absPath, onReveal }: { absPath: string; onReveal?: () => void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [open]);
+  return (
+    <span style={{ position: "relative", alignSelf: "center" }}>
+      <button
+        className="deep-link"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(!open);
+        }}
+      >
+        open in ▾
+      </button>
+      {open && (
+        <div className="ctx-menu" style={{ right: 0, top: "calc(100% + 4px)", left: "auto", position: "absolute" }}>
+          {EDITORS.map((ed) => (
+            <button
+              key={ed.scheme}
+              onClick={() => {
+                window.location.href = `${ed.scheme}://file${absPath}`;
+                setOpen(false);
+              }}
+            >
+              {ed.label}
+            </button>
+          ))}
+          {onReveal && (
+            <button
+              onClick={() => {
+                onReveal();
+                setOpen(false);
+              }}
+            >
+              reveal in Finder
+            </button>
+          )}
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -620,8 +727,12 @@ function fuzzyScore(hay: string, needle: string): number {
   return score + Math.max(0, 40 - hay.length / 4);
 }
 
-function PromptOverlay({ onSubmit, onClose }: { onSubmit: (t: string) => void; onClose: () => void }) {
+function PromptOverlay({ onSubmit, onClose }: {
+  onSubmit: (t: string, variants: number) => void;
+  onClose: () => void;
+}) {
   const [text, setText] = useState("");
+  const [variants, setVariants] = useState(1);
   return (
     <div className="prompt-overlay" onClick={onClose}>
       <div className="prompt-box" onClick={(e) => e.stopPropagation()}>
@@ -633,11 +744,26 @@ function PromptOverlay({ onSubmit, onClose }: { onSubmit: (t: string) => void; o
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && text.trim()) {
               e.preventDefault();
-              onSubmit(text.trim());
+              onSubmit(text.trim(), variants);
             }
           }}
           placeholder="make the header sticky and add a dark mode toggle"
         />
+        <div className="variants-row">
+          <span title="Run the same prompt in N parallel worktrees — compare the attempts, keep the best">
+            variants
+          </span>
+          {[1, 2, 3].map((n) => (
+            <button
+              key={n}
+              className={`variant-chip ${variants === n ? "on" : ""}`}
+              onClick={() => setVariants(n)}
+            >
+              {n}
+            </button>
+          ))}
+          {variants > 1 && <span className="variants-hint">{variants} agents, same prompt — keep the best</span>}
+        </div>
       </div>
     </div>
   );

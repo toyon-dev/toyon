@@ -243,6 +243,37 @@ export function startServer(opts: {
         ws.send(JSON.stringify({ t: "files", worktreeId: wt.id, paths } satisfies ServerMsg));
         break;
       }
+      case "reveal": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) throw new Error("unknown worktree");
+        const { resolve } = await import("node:path");
+        const target = resolve(wt.path, msg.path ?? ".");
+        if (target !== resolve(wt.path) && !target.startsWith(resolve(wt.path) + "/")) {
+          throw new Error("path escapes worktree");
+        }
+        const { spawn } = await import("node:child_process");
+        spawn("open", ["-R", target], { stdio: "ignore" }).unref();
+        break;
+      }
+      case "discard-file": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) throw new Error("unknown worktree");
+        const entry = statusFiles(wt.path).find((f) => f.path === msg.path);
+        if (!entry) throw new Error("file has no uncommitted changes");
+        if (entry.xy === "??") {
+          const { resolve } = await import("node:path");
+          const target = resolve(wt.path, msg.path);
+          if (!target.startsWith(resolve(wt.path) + "/")) throw new Error("path escapes worktree");
+          const { unlinkSync } = await import("node:fs");
+          unlinkSync(target);
+        } else {
+          const { spawnSync } = await import("node:child_process");
+          spawnSync("git", ["checkout", "HEAD", "--", msg.path], { cwd: wt.path });
+        }
+        ws.send(JSON.stringify({ t: "shipped", worktreeId: wt.id, ok: true, message: `discarded ${msg.path}` } satisfies ServerMsg));
+        sendGitStatus(wt.id, ws);
+        break;
+      }
       case "write-file": {
         const wt = manager.worktree(msg.worktreeId);
         if (!wt) throw new Error("unknown worktree");
@@ -250,7 +281,7 @@ export function startServer(opts: {
         const target = resolve(wt.path, msg.path);
         if (!target.startsWith(resolve(wt.path) + "/")) throw new Error("path escapes worktree");
         await Bun.write(target, msg.content);
-        ws.send(JSON.stringify({ t: "shipped", worktreeId: wt.id, ok: true, message: `saved ${msg.path}` } satisfies ServerMsg));
+        // no toast: autosave fires constantly; the changes list is the feedback
         sendGitStatus(wt.id, ws);
         break;
       }

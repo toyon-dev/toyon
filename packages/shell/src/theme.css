@@ -452,6 +452,16 @@ button {
   padding: 14px;
 }
 .prompt-box .title { font-size: 12px; color: var(--fg-dim); margin-bottom: 8px; }
+.variants-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; color: var(--fg-dim); }
+.variant-chip {
+  border: 1px solid var(--bg3);
+  border-radius: 4px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.variant-chip.on { color: var(--orange); border-color: var(--orange); }
+.variants-hint { color: var(--fg-dim); }
 .prompt-box.quick-open { padding: 8px; }
 .prompt-box.quick-open input {
   width: 100%;

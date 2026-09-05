@@ -88,12 +88,19 @@ export default function MonacoDiff({ before, after, path, onSave }: {
       // safety: never stay hidden if the diff event doesn't fire
       setTimeout(() => reveal(), 400);
     }
-    const cmd = editor.getModifiedEditor().addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-      () => saveRef.current(modified.getValue()),
-    );
-    void cmd;
+    // IDE-style autosave: debounce after last keystroke; cmd+s still forces it
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+    const sub2 = modified.onDidChangeContent(() => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveRef.current(modified.getValue()), 800);
+    });
+    editor.getModifiedEditor().addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveRef.current(modified.getValue());
+    });
     return () => {
+      sub2.dispose();
+      if (saveTimer) clearTimeout(saveTimer);
       editor.dispose();
       original.dispose();
       modified.dispose();

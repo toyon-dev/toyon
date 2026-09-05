@@ -22,6 +22,11 @@ export interface State {
   prefill: { worktreeId: string; text: string } | null;
   files: Record<string, string[]>;
   queues: Record<string, string[]>;
+  /** per-worktree: did the current agent turn edit anything / did the page HMR */
+  turnEdits: Record<string, boolean>;
+  turnHmr: Record<string, boolean>;
+  /** bumped to request a preview reload for a worktree */
+  reloadReq: { id: string; n: number } | null;
   showQuickOpen: boolean;
   showPrompt: boolean;
   leftOpen: boolean;
@@ -41,6 +46,9 @@ export const initial: State = {
   prefill: null,
   files: {},
   queues: {},
+  turnEdits: {},
+  turnHmr: {},
+  reloadReq: null,
   showQuickOpen: false,
   showPrompt: false,
   leftOpen: true,
@@ -55,6 +63,7 @@ export type Action =
   | { a: "dismiss-toast" }
   | { a: "clear-prefill" }
   | { a: "quick-open"; v: boolean }
+  | { a: "hmr"; id: string }
   | { a: "show-prompt"; v: boolean }
   | { a: "toggle-left" }
   | { a: "toggle-right" };
@@ -73,6 +82,8 @@ export function reducer(s: State, action: Action): State {
       return { ...s, prefill: null };
     case "quick-open":
       return { ...s, showQuickOpen: action.v };
+    case "hmr":
+      return { ...s, turnHmr: { ...s.turnHmr, [action.id]: true } };
     case "show-prompt":
       return { ...s, showPrompt: action.v };
     case "toggle-left":
@@ -121,7 +132,25 @@ function onServer(s: State, msg: ServerMsg): State {
     }
     case "agent": {
       const items = applyEvent(s.chats[msg.worktreeId] ?? [], msg.event);
-      return { ...s, chats: { ...s.chats, [msg.worktreeId]: items } };
+      let next: State = { ...s, chats: { ...s.chats, [msg.worktreeId]: items } };
+      const ev = msg.event;
+      const id = msg.worktreeId;
+      if (ev.type === "turn-start") {
+        next = {
+          ...next,
+          turnEdits: { ...next.turnEdits, [id]: false },
+          turnHmr: { ...next.turnHmr, [id]: false },
+        };
+      } else if (ev.type === "tool-start" && ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"].includes(ev.name)) {
+        next = { ...next, turnEdits: { ...next.turnEdits, [id]: true } };
+      } else if (ev.type === "turn-end") {
+        // edits happened but nothing hot-updated: the change is outside HMR's
+        // reach (backend/data) — ask the preview to reload itself
+        if (next.turnEdits[id] && !next.turnHmr[id]) {
+          next = { ...next, reloadReq: { id, n: (next.reloadReq?.n ?? 0) + 1 } };
+        }
+      }
+      return next;
     }
     case "backfill": {
       let items: ChatItem[] = [];

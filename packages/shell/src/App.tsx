@@ -605,6 +605,34 @@ function Center({ state, active, dispatch, sock, repo }: {
   // one persistent iframe per visited worktree: switching is a display toggle
   // (instant, and each preview keeps its app state + HMR socket while hidden)
   const [mounted, setMounted] = useState<string[]>([]);
+  const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
+
+  // attribute bridge messages (hmr etc.) to their worktree via event.source
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data;
+      if (!d || !d.__orchardist) return;
+      for (const [id, frame] of frameRefs.current) {
+        if (frame.contentWindow === e.source) {
+          if (d.type === "hmr" || d.type === "loaded") dispatch({ a: "hmr", id });
+          return;
+        }
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  // agent finished a turn whose changes HMR couldn't cover: reload that preview
+  // (small delay so backend --watch/--reload restarts settle first)
+  useEffect(() => {
+    const req = state.reloadReq;
+    if (!req) return;
+    const timer = setTimeout(() => {
+      frameRefs.current.get(req.id)?.contentWindow?.postMessage({ __orchardist: true, type: "reload" }, "*");
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [state.reloadReq?.n]);
   const activeReady =
     active && active.procs.length > 0 && active.procs.some((p) => p.status !== "stopped");
   useEffect(() => {
@@ -621,6 +649,10 @@ function Center({ state, active, dispatch, sock, repo }: {
       {frames.map((w) => (
         <iframe
           key={w.worktree.id}
+          ref={(el) => {
+            if (el) frameRefs.current.set(w.worktree.id, el);
+            else frameRefs.current.delete(w.worktree.id);
+          }}
           src={`http://127.0.0.1:${w.worktree.proxyPort}/`}
           title={w.worktree.title}
           style={{ display: w.worktree.id === state.activeId && !state.diff ? "block" : "none" }}

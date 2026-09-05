@@ -12,6 +12,16 @@ const post = (msg: Record<string, unknown>) => {
 
 post({ type: "loaded", url: location.href, title: document.title });
 
+// vite announces applied hot updates on window — relay so the shell knows
+// whether an agent's changes were HMR-covered or need a reload
+window.addEventListener("vite:afterUpdate", () => post({ type: "hmr" }));
+
+// shell-initiated preview reload (agent changed something HMR can't reach)
+window.addEventListener("message", (e) => {
+  const d = e.data;
+  if (d && d.__orchardist && d.type === "reload") location.reload();
+});
+
 window.addEventListener("error", (e) => {
   post({ type: "page-error", message: String(e.message), source: e.filename, line: e.lineno });
 });

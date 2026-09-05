@@ -37,8 +37,15 @@ monaco.editor.defineTheme("gruvbox-soft", {
   },
 });
 
-export default function MonacoDiff({ before, after, path }: { before: string; after: string; path: string }) {
+export default function MonacoDiff({ before, after, path, onSave }: {
+  before: string;
+  after: string;
+  path: string;
+  onSave: (content: string) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
+  const saveRef = useRef(onSave);
+  saveRef.current = onSave;
 
   useEffect(() => {
     const el = ref.current;
@@ -46,7 +53,8 @@ export default function MonacoDiff({ before, after, path }: { before: string; af
     const original = monaco.editor.createModel(before, undefined, monaco.Uri.file(`/before/${path}`));
     const modified = monaco.editor.createModel(after, undefined, monaco.Uri.file(`/after/${path}`));
     const editor = monaco.editor.createDiffEditor(el, {
-      readOnly: true,
+      readOnly: false,
+      originalEditable: false,
       automaticLayout: true,
       renderSideBySide: false,
       theme: "gruvbox-soft",
@@ -57,6 +65,11 @@ export default function MonacoDiff({ before, after, path }: { before: string; af
       hideUnchangedRegions: { enabled: true },
     });
     editor.setModel({ original, modified });
+    const cmd = editor.getModifiedEditor().addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+      () => saveRef.current(modified.getValue()),
+    );
+    void cmd;
     return () => {
       editor.dispose();
       original.dispose();

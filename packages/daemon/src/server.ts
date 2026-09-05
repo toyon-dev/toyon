@@ -231,6 +231,17 @@ export function startServer(opts: {
         await manager.renameWorktree(msg.worktreeId, msg.title);
         break;
       }
+      case "write-file": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) throw new Error("unknown worktree");
+        const { resolve } = await import("node:path");
+        const target = resolve(wt.path, msg.path);
+        if (!target.startsWith(resolve(wt.path) + "/")) throw new Error("path escapes worktree");
+        await Bun.write(target, msg.content);
+        ws.send(JSON.stringify({ t: "shipped", worktreeId: wt.id, ok: true, message: `saved ${msg.path}` } satisfies ServerMsg));
+        sendGitStatus(wt.id, ws);
+        break;
+      }
       case "confirm-config": {
         manager.confirmConfig(msg.repoId, msg.config);
         break;

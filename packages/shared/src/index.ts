@@ -112,6 +112,7 @@ export type ClientMsg =
   | { t: "commit"; worktreeId: string; message: string }
   | { t: "combine"; worktreeIds: string[] }
   | { t: "sync-main"; worktreeId: string }
+  | { t: "write-file"; worktreeId: string; path: string; content: string }
   | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 

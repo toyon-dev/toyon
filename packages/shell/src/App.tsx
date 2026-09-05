@@ -481,7 +481,7 @@ function Center({ state, active, dispatch, sock, repo }: {
                 : "starting dev servers…"}
         </div>
       )}
-      {state.diff && <DiffView diff={state.diff} state={state} dispatch={dispatch} />}
+      {state.diff && <DiffView diff={state.diff} state={state} dispatch={dispatch} sock={sock} />}
       {state.showPrompt && repo && (
         <PromptOverlay
           onSubmit={(text) => {
@@ -495,8 +495,8 @@ function Center({ state, active, dispatch, sock, repo }: {
   );
 }
 
-function DiffView({ diff, state, dispatch }: {
-  diff: NonNullable<State["diff"]>; state: State; dispatch: Dispatch;
+function DiffView({ diff, state, dispatch, sock }: {
+  diff: NonNullable<State["diff"]>; state: State; dispatch: Dispatch; sock: Sock;
 }) {
   const wt = state.worktrees.find((w) => w.worktree.id === diff.worktreeId);
   const absPath = wt ? `${wt.worktree.path}/${diff.path}` : diff.path;
@@ -504,13 +504,23 @@ function DiffView({ diff, state, dispatch }: {
     <div style={{ position: "absolute", inset: 0, background: "var(--bg0)" }}>
       <div className="file-head" style={{ padding: "6px 16px", display: "flex", gap: 12 }}>
         <span style={{ flex: 1, font: "12px var(--font-mono)", color: "var(--fg-muted)" }}>{diff.path}</span>
+        <span style={{ font: "11px var(--font-mono)", color: "var(--fg-dim)", alignSelf: "center" }}>
+          editable · ⌘S saves
+        </span>
         <a className="deep-link" href={`zed://file${absPath}`} title="Open in Zed">zed</a>
         <a className="deep-link" href={`vscode://file${absPath}`} title="Open in VS Code">code</a>
         <a className="deep-link" href={`cursor://file${absPath}`} title="Open in Cursor">cursor</a>
         <button onClick={() => dispatch({ a: "close-diff" })} title="Close (esc)">✕</button>
       </div>
       <Suspense fallback={<div className="empty">loading diff…</div>}>
-        <MonacoDiff before={diff.before} after={diff.after} path={diff.path} />
+        <MonacoDiff
+          before={diff.before}
+          after={diff.after}
+          path={diff.path}
+          onSave={(content) =>
+            sock?.send({ t: "write-file", worktreeId: diff.worktreeId, path: diff.path, content })
+          }
+        />
       </Suspense>
     </div>
   );

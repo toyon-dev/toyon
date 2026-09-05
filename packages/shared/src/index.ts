@@ -67,6 +67,8 @@ export interface WorktreeStatus {
   behind?: number;
   /** uncommitted file count (cached, ~10s freshness) */
   dirty?: number;
+  /** chat messages waiting behind the current turn */
+  queued?: number;
 }
 
 export interface GitFileStatus {
@@ -122,6 +124,7 @@ export type ClientMsg =
   | { t: "list-files"; worktreeId: string }
   | { t: "discard-file"; worktreeId: string; path: string }
   | { t: "reveal"; worktreeId: string; path?: string }
+  | { t: "stop-agent"; worktreeId: string }
   | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 

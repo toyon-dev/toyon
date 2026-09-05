@@ -891,7 +891,18 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
           {items.map((item, i) => (
             <ChatItemView key={i} item={item} />
           ))}
-          {active?.agent === "working" && <div className="msg-thinking">working…</div>}
+          {active?.agent === "working" && (
+          <div className="msg-thinking working-row">
+            working…{(active.queued ?? 0) > 0 && ` · ${active.queued} queued`}
+            <button
+              className="stop-btn"
+              title="Stop the agent (context up to here is kept; queued messages dropped)"
+              onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
+            >
+              ■ stop
+            </button>
+          </div>
+        )}
         </div>
         {showJump && (
           <button className="jump-down" onClick={jumpDown} title="Jump to latest">

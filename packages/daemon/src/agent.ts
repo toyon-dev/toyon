@@ -25,6 +25,21 @@ export class AgentSession {
   private seq = 0;
   private queue: string[] = [];
   private running = false;
+  private current: { interrupt?: () => Promise<void> } | null = null;
+  private interrupted = false;
+
+  get queueLength() {
+    return this.queue.length;
+  }
+
+  /** Interrupt the running turn and drop anything queued. Context up to the
+   * interrupt persists in the session; the next message resumes from there. */
+  stop() {
+    this.queue = [];
+    if (!this.running) return;
+    this.interrupted = true;
+    void this.current?.interrupt?.()?.catch?.(() => {});
+  }
 
   constructor(
     readonly worktreeId: string,
@@ -74,12 +89,23 @@ export class AgentSession {
       while (this.queue.length > 0) {
         const text = this.queue.shift()!;
         await this.runTurn(text);
+        if (this.interrupted) break;
+      }
+      if (this.interrupted) {
+        this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
       }
       this.setStatus("idle");
     } catch (e) {
-      this.emit({ type: "agent-error", message: String(e), ts: Date.now() });
-      this.setStatus("error");
+      if (this.interrupted) {
+        this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
+        this.setStatus("idle");
+      } else {
+        this.emit({ type: "agent-error", message: String(e), ts: Date.now() });
+        this.setStatus("error");
+      }
     } finally {
+      this.interrupted = false;
+      this.current = null;
       this.running = false;
     }
   }
@@ -99,9 +125,11 @@ export class AgentSession {
         ...(resume ? { resume } : {}),
       },
     });
+    this.current = stream as unknown as { interrupt?: () => Promise<void> };
 
     for await (const msg of stream) {
       this.handleSdkMessage(msg as Record<string, any>);
+      if (this.interrupted) break;
     }
   }
 

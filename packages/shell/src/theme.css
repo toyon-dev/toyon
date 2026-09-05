@@ -293,6 +293,16 @@ button {
 .md table { border-collapse: collapse; margin: 0 0 8px; font-size: 12px; }
 .md th, .md td { border: 1px solid var(--bg2); padding: 3px 8px; }
 .msg-thinking { font-size: 12px; color: var(--fg-dim); font-style: italic; white-space: pre-wrap; }
+.working-row { display: flex; align-items: center; gap: 10px; }
+.stop-btn {
+  font: 11px var(--font-ui);
+  font-style: normal;
+  color: var(--red);
+  border: 1px solid var(--bg3);
+  border-radius: 4px;
+  padding: 1px 8px;
+}
+.stop-btn:hover { border-color: var(--red); }
 
 .tool-row {
   font: 12px var(--font-mono);

@@ -129,6 +129,7 @@ export function startServer(opts: {
         let agent = manager.agentFor(msg.worktreeId);
         if (!agent) throw new Error("worktree still starting; try again in a moment");
         agent.send(msg.text);
+        hub.worktreesChanged(); // queued-count may have changed
         break;
       }
       case "create-worktree": {
@@ -268,6 +269,10 @@ export function startServer(opts: {
         });
         const paths = (r.stdout ?? "").split("\n").filter(Boolean);
         ws.send(JSON.stringify({ t: "files", worktreeId: wt.id, paths } satisfies ServerMsg));
+        break;
+      }
+      case "stop-agent": {
+        manager.agentFor(msg.worktreeId)?.stop();
         break;
       }
       case "reveal": {

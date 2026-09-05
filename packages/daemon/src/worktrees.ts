@@ -513,13 +513,15 @@ export class Manager {
       const rt = this.runtimes.get(wt.id);
       const pending = this.pendingAgents.get(wt.id);
       const { ahead, behind, dirty } = this.counts(wt);
+      const agent = rt?.agent ?? pending;
       return {
         worktree: wt,
         procs: rt?.procs.states() ?? [],
-        agent: rt?.agent.status ?? pending?.status ?? "idle",
+        agent: agent?.status ?? "idle",
         ahead,
         behind,
         dirty,
+        queued: agent?.queueLength || undefined,
       };
     });
   }

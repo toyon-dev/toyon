@@ -101,6 +101,20 @@ export function mergeToMain(worktreePath: string, branch: string, repoPath: stri
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };
 }
 
+/** Merge main into the worktree ("sync") so it's up to date before landing. */
+export function syncFromMain(worktreePath: string, defaultBr: string): ShipResult {
+  const cErr = requireClean(worktreePath);
+  if (cErr) return cErr;
+  const { behind } = aheadBehind(worktreePath, defaultBr);
+  if (behind === 0) return { ok: true, message: `already up to date with ${defaultBr}` };
+  const m = git(worktreePath, "merge", "--no-edit", defaultBr);
+  if (!m.ok) {
+    git(worktreePath, "merge", "--abort");
+    return { ok: false, message: `sync conflicts with ${defaultBr} — ask the agent to merge ${defaultBr} and resolve them` };
+  }
+  return { ok: true, message: `synced ${behind} commit(s) from ${defaultBr}` };
+}
+
 /** Commit everything, push, and open a PR (gh) or return the compare URL. */
 export function shipWorktree(worktreePath: string, branch: string, defaultBr: string, _title: string): ShipResult {
   const cErr = requireClean(worktreePath);

@@ -357,6 +357,7 @@ export class Manager {
       proxyPort: await allocatePort(),
       title: slug,
       createdAt: Date.now(),
+      sources: wts.map((w) => w.id),
     };
     this.state.worktrees.push(wt);
     saveState(this.state);

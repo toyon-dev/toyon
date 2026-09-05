@@ -37,6 +37,8 @@ export interface WorktreeInfo {
   createdAt: number;
   /** merged into main and no new work since */
   landed?: boolean;
+  /** for kind "combined": the worktrees this graft was made from */
+  sources?: string[];
 }
 
 export type ProcStatus = "starting" | "running" | "crashed" | "stopped";
@@ -92,7 +94,7 @@ export type ServerMsg =
   | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }> }
   | { t: "git-status"; worktreeId: string; files: GitFileStatus[]; ahead?: number; behind?: number }
   | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string }
-  | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean }
+  | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean; removeIds?: string[] }
   | { t: "error"; message: string };
 
 export type ClientMsg =
@@ -107,6 +109,7 @@ export type ClientMsg =
   | { t: "merge-main"; worktreeId: string }
   | { t: "commit"; worktreeId: string; message: string }
   | { t: "combine"; worktreeIds: string[] }
+  | { t: "sync-main"; worktreeId: string }
   | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 

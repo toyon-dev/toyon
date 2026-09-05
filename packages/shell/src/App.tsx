@@ -76,16 +76,20 @@ export function App() {
       {state.toast && (
         <div className={`toast ${state.toast.ok ? "ok" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
           {state.toast.message}
-          {state.toast.removeId && (
+          {state.toast.removeIds && state.toast.removeIds.length > 0 && (
             <button
               className="toast-action"
               onClick={(e) => {
                 e.stopPropagation();
-                sockRef.current?.send({ t: "remove-worktree", worktreeId: state.toast!.removeId! });
+                for (const id of state.toast!.removeIds!) {
+                  sockRef.current?.send({ t: "remove-worktree", worktreeId: id });
+                }
                 dispatch({ a: "dismiss-toast" });
               }}
             >
-              remove worktree
+              {state.toast.removeIds.length > 1
+                ? `remove graft + ${state.toast.removeIds.length - 1} source worktree(s)`
+                : "remove worktree"}
             </button>
           )}
         </div>
@@ -123,6 +127,17 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
           {behind > 0 && <span className="behind-badge" title={`${behind} commit(s) behind main`}> ↓{behind}</span>}
           {active?.worktree.landed && <span className="landed-badge" title="Merged into main"> ✓ landed</span>}
         </span>
+        {isWt && clean && behind > 0 && (
+          <span className="land-btns">
+            <button
+              className="ship-btn"
+              title={`Pull ${behind} commit(s) from main into this worktree`}
+              onClick={() => sock?.send({ t: "sync-main", worktreeId: active.worktree.id })}
+            >
+              sync ↓
+            </button>
+          </span>
+        )}
         {isWt && clean && ahead > 0 && (
           <span className="land-btns">
             <button
@@ -322,6 +337,9 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
                 }}
               >
                 graft with…
+              </button>
+              <button onClick={() => sock?.send({ t: "sync-main", worktreeId: menuWt.worktree.id })}>
+                sync with main
               </button>
               <button onClick={() => sock?.send({ t: "merge-main", worktreeId: menuWt.worktree.id })}>
                 merge into main

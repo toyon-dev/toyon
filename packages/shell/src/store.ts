@@ -18,7 +18,7 @@ export interface State {
   git: Record<string, { files: GitFileStatus[]; ahead?: number; behind?: number }>;
   logs: Record<string, string[]>;
   diff: { worktreeId: string; path: string; before: string; after: string } | null;
-  toast: { ok: boolean; message: string; url?: string; removeId?: string } | null;
+  toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
   showPrompt: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
@@ -128,7 +128,7 @@ function onServer(s: State, msg: ServerMsg): State {
           ok: msg.ok,
           message: msg.message,
           url: msg.url,
-          removeId: msg.merged && msg.ok ? msg.worktreeId : undefined,
+          removeIds: msg.merged && msg.ok ? msg.removeIds ?? [msg.worktreeId] : undefined,
         },
       };
     case "error":

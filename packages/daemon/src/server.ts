@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ClientMsg, ServerMsg } from "@orchardist/shared";
 import type { Manager } from "./worktrees.ts";
-import { aheadBehind, commitWorktree, fileBefore, mergeToMain, shipWorktree, statusFiles } from "./git.ts";
+import { aheadBehind, commitWorktree, fileBefore, mergeToMain, shipWorktree, statusFiles, syncFromMain } from "./git.ts";
 
 const VERSION = "0.0.1";
 
@@ -177,8 +177,27 @@ export function startServer(opts: {
         const repo = manager.repo(wt.repoId);
         const result = mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch, wt.title);
         if (result.ok) manager.setLanded(wt.id, true);
+        // landing a graft lands all its sources too — offer to clean up the lot
+        const removeIds =
+          result.ok && wt.kind === "combined"
+            ? [wt.id, ...(wt.sources ?? []).filter((id) => manager.worktree(id))]
+            : result.ok
+              ? [wt.id]
+              : undefined;
         ws.send(JSON.stringify({
-          t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message, merged: result.ok,
+          t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message, merged: result.ok, removeIds,
+        } satisfies ServerMsg));
+        sendGitStatus(wt.id, ws);
+        break;
+      }
+      case "sync-main": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) throw new Error("unknown worktree");
+        if (wt.kind === "main") throw new Error("main doesn't sync with itself");
+        const repo = manager.repo(wt.repoId);
+        const result = syncFromMain(wt.path, repo.defaultBranch);
+        ws.send(JSON.stringify({
+          t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message,
         } satisfies ServerMsg));
         sendGitStatus(wt.id, ws);
         break;

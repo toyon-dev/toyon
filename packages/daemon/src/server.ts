@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ClientMsg, ServerMsg } from "@orchardist/shared";
 import type { Manager } from "./worktrees.ts";
-import { aheadBehind, commitWorktree, committedFiles, fileBefore, mergeToMain, shipWorktree, statusFiles, syncFromMain } from "./git.ts";
+import { aheadBehind, changedRanges, commitWorktree, committedFiles, fileBefore, mergeToMain, shipWorktree, statusFiles, syncFromMain } from "./git.ts";
 
 const VERSION = "0.0.1";
 
@@ -304,6 +304,16 @@ export function startServer(opts: {
       }
       case "unqueue": {
         manager.agentFor(msg.worktreeId)?.unqueue(msg.index);
+        break;
+      }
+      case "changed-ranges": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) return;
+        const repo = manager.repo(wt.repoId);
+        const ranges = changedRanges(wt.path, repo.defaultBranch, msg.path);
+        ws.send(JSON.stringify({
+          t: "changed-ranges", worktreeId: wt.id, path: msg.path, ranges,
+        } satisfies ServerMsg));
         break;
       }
       case "reveal": {

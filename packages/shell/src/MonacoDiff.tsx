@@ -37,15 +37,18 @@ monaco.editor.defineTheme("gruvbox-soft", {
   },
 });
 
-export default function MonacoDiff({ before, after, path, onSave }: {
+export default function MonacoDiff({ before, after, path, onSave, onLineHover }: {
   before: string;
   after: string;
   path: string;
   onSave: (content: string) => void;
+  onLineHover?: (line: number | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const saveRef = useRef(onSave);
   saveRef.current = onSave;
+  const hoverRef = useRef(onLineHover);
+  hoverRef.current = onLineHover;
 
   useEffect(() => {
     const el = ref.current;
@@ -98,9 +101,27 @@ export default function MonacoDiff({ before, after, path, onSave }: {
       if (saveTimer) clearTimeout(saveTimer);
       saveRef.current(modified.getValue());
     });
+
+    // line hover -> highlight what that line renders on the page
+    let lastLine: number | null = null;
+    const me = editor.getModifiedEditor();
+    const subMove = me.onMouseMove((e) => {
+      const line = e.target?.position?.lineNumber ?? null;
+      if (line !== lastLine) {
+        lastLine = line;
+        hoverRef.current?.(line);
+      }
+    });
+    const subLeave = me.onMouseLeave(() => {
+      lastLine = null;
+      hoverRef.current?.(null);
+    });
     return () => {
       sub2.dispose();
+      subMove.dispose();
+      subLeave.dispose();
       if (saveTimer) clearTimeout(saveTimer);
+      hoverRef.current?.(null);
       editor.dispose();
       original.dispose();
       modified.dispose();

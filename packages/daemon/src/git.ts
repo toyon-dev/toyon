@@ -106,6 +106,24 @@ export function committedFiles(worktreePath: string, defaultBr: string): GitFile
   });
 }
 
+/** Changed line ranges (new-file numbering) for one file vs merge-base with main,
+ * including uncommitted work. Untracked files return one open-ended range. */
+export function changedRanges(worktreePath: string, defaultBr: string, file: string): Array<[number, number]> {
+  const status = statusFiles(worktreePath).find((f) => f.path === file);
+  if (status?.xy === "??") return [[1, 1_000_000]];
+  const base = git(worktreePath, "merge-base", "HEAD", defaultBr);
+  const ref = base.ok && base.out ? base.out : "HEAD";
+  const r = git(worktreePath, "diff", "-U0", ref, "--", file);
+  if (!r.ok) return [];
+  const ranges: Array<[number, number]> = [];
+  for (const m of r.out.matchAll(/^@@ [^+]*\+(\d+)(?:,(\d+))? @@/gm)) {
+    const start = Number(m[1]);
+    const count = m[2] === undefined ? 1 : Number(m[2]);
+    if (count > 0) ranges.push([start, start + count - 1]);
+  }
+  return ranges;
+}
+
 export function aheadBehind(worktreePath: string, defaultBr: string): { ahead: number; behind: number } {
   const a = git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
   const b = git(worktreePath, "rev-list", "--count", `HEAD..${defaultBr}`);

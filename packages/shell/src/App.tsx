@@ -215,6 +215,30 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
     setFileMenu({ x: e.clientX, y: e.clientY, path, canDiscard });
   };
 
+  // hover a changed file -> highlight only its changed lines' elements
+  const hoverPathRef = useRef<string | null>(null);
+  const hoverFile = (path: string, entering: boolean) => {
+    if (!state.activeId) return;
+    if (!entering) {
+      hoverPathRef.current = null;
+      previewBus.post(state.activeId, { type: "highlight-clear" });
+      return;
+    }
+    hoverPathRef.current = path;
+    const cached = state.changedRanges[`${state.activeId}:${path}`];
+    if (cached) {
+      previewBus.post(state.activeId, { type: "highlight-file", path, ranges: cached });
+    } else {
+      sock?.send({ t: "changed-ranges", worktreeId: state.activeId, path });
+    }
+  };
+  useEffect(() => {
+    const path = hoverPathRef.current;
+    if (!path || !state.activeId) return;
+    const ranges = state.changedRanges[`${state.activeId}:${path}`];
+    if (ranges) previewBus.post(state.activeId, { type: "highlight-file", path, ranges });
+  }, [state.changedRanges]);
+
   return (
     <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`} style={{ width }}>
       {(behind > 0 || ahead > 0 || active?.worktree.landed) && (
@@ -282,8 +306,8 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
                 state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
               }
               onContextMenu={(e) => fileCtx(e, f.path, true)}
-              onMouseEnter={() => state.activeId && previewBus.post(state.activeId, { type: "highlight-file", path: f.path })}
-              onMouseLeave={() => state.activeId && previewBus.post(state.activeId, { type: "highlight-clear" })}
+              onMouseEnter={() => hoverFile(f.path, true)}
+              onMouseLeave={() => hoverFile(f.path, false)}
             >
               <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
               <span className="path">{f.path}</span>
@@ -315,8 +339,8 @@ function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Di
                 state.activeId && sock?.send({ t: "file-diff", worktreeId: state.activeId, path: f.path })
               }
               onContextMenu={(e) => fileCtx(e, f.path, false)}
-              onMouseEnter={() => state.activeId && previewBus.post(state.activeId, { type: "highlight-file", path: f.path })}
-              onMouseLeave={() => state.activeId && previewBus.post(state.activeId, { type: "highlight-clear" })}
+              onMouseEnter={() => hoverFile(f.path, true)}
+              onMouseLeave={() => hoverFile(f.path, false)}
             >
               <span className={`xy ${xyClass(f.xy)}`}>{f.xy.trim() || "·"}</span>
               <span className="path">{f.path}</span>
@@ -700,31 +724,33 @@ function Center({ state, active, dispatch, sock, repo }: {
 
   return (
     <div className="center">
-      {frames.map((w) => (
-        <iframe
-          key={w.worktree.id}
-          ref={(el) => {
-            if (el) frameRefs.current.set(w.worktree.id, el);
-            else frameRefs.current.delete(w.worktree.id);
-          }}
-          src={`http://127.0.0.1:${w.worktree.proxyPort}/`}
-          title={w.worktree.title}
-          style={{ display: w.worktree.id === state.activeId && !state.diff ? "block" : "none" }}
-        />
-      ))}
-      {!activeReady && !state.diff && (
-        <div className="empty">
-          {!state.connected
-            ? hasToken()
-              ? "connecting to daemon…"
-              : "no access token for this address —\nrun `orchardist` in your repo, or open the full URL\n(with #token=…) printed in ~/.orchardist/daemon.log"
-            : !active
-              ? "no worktrees yet — run `orchardist` inside a git repo"
-              : logs.length > 0
-                ? logs.slice(-20).join("\n")
-                : "starting dev servers…"}
-        </div>
-      )}
+      <div className="preview-area">
+        {frames.map((w) => (
+          <iframe
+            key={w.worktree.id}
+            ref={(el) => {
+              if (el) frameRefs.current.set(w.worktree.id, el);
+              else frameRefs.current.delete(w.worktree.id);
+            }}
+            src={`http://127.0.0.1:${w.worktree.proxyPort}/`}
+            title={w.worktree.title}
+            style={{ display: w.worktree.id === state.activeId ? "block" : "none" }}
+          />
+        ))}
+        {!activeReady && (
+          <div className="empty">
+            {!state.connected
+              ? hasToken()
+                ? "connecting to daemon…"
+                : "no access token for this address —\nrun `orchardist` in your repo, or open the full URL\n(with #token=…) printed in ~/.orchardist/daemon.log"
+              : !active
+                ? "no worktrees yet — run `orchardist` inside a git repo"
+                : logs.length > 0
+                  ? logs.slice(-20).join("\n")
+                  : "starting dev servers…"}
+          </div>
+        )}
+      </div>
       {state.diff && <DiffView diff={state.diff} state={state} dispatch={dispatch} sock={sock} />}
       {state.showQuickOpen && active && (
         <QuickOpen
@@ -767,7 +793,7 @@ function DiffView({ diff, state, dispatch, sock }: {
   const wt = state.worktrees.find((w) => w.worktree.id === diff.worktreeId);
   const absPath = wt ? `${wt.worktree.path}/${diff.path}` : diff.path;
   return (
-    <div style={{ position: "absolute", inset: 0, background: "var(--bg0)" }}>
+    <div className="diff-pane">
       <div className="file-head" style={{ padding: "6px 16px", display: "flex", gap: 12 }}>
         <span style={{ flex: 1, font: "12px var(--font-mono)", color: "var(--fg-muted)" }}>{diff.path}</span>
         <OpenInMenu
@@ -784,6 +810,10 @@ function DiffView({ diff, state, dispatch, sock }: {
           onSave={(content) =>
             sock?.send({ t: "write-file", worktreeId: diff.worktreeId, path: diff.path, content })
           }
+          onLineHover={(line) => {
+            if (line == null) previewBus.post(diff.worktreeId, { type: "highlight-clear" });
+            else previewBus.post(diff.worktreeId, { type: "highlight-file", path: diff.path, ranges: [[line, line]] });
+          }}
         />
       </Suspense>
     </div>

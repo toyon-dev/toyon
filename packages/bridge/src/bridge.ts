@@ -207,20 +207,29 @@ function shortFile(f: string): string {
   return i >= 0 ? f.slice(i + 1) : f.split("/").slice(-2).join("/");
 }
 
-// ---- file highlight (hover a changed file -> outline what it renders) ----
+// ---- file/line highlight (hover a change -> outline what it renders) ----
 
-function highlightFile(path: string) {
+function fileMatches(srcFile: string, path: string): boolean {
+  return srcFile.endsWith(path) || path.endsWith(shortFile(srcFile));
+}
+
+/** ranges = changed line spans (new-file numbering); null/empty = whole file */
+function highlightFile(path: string, ranges: Array<[number, number]> | null) {
   clearOverlay();
   let count = 0;
   for (const el of Array.from(document.querySelectorAll("*"))) {
     if (count >= 40) break;
     const src = sourceOf(fiberOf(el));
-    if (src && (src.file.endsWith(path) || path.endsWith(shortFile(src.file)))) {
-      const rect = el.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        drawBox(rect);
-        count++;
-      }
+    if (!src || !fileMatches(src.file, path)) continue;
+    if (ranges && ranges.length > 0) {
+      const line = src.line ?? -1;
+      // JSX callsite within (or right at the edge of) a changed span
+      if (!ranges.some(([a, b]) => line >= a - 1 && line <= b + 1)) continue;
+    }
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      drawBox(rect);
+      count++;
     }
   }
 }
@@ -241,7 +250,7 @@ window.addEventListener("message", (e) => {
       stopPicking();
       break;
     case "highlight-file":
-      highlightFile(String(d.path ?? ""));
+      highlightFile(String(d.path ?? ""), Array.isArray(d.ranges) ? d.ranges : null);
       break;
     case "highlight-selector": {
       clearOverlay();

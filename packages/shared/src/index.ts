@@ -116,6 +116,7 @@ export type ServerMsg =
   | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean; removeIds?: string[]; suggestion?: string }
   | { t: "files"; worktreeId: string; paths: string[] }
   | { t: "queue"; worktreeId: string; items: string[] }
+  | { t: "changed-ranges"; worktreeId: string; path: string; ranges: Array<[number, number]> }
   | { t: "error"; message: string };
 
 export type ClientMsg =
@@ -139,6 +140,7 @@ export type ClientMsg =
   | { t: "stop-agent"; worktreeId: string }
   | { t: "pick-variant"; worktreeId: string }
   | { t: "unqueue"; worktreeId: string; index: number }
+  | { t: "changed-ranges"; worktreeId: string; path: string }
   | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 

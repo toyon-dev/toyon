@@ -43,6 +43,8 @@ export interface State {
     route: string;
     selector: string;
   } | null;
+  /** changed line ranges cache, keyed `${worktreeId}:${path}` */
+  changedRanges: Record<string, Array<[number, number]>>;
   showQuickOpen: boolean;
   showPrompt: boolean;
   leftOpen: boolean;
@@ -68,6 +70,7 @@ export const initial: State = {
   pageCtx: {},
   picking: false,
   pick: null,
+  changedRanges: {},
   showQuickOpen: false,
   showPrompt: false,
   leftOpen: true,
@@ -195,13 +198,24 @@ function onServer(s: State, msg: ServerMsg): State {
       for (const { event } of msg.events) items = applyEvent(items, event);
       return { ...s, chats: { ...s.chats, [msg.worktreeId]: items } };
     }
-    case "git-status":
+    case "git-status": {
+      // ranges go stale whenever the worktree's git state moves
+      const changedRanges = Object.fromEntries(
+        Object.entries(s.changedRanges).filter(([k]) => !k.startsWith(msg.worktreeId + ":")),
+      );
       return {
         ...s,
+        changedRanges,
         git: {
           ...s.git,
           [msg.worktreeId]: { files: msg.files, committed: msg.committed, ahead: msg.ahead, behind: msg.behind },
         },
+      };
+    }
+    case "changed-ranges":
+      return {
+        ...s,
+        changedRanges: { ...s.changedRanges, [`${msg.worktreeId}:${msg.path}`]: msg.ranges },
       };
     case "file-diff":
       return { ...s, diff: msg };

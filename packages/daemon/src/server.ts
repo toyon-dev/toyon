@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ClientMsg, ServerMsg } from "@orchardist/shared";
 import type { Manager } from "./worktrees.ts";
-import { fileBefore, shipWorktree, statusFiles } from "./git.ts";
+import { aheadBehind, fileBefore, mergeToMain, shipWorktree, statusFiles } from "./git.ts";
 
 const VERSION = "0.0.1";
 
@@ -170,6 +170,18 @@ export function startServer(opts: {
         sendGitStatus(wt.id, ws);
         break;
       }
+      case "merge-main": {
+        const wt = manager.worktree(msg.worktreeId);
+        if (!wt) throw new Error("unknown worktree");
+        if (wt.kind === "main") throw new Error("merge from a worktree, not main");
+        const repo = manager.repo(wt.repoId);
+        const result = mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch, wt.title);
+        ws.send(JSON.stringify({
+          t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message, merged: result.ok,
+        } satisfies ServerMsg));
+        sendGitStatus(wt.id, ws);
+        break;
+      }
       case "rename-worktree": {
         await manager.renameWorktree(msg.worktreeId, msg.title);
         break;
@@ -186,7 +198,8 @@ export function startServer(opts: {
     if (!wt) return;
     try {
       const files = statusFiles(wt.path);
-      ws.send(JSON.stringify({ t: "git-status", worktreeId, files } satisfies ServerMsg));
+      const counts = wt.kind === "main" ? {} : aheadBehind(wt.path, manager.repo(wt.repoId).defaultBranch);
+      ws.send(JSON.stringify({ t: "git-status", worktreeId, files, ...counts } satisfies ServerMsg));
     } catch {
       // worktree may still be setting up
     }

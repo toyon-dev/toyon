@@ -16,7 +16,8 @@ const SYSTEM_APPEND = [
   "You are working inside a dedicated git worktree managed by Orchardist.",
   "Stay strictly within the current working directory; never modify files outside it.",
   "Never run `git push`, delete branches, or create pull requests — shipping is handled by the Orchardist UI.",
-  "You may commit your work locally when it reaches a good state.",
+  "Commit your work locally in small, focused commits with clear one-line messages as you complete each coherent step — do not accumulate one giant uncommitted change.",
+  "Keep the scope tight: do the asked task well, then stop. Suggest follow-ups in chat instead of expanding scope.",
 ].join(" ");
 
 export class AgentSession {

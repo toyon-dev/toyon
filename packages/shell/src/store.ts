@@ -15,10 +15,10 @@ export interface State {
   worktrees: WorktreeStatus[];
   activeId: string | null;
   chats: Record<string, ChatItem[]>;
-  git: Record<string, GitFileStatus[]>;
+  git: Record<string, { files: GitFileStatus[]; ahead?: number; behind?: number }>;
   logs: Record<string, string[]>;
   diff: { worktreeId: string; path: string; before: string; after: string } | null;
-  toast: { ok: boolean; message: string; url?: string } | null;
+  toast: { ok: boolean; message: string; url?: string; removeId?: string } | null;
   showPrompt: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
@@ -115,11 +115,22 @@ function onServer(s: State, msg: ServerMsg): State {
       return { ...s, chats: { ...s.chats, [msg.worktreeId]: items } };
     }
     case "git-status":
-      return { ...s, git: { ...s.git, [msg.worktreeId]: msg.files } };
+      return {
+        ...s,
+        git: { ...s.git, [msg.worktreeId]: { files: msg.files, ahead: msg.ahead, behind: msg.behind } },
+      };
     case "file-diff":
       return { ...s, diff: msg };
     case "shipped":
-      return { ...s, toast: { ok: msg.ok, message: msg.message, url: msg.url } };
+      return {
+        ...s,
+        toast: {
+          ok: msg.ok,
+          message: msg.message,
+          url: msg.url,
+          removeId: msg.merged && msg.ok ? msg.worktreeId : undefined,
+        },
+      };
     case "error":
       return { ...s, toast: { ok: false, message: msg.message } };
   }

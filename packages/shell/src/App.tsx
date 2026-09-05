@@ -76,6 +76,18 @@ export function App() {
       {state.toast && (
         <div className={`toast ${state.toast.ok ? "ok" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
           {state.toast.message}
+          {state.toast.removeId && (
+            <button
+              className="toast-action"
+              onClick={(e) => {
+                e.stopPropagation();
+                sockRef.current?.send({ t: "remove-worktree", worktreeId: state.toast!.removeId! });
+                dispatch({ a: "dismiss-toast" });
+              }}
+            >
+              remove worktree
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -86,20 +98,38 @@ type Sock = DaemonSocket | null;
 type Dispatch = (a: Parameters<typeof reducer>[1]) => void;
 
 function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
-  const files = state.activeId ? state.git[state.activeId] ?? [] : [];
+  const gitInfo = state.activeId ? state.git[state.activeId] : undefined;
+  const files = gitInfo?.files ?? [];
+  const ahead = gitInfo?.ahead ?? 0;
+  const behind = gitInfo?.behind ?? 0;
   const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
+  const isWt = active && active.worktree.kind !== "main";
+  const landable = isWt && (files.length > 0 || ahead > 0);
   return (
     <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`}>
       <div className="dock-section-title changes-head">
-        <span>changes{files.length > 0 ? ` · ${files.length}` : ""}</span>
-        {active && active.worktree.kind !== "main" && files.length > 0 && (
-          <button
-            className="ship-btn"
-            title="Commit, push, open PR"
-            onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
-          >
-            ship ↗
-          </button>
+        <span>
+          changes{files.length > 0 ? ` · ${files.length}` : ""}
+          {ahead > 0 && <span className="ahead-badge" title={`${ahead} commit(s) ahead of main`}> ↑{ahead}</span>}
+          {behind > 0 && <span className="behind-badge" title={`${behind} commit(s) behind main`}> ↓{behind}</span>}
+        </span>
+        {landable && (
+          <span className="land-btns">
+            <button
+              className="ship-btn"
+              title="Commit and merge into main locally (no push)"
+              onClick={() => sock?.send({ t: "merge-main", worktreeId: active.worktree.id })}
+            >
+              merge
+            </button>
+            <button
+              className="ship-btn"
+              title="Commit, push, open a PR"
+              onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
+            >
+              pr ↗
+            </button>
+          </span>
         )}
       </div>
       {files.length === 0 && <div className="dock-empty">no changes on {active?.worktree.title ?? "—"}</div>}
@@ -349,7 +379,6 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
               new worktree from <b>{active?.worktree.title ?? "—"}</b>
             </span>
           </label>
-          <span>enter to send · ⌘K</span>
         </div>
       </div>
     </div>

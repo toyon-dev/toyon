@@ -58,16 +58,46 @@ export interface ShipResult {
   message: string;
 }
 
+function commitAll(worktreePath: string, title: string): ShipResult | null {
+  if (statusFiles(worktreePath).length === 0) return null;
+  git(worktreePath, "add", "-A");
+  const c = git(worktreePath, "commit", "-m", `orchardist: ${title}`);
+  if (!c.ok && !c.err.includes("nothing to commit")) {
+    return { ok: false, message: `commit failed: ${c.err}` };
+  }
+  return null;
+}
+
+export function aheadBehind(worktreePath: string, defaultBr: string): { ahead: number; behind: number } {
+  const a = git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
+  const b = git(worktreePath, "rev-list", "--count", `HEAD..${defaultBr}`);
+  return { ahead: Number(a.out) || 0, behind: Number(b.out) || 0 };
+}
+
+/** Merge the worktree's branch into the default branch in the main checkout. Local-only, no remote. */
+export function mergeToMain(worktreePath: string, branch: string, repoPath: string, defaultBr: string, title: string): ShipResult {
+  const cErr = commitAll(worktreePath, title);
+  if (cErr) return cErr;
+
+  const { ahead } = aheadBehind(worktreePath, defaultBr);
+  if (ahead === 0) return { ok: false, message: `nothing to merge — no commits ahead of ${defaultBr}` };
+
+  const current = git(repoPath, "branch", "--show-current");
+  if (current.out !== defaultBr) {
+    return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr} — switch it first` };
+  }
+  const m = git(repoPath, "merge", "--no-edit", branch);
+  if (!m.ok) {
+    git(repoPath, "merge", "--abort");
+    return { ok: false, message: `merge conflicts with ${defaultBr} — sync this worktree first (${m.err.slice(0, 200)})` };
+  }
+  return { ok: true, message: `merged ${branch} into ${defaultBr}` };
+}
+
 /** Commit everything, push, and open a PR (gh) or return the compare URL. */
 export function shipWorktree(worktreePath: string, branch: string, defaultBr: string, title: string): ShipResult {
-  const dirty = statusFiles(worktreePath).length > 0;
-  if (dirty) {
-    git(worktreePath, "add", "-A");
-    const c = git(worktreePath, "commit", "-m", `orchardist: ${title}`);
-    if (!c.ok && !c.err.includes("nothing to commit")) {
-      return { ok: false, message: `commit failed: ${c.err}` };
-    }
-  }
+  const cErr = commitAll(worktreePath, title);
+  if (cErr) return cErr;
   const ahead = git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
   if (ahead.ok && ahead.out === "0") {
     return { ok: false, message: "nothing to ship — no commits ahead of " + defaultBr };

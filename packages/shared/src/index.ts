@@ -85,9 +85,9 @@ export type ServerMsg =
   | { t: "log"; worktreeId: string; proc: string; line: string }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
   | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }> }
-  | { t: "git-status"; worktreeId: string; files: GitFileStatus[] }
+  | { t: "git-status"; worktreeId: string; files: GitFileStatus[]; ahead?: number; behind?: number }
   | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string }
-  | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string }
+  | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean }
   | { t: "error"; message: string };
 
 export type ClientMsg =
@@ -99,6 +99,7 @@ export type ClientMsg =
   | { t: "git-status"; worktreeId: string }
   | { t: "file-diff"; worktreeId: string; path: string }
   | { t: "ship"; worktreeId: string }
+  | { t: "merge-main"; worktreeId: string }
   | { t: "rename-worktree"; worktreeId: string; title: string }
   | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
 

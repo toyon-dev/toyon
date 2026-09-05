@@ -471,13 +471,12 @@ export class Manager {
       port: wt.proxyPort,
       bridgeScript: () => this.bridgeScript(),
       getTarget: () => {
-        const st = procs.states().find((p) => p.name === previewName);
-        if (!st) {
+        const st =
+          procs.states().find((p) => p.name === previewName) ??
           // backend-only repo: point preview at the first proc
-          const first = procs.states()[0];
-          return first && first.status !== "crashed" ? first.port : null;
-        }
-        return st.status === "crashed" ? null : st.port;
+          procs.states()[0];
+        if (!st || st.status === "crashed") return null;
+        return { port: st.port, host: st.host ?? "127.0.0.1" };
       },
     });
 

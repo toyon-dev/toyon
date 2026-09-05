@@ -19,15 +19,21 @@ export interface WorktreeProxy {
   setTarget: (port: number | null) => void;
 }
 
+export interface ProxyTarget {
+  port: number;
+  host: string;
+}
+
 export function startProxy(opts: {
   port: number;
   bridgeScript: () => string;
-  /** returns current upstream port for the preview proc, or null if not ready */
-  getTarget: () => number | null;
+  /** returns current upstream for the preview proc, or null if not ready */
+  getTarget: () => ProxyTarget | null;
   /** message from the injected bridge script (element picker etc.) */
   onBridgeMessage?: (msg: unknown) => void;
 }): WorktreeProxy {
   let target = opts.getTarget();
+  const hostPart = (t: ProxyTarget) => (t.host.includes(":") ? `[${t.host}]` : t.host);
 
   const server = Bun.serve<BridgeData, string>({
     port: opts.port,
@@ -52,7 +58,7 @@ export function startProxy(opts: {
       // WebSocket upgrade -> bridge to upstream
       if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
         const proto = req.headers.get("sec-websocket-protocol") ?? undefined;
-        const upstreamUrl = `ws://127.0.0.1:${target}${url.pathname}${url.search}`;
+        const upstreamUrl = `ws://${hostPart(target)}:${target.port}${url.pathname}${url.search}`;
         const ok = srv.upgrade(req, {
           data: { queue: [], upstream: undefined, upstreamUrl, protocol: proto },
         });
@@ -61,9 +67,9 @@ export function startProxy(opts: {
       }
 
       // Plain HTTP forward
-      const upstreamUrl = `http://127.0.0.1:${target}${url.pathname}${url.search}`;
+      const upstreamUrl = `http://${hostPart(target)}:${target.port}${url.pathname}${url.search}`;
       const headers = new Headers(req.headers);
-      headers.set("host", `127.0.0.1:${target}`);
+      headers.set("host", `localhost:${target.port}`);
       headers.delete("accept-encoding"); // keep bodies readable for injection
       let res: Response;
       try {

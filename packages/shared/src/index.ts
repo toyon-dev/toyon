@@ -54,6 +54,8 @@ export interface ProcState {
   status: ProcStatus;
   pid?: number;
   exitCode?: number | null;
+  /** address family the proc actually listens on (some dev servers bind ::1 only) */
+  host?: string;
 }
 
 export type AgentStatus = "idle" | "working" | "error";

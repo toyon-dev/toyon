@@ -97,19 +97,22 @@ export class WorktreeProcs {
     const { port } = mp.state;
     for (let i = 0; i < 120; i++) {
       if (this.stopped || mp.state.status === "crashed" || mp.state.status === "stopped") return;
-      try {
-        const sock = await Bun.connect({
-          hostname: "127.0.0.1",
-          port,
-          socket: { data() {}, open(s) { s.end(); } },
-        });
-        sock.end();
-        mp.state.status = "running";
-        this.onProc({ ...mp.state });
-        return;
-      } catch {
-        await Bun.sleep(500);
+      // dev servers bind whichever family "localhost" resolves to first — try both
+      for (const hostname of ["127.0.0.1", "::1"]) {
+        try {
+          const sock = await Bun.connect({
+            hostname,
+            port,
+            socket: { data() {}, open(s) { s.end(); } },
+          });
+          sock.end();
+          mp.state.host = hostname;
+          mp.state.status = "running";
+          this.onProc({ ...mp.state });
+          return;
+        } catch {}
       }
+      await Bun.sleep(500);
     }
   }
 

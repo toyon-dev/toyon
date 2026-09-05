@@ -34,6 +34,13 @@ export function startServer(opts: {
     async fetch(req: Request, srv: import("bun").Server<WsData>) {
       const url = new URL(req.url);
 
+      // the port-80 listener binds wildcard (macOS allows low ports unprivileged
+      // only on 0.0.0.0) — so enforce loopback peers on every request
+      const ip = srv.requestIP(req)?.address ?? "";
+      if (ip !== "127.0.0.1" && ip !== "::1" && !ip.startsWith("::ffff:127.")) {
+        return new Response("forbidden", { status: 403 });
+      }
+
       // DNS-rebinding defense: loopback hosts only. *.localhost is safe —
       // browsers hardwire it to loopback and public DNS cannot serve it (RFC 6761).
       const host = (req.headers.get("host") ?? "").split(":")[0] ?? "";
@@ -80,7 +87,7 @@ export function startServer(opts: {
       );
     },
     websocket: {
-      open(ws) {
+      open(ws: import("bun").ServerWebSocket<WsData>) {
         sockets.add(ws);
         const hello: ServerMsg = {
           t: "hello",
@@ -90,10 +97,10 @@ export function startServer(opts: {
         };
         ws.send(JSON.stringify(hello));
       },
-      close(ws) {
+      close(ws: import("bun").ServerWebSocket<WsData>) {
         sockets.delete(ws);
       },
-      async message(ws, raw) {
+      async message(ws: import("bun").ServerWebSocket<WsData>, raw: string | Buffer) {
         let msg: ClientMsg;
         try {
           msg = JSON.parse(String(raw));
@@ -115,7 +122,9 @@ export function startServer(opts: {
   let branded = false;
   if (opts.port !== 80) {
     try {
-      Bun.serve<WsData, string>({ ...serverConfig, port: 80 });
+      // wildcard bind is required for unprivileged :80 on macOS; the loopback
+      // peer check in fetch() keeps it effectively local-only
+      Bun.serve<WsData, string>({ ...serverConfig, hostname: "0.0.0.0", port: 80 });
       branded = true;
     } catch {}
   }

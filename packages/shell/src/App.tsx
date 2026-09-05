@@ -1,4 +1,6 @@
-import { Suspense, lazy, useEffect, useReducer, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import type { WorktreeStatus } from "@orchardist/shared";
 import { DaemonSocket } from "./ws.ts";
 import { initial, reducer, type ChatItem, type State } from "./store.ts";
@@ -589,12 +591,20 @@ function RightDock({ state, active, sock, dispatch }: { state: State; active: Wo
   );
 }
 
+function Markdown({ text }: { text: string }) {
+  const html = useMemo(
+    () => DOMPurify.sanitize(marked.parse(text, { async: false }) as string),
+    [text],
+  );
+  return <div className="msg-assistant md" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 function ChatItemView({ item }: { item: ChatItem }) {
   switch (item.kind) {
     case "user":
       return <div className="msg-user">{item.text}</div>;
     case "assistant":
-      return <div className="msg-assistant">{item.text}</div>;
+      return <Markdown text={item.text} />;
     case "thinking":
       return <div className="msg-thinking">{item.text}</div>;
     case "error":

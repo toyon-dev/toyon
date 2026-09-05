@@ -101,7 +101,11 @@ export function App() {
         dispatch({ a: "show-keys", v: !state.showKeys });
       } else if (e.key === "Escape") {
         if (state.showKeys) dispatch({ a: "show-keys", v: false });
-        else if (state.zen) dispatch({ a: "toggle-zen" });
+        else if (state.picking) {
+          // (the bridge handles esc itself when the preview has focus; this covers focus in the shell)
+          if (state.activeId) previewBus.post(state.activeId, { type: "pick-cancel" });
+          dispatch({ a: "set-picking", v: false });
+        } else if (state.zen) dispatch({ a: "toggle-zen" });
         else if (state.showQuickOpen) dispatch({ a: "quick-open", v: false });
         else if (state.showSearch) dispatch({ a: "show-search", v: false });
         else if (state.showCommands) dispatch({ a: "show-commands", v: false });
@@ -538,8 +542,6 @@ function WtRail({ state, dispatch, sock }: {
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, id: w.worktree.id });
               }}
-              data-tip-key={keyHint(i, state.worktrees.length)}
-              data-tip={`${w.worktree.branch}${(w.dirty ?? 0) > 0 ? ` · ${w.dirty} uncommitted` : ""}${graftMode ? " · click to select" : " · shift-click to graft"}`}
             >
               {graftMode && w.worktree.kind !== "main" && (
                 <input
@@ -558,7 +560,7 @@ function WtRail({ state, dispatch, sock }: {
               {w.worktree.variant && (
                 <span
                   className="row-badge variant-badge clickable"
-                  data-tip={`variant ${w.worktree.variant.index} of ${w.worktree.variant.of} — click to keep this one and remove the others`}
+                  data-tip="Keep this variant, remove the others"
                   onClick={(e) => {
                     e.stopPropagation();
                     pickVariant(w);
@@ -571,7 +573,7 @@ function WtRail({ state, dispatch, sock }: {
               {(w.dirty ?? 0) > 0 && (
                 <span
                   className="row-badge dirty-badge clickable"
-                  data-tip={`${w.dirty} uncommitted file(s) — click to view changes`}
+                  data-tip="View changes"
                   onClick={(e) => {
                     e.stopPropagation();
                     dispatch({ a: "activate", id: w.worktree.id });
@@ -585,7 +587,7 @@ function WtRail({ state, dispatch, sock }: {
               {(w.behind ?? 0) > 0 && (
                 <span
                   className="row-badge behind-badge clickable"
-                  data-tip={`${w.behind} commit(s) behind main — click to sync`}
+                  data-tip="Sync from main"
                   onClick={(e) => {
                     e.stopPropagation();
                     sock?.send({ t: "sync-main", worktreeId: w.worktree.id });
@@ -598,7 +600,7 @@ function WtRail({ state, dispatch, sock }: {
               {(w.ahead ?? 0) > 0 && (
                 <span
                   className="row-badge ahead-badge clickable"
-                  data-tip={`${w.ahead} commit(s) ahead of main — land it`}
+                  data-tip="Land"
                   onClick={(e) => {
                     e.stopPropagation();
                     const r = (e.target as HTMLElement).getBoundingClientRect();
@@ -793,7 +795,7 @@ function buildCommands(state: State, dispatch: Dispatch, sock: Sock, active: Wor
   }
   add("left", `${state.leftOpen ? "hide" : "show"} changes panel`, () => dispatch({ a: "toggle-left" }), "⌘B");
   add("right", `${state.rightOpen ? "hide" : "show"} chat panel`, () => dispatch({ a: "toggle-right" }), "⌘J");
-  add("zen", state.zen ? "exit zen" : "zen — full-bleed preview", () => dispatch({ a: "toggle-zen" }), "⌘.");
+  add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), "⌘.");
   add("keys", "keyboard shortcuts", () => dispatch({ a: "show-keys", v: true }), "⌘/");
 
   if (wt && id) {
@@ -1831,15 +1833,15 @@ function keyHint(i: number, count: number): string | undefined {
 }
 
 const KEY_ROWS: Array<[string, string]> = [
-  ["⌘1–9", "switch worktree · ⌘9 is always the last"],
-  ["⌘K", "new worktree (variants · batch)"],
+  ["⌘1–9", "switch worktree"],
+  ["⌘K", "new worktree"],
   ["⌘P", "jump to file"],
-  ["⌘E", "pick an element on the page"],
+  ["⌘E", "element picker"],
   ["⌘B", "changes panel"],
   ["⌘J", "chat panel"],
   ["⌘⇧F", "search in files"],
   ["⌘⇧P", "command palette"],
-  ["⌘.", "zen — full-bleed preview"],
+  ["⌘.", "full-bleed preview"],
   ["⌘/", "this list"],
 ];
 function KeysHelp({ onClose }: { onClose: () => void }) {
@@ -1907,7 +1909,9 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
     if (!url) return "/";
     try {
       const u = new URL(url);
-      return u.pathname + u.search;
+      // hash included: hash routers (#/about) are common in previews, and the
+      // bar should mirror what the page considers its route
+      return u.pathname + u.search + u.hash;
     } catch {
       return "/";
     }
@@ -1920,7 +1924,9 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
   const ready = !!active && active.procs.some((p) => p.status === "running" || p.status === "starting");
   const go = (p: string) => {
     if (!id) return;
-    const clean = p.trim().startsWith("/") ? p.trim() : `/${p.trim()}`;
+    const t = p.trim();
+    // "/path", "?query" and "#/hash-route" are all valid as typed; anything else is a path
+    const clean = /^[/?#]/.test(t) ? t : `/${t}`;
     previewBus.post(id, { type: "navigate", path: clean });
     setEditing(false);
   };
@@ -1994,7 +2000,7 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
         </button>
         <button
           className="toggle icon keys-btn"
-          {...tip("Zen — full-bleed preview, esc exits", "⌘.")}
+          {...tip("Full-bleed preview", "⌘.")}
           onClick={() => dispatch({ a: "toggle-zen" })}
         >
           <Icon name="zen" />

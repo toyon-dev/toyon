@@ -24,13 +24,22 @@ window.addEventListener("unhandledrejection", (e) => {
   post({ type: "page-error", message: `unhandled rejection: ${String(e.reason)}` });
 });
 
-// SPA navigation reporting
+// SPA navigation reporting: pushState/replaceState (history routers), popstate
+// (back/forward) and hashchange (hash routers, in case the browser doesn't also
+// fire popstate for fragment navigations)
+const navigated = () => post({ type: "navigated", url: location.href });
 const origPush = history.pushState.bind(history);
 history.pushState = (...args) => {
   origPush(...args);
-  post({ type: "navigated", url: location.href });
+  navigated();
 };
-window.addEventListener("popstate", () => post({ type: "navigated", url: location.href }));
+const origReplace = history.replaceState.bind(history);
+history.replaceState = (...args) => {
+  origReplace(...args);
+  navigated();
+};
+window.addEventListener("popstate", navigated);
+window.addEventListener("hashchange", navigated);
 
 // forward Orchardist chords to the shell even when the preview has focus
 const CHORD_KEYS = new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "k", "p", "b", "j", "e", "."]);

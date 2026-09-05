@@ -165,7 +165,7 @@ export function reducer(s: State, action: Action): State {
       return {
         ...s,
         zen: !s.zen,
-        toast: !s.zen ? { ok: true, message: "zen — esc or ⌘⇧F to exit" } : s.toast,
+        toast: !s.zen ? { ok: true, message: "esc or ⌘. to exit" } : s.toast,
       };
     case "show-keys":
       return { ...s, showKeys: action.v };

@@ -81,8 +81,17 @@ export interface GitFileStatus {
 
 // ---- Agent stream events (ACP-shaped) ----
 
+/** display metadata for a picked element attached to a message */
+export interface PickMeta {
+  component: string | null;
+  file: string | null;
+  line: number | null;
+  tag: string;
+  selector: string;
+}
+
 export type AgentEvent =
-  | { type: "user-message"; text: string; ts: number }
+  | { type: "user-message"; text: string; ts: number; pick?: PickMeta }
   | { type: "turn-start"; ts: number }
   | { type: "text-delta"; text: string }
   | { type: "thinking-delta"; text: string }
@@ -111,8 +120,8 @@ export type ServerMsg =
 
 export type ClientMsg =
   | { t: "subscribe"; worktreeId: string }
-  | { t: "chat"; worktreeId: string; text: string; context?: string }
-  | { t: "create-worktree"; repoId: string; prompt: string; baseWorktreeId?: string; variant?: { group: string; index: number; of: number }; context?: string }
+  | { t: "chat"; worktreeId: string; text: string; context?: string; pick?: PickMeta }
+  | { t: "create-worktree"; repoId: string; prompt: string; baseWorktreeId?: string; variant?: { group: string; index: number; of: number }; context?: string; pick?: PickMeta }
   | { t: "batch-worktrees"; repoId: string; prompt: string }
   | { t: "remove-worktree"; worktreeId: string }
   | { t: "restart-proc"; worktreeId: string; proc: string }

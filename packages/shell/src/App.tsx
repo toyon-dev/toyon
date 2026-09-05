@@ -665,6 +665,7 @@ function Center({ state, active, dispatch, sock, repo }: {
                 text: String(d.text ?? ""),
                 html: String(d.html ?? ""),
                 route: String(d.route ?? ""),
+                selector: String(d.selector ?? ""),
               },
             });
           } else if (d.type === "pick-cancel") dispatch({ a: "set-picking", v: false });
@@ -1041,6 +1042,9 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
   const send = () => {
     if (!active || !text.trim()) return;
     const context = buildContext();
+    const pickMeta = pick
+      ? { component: pick.component, file: pick.file, line: pick.line, tag: pick.tag, selector: pick.selector }
+      : undefined;
     if (spawnNew) {
       sock?.send({
         t: "create-worktree",
@@ -1048,9 +1052,10 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
         prompt: text.trim(),
         baseWorktreeId: active.worktree.id,
         context,
+        pick: pickMeta,
       });
     } else {
-      sock?.send({ t: "chat", worktreeId: active.worktree.id, text: text.trim(), context });
+      sock?.send({ t: "chat", worktreeId: active.worktree.id, text: text.trim(), context, pick: pickMeta });
     }
     if (pick) dispatch({ a: "clear-pick" });
     setText("");
@@ -1062,7 +1067,22 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
       <div className="chat-wrap">
         <div className="chat-log" ref={logRef} onScroll={onScroll}>
           {items.map((item, i) => (
-            <ChatItemView key={i} item={item} />
+            <ChatItemView
+              key={i}
+              item={item}
+              onPickHover={(p, entering) => {
+                if (!active) return;
+                if (entering) {
+                  previewBus.post(active.worktree.id, {
+                    type: "highlight-selector",
+                    selector: p.selector,
+                    label: p.component ? `<${p.component}>` : p.tag,
+                  });
+                } else {
+                  previewBus.post(active.worktree.id, { type: "highlight-clear" });
+                }
+              }}
+            />
           ))}
           {active?.agent === "working" && (
           <div className="msg-thinking working-row">
@@ -1109,7 +1129,18 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
       </div>
       <div className="chat-input">
         {pick && (
-          <div className="pick-chip" title={pick.html}>
+          <div
+            className="pick-chip"
+            title={pick.html}
+            onMouseEnter={() =>
+              previewBus.post(active!.worktree.id, {
+                type: "highlight-selector",
+                selector: pick.selector,
+                label: pick.component ? `<${pick.component}>` : pick.tag,
+              })
+            }
+            onMouseLeave={() => previewBus.post(active!.worktree.id, { type: "highlight-clear" })}
+          >
             <span className="pick-target">
               ⌖ {pick.component ? `<${pick.component}>` : `<${pick.tag}>`}
               {pick.file && (
@@ -1160,10 +1191,32 @@ function Markdown({ text }: { text: string }) {
   return <div className="msg-assistant md" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-function ChatItemView({ item }: { item: ChatItem }) {
+function ChatItemView({ item, onPickHover }: {
+  item: ChatItem;
+  onPickHover?: (p: NonNullable<Extract<ChatItem, { kind: "user" }>["pick"]>, entering: boolean) => void;
+}) {
   switch (item.kind) {
     case "user":
-      return <div className="msg-user">{item.text}</div>;
+      return (
+        <div className="msg-user">
+          {item.text}
+          {item.pick && (
+            <div
+              className="pick-chip in-chat"
+              title="Hover to highlight on the page"
+              onMouseEnter={() => onPickHover?.(item.pick!, true)}
+              onMouseLeave={() => onPickHover?.(item.pick!, false)}
+            >
+              ⌖ {item.pick.component ? `<${item.pick.component}>` : `<${item.pick.tag}>`}
+              {item.pick.file && (
+                <span className="pick-file">
+                  {" "}· {relFile(item.pick.file)}{item.pick.line ? `:${item.pick.line}` : ""}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      );
     case "assistant":
       return <Markdown text={item.text} />;
     case "thinking":

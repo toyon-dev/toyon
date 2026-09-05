@@ -252,6 +252,7 @@ export class Manager {
     baseWorktreeId?: string,
     variant?: { group: string; index: number; of: number },
     context?: string,
+    pick?: import("@orchardist/shared").PickMeta,
   ): Promise<WorktreeInfo> {
     const repo = this.repo(repoId);
     // variants share a name base so they read as siblings in the list
@@ -278,7 +279,7 @@ export class Manager {
         saveState(this.state);
         this.hub.worktreesChanged();
         const agent = this.agentFor(claimed.id) ?? this.makeAgent(claimed);
-        agent.send(agentPrompt);
+        agent.send(agentPrompt, undefined, pick);
         this.scheduleNaming(claimed, prompt, repo, variant);
         return claimed;
       }
@@ -309,7 +310,7 @@ export class Manager {
     void this.setupAndStart(wt, repo, base?.path ?? repo.path).then(() => this.hub.worktreesChanged());
     const rtAgent = this.makeAgent(wt);
     this.pendingAgents.set(wt.id, rtAgent);
-    rtAgent.send(agentPrompt);
+    rtAgent.send(agentPrompt, undefined, pick);
     this.scheduleNaming(wt, prompt, repo, variant);
     return wt;
   }

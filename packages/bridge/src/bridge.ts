@@ -148,6 +148,7 @@ function onPickClick(e: MouseEvent) {
     component: componentOf(fiber),
     file: src?.file ?? null,
     line: src?.line ?? null,
+    selector: cssPath(el),
     tag: el.tagName.toLowerCase(),
     classes: (el as HTMLElement).className?.toString?.().slice(0, 200) ?? "",
     text: el.textContent?.trim().slice(0, 120) ?? "",
@@ -182,6 +183,23 @@ function stopPicking() {
   document.removeEventListener("click", onPickClick, true);
   document.removeEventListener("keydown", onPickKey, true);
   document.documentElement.style.cursor = "";
+}
+
+// stable-enough CSS path for re-highlighting the picked element later
+function cssPath(el: Element): string {
+  const parts: string[] = [];
+  let cur: Element | null = el;
+  for (let depth = 0; cur && cur !== document.documentElement && depth < 6; depth++) {
+    if (cur.id) {
+      parts.unshift(`#${CSS.escape(cur.id)}`);
+      break;
+    }
+    const parent: Element | null = cur.parentElement;
+    const idx = parent ? Array.from(parent.children).indexOf(cur) + 1 : 1;
+    parts.unshift(`${cur.tagName.toLowerCase()}:nth-child(${idx})`);
+    cur = parent;
+  }
+  return parts.join(" > ");
 }
 
 function shortFile(f: string): string {
@@ -225,6 +243,14 @@ window.addEventListener("message", (e) => {
     case "highlight-file":
       highlightFile(String(d.path ?? ""));
       break;
+    case "highlight-selector": {
+      clearOverlay();
+      try {
+        const el = document.querySelector(String(d.selector ?? ""));
+        if (el) drawBox(el.getBoundingClientRect(), String(d.label ?? "") || undefined);
+      } catch {}
+      break;
+    }
     case "highlight-clear":
       clearOverlay();
       break;

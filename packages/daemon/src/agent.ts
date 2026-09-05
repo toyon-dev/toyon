@@ -6,7 +6,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentEvent, AgentStatus } from "@orchardist/shared";
+import type { AgentEvent, AgentStatus, PickMeta } from "@orchardist/shared";
 import { TRANSCRIPTS_DIR } from "./paths.ts";
 
 export type AgentEventListener = (event: AgentEvent, seq: number) => void;
@@ -23,7 +23,7 @@ const SYSTEM_APPEND = [
 export class AgentSession {
   status: AgentStatus = "idle";
   private seq = 0;
-  private queue: Array<{ text: string; context?: string }> = [];
+  private queue: Array<{ text: string; context?: string; pick?: PickMeta }> = [];
   private running = false;
   private current: { interrupt?: () => Promise<void> } | null = null;
   private interrupted = false;
@@ -98,8 +98,8 @@ export class AgentSession {
 
   /** context (live-page state, picked elements) reaches the agent's prompt but
    * never the visible transcript */
-  send(text: string, context?: string) {
-    this.queue.push({ text, context });
+  send(text: string, context?: string, pick?: PickMeta) {
+    this.queue.push({ text, context, pick });
     this.queueChanged();
     if (!this.running) void this.drain();
   }
@@ -111,7 +111,7 @@ export class AgentSession {
       while (this.queue.length > 0) {
         const item = this.queue.shift()!;
         this.queueChanged();
-        await this.runTurn(item.text, item.context);
+        await this.runTurn(item.text, item.context, item.pick);
         if (this.interrupted) break;
       }
       if (this.interrupted) {
@@ -133,8 +133,8 @@ export class AgentSession {
     }
   }
 
-  private async runTurn(text: string, context?: string) {
-    this.emit({ type: "user-message", text, ts: Date.now() });
+  private async runTurn(text: string, context?: string, pick?: PickMeta) {
+    this.emit({ type: "user-message", text, ts: Date.now(), pick });
     this.emit({ type: "turn-start", ts: Date.now() });
 
     const resume = this.getSessionId();

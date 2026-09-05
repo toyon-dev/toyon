@@ -151,12 +151,12 @@ export function startServer(opts: {
         if (!wt) throw new Error("unknown worktree");
         let agent = manager.agentFor(msg.worktreeId);
         if (!agent) throw new Error("worktree still starting; try again in a moment");
-        agent.send(msg.text, msg.context);
+        agent.send(msg.text, msg.context, msg.pick);
         hub.worktreesChanged(); // queued-count may have changed
         break;
       }
       case "create-worktree": {
-        await manager.createWorktree(msg.repoId, msg.prompt, msg.baseWorktreeId, msg.variant, msg.context);
+        await manager.createWorktree(msg.repoId, msg.prompt, msg.baseWorktreeId, msg.variant, msg.context, msg.pick);
         break;
       }
       case "batch-worktrees": {

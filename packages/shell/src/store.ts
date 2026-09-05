@@ -3,7 +3,7 @@ import type {
 } from "@orchardist/shared";
 
 export type ChatItem =
-  | { kind: "user"; text: string }
+  | { kind: "user"; text: string; pick?: import("@orchardist/shared").PickMeta }
   | { kind: "assistant"; text: string }
   | { kind: "thinking"; text: string }
   | { kind: "tool"; id: string; name: string; input: unknown; output?: string; isError?: boolean; done: boolean }
@@ -41,6 +41,7 @@ export interface State {
     text: string;
     html: string;
     route: string;
+    selector: string;
   } | null;
   showQuickOpen: boolean;
   showPrompt: boolean;
@@ -238,7 +239,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
   const last = items[items.length - 1];
   switch (event.type) {
     case "user-message":
-      return [...items, { kind: "user", text: event.text }];
+      return [...items, { kind: "user", text: event.text, pick: event.pick }];
     case "text-delta":
       if (last?.kind === "assistant") {
         return [...items.slice(0, -1), { ...last, text: last.text + event.text }];

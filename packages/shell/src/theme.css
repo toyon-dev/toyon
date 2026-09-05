@@ -499,6 +499,14 @@ body.resizing iframe { pointer-events: none; }
 .pick-chip .pick-file { color: var(--fg-dim); }
 .pick-chip button { color: var(--fg-dim); }
 .pick-chip button:hover { color: var(--fg1); }
+.pick-chip.in-chat {
+  margin: 6px 0 0;
+  padding: 2px 6px;
+  cursor: default;
+  display: inline-flex;
+  font-size: 11px;
+}
+.pick-chip.in-chat:hover { border-color: var(--orange); }
 .status-bar .toggle.icon:hover { background: var(--bg2); }
 .status-bar .branch { color: var(--orange); }
 .status-bar .grow { flex: 1; }

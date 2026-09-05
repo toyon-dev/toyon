@@ -127,8 +127,10 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
           {behind > 0 && <span className="behind-badge" title={`${behind} commit(s) behind main`}> ↓{behind}</span>}
           {active?.worktree.landed && <span className="landed-badge" title="Merged into main"> ✓ landed</span>}
         </span>
-        {isWt && clean && behind > 0 && (
-          <span className="land-btns">
+      </div>
+      {isWt && clean && (behind > 0 || ahead > 0) && (
+        <div className="land-row">
+          {behind > 0 && (
             <button
               className="ship-btn"
               title={`Pull ${behind} commit(s) from main into this worktree`}
@@ -136,27 +138,27 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
             >
               sync ↓
             </button>
-          </span>
-        )}
-        {isWt && clean && ahead > 0 && (
-          <span className="land-btns">
-            <button
-              className="ship-btn"
-              title="Merge into main locally (no push)"
-              onClick={() => sock?.send({ t: "merge-main", worktreeId: active.worktree.id })}
-            >
-              merge
-            </button>
-            <button
-              className="ship-btn"
-              title="Push and open a PR"
-              onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
-            >
-              pr ↗
-            </button>
-          </span>
-        )}
-      </div>
+          )}
+          {ahead > 0 && (
+            <>
+              <button
+                className="ship-btn"
+                title="Merge into main locally (no push)"
+                onClick={() => sock?.send({ t: "merge-main", worktreeId: active.worktree.id })}
+              >
+                merge
+              </button>
+              <button
+                className="ship-btn"
+                title="Push and open a PR"
+                onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
+              >
+                pr ↗
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {clean && <div className="dock-empty">no changes on {active?.worktree.title ?? "—"}</div>}
       {files.length > 0 && (
         <div className="commit-box">
@@ -189,7 +191,7 @@ function LeftDock({ state, dispatch, sock }: { state: State; dispatch: Dispatch;
 
 function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
   const [open, setOpen] = useState(true);
-  const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; id: string; land?: boolean } | null>(null);
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
   const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
@@ -291,27 +293,28 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
               {(w.ahead ?? 0) > 0 && (
                 <span
                   className="row-badge ahead-badge clickable"
-                  title={`${w.ahead} commit(s) ahead — click to merge into main`}
+                  title={`${w.ahead} commit(s) ahead of main — land it`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (window.confirm(`Merge ${w.worktree.title} (${w.ahead} commit(s)) into main?`)) {
-                      sock?.send({ t: "merge-main", worktreeId: w.worktree.id });
-                    }
+                    const r = (e.target as HTMLElement).getBoundingClientRect();
+                    setMenu({ x: r.left - 100, y: r.bottom + 4, id: w.worktree.id, land: true });
                   }}
                 >
-                  ↑{w.ahead}
+                  <span className="num">↑{w.ahead}</span>
+                  <span className="act">land</span>
                 </span>
               )}
               {(w.behind ?? 0) > 0 && (
                 <span
                   className="row-badge behind-badge clickable"
-                  title={`${w.behind} commit(s) behind — click to sync from main`}
+                  title={`${w.behind} commit(s) behind main — click to sync`}
                   onClick={(e) => {
                     e.stopPropagation();
                     sock?.send({ t: "sync-main", worktreeId: w.worktree.id });
                   }}
                 >
-                  ↓{w.behind}
+                  <span className="num">↓{w.behind}</span>
+                  <span className="act">sync</span>
                 </span>
               )}
               <span
@@ -349,7 +352,17 @@ function WtSwitcher({ state, dispatch, sock }: { state: State; dispatch: Dispatc
           </button>
         </div>
       )}
-      {menu && menuWt && (
+      {menu && menuWt && menu.land && (
+        <div className="ctx-menu" style={{ left: Math.min(menu.x, window.innerWidth - 180), top: menu.y }}>
+          <button onClick={() => sock?.send({ t: "merge-main", worktreeId: menuWt.worktree.id })}>
+            merge into main
+          </button>
+          <button onClick={() => sock?.send({ t: "ship", worktreeId: menuWt.worktree.id })}>
+            push + PR
+          </button>
+        </div>
+      )}
+      {menu && menuWt && !menu.land && (
         <div className="ctx-menu" style={{ left: Math.min(menu.x, window.innerWidth - 180), top: menu.y }}>
           {menuWt.worktree.kind !== "main" ? (
             <>

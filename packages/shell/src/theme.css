@@ -110,6 +110,9 @@ button {
 .wt-item .row-badge { font: 10px var(--font-mono); flex-shrink: 0; }
 .wt-item .row-badge.clickable { padding: 1px 4px; border-radius: 3px; }
 .wt-item .row-badge.clickable:hover { background: var(--bg3); }
+.wt-item .row-badge .act { display: none; }
+.wt-item .row-badge.clickable:hover .num { display: none; }
+.wt-item .row-badge.clickable:hover .act { display: inline; }
 .wt-item .wt-more {
   visibility: hidden;
   color: var(--fg-dim);
@@ -347,6 +350,7 @@ button {
 .behind-badge { color: var(--yellow); }
 .landed-badge { color: var(--aqua); }
 .land-btns { display: flex; gap: 6px; }
+.land-row { display: flex; gap: 6px; padding: 2px 12px 6px; }
 
 .commit-box { display: flex; gap: 6px; padding: 4px 12px 8px; }
 .commit-box input {

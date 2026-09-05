@@ -110,9 +110,27 @@ function installApp() {
 `,
   );
   const launcher = join(macos, "launch");
+  const daemonEntry = join(here, "../../daemon/src/index.ts");
   writeFileSync(
     launcher,
     `#!/bin/bash
+# Finder launches get a minimal PATH; find bun ourselves
+BUN=""
+for CAND in "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun; do
+  [ -x "$CAND" ] && BUN="$CAND" && break
+done
+
+# start the daemon if it isn't running
+if ! curl -s --max-time 1 http://127.0.0.1:${port}/health >/dev/null 2>&1; then
+  if [ -n "$BUN" ] && [ -f "${daemonEntry}" ]; then
+    nohup "$BUN" run "${daemonEntry}" >> "$HOME/.orchardist/daemon.log" 2>&1 &
+    for _ in $(seq 1 40); do
+      curl -s --max-time 1 http://127.0.0.1:${port}/health >/dev/null 2>&1 && break
+      sleep 0.25
+    done
+  fi
+fi
+
 TOKEN=$(cat "$HOME/.orchardist/token" 2>/dev/null)
 URL="http://orchardist.localhost:${port}/#token=$TOKEN"
 for APP in ${CHROMIUMS.map((a) => `"${a}"`).join(" ")}; do

@@ -2,7 +2,6 @@
 // transport layer (server/handlers.ts) calls in here and shapes replies; git/, runtime/ and the
 // spare pool do the work.
 
-import { spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { PickMeta, RepoInfo, ServerMsg, WorktreeInfo, WorktreeStatus } from "@orchardist/shared";
@@ -13,7 +12,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
-import { git, gitOrThrow } from "../git/exec.ts";
+import { git, gitOrThrow, run } from "../git/exec.ts";
 import { commitWorktree, mergeToMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts } from "../git/status.ts";
@@ -278,18 +277,18 @@ export class WorktreeService {
         ["copy", ["-R", srcNm, dstNm]],
       ];
       for (const [how, args] of attempts) {
-        if (spawnSync("cp", args, { stdio: "ignore" }).status === 0) {
+        if ((await run("cp", args, wt.path)).ok) {
           this.d.hub.emit("log", wt.id, "setup", `deps via ${how} in ${Date.now() - started}ms`);
           break;
         }
-        try {
-          spawnSync("rm", ["-rf", dstNm]);
-        } catch {}
+        await run("rm", ["-rf", dstNm], wt.path);
       }
     }
+    // `bun install` and friends can take a minute: async, so every preview and agent stream keeps
+    // flowing while a new worktree warms up
     for (const cmd of repo.config.setup ?? []) {
-      const r = spawnSync("sh", ["-c", cmd], { cwd: wt.path, encoding: "utf8" });
-      if (r.status !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed: ${cmd}: ${r.stderr}`);
+      const r = await run("sh", ["-c", cmd], wt.path);
+      if (!r.ok) this.d.hub.emit("log", wt.id, "setup", `setup failed: ${cmd}: ${r.err}`);
     }
     await this.d.runtime.start(wt, repo);
   }

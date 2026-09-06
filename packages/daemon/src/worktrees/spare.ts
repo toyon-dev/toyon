@@ -4,14 +4,13 @@
 // The placeholder entry ({worktreeId:"", ready:false}) goes in before the first await so a second
 // ensure() during warm-up is a no-op; refresh() and claim() key off `ready`.
 
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import type { RepoInfo, WorktreeInfo } from "@orchardist/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
-import { git, gitOrThrow, lockfileHash } from "../git/exec.ts";
+import { git, gitOrThrow, lockfileHash, run } from "../git/exec.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
@@ -114,8 +113,8 @@ export class SparePool {
       if (h !== entry.lockHash) {
         entry.lockHash = h;
         for (const cmd of repo.config.setup ?? []) {
-          const r = spawnSync("sh", ["-c", cmd], { cwd: wt.path, encoding: "utf8" });
-          if (r.status !== 0) log.warn(wt.id, `spare setup failed: ${cmd}`, r.stderr);
+          const r = await run("sh", ["-c", cmd], wt.path);
+          if (!r.ok) log.warn(wt.id, `spare setup failed: ${cmd}`, r.err);
         }
       }
     })().finally(() => {

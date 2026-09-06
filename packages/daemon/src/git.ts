@@ -63,16 +63,22 @@ export function statusFiles(worktreePath: string): GitFileStatus[] {
     maxBuffer: 32 * 1024 * 1024,
   });
   if (r.status !== 0) throw new Error(`git status failed: ${r.stderr}`);
-  return (r.stdout ?? "")
+  return parsePorcelain(r.stdout ?? "");
+}
+
+/** `git status --porcelain` (v1) → entries. Renames/copies (`R  old -> new`) report the NEW path:
+ * that is the file that exists on disk, and what file-diff / discard act on. Quoted paths are unquoted. */
+export function parsePorcelain(out: string): GitFileStatus[] {
+  const unquote = (p: string) => (p.startsWith('"') && p.endsWith('"') ? JSON.parse(p) : p);
+  return out
     .split("\n")
     .filter((line) => line.length > 3)
-    .map((line) => ({
-      xy: line.slice(0, 2),
-      path: line
-        .slice(3)
-        .replace(/^"(.*)"$/, "$1")
-        .replace(/ -> .*$/, ""),
-    }));
+    .map((line) => {
+      const xy = line.slice(0, 2);
+      const rest = line.slice(3);
+      const arrow = xy.includes("R") || xy.includes("C") ? rest.lastIndexOf(" -> ") : -1;
+      return { xy, path: unquote(arrow >= 0 ? rest.slice(arrow + 4) : rest) };
+    });
 }
 
 /** File content at merge-base with the default branch (empty string for new files). */

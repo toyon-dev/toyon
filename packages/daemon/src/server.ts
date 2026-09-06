@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { type ClientMsg, pickTheme, type ServerMsg } from "@orchardist/shared";
 import { cloud } from "./cloud.ts";
+import { fireAndForget, log } from "./core/log.ts";
 import {
   changedRanges,
   commitWorktree,
@@ -10,6 +11,7 @@ import {
   shipWorktree,
   statusFiles,
   syncFromMain,
+  withRepoLock,
 } from "./git.ts";
 import { setWaitingColors } from "./proxy.ts";
 import type { ThemeStore } from "./themes.ts";
@@ -197,23 +199,34 @@ export function startServer(opts: {
           } satisfies ServerMsg),
         );
         // plan + spawn in the background so the socket stays responsive
-        void (async () => {
-          const { planTasks } = await import("./agent.ts");
-          const tasks = (await planTasks(msg.prompt, repo.path)) ?? [msg.prompt];
-          for (const task of tasks) {
-            try {
-              await manager.createWorktree(msg.repoId, task);
-            } catch {}
-          }
-          ws.send(
-            JSON.stringify({
-              t: "shipped",
-              worktreeId: "",
-              ok: true,
-              message: `batch: ${tasks.length} worktree(s) started`,
-            } satisfies ServerMsg),
-          );
-        })();
+        fireAndForget(
+          msg.repoId,
+          (async () => {
+            const { planTasks } = await import("./agent.ts");
+            const tasks = (await planTasks(msg.prompt, repo.path)) ?? [msg.prompt];
+            let failed = 0;
+            for (const task of tasks) {
+              try {
+                await manager.createWorktree(msg.repoId, task);
+              } catch (e) {
+                failed++;
+                log.warn(msg.repoId, `batch: could not start "${task.slice(0, 60)}"`, e);
+              }
+            }
+            const started = tasks.length - failed;
+            ws.send(
+              JSON.stringify({
+                t: "shipped",
+                worktreeId: "",
+                ok: failed === 0,
+                message: failed
+                  ? `batch: ${started} started, ${failed} failed (see daemon log)`
+                  : `batch: ${started} worktree(s) started`,
+              } satisfies ServerMsg),
+            );
+          })(),
+          "batch",
+        );
         break;
       }
       case "remove-worktree": {
@@ -264,7 +277,10 @@ export function startServer(opts: {
         if (!wt) throw new Error("unknown worktree");
         if (wt.kind === "main") throw new Error("merge from a worktree, not main");
         const repo = manager.repo(wt.repoId);
-        const result = mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch, wt.title);
+        // touches the main checkout: serialize with spare refresh / worktree add on the same repo
+        const result = await withRepoLock(repo.path, () =>
+          mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch, wt.title),
+        );
         if (result.ok) manager.setLanded(wt.id, true);
         // landing a graft lands its sources; landing a variant ends the tournament —
         // in both cases offer to clean up the whole family
@@ -294,7 +310,7 @@ export function startServer(opts: {
         if (!wt) throw new Error("unknown worktree");
         if (wt.kind === "main") throw new Error("main doesn't sync with itself");
         const repo = manager.repo(wt.repoId);
-        const result = syncFromMain(wt.path, repo.defaultBranch);
+        const result = await withRepoLock(repo.path, () => syncFromMain(wt.path, repo.defaultBranch));
         const suggestion = result.ok
           ? undefined
           : `Merge ${repo.defaultBranch} into this branch and resolve the conflicts, then verify the app still works.`;

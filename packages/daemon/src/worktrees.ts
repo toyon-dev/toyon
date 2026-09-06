@@ -158,8 +158,27 @@ export class Manager {
       await this.setupAndStart(wt, repo); // CoW deps + setup + warm servers
       entry.lockHash = lockfileHash(wt.path);
       entry.ready = true;
-    } catch {
+    } catch (e) {
+      log.warn(repoId, "spare warm-up failed; rolling back", e);
       this.spares.delete(repoId);
+      // the state row and git worktree were created before setup could fail: undo them, or the
+      // next boot adopts a half-built spare
+      const id = entry.worktreeId;
+      const wt = id ? this.worktree(id) : undefined;
+      if (wt) {
+        const rt = this.runtimes.get(wt.id);
+        rt?.agent.stop();
+        rt?.procs.stopAll();
+        rt?.proxy.stop();
+        this.runtimes.delete(wt.id);
+        this.pendingAgents.delete(wt.id);
+        await withRepoLock(repo.path, () => {
+          git(repo.path, "worktree", "remove", "--force", wt.path);
+        });
+        this.state.worktrees = this.state.worktrees.filter((w) => w.id !== wt.id);
+        releasePort(wt.proxyPort);
+        saveState(this.state);
+      }
     }
   }
 

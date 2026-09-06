@@ -39,9 +39,9 @@ describe("matchChord", () => {
     expect(matchChord(ev("k", { meta: false, ctrl: true }))).toBeNull();
     expect(matchChord(ev("k", { alt: true }))).toBeNull();
   });
-  test("a ⌃ row matches ⌃ alone: ⌃` is the terminal, ⌘` (macOS cycles windows) and ⌃⌘` are not", () => {
+  test("a ⌃ row matches ⌃ alone or ⌘ alone (⌘` reaches the page only in an app window), never both", () => {
     expect(matchChord(ev("`", { meta: false, ctrl: true }))).toEqual({ id: "terminal" });
-    expect(matchChord(ev("`"))).toBeNull();
+    expect(matchChord(ev("`"))).toEqual({ id: "terminal" });
     expect(matchChord(ev("`", { ctrl: true }))).toBeNull();
     expect(matchChord(ev("`", { meta: false, ctrl: true, shift: true }))).toBeNull();
     expect(matchChord(ev("1", { meta: false, ctrl: true }))).toBeNull();

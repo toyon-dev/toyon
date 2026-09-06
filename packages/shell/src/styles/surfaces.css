@@ -415,9 +415,12 @@ body.resizing iframe {
   min-height: 0;
   padding: 0 4px 4px 8px;
 }
-.term-host,
-.term-host .xterm {
+.term-host {
   height: 100%;
+}
+/* xterm.css paints the viewport #000 for an opaque macOS scrollbar; below the last row that showed as a black strip */
+.term-host .xterm .xterm-viewport {
+  background-color: transparent;
 }
 .row-resize {
   position: absolute;

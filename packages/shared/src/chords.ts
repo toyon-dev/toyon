@@ -30,8 +30,9 @@ export interface Chord {
   /** the key as KeyboardEvent.key, lower-case for letters; "1-9" for the worktree switcher */
   key: string;
   shift?: boolean;
-  /** ⌃ instead of ⌘: only for keys macOS takes before any browser sees them (⌘` cycles windows),
-   * where every editor has settled on the ⌃ form */
+  /** bound and advertised as ⌃ rather than ⌘: for keys macOS takes before a browser sees them (⌘`
+   * cycles windows), where every editor settled on the ⌃ form. ⌘ still counts when it does arrive
+   * (an installed app window with nothing to cycle to). */
   ctrl?: true;
   /** other keys that fire the same chord. ⌘⇧E for the palette because Firefox owns ⌘⇧P; ⌘N for
    * new-worktree because it is the muscle-memory key, though only an installed PWA lets the page
@@ -103,7 +104,8 @@ export function matchChord(e: {
   if (e.metaKey && !e.shiftKey && key >= "1" && key <= "9") return { id: "worktree", digit: Number(key) };
   for (const c of CHORDS) {
     if (c.id === "worktree") continue;
-    if (!!c.ctrl !== !!e.ctrlKey || !!c.shift !== e.shiftKey) continue;
+    // a ⌘ row never fires on ⌃; a ⌃ row fires on either
+    if ((e.ctrlKey && !c.ctrl) || !!c.shift !== e.shiftKey) continue;
     if (c.key === key || c.aliases?.includes(key)) return { id: c.id };
   }
   return null;

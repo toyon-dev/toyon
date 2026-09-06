@@ -39,7 +39,7 @@ export function DiffView({
       <div className="file-head">
         <span className="file-path">{diff.path}</span>
         <button
-          className="deep-link"
+          className="btn btn-outline deep-link"
           onClick={onToggleFull}
           data-tip={full ? "Split view — show the preview above" : "Full height — hide the preview"}
         >

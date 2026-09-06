@@ -107,6 +107,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         />
       )}
       <textarea
+        className="field field-lg"
         ref={composerRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -139,7 +140,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           </span>
         </label>
         <button
-          className={`composer-pick ${picking ? "rb-on" : ""}`}
+          className={`btn-icon composer-pick ${picking ? "on" : ""}`}
           disabled={!active}
           {...tip("Pick an element on the page to attach", chord("pick"))}
           onClick={togglePick}

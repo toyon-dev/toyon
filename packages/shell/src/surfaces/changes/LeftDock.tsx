@@ -96,7 +96,7 @@ export function LeftDock({ width }: { width: number }) {
             <span className="land-btns">
               {behind > 0 && (
                 <button
-                  className="ship-btn"
+                  className="btn btn-outline ship-btn"
                   data-tip={`Pull ${behind} commit(s) from main into this worktree`}
                   onClick={() => sock?.send({ t: "sync-main", worktreeId: active.worktree.id })}
                 >
@@ -106,7 +106,7 @@ export function LeftDock({ width }: { width: number }) {
               {ahead > 0 && (
                 <>
                   <button
-                    className="ship-btn"
+                    className="btn btn-outline ship-btn"
                     data-tip={
                       active.worktree.prUrl
                         ? "Merge locally — the open PR will show as merged once main is pushed"
@@ -118,7 +118,7 @@ export function LeftDock({ width }: { width: number }) {
                   </button>
                   {active.worktree.prUrl ? (
                     <button
-                      className="ship-btn pr-open"
+                      className="btn btn-outline ship-btn pr-open"
                       data-tip={`PR open — click to view · ${active.worktree.prUrl}`}
                       onClick={() => window.open(active.worktree.prUrl, "_blank")}
                     >
@@ -126,7 +126,7 @@ export function LeftDock({ width }: { width: number }) {
                     </button>
                   ) : (
                     <button
-                      className="ship-btn"
+                      className="btn btn-outline ship-btn"
                       data-tip="Push and open a PR"
                       onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
                     >
@@ -147,13 +147,14 @@ export function LeftDock({ width }: { width: number }) {
           ))}
           <div className="commit-box">
             <input
+              className="field"
               value={commitMsg}
               onChange={(e) => setCommitMsg(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && commit()}
               placeholder="commit message…"
             />
             <button
-              className="ship-btn"
+              className="btn btn-outline ship-btn"
               disabled={!commitMsg.trim()}
               onClick={commit}
               data-tip="git add -A && git commit"

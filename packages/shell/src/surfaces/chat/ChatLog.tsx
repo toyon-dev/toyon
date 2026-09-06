@@ -68,7 +68,7 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
           <div className="msg-thinking working-row">
             working…
             <button
-              className="stop-btn"
+              className="btn btn-outline stop-btn"
               data-tip="Stop the agent (context up to here is kept; queued messages dropped)"
               onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
             >

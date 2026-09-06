@@ -46,6 +46,7 @@ export function PromptOverlay() {
           : "new worktree — describe the change; an agent starts on it immediately"}
       </div>
       <textarea
+        className="field field-lg"
         autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -70,7 +71,11 @@ export function PromptOverlay() {
           <span className="variants-right">
             <span data-tip="Run the same prompt in N parallel worktrees — keep the best">variants</span>
             {[1, 2, 3].map((n) => (
-              <button key={n} className={`variant-chip ${variants === n ? "on" : ""}`} onClick={() => setVariants(n)}>
+              <button
+                key={n}
+                className={`btn btn-outline variant-chip ${variants === n ? "on" : ""}`}
+                onClick={() => setVariants(n)}
+              >
                 {n}
               </button>
             ))}

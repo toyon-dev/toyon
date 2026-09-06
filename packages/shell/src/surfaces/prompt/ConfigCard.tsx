@@ -36,13 +36,13 @@ export function ConfigCard({ repo }: { repo: RepoInfo }) {
       {procs.map((p, i) => (
         <div className="cfg-proc" key={i}>
           <input
-            className="cfg-name"
+            className="field cfg-name"
             value={p.name}
             placeholder="name"
             onChange={(e) => setProcs(procs.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
           />
           <input
-            className="cfg-cmd"
+            className="field cfg-cmd"
             value={p.cmd}
             placeholder="bun run dev · uvicorn main:app --reload --port $PORT · ./start.sh"
             onChange={(e) => setProcs(procs.map((x, j) => (j === i ? { ...x, cmd: e.target.value } : x)))}
@@ -57,7 +57,7 @@ export function ConfigCard({ repo }: { repo: RepoInfo }) {
       </button>
       <div className="cfg-section">setup (run once per new worktree)</div>
       <textarea
-        className="cfg-setup"
+        className="field cfg-setup"
         value={setup}
         onChange={(e) => setSetup(e.target.value)}
         placeholder={"bun install\ncp ../../.env .env"}
@@ -71,7 +71,11 @@ export function ConfigCard({ repo }: { repo: RepoInfo }) {
       </label>
       <div className="cfg-actions">
         <span className="cfg-note">saved to orchardist.json in the repo</span>
-        <button className="ship-btn" disabled={procs.every((p) => !p.name.trim() || !p.cmd.trim())} onClick={start}>
+        <button
+          className="btn btn-outline ship-btn"
+          disabled={procs.every((p) => !p.name.trim() || !p.cmd.trim())}
+          onClick={start}
+        >
           start ▸
         </button>
       </div>

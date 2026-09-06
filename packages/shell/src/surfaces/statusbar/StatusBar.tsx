@@ -21,7 +21,7 @@ export function StatusBar({ navCenter }: { navCenter: number }) {
     <div className="status-bar top-bar">
       {zen && <span className="zen-title">{active?.worktree.title ?? "orchardist"}</span>}
       <button
-        className={`toggle icon ${leftOpen ? "on" : ""}`}
+        className={`btn-icon toggle ${leftOpen ? "on" : ""}`}
         onClick={() => dispatch({ a: "toggle-left" })}
         {...tip("Changes panel", chord("left"))}
       >
@@ -30,7 +30,7 @@ export function StatusBar({ navCenter }: { navCenter: number }) {
       <RouteBar worktreeId={id} ready={ready} left={navCenter} />
       {installEvt && (
         <button
-          className="toggle"
+          className="btn toggle"
           data-tip="Install Orchardist as an app (own window, dock icon)"
           onClick={() => void installEvt.prompt()}
         >
@@ -55,21 +55,21 @@ export function StatusBar({ navCenter }: { navCenter: number }) {
       {/* right cluster: help · chat toggle · zen (zen last — it hides everything, so it sits at the edge) */}
       <span className="bar-tools">
         <button
-          className="toggle icon keys-btn"
+          className="btn-icon toggle keys-btn"
           {...tip("Shortcuts & settings", chord("keys"))}
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
         >
           <Icon name="help" />
         </button>
         <button
-          className={`toggle icon ${rightOpen ? "on" : ""}`}
+          className={`btn-icon toggle ${rightOpen ? "on" : ""}`}
           onClick={() => dispatch({ a: "toggle-right" })}
           {...tip("Chat panel", chord("right"))}
         >
           <Icon name="chat" />
         </button>
         <button
-          className="toggle icon keys-btn"
+          className="btn-icon toggle keys-btn"
           {...tip("Full-bleed preview", chord("zen"))}
           onClick={() => dispatch({ a: "toggle-zen" })}
         >
@@ -110,7 +110,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
   return (
     <div className="rb-center" style={{ left }}>
       <button
-        className="rb-btn rb-nav"
+        className="btn-icon rb-btn"
         disabled={!ready}
         {...tip("Back")}
         onClick={() => id && previewBus.post(id, { type: "back" })}
@@ -118,7 +118,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
         <Icon name="back" />
       </button>
       <button
-        className="rb-btn rb-nav"
+        className="btn-icon rb-btn"
         disabled={!ready}
         {...tip("Forward")}
         onClick={() => id && previewBus.post(id, { type: "forward" })}
@@ -126,7 +126,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
         <Icon name="forward" />
       </button>
       <button
-        className="rb-btn rb-nav rb-reload"
+        className="btn-icon rb-btn rb-reload"
         disabled={!ready}
         {...tip("Reload preview")}
         onClick={() => id && previewBus.post(id, { type: "reload" })}
@@ -134,7 +134,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
         <Icon name="reload" />
       </button>
       <input
-        className="rb-path"
+        className="field rb-path"
         value={ready ? val : ""}
         disabled={!ready}
         placeholder={ready ? "/" : "—"}

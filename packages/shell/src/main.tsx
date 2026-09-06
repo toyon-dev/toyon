@@ -5,7 +5,9 @@ import { App } from "./app/App.tsx";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { STORAGE } from "./state/keys.ts";
 import { initialState } from "./state/store.ts";
-import "./theme.css";
+import "./styles/tokens.css";
+import "./styles/base.css";
+import "./styles/surfaces.css";
 import { applyTheme, cachedTheme, prefersDark } from "./theme.ts";
 import { DaemonSocket } from "./ws.ts";
 

@@ -31,13 +31,19 @@ export function KeysHelp() {
           <div className="keys-h">Settings</div>
           <div className="set-row">
             <span className="keys-d">theme</span>
-            <button className="set-v" onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
+            <button
+              className="btn btn-outline set-v"
+              onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}
+            >
               {resolveTheme(prefs, themes, systemDark).name}
             </button>
           </div>
           <div className="set-row">
             <span className="keys-d">light/dark mode</span>
-            <button className="set-v" onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}>
+            <button
+              className="btn btn-outline set-v"
+              onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}
+            >
               {appearanceLabel[prefs.mode]}
             </button>
           </div>

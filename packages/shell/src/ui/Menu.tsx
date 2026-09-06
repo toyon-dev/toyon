@@ -37,7 +37,7 @@ export function Menu({
   const y = anchor ? anchor.bottom + 4 : (at?.y ?? 0);
   const left = Math.max(4, Math.min(x, window.innerWidth - WIDTH - 4));
   return (
-    <div className="ctx-menu" style={{ position: "fixed", left, top: y }}>
+    <div className="menu" style={{ position: "fixed", left, top: y }}>
       {items.map((it, i) => (
         <button
           key={i}

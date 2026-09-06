@@ -86,6 +86,7 @@ export function ListPicker<T>({
   return (
     <Overlay onClose={onBack} boxClass="quick-open">
       <input
+        className="field field-lg"
         ref={inputRef}
         autoFocus
         value={q}

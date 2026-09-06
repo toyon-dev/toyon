@@ -1,0 +1,37 @@
+/* Theme tokens. The colors are the Gruvbox Dark Soft defaults (no-JS fallback); theme.ts
+   overwrites every color on the root element from the selected Theme (see @orchardist/shared
+   themes.ts for the contract). Radii and sizes are the shell's own scale. */
+:root {
+  color-scheme: dark;
+  --bg0: #32302f;
+  --bg1: #3c3836;
+  --bg2: #504945;
+  --bg3: #665c54;
+  --fg1: #ebdbb2;
+  --fg-muted: #a89984;
+  --fg-dim: #928374;
+  --green: #b8bb26;
+  --red: #fb4934;
+  --yellow: #fabd2f;
+  --blue: #83a598;
+  --aqua: #8ec07c;
+  --orange: #fe8019;
+  --purple: #d3869b;
+  --add-bg: #b8bb261f;
+  --del-bg: #fb49341f;
+  /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
+  --scrim: #282828b3;
+  --shadow: #00000066;
+  /* radii: xs chips/badges, sm controls, md boxes, lg cards */
+  --r-xs: 3px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-pill: 999px;
+  /* type scale: xs hints/mono chrome, sm rows, md body */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --font-ui: -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}

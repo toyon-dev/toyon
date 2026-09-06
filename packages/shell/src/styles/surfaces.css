@@ -1,60 +1,8 @@
-/* Theme tokens. These are the Gruvbox Dark Soft defaults (no-JS fallback);
-   theme.ts overwrites every one of them on the root element from the selected
-   Theme (see @orchardist/shared themes.ts for the contract). */
-:root {
-  color-scheme: dark;
-  --bg0: #32302f;
-  --bg1: #3c3836;
-  --bg2: #504945;
-  --bg3: #665c54;
-  --fg1: #ebdbb2;
-  --fg-muted: #a89984;
-  --fg-dim: #928374;
-  --green: #b8bb26;
-  --red: #fb4934;
-  --yellow: #fabd2f;
-  --blue: #83a598;
-  --aqua: #8ec07c;
-  --orange: #fe8019;
-  --purple: #d3869b;
-  --add-bg: #b8bb261f;
-  --del-bg: #fb49341f;
-  /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
-  --scrim: #282828b3;
-  --shadow: #00000066;
-  --font-ui: -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
-}
+/* Surface rules: layout and the semantic color/size deltas each surface adds on top of base.css.
+   Grouped by surface in the order they appear on screen. */
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  background: var(--bg0);
-  color: var(--fg1);
-  font: 14px / 1.5 var(--font-ui);
-}
 /* the app is a fixed workbench: panels scroll internally, the document itself never should.
    Without this an installed-PWA window rubber-bands the whole UI on trackpad overscroll. */
-html,
-body {
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-
-button {
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
 
 .app {
   display: grid;
@@ -67,7 +15,7 @@ button {
   width: 20px;
   height: 20px;
 }
-/* same frame as the palettes (.center-relative) so the card sits where the pickers do —
+/* same frame as the palettes (.prompt-overlay) so the card sits where the pickers do —
    esc from a picker lands back here without the box jumping */
 .keys-overlay {
   position: absolute;
@@ -82,10 +30,10 @@ button {
 .keys-card {
   background: var(--bg1);
   border: 1px solid var(--bg3);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   padding: 18px 24px 20px;
   box-shadow: 0 10px 36px var(--shadow);
-  font: 13px var(--font-ui);
+  font: var(--fs-md) var(--font-ui);
   color: var(--fg1);
   /* two columns of sections: Find | Preview over Panels | Worktrees */
   display: grid;
@@ -112,16 +60,16 @@ button {
   padding: 3px 0;
 }
 .set-v {
-  font: 11px var(--font-mono);
+  font-family: var(--font-mono);
   color: var(--fg1);
   background: var(--bg0);
-  border: 1px solid var(--bg2);
-  border-radius: 4px;
+  border-color: var(--bg2);
   padding: 2px 8px;
 }
 .set-v:hover {
-  border-color: var(--orange);
+  background: var(--bg0);
   color: var(--orange);
+  border-color: var(--orange);
 }
 .keys-row {
   display: grid;
@@ -131,11 +79,11 @@ button {
   padding: 3px 0;
 }
 .keys-k {
-  font: 11px var(--font-mono);
+  font: var(--fs-xs) var(--font-mono);
   color: var(--fg1);
   background: var(--bg0);
   border: 1px solid var(--bg2);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 2px 0;
   text-align: center;
   white-space: nowrap;
@@ -146,7 +94,7 @@ button {
 }
 .keys-mod {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1;
   position: relative;
   top: -0.5px;
@@ -233,7 +181,7 @@ body.resizing iframe {
 }
 
 .dock-section-title {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--fg-dim);
@@ -248,7 +196,7 @@ body.resizing iframe {
   padding: 6px 12px;
   text-align: left;
   color: var(--fg-muted);
-  font-size: 13px;
+  font-size: var(--fs-md);
 }
 .wt-item:hover {
   background: var(--bg2);
@@ -266,41 +214,10 @@ body.resizing iframe {
   text-align: left;
 }
 
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.dot.running {
-  background: var(--green);
-}
-.dot.starting {
-  background: var(--fg-dim);
-}
-.dot.working {
-  background: var(--yellow);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-.dot.crashed {
-  background: var(--red);
-}
-.dot.idle {
-  background: var(--bg3);
-}
-.dot.landed {
-  background: var(--aqua);
-}
-@keyframes pulse {
-  50% {
-    opacity: 0.3;
-  }
-}
-
 .new-wt {
   color: var(--fg-dim);
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: var(--fs-md);
   text-align: left;
   width: 100%;
   display: flex;
@@ -338,20 +255,8 @@ body.resizing iframe {
   gap: 2px;
 }
 .bulk-btn {
-  font-size: 12px;
-  color: var(--fg-muted);
+  font-size: var(--fs-sm);
   padding: 3px 7px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-.bulk-btn:hover {
-  background: var(--bg2);
-  color: var(--fg1);
-}
-.bulk-btn:disabled {
-  color: var(--bg3);
-  cursor: default;
-  background: none;
 }
 .bulk-btn.danger {
   color: var(--red);
@@ -379,7 +284,7 @@ body.resizing iframe {
 }
 .wt-item .row-badge.clickable {
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
 }
 .wt-item .row-badge.clickable:hover {
   background: var(--bg3);
@@ -397,7 +302,7 @@ body.resizing iframe {
   visibility: hidden;
   color: var(--fg-dim);
   padding: 0 2px;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   flex-shrink: 0;
 }
 .wt-item:hover .wt-more {
@@ -421,7 +326,7 @@ body.resizing iframe {
   gap: 8px;
   width: 100%;
   padding: 3px 12px;
-  font: 12px var(--font-mono);
+  font: var(--fs-sm) var(--font-mono);
   color: var(--fg-muted);
   text-align: left;
 }
@@ -492,66 +397,28 @@ body.resizing iframe {
   background: #fff;
 }
 
-/* ---- route bar ---- */
-.route-bar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: var(--bg1);
-  border-bottom: 1px solid var(--bg2);
-  flex-shrink: 0;
-}
 .rb-btn {
   color: var(--fg-dim);
-  padding: 1px 7px;
-  border-radius: 4px;
-  font-size: 13px;
-  line-height: 1.4;
-}
-.rb-btn:hover {
-  color: var(--fg1);
-  background: var(--bg2);
-}
-/* back/forward/reload: same 20px box as the status-bar icons so the row reads as one size */
-.rb-nav {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  line-height: 1;
-}
-.rb-nav:disabled {
-  color: var(--bg3);
-  cursor: default;
-  background: none;
-}
-.rb-btn.rb-on {
-  color: var(--orange);
-  background: var(--bg2);
-}
-.rb-variants {
-  font-size: 11px;
-  color: var(--purple);
-}
-.rb-variants:hover {
-  color: var(--purple);
 }
 .rb-path {
   flex: 1;
   min-width: 0;
-  background: var(--bg0);
-  border: 1px solid var(--bg2);
-  border-radius: 5px;
   color: var(--fg-muted);
-  font: 12px var(--font-mono);
   padding: 3px 10px;
-  outline: none;
 }
 .rb-path:focus {
-  border-color: var(--bg3);
   color: var(--fg1);
+}
+.diff-pane .file-head {
+  display: flex;
+  gap: 12px;
+  padding: 6px 16px;
+  align-items: center;
+}
+.diff-pane .file-path {
+  flex: 1;
+  font: var(--fs-sm) var(--font-mono);
+  color: var(--fg-muted);
 }
 .diff-pane {
   height: 45%;
@@ -581,44 +448,9 @@ body.resizing .row-resize {
   display: grid;
   place-items: center;
   color: var(--fg-dim);
-  font: 13px var(--font-mono);
+  font: var(--fs-md) var(--font-mono);
   white-space: pre-wrap;
   padding: 24px;
-}
-
-.diff-view {
-  height: 100%;
-  overflow: auto;
-  font: 12px / 1.6 var(--font-mono);
-  padding: 12px 0 48px;
-}
-.diff-view .file-head {
-  padding: 4px 16px;
-  color: var(--fg-muted);
-  border-bottom: 1px solid var(--bg2);
-  margin-bottom: 8px;
-  display: flex;
-  justify-content: space-between;
-}
-.diff-line {
-  padding: 0 16px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.diff-line.add {
-  background: var(--add-bg);
-  color: var(--green);
-}
-.diff-line.del {
-  background: var(--del-bg);
-  color: var(--red);
-}
-.diff-line.ctx {
-  color: var(--fg-muted);
-}
-.diff-line.hunk {
-  color: var(--blue);
-  padding-top: 8px;
 }
 
 /* ---- right dock (worktree switcher + chat) ---- */
@@ -688,7 +520,7 @@ body.resizing .row-resize {
   justify-content: flex-end;
   gap: 8px;
   padding: 0 17px 0 12px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--fg-dim);
   white-space: nowrap;
 }
@@ -756,42 +588,6 @@ body.resizing .row-resize {
   color: var(--yellow);
 }
 
-.dock-empty {
-  padding: 4px 12px;
-  font-size: 12px;
-  color: var(--fg-dim);
-}
-
-.ctx-menu {
-  position: fixed;
-  z-index: 40;
-  min-width: 160px;
-  background: var(--bg1);
-  border: 1px solid var(--bg3);
-  border-radius: 6px;
-  padding: 4px;
-  box-shadow: 0 6px 20px var(--shadow);
-  display: flex;
-  flex-direction: column;
-}
-.ctx-menu button {
-  text-align: left;
-  padding: 5px 10px;
-  font-size: 13px;
-  border-radius: 4px;
-  color: var(--fg1);
-}
-.ctx-menu button:hover {
-  background: var(--bg2);
-}
-.ctx-menu button.danger {
-  color: var(--red);
-}
-.ctx-menu button:disabled {
-  color: var(--fg-dim);
-  cursor: default;
-}
-
 .chat-wrap {
   flex: 1;
   min-height: 0;
@@ -815,9 +611,9 @@ body.resizing .row-resize {
   transform: translateX(-50%);
   background: var(--bg2);
   border: 1px solid var(--bg3);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 3px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--fg1);
   box-shadow: 0 2px 10px var(--shadow);
 }
@@ -828,9 +624,9 @@ body.resizing .row-resize {
 
 .msg-user {
   background: var(--bg2);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: var(--fs-md);
   align-self: flex-end;
   max-width: 92%;
   white-space: pre-wrap;
@@ -864,14 +660,14 @@ body.resizing .row-resize {
 .queued-actions button {
   color: var(--fg-dim);
   padding: 0 3px;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
 }
 .queued-actions button:hover {
   color: var(--fg1);
   background: var(--bg3);
 }
 .msg-assistant {
-  font-size: 13px;
+  font-size: var(--fs-md);
   white-space: pre-wrap;
   color: var(--fg1);
   max-width: 100%;
@@ -901,7 +697,7 @@ body.resizing .row-resize {
 .md h2,
 .md h3,
 .md h4 {
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 700;
   margin: 10px 0 4px;
   color: var(--fg1);
@@ -910,13 +706,13 @@ body.resizing .row-resize {
   font: 11.5px var(--font-mono);
   background: var(--bg0);
   border: 1px solid var(--bg2);
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   padding: 0 4px;
 }
 .md pre {
   background: var(--bg0);
   border: 1px solid var(--bg2);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 8px 10px;
   overflow-x: auto;
   margin: 0 0 8px;
@@ -947,15 +743,18 @@ body.resizing .row-resize {
 .md table {
   border-collapse: collapse;
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .md th,
 .md td {
   border: 1px solid var(--bg2);
   padding: 3px 8px;
 }
+.msg-error {
+  color: var(--red);
+}
 .msg-thinking {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--fg-dim);
   font-style: italic;
   white-space: pre-wrap;
@@ -966,23 +765,16 @@ body.resizing .row-resize {
   gap: 10px;
 }
 .stop-btn {
-  font: 11px var(--font-ui);
-  font-style: normal;
   color: var(--red);
-  border: 1px solid var(--bg3);
-  border-radius: 4px;
-  padding: 1px 8px;
-}
-.stop-btn:hover {
-  border-color: var(--red);
+  font-style: normal;
 }
 
 .tool-row {
-  font: 12px var(--font-mono);
+  font: var(--fs-sm) var(--font-mono);
   color: var(--fg-muted);
   background: var(--bg0);
   border: 1px solid var(--bg2);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
 }
 .tool-row summary {
   padding: 4px 8px;
@@ -1012,7 +804,7 @@ body.resizing .row-resize {
   border-top: 1px solid var(--bg2);
   overflow-x: auto;
   max-height: 240px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--fg-muted);
 }
 .tool-row .spinner {
@@ -1023,7 +815,7 @@ body.resizing .row-resize {
   align-items: center;
   gap: 8px;
   padding: 4px 8px;
-  font: 12px var(--font-mono);
+  font: var(--fs-sm) var(--font-mono);
   color: var(--fg-muted);
   background: var(--bg0);
   border-left: 2px solid var(--red);
@@ -1050,21 +842,11 @@ body.resizing .row-resize {
 }
 .chat-input textarea {
   width: 100%;
-  background: var(--bg0);
-  border: 1px solid var(--bg2);
-  border-radius: 6px;
-  color: var(--fg1);
-  font: 13px / 1.5 var(--font-ui);
-  padding: 8px 10px;
   resize: none;
-  outline: none;
   min-height: 60px;
 }
-.chat-input textarea:focus {
-  border-color: var(--bg3);
-}
 .chat-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--fg-dim);
   margin-top: 4px;
 }
@@ -1076,26 +858,8 @@ body.resizing .row-resize {
 }
 /* same 20px box as the status-bar icons, flush with the textarea's right edge
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
-.composer-pick {
-  width: 20px;
-  height: 20px;
-  padding: 2px;
-  display: grid;
-  place-items: center;
-  color: var(--fg-dim);
-  border-radius: 4px;
-}
-.composer-pick:hover {
-  color: var(--fg1);
-  background: var(--bg2);
-}
-.composer-pick.rb-on {
+.composer-pick.on {
   color: var(--orange);
-  background: var(--bg2);
-}
-.composer-pick:disabled {
-  color: var(--bg3);
-  cursor: default;
 }
 .spawn-row label {
   display: flex;
@@ -1111,7 +875,7 @@ body.resizing .row-resize {
   font-weight: 600;
 }
 
-/* ---- changes header / ship / deep links / toast ---- */
+/* ---- changes header / land buttons / toast ---- */
 .changes-head {
   display: flex;
   justify-content: space-between;
@@ -1119,28 +883,16 @@ body.resizing .row-resize {
   padding-right: 8px;
 }
 .ship-btn {
-  font-size: 11px;
   color: var(--orange);
-  border: 1px solid var(--bg3);
-  border-radius: 4px;
-  padding: 1px 8px;
-}
-.ship-btn:hover {
-  border-color: var(--orange);
 }
 .ship-btn.pr-open {
   color: var(--aqua);
 }
-.ship-btn.pr-open:hover {
-  border-color: var(--aqua);
-}
 
 .deep-link {
-  font: 11px var(--font-mono);
+  font-family: var(--font-mono);
   color: var(--fg-dim);
-  text-decoration: none;
-  border: 1px solid var(--bg2);
-  border-radius: 4px;
+  border-color: var(--bg2);
   padding: 1px 7px;
   align-self: center;
 }
@@ -1158,9 +910,9 @@ body.resizing .row-resize {
   background: var(--bg1);
   border: 1px solid var(--bg3);
   border-left: 3px solid var(--aqua);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: var(--fs-md);
   cursor: pointer;
   z-index: 30;
   box-shadow: 0 4px 16px var(--shadow);
@@ -1171,14 +923,9 @@ body.resizing .row-resize {
 .toast-action {
   display: block;
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--orange);
-  border: 1px solid var(--bg3);
-  border-radius: 4px;
   padding: 2px 10px;
-}
-.toast-action:hover {
-  border-color: var(--orange);
 }
 
 .ahead-badge {
@@ -1197,11 +944,6 @@ body.resizing .row-resize {
   display: flex;
   gap: 6px;
 }
-.land-row {
-  display: flex;
-  gap: 6px;
-  padding: 2px 12px 6px;
-}
 
 .commit-box {
   display: flex;
@@ -1210,22 +952,7 @@ body.resizing .row-resize {
 }
 .commit-box input {
   flex: 1;
-  background: var(--bg0);
-  border: 1px solid var(--bg2);
-  border-radius: 4px;
-  color: var(--fg1);
-  font: 12px var(--font-mono);
-  padding: 3px 8px;
-  outline: none;
   min-width: 0;
-}
-.commit-box input:focus {
-  border-color: var(--bg3);
-}
-.commit-box .ship-btn:disabled {
-  color: var(--fg-dim);
-  border-color: var(--bg2);
-  cursor: default;
 }
 
 /* ---- status bar ---- */
@@ -1236,7 +963,7 @@ body.resizing .row-resize {
   background: var(--bg1);
   border-bottom: 1px solid var(--bg2);
   padding: 4px 10px;
-  font: 11px var(--font-mono);
+  font: var(--fs-xs) var(--font-mono);
   color: var(--fg-dim);
   min-height: 32px;
 }
@@ -1306,26 +1033,6 @@ body.resizing .rb-center {
 .status-bar .toggle.on {
   color: var(--fg1);
 }
-.status-bar .toggle.icon {
-  display: grid;
-  place-items: center;
-  padding: 2px;
-  border-radius: 4px;
-}
-.status-bar .pick-toggle {
-  font-size: 14px;
-  line-height: 1;
-  width: 20px;
-  height: 20px;
-}
-.status-bar .pick-toggle.picking {
-  color: var(--orange);
-  background: var(--bg2);
-}
-.status-bar .pick-toggle:disabled {
-  color: var(--bg3);
-  cursor: default;
-}
 
 .pick-chip {
   display: flex;
@@ -1336,7 +1043,7 @@ body.resizing .rb-center {
   background: var(--bg0);
   border: 1px solid var(--bg3);
   border-left: 3px solid var(--orange);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   font: 11.5px var(--font-mono);
   color: var(--fg1);
 }
@@ -1360,17 +1067,10 @@ body.resizing .rb-center {
   padding: 2px 6px;
   cursor: default;
   display: inline-flex;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .pick-chip.in-chat:hover {
   border-color: var(--orange);
-}
-.status-bar .toggle.icon:hover {
-  background: var(--bg2);
-}
-/* semantic dock icons carry no open/closed fill — the highlight is the state */
-.status-bar .toggle.icon.on {
-  background: var(--bg2);
 }
 .status-bar .branch {
   color: var(--orange);
@@ -1394,28 +1094,6 @@ body.resizing .rb-center {
 /* ---- new worktree prompt overlay ---- */
 /* anchored near the top, not centered: a palette's height changes as you type, and a centered
    box would bob with it — the input stays put this way (editor/launcher convention) */
-.prompt-overlay {
-  position: absolute;
-  inset: 0;
-  background: var(--scrim);
-  display: grid;
-  justify-items: center;
-  align-content: start;
-  padding-top: clamp(72px, 18vh, 220px);
-  z-index: 10;
-}
-.prompt-box {
-  width: min(560px, 90%);
-  background: var(--bg1);
-  border: 1px solid var(--bg2);
-  border-radius: 8px;
-  padding: 14px;
-}
-.prompt-box .title {
-  font-size: 12px;
-  color: var(--fg-dim);
-  margin-bottom: 8px;
-}
 /* ---- first-run config card ---- */
 .config-card {
   width: min(640px, 92%);
@@ -1426,12 +1104,12 @@ body.resizing .rb-center {
 .config-card .title code {
   background: var(--bg0);
   border: 1px solid var(--bg2);
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   padding: 0 4px;
-  font: 11px var(--font-mono);
+  font: var(--fs-xs) var(--font-mono);
 }
 .cfg-section {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--fg-dim);
@@ -1444,16 +1122,7 @@ body.resizing .rb-center {
   align-items: center;
 }
 .cfg-proc input {
-  background: var(--bg0);
-  border: 1px solid var(--bg2);
-  border-radius: 4px;
-  color: var(--fg1);
-  font: 12px var(--font-mono);
   padding: 5px 8px;
-  outline: none;
-}
-.cfg-proc input:focus {
-  border-color: var(--bg3);
 }
 .cfg-name {
   width: 90px;
@@ -1472,25 +1141,20 @@ body.resizing .rb-center {
 }
 .config-card .new-wt {
   padding: 2px 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .cfg-setup {
   width: 100%;
   min-height: 54px;
-  background: var(--bg0);
-  border: 1px solid var(--bg2);
-  border-radius: 4px;
-  color: var(--fg1);
-  font: 12px / 1.6 var(--font-mono);
+  font: var(--fs-sm) / 1.6 var(--font-mono);
   padding: 6px 8px;
   resize: vertical;
-  outline: none;
 }
 .cfg-exclusive {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--fg-muted);
   margin-top: 10px;
   cursor: pointer;
@@ -1505,17 +1169,12 @@ body.resizing .rb-center {
   margin-top: 14px;
 }
 .cfg-note {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--fg-dim);
 }
 .cfg-actions .ship-btn {
-  font-size: 13px;
+  font-size: var(--fs-md);
   padding: 4px 16px;
-}
-.cfg-actions .ship-btn:disabled {
-  color: var(--fg-dim);
-  border-color: var(--bg2);
-  cursor: default;
 }
 
 .variants-row {
@@ -1523,7 +1182,7 @@ body.resizing .rb-center {
   align-items: center;
   gap: 6px;
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--fg-dim);
 }
 .variants-right {
@@ -1541,32 +1200,16 @@ body.resizing .rb-center {
 .variants-row input {
   accent-color: var(--orange);
 }
-.variant-chip {
-  border: 1px solid var(--bg3);
-  border-radius: 4px;
-  padding: 1px 8px;
-  font-size: 11px;
-  color: var(--fg-muted);
-}
 .variant-chip.on {
   color: var(--orange);
   border-color: var(--orange);
-}
-.variants-hint {
-  color: var(--fg-dim);
 }
 .prompt-box.quick-open {
   padding: 8px;
 }
 .prompt-box.quick-open input {
   width: 100%;
-  background: var(--bg0);
-  border: 1px solid var(--bg2);
-  border-radius: 6px;
-  color: var(--fg1);
-  font: 13px var(--font-mono);
-  padding: 8px 10px;
-  outline: none;
+  font-family: var(--font-mono);
 }
 .qo-list {
   max-height: 50vh;
@@ -1577,10 +1220,10 @@ body.resizing .rb-center {
   display: block;
   width: 100%;
   text-align: left;
-  font: 12px var(--font-mono);
+  font: var(--fs-sm) var(--font-mono);
   color: var(--fg-muted);
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1598,7 +1241,7 @@ body.resizing .rb-center {
   text-overflow: ellipsis;
 }
 .cmd-hint {
-  font: 11px var(--font-ui);
+  font: var(--fs-xs) var(--font-ui);
   color: var(--fg-dim);
   flex-shrink: 0;
 }
@@ -1616,7 +1259,7 @@ body.resizing .rb-center {
   width: 44px;
   text-align: center;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 0;
 }
 .theme-kinds .kind.on {
@@ -1630,7 +1273,7 @@ body.resizing .rb-center {
 }
 .sr-loc {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--fg-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1710,52 +1353,6 @@ body.resizing .rb-center {
 }
 .prompt-box textarea {
   width: 100%;
-  background: var(--bg0);
-  border: 1px solid var(--bg2);
-  border-radius: 6px;
-  color: var(--fg1);
-  font: 13px / 1.5 var(--font-ui);
-  padding: 8px 10px;
   min-height: 80px;
   resize: none;
-  outline: none;
-}
-
-/* ---- tooltip (one instance, delegated via data-tip; see Tooltip.tsx) ---- */
-.tooltip {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 100;
-  pointer-events: none;
-  max-width: 320px;
-  padding: 4px 8px;
-  font: 12px / 1.4 var(--font-ui);
-  color: var(--fg1);
-  background: var(--bg0);
-  border: 1px solid var(--bg3);
-  border-radius: 5px;
-  box-shadow: 0 4px 14px var(--shadow);
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-  animation: tooltip-in 90ms ease-out;
-}
-.tooltip[data-side="above"] {
-  animation-name: tooltip-in-above;
-}
-.tooltip-key {
-  margin-left: 12px;
-  color: var(--fg-muted);
-}
-@keyframes tooltip-in {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
-}
-@keyframes tooltip-in-above {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
 }

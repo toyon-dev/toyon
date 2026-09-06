@@ -1,0 +1,239 @@
+/* Base layer: the reset and the primitives every surface composes. A semantic class (.ship-btn,
+   .deep-link, .rb-path…) adds color or a size delta on top of one of these; hover and disabled
+   states are defined here, once. */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html,
+body,
+#root {
+  height: 100%;
+  background: var(--bg0);
+  color: var(--fg1);
+  font: 14px / 1.5 var(--font-ui);
+}
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ---- buttons ---- */
+/* .btn: ghost text button. .btn-outline: bordered pill (border takes the text color on hover).
+   .btn-icon: 20px square glyph box. `.on` marks an active toggle. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  color: var(--fg-muted);
+  border-radius: var(--r-sm);
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.btn:hover {
+  color: var(--fg1);
+  background: var(--bg2);
+}
+.btn:disabled {
+  color: var(--bg3);
+  cursor: default;
+  background: none;
+}
+.btn-outline {
+  border: 1px solid var(--bg3);
+}
+.btn-outline:hover {
+  background: none;
+  color: inherit;
+  border-color: currentColor;
+}
+.btn-outline:disabled {
+  color: var(--fg-dim);
+  border-color: var(--bg2);
+}
+.btn-icon {
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  display: grid;
+  place-items: center;
+  color: var(--fg-dim);
+  border-radius: var(--r-sm);
+  line-height: 1;
+}
+.btn-icon:hover,
+.btn-icon.on {
+  color: var(--fg1);
+  background: var(--bg2);
+}
+.btn-icon:disabled {
+  color: var(--bg3);
+  cursor: default;
+  background: none;
+}
+
+/* ---- fields ---- */
+.field {
+  background: var(--bg0);
+  border: 1px solid var(--bg2);
+  border-radius: var(--r-sm);
+  color: var(--fg1);
+  font: var(--fs-sm) var(--font-mono);
+  padding: 3px 8px;
+  outline: none;
+}
+.field:focus {
+  border-color: var(--bg3);
+}
+/* multi-line / palette inputs */
+.field-lg {
+  border-radius: var(--r-md);
+  font: var(--fs-md) / 1.5 var(--font-ui);
+  padding: 8px 10px;
+}
+
+/* ---- menu (context menus, "open in") ---- */
+.menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 160px;
+  background: var(--bg1);
+  border: 1px solid var(--bg3);
+  border-radius: var(--r-md);
+  padding: 4px;
+  box-shadow: 0 6px 20px var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+.menu button {
+  text-align: left;
+  padding: 5px 10px;
+  font-size: var(--fs-md);
+  border-radius: var(--r-sm);
+  color: var(--fg1);
+}
+.menu button:hover {
+  background: var(--bg2);
+}
+.menu button.danger {
+  color: var(--red);
+}
+.menu button:disabled {
+  color: var(--fg-dim);
+  cursor: default;
+}
+
+/* ---- overlay: scrim over the preview column + a box anchored near the top (a palette's height
+   changes as you type, and a centered box would bob with it — editor/launcher convention) ---- */
+.prompt-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding-top: clamp(72px, 18vh, 220px);
+  z-index: 10;
+}
+.prompt-box {
+  width: min(560px, 90%);
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: var(--r-lg);
+  padding: 14px;
+}
+.prompt-box .title {
+  font-size: var(--fs-sm);
+  color: var(--fg-dim);
+  margin-bottom: 8px;
+}
+
+.dock-empty {
+  padding: 4px 12px;
+  font-size: var(--fs-sm);
+  color: var(--fg-dim);
+}
+
+/* ---- status dots ---- */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot.running {
+  background: var(--green);
+}
+.dot.starting {
+  background: var(--fg-dim);
+}
+.dot.working {
+  background: var(--yellow);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.dot.crashed {
+  background: var(--red);
+}
+.dot.idle {
+  background: var(--bg3);
+}
+.dot.landed {
+  background: var(--aqua);
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ---- tooltip (one instance, delegated via data-tip; see Tooltip.tsx) ---- */
+.tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  pointer-events: none;
+  max-width: 320px;
+  padding: 4px 8px;
+  font: var(--fs-sm) / 1.4 var(--font-ui);
+  color: var(--fg1);
+  background: var(--bg0);
+  border: 1px solid var(--bg3);
+  border-radius: var(--r-sm);
+  box-shadow: 0 4px 14px var(--shadow);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  animation: tooltip-in 90ms ease-out;
+}
+.tooltip[data-side="above"] {
+  animation-name: tooltip-in-above;
+}
+.tooltip-key {
+  margin-left: 12px;
+  color: var(--fg-muted);
+}
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+@keyframes tooltip-in-above {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}

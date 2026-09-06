@@ -28,14 +28,23 @@ export function lockfileHash(dir: string): string {
   return h.digest("hex");
 }
 
-export function git(cwd: string, ...args: string[]): { ok: boolean; out: string; err: string } {
+export interface GitResult {
+  ok: boolean;
+  out: string;
+  err: string;
+  /** exit status, or the signal name when git was killed (status null) */
+  exit: number | string | null;
+}
+
+export function git(cwd: string, ...args: string[]): GitResult {
   const r = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
-  return { ok: r.status === 0, out: (r.stdout ?? "").trim(), err: (r.stderr ?? "").trim() };
+  const exit = r.status ?? r.signal ?? (r.error ? r.error.message : null);
+  return { ok: r.status === 0, out: (r.stdout ?? "").trim(), err: (r.stderr ?? "").trim(), exit };
 }
 
 export function gitOrThrow(cwd: string, ...args: string[]): string {
   const r = git(cwd, ...args);
-  if (!r.ok) throw new Error(`git ${args.join(" ")} failed: ${r.err}`);
+  if (!r.ok) throw new Error(`git ${args.join(" ")} failed (${r.exit}): ${r.err}`);
   return r.out;
 }
 

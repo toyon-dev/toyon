@@ -6,7 +6,11 @@ import { ensureDirs, makePaths, type Paths } from "../../src/core/paths.ts";
 
 export function sh(cwd: string, cmd: string, ...args: string[]): string {
   const r = spawnSync(cmd, args, { cwd, encoding: "utf8" });
-  if (r.status !== 0) throw new Error(`${cmd} ${args.join(" ")} failed: ${r.stderr}`);
+  if (r.status !== 0) {
+    throw new Error(
+      `${cmd} ${args.join(" ")} failed: status=${r.status} signal=${r.signal} error=${r.error?.message ?? ""} stderr=${r.stderr}`,
+    );
+  }
   return r.stdout.trim();
 }
 

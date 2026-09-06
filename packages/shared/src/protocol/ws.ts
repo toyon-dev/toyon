@@ -96,6 +96,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   }),
   z.object({
     t: z.literal("create-worktree"),
+    /** the requesting tab's id, echoed as WorktreeInfo.createdBy so only that tab auto-focuses it */
+    clientId: z.string().max(64).optional(),
     repoId: id,
     prompt: z.string(),
     baseWorktreeId: id.optional(),

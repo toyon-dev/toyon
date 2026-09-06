@@ -1,0 +1,4 @@
+[test]
+# integration tests drive real git in a tmp repo; Apple's /usr/bin/git shim occasionally stalls for
+# seconds under a burst of spawns, which is not a test failure
+timeout = 20000

@@ -41,6 +41,8 @@ export interface WorktreeInfo {
   variant?: { group: string; index: number; of: number };
   /** open PR created from this worktree (via gh) */
   prUrl?: string;
+  /** the shell tab that asked for it (client nonce); that tab focuses it, others don't */
+  createdBy?: string;
 }
 
 export type ProcStatus = "starting" | "running" | "crashed" | "stopped";

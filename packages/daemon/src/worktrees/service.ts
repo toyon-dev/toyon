@@ -25,6 +25,8 @@ import { SparePool } from "./spare.ts";
 export type Variant = { group: string; index: number; of: number };
 
 export interface CreateOpts {
+  /** the shell tab that asked; stored as createdBy so only that tab auto-focuses the result */
+  createdBy?: string;
   baseWorktreeId?: string;
   variant?: Variant;
   context?: string;
@@ -84,6 +86,7 @@ export class WorktreeService {
       const claimed = await this.spare.claim(repoId, branch, slug);
       if (claimed) {
         if (variant) claimed.variant = variant;
+        if (opts.createdBy) claimed.createdBy = opts.createdBy;
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
         this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, undefined, pick);
@@ -108,6 +111,7 @@ export class WorktreeService {
       title: slug,
       createdAt: Date.now(),
       ...(variant ? { variant } : {}),
+      ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
     };
     this.d.state.addWorktree(wt);
     this.d.hub.emit("worktreesChanged");

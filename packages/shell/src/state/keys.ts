@@ -10,4 +10,6 @@ export const STORAGE = {
   rightWidth: "orch-rw",
   diffHeight: "orch-dh",
   diffFull: "orch-dfull",
+  /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */
+  client: "orch-client",
 } as const;

@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent, ServerMsg, WorktreeStatus } from "@orchardist/shared";
-import { type Action, initial, reducer, type State } from "./store.ts";
+import { type Action, EMPTY_LOCAL, initialState, localOf, reducer, type State } from "./store.ts";
 
-// Pins the reducer's current behavior before phase 4 reshapes the state. Rules under test are the
-// ones the UI depends on and nothing else documents: which worktree becomes active, how agent
-// events fold into chat items, when a preview reload is requested, overlay exclusivity.
+// The reducer's rules the UI depends on and nothing else documents: which worktree becomes active,
+// how agent events fold into chat items, when a preview reload is requested, overlay exclusivity,
+// and that per-worktree records follow the worktree list.
 
-function wt(id: string, kind: WorktreeStatus["worktree"]["kind"] = "worktree"): WorktreeStatus {
+const ME = "tab-1";
+
+function wt(id: string, kind: WorktreeStatus["worktree"]["kind"] = "worktree", createdBy?: string): WorktreeStatus {
   return {
     worktree: {
       id,
@@ -17,12 +19,14 @@ function wt(id: string, kind: WorktreeStatus["worktree"]["kind"] = "worktree"): 
       proxyPort: 1,
       title: id,
       createdAt: 0,
+      ...(createdBy ? { createdBy } : {}),
     },
     procs: [],
     agent: "idle",
   };
 }
 
+const initial = initialState({ clientId: ME });
 const server = (msg: ServerMsg): Action => ({ a: "server", msg });
 const hello = (...w: WorktreeStatus[]): Action =>
   server({
@@ -45,20 +49,29 @@ describe("active worktree", () => {
   test("hello picks the first worktree when nothing is active", () => {
     expect(run([hello(wt("main", "main"), wt("a"))]).activeId).toBe("main");
   });
+  test("hello restores the worktree selected before a reload", () => {
+    const s = run([hello(wt("main", "main"), wt("a"))], initialState({ clientId: ME, storedActive: "a" }));
+    expect(s.activeId).toBe("a");
+  });
   test("hello keeps the current selection if it still exists", () => {
     const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
     expect(run([hello(wt("main", "main"), wt("a"))], s).activeId).toBe("a");
   });
-  test("a brand-new worktree steals focus (the prompt-spawns-a-tab moment)", () => {
+  test("a worktree this tab created steals focus (the prompt-spawns-a-tab moment)", () => {
     const s = run([hello(wt("main", "main"))]);
-    expect(run([worktrees(wt("main", "main"), wt("fresh"))], s).activeId).toBe("fresh");
+    expect(run([worktrees(wt("main", "main"), wt("fresh", "worktree", ME))], s).activeId).toBe("fresh");
   });
-  test("a new spare/main/combined does not steal focus", () => {
+  test("a worktree created from another tab or the CLI does not", () => {
     const s = run([hello(wt("main", "main"))]);
-    expect(run([worktrees(wt("main", "main"), wt("g", "combined"))], s).activeId).toBe("main");
+    expect(run([worktrees(wt("main", "main"), wt("fresh", "worktree", "tab-2"))], s).activeId).toBe("main");
+    expect(run([worktrees(wt("main", "main"), wt("cli"))], s).activeId).toBe("main");
+  });
+  test("a new combined worktree does not steal focus even from this tab", () => {
+    const s = run([hello(wt("main", "main"))]);
+    expect(run([worktrees(wt("main", "main"), wt("g", "combined", ME))], s).activeId).toBe("main");
   });
   test("the first worktrees list after an empty state does not count as new", () => {
-    expect(run([worktrees(wt("main", "main"), wt("a"))]).activeId).toBe("main");
+    expect(run([worktrees(wt("main", "main"), wt("a", "worktree", ME))]).activeId).toBe("main");
   });
   test("removing the active worktree falls back to the first", () => {
     const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
@@ -69,6 +82,39 @@ describe("active worktree", () => {
     const withDiff = reducer(s, server({ t: "file-diff", worktreeId: "main", path: "x", before: "", after: "" }));
     expect(withDiff.diff).not.toBeNull();
     expect(reducer(withDiff, { a: "activate", id: "a" }).diff).toBeNull();
+  });
+});
+
+describe("per-worktree records", () => {
+  test("an unknown worktree reads as the shared empty record", () => {
+    expect(localOf(initial, "nope")).toBe(EMPTY_LOCAL);
+    expect(localOf(initial, null)).toBe(EMPTY_LOCAL);
+  });
+  test("records are dropped when the worktree leaves the list, and untouched otherwise", () => {
+    const s = run([
+      hello(wt("main", "main"), wt("a")),
+      server({ t: "log", worktreeId: "a", proc: "web", line: "ready" }),
+      server({ t: "log", worktreeId: "main", proc: "web", line: "ready" }),
+    ]);
+    expect(s.local.a?.log).toEqual(["[web] ready"]);
+    const after = reducer(s, worktrees(wt("main", "main")));
+    expect(after.local.a).toBeUndefined();
+    expect(after.local.main).toBe(s.local.main);
+  });
+  test("git-status invalidates that worktree's changed-range cache only", () => {
+    const s = run([
+      hello(wt("a"), wt("b")),
+      server({ t: "changed-ranges", worktreeId: "a", path: "x.ts", ranges: [[1, 2]], lineOffset: 3 }),
+      server({ t: "changed-ranges", worktreeId: "b", path: "y.ts", ranges: [[5, 5]], lineOffset: 0 }),
+      server({ t: "git-status", worktreeId: "a", files: [] }),
+    ]);
+    expect(s.local.a?.changedRanges).toEqual({});
+    expect(s.local.b?.changedRanges["y.ts"]).toEqual({ ranges: [[5, 5]], offset: 0 });
+  });
+  test("page errors keep the last three and reset on a fresh load", () => {
+    const s = run([hello(wt("a")), ...["e1", "e2", "e3", "e4"].map((e): Action => ({ a: "page", id: "a", error: e }))]);
+    expect(s.local.a?.page.errors).toEqual(["e2", "e3", "e4"]);
+    expect(reducer(s, { a: "page", id: "a", url: "u", fresh: true }).local.a?.page).toEqual({ url: "u", errors: [] });
   });
 });
 
@@ -83,7 +129,7 @@ describe("chat folding", () => {
       agent("a", { type: "text-delta", text: "x" }),
     ]);
     expect(
-      s.chats.a?.map((i) => (i.kind === "user" || i.kind === "assistant" ? `${i.kind}:${i.text}` : i.kind)),
+      s.local.a?.chat.map((i) => (i.kind === "user" || i.kind === "assistant" ? `${i.kind}:${i.text}` : i.kind)),
     ).toEqual(["user:hi", "assistant:hello", "user:more", "assistant:x"]);
   });
   test("tool-end completes the matching tool-start", () => {
@@ -93,7 +139,7 @@ describe("chat folding", () => {
       agent("a", { type: "tool-start", toolId: "t2", name: "Edit", input: {} }),
       agent("a", { type: "tool-end", toolId: "t1", output: "ok" }),
     ]);
-    const tools = s.chats.a?.filter((i) => i.kind === "tool") ?? [];
+    const tools = s.local.a?.chat.filter((i) => i.kind === "tool") ?? [];
     expect(tools.map((t) => (t.kind === "tool" ? [t.id, t.done] : null))).toEqual([
       ["t1", true],
       ["t2", false],
@@ -111,7 +157,7 @@ describe("chat folding", () => {
         ],
       }),
     ]);
-    expect(s.chats.a?.length).toBe(2);
+    expect(s.local.a?.chat.length).toBe(2);
   });
 });
 
@@ -128,6 +174,15 @@ describe("preview reload after a turn", () => {
   test("edits covered by HMR do not", () => {
     expect(run([hello(wt("a")), ...turn("a", true, true)]).reloadReq).toBeNull();
   });
+  test("a Bash tool counts as an edit (installs, migrations)", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "turn-start", ts: 0 }),
+      agent("a", { type: "tool-start", toolId: "t", name: "Bash", input: {} }),
+      agent("a", { type: "turn-end", stopReason: "done", ts: 0 }),
+    ]);
+    expect(s.reloadReq?.n).toBe(1);
+  });
   test("a read-only turn does not", () => {
     expect(run([hello(wt("a")), ...turn("a", false, false)]).reloadReq).toBeNull();
   });
@@ -137,24 +192,47 @@ describe("preview reload after a turn", () => {
 });
 
 describe("overlays", () => {
-  test("opening one closes the others", () => {
+  test("opening one replaces the other", () => {
     const s = run([
-      { a: "quick-open", v: true },
-      { a: "show-search", v: true },
+      { a: "open", overlay: { kind: "quick-open" } },
+      { a: "open", overlay: { kind: "search" } },
     ]);
-    expect(s.showQuickOpen).toBe(false);
-    expect(s.showSearch).toBe(true);
+    expect(s.overlay).toEqual({ kind: "search" });
   });
-  test("closing a sub-picker with back returns to the palette it came from", () => {
+  test("toggle closes the same kind and opens a different one", () => {
+    const s = run([{ a: "toggle", overlay: { kind: "keys" } }]);
+    expect(s.overlay?.kind).toBe("keys");
+    expect(reducer(s, { a: "toggle", overlay: { kind: "keys" } }).overlay).toBeNull();
+    expect(reducer(s, { a: "toggle", overlay: { kind: "prompt" } }).overlay?.kind).toBe("prompt");
+  });
+  test("closing a sub-picker with back returns to the palette it came from, query intact", () => {
     const s = run([
-      { a: "show-commands", v: true },
+      { a: "open", overlay: { kind: "commands" } },
       { a: "palette-return", v: { mode: "commands", q: "the" } },
-      { a: "show-themes", v: "theme" },
-      { a: "show-themes", v: null, back: true },
+      { a: "open", overlay: { kind: "theme", slot: "theme" } },
+      { a: "close", back: true },
     ]);
-    expect(s.showThemes).toBeNull();
-    expect(s.showCommands).toBe(true);
+    expect(s.overlay).toEqual({ kind: "commands" });
     expect(s.paletteReturn?.q).toBe("the");
+  });
+  test("a plain close forgets the return; opening a palette does too", () => {
+    const s = run([
+      { a: "palette-return", v: { mode: "keys", q: "x" } },
+      { a: "open", overlay: { kind: "appearance" } },
+    ]);
+    expect(s.paletteReturn?.mode).toBe("keys");
+    expect(reducer(s, { a: "close" }).paletteReturn).toBeNull();
+    expect(reducer(s, { a: "open", overlay: { kind: "quick-open" } }).paletteReturn).toBeNull();
+  });
+  test("any overlay change drops the theme picker's live preview", () => {
+    const theme = initial.themes[0]!;
+    const s = run([
+      { a: "open", overlay: { kind: "theme", slot: "theme" } },
+      { a: "preview-theme", theme },
+    ]);
+    expect(s.previewTheme).toBe(theme);
+    expect(reducer(s, { a: "close" }).previewTheme).toBeNull();
+    expect(reducer(s, { a: "open", overlay: { kind: "keys" } }).previewTheme).toBeNull();
   });
   test("a picked element clears picking mode and opens the chat dock", () => {
     const s = run([

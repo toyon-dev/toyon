@@ -25,49 +25,26 @@ import {
 } from "@orchardist/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { lazy, Suspense, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { previewBus } from "./app/previewBus.ts";
 import { matchPositions, rankFiles, splitPath } from "./quickOpen.ts";
+import { useDispatch, useSock, useStore } from "./state/context.tsx";
 import { STORAGE } from "./state/keys.ts";
-import { type ChatItem, currentTheme, initial, reducer, type State } from "./store.ts";
+import { type Action, type ChatItem, currentTheme, type State } from "./state/store.ts";
+import { clampW, dotClass, EDITORS, previewUrl, relFile, shiftRanges, xyClass, xyLetter } from "./surfaces/util.ts";
 import { Tooltips, tip } from "./Tooltip.tsx";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "./theme.ts";
-import { DaemonSocket, hasToken } from "./ws.ts";
+import { type DaemonSocket, hasToken } from "./ws.ts";
 
 const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
 
-// Preview iframes hit the worktree's proxy port. Locally that is always
-// loopback (the daemon binds 127.0.0.1); in cloud mode the same port is a
-// public TLS port on the host that served this page, so follow the page's origin.
-function previewUrl(proxyPort: number): string {
-  const h = location.hostname;
-  const local = h === "127.0.0.1" || h === "localhost" || h.endsWith(".localhost");
-  if (local) return `http://127.0.0.1:${proxyPort}/`;
-  return `${location.protocol}//${h}:${proxyPort}/`;
-}
-
 export function App() {
-  const [state, dispatch] = useReducer(reducer, initial);
-  const sockRef = useRef<DaemonSocket | null>(null);
-
-  useEffect(() => {
-    const sock = new DaemonSocket(
-      (msg) => {
-        // a daemon upgraded under a stale tab: the shell's protocol knowledge is baked at build,
-        // so stop talking (and reconnecting) and ask for a reload rather than misread frames
-        if (msg.t === "hello" && msg.protocol !== PROTOCOL_VERSION) {
-          dispatch({ a: "server", msg: { t: "error", message: "orchardist was updated — reload this page" } });
-          sock.dispose();
-          return;
-        }
-        dispatch({ a: "server", msg });
-      },
-      (v) => dispatch({ a: "connected", v }),
-    );
-    sockRef.current = sock;
-    return () => sock.dispose();
-  }, []);
-
-  const sock = sockRef.current;
+  const state = useStore((s) => s);
+  const dispatch = useDispatch();
+  const sock = useSock();
+  // the key handler closes over a ref so its effect doesn't re-subscribe when the socket changes
+  const sockRef = useRef(sock);
+  sockRef.current = sock;
   const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
 
   // subscribe when the active worktree changes
@@ -111,14 +88,14 @@ export function App() {
             break;
           }
           case "new":
-            dispatch({ a: "show-prompt", v: !state.showPrompt });
+            dispatch({ a: "toggle", overlay: { kind: "prompt" } });
             break;
           case "quick-open":
-            if (state.showQuickOpen) {
-              dispatch({ a: "quick-open", v: false });
+            if (state.overlay?.kind === "quick-open") {
+              dispatch({ a: "close" });
             } else if (state.activeId) {
               sockRef.current?.send({ t: "list-files", worktreeId: state.activeId });
-              dispatch({ a: "quick-open", v: true });
+              dispatch({ a: "open", overlay: { kind: "quick-open" } });
             }
             break;
           case "pick":
@@ -131,10 +108,10 @@ export function App() {
             }
             break;
           case "search":
-            if (state.activeId) dispatch({ a: "show-search", v: !state.showSearch });
+            if (state.activeId) dispatch({ a: "toggle", overlay: { kind: "search" } });
             break;
           case "commands":
-            dispatch({ a: "show-commands", v: !state.showCommands });
+            dispatch({ a: "toggle", overlay: { kind: "commands" } });
             break;
           case "zen":
             dispatch({ a: "toggle-zen" });
@@ -146,22 +123,18 @@ export function App() {
             dispatch({ a: "toggle-right" });
             break;
           case "keys":
-            dispatch({ a: "show-keys", v: !state.showKeys });
+            dispatch({ a: "toggle", overlay: { kind: "keys" } });
             break;
         }
       } else if (e.key === "Escape") {
-        if (state.showThemes) dispatch({ a: "show-themes", v: null, back: true });
-        else if (state.showAppearance) dispatch({ a: "show-appearance", v: false, back: true });
-        else if (state.showKeys) dispatch({ a: "show-keys", v: false });
-        else if (state.picking) {
+        if (state.overlay) {
+          // sub-pickers go back to the palette they came from; everything else just closes
+          dispatch({ a: "close", back: state.overlay.kind === "theme" || state.overlay.kind === "appearance" });
+        } else if (state.picking) {
           // (the bridge handles esc itself when the preview has focus; this covers focus in the shell)
           if (state.activeId) previewBus.post(state.activeId, { type: "pick-cancel" });
           dispatch({ a: "set-picking", v: false });
         } else if (state.zen) dispatch({ a: "toggle-zen" });
-        else if (state.showQuickOpen) dispatch({ a: "quick-open", v: false });
-        else if (state.showSearch) dispatch({ a: "show-search", v: false });
-        else if (state.showCommands) dispatch({ a: "show-commands", v: false });
-        else if (state.showPrompt) dispatch({ a: "show-prompt", v: false });
         else if (state.diff) dispatch({ a: "close-diff" });
       }
     };
@@ -170,20 +143,7 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [
-    state.worktrees,
-    state.diff,
-    state.showPrompt,
-    state.showQuickOpen,
-    state.showSearch,
-    state.showCommands,
-    state.activeId,
-    state.picking,
-    state.zen,
-    state.showKeys,
-    state.showThemes,
-    state.showAppearance,
-  ]);
+  }, [state.worktrees, state.diff, state.activeId, state.picking, state.zen, state.overlay]);
 
   // ship results: open PR/compare URLs, auto-dismiss toasts
   const openedRef = useRef<string | null>(null);
@@ -215,7 +175,7 @@ export function App() {
     if (!g || next?.worktree.variant?.group !== g) return;
     const pathOf = (id: string) => {
       try {
-        const u = state.pageCtx[id]?.url;
+        const u = state.local[id]?.page.url;
         return u ? new URL(u).pathname + new URL(u).search : "/";
       } catch {
         return "/";
@@ -308,32 +268,10 @@ export function App() {
 }
 
 type Sock = DaemonSocket | null;
-type Dispatch = (a: Parameters<typeof reducer>[1]) => void;
-
-// module-level bridge to post into preview iframes (registered by Center)
-export const previewBus = {
-  post: (_id: string, _msg: ShellToBridgeMsg) => {},
-  broadcast: (_msg: ShellToBridgeMsg) => {},
-};
-
-// fiber lineNumbers may be preamble-shifted (daemon derives the offset per file)
-function shiftRanges(cr: { ranges: Array<[number, number]>; offset: number }): Array<[number, number]> {
-  return cr.ranges.map(([a, b]) => [a + cr.offset, b + cr.offset]);
-}
-
-function relFile(file: string, worktreePath?: string): string {
-  if (worktreePath && file.startsWith(`${worktreePath}/`)) return file.slice(worktreePath.length + 1);
-  const i = file.lastIndexOf("/src/");
-  return i >= 0 ? file.slice(i + 1) : file;
-}
-
-function clampW(n: number, fallback: number): number {
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return Math.min(Math.max(n, 170), Math.floor(window.innerWidth * 0.5));
-}
+type Dispatch = (a: Action) => void;
 
 function LeftDock({ state, sock, width }: { state: State; sock: Sock; width: number }) {
-  const gitInfo = state.activeId ? state.git[state.activeId] : undefined;
+  const gitInfo = state.activeId ? state.local[state.activeId]?.git : undefined;
   const files = gitInfo?.files ?? [];
   const ahead = gitInfo?.ahead ?? 0;
   const behind = gitInfo?.behind ?? 0;
@@ -378,7 +316,7 @@ function LeftDock({ state, sock, width }: { state: State; sock: Sock; width: num
       return;
     }
     hoverPathRef.current = path;
-    const cached = state.changedRanges[`${state.activeId}:${path}`];
+    const cached = state.local[state.activeId]?.changedRanges[path];
     if (cached) {
       previewBus.post(state.activeId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
     } else {
@@ -388,9 +326,9 @@ function LeftDock({ state, sock, width }: { state: State; sock: Sock; width: num
   useEffect(() => {
     const path = hoverPathRef.current;
     if (!path || !state.activeId) return;
-    const cached = state.changedRanges[`${state.activeId}:${path}`];
+    const cached = state.local[state.activeId]?.changedRanges[path];
     if (cached) previewBus.post(state.activeId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
-  }, [state.changedRanges]);
+  }, [state.local]);
 
   return (
     <div className={`left-dock ${state.leftOpen ? "" : "collapsed"}`} style={{ width }}>
@@ -745,7 +683,7 @@ function WtRail({ state, dispatch, sock }: { state: State; dispatch: Dispatch; s
                 className="new-wt"
                 data-tip="New worktree"
                 data-tip-key={chord("new")}
-                onClick={() => dispatch({ a: "show-prompt", v: true })}
+                onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
               >
                 <span className="nw-full">+ new worktree</span>
                 <span className="nw-mini">+</span>
@@ -866,18 +804,18 @@ function buildCommands(
   const wt = active;
   const id = wt?.worktree.id;
 
-  if (repo) add("new", "new worktree…", () => dispatch({ a: "show-prompt", v: true }), chord("new"));
+  if (repo) add("new", "new worktree…", () => dispatch({ a: "open", overlay: { kind: "prompt" } }), chord("new"));
   if (id) {
     add(
       "jump",
       "jump to file…",
       () => {
         sock?.send({ t: "list-files", worktreeId: id });
-        dispatch({ a: "quick-open", v: true });
+        dispatch({ a: "open", overlay: { kind: "quick-open" } });
       },
       chord("quick-open"),
     );
-    add("search", "search in files…", () => dispatch({ a: "show-search", v: true }), chord("search"));
+    add("search", "search in files…", () => dispatch({ a: "open", overlay: { kind: "search" } }), chord("search"));
     add(
       "pick",
       state.picking ? "cancel element picker" : "pick an element on the page",
@@ -902,21 +840,21 @@ function buildCommands(
     chord("right"),
   );
   add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), chord("zen"));
-  add("keys", "shortcuts & settings", () => dispatch({ a: "show-keys", v: true }), chord("keys"));
+  add("keys", "shortcuts & settings", () => dispatch({ a: "open", overlay: { kind: "keys" } }), chord("keys"));
 
   const prefs = state.themePrefs;
   const themeName = (tid: string) => state.themes.find((t) => t.id === tid)?.name ?? tid;
   add(
     "theme",
     "theme…",
-    () => dispatch({ a: "show-themes", v: "theme" }),
+    () => dispatch({ a: "open", overlay: { kind: "theme", slot: "theme" } }),
     resolveTheme(prefs, state.themes, state.systemDark).name,
     true,
   );
   add(
     "appearance",
     "theme: light/dark mode…",
-    () => dispatch({ a: "show-appearance", v: true }),
+    () => dispatch({ a: "open", overlay: { kind: "appearance" } }),
     appearanceLabel[prefs.mode],
     true,
   );
@@ -928,14 +866,14 @@ function buildCommands(
   add(
     "theme-dark",
     "theme: dark slot override…",
-    () => dispatch({ a: "show-themes", v: "dark" }),
+    () => dispatch({ a: "open", overlay: { kind: "theme", slot: "dark" } }),
     themeName(prefs.dark),
     true,
   );
   add(
     "theme-light",
     "theme: light slot override…",
-    () => dispatch({ a: "show-themes", v: "light" }),
+    () => dispatch({ a: "open", overlay: { kind: "theme", slot: "light" } }),
     themeName(prefs.light),
     true,
   );
@@ -1148,9 +1086,9 @@ function AppearancePicker({ state, dispatch, sock }: { state: State; dispatch: D
       }
       onPick={(m) => {
         sock?.send({ t: "set-theme", prefs: { ...prefs, mode: m } });
-        dispatch({ a: "show-appearance", v: false });
+        dispatch({ a: "close" });
       }}
-      onBack={() => dispatch({ a: "show-appearance", v: false, back: true })}
+      onBack={() => dispatch({ a: "close", back: true })}
       placeholder="light/dark mode · ↑↓ preview · enter keeps · esc reverts"
       row={(m) => (
         <>
@@ -1172,12 +1110,12 @@ const sourceOf = (t: Theme) => (t.source === "file" ? "~/.orchardist/themes" : t
 /** theme picker. Main mode lists families (a dark/light pair is one row; ←→ peeks at the other
  * variant, enter fills both slots and appearance stays as set). Slot overrides list single themes of that kind. */
 function ThemePicker({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
-  const slot = state.showThemes ?? "theme";
+  const slot = state.overlay?.kind === "theme" ? state.overlay.slot : "theme";
   const prefs = state.themePrefs;
   const nowKind = effectiveKind(prefs, state.systemDark);
   const selectedId = prefs[slot === "theme" ? nowKind : slot];
-  const close = () => dispatch({ a: "show-themes", v: null });
-  const back = () => dispatch({ a: "show-themes", v: null, back: true });
+  const close = () => dispatch({ a: "close" });
+  const back = () => dispatch({ a: "close", back: true });
   const preview = (t: Theme | null) => dispatch({ a: "preview-theme", theme: t });
 
   // ←→ picks a column (null = whatever appearance says) and it sticks as ↑↓ walks the rows, so
@@ -1304,30 +1242,6 @@ function CommandPalette({
   );
 }
 
-function dotClass(w: WorktreeStatus): string {
-  if (w.agent === "working") return "working";
-  if (w.worktree.landed) return "landed";
-  if (w.procs.some((p) => p.status === "crashed")) return "crashed";
-  if (w.procs.some((p) => p.status === "running")) return "running";
-  if (w.procs.some((p) => p.status === "starting")) return "starting";
-  return "idle";
-}
-
-function xyClass(xy: string): string {
-  if (xy.includes("A") || xy === "??") return "added";
-  if (xy.includes("D")) return "deleted";
-  return "";
-}
-
-/** Porcelain XY → one letter. The tool commits with `add -A`, so staged vs unstaged
- * is not a distinction the user can act on, and untracked is just "new". */
-function xyLetter(xy: string): string {
-  if (xy === "??") return "A";
-  if (xy === "UU" || xy === "AA" || xy === "DD" || xy.includes("U")) return "C";
-  const code = xy.trim()[0] ?? "";
-  return code === "T" ? "M" : code || "·";
-}
-
 function LineCounts({ f }: { f: GitFileStatus }) {
   if (f.add === undefined && f.del === undefined) return null;
   return (
@@ -1427,7 +1341,7 @@ function Center({
     }
   }, [active?.worktree.id, activeReady]);
 
-  const logs = active ? (state.logs[active.worktree.id] ?? []) : [];
+  const logs = active ? (state.local[active.worktree.id]?.log ?? []) : [];
   const frames = state.worktrees.filter((w) => mounted.includes(w.worktree.id));
 
   // editor pane: draggable height + full-height toggle, persisted
@@ -1517,48 +1431,48 @@ function Center({
         const activeRepo = active ? state.repos.find((r) => r.id === active.worktree.repoId) : null;
         return activeRepo?.needsSetup ? <ConfigCard key={activeRepo.id} repo={activeRepo} sock={sock} /> : null;
       })()}
-      {state.showQuickOpen && active && (
+      {state.overlay?.kind === "quick-open" && active && (
         <QuickOpen
-          paths={state.files[active.worktree.id] ?? []}
-          status={state.git[active.worktree.id]?.files ?? []}
+          paths={state.local[active.worktree.id]?.files ?? []}
+          status={state.local[active.worktree.id]?.git?.files ?? []}
           commands={buildCommands(state, dispatch, sock, active, repo)}
           onPick={(path) => {
             sock?.send({ t: "file-diff", worktreeId: active.worktree.id, path });
-            dispatch({ a: "quick-open", v: false });
+            dispatch({ a: "close" });
           }}
-          onClose={() => dispatch({ a: "quick-open", v: false })}
+          onClose={() => dispatch({ a: "close" })}
           initialQuery={state.paletteReturn?.mode === "quick-open" ? state.paletteReturn.q : ""}
           onSub={(q) => dispatch({ a: "palette-return", v: { mode: "quick-open", q } })}
         />
       )}
-      {state.showSearch && active && (
+      {state.overlay?.kind === "search" && active && (
         <SearchPalette
           worktreeId={active.worktree.id}
-          results={state.search?.worktreeId === active.worktree.id ? state.search : null}
+          results={state.local[active.worktree.id]?.search ?? null}
           onQuery={(q) => sock?.send({ t: "search", worktreeId: active.worktree.id, query: q })}
           onPick={(hit) => {
             dispatch({ a: "goto-line", v: { worktreeId: active.worktree.id, path: hit.path, line: hit.line } });
             sock?.send({ t: "file-diff", worktreeId: active.worktree.id, path: hit.path });
             if (!state.leftOpen) dispatch({ a: "toggle-left" });
-            dispatch({ a: "show-search", v: false });
+            dispatch({ a: "close" });
           }}
-          onClose={() => dispatch({ a: "show-search", v: false })}
+          onClose={() => dispatch({ a: "close" })}
         />
       )}
-      {state.showKeys && (
-        <KeysHelp state={state} dispatch={dispatch} onClose={() => dispatch({ a: "show-keys", v: false })} />
+      {state.overlay?.kind === "keys" && (
+        <KeysHelp state={state} dispatch={dispatch} onClose={() => dispatch({ a: "close" })} />
       )}
-      {state.showThemes && <ThemePicker state={state} dispatch={dispatch} sock={sock} />}
-      {state.showAppearance && <AppearancePicker state={state} dispatch={dispatch} sock={sock} />}
-      {state.showCommands && (
+      {state.overlay?.kind === "theme" && <ThemePicker state={state} dispatch={dispatch} sock={sock} />}
+      {state.overlay?.kind === "appearance" && <AppearancePicker state={state} dispatch={dispatch} sock={sock} />}
+      {state.overlay?.kind === "commands" && (
         <CommandPalette
           commands={buildCommands(state, dispatch, sock, active, repo)}
-          onClose={() => dispatch({ a: "show-commands", v: false })}
+          onClose={() => dispatch({ a: "close" })}
           initialQuery={state.paletteReturn?.mode === "commands" ? state.paletteReturn.q : ""}
           onSub={(q) => dispatch({ a: "palette-return", v: { mode: "commands", q } })}
         />
       )}
-      {state.showPrompt && repo && (
+      {state.overlay?.kind === "prompt" && repo && (
         <PromptOverlay
           onSubmit={(text, variants, batch) => {
             if (batch) {
@@ -1568,19 +1482,20 @@ function Center({
               for (let i = 0; i < variants; i++) {
                 sock?.send({
                   t: "create-worktree",
+                  clientId: state.clientId,
                   repoId: repo.id,
                   prompt: text,
                   variant: { group, index: i + 1, of: variants },
                 });
               }
             } else {
-              sock?.send({ t: "create-worktree", repoId: repo.id, prompt: text });
+              sock?.send({ t: "create-worktree", clientId: state.clientId, repoId: repo.id, prompt: text });
             }
-            dispatch({ a: "show-prompt", v: false });
+            dispatch({ a: "close" });
             // the agent starts talking in the chat panel — make sure it's on screen
             if (!state.rightOpen) dispatch({ a: "toggle-right" });
           }}
-          onClose={() => dispatch({ a: "show-prompt", v: false })}
+          onClose={() => dispatch({ a: "close" })}
         />
       )}
     </div>
@@ -1610,11 +1525,11 @@ function DiffView({
   const absPath = wt ? `${wt.worktree.path}/${diff.path}` : diff.path;
   // warm the line-offset/ranges cache so line-hover highlights align
   useEffect(() => {
-    if (!state.changedRanges[`${diff.worktreeId}:${diff.path}`]) {
+    if (!state.local[diff.worktreeId]?.changedRanges[diff.path]) {
       sock?.send({ t: "changed-ranges", worktreeId: diff.worktreeId, path: diff.path });
     }
   }, [diff.worktreeId, diff.path]);
-  const lineOff = state.changedRanges[`${diff.worktreeId}:${diff.path}`]?.offset ?? 0;
+  const lineOff = state.local[diff.worktreeId]?.changedRanges[diff.path]?.offset ?? 0;
   return (
     <div className="diff-pane" style={{ height }}>
       {!full && <div className="row-resize" onPointerDown={onDragStart} />}
@@ -1657,12 +1572,6 @@ function DiffView({
     </div>
   );
 }
-
-const EDITORS: Array<{ label: string; scheme: string }> = [
-  { label: "Zed", scheme: "zed" },
-  { label: "VS Code", scheme: "vscode" },
-  { label: "Cursor", scheme: "cursor" },
-];
 
 function OpenInMenu({ absPath, onReveal }: { absPath: string; onReveal?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -2019,7 +1928,7 @@ function RightDock({
   dispatch: Dispatch;
   width: number;
 }) {
-  const items = active ? (state.chats[active.worktree.id] ?? []) : [];
+  const items = active ? (state.local[active.worktree.id]?.chat ?? []) : [];
   const logRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("");
 
@@ -2084,7 +1993,7 @@ function RightDock({
   const buildContext = (): string | undefined => {
     if (!active) return undefined;
     const parts: string[] = [];
-    const pc = state.pageCtx[active.worktree.id];
+    const pc = state.local[active.worktree.id]?.page;
     if (pc?.url) {
       try {
         const u = new URL(pc.url);
@@ -2114,6 +2023,7 @@ function RightDock({
     if (spawnNew) {
       sock?.send({
         t: "create-worktree",
+        clientId: state.clientId,
         repoId: active.worktree.repoId,
         prompt: text.trim(),
         baseWorktreeId: active.worktree.id,
@@ -2162,7 +2072,7 @@ function RightDock({
             </div>
           )}
           {active &&
-            (state.queues[active.worktree.id] ?? []).map((text, i) => (
+            (state.local[active.worktree.id]?.queue ?? []).map((text, i) => (
               <div key={`q-${i}`} className="msg-user queued-msg">
                 <span className="queued-tag">queued</span>
                 <span className="queued-text">{text}</span>
@@ -2469,13 +2379,13 @@ function KeysHelp({ state, dispatch, onClose }: { state: State; dispatch: Dispat
           <div className="keys-h">Settings</div>
           <div className="set-row">
             <span className="keys-d">theme</span>
-            <button className="set-v" onClick={() => open({ a: "show-themes", v: "theme" })}>
+            <button className="set-v" onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
               {resolveTheme(prefs, state.themes, state.systemDark).name}
             </button>
           </div>
           <div className="set-row">
             <span className="keys-d">light/dark mode</span>
-            <button className="set-v" onClick={() => open({ a: "show-appearance", v: true })}>
+            <button className="set-v" onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}>
               {appearanceLabel[prefs.mode]}
             </button>
           </div>
@@ -2566,7 +2476,7 @@ function StatusBar({
 
   // route section (merged from the old preview route bar)
   const id = active?.worktree.id ?? null;
-  const url = id ? state.pageCtx[id]?.url : undefined;
+  const url = id ? state.local[id]?.page.url : undefined;
   const path = useMemo(() => {
     if (!url) return "/";
     try {
@@ -2675,7 +2585,7 @@ function StatusBar({
         <button
           className="toggle icon keys-btn"
           {...tip("Shortcuts & settings", chord("keys"))}
-          onClick={() => dispatch({ a: "show-keys", v: !state.showKeys })}
+          onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
         >
           <Icon name="help" />
         </button>

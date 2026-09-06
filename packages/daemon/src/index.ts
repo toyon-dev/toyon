@@ -3,7 +3,7 @@
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DAEMON_DEFAULT_PORT } from "@toyon/shared";
+import { DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { cloud } from "./core/cloud.ts";
 import { Hub } from "./core/hub.ts";
@@ -63,6 +63,9 @@ bridge.setShellOrigins(
         `http://localhost:${port}`,
         `http://toyon.localhost:${port}`,
         ...(branded ? ["http://toyon.localhost"] : []),
+        // the Vite dev shell frames the same previews
+        `http://127.0.0.1:${SHELL_DEV_PORT}`,
+        `http://localhost:${SHELL_DEV_PORT}`,
       ],
 );
 

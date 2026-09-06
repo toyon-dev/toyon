@@ -12,8 +12,14 @@ import type { BridgeToShellMsg, ShellToBridgeMsg } from "@toyon/shared/protocol/
 declare global {
   interface Window {
     __toyonShellOrigins?: string[];
+    __toyonBridge?: boolean;
   }
 }
+// injected once per document: an htmx/Turbo fragment swap re-delivers the tag and would wrap
+// history and double every listener
+if (window.__toyonBridge) throw new Error("toyon bridge already installed");
+window.__toyonBridge = true;
+
 const SHELL_ORIGINS: string[] = window.__toyonShellOrigins ?? [];
 let shellOrigin: string | null = null;
 
@@ -290,7 +296,8 @@ function highlightFile(path: string, ranges: Array<[number, number]> | null) {
 }
 
 // ---- headless self-test hook: #__toyontest=src/App.tsx@27-27 ----
-if (location.hash.startsWith("#__toyontest=")) {
+const LOOPBACK = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
+if (LOOPBACK && location.hash.startsWith("#__toyontest=")) {
   const spec = decodeURIComponent(location.hash.slice("#__toyontest=".length));
   const [path, span] = spec.split("@");
   const ranges: Array<[number, number]> | null = span
@@ -333,8 +340,9 @@ window.addEventListener("message", (e) => {
       location.reload();
       break;
     case "navigate":
-      // full navigation: always correct regardless of the app's router (or lack of one)
-      location.assign(d.path || "/");
+      // full navigation: always correct regardless of the app's router (or lack of one).
+      // Same-origin paths only: never a scheme, so a bad frame can't send the page elsewhere
+      if (/^[/?#]/.test(d.path)) location.assign(d.path);
       break;
     case "back":
       history.back();
@@ -363,8 +371,9 @@ window.addEventListener("message", (e) => {
       clearOverlay();
       break;
     case "theme":
-      accent = d.accent;
-      accentFg = d.accentFg;
+      // interpolated into cssText: hex colors only
+      if (/^#[0-9a-f]{3,8}$/i.test(d.accent)) accent = d.accent;
+      if (/^#[0-9a-f]{3,8}$/i.test(d.accentFg)) accentFg = d.accentFg;
       break;
   }
 });

@@ -1,7 +1,6 @@
 // Working-tree and branch state: porcelain parsing, line counts, changed ranges, ahead/behind.
 // The parsers are pure; the functions around them shell out through git/exec.
 
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GitFileStatus } from "@toyon/shared";
 import { git, gitRaw } from "./exec.ts";
@@ -52,9 +51,12 @@ async function numstat(worktreePath: string, ...range: string[]): Promise<Map<st
 }
 
 /** Line count of an untracked file (all insertions). Undefined for binaries and directories. */
-function untrackedLines(worktreePath: string, file: string): LineCounts {
+async function untrackedLines(worktreePath: string, file: string): Promise<LineCounts> {
   try {
-    const buf = readFileSync(join(worktreePath, file));
+    const f = Bun.file(join(worktreePath, file));
+    // a dumped database or a video is not something to count lines in
+    if (f.size > 2_000_000) return {};
+    const buf = new Uint8Array(await f.arrayBuffer());
     if (buf.subarray(0, 8000).includes(0)) return {};
     if (buf.length === 0) return { add: 0, del: 0 };
     let n = 0;
@@ -71,10 +73,12 @@ export async function statusFilesWithCounts(worktreePath: string): Promise<GitFi
   const files = await statusFiles(worktreePath);
   if (files.length === 0) return files;
   const counts = files.some((f) => f.xy !== "??") ? await numstat(worktreePath, "HEAD") : new Map<string, LineCounts>();
-  return files.map((f) => ({
-    ...f,
-    ...(f.xy === "??" ? untrackedLines(worktreePath, f.path) : (counts.get(f.path) ?? {})),
-  }));
+  return Promise.all(
+    files.map(async (f) => ({
+      ...f,
+      ...(f.xy === "??" ? await untrackedLines(worktreePath, f.path) : (counts.get(f.path) ?? {})),
+    })),
+  );
 }
 
 /** Files changed between merge-base with main and HEAD (committed, not yet landed). */

@@ -115,12 +115,16 @@ export function startProxy(opts: {
         upstream.onclose = (ev) => {
           try {
             ws.close(ev.code, ev.reason);
-          } catch {}
+          } catch {
+            // already closed by the client
+          }
         };
         upstream.onerror = () => {
           try {
             ws.close(1011, "upstream error");
-          } catch {}
+          } catch {
+            // already closed by the client
+          }
         };
       },
       message(ws: ServerWebSocket<BridgeData>, message) {
@@ -132,7 +136,9 @@ export function startProxy(opts: {
       close(ws: ServerWebSocket<BridgeData>) {
         try {
           ws.data.upstream?.close();
-        } catch {}
+        } catch {
+          // upstream never opened
+        }
       },
     },
   });
@@ -145,7 +151,7 @@ export function startProxy(opts: {
 }
 
 function injectBridge(html: string): string {
-  // version-busted URL: every bridge bump is a guaranteed cache miss
+  // served with cache-control: no-store, so every page load gets the current bridge
   const tag = `<script src="/__toyon/bridge.js"></script>`;
   if (html.includes("</head>")) return html.replace("</head>", `${tag}</head>`);
   if (html.includes("<body")) return html.replace(/<body([^>]*)>/, `<body$1>${tag}`);

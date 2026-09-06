@@ -5,6 +5,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Server } from "bun";
 import { cloud } from "../core/cloud.ts";
+import { UserError } from "../core/errors.ts";
+import { log } from "../core/log.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 
 export interface WsData {
@@ -62,10 +64,16 @@ export function createFetch(opts: HttpOpts) {
       if (req.headers.get("authorization") !== `Bearer ${opts.token}`) {
         return new Response("unauthorized", { status: 401 });
       }
-      const body = (await req.json()) as { path?: string };
+      const body = (await req.json().catch(() => ({}))) as { path?: string };
       if (!body.path) return new Response("missing path", { status: 400 });
-      const repo = await opts.repos.register(body.path);
-      return Response.json({ repoId: repo.id });
+      try {
+        const repo = await opts.repos.register(body.path);
+        return Response.json({ repoId: repo.id });
+      } catch (e) {
+        if (e instanceof UserError) return new Response(e.message, { status: 400 });
+        log.error("http", "register failed", e);
+        return new Response("register failed; see daemon log", { status: 500 });
+      }
     }
 
     // static shell

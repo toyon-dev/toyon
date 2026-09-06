@@ -3,11 +3,12 @@
 // the wire protocol. Transcript JSONL in ~/.toyon/transcripts is the
 // source of truth for rendering; the SDK session id is only used for resume.
 
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStatus, PickMeta } from "@toyon/shared";
-import { log } from "../core/log.ts";
+import { fireAndForget, log } from "../core/log.ts";
 import type { AgentAdapter } from "./adapter.ts";
 import { buildScope, type Scope } from "./scope.ts";
 
@@ -64,7 +65,8 @@ export class AgentSession implements AgentAdapter {
     this.queueChanged();
     if (!this.running) return;
     this.interrupted = true;
-    void this.current?.interrupt?.()?.catch?.(() => {});
+    const interrupt = this.current?.interrupt?.();
+    if (interrupt) fireAndForget(this.worktreeId, interrupt, "interrupt");
   }
 
   constructor(
@@ -111,14 +113,16 @@ export class AgentSession implements AgentAdapter {
     return out;
   }
 
+  /** appends are chained so lines land in order without a sync write per streamed token */
+  private writes: Promise<void> = Promise.resolve();
+
   private emit(event: AgentEvent) {
     const entry = { seq: this.seq++, event };
     this.events.push(entry);
-    try {
-      appendFileSync(this.transcriptPath(), `${JSON.stringify(entry)}\n`);
-    } catch (e) {
-      log.warn(this.worktreeId, "transcript append failed", e);
-    }
+    const line = `${JSON.stringify(entry)}\n`;
+    this.writes = this.writes
+      .then(() => appendFile(this.transcriptPath(), line))
+      .catch((e) => log.warn(this.worktreeId, "transcript append failed", e));
     this.onEvent(event, entry.seq);
   }
 
@@ -132,7 +136,7 @@ export class AgentSession implements AgentAdapter {
   send(text: string, context?: string, pick?: PickMeta) {
     this.queue.push({ text, context, pick });
     this.queueChanged();
-    if (!this.running) void this.drain();
+    if (!this.running) fireAndForget(this.worktreeId, this.drain(), "agent drain");
   }
 
   private async drain() {

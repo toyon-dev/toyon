@@ -7,7 +7,7 @@
 // tokenColors by TextMate scope prefix — Monaco can't consume TextMate scopes
 // directly, so a coarse mapping is all we carry.
 
-import type { Theme, ThemeColorKey, ThemeSyntaxToken } from "./index.ts";
+import type { Theme, ThemeColorKey, ThemeSyntaxToken } from "./model.ts";
 import { composite, contrastRatio, hex8, isDark, normalizeHex, parseHex } from "./themes.ts";
 
 export interface VsCodeThemeJson {

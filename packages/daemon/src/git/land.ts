@@ -47,13 +47,7 @@ export async function mergeToMain(
     return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr} — switch it first` };
   }
   const m = await git(repoPath, "merge", "--no-edit", branch);
-  if (!m.ok) {
-    await git(repoPath, "merge", "--abort");
-    return {
-      ok: false,
-      message: `merge conflicts with ${defaultBr} — sync this worktree first (${m.err.slice(0, 200)})`,
-    };
-  }
+  if (!m.ok) return mergeFailure(repoPath, m.err, `merge conflicts with ${defaultBr} — sync this worktree first`);
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };
 }
 
@@ -65,23 +59,32 @@ export async function syncFromMain(worktreePath: string, defaultBr: string): Pro
   if (behind === 0) return { ok: true, message: `already up to date with ${defaultBr}` };
   const m = await git(worktreePath, "merge", "--no-edit", defaultBr);
   if (!m.ok) {
-    await git(worktreePath, "merge", "--abort");
-    return {
-      ok: false,
-      message: `sync conflicts with ${defaultBr} — ask the agent to merge ${defaultBr} and resolve them`,
-    };
+    return mergeFailure(
+      worktreePath,
+      m.err,
+      `sync conflicts with ${defaultBr} — ask the agent to merge ${defaultBr} and resolve them`,
+    );
   }
   return { ok: true, message: `synced ${behind} commit(s) from ${defaultBr}` };
+}
+
+/** A conflict leaves a merge in progress that must be aborted; any other failure (dirty index,
+ * unrelated histories, hook) has nothing to abort and deserves its own message. */
+async function mergeFailure(cwd: string, err: string, conflictMessage: string): Promise<ShipResult> {
+  const conflict = /CONFLICT|Automatic merge failed/.test(err);
+  if (conflict) {
+    await git(cwd, "merge", "--abort");
+    return { ok: false, message: `${conflictMessage} (${err.slice(0, 200)})` };
+  }
+  return { ok: false, message: `merge failed: ${err.slice(0, 300)}` };
 }
 
 /** Commit everything, push, and open a PR (gh) or return the compare URL. */
 export async function shipWorktree(worktreePath: string, branch: string, defaultBr: string): Promise<ShipResult> {
   const cErr = await requireClean(worktreePath);
   if (cErr) return cErr;
-  const ahead = await git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
-  if (ahead.ok && ahead.out === "0") {
-    return { ok: false, message: `nothing to ship — no commits ahead of ${defaultBr}` };
-  }
+  const { ahead } = await aheadBehind(worktreePath, defaultBr);
+  if (ahead === 0) return { ok: false, message: `nothing to ship — no commits ahead of ${defaultBr}` };
 
   const remote = await git(worktreePath, "remote", "get-url", "origin");
   if (!remote.ok) {

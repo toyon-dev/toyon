@@ -4,7 +4,7 @@
 
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { PickMeta, RepoInfo, ServerMsg, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
+import type { GitFileStatus, PickMeta, RepoInfo, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
 import { quickName } from "../agent/llm.ts";
 import { transcriptPathFor } from "../agent/session.ts";
 import { UserError } from "../core/errors.ts";
@@ -22,6 +22,14 @@ import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 
 export type Variant = { group: string; index: number; of: number };
+
+/** what `git status` + ahead/behind say about one worktree */
+export interface GitInfo {
+  files: GitFileStatus[];
+  committed?: GitFileStatus[];
+  ahead?: number;
+  behind?: number;
+}
 
 export interface CreateOpts {
   /** the shell tab that asked; stored as createdBy so only that tab auto-focuses the result */
@@ -114,11 +122,8 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
 
     // setup + procs warm in the background; the agent starts immediately
-    fireAndForget(
-      wt.id,
-      this.setupAndStart(wt, repo, base?.path ?? repo.path).then(() => this.d.hub.emit("worktreesChanged")),
-      "setup + start",
-    );
+    // RuntimeRegistry.start emits worktreesChanged once the procs are up
+    fireAndForget(wt.id, this.setupAndStart(wt, repo, base?.path ?? repo.path), "setup + start");
     this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, undefined, pick);
     this.scheduleNaming(wt, prompt, repo, variant);
     return wt;
@@ -252,11 +257,7 @@ export class WorktreeService {
     };
     this.d.state.addWorktree(wt);
     this.d.hub.emit("worktreesChanged");
-    fireAndForget(
-      wt.id,
-      this.setupAndStart(wt, repo, wts[0]!.path).then(() => this.d.hub.emit("worktreesChanged")),
-      "setup + start",
-    );
+    fireAndForget(wt.id, this.setupAndStart(wt, repo, wts[0]!.path), "setup + start");
     return wt;
   }
 
@@ -312,9 +313,9 @@ export class WorktreeService {
   }
 
   private landable(worktreeId: string, verb: string): { wt: WorktreeInfo; repo: RepoInfo } {
-    const wt = this.d.state.requireWorktree(worktreeId);
-    if (wt.kind === "main") throw new UserError(`${verb} from a worktree, not main`);
-    return { wt, repo: this.d.state.requireRepo(wt.repoId) };
+    const pair = this.d.state.requireWorktreeWithRepo(worktreeId);
+    if (pair.wt.kind === "main") throw new UserError(`${verb} from a worktree, not main`);
+    return pair;
   }
 
   /** push + PR. Not under the repo lock: it holds `git push` + `gh` for seconds. */
@@ -346,9 +347,7 @@ export class WorktreeService {
   }
 
   async sync(worktreeId: string): Promise<{ result: ShipResult; defaultBranch: string }> {
-    const wt = this.d.state.requireWorktree(worktreeId);
-    if (wt.kind === "main") throw new UserError("main doesn't sync with itself");
-    const repo = this.d.state.requireRepo(wt.repoId);
+    const { wt, repo } = this.landable(worktreeId, "sync");
     const result = await withRepoLock(repo.path, () => syncFromMain(wt.path, repo.defaultBranch));
     return { result, defaultBranch: repo.defaultBranch };
   }
@@ -381,9 +380,9 @@ export class WorktreeService {
     }
   }
 
-  /** git-status payload for one worktree (subscribe, edits, ref ticks). Also the one place the
-   * `landed` badge is cleared: new work after a merge means it is no longer landed. */
-  async gitStatus(worktreeId: string): Promise<Extract<ServerMsg, { t: "git-status" }> | null> {
+  /** the working-tree state the changes panel shows (subscribe, edits, ref ticks). Also the one
+   * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
+  async gitStatus(worktreeId: string): Promise<GitInfo | null> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || wt.kind === "spare") return null;
     try {
@@ -395,7 +394,7 @@ export class WorktreeService {
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
       const committed = wt.kind !== "main" && ahead > 0 ? await committedFiles(wt.path, defaultBr) : undefined;
       if (wt.landed && (files.length > 0 || ahead > 0)) this.setLanded(wt.id, false);
-      return { t: "git-status", worktreeId, files, committed, ...counts };
+      return { files, committed, ...counts };
     } catch (e) {
       log.warn(worktreeId, "git status failed", e);
       return null;

@@ -30,8 +30,8 @@ export interface HandlerCtx {
   reply(msg: ServerMsg): void;
   /** to every connected socket */
   broadcast(msg: ServerMsg): void;
-  /** this socket wants (or stops wanting) a worktree's stream */
-  subscribe(worktreeId: string): void;
+  /** this socket wants a worktree's stream; false if it already had it */
+  subscribe(worktreeId: string): boolean;
   unsubscribe(worktreeId: string): void;
 }
 
@@ -49,13 +49,22 @@ const toast = (
 ) => ({ t: "shipped", worktreeId, ok, message, ...extra }) satisfies ServerMsg;
 
 const gitStatus = async (s: Services, ctx: HandlerCtx, worktreeId: string) => {
-  const msg = await s.worktrees.gitStatus(worktreeId);
-  if (msg) ctx.reply(msg);
+  const info = await s.worktrees.gitStatus(worktreeId);
+  if (info) ctx.reply({ t: "git-status", worktreeId, ...info });
+};
+
+/** the landing-op tail: tell the caller what happened, then refresh its changes panel */
+const notify = async (s: Services, ctx: HandlerCtx, worktreeId: string, msg: ServerMsg) => {
+  ctx.reply(msg);
+  await gitStatus(s, ctx, worktreeId);
 };
 
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async subscribe(msg, ctx, s) {
-    ctx.subscribe(msg.worktreeId);
+    s.state.requireWorktree(msg.worktreeId);
+    // the shell re-asserts its whole subscription set on every switch; only a NEW subscription
+    // needs the backfill (an existing one has been receiving the stream all along)
+    if (!ctx.subscribe(msg.worktreeId)) return;
     const agent = s.runtime.agentFor(msg.worktreeId);
     const events = agent?.transcript() ?? [];
     ctx.reply({
@@ -128,6 +137,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   "restart-proc"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
     s.runtime.restartProc(msg.worktreeId, msg.proc);
   },
 
@@ -136,39 +146,42 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "file-diff"(msg, ctx, s) {
-    if (!s.state.worktree(msg.worktreeId)) return;
     const { before, after } = await s.files.diff(msg.worktreeId, msg.path);
     ctx.reply({ t: "file-diff", worktreeId: msg.worktreeId, path: msg.path, before, after });
   },
 
   async ship(msg, ctx, s) {
     const result = await s.worktrees.ship(msg.worktreeId);
-    ctx.reply(toast(msg.worktreeId, result.ok, result.message, { url: result.url }));
-    await gitStatus(s, ctx, msg.worktreeId);
+    await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message, { url: result.url }));
   },
 
   async "merge-main"(msg, ctx, s) {
     const { result, removeIds } = await s.worktrees.merge(msg.worktreeId);
-    ctx.reply(toast(msg.worktreeId, result.ok, result.message, { merged: result.ok, removeIds }));
-    await gitStatus(s, ctx, msg.worktreeId);
+    await notify(
+      s,
+      ctx,
+      msg.worktreeId,
+      toast(msg.worktreeId, result.ok, result.message, { merged: result.ok, removeIds }),
+    );
   },
 
   async "sync-main"(msg, ctx, s) {
     const { result, defaultBranch } = await s.worktrees.sync(msg.worktreeId);
-    ctx.reply(
+    await notify(
+      s,
+      ctx,
+      msg.worktreeId,
       result.ok
         ? toast(msg.worktreeId, true, result.message)
         : toast(msg.worktreeId, false, `sync conflicts with ${defaultBranch} — prompt prefilled in chat`, {
             suggestion: `Merge ${defaultBranch} into this branch and resolve the conflicts, then verify the app still works.`,
           }),
     );
-    await gitStatus(s, ctx, msg.worktreeId);
   },
 
   async commit(msg, ctx, s) {
     const result = await s.worktrees.commit(msg.worktreeId, msg.message);
-    ctx.reply(toast(msg.worktreeId, result.ok, result.message));
-    await gitStatus(s, ctx, msg.worktreeId);
+    await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message));
   },
 
   async combine(msg, ctx, s) {
@@ -192,6 +205,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   "stop-agent"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.stop();
   },
 
@@ -200,11 +214,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   unqueue(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.unqueue(msg.index);
   },
 
   async "changed-ranges"(msg, ctx, s) {
-    if (!s.state.worktree(msg.worktreeId)) return;
     const { ranges, lineOffset } = await s.files.changedRanges(msg.worktreeId, msg.path);
     ctx.reply({ t: "changed-ranges", worktreeId: msg.worktreeId, path: msg.path, ranges, lineOffset });
   },
@@ -215,8 +229,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   async "discard-file"(msg, ctx, s) {
     await s.files.discard(msg.worktreeId, msg.path);
-    ctx.reply(toast(msg.worktreeId, true, `discarded ${msg.path}`));
-    await gitStatus(s, ctx, msg.worktreeId);
+    await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, true, `discarded ${msg.path}`));
   },
 
   async "write-file"(msg, ctx, s) {

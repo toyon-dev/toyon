@@ -21,8 +21,7 @@ export class FileService {
   ) {}
 
   async diff(worktreeId: string, path: string): Promise<{ before: string; after: string }> {
-    const wt = this.state.requireWorktree(worktreeId);
-    const repo = this.state.requireRepo(wt.repoId);
+    const { wt, repo } = this.state.requireWorktreeWithRepo(worktreeId);
     const target = resolveInside(wt.path, path);
     const before = await fileBefore(wt.path, repo.defaultBranch, path);
     const afterFile = Bun.file(target);
@@ -81,8 +80,7 @@ export class FileService {
     worktreeId: string,
     path: string,
   ): Promise<{ ranges: Array<[number, number]>; lineOffset: number }> {
-    const wt = this.state.requireWorktree(worktreeId);
-    const repo = this.state.requireRepo(wt.repoId);
+    const { wt, repo } = this.state.requireWorktreeWithRepo(worktreeId);
     resolveInside(wt.path, path);
     const ranges = await changedRanges(wt.path, repo.defaultBranch, path);
     const lineOffset = await viteLineOffset(wt.path, path, this.runtime.previewTarget(wt.id));

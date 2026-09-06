@@ -23,7 +23,9 @@ export function lockfileHash(dir: string): string {
   for (const f of LOCKFILES) {
     try {
       h.update(readFileSync(join(dir, f)));
-    } catch {}
+    } catch {
+      // absent lockfile: not part of the hash
+    }
   }
   return h.digest("hex");
 }

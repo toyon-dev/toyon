@@ -1,7 +1,7 @@
 // Built-in themes + color helpers shared by the daemon (importing/serving) and
 // the shell (applying). Every color is #rrggbb or #rrggbbaa.
 
-import type { Theme, ThemeColorKey, ThemePrefs } from "./index.ts";
+import type { Theme, ThemeColorKey, ThemePrefs } from "./model.ts";
 
 export const gruvboxDarkSoft: Theme = {
   id: "gruvbox-dark-soft",

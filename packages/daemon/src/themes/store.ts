@@ -17,6 +17,7 @@ import {
 } from "@toyon/shared";
 import { parse as parseJsonc } from "jsonc-parser";
 import { cloud } from "../core/cloud.ts";
+import { log } from "../core/log.ts";
 
 const home = homedir();
 const defaultExtensionDirs = [
@@ -161,7 +162,7 @@ function loadDir(dir: string): Theme[] {
         out.push(vscodeToTheme(readVscodeTheme(file), { id, source: "file" }));
       }
     } catch (e) {
-      console.warn(`[themes] skipping ${file}: ${e instanceof Error ? e.message : e}`);
+      log.warn("themes", `skipping ${file}`, e instanceof Error ? e.message : e);
     }
   }
   return out;
@@ -196,7 +197,9 @@ function discover(dir: string): Theme[] {
       if (existsSync(nlsFile)) {
         try {
           nls = JSON.parse(readFileSync(nlsFile, "utf8"));
-        } catch {}
+        } catch {
+          // unreadable nls file: labels stay as their %keys%
+        }
       }
       for (const c of themes) {
         if (!c.path || !c.label) continue;
@@ -207,11 +210,11 @@ function discover(dir: string): Theme[] {
           const json = readVscodeTheme(file);
           out.push(vscodeToTheme(json, { id: `vscode:${ext}:${slug(c.label)}`, name: c.label, source: "vscode" }));
         } catch (e) {
-          console.warn(`[themes] skipping ${file}: ${e instanceof Error ? e.message : e}`);
+          log.warn("themes", `skipping ${file}`, e instanceof Error ? e.message : e);
         }
       }
     } catch (e) {
-      console.warn(`[themes] skipping ${extDir}: ${e instanceof Error ? e.message : e}`);
+      log.warn("themes", `skipping ${extDir}`, e instanceof Error ? e.message : e);
     }
   }
   return out;

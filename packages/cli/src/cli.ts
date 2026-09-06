@@ -16,7 +16,8 @@ const wantsInstallApp = args.includes("--install-app");
 
 const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 const base = `http://127.0.0.1:${port}`;
-const tokenFile = join(homedir(), ".toyon", "token");
+const TOYON_HOME = process.env.TOYON_HOME ?? join(homedir(), ".toyon");
+const tokenFile = join(TOYON_HOME, "token");
 const here = dirname(fileURLToPath(import.meta.url));
 const daemonEntry = join(here, "../../daemon/src/index.ts");
 
@@ -31,7 +32,7 @@ async function healthy(): Promise<boolean> {
 
 if (!(await healthy())) {
   console.log("starting toyon daemon…");
-  const logFd = openSync(join(homedir(), ".toyon", "daemon.log"), "a");
+  const logFd = openSync(join(TOYON_HOME, "daemon.log"), "a");
   const child = spawn("bun", ["run", daemonEntry], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
@@ -90,7 +91,7 @@ const DATA_DIRS: Record<string, string> = {
 // origin). Cached per browser once found; the cache is trusted only while the app's manifest
 // resources dir still exists (i.e. it hasn't been uninstalled).
 const manifestId = new URL("/", appUrl).href;
-const pwaCacheDir = join(homedir(), ".toyon", "pwa");
+const pwaCacheDir = join(TOYON_HOME, "pwa");
 function profilesOf(browser: string): string[] {
   const root = join(homedir(), "Library", "Application Support", DATA_DIRS[browser] ?? browser);
   if (!existsSync(root)) return [];
@@ -225,7 +226,7 @@ exec open "$URL"
   );
   chmodSync(launcher, 0o755);
   const stub = join(macos, "Toyon");
-  const cSrc = join(homedir(), ".toyon", "launcher.c");
+  const cSrc = join(TOYON_HOME, "launcher.c");
   writeFileSync(
     cSrc,
     `#include <mach-o/dyld.h>
@@ -255,7 +256,7 @@ int main(int argc, char **argv) {
   // best-effort icon: rasterize the shell's SVG -> iconset -> icns
   try {
     const svg = join(here, "../../shell/public/icon.svg");
-    const tmp = join(homedir(), ".toyon", "iconset.tmp");
+    const tmp = join(TOYON_HOME, "iconset.tmp");
     const iconset = join(tmp, "AppIcon.iconset");
     mkdirSync(iconset, { recursive: true });
     spawnSync("qlmanage", ["-t", "-s", "1024", "-o", tmp, svg], { stdio: "ignore" });

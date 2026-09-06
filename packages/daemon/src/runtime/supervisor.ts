@@ -162,13 +162,16 @@ export class WorktreeProcs {
       try {
         process.kill(-pid, "SIGTERM");
       } catch {
+        // group already gone: nothing to wait for
         finish();
         return;
       }
       killTimer = setTimeout(() => {
         try {
           process.kill(-pid, "SIGKILL");
-        } catch {}
+        } catch {
+          // group already gone
+        }
         // the exit event follows the SIGKILL almost immediately; don't hang on a stuck one
         setTimeout(finish, 200);
       }, 3000);

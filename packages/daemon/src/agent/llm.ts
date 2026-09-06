@@ -1,6 +1,7 @@
 // One-shot Haiku helpers: task naming and batch planning. No session, no tools.
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { log } from "../core/log.ts";
 
 /** One-shot Haiku call: name a task in 2-4 kebab-case words. Returns null on any failure. */
 export async function quickName(taskPrompt: string, cwd: string): Promise<string | null> {
@@ -28,7 +29,9 @@ export async function quickName(taskPrompt: string, cwd: string): Promise<string
         if (name && name.length >= 3) return name;
       }
     }
-  } catch {}
+  } catch (e) {
+    log.warn("llm", "one-shot call failed", e);
+  }
   return null;
 }
 
@@ -64,6 +67,8 @@ export async function planTasks(request: string, cwd: string): Promise<string[] 
         return tasks.length > 0 ? tasks : null;
       }
     }
-  } catch {}
+  } catch (e) {
+    log.warn("llm", "one-shot call failed", e);
+  }
   return null;
 }

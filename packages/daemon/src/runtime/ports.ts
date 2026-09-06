@@ -6,6 +6,7 @@
 // fixed range instead, because each one must be declared as a public TLS port.
 
 import { cloud } from "../core/cloud.ts";
+import { UserError } from "../core/errors.ts";
 
 const allocated = new Set<number>();
 
@@ -43,7 +44,7 @@ export async function allocateProxyPort(): Promise<number> {
       return port;
     }
   }
-  throw new Error(`no free proxy port in TOYON_PROXY_PORTS=${range.from}-${range.to}; remove a worktree first`);
+  throw new UserError(`no free proxy port in TOYON_PROXY_PORTS=${range.from}-${range.to}; remove a worktree first`);
 }
 
 /** mark a persisted port as taken (worktrees restored at boot keep their port) */

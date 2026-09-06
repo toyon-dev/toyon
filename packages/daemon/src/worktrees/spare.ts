@@ -12,7 +12,7 @@ import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
 import { git, gitOrThrow, lockfileHash, run } from "../git/exec.ts";
 import { withRepoLock } from "../git/lock.ts";
-import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
+import { allocateProxyPort } from "../runtime/ports.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { shortId } from "./naming.ts";
 
@@ -90,12 +90,8 @@ export class SparePool {
       this.spares.delete(repoId);
       // the state row and git worktree were created before setup could fail: undo them, or the
       // next boot adopts a half-built spare
-      const wt = entry.worktreeId ? this.d.state.worktree(entry.worktreeId) : undefined;
-      if (wt) {
-        await this.d.runtime.stop(wt.id);
-        await withRepoLock(repo.path, () => git(repo.path, "worktree", "remove", "--force", wt.path));
-        this.d.state.removeWorktree(wt.id);
-        releasePort(wt.proxyPort);
+      if (entry.worktreeId && this.d.state.worktree(entry.worktreeId)) {
+        await this.d.remove(entry.worktreeId).catch((re) => log.warn(repoId, "spare rollback failed", re));
       }
     }
   }
@@ -133,17 +129,19 @@ export class SparePool {
     const wt = this.d.state.worktree(entry.worktreeId);
     if (wt?.kind !== "spare") return null;
     const repo = this.d.state.requireRepo(repoId);
-    await withRepoLock(repo.path, () => gitOrThrow(wt.path, "switch", "-c", branch));
+    try {
+      await withRepoLock(repo.path, () => gitOrThrow(wt.path, "switch", "-c", branch));
+    } catch (e) {
+      // the spare is still a good spare: put it back rather than leaving an invisible row
+      this.spares.set(repoId, { ...entry, ready: true });
+      throw e;
+    }
     wt.kind = "worktree";
     wt.branch = branch;
     wt.title = slug;
     wt.createdAt = Date.now();
     this.d.state.save();
-    fireAndForget(
-      repoId,
-      this.ensure(repoId).then(() => this.d.hub.emit("worktreesChanged")),
-      "spare warm-up",
-    );
+    fireAndForget(repoId, this.ensure(repoId), "spare warm-up");
     return wt;
   }
 }

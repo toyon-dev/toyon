@@ -1,13 +1,12 @@
 // WebSocket side of the daemon: socket registry, hello, inbound validation + dispatch, and the
 // table of what gets pushed when a hub event fires. Phase 6 scopes the pushes per subscription.
 
-import { PROTOCOL_VERSION, parseClientMsg, type ServerMsg } from "@toyon/shared";
+import { PROTOCOL_VERSION, parseClientMsg, type ServerMsg, ThemeImportError } from "@toyon/shared";
 import type { Server, ServerWebSocket } from "bun";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
-import { statusFilesWithCounts } from "../git/status.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
 import { dispatch, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
@@ -57,12 +56,29 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   });
 
   // ---- what a hub event pushes to clients ----
-  const worktreesChanged = () =>
+  // single-flight: a burst of changes (five creates, ten proc events) yields one statuses() run
+  // in flight and at most one more after it, and snapshots can never land out of order
+  let statusesInFlight = false;
+  let statusesDirty = false;
+  const worktreesChanged = () => {
+    if (statusesInFlight) {
+      statusesDirty = true;
+      return;
+    }
+    statusesInFlight = true;
     fireAndForget(
       "ws",
-      s.worktrees.statuses().then((worktrees) => broadcast({ t: "worktrees", worktrees })),
+      (async () => {
+        do {
+          statusesDirty = false;
+          broadcast({ t: "worktrees", worktrees: await s.worktrees.statuses() });
+        } while (statusesDirty);
+      })().finally(() => {
+        statusesInFlight = false;
+      }),
       "worktrees broadcast",
     );
+  };
   s.hub.on("worktreesChanged", worktreesChanged);
   s.hub.on("agentStatus", worktreesChanged);
   s.hub.on("proc", (worktreeId, proc) => broadcast({ t: "proc", worktreeId, proc }));
@@ -75,15 +91,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     clearTimeout(gitStatusTimers.get(worktreeId));
     gitStatusTimers.set(
       worktreeId,
-      setTimeout(async () => {
+      setTimeout(() => {
         gitStatusTimers.delete(worktreeId);
-        const wt = s.state.worktree(worktreeId);
-        if (!wt) return;
-        try {
-          sendTo(worktreeId, { t: "git-status", worktreeId, files: await statusFilesWithCounts(wt.path) });
-        } catch (e) {
-          log.warn(worktreeId, "git status after agent edit failed", e);
-        }
+        // the same producer as subscribe/edits, so ahead/behind/committed are never blanked
+        fireAndForget(worktreeId, pushGitStatus(worktreeId), "git status after agent edit");
       }, 150),
     );
   };
@@ -91,16 +102,16 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     sendTo(worktreeId, { t: "agent", worktreeId, seq, event });
     if (event.type === "tool-end" || event.type === "turn-end") refreshGitStatus(worktreeId);
   });
+  const pushGitStatus = async (worktreeId: string) => {
+    if (![...sockets].some((ws) => ws.data.subs.has(worktreeId))) return;
+    const info = await s.worktrees.gitStatus(worktreeId);
+    if (info) sendTo(worktreeId, { t: "git-status", worktreeId, ...info });
+  };
   s.hub.on("repoTick", (repoId) => {
     // main moved: refresh badges + git status for every subscribed worktree of the repo
     worktreesChanged();
     for (const wt of s.state.worktrees.filter((w) => w.repoId === repoId)) {
-      if (![...sockets].some((ws) => ws.data.subs.has(wt.id))) continue;
-      fireAndForget(
-        wt.id,
-        s.worktrees.gitStatus(wt.id).then((msg) => msg && sendTo(wt.id, msg)),
-        "git status on ref tick",
-      );
+      fireAndForget(wt.id, pushGitStatus(wt.id), "git status on ref tick");
     }
   });
   const themesChanged = () => {
@@ -147,13 +158,20 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         const ctx = {
           reply: (m: ServerMsg) => send(ws, m),
           broadcast,
-          subscribe: (id: string) => ws.data.subs.add(id),
-          unsubscribe: (id: string) => ws.data.subs.delete(id),
+          subscribe: (id: string) => {
+            if (ws.data.subs.has(id)) return false;
+            ws.data.subs.add(id);
+            return true;
+          },
+          unsubscribe: (id: string) => {
+            ws.data.subs.delete(id);
+          },
         };
         try {
           await dispatch(parsed.msg, ctx, s);
         } catch (e) {
-          if (!(e instanceof UserError)) log.error("ws", `${parsed.msg.t} failed`, e);
+          // theme import errors are the user's file, not our bug
+          if (!(e instanceof UserError || e instanceof ThemeImportError)) log.error("ws", `${parsed.msg.t} failed`, e);
           send(ws, { t: "error", message: e instanceof Error ? e.message : String(e) });
         }
       },

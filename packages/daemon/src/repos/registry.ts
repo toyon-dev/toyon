@@ -91,19 +91,16 @@ export class RepoRegistry {
     } catch (e) {
       log.warn(repoId, "could not write toyon.json", e);
     }
-    // (re)start procs for this repo's worktrees under the confirmed config; agents stay
-    for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind !== "spare")) {
+    // (re)start procs for this repo's worktrees — spares included, or a spare warmed under the old
+    // config would be handed to the next task with stale procs; agents stay
+    for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId)) {
       fireAndForget(
         wt.id,
         this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),
         "runtime restart",
       );
     }
-    fireAndForget(
-      repoId,
-      this.d.worktrees.spare.ensure(repoId).then(() => this.d.hub.emit("worktreesChanged")),
-      "spare warm-up",
-    );
+    fireAndForget(repoId, this.d.worktrees.spare.ensure(repoId), "spare warm-up");
     this.d.hub.emit("worktreesChanged");
   }
 

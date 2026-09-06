@@ -35,7 +35,9 @@ export function loadState(paths: Paths): PersistedState {
     const backup = `${STATE_FILE}.corrupt-${Date.now()}`;
     try {
       writeFileSync(backup, raw);
-    } catch {}
+    } catch (be) {
+      log.warn("state", "could not write the corrupt-state backup", be);
+    }
     log.error("state", `${STATE_FILE} is not valid JSON; copied to ${backup} and starting empty`, e);
     return structuredClone(empty);
   }
@@ -109,6 +111,11 @@ export class StateStore {
     if (!w) throw new UserError("unknown worktree");
     return w;
   }
+  /** the worktree and its repo, or a UserError — the pair most service methods start from */
+  requireWorktreeWithRepo(id: string): { wt: WorktreeInfo; repo: RepoInfo } {
+    const wt = this.requireWorktree(id);
+    return { wt, repo: this.requireRepo(wt.repoId) };
+  }
 
   addRepo(repo: RepoInfo) {
     this.state.repos.push(repo);
@@ -127,6 +134,7 @@ export class StateStore {
   /** keep only the worktrees the predicate accepts (boot-time pruning) */
   pruneWorktrees(keep: (wt: WorktreeInfo) => boolean) {
     this.state.worktrees = this.state.worktrees.filter(keep);
+    this.save();
   }
 
   session(worktreeId: string): string | undefined {

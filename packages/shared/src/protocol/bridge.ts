@@ -7,6 +7,7 @@
 
 import { z } from "zod";
 import type { PickMeta } from "./events.ts";
+import { pickMetaSchema } from "./ws.ts";
 
 export type ShellToBridgeMsg =
   | { type: "reload" }
@@ -25,12 +26,7 @@ export type ShellToBridgeMsg =
 const range = z.tuple([z.number(), z.number()]);
 
 /** a picked element: the PickMeta that travels with the chat message, plus display-only context */
-export const pickedElementSchema = z.object({
-  component: z.string().nullable(),
-  file: z.string().nullable(),
-  line: z.number().nullable(),
-  tag: z.string(),
-  selector: z.string(),
+export const pickedElementSchema = pickMetaSchema.extend({
   classes: z.string(),
   text: z.string(),
   html: z.string(),

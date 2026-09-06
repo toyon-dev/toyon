@@ -5,7 +5,15 @@
 // arrive from a browser (public internet in cloud mode) and are validated before any handler runs.
 
 import { z } from "zod";
-import type { GitFileStatus, RepoInfo, Theme, ThemePrefs, ToyonConfig, WorktreeStatus } from "../model.ts";
+import type {
+  GitFileStatus,
+  RepoInfo,
+  Theme,
+  ThemePrefs,
+  ToyonConfig,
+  WorktreeInfo,
+  WorktreeStatus,
+} from "../model.ts";
 import type { AgentEvent, PickMeta } from "./events.ts";
 
 /** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */
@@ -62,6 +70,10 @@ export type ServerMsg =
 const id = z.string().min(1).max(200);
 /** a worktree-relative path; the daemon still canonicalises and bounds it (resolveInside) */
 const relPath = z.string().min(1).max(4096);
+/** a chat message or its ambient context */
+const prose = z.string().max(200_000);
+const prompt = z.string().max(20_000);
+const shellCommand = z.string().max(2_000);
 
 export const pickMetaSchema = z.object({
   component: z.string().nullable(),
@@ -72,9 +84,9 @@ export const pickMetaSchema = z.object({
 });
 
 export const toyonConfigSchema = z.object({
-  procs: z.record(z.string(), z.string()),
-  setup: z.array(z.string()).optional(),
-  preview: z.string().optional(),
+  procs: z.record(z.string().max(100), shellCommand),
+  setup: z.array(shellCommand).max(50).optional(),
+  preview: z.string().max(100).optional(),
   exclusive: z.boolean().optional(),
 });
 
@@ -93,8 +105,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({
     t: z.literal("chat"),
     worktreeId: id,
-    text: z.string(),
-    context: z.string().optional(),
+    text: prose,
+    context: prose.optional(),
     pick: pickMetaSchema.optional(),
   }),
   z.object({
@@ -102,23 +114,23 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     /** the requesting tab's id, echoed as WorktreeInfo.createdBy so only that tab auto-focuses it */
     clientId: z.string().max(64).optional(),
     repoId: id,
-    prompt: z.string(),
+    prompt,
     baseWorktreeId: id.optional(),
     variant: variantSchema.optional(),
-    context: z.string().optional(),
+    context: prose.optional(),
     pick: pickMetaSchema.optional(),
   }),
-  z.object({ t: z.literal("batch-worktrees"), repoId: id, prompt: z.string() }),
+  z.object({ t: z.literal("batch-worktrees"), repoId: id, prompt }),
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
   z.object({ t: z.literal("restart-proc"), worktreeId: id, proc: z.string() }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
   z.object({ t: z.literal("file-diff"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("ship"), worktreeId: id }),
   z.object({ t: z.literal("merge-main"), worktreeId: id }),
-  z.object({ t: z.literal("commit"), worktreeId: id, message: z.string() }),
+  z.object({ t: z.literal("commit"), worktreeId: id, message: z.string().max(5_000) }),
   z.object({ t: z.literal("combine"), worktreeIds: z.array(id).min(2).max(20) }),
   z.object({ t: z.literal("sync-main"), worktreeId: id }),
-  z.object({ t: z.literal("write-file"), worktreeId: id, path: relPath, content: z.string() }),
+  z.object({ t: z.literal("write-file"), worktreeId: id, path: relPath, content: z.string().max(10_000_000) }),
   z.object({ t: z.literal("list-files"), worktreeId: id }),
   z.object({ t: z.literal("search"), worktreeId: id, query: z.string().max(500) }),
   z.object({ t: z.literal("discard-file"), worktreeId: id, path: relPath }),
@@ -152,6 +164,8 @@ type Same<A, B> = A extends B ? (B extends A ? true : never) : never;
 const _pickMeta: Same<z.infer<typeof pickMetaSchema>, PickMeta> = true;
 const _config: Same<z.infer<typeof toyonConfigSchema>, ToyonConfig> = true;
 const _prefs: Same<z.infer<typeof themePrefsSchema>, ThemePrefs> = true;
+const _variant: Same<z.infer<typeof variantSchema>, NonNullable<WorktreeInfo["variant"]>> = true;
 void _pickMeta;
 void _config;
 void _prefs;
+void _variant;

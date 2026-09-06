@@ -33,7 +33,11 @@ function make() {
   const ctx: HandlerCtx = {
     reply: (m) => replies.push(m),
     broadcast: (m) => broadcasts.push(m),
-    subscribe: (id) => subs.add(id),
+    subscribe: (id) => {
+      if (subs.has(id)) return false;
+      subs.add(id);
+      return true;
+    },
     unsubscribe: (id) => subs.delete(id),
   };
   return { ...t, services, ctx, replies, broadcasts, subs, ...f };

@@ -2,7 +2,7 @@
 // setup has run, its process group and preview proxy. Replaces the old runtimes + pendingAgents
 // pair, which four call sites each had to consult.
 
-import type { ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import { AgentSession } from "../agent/session.ts";
 import type { Hub } from "../core/hub.ts";
@@ -66,6 +66,8 @@ function defaultProxy(wt: WorktreeInfo, previewName: string | undefined, procs: 
   });
 }
 
+/** where the proxy forwards: the preview proc unless it crashed (a proc that is still starting is
+ * a valid target — the proxy serves its "starting…" page until the port answers) */
 function previewTargetOf(procs: WorktreeProcs, previewName: string | undefined): ProxyTarget | null {
   const st =
     procs.states().find((p) => p.name === previewName) ??
@@ -176,10 +178,7 @@ export class RuntimeRegistry {
     return this.runtimes.get(id)?.procs?.recentLogs() ?? [];
   }
 
-  procStates(id: string): ProcState[] {
-    return this.runtimes.get(id)?.procs?.states() ?? [];
-  }
-
+  /** the preview proc only once it answers on its port — for fetching served source (vite-offset) */
   previewTarget(id: string): ProxyTarget | null {
     const rt = this.runtimes.get(id);
     if (!rt?.procs) return null;

@@ -3,6 +3,7 @@ import type { AgentAdapter } from "../../src/agent/adapter.ts";
 import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
 import type { RuntimeDeps } from "../../src/runtime/registry.ts";
 import type { WorktreeProcs } from "../../src/runtime/supervisor.ts";
+import type { TerminalHandle, TerminalOpts } from "../../src/runtime/terminal.ts";
 
 export class FakeAgent implements AgentAdapter {
   status: AgentStatus = "idle";
@@ -61,12 +62,63 @@ export class FakeProxy implements WorktreeProxy {
   setTarget() {}
 }
 
+/** records writes/resizes/kills; `emit`/`exit` play the pty's side */
+export class FakeTerminal implements TerminalHandle {
+  pid = 4242;
+  alive = true;
+  cols: number;
+  rows: number;
+  writes: string[] = [];
+  resizes: Array<[number, number]> = [];
+  kills = 0;
+  private ring = "";
+  constructor(
+    readonly opts: TerminalOpts,
+    private onData: (data: string) => void,
+    private onExit: (exitCode: number) => void,
+  ) {
+    this.cols = opts.cols;
+    this.rows = opts.rows;
+  }
+  write(data: string) {
+    this.writes.push(data);
+  }
+  resize(cols: number, rows: number) {
+    this.resizes.push([cols, rows]);
+    this.cols = cols;
+    this.rows = rows;
+  }
+  kill() {
+    this.kills++;
+    this.exit(0);
+  }
+  snapshot() {
+    return this.ring;
+  }
+  emit(data: string) {
+    this.ring += data;
+    this.onData(data);
+  }
+  exit(code: number) {
+    if (!this.alive) return;
+    this.alive = false;
+    this.onExit(code);
+  }
+}
+
 /** RuntimeDeps factories that build the fakes above and remember them by worktree id */
 export function fakeFactories() {
   const agents = new Map<string, FakeAgent>();
   const procs = new Map<string, FakeProcs>();
   const proxies = new Map<string, FakeProxy>();
-  const factories: Pick<RuntimeDeps, "makeAgent" | "makeProcs" | "makeProxy"> = {
+  /** every terminal spawned per worktree, in order (a dead one is respawned on the next open) */
+  const terminals = new Map<string, FakeTerminal[]>();
+  const factories: Pick<RuntimeDeps, "makeAgent" | "makeProcs" | "makeProxy" | "makeTerminal"> = {
+    makeTerminal: (wt, opts, onData, onExit) => {
+      const t = new FakeTerminal(opts, onData, onExit);
+      terminals.set(wt.id, [...(terminals.get(wt.id) ?? []), t]);
+      return t;
+    },
     makeAgent: (wt: WorktreeInfo) => {
       const a = new FakeAgent(wt.id);
       agents.set(wt.id, a);
@@ -83,5 +135,5 @@ export function fakeFactories() {
       return p;
     },
   };
-  return { factories, agents, procs, proxies };
+  return { factories, agents, procs, proxies, terminals };
 }

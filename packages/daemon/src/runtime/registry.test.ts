@@ -2,9 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
+import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
-import { RuntimeRegistry } from "./registry.ts";
+import { procUrlEnv, RuntimeRegistry, terminalEnv } from "./registry.ts";
 
 const repo: RepoInfo = {
   id: "r",
@@ -24,6 +25,7 @@ const wt: WorktreeInfo = {
   title: "w1",
   createdAt: 0,
 };
+const spare: WorktreeInfo = { ...wt, id: "s1", path: "/nowhere/s1", branch: "spare-s1", kind: "spare", proxyPort: 2 };
 
 let cleanup = () => {};
 afterEach(() => cleanup());
@@ -31,7 +33,7 @@ afterEach(() => cleanup());
 function make() {
   const t = tmpRepo();
   cleanup = t.cleanup;
-  const state = new StateStore(t.paths, { repos: [repo], worktrees: [wt], sessions: {} });
+  const state = new StateStore(t.paths, { repos: [repo], worktrees: [wt, spare], sessions: {} });
   const hub = new Hub();
   const f = fakeFactories();
   const registry = new RuntimeRegistry({ hub, state, paths: t.paths, bridgeScript: () => "", ...f.factories });
@@ -102,5 +104,104 @@ describe("RuntimeRegistry", () => {
     const t = registry.previewTarget(wt.id);
     expect(t?.host).toBe("127.0.0.1");
     expect(registry.previewTarget("nope")).toBeNull();
+  });
+});
+
+describe("terminal env", () => {
+  test("procUrlEnv names every non-preview proc and doubles api as API_URL", () => {
+    const st = (name: string, port: number) => ({ name, command: "x", port, status: "running" as const });
+    expect(procUrlEnv([st("api", 1), st("job-runner", 2), st("web", 3)], "web")).toEqual({
+      API_URL: "http://127.0.0.1:1",
+      VITE_API_URL: "http://127.0.0.1:1",
+      JOB_RUNNER_URL: "http://127.0.0.1:2",
+      VITE_JOB_RUNNER_URL: "http://127.0.0.1:2",
+    });
+  });
+
+  test("terminalEnv keeps the daemon's env minus PORT/FORCE_COLOR and adds TERM + the worktree id", () => {
+    const env = terminalEnv({ PATH: "/bin", PORT: "1", FORCE_COLOR: "0", GONE: undefined }, wt, { API_URL: "u" });
+    expect(env).toEqual({
+      PATH: "/bin",
+      API_URL: "u",
+      TERM: "xterm-256color",
+      COLORTERM: "truecolor",
+      TOYON_WORKTREE: "w1",
+    });
+  });
+});
+
+describe("RuntimeRegistry terminals", () => {
+  test("openTerminal spawns once, in the worktree, with the sibling URLs", async () => {
+    const { registry, terminals } = make();
+    await registry.start(wt, repo);
+    const first = registry.openTerminal(wt.id, 80, 24);
+    expect(first).toEqual({ snapshot: "", alive: true });
+    const spawned = terminals.get(wt.id)!;
+    expect(spawned.length).toBe(1);
+    expect(spawned[0]!.opts.cwd).toBe(wt.path);
+    expect(spawned[0]!.opts.env.API_URL).toBe("http://127.0.0.1:40001");
+    expect(spawned[0]!.opts.env.TERM).toBe("xterm-256color");
+    expect(spawned[0]!.opts.env.TOYON_WORKTREE).toBe(wt.id);
+    spawned[0]!.emit("$ ");
+    expect(registry.openTerminal(wt.id, 80, 24)).toEqual({ snapshot: "$ ", alive: true });
+    expect(spawned.length).toBe(1);
+  });
+
+  test("a terminal opens before the procs are up, and a different size on reopen resizes", () => {
+    const { registry, terminals } = make();
+    registry.openTerminal(wt.id, 80, 24);
+    const t = terminals.get(wt.id)![0]!;
+    expect(t.opts.env.API_URL).toBeUndefined();
+    expect(t.resizes).toEqual([]);
+    registry.openTerminal(wt.id, 120, 40);
+    expect(t.resizes).toEqual([[120, 40]]);
+  });
+
+  test("output and exit reach the hub; input after the exit is dropped; the next open respawns", () => {
+    const { registry, terminals, hub } = make();
+    const data: string[] = [];
+    const exits: number[] = [];
+    hub.on("termData", (id, d) => data.push(`${id}:${d}`));
+    hub.on("termExit", (id, code) => exits.push(code));
+    registry.openTerminal(wt.id, 80, 24);
+    const t = terminals.get(wt.id)![0]!;
+    registry.terminalInput(wt.id, "ls\n");
+    registry.terminalResize(wt.id, 90, 30);
+    t.emit("ls\nfile\n");
+    expect(t.writes).toEqual(["ls\n"]);
+    expect(t.resizes).toEqual([[90, 30]]);
+    expect(data).toEqual(["w1:ls\nfile\n"]);
+    t.exit(1);
+    expect(exits).toEqual([1]);
+    registry.terminalInput(wt.id, "echo\n");
+    expect(t.writes).toEqual(["ls\n"]);
+    expect(registry.openTerminal(wt.id, 80, 24)).toEqual({ snapshot: "", alive: true });
+    expect(terminals.get(wt.id)!.length).toBe(2);
+  });
+
+  test("killTerminal and stop() kill the shell; stopProcs() leaves it running", async () => {
+    const { registry, terminals } = make();
+    await registry.start(wt, repo);
+    registry.openTerminal(wt.id, 80, 24);
+    const t = terminals.get(wt.id)![0]!;
+    await registry.stopProcs(wt.id);
+    expect(t.kills).toBe(0);
+    expect(t.alive).toBe(true);
+    registry.killTerminal(wt.id);
+    expect(t.kills).toBe(1);
+    registry.openTerminal(wt.id, 80, 24);
+    const t2 = terminals.get(wt.id)![1]!;
+    await registry.stop(wt.id);
+    expect(t2.kills).toBe(1);
+    expect(t2.alive).toBe(false);
+  });
+
+  test("input with no terminal is a no-op; a spare has no terminal", () => {
+    const { registry } = make();
+    registry.terminalInput(wt.id, "x");
+    registry.terminalResize(wt.id, 1, 1);
+    registry.killTerminal(wt.id);
+    expect(() => registry.openTerminal(spare.id, 80, 24)).toThrow(UserError);
+    expect(() => registry.openTerminal("nope", 80, 24)).toThrow(UserError);
   });
 });

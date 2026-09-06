@@ -2,14 +2,17 @@
 // setup has run, its process group and preview proxy. Replaces the old runtimes + pendingAgents
 // pair, which four call sites each had to consult.
 
-import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import { AgentSession } from "../agent/session.ts";
+import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
+import { log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { WorktreeProcs } from "./supervisor.ts";
+import { type TerminalHandle, type TerminalOpts, WorktreeTerminal } from "./terminal.ts";
 
 export interface Runtime {
   info: WorktreeInfo;
@@ -18,6 +21,8 @@ export interface Runtime {
   procs: WorktreeProcs | null;
   proxy: WorktreeProxy | null;
   previewName: string | undefined;
+  /** null until a pane first opens it; survives hiding the pane, dies with the worktree */
+  terminal: TerminalHandle | null;
 }
 
 export interface RuntimeDeps {
@@ -34,6 +39,44 @@ export interface RuntimeDeps {
     procs: WorktreeProcs,
     deps: RuntimeDeps,
   ) => WorktreeProxy;
+  makeTerminal?: (
+    wt: WorktreeInfo,
+    opts: TerminalOpts,
+    onData: (data: string) => void,
+    onExit: (exitCode: number) => void,
+  ) => TerminalHandle;
+}
+
+/** the sibling-URL variables a proc (or a shell) gets for the procs already up: `<NAME>_URL` and
+ * `VITE_<NAME>_URL` per non-preview proc, plus `API_URL` for the one named api */
+export function procUrlEnv(states: ProcState[], previewName: string | undefined): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const st of states) {
+    if (st.name === previewName) continue;
+    const urlVar = `${st.name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_URL`;
+    const url = `http://127.0.0.1:${st.port}`;
+    env[urlVar] = url;
+    env[`VITE_${urlVar}`] = url;
+    if (st.name === "api") {
+      env.API_URL = url;
+      env.VITE_API_URL = url;
+    }
+  }
+  return env;
+}
+
+/** a terminal's environment: the daemon's own minus PORT and the supervisor's FORCE_COLOR=0 (a
+ * shell wants color and has no port), the sibling URLs, a 256-color TERM, and the worktree id */
+export function terminalEnv(
+  base: Record<string, string | undefined>,
+  wt: WorktreeInfo,
+  urls: Record<string, string>,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(base)) {
+    if (typeof v === "string" && k !== "PORT" && k !== "FORCE_COLOR") env[k] = v;
+  }
+  return { ...env, ...urls, TERM: "xterm-256color", COLORTERM: "truecolor", TOYON_WORKTREE: wt.id };
 }
 
 function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
@@ -56,6 +99,15 @@ function defaultProcs(wt: WorktreeInfo, d: RuntimeDeps): WorktreeProcs {
     (p) => d.hub.emit("proc", wt.id, p),
     (proc, line) => d.hub.emit("log", wt.id, proc, line),
   );
+}
+
+function defaultTerminal(
+  _wt: WorktreeInfo,
+  opts: TerminalOpts,
+  onData: (data: string) => void,
+  onExit: (exitCode: number) => void,
+): TerminalHandle {
+  return new WorktreeTerminal(opts, onData, onExit);
 }
 
 function defaultProxy(wt: WorktreeInfo, previewName: string | undefined, procs: WorktreeProcs, d: RuntimeDeps) {
@@ -105,6 +157,7 @@ export class RuntimeRegistry {
       procs: null,
       proxy: null,
       previewName: undefined,
+      terminal: null,
     };
     this.runtimes.set(wt.id, rt);
     return rt;
@@ -124,20 +177,11 @@ export class RuntimeRegistry {
     rt.previewName = previewName;
 
     // start non-preview procs first so the preview proc can get their URLs
-    const extraEnv: Record<string, string> = {};
     for (const [name, cmd] of Object.entries(procEntries)) {
-      if (name === previewName) continue;
-      const st = await procs.start(name, cmd);
-      const urlVar = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_URL`;
-      extraEnv[urlVar] = `http://127.0.0.1:${st.port}`;
-      extraEnv[`VITE_${urlVar}`] = extraEnv[urlVar];
-      if (name === "api") {
-        extraEnv.API_URL = extraEnv[urlVar];
-        extraEnv.VITE_API_URL = extraEnv[urlVar];
-      }
+      if (name !== previewName) await procs.start(name, cmd);
     }
     if (previewName && procEntries[previewName]) {
-      await procs.start(previewName, procEntries[previewName]!, extraEnv);
+      await procs.start(previewName, procEntries[previewName]!, procUrlEnv(procs.states(), previewName));
     }
 
     if (!this.deps.state.worktree(wt.id) || this.runtimes.get(wt.id) !== rt) {
@@ -166,8 +210,58 @@ export class RuntimeRegistry {
     if (!rt) return;
     this.runtimes.delete(id);
     rt.agent.stop();
+    rt.terminal?.kill();
     rt.proxy?.stop();
     await rt.procs?.stopAll();
+  }
+
+  /** the worktree's shell, spawned on the first open or after it exited; what a fresh pane needs
+   * to paint. Resizes before snapshotting: a TUI redraws on SIGWINCH and that redraw arrives as
+   * live data after the snapshot, so the pane ends up showing the current screen. */
+  openTerminal(id: string, cols: number, rows: number): { snapshot: string; alive: boolean } {
+    const wt = this.deps.state.requireWorktree(id);
+    if (wt.kind === "spare") throw new UserError("no terminal for a spare worktree");
+    const rt = this.ensureAgent(wt);
+    let term = rt.terminal;
+    if (!term?.alive) {
+      const opts: TerminalOpts = {
+        cwd: wt.path,
+        env: terminalEnv(process.env, wt, procUrlEnv(rt.procs?.states() ?? [], rt.previewName)),
+        cols,
+        rows,
+        shell: process.env.SHELL || "sh",
+        args: ["-l"],
+      };
+      try {
+        term = (this.deps.makeTerminal ?? defaultTerminal)(
+          wt,
+          opts,
+          (data) => this.deps.hub.emit("termData", wt.id, data),
+          (code) => this.deps.hub.emit("termExit", wt.id, code),
+        );
+      } catch (e) {
+        throw new UserError(`could not start a shell: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      rt.terminal = term;
+    } else if (term.cols !== cols || term.rows !== rows) {
+      term.resize(cols, rows);
+    }
+    return { snapshot: term.snapshot(), alive: term.alive };
+  }
+
+  terminalInput(id: string, data: string) {
+    const term = this.runtimes.get(id)?.terminal;
+    // a keystroke that lands after the shell exited (or before a pane opened one) is not an error
+    if (!term?.alive) return log.debug("terminal", `input for ${id} with no live shell dropped`);
+    term.write(data);
+  }
+
+  terminalResize(id: string, cols: number, rows: number) {
+    this.runtimes.get(id)?.terminal?.resize(cols, rows);
+  }
+
+  killTerminal(id: string) {
+    this.runtimes.get(id)?.terminal?.kill();
   }
 
   restartProc(id: string, name: string) {

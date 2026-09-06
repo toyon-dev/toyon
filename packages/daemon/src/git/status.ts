@@ -5,11 +5,11 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GitFileStatus } from "@orchardist/shared";
-import { git } from "./exec.ts";
+import { GIT, git } from "./exec.ts";
 
 export function statusFiles(worktreePath: string): GitFileStatus[] {
   // no trim: porcelain lines for unstaged changes start with a significant space
-  const r = spawnSync("git", ["status", "--porcelain"], {
+  const r = spawnSync(GIT, ["status", "--porcelain"], {
     cwd: worktreePath,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,

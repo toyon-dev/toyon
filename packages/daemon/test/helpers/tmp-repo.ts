@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDirs, makePaths, type Paths } from "../../src/core/paths.ts";
+import { GIT } from "../../src/git/exec.ts";
 
 export function sh(cwd: string, cmd: string, ...args: string[]): string {
   const r = spawnSync(cmd, args, { cwd, encoding: "utf8" });
@@ -18,13 +19,13 @@ export function sh(cwd: string, cmd: string, ...args: string[]): string {
 export function tmpRepo(): { repo: string; paths: Paths; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "orch-t-"));
   const repo = join(root, "repo");
-  sh(root, "git", "init", "-q", "-b", "main", repo);
-  sh(repo, "git", "config", "user.email", "t@t");
-  sh(repo, "git", "config", "user.name", "t");
-  sh(repo, "git", "config", "commit.gpgsign", "false");
+  sh(root, GIT, "init", "-q", "-b", "main", repo);
+  sh(repo, GIT, "config", "user.email", "t@t");
+  sh(repo, GIT, "config", "user.name", "t");
+  sh(repo, GIT, "config", "commit.gpgsign", "false");
   writeFileSync(join(repo, "README.md"), "hello\n");
-  sh(repo, "git", "add", "-A");
-  sh(repo, "git", "commit", "-q", "-m", "init");
+  sh(repo, GIT, "add", "-A");
+  sh(repo, GIT, "commit", "-q", "-m", "init");
   const paths = makePaths(join(root, "home"));
   ensureDirs(paths);
   return { repo, paths, cleanup: () => rmSync(root, { recursive: true, force: true }) };

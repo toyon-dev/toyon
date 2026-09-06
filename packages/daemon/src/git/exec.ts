@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const LOCKFILES = [
@@ -36,8 +36,29 @@ export interface GitResult {
   exit: number | string | null;
 }
 
+/**
+ * The git binary. On macOS `/usr/bin/git` is an xcrun shim: ~3x slower per spawn than the real
+ * binary and, under a burst of spawns, it can stall on xcrun's cache lock for seconds and abort
+ * with SIGTERM. Resolve the real one once. ORCHARDIST_GIT overrides.
+ */
+export const GIT: string = resolveGit();
+
+function resolveGit(): string {
+  if (process.env.ORCHARDIST_GIT) return process.env.ORCHARDIST_GIT;
+  if (process.platform !== "darwin") return "git";
+  for (const p of [
+    "/Library/Developer/CommandLineTools/usr/bin/git",
+    "/Applications/Xcode.app/Contents/Developer/usr/bin/git",
+    "/opt/homebrew/bin/git",
+    "/usr/local/bin/git",
+  ]) {
+    if (existsSync(p)) return p;
+  }
+  return "git";
+}
+
 export function git(cwd: string, ...args: string[]): GitResult {
-  const r = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+  const r = spawnSync(GIT, args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
   const exit = r.status ?? r.signal ?? (r.error ? r.error.message : null);
   return { ok: r.status === 0, out: (r.stdout ?? "").trim(), err: (r.stderr ?? "").trim(), exit };
 }

@@ -6,6 +6,7 @@ import { unlinkSync } from "node:fs";
 import type { SearchHit } from "@orchardist/shared";
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
+import { GIT } from "../git/exec.ts";
 import { changedRanges, fileBefore, statusFiles } from "../git/status.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { resolveInside } from "../worktrees/paths.ts";
@@ -41,13 +42,13 @@ export class FileService {
     const entry = statusFiles(wt.path).find((f) => f.path === path);
     if (!entry) throw new UserError("file has no uncommitted changes");
     if (entry.xy === "??") unlinkSync(target);
-    else spawnSync("git", ["checkout", "HEAD", "--", path], { cwd: wt.path });
+    else spawnSync(GIT, ["checkout", "HEAD", "--", path], { cwd: wt.path });
   }
 
   /** tracked + untracked (respecting .gitignore) */
   list(worktreeId: string): string[] {
     const wt = this.state.requireWorktree(worktreeId);
-    const r = spawnSync("git", ["ls-files", "-co", "--exclude-standard"], {
+    const r = spawnSync(GIT, ["ls-files", "-co", "--exclude-standard"], {
       cwd: wt.path,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
@@ -63,7 +64,7 @@ export class FileService {
     let truncated = false;
     if (q.length < 2) return { hits, truncated };
     const r = spawnSync(
-      "git",
+      GIT,
       ["grep", "-n", "-I", "-i", "-F", "--untracked", "--no-color", `--max-count=${SEARCH_MAX}`, "-e", q, "--"],
       { cwd: wt.path, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
     );

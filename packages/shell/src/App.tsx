@@ -1,9 +1,11 @@
-import { Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { Fragment, Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import type { GitFileStatus, RepoInfo, SearchHit, WorktreeStatus } from "@orchardist/shared";
+import type { GitFileStatus, RepoInfo, SearchHit, Theme, ThemePrefs, WorktreeStatus } from "@orchardist/shared";
 import { DaemonSocket, hasToken } from "./ws.ts";
-import { initial, reducer, type ChatItem, type State } from "./store.ts";
+import { currentTheme, initial, reducer, type ChatItem, type State } from "./store.ts";
+import { effectiveKind, pairOf, pickTheme, resolveTheme } from "@orchardist/shared";
+import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "./theme.ts";
 import { Tooltips, tip } from "./Tooltip.tsx";
 
 const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
@@ -43,6 +45,14 @@ export function App() {
   useEffect(() => {
     document.title = active ? `${active.worktree.title} — orchardist` : "orchardist";
   }, [active?.worktree.title]);
+
+  // paint the selected theme (or the picker's live preview); previews get the accent for their overlays
+  const theme = currentTheme(state);
+  useEffect(() => {
+    applyTheme(theme);
+    previewBus.broadcast(bridgeThemeMsg(theme));
+  }, [theme]);
+  useEffect(() => onPrefersDarkChange((v) => dispatch({ a: "system-dark", v })), []);
 
   // remember the selection across reloads
   useEffect(() => {
@@ -102,7 +112,9 @@ export function App() {
         e.preventDefault();
         dispatch({ a: "show-keys", v: !state.showKeys });
       } else if (e.key === "Escape") {
-        if (state.showKeys) dispatch({ a: "show-keys", v: false });
+        if (state.showThemes) dispatch({ a: "show-themes", v: null });
+        else if (state.showAppearance) dispatch({ a: "show-appearance", v: false });
+        else if (state.showKeys) dispatch({ a: "show-keys", v: false });
         else if (state.picking) {
           // (the bridge handles esc itself when the preview has focus; this covers focus in the shell)
           if (state.activeId) previewBus.post(state.activeId, { type: "pick-cancel" });
@@ -128,7 +140,7 @@ export function App() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("message", onMsg);
     };
-  }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.showSearch, state.showCommands, state.activeId, state.picking, state.zen, state.showKeys]);
+  }, [state.worktrees, state.diff, state.showPrompt, state.showQuickOpen, state.showSearch, state.showCommands, state.activeId, state.picking, state.zen, state.showKeys, state.showThemes, state.showAppearance]);
 
   // ship results: open PR/compare URLs, auto-dismiss toasts
   const openedRef = useRef<string | null>(null);
@@ -258,6 +270,7 @@ type Dispatch = (a: Parameters<typeof reducer>[1]) => void;
 // module-level bridge to post into preview iframes (registered by Center)
 export const previewBus = {
   post: (_id: string, _msg: Record<string, unknown>) => {},
+  broadcast: (_msg: Record<string, unknown>) => {},
 };
 
 // fiber lineNumbers may be preamble-shifted (daemon derives the offset per file)
@@ -800,6 +813,16 @@ function buildCommands(state: State, dispatch: Dispatch, sock: Sock, active: Wor
   add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), "⌘.");
   add("keys", "keyboard shortcuts", () => dispatch({ a: "show-keys", v: true }), "⌘/");
 
+  const prefs = state.themePrefs;
+  const themeName = (tid: string) => state.themes.find((t) => t.id === tid)?.name ?? tid;
+  add("theme", "theme…", () => dispatch({ a: "show-themes", v: "theme" }), resolveTheme(prefs, state.themes, state.systemDark).name);
+  add("appearance", "theme: appearance…", () => dispatch({ a: "show-appearance", v: true }), appearanceLabel[prefs.mode]);
+  add("theme-import", "theme: import VS Code theme file…", () => pickThemeFile((name, source) => sock?.send({ t: "import-theme", name, source })));
+  add("theme-rescan", "theme: rescan installed editor themes", () => sock?.send({ t: "rescan-themes" }));
+  // per-slot overrides for mismatched pairs; the picker fills both slots by family so these sit last
+  add("theme-dark", "theme: dark slot override…", () => dispatch({ a: "show-themes", v: "dark" }), themeName(prefs.dark));
+  add("theme-light", "theme: light slot override…", () => dispatch({ a: "show-themes", v: "light" }), themeName(prefs.light));
+
   if (wt && id) {
     const acts = wtActions(sock);
     const t = wt.worktree.title;
@@ -817,7 +840,8 @@ function buildCommands(state: State, dispatch: Dispatch, sock: Sock, active: Wor
   }
   state.worktrees.forEach((w, i) => {
     if (w.worktree.id === id) return;
-    add(`go:${w.worktree.id}`, `switch to ${w.worktree.title}`, () => dispatch({ a: "activate", id: w.worktree.id }), keyHint(i, state.worktrees.length)?.trim());
+    const v = w.worktree.variant;
+    add(`go:${w.worktree.id}`, `switch to ${w.worktree.title}${v ? ` (v${v.index}/${v.of})` : ""}`, () => dispatch({ a: "activate", id: w.worktree.id }), keyHint(i, state.worktrees.length)?.trim());
   });
   return cmds;
 }
@@ -827,11 +851,134 @@ function filterCommands(commands: Command[], q: string): Command[] {
   if (!needle) return commands;
   const scored: Array<{ c: Command; score: number }> = [];
   for (const c of commands) {
-    const s = fuzzyScore(c.label.toLowerCase(), needle);
+    const s = commandScore(c.label.toLowerCase(), needle);
     if (s > 0) scored.push({ c, score: s });
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.map((x) => x.c);
+}
+
+/** browser file dialog → raw theme text (the daemon parses JSONC and converts) */
+function pickThemeFile(onText: (name: string, source: string) => void) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json,.jsonc,application/json";
+  input.onchange = () => {
+    const f = input.files?.[0];
+    if (f) f.text().then((source) => onText(f.name, source));
+  };
+  input.click();
+}
+
+const sourceHint: Record<Theme["source"], string> = { builtin: "built-in", file: "~/.orchardist/themes", vscode: "VS Code" };
+
+const appearanceLabel: Record<ThemePrefs["mode"], string> = { dark: "dark", light: "light", system: "follow system" };
+
+/** dark / light / follow system — same overlay as the theme list, previews the slot it would paint */
+function AppearancePicker({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
+  const prefs = state.themePrefs;
+  const modes: ThemePrefs["mode"][] = ["dark", "light", "system"];
+  const [idx, setIdx] = useState(Math.max(0, modes.indexOf(prefs.mode)));
+  const slotName = (m: ThemePrefs["mode"]) => state.themes.find((t) => t.id === prefs[effectiveKind({ ...prefs, mode: m }, state.systemDark)])?.name ?? "";
+  useEffect(() => {
+    dispatch({ a: "preview-theme", theme: resolveTheme({ ...prefs, mode: modes[idx]! }, state.themes, state.systemDark) });
+  }, [idx]);
+  const close = () => dispatch({ a: "show-appearance", v: false });
+  const keep = (m: ThemePrefs["mode"]) => { sock?.send({ t: "set-theme", prefs: { ...prefs, mode: m } }); close(); };
+  return (
+    <div className="prompt-overlay" onClick={close}>
+      <div
+        className="prompt-box quick-open"
+        onClick={(e) => e.stopPropagation()}
+        tabIndex={-1}
+        ref={(el) => el?.focus()}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, modes.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+          else if (e.key === "Enter") { e.preventDefault(); keep(modes[idx]!); }
+        }}
+      >
+        <div className="title">appearance · ↑↓ preview · enter keeps · esc reverts</div>
+        <div className="qo-list">
+          {modes.map((m, i) => (
+            <button key={m} className={`qo-item cmd-item ${i === idx ? "active" : ""}`} onMouseEnter={() => setIdx(i)} onClick={() => keep(m)}>
+              <span className="cmd-label">{m === prefs.mode ? "● " : ""}{appearanceLabel[m]}</span>
+              <span className="cmd-hint">{m === "system" ? `${state.systemDark ? "dark" : "light"} now · ${slotName(m)}` : slotName(m)}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** theme list with live preview: ↑↓ paints the highlighted theme, enter keeps it, esc reverts */
+function ThemePicker({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
+  const slot = state.showThemes ?? "theme";
+  const prefs = state.themePrefs;
+  const [q, setQ] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
+  // slot overrides list one kind; the plain picker lists everything, grouped so browsing doesn't
+  // strobe dark/light: the kind currently painted first, then the other
+  const nowKind = effectiveKind(prefs, state.systemDark);
+  const themes = useMemo(() => {
+    const pool = slot === "theme" ? state.themes : state.themes.filter((t) => t.kind === slot);
+    const needle = q.trim().toLowerCase();
+    const hits = needle ? pool.filter((t) => t.name.toLowerCase().includes(needle) || t.id.includes(needle)) : pool;
+    return slot === "theme" ? [...hits.filter((t) => t.kind === nowKind), ...hits.filter((t) => t.kind !== nowKind)] : hits;
+  }, [state.themes, slot, q, nowKind]);
+  const selectedId = slot === "theme" ? prefs[effectiveKind(prefs, state.systemDark)] : prefs[slot];
+  const [idx, setIdx] = useState(() => Math.max(0, themes.findIndex((t) => t.id === selectedId)));
+  // typing resets the highlight; the mount keeps it on the current theme
+  const prevQ = useRef(q);
+  useEffect(() => { if (prevQ.current !== q) { prevQ.current = q; setIdx(0); } }, [q]);
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>(".qo-item.active")?.scrollIntoView({ block: "nearest" });
+    const t = themes[idx];
+    // previewing a light theme while the OS is dark (or vice versa) is exactly the point of the slot pickers
+    dispatch({ a: "preview-theme", theme: t ?? null });
+  }, [idx, themes]);
+  const close = () => dispatch({ a: "show-themes", v: null });
+  const keep = (t: Theme) => {
+    // the main picker fills the theme's slot and its sibling's; a slot override touches one slot only
+    const next: ThemePrefs = slot === "theme" ? pickTheme(prefs, t, state.themes) : { ...prefs, [slot]: t.id };
+    sock?.send({ t: "set-theme", prefs: next });
+    close();
+  };
+  const title = slot === "theme" ? "theme" : `${slot} slot override`;
+  return (
+    <div className="prompt-overlay" onClick={close}>
+      <div className="prompt-box quick-open" onClick={(e) => e.stopPropagation()}>
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, themes.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Enter" && themes[idx]) { e.preventDefault(); keep(themes[idx]!); }
+          }}
+          placeholder={`${title} · ↑↓ preview · enter keeps · esc reverts`}
+        />
+        <div className="qo-list" ref={listRef}>
+          {themes.map((t, i) => (
+            <Fragment key={t.id}>
+              {slot === "theme" && themes[i - 1]?.kind !== t.kind && <div className="dock-section-title">{t.kind}</div>}
+              <button
+                className={`qo-item cmd-item ${i === idx ? "active" : ""}`}
+                onMouseEnter={() => setIdx(i)}
+                onClick={() => keep(t)}
+              >
+                <span className="cmd-label">{t.id === selectedId ? "● " : ""}{t.name}</span>
+                <span className="cmd-hint">{sourceHint[t.source]}{slot === "theme" && pairOf(t, state.themes) ? ` · pairs with ${pairOf(t, state.themes)!.name}` : ""}</span>
+              </button>
+            </Fragment>
+          ))}
+          {themes.length === 0 && <div className="dock-empty">no matching theme</div>}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function CommandRow({ c, active, onRun }: { c: Command; active: boolean; onRun: () => void }) {
@@ -925,11 +1072,16 @@ function Center({ state, active, dispatch, sock, repo }: {
   // (instant, and each preview keeps its app state + HMR socket while hidden)
   const [mounted, setMounted] = useState<string[]>([]);
   const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   // let the rest of the shell post commands into preview iframes
   useEffect(() => {
     previewBus.post = (id, m) =>
       frameRefs.current.get(id)?.contentWindow?.postMessage({ __orchardist: true, ...m }, "*");
+    previewBus.broadcast = (m) => {
+      for (const f of frameRefs.current.values()) f.contentWindow?.postMessage({ __orchardist: true, ...m }, "*");
+    };
   }, []);
 
   // attribute bridge messages to their worktree via event.source
@@ -941,6 +1093,7 @@ function Center({ state, active, dispatch, sock, repo }: {
         if (frame.contentWindow === e.source) {
           if (d.type === "hmr") dispatch({ a: "hmr", id });
           else if (d.type === "loaded") {
+            previewBus.post(id, bridgeThemeMsg(currentTheme(stateRef.current)));
             dispatch({ a: "hmr", id });
             dispatch({ a: "page", id, url: d.url, title: d.title, fresh: true });
           } else if (d.type === "highlight-miss") {
@@ -1105,6 +1258,8 @@ function Center({ state, active, dispatch, sock, repo }: {
           onClose={() => dispatch({ a: "show-search", v: false })}
         />
       )}
+      {state.showThemes && <ThemePicker state={state} dispatch={dispatch} sock={sock} />}
+      {state.showAppearance && <AppearancePicker state={state} dispatch={dispatch} sock={sock} />}
       {state.showCommands && (
         <CommandPalette
           commands={buildCommands(state, dispatch, sock, active, repo)}
@@ -1176,6 +1331,7 @@ function DiffView({ diff, state, dispatch, sock, height, full, onToggleFull, onD
           after={diff.after}
           path={diff.path}
           line={diff.line}
+          theme={currentTheme(state)}
           onSave={(content) =>
             sock?.send({ t: "write-file", worktreeId: diff.worktreeId, path: diff.path, content })
           }
@@ -1377,6 +1533,24 @@ function QuickOpen({ paths, commands, onPick, onClose }: {
       </div>
     </div>
   );
+}
+
+// command labels are prose, not paths: a character may only skip ahead to the start of a word,
+// so "theem" can't scavenge t·h·e·e·m out of "switch to you-ve-hit-your-session-limit"
+function commandScore(hay: string, needle: string): number {
+  const wordStart = (i: number) => i === 0 || /[\s:\-–—/.(]/.test(hay[i - 1]!);
+  let score = 0, hi = 0, streak = 0;
+  for (const ch of needle) {
+    let found = -1;
+    if (hay[hi] === ch) found = hi;
+    else if (ch === " ") found = hay.indexOf(" ", hi); // a typed space lands on the next word gap
+    else for (let i = hay.indexOf(ch, hi); i !== -1; i = hay.indexOf(ch, i + 1)) { if (wordStart(i)) { found = i; break; } }
+    if (found === -1) return 0;
+    streak = found === hi ? streak + 1 : 1;
+    score += streak + (wordStart(found) ? 3 : 0);
+    hi = found + 1;
+  }
+  return score + Math.max(0, 40 - hay.length / 4);
 }
 
 // subsequence match; bonuses for consecutive hits and path-segment starts

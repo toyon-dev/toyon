@@ -3,6 +3,8 @@
 
 import { useEffect, useRef } from "react";
 import * as monaco from "monaco-editor";
+import type { Theme } from "@orchardist/shared";
+import { gruvboxDarkSoft, hex8, scaleAlpha } from "@orchardist/shared";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
@@ -35,43 +37,51 @@ for (const d of [typescriptDefaults, javascriptDefaults]) {
   d.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false, noSuggestionDiagnostics: true });
 }
 
-monaco.editor.defineTheme("gruvbox-soft", {
-  base: "vs-dark",
-  inherit: true,
-  rules: [
-    { token: "", foreground: "ebdbb2", background: "32302f" },
-    { token: "comment", foreground: "928374", fontStyle: "italic" },
-    { token: "keyword", foreground: "fb4934" },
-    { token: "string", foreground: "b8bb26" },
-    { token: "number", foreground: "d3869b" },
-    { token: "type", foreground: "fabd2f" },
-    { token: "function", foreground: "8ec07c" },
-    { token: "variable", foreground: "83a598" },
-  ],
-  colors: {
-    "editor.background": "#32302f",
-    "editor.foreground": "#ebdbb2",
-    "editor.lineHighlightBackground": "#3c383600",
-    "editorLineNumber.foreground": "#665c54",
-    "diffEditor.insertedTextBackground": "#b8bb2622",
-    "diffEditor.removedTextBackground": "#fb493422",
-    "diffEditor.insertedLineBackground": "#b8bb2615",
-    "diffEditor.removedLineBackground": "#fb493415",
-    "editorWidget.background": "#3c3836",
-    "scrollbarSlider.background": "#50494566",
-  },
-});
+/** Monaco theme derived from the shell's Theme so the diff pane never drifts from the chrome */
+function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
+  const c = t.colors;
+  const rules: monaco.editor.ITokenThemeRule[] = [{ token: "", foreground: c.fg1.slice(1), background: c.bg0.slice(1) }];
+  for (const [token, color] of Object.entries(t.syntax ?? {})) {
+    if (color) rules.push({ token, foreground: color.slice(1), ...(token === "comment" ? { fontStyle: "italic" } : {}) });
+  }
+  return {
+    base: t.kind === "light" ? "vs" : "vs-dark",
+    inherit: true,
+    rules,
+    colors: {
+      "editor.background": c.bg0,
+      "editor.foreground": c.fg1,
+      "editor.lineHighlightBackground": hex8(c.bg1, 0),
+      "editorLineNumber.foreground": c.bg3,
+      "diffEditor.insertedTextBackground": scaleAlpha(c.addBg, 1.6),
+      "diffEditor.removedTextBackground": scaleAlpha(c.delBg, 1.6),
+      "diffEditor.insertedLineBackground": c.addBg,
+      "diffEditor.removedLineBackground": c.delBg,
+      "editorWidget.background": c.bg1,
+      "scrollbarSlider.background": hex8(c.bg2, 0.4),
+    },
+  };
+}
 
-export default function MonacoDiff({ before, after, path, line: focusLine, onSave, onLineHover }: {
+const THEME = "orchardist";
+monaco.editor.defineTheme(THEME, toMonacoTheme(gruvboxDarkSoft));
+
+export default function MonacoDiff({ before, after, path, line: focusLine, theme, onSave, onLineHover }: {
   before: string;
   after: string;
   path: string;
   /** 1-based line to reveal + place the cursor on (search hit); otherwise the first change */
   line?: number;
+  theme: Theme;
   onSave: (content: string) => void;
   onLineHover?: (line: number | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // setTheme is global: every editor follows, including ones created before the change
+  useEffect(() => {
+    monaco.editor.defineTheme(THEME, toMonacoTheme(theme));
+    monaco.editor.setTheme(THEME);
+  }, [theme]);
   const saveRef = useRef(onSave);
   saveRef.current = onSave;
   const hoverRef = useRef(onLineHover);
@@ -90,7 +100,7 @@ export default function MonacoDiff({ before, after, path, line: focusLine, onSav
       originalEditable: false,
       automaticLayout: true,
       renderSideBySide: false,
-      theme: "gruvbox-soft",
+      theme: THEME,
       scrollBeyondLastLine: false,
       minimap: { enabled: false },
       fontSize: 12,

@@ -10,6 +10,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
     "@orchardist/shared": "workspace:*",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "jsonc-parser": "^3.3.1"
   }
 }

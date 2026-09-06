@@ -105,13 +105,53 @@ export type AgentEvent =
   | { type: "agent-error"; message: string; ts: number }
   | { type: "agent-blocked"; tool: string; path: string; reason: string; ts: number };
 
+// ---- Themes ----
+
+/** always #rrggbb or #rrggbbaa — CSS and Monaco both take 8-digit hex as-is */
+export type ThemeColor = string;
+
+export type ThemeSyntaxToken = "comment" | "keyword" | "string" | "number" | "type" | "function" | "variable";
+
+export interface Theme {
+  /** "gruvbox-dark-soft" | "file:<slug>" | "vscode:<publisher.ext>:<label-slug>" */
+  id: string;
+  name: string;
+  kind: "dark" | "light";
+  /** where it came from — shown as a hint in the picker */
+  source: "builtin" | "file" | "vscode";
+  colors: {
+    bg0: ThemeColor; bg1: ThemeColor; bg2: ThemeColor; bg3: ThemeColor;
+    fg1: ThemeColor; fgMuted: ThemeColor; fgDim: ThemeColor;
+    red: ThemeColor; orange: ThemeColor; yellow: ThemeColor; green: ThemeColor;
+    aqua: ThemeColor; blue: ThemeColor; purple: ThemeColor;
+    /** diff line tints (alpha hex) */
+    addBg: ThemeColor; delBg: ThemeColor;
+    /** overlay backdrop and box-shadow color (alpha hex) */
+    scrim: ThemeColor; shadow: ThemeColor;
+  };
+  /** editor token colors; missing entries inherit Monaco's base theme */
+  syntax?: Partial<Record<ThemeSyntaxToken, ThemeColor>>;
+  /** id of this theme's opposite-kind sibling (Gruvbox Dark ↔ Gruvbox Light); guessed by name when absent */
+  pair?: string;
+}
+
+export type ThemeColorKey = keyof Theme["colors"];
+
+export interface ThemePrefs {
+  /** appearance: paint the `dark` or `light` slot, or follow prefers-color-scheme */
+  mode: "dark" | "light" | "system";
+  light: string;
+  dark: string;
+}
+
 // ---- WebSocket protocol ----
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
 
 export type ServerMsg =
-  | { t: "hello"; version: string; repos: RepoInfo[]; worktrees: WorktreeStatus[] }
+  | { t: "hello"; version: string; repos: RepoInfo[]; worktrees: WorktreeStatus[]; themes: Theme[]; themePrefs: ThemePrefs }
+  | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   | { t: "repos"; repos: RepoInfo[] }
   | { t: "worktrees"; worktrees: WorktreeStatus[] }
   | { t: "proc"; worktreeId: string; proc: ProcState }
@@ -151,6 +191,13 @@ export type ClientMsg =
   | { t: "unqueue"; worktreeId: string; index: number }
   | { t: "changed-ranges"; worktreeId: string; path: string }
   | { t: "rename-worktree"; worktreeId: string; title: string }
-  | { t: "confirm-config"; repoId: string; config: OrchardistConfig };
+  | { t: "confirm-config"; repoId: string; config: OrchardistConfig }
+  | { t: "set-theme"; prefs: ThemePrefs }
+  /** raw VS Code theme JSON/JSONC text picked in the browser */
+  | { t: "import-theme"; name: string; source: string }
+  | { t: "rescan-themes" };
 
 export const DAEMON_DEFAULT_PORT = 4141;
+
+export * from "./themes.ts";
+export * from "./vscode-theme.ts";

@@ -1,0 +1,11 @@
+// shared base — comments and trailing commas are VS Code-legal
+{
+  "colors": {
+    "editor.background": "#101418",
+    "editor.foreground": "#d8dee9",
+    "terminal.ansiRed": "#ff6b6b",
+  },
+  "tokenColors": [
+    { "scope": "comment", "settings": { "foreground": "#5c6670" } },
+  ],
+}

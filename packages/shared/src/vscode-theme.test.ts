@@ -1,0 +1,107 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { vscodeToTheme, ThemeImportError } from "./vscode-theme.ts";
+import {
+  builtinThemes, composite, contrastFg, gruvboxDarkSoft, gruvboxLight, hex8, normalizeHex, pairOf, pickTheme,
+  resolveTheme, themeColorKeys, themeToCssVars, vscodeDark2026, vscodeLight2026,
+} from "./themes.ts";
+import type { Theme } from "./index.ts";
+
+const fixture = (f: string) => JSON.parse(readFileSync(join(import.meta.dir, "../test/fixtures", f), "utf8"));
+const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/;
+
+describe("vscodeToTheme", () => {
+  test("full dark theme: precedence + normalized hex everywhere", () => {
+    const t = vscodeToTheme(fixture("full-dark.json"), { id: "x" });
+    expect(t.name).toBe("Orchard Night");
+    expect(t.kind).toBe("dark");
+    for (const k of themeColorKeys) expect(t.colors[k]).toMatch(HEX);
+    expect(t.colors.bg0).toBe("#101418");
+    expect(t.colors.bg1).toBe("#0b0e11");
+    // translucent hover flattened over bg1, never left with alpha
+    expect(t.colors.bg2).toBe(composite("#ffffff14", "#0b0e11"));
+    expect(t.colors.bg3).toBe("#2a3038");
+    expect(t.colors.fgMuted).toBe("#8a94a0");
+    expect(t.colors.fgDim).toBe("#5c6670");
+    expect(t.colors.orange).toBe("#ff9f43");
+    expect(t.colors.purple).toBe("#d19bff");
+    expect(t.colors.addBg).toBe("#8bd64920");
+    expect(t.colors.scrim).toBe(hex8("#101418", 0.7));
+    expect(t.syntax).toEqual({
+      comment: "#5c6670", keyword: "#ff6b6b", string: "#8bd649", number: "#d19bff",
+      function: "#5fd7d7", variable: "#78a9ff",
+    });
+  });
+
+  test("sparse light theme: kind from luminance, gaps from defaults, tints derived", () => {
+    const t = vscodeToTheme(fixture("sparse-light.json"), { id: "y", name: "Sparse" });
+    expect(t.kind).toBe("light");
+    expect(t.name).toBe("Sparse");
+    for (const k of themeColorKeys) expect(t.colors[k]).toMatch(HEX);
+    expect(t.colors.bg1).toBe("#fdf6e3"); // sideBar falls through to editor.background
+    expect(t.colors.red).toBe("#dc322f");
+    expect(t.colors.blue).toBe("#0451a5"); // Light Modern default
+    expect(t.colors.addBg).toBe(hex8("#859900", 0.12));
+    expect(t.colors.shadow).toBe("#0000002e");
+    expect(t.syntax).toBeUndefined();
+  });
+
+  test("rejects non-themes", () => {
+    expect(() => vscodeToTheme({ colors: {} }, { id: "z" })).toThrow(ThemeImportError);
+    expect(() => vscodeToTheme(null, { id: "z" })).toThrow(ThemeImportError);
+  });
+});
+
+describe("color helpers", () => {
+  test("normalizeHex", () => {
+    expect(normalizeHex("#ABC")).toBe("#aabbcc");
+    expect(normalizeHex("#aabbccff")).toBe("#aabbcc");
+    expect(normalizeHex("#aabbcc80")).toBe("#aabbcc80");
+    expect(normalizeHex("red")).toBeNull();
+  });
+  test("contrastFg picks a readable text color", () => {
+    expect(contrastFg("#fe8019")).toBe("#1d2021");
+    expect(contrastFg("#076678")).toBe("#fbf1c7");
+  });
+  test("css var names", () => {
+    const v = themeToCssVars(gruvboxDarkSoft);
+    expect(v["--fg-muted"]).toBe("#a89984");
+    expect(v["--add-bg"]).toBe("#b8bb261f");
+    expect(Object.keys(v).length).toBe(themeColorKeys.length);
+  });
+});
+
+describe("pairing", () => {
+  const mk = (id: string, name: string, kind: Theme["kind"], source: Theme["source"] = "vscode"): Theme =>
+    ({ ...gruvboxDarkSoft, id, name, kind, source, pair: undefined });
+  const ext = [
+    mk("vscode:a.one:one-dark", "One Dark", "dark"),
+    mk("vscode:a.one:one-light", "One Light", "light"),
+    mk("vscode:b.two:one-light", "One Light", "light"), // same name, other extension
+    mk("vscode:a.one:lonely-dark", "Lonely Dark", "dark"),
+    mk("file:my-light", "Dracula Light", "light", "file"),
+  ];
+  const all = [...builtinThemes, ...ext];
+
+  test("explicit pairs on built-ins", () => {
+    expect(pairOf(gruvboxDarkSoft, all)?.id).toBe("gruvbox-light");
+    expect(pairOf(vscodeLight2026, all)?.id).toBe("vscode-2026-dark");
+  });
+  test("guessed pairs stay inside the extension and match by dark↔light name swap", () => {
+    expect(pairOf(ext[0]!, all)?.id).toBe("vscode:a.one:one-light");
+    expect(pairOf(ext[3]!, all)).toBeNull();
+    expect(pairOf(ext[4]!, all)).toBeNull();
+  });
+  test("pickTheme fills the slot + sibling and follows the kind unless in system mode", () => {
+    const p0 = { mode: "dark" as const, light: gruvboxLight.id, dark: gruvboxDarkSoft.id };
+    expect(pickTheme(p0, vscodeLight2026, all)).toEqual({ mode: "light", light: vscodeLight2026.id, dark: vscodeDark2026.id });
+    expect(pickTheme({ ...p0, mode: "system" }, ext[3]!, all)).toEqual({ mode: "system", light: gruvboxLight.id, dark: "vscode:a.one:lonely-dark" });
+  });
+  test("resolveTheme by appearance", () => {
+    const p = { mode: "system" as const, light: "vscode-2026-light", dark: "missing" };
+    expect(resolveTheme(p, all, false).id).toBe("vscode-2026-light");
+    expect(resolveTheme(p, all, true).id).toBe("gruvbox-dark-soft"); // unknown → built-in of that kind
+    expect(resolveTheme({ ...p, mode: "light" }, all, true).id).toBe("vscode-2026-light");
+  });
+});

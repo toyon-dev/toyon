@@ -1,0 +1,8 @@
+{
+  "colors": {
+    "editor.background": "#fdf6e3",
+    "editor.foreground": "#586e75",
+    "terminal.ansiRed": "#dc322f",
+    "terminal.ansiGreen": "#859900"
+  }
+}

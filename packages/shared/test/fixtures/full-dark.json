@@ -1,0 +1,30 @@
+{
+  "name": "Orchard Night",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#101418",
+    "editor.foreground": "#d8dee9",
+    "sideBar.background": "#0b0e11",
+    "list.hoverBackground": "#ffffff14",
+    "panel.border": "#2a3038",
+    "descriptionForeground": "#8a94a0",
+    "disabledForeground": "#5c6670",
+    "terminal.ansiRed": "#ff6b6b",
+    "terminal.ansiGreen": "#8bd649",
+    "terminal.ansiYellow": "#ffd866",
+    "terminal.ansiBlue": "#78a9ff",
+    "terminal.ansiCyan": "#5fd7d7",
+    "terminal.ansiMagenta": "#d19bff",
+    "focusBorder": "#ff9f43",
+    "diffEditor.insertedLineBackground": "#8bd64920",
+    "diffEditor.removedLineBackground": "#ff6b6b20"
+  },
+  "tokenColors": [
+    { "scope": ["comment", "punctuation.definition.comment"], "settings": { "foreground": "#5c6670", "fontStyle": "italic" } },
+    { "scope": "keyword.control, storage.type", "settings": { "foreground": "#ff6b6b" } },
+    { "scope": "string.quoted", "settings": { "foreground": "#8bd649" } },
+    { "scope": "constant.numeric", "settings": { "foreground": "#d19bff" } },
+    { "scope": "entity.name.function", "settings": { "foreground": "#5fd7d7" } },
+    { "scope": "variable.other", "settings": { "foreground": "#78a9ff" } }
+  ]
+}

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import type { RepoInfo, WorktreeInfo } from "@orchardist/shared";
+import type { RepoInfo, ThemePrefs, WorktreeInfo } from "@orchardist/shared";
 import { STATE_FILE, TOKEN_FILE, ensureDirs } from "./paths.ts";
 
 export interface PersistedState {
@@ -8,6 +8,8 @@ export interface PersistedState {
   worktrees: WorktreeInfo[];
   /** worktreeId -> Claude session id, for resume */
   sessions: Record<string, string>;
+  /** shell theme selection (shared by every browser that connects) */
+  theme?: ThemePrefs;
 }
 
 const empty: PersistedState = { repos: [], worktrees: [], sessions: {} };

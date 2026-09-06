@@ -1,9 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ClientMsg, ServerMsg } from "@orchardist/shared";
+import { pickTheme, type ClientMsg, type ServerMsg } from "@orchardist/shared";
 import type { Manager } from "./worktrees.ts";
 import { aheadBehind, changedRanges, commitWorktree, committedFiles, fileBefore, mergeToMain, shipWorktree, statusFiles, syncFromMain } from "./git.ts";
 import { cloud } from "./cloud.ts";
+import type { ThemeStore } from "./themes.ts";
+import { setWaitingColors } from "./proxy.ts";
 
 const VERSION = "0.0.1";
 
@@ -16,8 +18,9 @@ export function startServer(opts: {
   token: string;
   manager: Manager;
   shellDist: string;
+  themes: ThemeStore;
 }) {
-  const { manager, token } = opts;
+  const { manager, token, themes } = opts;
   const sockets = new Set<import("bun").ServerWebSocket<WsData>>();
 
   const broadcast = (msg: ServerMsg) => {
@@ -29,6 +32,13 @@ export function startServer(opts: {
     broadcast,
     worktreesChanged: () => broadcast({ t: "worktrees", worktrees: manager.statuses() }),
   };
+
+  const themesChanged = () => {
+    const cur = themes.current();
+    setWaitingColors({ bg: cur.colors.bg0, fg: cur.colors.fgMuted });
+    broadcast({ t: "themes", themes: themes.themes, prefs: themes.prefs });
+  };
+  themesChanged();
 
   const serverConfig = {
     hostname: cloud.bindHost,
@@ -99,6 +109,8 @@ export function startServer(opts: {
           version: VERSION,
           repos: manager.state.repos,
           worktrees: manager.statuses(),
+          themes: themes.themes,
+          themePrefs: themes.prefs,
         };
         ws.send(JSON.stringify(hello));
       },
@@ -397,6 +409,22 @@ export function startServer(opts: {
       }
       case "confirm-config": {
         manager.confirmConfig(msg.repoId, msg.config);
+        break;
+      }
+      case "set-theme": {
+        themes.setPrefs(msg.prefs);
+        themesChanged();
+        break;
+      }
+      case "import-theme": {
+        const theme = themes.import(msg.name, msg.source);
+        themes.setPrefs(pickTheme(themes.prefs, theme, themes.themes));
+        themesChanged();
+        break;
+      }
+      case "rescan-themes": {
+        themes.load();
+        themesChanged();
         break;
       }
     }

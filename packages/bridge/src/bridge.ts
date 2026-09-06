@@ -12,6 +12,10 @@ const post = (msg: Record<string, unknown>) => {
 
 post({ type: "loaded", url: location.href, title: document.title });
 
+// picker/highlight overlay colors follow the shell theme (sent on load and on theme change)
+let accent = "#fe8019";
+let accentFg = "#1d2021";
+
 // vite announces applied hot updates on window — relay so the shell knows
 // whether an agent's changes were HMR-covered or need a reload
 window.addEventListener("vite:afterUpdate", () => post({ type: "hmr" }));
@@ -122,12 +126,12 @@ function clearOverlay() {
 
 function drawBox(rect: DOMRect, label?: string) {
   const box = document.createElement("div");
-  box.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;outline:2px solid #fe8019;outline-offset:-1px;background:rgba(254,128,25,0.08);border-radius:2px;`;
+  box.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;outline:2px solid ${accent};outline-offset:-1px;background:${accent}14;border-radius:2px;`;
   if (label) {
     const tag = document.createElement("div");
     tag.textContent = label;
     tag.style.cssText =
-      "position:absolute;left:0;top:-20px;background:#fe8019;color:#1d2021;font:11px -apple-system,sans-serif;padding:1px 6px;border-radius:3px;white-space:nowrap;";
+      `position:absolute;left:0;top:-20px;background:${accent};color:${accentFg};font:11px -apple-system,sans-serif;padding:1px 6px;border-radius:3px;white-space:nowrap;`;
     box.appendChild(tag);
   }
   ensureOverlay().appendChild(box);
@@ -338,6 +342,10 @@ window.addEventListener("message", (e) => {
     }
     case "highlight-clear":
       clearOverlay();
+      break;
+    case "theme":
+      if (typeof d.accent === "string") accent = d.accent;
+      if (typeof d.accentFg === "string") accentFg = d.accentFg;
       break;
   }
 });

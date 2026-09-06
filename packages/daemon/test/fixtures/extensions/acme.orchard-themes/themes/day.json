@@ -1,0 +1,4 @@
+{
+  "include": "./base.json",
+  "colors": { "editor.background": "#fdf6e3", "editor.foreground": "#586e75" }
+}

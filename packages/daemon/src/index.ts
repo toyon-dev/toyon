@@ -7,6 +7,8 @@ import { statusFilesWithCounts } from "./git.ts";
 import { loadOrCreateToken } from "./state.ts";
 import { ensureDirs } from "./paths.ts";
 import { cloud } from "./cloud.ts";
+import { ThemeStore } from "./themes.ts";
+import { saveState } from "./state.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SHELL_DIST = join(here, "../../shell/dist");
@@ -49,7 +51,12 @@ const hubEvents: HubEvents = {
 };
 
 const manager = new Manager(hubEvents, BRIDGE_JS);
-const { hub, branded } = startServer({ port, token, manager, shellDist: SHELL_DIST });
+const themes = new ThemeStore({
+  get: () => manager.state.theme,
+  set: (p) => { manager.state.theme = p; saveState(manager.state); },
+});
+themes.load();
+const { hub, branded } = startServer({ port, token, manager, shellDist: SHELL_DIST, themes });
 broadcastRef = hub.broadcast;
 worktreesChangedRef = hub.worktreesChanged;
 

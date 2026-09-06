@@ -142,8 +142,14 @@ function injectBridge(html: string): string {
   return html + tag;
 }
 
+// painted with the selected shell theme so the placeholder doesn't flash a foreign color
+let waitingColors = { bg: "#32302f", fg: "#a89984" };
+export function setWaitingColors(c: { bg: string; fg: string }) {
+  waitingColors = c;
+}
+
 function waitingPage(): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="2"><style>
-  body{background:#32302f;color:#a89984;font:14px/1.6 ui-monospace,monospace;display:grid;place-items:center;height:100vh;margin:0}
+  body{background:${waitingColors.bg};color:${waitingColors.fg};font:14px/1.6 ui-monospace,monospace;display:grid;place-items:center;height:100vh;margin:0}
   </style></head><body><div>starting dev server…</div></body></html>`;
 }

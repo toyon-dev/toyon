@@ -1,6 +1,11 @@
 import type {
-  AgentEvent, GitFileStatus, RepoInfo, SearchHit, ServerMsg, WorktreeStatus,
+  AgentEvent, GitFileStatus, RepoInfo, SearchHit, ServerMsg, Theme, ThemePrefs, WorktreeStatus,
 } from "@orchardist/shared";
+import { builtinThemes, defaultThemePrefs, resolveTheme } from "@orchardist/shared";
+import { cachedTheme } from "./theme.ts";
+
+// until hello arrives, the theme painted last time is the selection (no flash back to the default)
+const cached = cachedTheme();
 
 export type ChatItem =
   | { kind: "user"; text: string; pick?: import("@orchardist/shared").PickMeta }
@@ -63,6 +68,22 @@ export interface State {
   showKeys: boolean;
   /** ⌘⇧E command palette */
   showCommands: boolean;
+  /** themes the daemon knows (built-ins, ~/.orchardist/themes, installed editors) + the selection */
+  themes: Theme[];
+  themePrefs: ThemePrefs;
+  /** theme picker: which pref slot Enter writes; null = closed */
+  showThemes: "theme" | "light" | "dark" | null;
+  /** picker highlight, applied live while browsing */
+  previewTheme: Theme | null;
+  /** dark / light / follow-system picker */
+  showAppearance: boolean;
+  /** OS appearance (prefers-color-scheme), for themePrefs.mode === "system" */
+  systemDark: boolean;
+}
+
+/** the theme to paint right now: picker preview beats prefs */
+export function currentTheme(s: State): Theme {
+  return s.previewTheme ?? resolveTheme(s.themePrefs, s.themes, s.systemDark);
 }
 
 export const initial: State = {
@@ -96,6 +117,12 @@ export const initial: State = {
   zen: false,
   showKeys: false,
   showCommands: false,
+  themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
+  themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
+  showThemes: null,
+  previewTheme: null,
+  showAppearance: false,
+  systemDark: typeof window !== "undefined" ? window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true : true,
 };
 
 export type Action =
@@ -118,10 +145,14 @@ export type Action =
   | { a: "toggle-right" }
   | { a: "toggle-zen" }
   | { a: "show-keys"; v: boolean }
+  | { a: "show-themes"; v: State["showThemes"] }
+  | { a: "show-appearance"; v: boolean }
+  | { a: "preview-theme"; theme: Theme | null }
+  | { a: "system-dark"; v: boolean }
   | { a: "show-commands"; v: boolean };
 
 /** the modal overlays are mutually exclusive: opening one closes the others */
-const NO_OVERLAYS = { showQuickOpen: false, showSearch: false, showPrompt: false, showKeys: false, showCommands: false } as const;
+const NO_OVERLAYS = { showQuickOpen: false, showSearch: false, showPrompt: false, showKeys: false, showCommands: false, showThemes: null, showAppearance: false, previewTheme: null } as const;
 
 export function reducer(s: State, action: Action): State {
   switch (action.a) {
@@ -174,6 +205,15 @@ export function reducer(s: State, action: Action): State {
       return { ...s, ...(action.v ? NO_OVERLAYS : {}), showKeys: action.v };
     case "show-commands":
       return { ...s, ...(action.v ? NO_OVERLAYS : {}), showCommands: action.v };
+    case "show-themes":
+      // closing drops the live preview so the kept/previous theme paints again
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showThemes: action.v, previewTheme: null };
+    case "show-appearance":
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showAppearance: action.v, previewTheme: null };
+    case "preview-theme":
+      return { ...s, previewTheme: action.theme };
+    case "system-dark":
+      return { ...s, systemDark: action.v };
     case "server":
       return onServer(s, action.msg);
   }
@@ -193,8 +233,11 @@ function onServer(s: State, msg: ServerMsg): State {
           : stored && msg.worktrees.some((w) => w.worktree.id === stored)
             ? stored
             : msg.worktrees[0]?.worktree.id ?? null;
-      return { ...s, repos: msg.repos, worktrees: msg.worktrees, activeId };
+      // an older daemon sends no themes: keep the built-ins rather than crashing the picker
+      return { ...s, repos: msg.repos, worktrees: msg.worktrees, activeId, themes: msg.themes ?? s.themes, themePrefs: msg.themePrefs ?? s.themePrefs };
     }
+    case "themes":
+      return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "repos":
       return { ...s, repos: msg.repos };
     case "worktrees": {

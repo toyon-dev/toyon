@@ -7,6 +7,7 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStatus, PickMeta } from "@orchardist/shared";
+import { log } from "./core/log.ts";
 import { TRANSCRIPTS_DIR } from "./paths.ts";
 import { buildScope, type Scope } from "./scope.ts";
 
@@ -81,10 +82,20 @@ export class AgentSession {
   transcript(): Array<{ seq: number; event: AgentEvent }> {
     const p = this.transcriptPath();
     if (!existsSync(p)) return [];
-    return readFileSync(p, "utf8")
-      .split("\n")
-      .filter(Boolean)
-      .map((l) => JSON.parse(l));
+    const out: Array<{ seq: number; event: AgentEvent }> = [];
+    let torn = 0;
+    for (const line of readFileSync(p, "utf8").split("\n")) {
+      if (!line) continue;
+      try {
+        out.push(JSON.parse(line));
+      } catch {
+        // a crash mid-append leaves a partial last line; one bad line must not make the whole
+        // worktree unbootable
+        torn++;
+      }
+    }
+    if (torn) log.warn(this.worktreeId, `transcript: skipped ${torn} unparsable line(s)`);
+    return out;
   }
 
   private emit(event: AgentEvent) {

@@ -14,6 +14,7 @@ import type {
 } from "@orchardist/shared";
 import { AgentSession, quickName } from "./agent.ts";
 import { detectConfig } from "./config.ts";
+import { fireAndForget, log } from "./core/log.ts";
 import {
   aheadBehind,
   committedFiles,
@@ -103,7 +104,7 @@ export class Manager {
       watchDefaultBranch(repo.path, repo.defaultBranch, () => {
         this.countsCache.clear();
         this.hub.repoTick(repo.id);
-        void this.refreshSpare(repo.id);
+        fireAndForget(repo.id, this.refreshSpare(repo.id), "spare refresh");
       }),
     );
   }
@@ -112,7 +113,8 @@ export class Manager {
   private adoptOrCreateSpare(repoId: string) {
     const persisted = this.state.worktrees.filter((w) => w.repoId === repoId && w.kind === "spare");
     // keep at most one; stale extras are removed
-    for (const extra of persisted.slice(1)) void this.removeWorktree(extra.id, true);
+    for (const extra of persisted.slice(1))
+      fireAndForget(extra.id, this.removeWorktree(extra.id, true), "stale spare removal");
     const spare = persisted[0];
     if (spare) {
       this.spares.set(repoId, {
@@ -121,9 +123,9 @@ export class Manager {
         refreshing: null,
         ready: true,
       });
-      void this.refreshSpare(repoId); // main may have moved while the daemon was down
+      fireAndForget(repoId, this.refreshSpare(repoId), "spare refresh"); // main may have moved while the daemon was down
     } else {
-      void this.ensureSpare(repoId);
+      fireAndForget(repoId, this.ensureSpare(repoId), "spare warm-up");
     }
   }
 
@@ -201,7 +203,11 @@ export class Manager {
     wt.title = slug;
     wt.createdAt = Date.now();
     saveState(this.state);
-    void this.ensureSpare(repoId).then(() => this.hub.worktreesChanged());
+    fireAndForget(
+      repoId,
+      this.ensureSpare(repoId).then(() => this.hub.worktreesChanged()),
+      "spare warm-up",
+    );
     return wt;
   }
 
@@ -246,7 +252,7 @@ export class Manager {
     saveState(this.state);
     await this.startRuntime(main, repo);
     this.startWatcher(repo);
-    void this.ensureSpare(repo.id);
+    fireAndForget(repo.id, this.ensureSpare(repo.id), "spare warm-up");
     this.hub.worktreesChanged();
     return repo;
   }
@@ -259,7 +265,9 @@ export class Manager {
     // persist next to the code so it's shared/committed and future registers skip the card
     try {
       writeFileSync(join(repo.path, "orchardist.json"), `${JSON.stringify(config, null, 2)}\n`);
-    } catch {}
+    } catch (e) {
+      log.warn(repoId, "could not write orchardist.json", e);
+    }
     // (re)start procs for this repo's worktrees under the confirmed config
     for (const wt of this.state.worktrees.filter((w) => w.repoId === repoId && w.kind !== "spare")) {
       const rt = this.runtimes.get(wt.id);
@@ -268,9 +276,13 @@ export class Manager {
         rt.proxy.stop();
         this.runtimes.delete(wt.id);
       }
-      void this.startRuntime(wt, repo);
+      fireAndForget(wt.id, this.startRuntime(wt, repo), "runtime start");
     }
-    void this.ensureSpare(repoId).then(() => this.hub.worktreesChanged());
+    fireAndForget(
+      repoId,
+      this.ensureSpare(repoId).then(() => this.hub.worktreesChanged()),
+      "spare warm-up",
+    );
     this.hub.worktreesChanged();
   }
 
@@ -339,7 +351,11 @@ export class Manager {
     this.hub.worktreesChanged();
 
     // setup + procs warm in the background; agent starts immediately
-    void this.setupAndStart(wt, repo, base?.path ?? repo.path).then(() => this.hub.worktreesChanged());
+    fireAndForget(
+      wt.id,
+      this.setupAndStart(wt, repo, base?.path ?? repo.path).then(() => this.hub.worktreesChanged()),
+      "setup + start",
+    );
     const rtAgent = this.makeAgent(wt);
     this.pendingAgents.set(wt.id, rtAgent);
     rtAgent.send(agentPrompt, undefined, pick);
@@ -356,18 +372,28 @@ export class Manager {
     variant?: { group: string; index: number; of: number },
   ) {
     if (!variant) {
-      void quickName(prompt, repo.path).then((name) => {
-        if (name) this.renameWorktree(wt.id, name).catch(() => {});
-      });
+      fireAndForget(
+        wt.id,
+        quickName(prompt, repo.path).then((name) => {
+          if (name) return this.renameWorktree(wt.id, name);
+        }),
+        "auto-naming",
+      );
       return;
     }
     if (variant.index !== 1) return; // sibling 1 names the whole group
-    void quickName(prompt, repo.path).then(async (name) => {
-      if (!name) return;
-      for (const sibling of this.state.worktrees.filter((w) => w.variant?.group === variant.group)) {
-        await this.renameWorktree(sibling.id, `${name}-v${sibling.variant!.index}`).catch(() => {});
-      }
-    });
+    fireAndForget(
+      wt.id,
+      quickName(prompt, repo.path).then(async (name) => {
+        if (!name) return;
+        for (const sibling of this.state.worktrees.filter((w) => w.variant?.group === variant.group)) {
+          await this.renameWorktree(sibling.id, `${name}-v${sibling.variant!.index}`).catch((e) => {
+            log.warn(sibling.id, "variant rename failed", e);
+          });
+        }
+      }),
+      "auto-naming",
+    );
   }
 
   /** Declare a variant the winner: remove its siblings, drop its variant badge. */
@@ -691,7 +717,11 @@ export class Manager {
     this.state.worktrees.push(wt);
     saveState(this.state);
     this.hub.worktreesChanged();
-    void this.setupAndStart(wt, repo, wts[0]!.path).then(() => this.hub.worktreesChanged());
+    fireAndForget(
+      wt.id,
+      this.setupAndStart(wt, repo, wts[0]!.path).then(() => this.hub.worktreesChanged()),
+      "setup + start",
+    );
     return wt;
   }
 

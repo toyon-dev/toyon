@@ -68,6 +68,14 @@ export class WorktreeProcs {
     child.stdout?.on("data", pushLines);
     child.stderr?.on("data", pushLines);
 
+    // a spawn failure (cwd removed, sh missing) emits 'error' with no 'exit'; unhandled it kills the daemon
+    child.on("error", (e) => {
+      if (this.stopped || mp.state.status === "stopped" || mp.state.status === "crashed") return;
+      mp.state.status = "crashed";
+      this.onProc({ ...mp.state });
+      this.onLog(name, `failed to start: ${e.message}`);
+    });
+
     child.on("exit", (code) => {
       mp.state.exitCode = code;
       if (this.stopped || mp.state.status === "stopped") return;

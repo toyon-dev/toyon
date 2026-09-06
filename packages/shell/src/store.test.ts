@@ -25,7 +25,15 @@ function wt(id: string, kind: WorktreeStatus["worktree"]["kind"] = "worktree"): 
 
 const server = (msg: ServerMsg): Action => ({ a: "server", msg });
 const hello = (...w: WorktreeStatus[]): Action =>
-  server({ t: "hello", version: "0", repos: [], worktrees: w, themes: initial.themes, themePrefs: initial.themePrefs });
+  server({
+    t: "hello",
+    version: "0",
+    protocol: 1,
+    repos: [],
+    worktrees: w,
+    themes: initial.themes,
+    themePrefs: initial.themePrefs,
+  });
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });
 

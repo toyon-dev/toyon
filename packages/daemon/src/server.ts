@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { type ClientMsg, pickTheme, type ServerMsg } from "@orchardist/shared";
+import { type ClientMsg, PROTOCOL_VERSION, parseClientMsg, pickTheme, type ServerMsg } from "@orchardist/shared";
 import { cloud } from "./cloud.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import {
@@ -115,6 +115,7 @@ export function startServer(opts: {
         const hello: ServerMsg = {
           t: "hello",
           version: VERSION,
+          protocol: PROTOCOL_VERSION,
           repos: manager.state.repos,
           worktrees: manager.statuses(),
           themes: themes.themes,
@@ -126,14 +127,20 @@ export function startServer(opts: {
         sockets.delete(ws);
       },
       async message(ws: import("bun").ServerWebSocket<WsData>, raw: string | Buffer) {
-        let msg: ClientMsg;
+        let json: unknown;
         try {
-          msg = JSON.parse(String(raw));
+          json = JSON.parse(String(raw));
         } catch {
+          ws.send(JSON.stringify({ t: "error", message: "invalid message: not JSON" } satisfies ServerMsg));
+          return;
+        }
+        const parsed = parseClientMsg(json);
+        if (!parsed.ok) {
+          ws.send(JSON.stringify({ t: "error", message: `invalid message: ${parsed.reason}` } satisfies ServerMsg));
           return;
         }
         try {
-          await handle(msg, ws);
+          await handle(parsed.msg, ws);
         } catch (e) {
           ws.send(JSON.stringify({ t: "error", message: String(e) } satisfies ServerMsg));
         }

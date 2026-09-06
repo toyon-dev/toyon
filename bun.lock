@@ -44,6 +44,9 @@
     "packages/shared": {
       "name": "@orchardist/shared",
       "version": "0.0.1",
+      "dependencies": {
+        "zod": "^4.5.4",
+      },
     },
     "packages/shell": {
       "name": "@orchardist/shell",

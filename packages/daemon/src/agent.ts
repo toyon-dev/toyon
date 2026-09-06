@@ -22,6 +22,10 @@ const SYSTEM_APPEND = [
   "Keep the scope tight: do the asked task well, then stop. Suggest follow-ups in chat instead of expanding scope.",
 ].join(" ");
 
+export function transcriptPathFor(worktreeId: string): string {
+  return join(TRANSCRIPTS_DIR, `${worktreeId}.jsonl`);
+}
+
 export class AgentSession {
   status: AgentStatus = "idle";
   private seq = 0;
@@ -76,7 +80,7 @@ export class AgentSession {
   }
 
   private transcriptPath() {
-    return join(TRANSCRIPTS_DIR, `${this.worktreeId}.jsonl`);
+    return transcriptPathFor(this.worktreeId);
   }
 
   transcript(): Array<{ seq: number; event: AgentEvent }> {

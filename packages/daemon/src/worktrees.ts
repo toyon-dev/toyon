@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type {
   AgentEvent,
@@ -12,7 +12,7 @@ import type {
   WorktreeInfo,
   WorktreeStatus,
 } from "@orchardist/shared";
-import { AgentSession, quickName } from "./agent.ts";
+import { AgentSession, quickName, transcriptPathFor } from "./agent.ts";
 import { detectConfig } from "./config.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import {
@@ -273,6 +273,9 @@ export class Manager {
     for (const wt of this.state.worktrees.filter((w) => w.repoId === repoId && w.kind !== "spare")) {
       const rt = this.runtimes.get(wt.id);
       if (rt) {
+        // keep the agent (possibly mid-turn); only procs and proxy restart under the new config.
+        // Without this, startRuntime's makeAgent would build a second session for the same worktree.
+        this.pendingAgents.set(wt.id, rt.agent);
         rt.procs.stopAll();
         rt.proxy.stop();
         this.runtimes.delete(wt.id);
@@ -491,6 +494,10 @@ export class Manager {
     if (!wt || wt.kind === "main" || (wt.kind === "spare" && !allowSpare)) return;
     const repo = this.repo(wt.repoId);
     const rt = this.runtimes.get(worktreeId);
+    // the agent first: it may be mid-turn in the directory about to be deleted, and its
+    // session-info callback would re-add the session entry removed below
+    (rt?.agent ?? this.pendingAgents.get(worktreeId))?.stop();
+    this.pendingAgents.delete(worktreeId);
     rt?.procs.stopAll();
     rt?.proxy.stop();
     this.runtimes.delete(worktreeId);
@@ -499,6 +506,11 @@ export class Manager {
     });
     this.state.worktrees = this.state.worktrees.filter((w) => w.id !== worktreeId);
     delete this.state.sessions[worktreeId];
+    try {
+      rmSync(transcriptPathFor(worktreeId), { force: true });
+    } catch (e) {
+      log.warn(worktreeId, "could not delete transcript", e);
+    }
     releasePort(wt.proxyPort);
     saveState(this.state);
     this.hub.worktreesChanged();
@@ -741,8 +753,10 @@ export class Manager {
   /** Stop watchers, proxies and every proc group; resolves once the procs have exited. */
   async shutdown(): Promise<void> {
     for (const stop of this.watchers.values()) stop();
+    for (const agent of this.pendingAgents.values()) agent.stop();
     await Promise.all(
       [...this.runtimes.values()].map(async (rt) => {
+        rt.agent.stop();
         rt.proxy.stop();
         await rt.procs.stopAll();
       }),

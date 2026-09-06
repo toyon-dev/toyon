@@ -1,4 +1,4 @@
-import type { GitFileStatus, WorktreeStatus } from "@orchardist/shared";
+import { type ChordId, chordLabel, type GitFileStatus, type WorktreeStatus } from "@orchardist/shared";
 
 /** Preview iframes hit the worktree's proxy port. Locally that is always loopback (the daemon
  * binds 127.0.0.1); in cloud mode the same port is a public TLS port on the host that served this
@@ -52,10 +52,12 @@ export function xyLetter(xy: string): string {
   return code === "T" ? "M" : code || "·";
 }
 
-export type { GitFileStatus };
+// Firefox owns ⌘⇧P (new private window) before the page sees it; both chords work everywhere
+// else, so advertise the one that will actually fire in this browser
+const IS_FIREFOX = /Firefox\//.test(navigator.userAgent);
+export const chord = (id: ChordId) => chordLabel(id, { firefox: IS_FIREFOX });
 
-export const EDITORS: Array<{ label: string; scheme: string }> = [
-  { label: "Zed", scheme: "zed" },
-  { label: "VS Code", scheme: "vscode" },
-  { label: "Cursor", scheme: "cursor" },
-];
+/** the picked element as a label: <Component> or <tag> */
+export function pickLabel(p: { component: string | null; tag: string }): string {
+  return p.component ? `<${p.component}>` : `<${p.tag}>`;
+}

@@ -1,7 +1,7 @@
 import { PROTOCOL_VERSION } from "@orchardist/shared";
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App.tsx";
+import { App } from "./app/App.tsx";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { STORAGE } from "./state/keys.ts";
 import { initialState } from "./state/store.ts";
@@ -57,7 +57,7 @@ const sock = new DaemonSocket(
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <StoreProvider store={store} sock={sock}>
-      <App />
+      <App store={store} />
     </StoreProvider>
   </React.StrictMode>,
 );

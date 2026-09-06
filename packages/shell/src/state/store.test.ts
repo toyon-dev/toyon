@@ -259,6 +259,27 @@ describe("overlays", () => {
   });
 });
 
+describe("drafts", () => {
+  test("the composer draft is kept per worktree and survives switching", () => {
+    const s = run([
+      hello(wt("a"), wt("b")),
+      { a: "set-draft", id: "a", text: "half a thought" },
+      { a: "activate", id: "b" },
+    ]);
+    expect(s.local.a?.draft).toBe("half a thought");
+    expect(localOf(s, "b").draft).toBe("");
+  });
+  test("a sync-conflict suggestion lands in that worktree's draft and focuses it", () => {
+    const s = run([
+      hello(wt("main", "main"), wt("a")),
+      server({ t: "shipped", worktreeId: "a", ok: false, message: "conflicts", suggestion: "Merge main and fix" }),
+    ]);
+    expect(s.activeId).toBe("a");
+    expect(s.local.a?.draft).toBe("Merge main and fix");
+    expect(s.toast?.ok).toBe(false);
+  });
+});
+
 describe("git status", () => {
   test("a clean main on first load auto-closes the changes panel, once", () => {
     const s = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);

@@ -1,0 +1,176 @@
+import { useEffect, useMemo, useState } from "react";
+import { previewBus } from "../../app/previewBus.ts";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useActive, useLocal } from "../../state/selectors.ts";
+import { Icon } from "../../ui/Icon.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
+import { chord } from "../util.ts";
+
+/** the top bar: dock toggles, the route bar centered over the preview, unhealthy procs, tools */
+export function StatusBar({ navCenter }: { navCenter: number }) {
+  const dispatch = useDispatch();
+  const sock = useSock();
+  const active = useActive();
+  const zen = useStore((s) => s.zen);
+  const leftOpen = useStore((s) => s.leftOpen);
+  const rightOpen = useStore((s) => s.rightOpen);
+  const installEvt = useInstallPrompt();
+  const id = active?.worktree.id ?? null;
+  const ready = !!active && active.procs.some((p) => p.status === "running" || p.status === "starting");
+  return (
+    <div className="status-bar top-bar">
+      {zen && <span className="zen-title">{active?.worktree.title ?? "orchardist"}</span>}
+      <button
+        className={`toggle icon ${leftOpen ? "on" : ""}`}
+        onClick={() => dispatch({ a: "toggle-left" })}
+        {...tip("Changes panel", chord("left"))}
+      >
+        <Icon name="branch" />
+      </button>
+      <RouteBar worktreeId={id} ready={ready} left={navCenter} />
+      {installEvt && (
+        <button
+          className="toggle"
+          data-tip="Install Orchardist as an app (own window, dock icon)"
+          onClick={() => void installEvt.prompt()}
+        >
+          ⇣ install app
+        </button>
+      )}
+      <span className="grow" />
+      {/* procs surface only when something needs attention — healthy is silence */}
+      {active?.procs
+        .filter((p) => p.status !== "running")
+        .map((p) => (
+          <button
+            key={p.name}
+            className="proc"
+            data-tip={`${p.command} — ${p.status} on :${p.port} · click to restart`}
+            onClick={() => sock?.send({ t: "restart-proc", worktreeId: active.worktree.id, proc: p.name })}
+          >
+            <span className={`dot ${p.status === "crashed" ? "crashed" : "starting"}`} />
+            {p.name} {p.status}
+          </button>
+        ))}
+      {/* right cluster: help · chat toggle · zen (zen last — it hides everything, so it sits at the edge) */}
+      <span className="bar-tools">
+        <button
+          className="toggle icon keys-btn"
+          {...tip("Shortcuts & settings", chord("keys"))}
+          onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
+        >
+          <Icon name="help" />
+        </button>
+        <button
+          className={`toggle icon ${rightOpen ? "on" : ""}`}
+          onClick={() => dispatch({ a: "toggle-right" })}
+          {...tip("Chat panel", chord("right"))}
+        >
+          <Icon name="chat" />
+        </button>
+        <button
+          className="toggle icon keys-btn"
+          {...tip("Full-bleed preview", chord("zen"))}
+          onClick={() => dispatch({ a: "toggle-zen" })}
+        >
+          <Icon name="zen" />
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/** Safari-style: back/forward/reload + the preview's route, anchored to the preview column's center */
+function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; ready: boolean; left: number }) {
+  const url = useLocal(id).page.url;
+  const path = useMemo(() => {
+    if (!url) return "/";
+    try {
+      const u = new URL(url);
+      // hash included: hash routers (#/about) are common in previews, and the bar should mirror
+      // what the page considers its route
+      return u.pathname + u.search + u.hash;
+    } catch {
+      return "/";
+    }
+  }, [url]);
+  const [val, setVal] = useState(path);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setVal(path);
+  }, [path, id, editing]);
+  const go = (p: string) => {
+    if (!id) return;
+    const t = p.trim();
+    // "/path", "?query" and "#/hash-route" are all valid as typed; anything else is a path
+    const clean = /^[/?#]/.test(t) ? t : `/${t}`;
+    previewBus.post(id, { type: "navigate", path: clean });
+    setEditing(false);
+  };
+  return (
+    <div className="rb-center" style={{ left }}>
+      <button
+        className="rb-btn rb-nav"
+        disabled={!ready}
+        {...tip("Back")}
+        onClick={() => id && previewBus.post(id, { type: "back" })}
+      >
+        <Icon name="back" />
+      </button>
+      <button
+        className="rb-btn rb-nav"
+        disabled={!ready}
+        {...tip("Forward")}
+        onClick={() => id && previewBus.post(id, { type: "forward" })}
+      >
+        <Icon name="forward" />
+      </button>
+      <button
+        className="rb-btn rb-nav rb-reload"
+        disabled={!ready}
+        {...tip("Reload preview")}
+        onClick={() => id && previewBus.post(id, { type: "reload" })}
+      >
+        <Icon name="reload" />
+      </button>
+      <input
+        className="rb-path"
+        value={ready ? val : ""}
+        disabled={!ready}
+        placeholder={ready ? "/" : "—"}
+        onFocus={() => setEditing(true)}
+        onBlur={() => setEditing(false)}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") go(val);
+          if (e.key === "Escape") {
+            setVal(path);
+            setEditing(false);
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        spellCheck={false}
+      />
+    </div>
+  );
+}
+
+/** the browser's install prompt, when we're not already running as an app */
+function useInstallPrompt() {
+  const [evt, setEvt] = useState<{ prompt: () => Promise<unknown> } | null>(null);
+  useEffect(() => {
+    if (window.matchMedia("(display-mode: standalone)").matches) return;
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setEvt(e as unknown as { prompt: () => Promise<unknown> });
+    };
+    const onInstalled = () => setEvt(null);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+  return evt;
+}

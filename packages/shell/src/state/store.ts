@@ -47,6 +47,9 @@ export interface WorktreeLocal {
   changedRanges: Record<string, { ranges: Array<[number, number]>; offset: number }>;
   /** ⌘⇧F results */
   search: { query: string; hits: SearchHit[]; truncated: boolean } | null;
+  /** the composer's unsent text; survives switching worktrees, and is where the daemon's
+   * conflict-resolution suggestion lands */
+  draft: string;
 }
 
 export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
@@ -57,6 +60,7 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   turn: { edits: false, hmr: false },
   changedRanges: {},
   search: null,
+  draft: "",
 }) as WorktreeLocal;
 
 /** the modal overlays are mutually exclusive: exactly one (or none) is open */
@@ -82,8 +86,6 @@ export interface State {
   local: Record<string, WorktreeLocal>;
   diff: { worktreeId: string; path: string; before: string; after: string; line?: number } | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
-  /** a message the daemon wants in a worktree's composer (conflict resolution prompt) */
-  prefill: { worktreeId: string; text: string } | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
   /** armed element picker + last picked element (pending chat attachment) */
@@ -129,7 +131,6 @@ export function initialState(opts: InitialOpts = {}): State {
     local: {},
     diff: null,
     toast: null,
-    prefill: null,
     reloadReq: null,
     picking: false,
     pick: null,
@@ -162,7 +163,7 @@ export type Action =
   | { a: "activate"; id: string }
   | { a: "close-diff" }
   | { a: "dismiss-toast" }
-  | { a: "clear-prefill" }
+  | { a: "set-draft"; id: string; text: string }
   | { a: "goto-line"; v: State["gotoLine"] }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
@@ -204,8 +205,8 @@ export function reducer(s: State, action: Action): State {
       return { ...s, diff: null };
     case "dismiss-toast":
       return { ...s, toast: null };
-    case "clear-prefill":
-      return { ...s, prefill: null };
+    case "set-draft":
+      return withLocal(s, action.id, (l) => ({ ...l, draft: action.text }));
     case "goto-line":
       return { ...s, gotoLine: action.v };
     case "hmr":
@@ -362,12 +363,13 @@ function onServer(s: State, msg: ServerMsg): State {
       const line = g && g.worktreeId === msg.worktreeId && g.path === msg.path ? g.line : undefined;
       return { ...s, diff: { ...msg, line }, gotoLine: null };
     }
-    case "shipped":
+    case "shipped": {
+      // a suggestion lands in that worktree's composer and focuses it
+      const next = msg.suggestion
+        ? withLocal({ ...s, activeId: msg.worktreeId }, msg.worktreeId, (l) => ({ ...l, draft: msg.suggestion! }))
+        : s;
       return {
-        ...s,
-        // a suggestion prefills that worktree's chat and focuses it
-        activeId: msg.suggestion ? msg.worktreeId : s.activeId,
-        prefill: msg.suggestion ? { worktreeId: msg.worktreeId, text: msg.suggestion } : s.prefill,
+        ...next,
         toast: {
           ok: msg.ok,
           message: msg.message,
@@ -375,6 +377,7 @@ function onServer(s: State, msg: ServerMsg): State {
           removeIds: msg.merged && msg.ok ? (msg.removeIds ?? [msg.worktreeId]) : undefined,
         },
       };
+    }
     case "files":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, files: msg.paths }));
     case "search-results":

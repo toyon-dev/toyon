@@ -72,7 +72,7 @@ export function App() {
           sockRef.current?.send({ t: "list-files", worktreeId: state.activeId });
           dispatch({ a: "quick-open", v: true });
         }
-      } else if (e.metaKey && e.key === "e") {
+      } else if (e.metaKey && !e.shiftKey && e.key === "e") {
         e.preventDefault();
         if (state.picking) {
           if (state.activeId) previewBus.post(state.activeId, { type: "pick-cancel" });
@@ -84,7 +84,9 @@ export function App() {
       } else if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
         if (state.activeId) dispatch({ a: "show-search", v: !state.showSearch });
-      } else if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "p") {
+      } else if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "e") {
+        // editors use ⌘⇧P, but Firefox/Edge own it (new private window) and browsers handle
+        // that before the page sees it — ⌘⇧E is unbound everywhere
         e.preventDefault();
         dispatch({ a: "show-commands", v: !state.showCommands });
       } else if (e.metaKey && e.key === ".") {
@@ -746,7 +748,7 @@ function WtRail({ state, dispatch, sock }: {
   );
 }
 
-/** confirm-then-send worktree actions, shared by the rail's context menu and the ⌘⇧P palette */
+/** confirm-then-send worktree actions, shared by the rail's context menu and the ⌘⇧E palette */
 function wtActions(sock: Sock) {
   return {
     rename(w: WorktreeStatus) {
@@ -1834,7 +1836,7 @@ function keyHint(i: number, count: number): string | undefined {
 
 const KEY_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   // grid order: Find | Preview over Panels | Worktrees
-  { title: "Find", rows: [["⌘P", "jump to file"], ["⌘⇧F", "search in files"], ["⌘⇧P", "command palette"]] },
+  { title: "Find", rows: [["⌘P", "jump to file"], ["⌘⇧F", "search in files"], ["⌘⇧E", "command palette"]] },
   { title: "Preview", rows: [["⌘E", "element picker"], ["⌘.", "full-bleed preview"]] },
   { title: "Panels", rows: [["⌘B", "changes"], ["⌘J", "chat"], ["⌘/", "this list"]] },
   { title: "Worktrees", rows: [["⌘1–9", "switch worktree"], ["⌘K", "new worktree"]] },

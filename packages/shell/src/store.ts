@@ -61,7 +61,7 @@ export interface State {
   zen: boolean;
   /** keyboard shortcuts overlay (⌘/ or the ? button) */
   showKeys: boolean;
-  /** ⌘⇧P command palette */
+  /** ⌘⇧E command palette */
   showCommands: boolean;
 }
 

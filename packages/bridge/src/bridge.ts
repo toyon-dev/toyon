@@ -50,8 +50,8 @@ window.addEventListener(
       e.preventDefault();
       e.stopPropagation();
       post({ type: "key", key: e.key, meta: true });
-    } else if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "p")) {
-      // ⌘⇧F search-in-files and ⌘⇧P command palette work even with the preview focused
+    } else if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "e")) {
+      // ⌘⇧F search-in-files and ⌘⇧E command palette work even with the preview focused
       // (plain ⌘F stays the page's own find)
       e.preventDefault();
       e.stopPropagation();

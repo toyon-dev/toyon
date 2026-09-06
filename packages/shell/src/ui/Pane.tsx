@@ -12,6 +12,7 @@ export function Pane({
   actions,
   onClose,
   closeHint = "esc",
+  floating = false,
   children,
 }: {
   className: string;
@@ -23,12 +24,15 @@ export function Pane({
   actions?: ReactNode;
   onClose: () => void;
   closeHint?: string;
+  /** the header floats over the top-right corner instead of taking a row (the terminal: its
+   * first line is the title) */
+  floating?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className={`pane ${className}`} style={height === undefined ? undefined : { height }}>
       {resizable && <div className="row-resize" onPointerDown={onDragStart} />}
-      <div className="file-head">
+      <div className={`file-head ${floating ? "floating" : ""}`}>
         <span className="file-path">{title}</span>
         {actions}
         <button onClick={onClose} {...tip("Close", closeHint)}>

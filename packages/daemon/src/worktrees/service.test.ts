@@ -126,6 +126,19 @@ describe("spare pool", () => {
     expect(lstatSync(link, { throwIfNoEntry: false })).toBeUndefined();
   });
 
+  test("worktrees sharing a title link by branch tail, so links never collide", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "first task");
+    const b = await w.worktrees.create(repoId, "second task");
+    await w.worktrees.rename(a.id, "same");
+    await w.worktrees.rename(b.id, "same");
+    expect([a.title, b.title]).toEqual(["same", "same"]);
+    expect(b.branch).toBe("toyon/same-2");
+    expect(a.linkPath).toBe(join(dirname(a.path), "same"));
+    expect(b.linkPath).toBe(join(dirname(b.path), "same-2"));
+    expect(readlinkSync(b.linkPath!)).toBe(b.path);
+  });
+
   test("the spare's statuses row is hidden until claimed", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);

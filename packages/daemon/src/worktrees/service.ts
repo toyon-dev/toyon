@@ -207,7 +207,10 @@ export class WorktreeService {
    * spare-xxxx). The terminal and editor links show the link; git and procs keep the real path.
    * Moving the directory for real would restart the procs and the agent session (its cwd). */
   private refreshLink(wt: WorktreeInfo) {
-    const desired = wt.kind === "worktree" ? join(dirname(wt.path), wt.title) : wt.path;
+    // the branch tail rather than the title: titles may repeat (three tasks named alike), branches
+    // never do (rename suffixes them)
+    const name = wt.branch.replace(/^toyon\//, "");
+    const desired = wt.kind === "worktree" ? join(dirname(wt.path), name) : wt.path;
     if (wt.linkPath && wt.linkPath !== desired) this.dropLink(wt);
     if (desired === wt.path) return;
     try {

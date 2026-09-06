@@ -52,6 +52,7 @@ export default function XTerm({
   sock,
   connected,
   onAlive,
+  onEscape,
 }: {
   worktreeId: string;
   theme: Theme;
@@ -59,6 +60,9 @@ export default function XTerm({
   connected: boolean;
   /** the shell's state as the daemon reports it: alive after a snapshot, dead (with its code) on exit */
   onAlive: (alive: boolean, exitCode?: number) => void;
+  /** Escape at the prompt (xterm stops propagation on every key it consumes, so the window
+   * ladder never sees it; the pane closes itself instead) */
+  onEscape: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -66,6 +70,8 @@ export default function XTerm({
   themeRef.current = theme;
   const onAliveRef = useRef(onAlive);
   onAliveRef.current = onAlive;
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
 
   useEffect(() => {
     const el = box.current;
@@ -95,9 +101,12 @@ export default function XTerm({
       }
       // a toyon chord is the shell's: xterm skips it and the event bubbles up to useChords
       if (matchChord(e)) return false;
-      // a full-screen program (vim, less) is on the alternate buffer and owns Escape; at the
-      // prompt, Escape bubbles up and closes the pane like any other
-      if (e.key === "Escape" && term.buffer.active.type === "alternate") e.stopPropagation();
+      // a full-screen program (vim, less) is on the alternate buffer and owns Escape
+      if (e.key === "Escape" && term.buffer.active.type !== "alternate") {
+        e.preventDefault();
+        onEscapeRef.current();
+        return false;
+      }
       return true;
     });
     const input = term.onData((d) => {

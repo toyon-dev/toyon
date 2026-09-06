@@ -399,8 +399,24 @@ body.resizing iframe {
   display: flex;
   flex-direction: column;
 }
-.term-pane .file-head {
-  padding: 4px 12px;
+/* the terminal has no title row: its actions sit over the top-right corner, faint until hovered, so
+   the first line of output starts at the top */
+.pane .file-head.floating {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  padding: 0;
+  gap: 6px;
+  z-index: 2;
+  opacity: 0.55;
+  transition: opacity 120ms;
+}
+.pane:hover .file-head.floating,
+.pane .file-head.floating:focus-within {
+  opacity: 1;
+}
+.pane .file-head.floating .file-path {
+  display: none;
 }
 .diff-pane .file-path,
 .term-pane .file-path {
@@ -440,7 +456,7 @@ body.resizing iframe {
 .term-body {
   flex: 1;
   min-height: 0;
-  padding: 0 4px 4px 8px;
+  padding: 6px 4px 4px 8px;
 }
 .term-host {
   height: 100%;

@@ -35,6 +35,7 @@ export function TerminalPane({
       className="term-pane"
       height={height}
       onDragStart={onDragStart}
+      floating
       onClose={() => dispatch({ a: "toggle-terminal" })}
       actions={
         <>
@@ -54,6 +55,7 @@ export function TerminalPane({
             sock={sock}
             connected={connected}
             onAlive={(alive, code) => setExit(alive ? null : (code ?? 0))}
+            onEscape={() => dispatch({ a: "toggle-terminal" })}
           />
         </Suspense>
       </div>

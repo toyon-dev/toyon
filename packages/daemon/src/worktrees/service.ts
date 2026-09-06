@@ -36,6 +36,8 @@ export interface WorktreeServiceDeps {
   hub: Hub;
   runtime: RuntimeRegistry;
   paths: Paths;
+  /** task → short kebab-case name (Haiku by default; tests inject a stub) */
+  namer?: (prompt: string, cwd: string) => Promise<string | null>;
 }
 
 export class WorktreeService {
@@ -127,7 +129,7 @@ export class WorktreeService {
     if (!variant) {
       fireAndForget(
         wt.id,
-        quickName(prompt, repo.path).then((name) => {
+        (this.d.namer ?? quickName)(prompt, repo.path).then((name) => {
           if (name) return this.rename(wt.id, name);
         }),
         "auto-naming",
@@ -137,7 +139,7 @@ export class WorktreeService {
     if (variant.index !== 1) return; // sibling 1 names the whole group
     fireAndForget(
       wt.id,
-      quickName(prompt, repo.path).then(async (name) => {
+      (this.d.namer ?? quickName)(prompt, repo.path).then(async (name) => {
         if (!name) return;
         for (const sibling of this.d.state.worktrees.filter((w) => w.variant?.group === variant.group)) {
           await this.rename(sibling.id, `${name}-v${sibling.variant!.index}`).catch((e) => {

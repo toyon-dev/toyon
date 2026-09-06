@@ -1,0 +1,27 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ensureDirs, makePaths, type Paths } from "../../src/core/paths.ts";
+
+export function sh(cwd: string, cmd: string, ...args: string[]): string {
+  const r = spawnSync(cmd, args, { cwd, encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`${cmd} ${args.join(" ")} failed: ${r.stderr}`);
+  return r.stdout.trim();
+}
+
+/** a real git repo on `main` with one commit, plus a throwaway ORCHARDIST home */
+export function tmpRepo(): { repo: string; paths: Paths; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), "orch-t-"));
+  const repo = join(root, "repo");
+  sh(root, "git", "init", "-q", "-b", "main", repo);
+  sh(repo, "git", "config", "user.email", "t@t");
+  sh(repo, "git", "config", "user.name", "t");
+  sh(repo, "git", "config", "commit.gpgsign", "false");
+  writeFileSync(join(repo, "README.md"), "hello\n");
+  sh(repo, "git", "add", "-A");
+  sh(repo, "git", "commit", "-q", "-m", "init");
+  const paths = makePaths(join(root, "home"));
+  ensureDirs(paths);
+  return { repo, paths, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}

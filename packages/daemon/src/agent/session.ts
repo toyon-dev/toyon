@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStatus, PickMeta } from "@orchardist/shared";
 import { log } from "../core/log.ts";
+import type { AgentAdapter } from "./adapter.ts";
 import { buildScope, type Scope } from "./scope.ts";
 
 export type AgentEventListener = (event: AgentEvent, seq: number) => void;
@@ -25,7 +26,7 @@ export function transcriptPathFor(transcriptsDir: string, worktreeId: string): s
   return join(transcriptsDir, `${worktreeId}.jsonl`);
 }
 
-export class AgentSession {
+export class AgentSession implements AgentAdapter {
   status: AgentStatus = "idle";
   private seq = 0;
   private queue: Array<{ text: string; context?: string; pick?: PickMeta }> = [];
@@ -75,15 +76,23 @@ export class AgentSession {
     private onEvent: AgentEventListener,
     private onStatus: AgentStatusListener,
   ) {
-    // continue numbering after any persisted transcript
-    this.seq = this.transcript().length;
+    // the transcript is read from disk once; from then on the in-memory copy is the source for
+    // backfills (a long session used to be re-parsed on every subscribe)
+    this.events = this.readTranscript();
+    this.seq = this.events.length;
   }
+
+  private events: Array<{ seq: number; event: AgentEvent }>;
 
   private transcriptPath() {
     return transcriptPathFor(this.transcriptsDir, this.worktreeId);
   }
 
   transcript(): Array<{ seq: number; event: AgentEvent }> {
+    return this.events;
+  }
+
+  private readTranscript(): Array<{ seq: number; event: AgentEvent }> {
     const p = this.transcriptPath();
     if (!existsSync(p)) return [];
     const out: Array<{ seq: number; event: AgentEvent }> = [];
@@ -104,7 +113,12 @@ export class AgentSession {
 
   private emit(event: AgentEvent) {
     const entry = { seq: this.seq++, event };
-    appendFileSync(this.transcriptPath(), `${JSON.stringify(entry)}\n`);
+    this.events.push(entry);
+    try {
+      appendFileSync(this.transcriptPath(), `${JSON.stringify(entry)}\n`);
+    } catch (e) {
+      log.warn(this.worktreeId, "transcript append failed", e);
+    }
     this.onEvent(event, entry.seq);
   }
 

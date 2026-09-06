@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { type ClientMsg, PROTOCOL_VERSION, parseClientMsg, pickTheme, type ServerMsg } from "@orchardist/shared";
+import pkg from "../package.json" with { type: "json" };
 import { cloud } from "./cloud.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import {
@@ -18,7 +19,7 @@ import type { ThemeStore } from "./themes.ts";
 import { resolveInside } from "./worktrees/paths.ts";
 import type { Manager } from "./worktrees.ts";
 
-const VERSION = "0.0.1";
+const VERSION: string = pkg.version;
 
 interface WsData {
   authed: boolean;

@@ -14,6 +14,7 @@ import {
   chordLabel,
   effectiveKind,
   matchChord,
+  PROTOCOL_VERSION,
   parseBridgeMsg,
   pickFamily,
   resolveTheme,
@@ -49,7 +50,16 @@ export function App() {
 
   useEffect(() => {
     const sock = new DaemonSocket(
-      (msg) => dispatch({ a: "server", msg }),
+      (msg) => {
+        // a daemon upgraded under a stale tab: the shell's protocol knowledge is baked at build,
+        // so stop talking (and reconnecting) and ask for a reload rather than misread frames
+        if (msg.t === "hello" && msg.protocol !== PROTOCOL_VERSION) {
+          dispatch({ a: "server", msg: { t: "error", message: "orchardist was updated — reload this page" } });
+          sock.dispose();
+          return;
+        }
+        dispatch({ a: "server", msg });
+      },
       (v) => dispatch({ a: "connected", v }),
     );
     sockRef.current = sock;

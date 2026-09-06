@@ -1,6 +1,9 @@
 {
   "compilerOptions": {
-    "lib": ["ESNext", "DOM"],
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -13,7 +16,13 @@
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "jsx": "react-jsx",
-    "types": ["bun"]
+    "types": [
+      "bun"
+    ],
+    "resolveJsonModule": true
   },
-  "exclude": ["node_modules", "**/dist"]
+  "exclude": [
+    "node_modules",
+    "**/dist"
+  ]
 }

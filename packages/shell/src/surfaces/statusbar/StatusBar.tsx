@@ -5,7 +5,7 @@ import { useActive, useLocalField } from "../../state/selectors.ts";
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
-import { chord } from "../util.ts";
+import { chord, isInstalledApp } from "../util.ts";
 
 /** the top bar: dock toggles, the route bar centered over the preview, unhealthy procs, tools */
 /** `leftPx`/`rightPx`: the dock columns' widths, so the nav cluster can sit over the preview column */
@@ -164,7 +164,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
 function useInstallPrompt() {
   const [evt, setEvt] = useState<{ prompt: () => Promise<unknown> } | null>(null);
   useEffect(() => {
-    if (window.matchMedia("(display-mode: standalone)").matches) return;
+    if (isInstalledApp()) return;
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setEvt(e as unknown as { prompt: () => Promise<unknown> });

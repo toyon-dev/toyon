@@ -2,6 +2,7 @@ import type { WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveId, useWorktrees } from "../../state/selectors.ts";
+import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass } from "../util.ts";
@@ -232,7 +233,7 @@ export function WtRail() {
             >
               <span className="nw-full">+ new worktree</span>
               <span className="nw-mini">+</span>
-              <span className="kbd-hint nw-full">{chord("new")}</span>
+              <Kbd k={chord("new")} className="kbd-hint nw-full" />
             </button>
           )}
         </div>

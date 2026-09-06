@@ -12,9 +12,11 @@ const ev = (key: string, o: Partial<{ meta: boolean; shift: boolean; ctrl: boole
 describe("matchChord", () => {
   test("plain ⌘ chords", () => {
     expect(matchChord(ev("k"))).toEqual({ id: "new" });
+    expect(matchChord(ev("n"))).toEqual({ id: "new" }); // reaches the page only in a PWA
     expect(matchChord(ev("p"))).toEqual({ id: "quick-open" });
     expect(matchChord(ev("."))).toEqual({ id: "zen" });
     expect(matchChord(ev("/"))).toEqual({ id: "keys" });
+    expect(matchChord(ev(","))).toEqual({ id: "keys" }); // ⌘, alias: macOS preferences key
   });
   test("shift chords match whether the browser reports upper or lower case", () => {
     expect(matchChord(ev("F", { shift: true }))).toEqual({ id: "search" });
@@ -40,6 +42,9 @@ describe("matchChord", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find
     expect(matchChord(ev("w"))).toBeNull();
   });
+  test("an advertised key is always one of the chord's aliases", () => {
+    for (const c of CHORDS) if (c.advertise) expect(c.aliases).toContain(c.advertise.key);
+  });
   test("every table entry round-trips through the matcher", () => {
     for (const c of CHORDS) {
       if (c.id === "worktree") continue;
@@ -52,6 +57,9 @@ describe("labels", () => {
   test("chordLabel formats ⌘/⇧ and the Firefox alias", () => {
     expect(chordLabel("commands")).toBe("⌘⇧P");
     expect(chordLabel("commands", { firefox: true })).toBe("⌘⇧E");
+    expect(chordLabel("new", { firefox: true })).toBe("⌘K"); // ⌘N is an alias, not the Firefox key
+    expect(chordLabel("new", { pwa: true })).toBe("⌘N"); // an installed PWA lets ⌘N through
+    expect(chordLabel("commands", { pwa: true })).toBe("⌘⇧P");
     expect(chordLabel("search")).toBe("⌘⇧F");
     expect(chordLabel("zen")).toBe("⌘.");
     expect(chordLabel("worktree")).toBe("⌘1–9");

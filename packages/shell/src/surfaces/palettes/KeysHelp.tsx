@@ -1,6 +1,7 @@
 import { CHORD_SECTIONS, CHORDS, resolveTheme } from "@toyon/shared";
 import { useDispatch, useStore } from "../../state/context.tsx";
 import type { Action } from "../../state/store.ts";
+import { Kbd } from "../../ui/Kbd.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { chord } from "../util.ts";
 import { appearanceLabel } from "./commands.ts";
@@ -50,10 +51,7 @@ export function KeysHelp() {
             <div className="keys-h">{sec.title}</div>
             {sec.rows.map(([k, d]) => (
               <div className="keys-row" key={k}>
-                <span className="keys-k">
-                  {/^[⌘⇧⌥⌃]+/.test(k) && <span className="keys-mod">{k.match(/^[⌘⇧⌥⌃]+/)![0]}</span>}
-                  {k.replace(/^[⌘⇧⌥⌃]+/, "")}
-                </span>
+                <Kbd k={k} chip />
                 <span className="keys-d">{d}</span>
               </div>
             ))}

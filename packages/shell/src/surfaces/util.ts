@@ -53,9 +53,20 @@ export function xyLetter(xy: string): string {
 }
 
 // Firefox owns ⌘⇧P (new private window) before the page sees it; both chords work everywhere
-// else, so advertise the one that will actually fire in this browser
+// else, so advertise the one that will actually fire in this browser. The reverse for ⌘N: only
+// an installed Chromium PWA hands it to the page (browser tabs, Safari and Firefox take it as
+// new window), so only there is it advertised over ⌘K.
 const IS_FIREFOX = /Firefox\//.test(navigator.userAgent);
-export const chord = (id: ChordId) => chordLabel(id, { firefox: IS_FIREFOX });
+
+/** running as an installed app. The manifest asks for window-controls-overlay, and when Chrome
+ * grants it `display-mode: standalone` is false, so both modes count. */
+export function isInstalledApp(): boolean {
+  const mq = (q: string) => window.matchMedia?.(`(display-mode: ${q})`).matches ?? false;
+  return mq("standalone") || mq("window-controls-overlay");
+}
+
+const IS_CHROMIUM_PWA = /Chrome\//.test(navigator.userAgent) && isInstalledApp();
+export const chord = (id: ChordId) => chordLabel(id, { firefox: IS_FIREFOX, pwa: IS_CHROMIUM_PWA });
 
 /** the picked element as a label: <Component> or <tag> */
 export function pickLabel(p: { component: string | null; tag: string }): string {

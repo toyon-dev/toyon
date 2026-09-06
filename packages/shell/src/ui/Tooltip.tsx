@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Kbd } from "./Kbd.tsx";
 
 /**
  * One tooltip for the whole app. Put `data-tip="…"` on any element (or spread
@@ -121,7 +122,7 @@ export function Tooltips() {
   return createPortal(
     <div ref={box} className="tooltip" role="tooltip">
       {anchor.text}
-      {anchor.key && <span className="tooltip-key">{anchor.key}</span>}
+      {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}
     </div>,
     document.body,
   );

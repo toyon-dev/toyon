@@ -18,27 +18,56 @@ export type ChordId =
 
 export type ChordSection = "Find" | "Panels" | "Preview" | "Worktrees";
 
+/** what the shell knows about the browser it runs in; each flag can swap an advertised key */
+export interface ChordEnv {
+  firefox?: boolean;
+  pwa?: boolean;
+}
+
 export interface Chord {
   id: ChordId;
   /** the key as KeyboardEvent.key, lower-case for letters; "1-9" for the worktree switcher */
   key: string;
   shift?: boolean;
-  /** other keys that fire the same chord (⌘⇧E for the palette: Firefox owns ⌘⇧P) */
+  /** other keys that fire the same chord. ⌘⇧E for the palette because Firefox owns ⌘⇧P; ⌘N for
+   * new-worktree because it is the muscle-memory key, though only an installed PWA lets the page
+   * see it (Chrome tabs, Safari and Firefox all take ⌘N as new window before the page). */
   aliases?: string[];
+  /** which alias the labels show instead of `key`, and in which environment: on Firefox because
+   * the primary never reaches the page there, in an installed Chromium PWA because that is the one
+   * place the browser gives the alias up */
+  advertise?: { key: string; when: keyof ChordEnv };
   label: string;
   section: ChordSection;
 }
 
 export const CHORDS: readonly Chord[] = [
   { id: "quick-open", key: "p", label: "jump to file", section: "Find" },
-  { id: "commands", key: "p", shift: true, aliases: ["e"], label: "command palette", section: "Find" },
+  {
+    id: "commands",
+    key: "p",
+    shift: true,
+    aliases: ["e"],
+    advertise: { key: "e", when: "firefox" },
+    label: "command palette",
+    section: "Find",
+  },
   { id: "search", key: "f", shift: true, label: "search in files", section: "Find" },
   { id: "left", key: "b", label: "changes", section: "Panels" },
   { id: "right", key: "j", label: "chat", section: "Panels" },
-  { id: "keys", key: "/", label: "shortcuts & settings", section: "Panels" },
+  // ⌘, is the macOS preferences key; in an installed PWA Chrome otherwise takes it to its own
+  // settings page (a page can preempt it, unlike ⌘N/⌘T/⌘W), so it lands on ours instead
+  { id: "keys", key: "/", aliases: [","], label: "shortcuts & settings", section: "Panels" },
   { id: "pick", key: "e", label: "element picker", section: "Preview" },
   { id: "zen", key: ".", label: "full-bleed preview", section: "Preview" },
-  { id: "new", key: "k", label: "new worktree", section: "Worktrees" },
+  {
+    id: "new",
+    key: "k",
+    aliases: ["n"],
+    advertise: { key: "n", when: "pwa" },
+    label: "new worktree",
+    section: "Worktrees",
+  },
   { id: "worktree", key: "1-9", label: "switch worktree", section: "Worktrees" },
 ];
 
@@ -73,11 +102,11 @@ export function chordOf(id: ChordId): Chord {
   return c;
 }
 
-/** "⌘⇧P" style label. Firefox owns ⌘⇧P (new private window) before the page sees it, so there
- * the palette advertises its alias. */
-export function chordLabel(id: ChordId, opts: { firefox?: boolean } = {}): string {
+/** "⌘⇧P" style label, showing the chord's advertised alias when the environment calls for it
+ * (⌘⇧E on Firefox, ⌘N in an installed PWA). Other aliases stay unadvertised. */
+export function chordLabel(id: ChordId, env: ChordEnv = {}): string {
   const c = chordOf(id);
-  const key = opts.firefox && c.aliases?.[0] ? c.aliases[0] : c.key;
+  const key = c.advertise && env[c.advertise.when] ? c.advertise.key : c.key;
   const shown = key === "1-9" ? "1–9" : key.toUpperCase();
   return `⌘${c.shift ? "⇧" : ""}${shown}`;
 }

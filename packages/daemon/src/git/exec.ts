@@ -1,6 +1,5 @@
-// git process wrapper + repo-level queries. Synchronous for now (phase 6 moves to Bun.spawn).
+// git process wrapper + repo-level queries, async on Bun.spawn so git never blocks the event loop.
 
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,14 +28,6 @@ export function lockfileHash(dir: string): string {
   return h.digest("hex");
 }
 
-export interface GitResult {
-  ok: boolean;
-  out: string;
-  err: string;
-  /** exit status, or the signal name when git was killed (status null) */
-  exit: number | string | null;
-}
-
 /**
  * The git binary. On macOS `/usr/bin/git` is an xcrun shim: ~3x slower per spawn than the real
  * binary and, under a burst of spawns, it can stall on xcrun's cache lock for seconds and abort
@@ -58,35 +49,69 @@ function resolveGit(): string {
   return "git";
 }
 
-export function git(cwd: string, ...args: string[]): GitResult {
-  const started = Date.now();
-  const r = spawnSync(GIT, args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
-  lastGit.cmd = `git ${args.slice(0, 3).join(" ")}`;
-  lastGit.ms = Date.now() - started;
-  lastGit.at = Date.now();
-  const exit = r.status ?? r.signal ?? (r.error ? r.error.message : null);
-  return { ok: r.status === 0, out: (r.stdout ?? "").trim(), err: (r.stderr ?? "").trim(), exit };
+export interface GitResult {
+  ok: boolean;
+  out: string;
+  err: string;
+  /** exit status, or the signal name when the process was killed (status null) */
+  exit: number | string | null;
 }
 
-export function gitOrThrow(cwd: string, ...args: string[]): string {
-  const r = git(cwd, ...args);
+/** run a command to completion without blocking the event loop (a proxy request or agent stream
+ * keeps flowing while git works). A spawn failure (cwd gone, binary missing) is a result, not a throw. */
+export async function run(cmd: string, args: string[], cwd: string): Promise<GitResult & { rawOut: string }> {
+  const started = Date.now();
+  try {
+    const p = Bun.spawn([cmd, ...args], { cwd, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+    const [rawOut, err, status] = await Promise.all([
+      new Response(p.stdout).text(),
+      new Response(p.stderr).text(),
+      p.exited,
+    ]);
+    const exit = p.signalCode ?? status;
+    return { ok: status === 0, out: rawOut.trim(), rawOut, err: err.trim(), exit };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, out: "", rawOut: "", err: msg, exit: msg };
+  } finally {
+    if (cmd === GIT) {
+      lastGit.cmd = `git ${args.slice(0, 3).join(" ")}`;
+      lastGit.ms = Date.now() - started;
+      lastGit.at = Date.now();
+    }
+  }
+}
+
+export async function git(cwd: string, ...args: string[]): Promise<GitResult> {
+  const { rawOut: _raw, ...r } = await run(GIT, args, cwd);
+  return r;
+}
+
+/** like git() but stdout untrimmed — porcelain lines for unstaged changes start with a significant space */
+export async function gitRaw(cwd: string, ...args: string[]): Promise<GitResult> {
+  const { rawOut, ...r } = await run(GIT, args, cwd);
+  return { ...r, out: rawOut };
+}
+
+export async function gitOrThrow(cwd: string, ...args: string[]): Promise<string> {
+  const r = await git(cwd, ...args);
   if (!r.ok) throw new Error(`git ${args.join(" ")} failed (${r.exit}): ${r.err}`);
   return r.out;
 }
 
-export function isGitRepo(path: string): boolean {
-  return git(path, "rev-parse", "--is-inside-work-tree").out === "true";
+export async function isGitRepo(path: string): Promise<boolean> {
+  return (await git(path, "rev-parse", "--is-inside-work-tree")).out === "true";
 }
 
-export function repoRoot(path: string): string {
+export function repoRoot(path: string): Promise<string> {
   return gitOrThrow(path, "rev-parse", "--show-toplevel");
 }
 
-export function defaultBranch(path: string): string {
-  const head = git(path, "symbolic-ref", "--short", "refs/remotes/origin/HEAD");
+export async function defaultBranch(path: string): Promise<string> {
+  const head = await git(path, "symbolic-ref", "--short", "refs/remotes/origin/HEAD");
   if (head.ok && head.out) return head.out.replace(/^origin\//, "");
   for (const b of ["main", "master"]) {
-    if (git(path, "show-ref", "--verify", `refs/heads/${b}`).ok) return b;
+    if ((await git(path, "show-ref", "--verify", `refs/heads/${b}`)).ok) return b;
   }
   return gitOrThrow(path, "branch", "--show-current");
 }

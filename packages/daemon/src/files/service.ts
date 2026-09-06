@@ -1,12 +1,12 @@
 // Files inside a worktree, as the shell sees them: diff vs main, autosave, discard, quick-open
 // listing, content search, changed-line ranges. Every client path goes through resolveInside.
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { unlinkSync } from "node:fs";
 import type { SearchHit } from "@orchardist/shared";
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
-import { GIT } from "../git/exec.ts";
+import { GIT, git, run } from "../git/exec.ts";
 import { changedRanges, fileBefore, statusFiles } from "../git/status.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { resolveInside } from "../worktrees/paths.ts";
@@ -24,7 +24,7 @@ export class FileService {
     const wt = this.state.requireWorktree(worktreeId);
     const repo = this.state.requireRepo(wt.repoId);
     const target = resolveInside(wt.path, path);
-    const before = fileBefore(wt.path, repo.defaultBranch, path);
+    const before = await fileBefore(wt.path, repo.defaultBranch, path);
     const afterFile = Bun.file(target);
     const after = (await afterFile.exists()) ? await afterFile.text() : "";
     return { before, after };
@@ -36,39 +36,35 @@ export class FileService {
   }
 
   /** drop uncommitted changes to one file (delete it if untracked) */
-  discard(worktreeId: string, path: string): void {
+  async discard(worktreeId: string, path: string): Promise<void> {
     const wt = this.state.requireWorktree(worktreeId);
     const target = resolveInside(wt.path, path);
-    const entry = statusFiles(wt.path).find((f) => f.path === path);
+    const entry = (await statusFiles(wt.path)).find((f) => f.path === path);
     if (!entry) throw new UserError("file has no uncommitted changes");
     if (entry.xy === "??") unlinkSync(target);
-    else spawnSync(GIT, ["checkout", "HEAD", "--", path], { cwd: wt.path });
+    else await git(wt.path, "checkout", "HEAD", "--", path);
   }
 
   /** tracked + untracked (respecting .gitignore) */
-  list(worktreeId: string): string[] {
+  async list(worktreeId: string): Promise<string[]> {
     const wt = this.state.requireWorktree(worktreeId);
-    const r = spawnSync(GIT, ["ls-files", "-co", "--exclude-standard"], {
-      cwd: wt.path,
-      encoding: "utf8",
-      maxBuffer: 32 * 1024 * 1024,
-    });
-    return (r.stdout ?? "").split("\n").filter(Boolean);
+    const r = await git(wt.path, "ls-files", "-co", "--exclude-standard");
+    return r.out.split("\n").filter(Boolean);
   }
 
   /** fixed-string, case-insensitive git grep over tracked + untracked (not ignored) files */
-  search(worktreeId: string, query: string): { hits: SearchHit[]; truncated: boolean } {
+  async search(worktreeId: string, query: string): Promise<{ hits: SearchHit[]; truncated: boolean }> {
     const wt = this.state.requireWorktree(worktreeId);
     const q = query.trim();
     const hits: SearchHit[] = [];
     let truncated = false;
     if (q.length < 2) return { hits, truncated };
-    const r = spawnSync(
+    const r = await run(
       GIT,
       ["grep", "-n", "-I", "-i", "-F", "--untracked", "--no-color", `--max-count=${SEARCH_MAX}`, "-e", q, "--"],
-      { cwd: wt.path, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+      wt.path,
     );
-    for (const row of (r.stdout ?? "").split("\n")) {
+    for (const row of r.rawOut.split("\n")) {
       if (!row) continue;
       const m = /^(.+?):(\d+):(.*)$/.exec(row);
       if (!m) continue;
@@ -88,7 +84,7 @@ export class FileService {
     const wt = this.state.requireWorktree(worktreeId);
     const repo = this.state.requireRepo(wt.repoId);
     resolveInside(wt.path, path);
-    const ranges = changedRanges(wt.path, repo.defaultBranch, path);
+    const ranges = await changedRanges(wt.path, repo.defaultBranch, path);
     const lineOffset = await viteLineOffset(wt.path, path, this.runtime.previewTarget(wt.id));
     return { ranges, lineOffset };
   }

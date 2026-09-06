@@ -64,7 +64,7 @@ export class WorktreeService {
     const repo = this.d.state.requireRepo(repoId);
     // variants share a name base so they read as siblings in the list
     let slug = variant ? `${slugify(prompt, false)}-v${variant.index}` : slugify(prompt);
-    if (variant && git(repo.path, "show-ref", "--verify", `refs/heads/orchard/${slug}`).ok) {
+    if (variant && (await git(repo.path, "show-ref", "--verify", `refs/heads/orchard/${slug}`)).ok) {
       slug = `${slug}-${shortId().slice(0, 3)}`;
     }
     const branch = `orchard/${slug}`;
@@ -97,9 +97,7 @@ export class WorktreeService {
 
     const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
     const baseBranch = fromMain ? repo.defaultBranch : base!.branch;
-    await withRepoLock(repo.path, () => {
-      gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, baseBranch);
-    });
+    await withRepoLock(repo.path, () => gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, baseBranch));
 
     const wt: WorktreeInfo = {
       id: shortId(),
@@ -162,9 +160,7 @@ export class WorktreeService {
     // the agent first (inside runtime.stop): it may be mid-turn in the directory about to be
     // deleted, and its session-info callback would re-add the session entry removed below
     await this.d.runtime.stop(worktreeId);
-    await withRepoLock(repo.path, () => {
-      gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path);
-    });
+    await withRepoLock(repo.path, () => gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path));
     this.d.state.removeWorktree(worktreeId);
     try {
       rmSync(transcriptPathFor(this.d.paths.transcriptsDir, worktreeId), { force: true });
@@ -181,13 +177,14 @@ export class WorktreeService {
     const repo = this.d.state.requireRepo(wt.repoId);
     const clean = cleanTitle(title);
     if (!clean) return;
-    await withRepoLock(repo.path, () => {
+    await withRepoLock(repo.path, async () => {
       let branch = `orchard/${clean}`;
       if (branch !== wt.branch) {
         // avoid collisions with an existing branch
-        for (let n = 2; !git(wt.path, "branch", "-m", wt.branch, branch).ok; n++) {
+        let n = 2;
+        while (!(await git(wt.path, "branch", "-m", wt.branch, branch)).ok) {
           if (n > 5) return;
-          branch = `orchard/${clean}-${n}`;
+          branch = `orchard/${clean}-${n++}`;
         }
         wt.branch = branch;
       }
@@ -226,19 +223,19 @@ export class WorktreeService {
       .map((w) => w.title.split("-")[0])
       .join("+")
       .slice(0, 40);
-    if (git(repo.path, "show-ref", "--verify", `refs/heads/orchard/${slug}`).ok) {
+    if ((await git(repo.path, "show-ref", "--verify", `refs/heads/orchard/${slug}`)).ok) {
       slug = `${slug.slice(0, 34)}-${shortId().slice(0, 4)}`;
     }
     const branch = `orchard/${slug}`;
     const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
 
-    await withRepoLock(repo.path, () => {
-      gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch);
-      const m = git(wtPath, "merge", "--no-edit", ...wts.map((w) => w.branch));
+    await withRepoLock(repo.path, async () => {
+      await gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch);
+      const m = await git(wtPath, "merge", "--no-edit", ...wts.map((w) => w.branch));
       if (!m.ok) {
-        git(wtPath, "merge", "--abort");
-        git(repo.path, "worktree", "remove", "--force", wtPath);
-        git(repo.path, "branch", "-D", branch);
+        await git(wtPath, "merge", "--abort");
+        await git(repo.path, "worktree", "remove", "--force", wtPath);
+        await git(repo.path, "branch", "-D", branch);
         throw new UserError(`branches conflict — these worktrees can't be grafted cleanly (${m.err.slice(0, 200)})`);
       }
     });
@@ -322,9 +319,9 @@ export class WorktreeService {
   }
 
   /** push + PR. Not under the repo lock: it holds `git push` + `gh` for seconds. */
-  ship(worktreeId: string): ShipResult {
+  async ship(worktreeId: string): Promise<ShipResult> {
     const { wt, repo } = this.landable(worktreeId, "ship");
-    const result = shipWorktree(wt.path, wt.branch, repo.defaultBranch, wt.title);
+    const result = await shipWorktree(wt.path, wt.branch, repo.defaultBranch);
     if (result.prCreated && result.url) this.setPrUrl(wt.id, result.url);
     return result;
   }
@@ -334,9 +331,7 @@ export class WorktreeService {
   async merge(worktreeId: string): Promise<{ result: ShipResult; removeIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "merge");
     // touches the main checkout: serialize with spare refresh / worktree add on the same repo
-    const result = await withRepoLock(repo.path, () =>
-      mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch, wt.title),
-    );
+    const result = await withRepoLock(repo.path, () => mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch));
     if (!result.ok) return { result };
     this.setLanded(wt.id, true);
     let removeIds: string[];
@@ -359,7 +354,7 @@ export class WorktreeService {
     return { result, defaultBranch: repo.defaultBranch };
   }
 
-  commit(worktreeId: string, message: string): ShipResult {
+  async commit(worktreeId: string, message: string): Promise<ShipResult> {
     const wt = this.d.state.requireWorktree(worktreeId);
     const m = message.trim();
     if (!m) throw new UserError("commit message required");
@@ -373,12 +368,13 @@ export class WorktreeService {
     this.countsCache.clear();
   }
 
-  private counts(wt: WorktreeInfo): { ahead?: number; behind?: number; dirty?: number } {
+  private async counts(wt: WorktreeInfo): Promise<{ ahead?: number; behind?: number; dirty?: number }> {
     const cached = this.countsCache.get(wt.id);
     if (cached && Date.now() - cached.at < 10_000) return cached;
     try {
-      const ab = wt.kind === "main" ? {} : aheadBehind(wt.path, this.d.state.requireRepo(wt.repoId).defaultBranch);
-      const fresh = { ...ab, dirty: statusFiles(wt.path).length, at: Date.now() };
+      const ab =
+        wt.kind === "main" ? {} : await aheadBehind(wt.path, this.d.state.requireRepo(wt.repoId).defaultBranch);
+      const fresh = { ...ab, dirty: (await statusFiles(wt.path)).length, at: Date.now() };
       this.countsCache.set(wt.id, fresh);
       return fresh;
     } catch {
@@ -388,15 +384,17 @@ export class WorktreeService {
 
   /** git-status payload for one worktree (subscribe, edits, ref ticks). Also the one place the
    * `landed` badge is cleared: new work after a merge means it is no longer landed. */
-  gitStatus(worktreeId: string): Extract<ServerMsg, { t: "git-status" }> | null {
+  async gitStatus(worktreeId: string): Promise<Extract<ServerMsg, { t: "git-status" }> | null> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || wt.kind === "spare") return null;
     try {
-      const files = statusFilesWithCounts(wt.path);
       const defaultBr = this.d.state.requireRepo(wt.repoId).defaultBranch;
-      const counts = wt.kind === "main" ? {} : aheadBehind(wt.path, defaultBr);
+      const [files, counts] = await Promise.all([
+        statusFilesWithCounts(wt.path),
+        wt.kind === "main" ? Promise.resolve({}) : aheadBehind(wt.path, defaultBr),
+      ]);
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
-      const committed = wt.kind !== "main" && ahead > 0 ? committedFiles(wt.path, defaultBr) : undefined;
+      const committed = wt.kind !== "main" && ahead > 0 ? await committedFiles(wt.path, defaultBr) : undefined;
       if (wt.landed && (files.length > 0 || ahead > 0)) this.setLanded(wt.id, false);
       return { t: "git-status", worktreeId, files, committed, ...counts };
     } catch (e) {
@@ -405,21 +403,23 @@ export class WorktreeService {
     }
   }
 
-  statuses(): WorktreeStatus[] {
-    return this.d.state.worktrees
-      .filter((wt) => wt.kind !== "spare")
-      .map((wt) => {
-        const rt = this.d.runtime.get(wt.id);
-        const { ahead, behind, dirty } = this.counts(wt);
-        return {
-          worktree: wt,
-          procs: rt?.procs?.states() ?? [],
-          agent: rt?.agent.status ?? "idle",
-          ahead,
-          behind,
-          dirty,
-          queued: rt?.agent.queueLength || undefined,
-        };
-      });
+  async statuses(): Promise<WorktreeStatus[]> {
+    return Promise.all(
+      this.d.state.worktrees
+        .filter((wt) => wt.kind !== "spare")
+        .map(async (wt) => {
+          const rt = this.d.runtime.get(wt.id);
+          const { ahead, behind, dirty } = await this.counts(wt);
+          return {
+            worktree: wt,
+            procs: rt?.procs?.states() ?? [],
+            agent: rt?.agent.status ?? "idle",
+            ahead,
+            behind,
+            dirty,
+            queued: rt?.agent.queueLength || undefined,
+          };
+        }),
+    );
   }
 }

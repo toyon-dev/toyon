@@ -68,9 +68,9 @@ export class SparePool {
     try {
       const slug = `spare-${shortId().slice(0, 4)}`;
       const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
-      await withRepoLock(repo.path, () => {
-        gitOrThrow(repo.path, "worktree", "add", "--detach", wtPath, repo.defaultBranch);
-      });
+      await withRepoLock(repo.path, () =>
+        gitOrThrow(repo.path, "worktree", "add", "--detach", wtPath, repo.defaultBranch),
+      );
       const wt: WorktreeInfo = {
         id: shortId(),
         repoId,
@@ -94,9 +94,7 @@ export class SparePool {
       const wt = entry.worktreeId ? this.d.state.worktree(entry.worktreeId) : undefined;
       if (wt) {
         await this.d.runtime.stop(wt.id);
-        await withRepoLock(repo.path, () => {
-          git(repo.path, "worktree", "remove", "--force", wt.path);
-        });
+        await withRepoLock(repo.path, () => git(repo.path, "worktree", "remove", "--force", wt.path));
         this.d.state.removeWorktree(wt.id);
         releasePort(wt.proxyPort);
       }
@@ -111,9 +109,7 @@ export class SparePool {
     const wt = this.d.state.worktree(entry.worktreeId);
     if (wt?.kind !== "spare") return;
     entry.refreshing = (async () => {
-      await withRepoLock(repo.path, () => {
-        git(wt.path, "reset", "--hard", repo.defaultBranch);
-      });
+      await withRepoLock(repo.path, () => git(wt.path, "reset", "--hard", repo.defaultBranch));
       const h = lockfileHash(wt.path);
       if (h !== entry.lockHash) {
         entry.lockHash = h;
@@ -138,9 +134,7 @@ export class SparePool {
     const wt = this.d.state.worktree(entry.worktreeId);
     if (wt?.kind !== "spare") return null;
     const repo = this.d.state.requireRepo(repoId);
-    await withRepoLock(repo.path, () => {
-      gitOrThrow(wt.path, "switch", "-c", branch);
-    });
+    await withRepoLock(repo.path, () => gitOrThrow(wt.path, "switch", "-c", branch));
     wt.kind = "worktree";
     wt.branch = branch;
     wt.title = slug;

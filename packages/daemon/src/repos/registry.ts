@@ -44,8 +44,8 @@ export class RepoRegistry {
   }
 
   async register(path: string): Promise<RepoInfo> {
-    if (!isGitRepo(path)) throw new UserError(`${path} is not a git repository`);
-    const root = repoRoot(path);
+    if (!(await isGitRepo(path))) throw new UserError(`${path} is not a git repository`);
+    const root = await repoRoot(path);
     const existing = this.d.state.repos.find((r) => r.path === root);
     if (existing) return existing;
 
@@ -54,7 +54,7 @@ export class RepoRegistry {
       id: shortId(),
       path: root,
       name: basename(root),
-      defaultBranch: defaultBranch(root),
+      defaultBranch: await defaultBranch(root),
       config: detected.config,
       needsSetup: detected.needsSetup,
     };

@@ -7,20 +7,24 @@ import { join } from "node:path";
 import { git } from "../git/exec.ts";
 
 export function watchDefaultBranch(repoPath: string, branch: string, onMove: () => void): () => void {
-  let last = git(repoPath, "rev-parse", branch).out;
+  // null until the first read: the initial position is fetched asynchronously, and a change
+  // before it lands is simply the new baseline
+  let last: string | null = null;
+  void git(repoPath, "rev-parse", branch).then((r) => {
+    last ??= r.out;
+  });
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const check = () => {
+  const check = async () => {
     timer = null;
-    const now = git(repoPath, "rev-parse", branch).out;
-    if (now && now !== last) {
-      last = now;
-      onMove();
-    }
+    const now = (await git(repoPath, "rev-parse", branch)).out;
+    if (!now) return;
+    if (last !== null && now !== last) onMove();
+    last = now;
   };
   const schedule = () => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(check, 1000);
+    timer = setTimeout(() => void check(), 1000);
   };
 
   const watchers: FSWatcher[] = [];

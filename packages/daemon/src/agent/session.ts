@@ -169,7 +169,7 @@ export class AgentSession implements AgentAdapter {
     this.emit({ type: "turn-start", ts: Date.now() });
 
     const resume = this.getSessionId();
-    this.scope ??= buildScope(this.cwd, (b) =>
+    this.scope ??= await buildScope(this.cwd, (b) =>
       this.emit({ type: "agent-blocked", tool: b.tool, path: b.path, reason: b.reason, ts: Date.now() }),
     );
     const stream = query({

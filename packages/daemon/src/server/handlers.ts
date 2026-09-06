@@ -48,13 +48,13 @@ const toast = (
   extra: Partial<Extract<ServerMsg, { t: "shipped" }>> = {},
 ) => ({ t: "shipped", worktreeId, ok, message, ...extra }) satisfies ServerMsg;
 
-const gitStatus = (s: Services, ctx: HandlerCtx, worktreeId: string) => {
-  const msg = s.worktrees.gitStatus(worktreeId);
+const gitStatus = async (s: Services, ctx: HandlerCtx, worktreeId: string) => {
+  const msg = await s.worktrees.gitStatus(worktreeId);
   if (msg) ctx.reply(msg);
 };
 
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
-  subscribe(msg, ctx, s) {
+  async subscribe(msg, ctx, s) {
     ctx.subscribe(msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);
     const events = agent?.transcript() ?? [];
@@ -65,7 +65,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       log: s.runtime.recentLogs(msg.worktreeId),
     });
     ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: agent?.queueItems ?? [] });
-    gitStatus(s, ctx, msg.worktreeId);
+    await gitStatus(s, ctx, msg.worktreeId);
   },
 
   unsubscribe(msg, ctx) {
@@ -131,8 +131,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.runtime.restartProc(msg.worktreeId, msg.proc);
   },
 
-  "git-status"(msg, ctx, s) {
-    gitStatus(s, ctx, msg.worktreeId);
+  async "git-status"(msg, ctx, s) {
+    await gitStatus(s, ctx, msg.worktreeId);
   },
 
   async "file-diff"(msg, ctx, s) {
@@ -141,16 +141,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply({ t: "file-diff", worktreeId: msg.worktreeId, path: msg.path, before, after });
   },
 
-  ship(msg, ctx, s) {
-    const result = s.worktrees.ship(msg.worktreeId);
+  async ship(msg, ctx, s) {
+    const result = await s.worktrees.ship(msg.worktreeId);
     ctx.reply(toast(msg.worktreeId, result.ok, result.message, { url: result.url }));
-    gitStatus(s, ctx, msg.worktreeId);
+    await gitStatus(s, ctx, msg.worktreeId);
   },
 
   async "merge-main"(msg, ctx, s) {
     const { result, removeIds } = await s.worktrees.merge(msg.worktreeId);
     ctx.reply(toast(msg.worktreeId, result.ok, result.message, { merged: result.ok, removeIds }));
-    gitStatus(s, ctx, msg.worktreeId);
+    await gitStatus(s, ctx, msg.worktreeId);
   },
 
   async "sync-main"(msg, ctx, s) {
@@ -162,13 +162,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
             suggestion: `Merge ${defaultBranch} into this branch and resolve the conflicts, then verify the app still works.`,
           }),
     );
-    gitStatus(s, ctx, msg.worktreeId);
+    await gitStatus(s, ctx, msg.worktreeId);
   },
 
-  commit(msg, ctx, s) {
-    const result = s.worktrees.commit(msg.worktreeId, msg.message);
+  async commit(msg, ctx, s) {
+    const result = await s.worktrees.commit(msg.worktreeId, msg.message);
     ctx.reply(toast(msg.worktreeId, result.ok, result.message));
-    gitStatus(s, ctx, msg.worktreeId);
+    await gitStatus(s, ctx, msg.worktreeId);
   },
 
   async combine(msg, ctx, s) {
@@ -182,12 +182,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     await s.worktrees.rename(msg.worktreeId, msg.title);
   },
 
-  "list-files"(msg, ctx, s) {
-    ctx.reply({ t: "files", worktreeId: msg.worktreeId, paths: s.files.list(msg.worktreeId) });
+  async "list-files"(msg, ctx, s) {
+    ctx.reply({ t: "files", worktreeId: msg.worktreeId, paths: await s.files.list(msg.worktreeId) });
   },
 
-  search(msg, ctx, s) {
-    const { hits, truncated } = s.files.search(msg.worktreeId, msg.query);
+  async search(msg, ctx, s) {
+    const { hits, truncated } = await s.files.search(msg.worktreeId, msg.query);
     ctx.reply({ t: "search-results", worktreeId: msg.worktreeId, query: msg.query, hits, truncated });
   },
 
@@ -213,16 +213,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.files.reveal(msg.worktreeId, msg.path);
   },
 
-  "discard-file"(msg, ctx, s) {
-    s.files.discard(msg.worktreeId, msg.path);
+  async "discard-file"(msg, ctx, s) {
+    await s.files.discard(msg.worktreeId, msg.path);
     ctx.reply(toast(msg.worktreeId, true, `discarded ${msg.path}`));
-    gitStatus(s, ctx, msg.worktreeId);
+    await gitStatus(s, ctx, msg.worktreeId);
   },
 
   async "write-file"(msg, ctx, s) {
     await s.files.write(msg.worktreeId, msg.path, msg.content);
     // no toast: autosave fires constantly; the changes list is the feedback
-    gitStatus(s, ctx, msg.worktreeId);
+    await gitStatus(s, ctx, msg.worktreeId);
   },
 
   "confirm-config"(msg, _ctx, s) {

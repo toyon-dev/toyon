@@ -1,21 +1,15 @@
 // Working-tree and branch state: porcelain parsing, line counts, changed ranges, ahead/behind.
 // The parsers are pure; the functions around them shell out through git/exec.
 
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GitFileStatus } from "@orchardist/shared";
-import { GIT, git } from "./exec.ts";
+import { git, gitRaw } from "./exec.ts";
 
-export function statusFiles(worktreePath: string): GitFileStatus[] {
-  // no trim: porcelain lines for unstaged changes start with a significant space
-  const r = spawnSync(GIT, ["status", "--porcelain"], {
-    cwd: worktreePath,
-    encoding: "utf8",
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  if (r.status !== 0) throw new Error(`git status failed: ${r.stderr}`);
-  return parsePorcelain(r.stdout ?? "");
+export async function statusFiles(worktreePath: string): Promise<GitFileStatus[]> {
+  const r = await gitRaw(worktreePath, "status", "--porcelain");
+  if (!r.ok) throw new Error(`git status failed: ${r.err}`);
+  return parsePorcelain(r.out);
 }
 
 /** `git status --porcelain` (v1) → entries. Renames/copies (`R  old -> new`) report the NEW path:
@@ -34,19 +28,19 @@ export function parsePorcelain(out: string): GitFileStatus[] {
 }
 
 /** File content at merge-base with the default branch (empty string for new files). */
-export function fileBefore(worktreePath: string, defaultBr: string, file: string): string {
-  const base = git(worktreePath, "merge-base", "HEAD", defaultBr);
+export async function fileBefore(worktreePath: string, defaultBr: string, file: string): Promise<string> {
+  const base = await git(worktreePath, "merge-base", "HEAD", defaultBr);
   const ref = base.ok && base.out ? base.out : "HEAD";
-  const r = git(worktreePath, "show", `${ref}:${file}`);
+  const r = await git(worktreePath, "show", `${ref}:${file}`);
   return r.ok ? r.out : "";
 }
 
 type LineCounts = Pick<GitFileStatus, "add" | "del">;
 
 /** `git diff --numstat` for the given range, keyed by path. Binary files map to {}. */
-function numstat(worktreePath: string, ...range: string[]): Map<string, LineCounts> {
+async function numstat(worktreePath: string, ...range: string[]): Promise<Map<string, LineCounts>> {
   const out = new Map<string, LineCounts>();
-  const r = git(worktreePath, "diff", "--numstat", "--no-renames", ...range);
+  const r = await git(worktreePath, "diff", "--numstat", "--no-renames", ...range);
   if (!r.ok) return out;
   for (const line of r.out.split("\n")) {
     const [a, d, ...rest] = line.split("\t");
@@ -73,10 +67,10 @@ function untrackedLines(worktreePath: string, file: string): LineCounts {
 }
 
 /** Uncommitted files with +/- line counts vs HEAD (staged and unstaged combined). */
-export function statusFilesWithCounts(worktreePath: string): GitFileStatus[] {
-  const files = statusFiles(worktreePath);
+export async function statusFilesWithCounts(worktreePath: string): Promise<GitFileStatus[]> {
+  const files = await statusFiles(worktreePath);
   if (files.length === 0) return files;
-  const counts = files.some((f) => f.xy !== "??") ? numstat(worktreePath, "HEAD") : new Map<string, LineCounts>();
+  const counts = files.some((f) => f.xy !== "??") ? await numstat(worktreePath, "HEAD") : new Map<string, LineCounts>();
   return files.map((f) => ({
     ...f,
     ...(f.xy === "??" ? untrackedLines(worktreePath, f.path) : (counts.get(f.path) ?? {})),
@@ -84,12 +78,12 @@ export function statusFilesWithCounts(worktreePath: string): GitFileStatus[] {
 }
 
 /** Files changed between merge-base with main and HEAD (committed, not yet landed). */
-export function committedFiles(worktreePath: string, defaultBr: string): GitFileStatus[] {
-  const base = git(worktreePath, "merge-base", "HEAD", defaultBr);
+export async function committedFiles(worktreePath: string, defaultBr: string): Promise<GitFileStatus[]> {
+  const base = await git(worktreePath, "merge-base", "HEAD", defaultBr);
   if (!base.ok || !base.out) return [];
-  const r = git(worktreePath, "diff", "--name-status", base.out, "HEAD");
+  const r = await git(worktreePath, "diff", "--name-status", base.out, "HEAD");
   if (!r.ok || !r.out) return [];
-  const counts = numstat(worktreePath, base.out, "HEAD");
+  const counts = await numstat(worktreePath, base.out, "HEAD");
   return r.out
     .split("\n")
     .filter(Boolean)
@@ -102,12 +96,16 @@ export function committedFiles(worktreePath: string, defaultBr: string): GitFile
 
 /** Changed line ranges (new-file numbering) for one file vs merge-base with main,
  * including uncommitted work. Untracked files return one open-ended range. */
-export function changedRanges(worktreePath: string, defaultBr: string, file: string): Array<[number, number]> {
-  const status = statusFiles(worktreePath).find((f) => f.path === file);
+export async function changedRanges(
+  worktreePath: string,
+  defaultBr: string,
+  file: string,
+): Promise<Array<[number, number]>> {
+  const status = (await statusFiles(worktreePath)).find((f) => f.path === file);
   if (status?.xy === "??") return [[1, 1_000_000]];
-  const base = git(worktreePath, "merge-base", "HEAD", defaultBr);
+  const base = await git(worktreePath, "merge-base", "HEAD", defaultBr);
   const ref = base.ok && base.out ? base.out : "HEAD";
-  const r = git(worktreePath, "diff", "-U0", ref, "--", file);
+  const r = await git(worktreePath, "diff", "-U0", ref, "--", file);
   if (!r.ok) return [];
   const ranges: Array<[number, number]> = [];
   for (const m of r.out.matchAll(/^@@ [^+]*\+(\d+)(?:,(\d+))? @@/gm)) {
@@ -118,8 +116,10 @@ export function changedRanges(worktreePath: string, defaultBr: string, file: str
   return ranges;
 }
 
-export function aheadBehind(worktreePath: string, defaultBr: string): { ahead: number; behind: number } {
-  const a = git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
-  const b = git(worktreePath, "rev-list", "--count", `HEAD..${defaultBr}`);
+export async function aheadBehind(worktreePath: string, defaultBr: string): Promise<{ ahead: number; behind: number }> {
+  const [a, b] = await Promise.all([
+    git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`),
+    git(worktreePath, "rev-list", "--count", `HEAD..${defaultBr}`),
+  ]);
   return { ahead: Number(a.out) || 0, behind: Number(b.out) || 0 };
 }

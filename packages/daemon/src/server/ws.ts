@@ -5,7 +5,7 @@ import { PROTOCOL_VERSION, parseClientMsg, type ServerMsg } from "@orchardist/sh
 import type { Server, ServerWebSocket } from "bun";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
-import { log } from "../core/log.ts";
+import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
 import { statusFilesWithCounts } from "../git/status.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
@@ -57,7 +57,12 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   });
 
   // ---- what a hub event pushes to clients ----
-  const worktreesChanged = () => broadcast({ t: "worktrees", worktrees: s.worktrees.statuses() });
+  const worktreesChanged = () =>
+    fireAndForget(
+      "ws",
+      s.worktrees.statuses().then((worktrees) => broadcast({ t: "worktrees", worktrees })),
+      "worktrees broadcast",
+    );
   s.hub.on("worktreesChanged", worktreesChanged);
   s.hub.on("agentStatus", worktreesChanged);
   s.hub.on("proc", (worktreeId, proc) => broadcast({ t: "proc", worktreeId, proc }));
@@ -70,12 +75,12 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     clearTimeout(gitStatusTimers.get(worktreeId));
     gitStatusTimers.set(
       worktreeId,
-      setTimeout(() => {
+      setTimeout(async () => {
         gitStatusTimers.delete(worktreeId);
         const wt = s.state.worktree(worktreeId);
         if (!wt) return;
         try {
-          sendTo(worktreeId, { t: "git-status", worktreeId, files: statusFilesWithCounts(wt.path) });
+          sendTo(worktreeId, { t: "git-status", worktreeId, files: await statusFilesWithCounts(wt.path) });
         } catch (e) {
           log.warn(worktreeId, "git status after agent edit failed", e);
         }
@@ -91,8 +96,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     worktreesChanged();
     for (const wt of s.state.worktrees.filter((w) => w.repoId === repoId)) {
       if (![...sockets].some((ws) => ws.data.subs.has(wt.id))) continue;
-      const msg = s.worktrees.gitStatus(wt.id);
-      if (msg) sendTo(wt.id, msg);
+      fireAndForget(
+        wt.id,
+        s.worktrees.gitStatus(wt.id).then((msg) => msg && sendTo(wt.id, msg)),
+        "git status on ref tick",
+      );
     }
   });
   const themesChanged = () => {
@@ -108,14 +116,14 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     hostname: cloud.bindHost,
     fetch: createFetch({ token, shellDist: opts.shellDist, version, repos: s.repos, branded: () => branded, metrics }),
     websocket: {
-      open(ws: ServerWebSocket<WsData>) {
+      async open(ws: ServerWebSocket<WsData>) {
         sockets.add(ws);
         send(ws, {
           t: "hello",
           version,
           protocol: PROTOCOL_VERSION,
           repos: s.state.repos,
-          worktrees: s.worktrees.statuses(),
+          worktrees: await s.worktrees.statuses(),
           themes: s.themes.themes,
           themePrefs: s.themes.prefs,
         });

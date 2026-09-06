@@ -102,7 +102,7 @@ describe("spare pool", () => {
     const wt = await w.worktrees.create(repoId, "use the spare");
     expect(wt.id).toBe(spare.id);
     expect(wt.kind).toBe("worktree");
-    expect(git(wt.path, "branch", "--show-current").out).toBe(wt.branch);
+    expect((await git(wt.path, "branch", "--show-current")).out).toBe(wt.branch);
     expect(spareAgent.sent[0]?.text).toBe("use the spare");
     expect(w.runtime.get(wt.id)?.agent).toBe(spareAgent);
   });
@@ -110,7 +110,7 @@ describe("spare pool", () => {
   test("the spare's statuses row is hidden until claimed", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
-    expect(w.worktrees.statuses().some((s) => s.worktree.kind === "spare")).toBe(false);
+    expect((await w.worktrees.statuses()).some((s) => s.worktree.kind === "spare")).toBe(false);
   });
 });
 
@@ -139,7 +139,7 @@ describe("landing", () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
-    expect(w.worktrees.commit(wt.id, "add feature").ok).toBe(true);
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
     const { result, removeIds } = await w.worktrees.merge(wt.id);
     expect(result.ok).toBe(true);
     expect(removeIds).toEqual([wt.id]);
@@ -147,7 +147,7 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.landed).toBe(true);
     // new work clears the badge through gitStatus
     writeFileSync(join(wt.path, "more.txt"), "y\n");
-    w.worktrees.gitStatus(wt.id);
+    await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.landed).toBe(false);
   });
 
@@ -163,7 +163,7 @@ describe("landing", () => {
   test("commit with an empty message is a UserError", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
-    expect(() => w.worktrees.commit(wt.id, "  ")).toThrow(UserError);
+    await expect(w.worktrees.commit(wt.id, "  ")).rejects.toBeInstanceOf(UserError);
   });
 });
 
@@ -178,7 +178,7 @@ describe("combine", () => {
     sh(b.path, "git", "commit", "-qam", "b");
     await expect(w.worktrees.combine([a.id, b.id])).rejects.toBeInstanceOf(UserError);
     expect(w.state.worktrees.some((x) => x.kind === "combined")).toBe(false);
-    expect(git(w.repo, "branch", "--list", "orchard/alpha+beta").out).toBe("");
+    expect((await git(w.repo, "branch", "--list", "orchard/alpha+beta")).out).toBe("");
   });
 
   test("clean branches graft into a combined worktree", async () => {

@@ -57,11 +57,11 @@ export function within(path: string, root: string): boolean {
   return path === root || path.startsWith(root + sep);
 }
 
-export function buildScope(cwd: string, onBlocked: (b: BlockedWrite) => void): Scope {
+export async function buildScope(cwd: string, onBlocked: (b: BlockedWrite) => void): Promise<Scope> {
   const root = canonical(cwd);
   // a linked worktree's `.git` is a pointer file; commits write into the main
   // repo's .git/worktrees/<name>, which must stay writable or git breaks
-  const common = git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir");
+  const common = await git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir");
   const gitDir = common.ok && common.out ? canonical(common.out) : null;
 
   // canonical forms so `/tmp` (→ /private/tmp on macOS) matches resolved targets

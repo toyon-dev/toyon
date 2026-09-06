@@ -38,7 +38,8 @@ export class Hub {
     if (!set) return;
     for (const fn of set) {
       try {
-        (fn as (...a: Parameters<Listener<K>>) => void)(...args);
+        const r = (fn as (...a: Parameters<Listener<K>>) => unknown)(...args);
+        if (r instanceof Promise) r.catch((e) => log.error("hub", `async listener for ${String(event)} rejected`, e));
       } catch (e) {
         // one broken subscriber must not stop the others (or the emitter)
         log.error("hub", `listener for ${String(event)} threw`, e);

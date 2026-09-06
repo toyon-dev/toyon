@@ -13,6 +13,8 @@ export interface WsData {
   authed: boolean;
   /** worktree ids this socket receives streams for */
   subs: Set<string>;
+  /** worktree ids whose terminal pane this socket has open (term-data goes only there) */
+  terms: Set<string>;
   sent: number;
   bytes: number;
 }
@@ -51,7 +53,8 @@ export function createFetch(opts: HttpOpts) {
 
     if (url.pathname === "/ws") {
       if (url.searchParams.get("token") !== opts.token) return new Response("unauthorized", { status: 401 });
-      if (srv.upgrade(req, { data: { authed: true, subs: new Set<string>(), sent: 0, bytes: 0 } })) return undefined;
+      const data: WsData = { authed: true, subs: new Set(), terms: new Set(), sent: 0, bytes: 0 };
+      if (srv.upgrade(req, { data })) return undefined;
       return new Response("upgrade failed", { status: 400 });
     }
 

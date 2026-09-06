@@ -1,7 +1,8 @@
-import { PROTOCOL_VERSION } from "@toyon/shared";
+import { isTermMsg, PROTOCOL_VERSION } from "@toyon/shared";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
+import { terminalBus } from "./app/terminalBus.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
 import { initialState } from "./state/store.ts";
@@ -51,6 +52,10 @@ const sock = new DaemonSocket(
     if (msg.t === "hello" && msg.protocol !== PROTOCOL_VERSION) {
       store.dispatch({ a: "incompatible" });
       sock.dispose();
+      return;
+    }
+    if (isTermMsg(msg)) {
+      terminalBus.deliver(msg);
       return;
     }
     store.dispatch({ a: "server", msg });

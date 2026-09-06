@@ -10,6 +10,7 @@ import type {
   RepoInfo,
   SearchHit,
   ServerMsg,
+  TermServerMsg,
   Theme,
   ThemePrefs,
   WorktreeStatus,
@@ -167,8 +168,11 @@ export function worktreeById(s: State, id: string | null | undefined): WorktreeS
 
 export const isSubPicker = (o: Overlay) => o.kind === "theme" || o.kind === "appearance";
 
+/** what reaches the reducer: terminal frames are routed to the pane before dispatch (main.tsx) */
+export type StoreServerMsg = Exclude<ServerMsg, TermServerMsg>;
+
 export type Action =
-  | { a: "server"; msg: ServerMsg }
+  | { a: "server"; msg: StoreServerMsg }
   | { a: "connected"; v: boolean }
   | { a: "activate"; id: string }
   | { a: "close-diff" }
@@ -279,7 +283,7 @@ function pruneLocal(local: State["local"], worktrees: WorktreeStatus[]): State["
   return Object.fromEntries(Object.entries(local).filter(([id]) => keep.has(id)));
 }
 
-function onServer(s: State, msg: ServerMsg): State {
+function onServer(s: State, msg: StoreServerMsg): State {
   switch (msg.t) {
     case "hello": {
       // restore the previously selected worktree across reloads

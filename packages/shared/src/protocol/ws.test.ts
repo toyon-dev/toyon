@@ -17,6 +17,11 @@ describe("parseClientMsg", () => {
       { t: "confirm-config", repoId: "r", config: { procs: { web: "bun dev" } } },
       { t: "set-theme", prefs: { mode: "system", light: "l", dark: "d" } },
       { t: "rescan-themes" },
+      { t: "term-open", worktreeId: "a", cols: 80, rows: 24 },
+      { t: "term-input", worktreeId: "a", data: "ls\r" },
+      { t: "term-resize", worktreeId: "a", cols: 1, rows: 500 },
+      { t: "term-kill", worktreeId: "a" },
+      { t: "term-close", worktreeId: "a" },
     ]) {
       const r = parseClientMsg(msg);
       expect(r.ok, JSON.stringify(msg)).toBe(true);
@@ -41,6 +46,16 @@ describe("parseClientMsg", () => {
     expect(parseClientMsg({ t: "combine", worktreeIds: ["a"] }).ok).toBe(false);
     expect(parseClientMsg({ t: "unqueue", worktreeId: "a", index: -1 }).ok).toBe(false);
     expect(parseClientMsg({ t: "unqueue", worktreeId: "a", index: 1.5 }).ok).toBe(false);
+  });
+
+  test("terminal sizes are 1–500 integers and input is bounded", () => {
+    const open = (cols: number, rows: number) => parseClientMsg({ t: "term-open", worktreeId: "a", cols, rows });
+    expect(open(0, 24).ok).toBe(false);
+    expect(open(80, 501).ok).toBe(false);
+    expect(open(80.5, 24).ok).toBe(false);
+    const r = open(0, 24);
+    if (!r.ok) expect(r.reason).toMatch(/^cols/);
+    expect(parseClientMsg({ t: "term-input", worktreeId: "a", data: "x".repeat(65_537) }).ok).toBe(false);
   });
 
   test("unknown extra fields are dropped, not rejected", () => {

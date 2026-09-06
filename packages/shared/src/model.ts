@@ -64,6 +64,18 @@ export interface ProcState {
 
 export type AgentStatus = "idle" | "working" | "error";
 
+/** one entry of the daemon's agent registry, as the shell's pickers see it */
+export interface AgentInfo {
+  id: string;
+  name: string;
+  /** its launch command resolves on this machine (auth is only discovered on the first prompt) */
+  available: boolean;
+  /** why not, when unavailable */
+  reason?: string;
+  /** runs shell commands under an OS sandbox confined to the worktree */
+  sandboxed: boolean;
+}
+
 export interface WorktreeStatus {
   worktree: WorktreeInfo;
   procs: ProcState[];

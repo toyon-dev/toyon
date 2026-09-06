@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { vscodeToTheme, ThemeImportError } from "./vscode-theme.ts";
 import {
-  builtinThemes, composite, contrastFg, gruvboxDarkSoft, gruvboxLight, hex8, normalizeHex, pairOf, pickTheme,
-  resolveTheme, themeColorKeys, themeToCssVars, vscodeDark2026, vscodeLight2026,
+  builtinThemes, composite, contrastFg, gruvboxDarkSoft, gruvboxLight, hex8, normalizeHex, pairOf, pickFamily, pickTheme,
+  resolveTheme, themeColorKeys, themeFamilies, themeToCssVars, vscodeDark2026, vscodeLight2026,
 } from "./themes.ts";
 import type { Theme } from "./index.ts";
 
@@ -103,5 +103,30 @@ describe("pairing", () => {
     expect(resolveTheme(p, all, false).id).toBe("vscode-2026-light");
     expect(resolveTheme(p, all, true).id).toBe("gruvbox-dark-soft"); // unknown → built-in of that kind
     expect(resolveTheme({ ...p, mode: "light" }, all, true).id).toBe("vscode-2026-light");
+  });
+});
+
+describe("families", () => {
+  const mk = (id: string, name: string, kind: Theme["kind"]): Theme => ({ ...gruvboxDarkSoft, id, name, kind, source: "vscode", pair: undefined, family: undefined });
+  const ext = [mk("vscode:a.x:one-dark", "One Dark", "dark"), mk("vscode:a.x:one-light", "One Light", "light"), mk("vscode:a.x:solo", "Solo Dark", "dark")];
+  test("pairs collapse, singles stand alone, names derive when not explicit", () => {
+    const fams = themeFamilies([...builtinThemes, ...ext]);
+    const byName = Object.fromEntries(fams.map((f) => [f.name, f]));
+    expect(byName["Gruvbox"]?.dark?.id).toBe("gruvbox-dark-soft");
+    expect(byName["Gruvbox"]?.light?.id).toBe("gruvbox-light");
+    expect(byName["Nord"]?.light).toBeUndefined();
+    expect(byName["One"]?.dark?.id).toBe("vscode:a.x:one-dark");
+    expect(byName["One"]?.light?.id).toBe("vscode:a.x:one-light");
+    expect(byName["Solo"]?.dark?.id).toBe("vscode:a.x:solo");
+    // every theme lands in exactly one family
+    expect(fams.flatMap((f) => [f.dark, f.light].filter(Boolean)).length).toBe(builtinThemes.length + ext.length);
+  });
+  test("pickFamily fills the slots it has and keeps appearance unless it can't paint it", () => {
+    const fams = themeFamilies(builtinThemes);
+    const cat = fams.find((f) => f.name === "Catppuccin")!, nord = fams.find((f) => f.name === "Nord")!;
+    const p0 = { mode: "light" as const, light: gruvboxLight.id, dark: gruvboxDarkSoft.id };
+    expect(pickFamily(p0, cat)).toEqual({ mode: "light", light: "catppuccin-latte", dark: "catppuccin-mocha" });
+    expect(pickFamily(p0, nord)).toEqual({ mode: "dark", light: gruvboxLight.id, dark: "nord" });
+    expect(pickFamily({ ...p0, mode: "system" }, nord).mode).toBe("system");
   });
 });

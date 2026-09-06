@@ -4,7 +4,7 @@ import DOMPurify from "dompurify";
 import type { GitFileStatus, RepoInfo, SearchHit, Theme, ThemePrefs, WorktreeStatus } from "@orchardist/shared";
 import { DaemonSocket, hasToken } from "./ws.ts";
 import { currentTheme, initial, reducer, type ChatItem, type State } from "./store.ts";
-import { effectiveKind, pairOf, pickTheme, resolveTheme } from "@orchardist/shared";
+import { effectiveKind, pickFamily, resolveTheme, themeFamilies, type ThemeFamily } from "@orchardist/shared";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "./theme.ts";
 import { Tooltips, tip } from "./Tooltip.tsx";
 
@@ -112,8 +112,8 @@ export function App() {
         e.preventDefault();
         dispatch({ a: "show-keys", v: !state.showKeys });
       } else if (e.key === "Escape") {
-        if (state.showThemes) dispatch({ a: "show-themes", v: null });
-        else if (state.showAppearance) dispatch({ a: "show-appearance", v: false });
+        if (state.showThemes) dispatch({ a: "show-themes", v: null, back: true });
+        else if (state.showAppearance) dispatch({ a: "show-appearance", v: false, back: true });
         else if (state.showKeys) dispatch({ a: "show-keys", v: false });
         else if (state.picking) {
           // (the bridge handles esc itself when the preview has focus; this covers focus in the shell)
@@ -789,12 +789,12 @@ function wtActions(sock: Sock) {
   };
 }
 
-type Command = { id: string; label: string; hint?: string; run: () => void };
+type Command = { id: string; label: string; hint?: string; run: () => void; /** opens a sub-picker: esc there returns to the palette */ sub?: boolean };
 
 /** everything the UI can do, as typeable commands — chords first, then the context-menu long tail */
 function buildCommands(state: State, dispatch: Dispatch, sock: Sock, active: WorktreeStatus | null, repo: RepoInfo | null): Command[] {
   const cmds: Command[] = [];
-  const add = (id: string, label: string, run: () => void, hint?: string) => cmds.push({ id, label, hint, run });
+  const add = (id: string, label: string, run: () => void, hint?: string, sub?: boolean) => cmds.push({ id, label, hint, run, sub });
   const wt = active;
   const id = wt?.worktree.id;
 
@@ -811,17 +811,17 @@ function buildCommands(state: State, dispatch: Dispatch, sock: Sock, active: Wor
   add("left", `${state.leftOpen ? "hide" : "show"} changes panel`, () => dispatch({ a: "toggle-left" }), "⌘B");
   add("right", `${state.rightOpen ? "hide" : "show"} chat panel`, () => dispatch({ a: "toggle-right" }), "⌘J");
   add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), "⌘.");
-  add("keys", "keyboard shortcuts", () => dispatch({ a: "show-keys", v: true }), "⌘/");
+  add("keys", "shortcuts & settings", () => dispatch({ a: "show-keys", v: true }), "⌘/");
 
   const prefs = state.themePrefs;
   const themeName = (tid: string) => state.themes.find((t) => t.id === tid)?.name ?? tid;
-  add("theme", "theme…", () => dispatch({ a: "show-themes", v: "theme" }), resolveTheme(prefs, state.themes, state.systemDark).name);
-  add("appearance", "theme: appearance…", () => dispatch({ a: "show-appearance", v: true }), appearanceLabel[prefs.mode]);
+  add("theme", "theme…", () => dispatch({ a: "show-themes", v: "theme" }), resolveTheme(prefs, state.themes, state.systemDark).name, true);
+  add("appearance", "theme: light/dark mode…", () => dispatch({ a: "show-appearance", v: true }), appearanceLabel[prefs.mode], true);
   add("theme-import", "theme: import VS Code theme file…", () => pickThemeFile((name, source) => sock?.send({ t: "import-theme", name, source })));
   add("theme-rescan", "theme: rescan installed editor themes", () => sock?.send({ t: "rescan-themes" }));
   // per-slot overrides for mismatched pairs; the picker fills both slots by family so these sit last
-  add("theme-dark", "theme: dark slot override…", () => dispatch({ a: "show-themes", v: "dark" }), themeName(prefs.dark));
-  add("theme-light", "theme: light slot override…", () => dispatch({ a: "show-themes", v: "light" }), themeName(prefs.light));
+  add("theme-dark", "theme: dark slot override…", () => dispatch({ a: "show-themes", v: "dark" }), themeName(prefs.dark), true);
+  add("theme-light", "theme: light slot override…", () => dispatch({ a: "show-themes", v: "light" }), themeName(prefs.light), true);
 
   if (wt && id) {
     const acts = wtActions(sock);
@@ -870,114 +870,202 @@ function pickThemeFile(onText: (name: string, source: string) => void) {
   input.click();
 }
 
-const sourceHint: Record<Theme["source"], string> = { builtin: "built-in", file: "~/.orchardist/themes", vscode: "VS Code" };
+/** the overlays only scrim the preview column, so a click on a dock or the rail wouldn't reach the
+ * backdrop — dismiss on any mousedown outside the box instead (the ? button is exempt: it toggles) */
+function useDismissOutside(box: React.RefObject<HTMLElement | null>, onOutside: () => void) {
+  const cb = useRef(onOutside);
+  cb.current = onOutside;
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      if (t?.closest?.(".keys-btn")) return;
+      if (box.current && !box.current.contains(t as Node)) cb.current();
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+}
+
+/** ↑↓ with wrap-around */
+function step(i: number, delta: number, n: number): number {
+  return n === 0 ? 0 : (i + delta + n) % n;
+}
 
 const appearanceLabel: Record<ThemePrefs["mode"], string> = { dark: "dark", light: "light", system: "follow system" };
 
-/** dark / light / follow system — same overlay as the theme list, previews the slot it would paint */
-function AppearancePicker({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
-  const prefs = state.themePrefs;
-  const modes: ThemePrefs["mode"][] = ["dark", "light", "system"];
-  const [idx, setIdx] = useState(Math.max(0, modes.indexOf(prefs.mode)));
-  const slotName = (m: ThemePrefs["mode"]) => state.themes.find((t) => t.id === prefs[effectiveKind({ ...prefs, mode: m }, state.systemDark)])?.name ?? "";
+/** the one list-picker: overlay + filter input + rows, ↑↓ wrap, enter picks, ←→ optional,
+ * hover highlights, active row reported so a parent can live-preview. Every palette-shaped
+ * overlay builds on this rather than carrying its own copy of the keyboard machinery. */
+function ListPicker<T>({ items, filter, keyOf, row, onPick, onBack, onActive, onSide, placeholder, initialQuery = "", initialIndex, empty = "no matches" }: {
+  items: T[];
+  /** narrow the list for a query (empty query → everything) */
+  filter: (items: T[], q: string) => T[];
+  keyOf: (t: T) => string;
+  row: (t: T, active: boolean) => React.ReactNode;
+  onPick: (t: T, q: string) => void;
+  /** esc / backdrop */
+  onBack: () => void;
+  onActive?: (t: T | null) => void;
+  /** ←→ on the highlighted row */
+  onSide?: (t: T, dir: -1 | 1) => void;
+  placeholder: string;
+  initialQuery?: string;
+  /** where the highlight starts (mount only); default 0 */
+  initialIndex?: (results: T[]) => number;
+  empty?: string;
+}) {
+  const [q, setQ] = useState(initialQuery);
+  const results = useMemo(() => filter(items, q), [items, q, filter]);
+  const [idx, setIdx] = useState(() => Math.max(0, initialIndex?.(results) ?? 0));
+  const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  useDismissOutside(boxRef, onBack);
   useEffect(() => {
-    dispatch({ a: "preview-theme", theme: resolveTheme({ ...prefs, mode: modes[idx]! }, state.themes, state.systemDark) });
-  }, [idx]);
-  const close = () => dispatch({ a: "show-appearance", v: false });
-  const keep = (m: ThemePrefs["mode"]) => { sock?.send({ t: "set-theme", prefs: { ...prefs, mode: m } }); close(); };
+    inputRef.current?.focus();
+    const f = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(f);
+  }, []);
+  // typing resets the highlight; the mount keeps initialIndex
+  const prevQ = useRef(q);
+  useEffect(() => { if (prevQ.current !== q) { prevQ.current = q; setIdx(0); } }, [q]);
+  // keyed on the row's key, not the results array: parents rebuild items every render, and a
+  // re-report on identity change would reset any state they keep for the active row (←→ peek)
+  const activeKey = results[idx] ? keyOf(results[idx]!) : null;
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>(".qo-item.active")?.scrollIntoView({ block: "nearest" });
+    onActive?.(results[idx] ?? null);
+  }, [activeKey]);
   return (
-    <div className="prompt-overlay" onClick={close}>
-      <div
-        className="prompt-box quick-open"
-        onClick={(e) => e.stopPropagation()}
-        tabIndex={-1}
-        ref={(el) => el?.focus()}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, modes.length - 1)); }
-          else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
-          else if (e.key === "Enter") { e.preventDefault(); keep(modes[idx]!); }
-        }}
-      >
-        <div className="title">appearance · ↑↓ preview · enter keeps · esc reverts</div>
-        <div className="qo-list">
-          {modes.map((m, i) => (
-            <button key={m} className={`qo-item cmd-item ${i === idx ? "active" : ""}`} onMouseEnter={() => setIdx(i)} onClick={() => keep(m)}>
-              <span className="cmd-label">{m === prefs.mode ? "● " : ""}{appearanceLabel[m]}</span>
-              <span className="cmd-hint">{m === "system" ? `${state.systemDark ? "dark" : "light"} now · ${slotName(m)}` : slotName(m)}</span>
+    <div className="prompt-overlay">
+      <div className="prompt-box quick-open" ref={boxRef}>
+        <input
+          ref={inputRef}
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => step(i, 1, results.length)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => step(i, -1, results.length)); }
+            else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onSide && results[idx]) { e.preventDefault(); onSide(results[idx]!, e.key === "ArrowLeft" ? -1 : 1); }
+            else if (e.key === "Enter" && results[idx]) { e.preventDefault(); onPick(results[idx]!, q); }
+          }}
+          placeholder={placeholder}
+        />
+        <div className="qo-list" ref={listRef}>
+          {results.map((t, i) => (
+            <button key={keyOf(t)} className={`qo-item cmd-item ${i === idx ? "active" : ""}`} onMouseEnter={() => setIdx(i)} onClick={() => onPick(t, q)}>
+              {row(t, i === idx)}
             </button>
           ))}
+          {results.length === 0 && <div className="dock-empty">{empty}</div>}
         </div>
       </div>
     </div>
   );
 }
 
-/** theme list with live preview: ↑↓ paints the highlighted theme, enter keeps it, esc reverts */
+const byName = (needle: string, ...names: Array<string | undefined>) => {
+  const n = needle.trim().toLowerCase();
+  return !n || names.some((x) => x?.toLowerCase().includes(n));
+};
+
+/** dark / light / follow system — previews the slot each would paint */
+function AppearancePicker({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
+  const prefs = state.themePrefs;
+  const modes: ThemePrefs["mode"][] = ["dark", "light", "system"];
+  const slotName = (m: ThemePrefs["mode"]) => state.themes.find((t) => t.id === prefs[effectiveKind({ ...prefs, mode: m }, state.systemDark)])?.name ?? "";
+  return (
+    <ListPicker
+      items={modes}
+      filter={(ms, q) => ms.filter((m) => byName(q, appearanceLabel[m]))}
+      keyOf={(m) => m}
+      initialIndex={(ms) => ms.indexOf(prefs.mode)}
+      onActive={(m) => dispatch({ a: "preview-theme", theme: m ? resolveTheme({ ...prefs, mode: m }, state.themes, state.systemDark) : null })}
+      onPick={(m) => { sock?.send({ t: "set-theme", prefs: { ...prefs, mode: m } }); dispatch({ a: "show-appearance", v: false }); }}
+      onBack={() => dispatch({ a: "show-appearance", v: false, back: true })}
+      placeholder="light/dark mode · ↑↓ preview · enter keeps · esc reverts"
+      row={(m) => (
+        <>
+          <span className="cmd-label">{m === prefs.mode ? "● " : ""}{appearanceLabel[m]}</span>
+          <span className="cmd-hint">{m === "system" ? `${state.systemDark ? "dark" : "light"} now · ${slotName(m)}` : slotName(m)}</span>
+        </>
+      )}
+    />
+  );
+}
+
+const sourceOf = (t: Theme) => (t.source === "file" ? "~/.orchardist/themes" : t.source === "vscode" ? "VS Code" : "");
+
+/** theme picker. Main mode lists families (a dark/light pair is one row; ←→ peeks at the other
+ * variant, enter fills both slots and appearance stays as set). Slot overrides list single themes of that kind. */
 function ThemePicker({ state, dispatch, sock }: { state: State; dispatch: Dispatch; sock: Sock }) {
   const slot = state.showThemes ?? "theme";
   const prefs = state.themePrefs;
-  const [q, setQ] = useState("");
-  const listRef = useRef<HTMLDivElement>(null);
-  // slot overrides list one kind; the plain picker lists everything, grouped so browsing doesn't
-  // strobe dark/light: the kind currently painted first, then the other
   const nowKind = effectiveKind(prefs, state.systemDark);
-  const themes = useMemo(() => {
-    const pool = slot === "theme" ? state.themes : state.themes.filter((t) => t.kind === slot);
-    const needle = q.trim().toLowerCase();
-    const hits = needle ? pool.filter((t) => t.name.toLowerCase().includes(needle) || t.id.includes(needle)) : pool;
-    return slot === "theme" ? [...hits.filter((t) => t.kind === nowKind), ...hits.filter((t) => t.kind !== nowKind)] : hits;
-  }, [state.themes, slot, q, nowKind]);
-  const selectedId = slot === "theme" ? prefs[effectiveKind(prefs, state.systemDark)] : prefs[slot];
-  const [idx, setIdx] = useState(() => Math.max(0, themes.findIndex((t) => t.id === selectedId)));
-  // typing resets the highlight; the mount keeps it on the current theme
-  const prevQ = useRef(q);
-  useEffect(() => { if (prevQ.current !== q) { prevQ.current = q; setIdx(0); } }, [q]);
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(".qo-item.active")?.scrollIntoView({ block: "nearest" });
-    const t = themes[idx];
-    // previewing a light theme while the OS is dark (or vice versa) is exactly the point of the slot pickers
-    dispatch({ a: "preview-theme", theme: t ?? null });
-  }, [idx, themes]);
+  const selectedId = prefs[slot === "theme" ? nowKind : slot];
   const close = () => dispatch({ a: "show-themes", v: null });
-  const keep = (t: Theme) => {
-    // the main picker fills the theme's slot and its sibling's; a slot override touches one slot only
-    const next: ThemePrefs = slot === "theme" ? pickTheme(prefs, t, state.themes) : { ...prefs, [slot]: t.id };
-    sock?.send({ t: "set-theme", prefs: next });
-    close();
-  };
-  const title = slot === "theme" ? "theme" : `${slot} slot override`;
+  const back = () => dispatch({ a: "show-themes", v: null, back: true });
+  const preview = (t: Theme | null) => dispatch({ a: "preview-theme", theme: t });
+
+  // ←→ picks a column (null = whatever appearance says) and it sticks as ↑↓ walks the rows, so
+  // "browse the light variants" is one keypress; a family missing that kind shows what it has
+  const [active, setActive] = useState<ThemeFamily | null>(null);
+  const [peek, setPeek] = useState<"dark" | "light" | null>(null);
+  const previewOf = (f: ThemeFamily, k: "dark" | "light" | null) => f[k ?? nowKind] ?? f.dark ?? f.light ?? null;
+  useEffect(() => { if (slot === "theme") preview(active ? previewOf(active, peek) : null); }, [active, peek]);
+
+  if (slot !== "theme") {
+    return (
+      <ListPicker
+        items={state.themes.filter((t) => t.kind === slot)}
+        filter={(ts, q) => ts.filter((t) => byName(q, t.name, t.id))}
+        keyOf={(t) => t.id}
+        initialIndex={(ts) => ts.findIndex((t) => t.id === selectedId)}
+        onActive={preview}
+        onPick={(t) => { sock?.send({ t: "set-theme", prefs: { ...prefs, [slot]: t.id } }); close(); }}
+        onBack={back}
+        placeholder={`${slot} slot override · ↑↓ preview · enter keeps · esc reverts`}
+        empty="no matching theme"
+        row={(t) => (
+          <>
+            <span className="cmd-label">{t.id === selectedId ? "● " : ""}{t.name}</span>
+            <span className="cmd-hint">{sourceOf(t)}</span>
+          </>
+        )}
+      />
+    );
+  }
+
+  const families = useMemo(() => themeFamilies(state.themes), [state.themes]);
   return (
-    <div className="prompt-overlay" onClick={close}>
-      <div className="prompt-box quick-open" onClick={(e) => e.stopPropagation()}>
-        <input
-          autoFocus
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, themes.length - 1)); }
-            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
-            else if (e.key === "Enter" && themes[idx]) { e.preventDefault(); keep(themes[idx]!); }
-          }}
-          placeholder={`${title} · ↑↓ preview · enter keeps · esc reverts`}
-        />
-        <div className="qo-list" ref={listRef}>
-          {themes.map((t, i) => (
-            <Fragment key={t.id}>
-              {slot === "theme" && themes[i - 1]?.kind !== t.kind && <div className="dock-section-title">{t.kind}</div>}
-              <button
-                className={`qo-item cmd-item ${i === idx ? "active" : ""}`}
-                onMouseEnter={() => setIdx(i)}
-                onClick={() => keep(t)}
-              >
-                <span className="cmd-label">{t.id === selectedId ? "● " : ""}{t.name}</span>
-                <span className="cmd-hint">{sourceHint[t.source]}{slot === "theme" && pairOf(t, state.themes) ? ` · pairs with ${pairOf(t, state.themes)!.name}` : ""}</span>
-              </button>
-            </Fragment>
-          ))}
-          {themes.length === 0 && <div className="dock-empty">no matching theme</div>}
-        </div>
-      </div>
-    </div>
+    <ListPicker
+      items={families}
+      filter={(fs, q) => fs.filter((f) => byName(q, f.name, f.dark?.name, f.light?.name))}
+      keyOf={(f) => f.name + (f.dark?.id ?? f.light?.id)}
+      initialIndex={(fs) => fs.findIndex((f) => f.dark?.id === selectedId || f.light?.id === selectedId)}
+      onActive={setActive}
+      onSide={(f) => { if (f.dark && f.light) setPeek((previewOf(f, peek)?.kind ?? nowKind) === "dark" ? "light" : "dark"); }}
+      onPick={(f) => { sock?.send({ t: "set-theme", prefs: pickFamily(prefs, f) }); close(); }}
+      onBack={back}
+      placeholder="theme · ↑↓ preview · ←→ dark/light · enter keeps · esc reverts"
+      empty="no matching theme"
+      row={(f, isActive) => {
+        const shown = previewOf(f, isActive ? peek : null);
+        const src = sourceOf(f.dark ?? f.light!);
+        const current = f.dark?.id === selectedId || f.light?.id === selectedId;
+        return (
+          <>
+            <span className="cmd-label">{current ? "● " : ""}{f.name}</span>
+            <span className="cmd-hint theme-kinds">
+              {src && <span>{src}</span>}
+              <span className={`kind ${isActive && shown?.kind === "dark" ? "on" : ""}`}>{f.dark ? "dark" : ""}</span>
+              <span className={`kind ${isActive && shown?.kind === "light" ? "on" : ""}`}>{f.light ? "light" : ""}</span>
+            </span>
+          </>
+        );
+      }}
+    />
   );
 }
 
@@ -990,43 +1078,28 @@ function CommandRow({ c, active, onRun }: { c: Command; active: boolean; onRun: 
   );
 }
 
-function CommandPalette({ commands, onClose }: { commands: Command[]; onClose: () => void }) {
-  const [q, setQ] = useState("");
-  const [idx, setIdx] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    inputRef.current?.focus();
-    const f = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(f);
-  }, []);
-  const results = useMemo(() => filterCommands(commands, q), [q, commands]);
-  useEffect(() => setIdx(0), [q]);
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(".qo-item.active")?.scrollIntoView({ block: "nearest" });
-  }, [idx]);
-  const run = (c: Command) => { onClose(); c.run(); };
+function CommandPalette({ commands, onClose, initialQuery = "", onSub }: {
+  commands: Command[]; onClose: () => void; initialQuery?: string;
+  /** a sub-picker command is about to run: remember the query so esc there comes back here */
+  onSub?: (q: string) => void;
+}) {
   return (
-    <div className="prompt-overlay" onClick={onClose}>
-      <div className="prompt-box quick-open" onClick={(e) => e.stopPropagation()}>
-        <input
-          ref={inputRef}
-          autoFocus
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, results.length - 1)); }
-            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
-            else if (e.key === "Enter" && results[idx]) { e.preventDefault(); run(results[idx]!); }
-          }}
-          placeholder="run a command…"
-        />
-        <div className="qo-list" ref={listRef}>
-          {results.map((c, i) => <CommandRow key={c.id} c={c} active={i === idx} onRun={() => run(c)} />)}
-          {results.length === 0 && <div className="dock-empty">no matching command</div>}
-        </div>
-      </div>
-    </div>
+    <ListPicker
+      items={commands}
+      filter={filterCommands}
+      keyOf={(c) => c.id}
+      onPick={(c, q) => { if (c.sub && onSub) onSub(q); else onClose(); c.run(); }}
+      onBack={onClose}
+      placeholder="run a command…"
+      initialQuery={initialQuery}
+      empty="no matching command"
+      row={(c) => (
+        <>
+          <span className="cmd-label">{c.label}</span>
+          {c.hint && <span className="cmd-hint">{c.hint}</span>}
+        </>
+      )}
+    />
   );
 }
 
@@ -1242,6 +1315,8 @@ function Center({ state, active, dispatch, sock, repo }: {
             dispatch({ a: "quick-open", v: false });
           }}
           onClose={() => dispatch({ a: "quick-open", v: false })}
+          initialQuery={state.paletteReturn?.mode === "quick-open" ? state.paletteReturn.q : ""}
+          onSub={(q) => dispatch({ a: "palette-return", v: { mode: "quick-open", q } })}
         />
       )}
       {state.showSearch && active && (
@@ -1258,12 +1333,15 @@ function Center({ state, active, dispatch, sock, repo }: {
           onClose={() => dispatch({ a: "show-search", v: false })}
         />
       )}
+      {state.showKeys && <KeysHelp state={state} dispatch={dispatch} onClose={() => dispatch({ a: "show-keys", v: false })} />}
       {state.showThemes && <ThemePicker state={state} dispatch={dispatch} sock={sock} />}
       {state.showAppearance && <AppearancePicker state={state} dispatch={dispatch} sock={sock} />}
       {state.showCommands && (
         <CommandPalette
           commands={buildCommands(state, dispatch, sock, active, repo)}
           onClose={() => dispatch({ a: "show-commands", v: false })}
+          initialQuery={state.paletteReturn?.mode === "commands" ? state.paletteReturn.q : ""}
+          onSub={(q) => dispatch({ a: "palette-return", v: { mode: "commands", q } })}
         />
       )}
       {state.showPrompt && repo && (
@@ -1474,13 +1552,15 @@ function ConfigCard({ repo, sock }: { repo: State["repos"][number]; sock: Sock }
 }
 
 /** ⌘P: fuzzy file jump; a leading `>` switches the same box to the command palette (editor convention) */
-function QuickOpen({ paths, commands, onPick, onClose }: {
+function QuickOpen({ paths, commands, onPick, onClose, initialQuery = "", onSub }: {
   paths: string[];
   commands: Command[];
   onPick: (path: string) => void;
   onClose: () => void;
+  initialQuery?: string;
+  onSub?: (q: string) => void;
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
   const [idx, setIdx] = useState(0);
   const cmdMode = q.startsWith(">");
 
@@ -1498,7 +1578,7 @@ function QuickOpen({ paths, commands, onPick, onClose }: {
   }, [q, paths, cmdMode]);
   const cmdResults = useMemo(() => (cmdMode ? filterCommands(commands, q.slice(1)) : []), [q, commands, cmdMode]);
   const count = cmdMode ? cmdResults.length : results.length;
-  const runCmd = (c: Command) => { onClose(); c.run(); };
+  const runCmd = (c: Command) => { if (c.sub && onSub) onSub(q); else onClose(); c.run(); };
 
   useEffect(() => setIdx(0), [q]);
 
@@ -1510,8 +1590,8 @@ function QuickOpen({ paths, commands, onPick, onClose }: {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, count - 1)); }
-            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => step(i, 1, count)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => step(i, -1, count)); }
             else if (e.key === "Enter") {
               e.preventDefault();
               if (cmdMode) { if (cmdResults[idx]) runCmd(cmdResults[idx]!); }
@@ -1974,8 +2054,8 @@ function SearchPalette({ worktreeId, results, onQuery, onPick, onClose }: {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => Math.min(i + 1, hits.length - 1)); }
-            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => Math.max(i - 1, 0)); }
+            if (e.key === "ArrowDown") { e.preventDefault(); setIdx((i) => step(i, 1, hits.length)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setIdx((i) => step(i, -1, hits.length)); }
             else if (e.key === "Enter" && hits[idx]) { e.preventDefault(); onPick(hits[idx]!); }
           }}
           placeholder="search in files…"
@@ -2011,14 +2091,32 @@ function keyHint(i: number, count: number): string | undefined {
 const KEY_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   // grid order
   { title: "Find", rows: [["⌘P", "jump to file"], ["⌘⇧F", "search in files"], ["⌘⇧E", "command palette"]] },
-  { title: "Panels", rows: [["⌘B", "changes"], ["⌘J", "chat"], ["⌘/", "this list"]] },
+  { title: "Panels", rows: [["⌘B", "changes"], ["⌘J", "chat"], ["⌘/", "shortcuts & settings"]] },
   { title: "Preview", rows: [["⌘E", "element picker"], ["⌘.", "full-bleed preview"]] },
   { title: "Worktrees", rows: [["⌘K", "new worktree"], ["⌘1–9", "switch worktree"]] },
 ];
-function KeysHelp({ onClose }: { onClose: () => void }) {
+/** ? / ⌘/: settings card stacked over the shortcut card — the one non-worktree surface, so global
+ * settings live here as well as in the palette; esc from a picker opened here comes back */
+function KeysHelp({ state, dispatch, onClose }: { state: State; dispatch: Dispatch; onClose: () => void }) {
+  const prefs = state.themePrefs;
+  const open = (a: Parameters<Dispatch>[0]) => { dispatch({ a: "palette-return", v: { mode: "keys", q: "" } }); dispatch(a); };
+  const boxRef = useRef<HTMLDivElement>(null);
+  useDismissOutside(boxRef, onClose);
   return (
-    <div className="keys-overlay" onClick={onClose}>
-      <div className="keys-card" onClick={(e) => e.stopPropagation()}>
+    <div className="keys-overlay">
+      <div className="keys-stack" ref={boxRef}>
+      <div className="keys-card settings-card">
+        <div className="keys-h">Settings</div>
+        <div className="set-row">
+          <span className="keys-d">theme</span>
+          <button className="set-v" onClick={() => open({ a: "show-themes", v: "theme" })}>{resolveTheme(prefs, state.themes, state.systemDark).name}</button>
+        </div>
+        <div className="set-row">
+          <span className="keys-d">light/dark mode</span>
+          <button className="set-v" onClick={() => open({ a: "show-appearance", v: true })}>{appearanceLabel[prefs.mode]}</button>
+        </div>
+      </div>
+      <div className="keys-card">
         {KEY_SECTIONS.map((sec) => (
           <div className="keys-section" key={sec.title}>
             <div className="keys-h">{sec.title}</div>
@@ -2033,6 +2131,7 @@ function KeysHelp({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         ))}
+      </div>
       </div>
     </div>
   );
@@ -2164,7 +2263,7 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
         ))}
       {/* right cluster: help · chat toggle · zen (zen last — it hides everything, so it sits at the edge) */}
       <span className="bar-tools">
-        <button className="toggle icon keys-btn" {...tip("Keyboard shortcuts", "⌘/")} onClick={() => dispatch({ a: "show-keys", v: true })}>
+        <button className="toggle icon keys-btn" {...tip("Shortcuts & settings", "⌘/")} onClick={() => dispatch({ a: "show-keys", v: !state.showKeys })}>
           <Icon name="help" />
         </button>
         <button
@@ -2182,7 +2281,6 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
           <Icon name="zen" />
         </button>
       </span>
-      {state.showKeys && <KeysHelp onClose={() => dispatch({ a: "show-keys", v: false })} />}
     </div>
   );
 }

@@ -170,9 +170,6 @@ function discover(dir: string): Theme[] {
         const file = resolve(extDir, c.path);
         try {
           const json = readVscodeTheme(file);
-          // uiTheme is authoritative over the file's own `type`
-          if (c.uiTheme === "vs") json.type = "light";
-          else if (c.uiTheme === "vs-dark" || c.uiTheme === "hc-black") json.type = "dark";
           out.push(vscodeToTheme(json, { id: `vscode:${ext}:${slug(c.label)}`, name: c.label, source: "vscode" }));
         } catch (e) {
           console.warn(`[themes] skipping ${file}: ${e instanceof Error ? e.message : e}`);

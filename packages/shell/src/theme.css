@@ -57,13 +57,17 @@ button {
 
 /* ---- keyboard shortcuts help ---- */
 .keys-btn { width: 20px; height: 20px; }
+/* same frame as the palettes (.center-relative) so the card sits where the pickers do —
+   esc from a picker lands back here without the box jumping */
 .keys-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: var(--scrim);
   display: grid;
-  place-items: center;
-  z-index: 60;
+  justify-items: center;
+  align-content: start;
+  padding-top: clamp(72px, 18vh, 220px);
+  z-index: 10;
 }
 .keys-card {
   background: var(--bg1);
@@ -80,6 +84,28 @@ button {
   row-gap: 18px;
   align-items: start;
 }
+/* settings card stacked above the shortcut card, same width */
+.keys-stack { display: grid; gap: 12px; width: min(560px, 90%); }
+.keys-card.settings-card {
+  display: block;
+  padding: 12px 24px 12px;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 3px 0;
+}
+.set-v {
+  font: 11px var(--font-mono);
+  color: var(--fg1);
+  background: var(--bg0);
+  border: 1px solid var(--bg2);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+.set-v:hover { border-color: var(--orange); color: var(--orange); }
 .keys-row {
   display: grid;
   grid-template-columns: 76px 1fr;
@@ -807,12 +833,16 @@ body.resizing .rb-center { transition: none; }
 .status-bar .proc { display: flex; gap: 4px; align-items: center; }
 
 /* ---- new worktree prompt overlay ---- */
+/* anchored near the top, not centered: a palette's height changes as you type, and a centered
+   box would bob with it — the input stays put this way (editor/launcher convention) */
 .prompt-overlay {
   position: absolute;
   inset: 0;
   background: var(--scrim);
   display: grid;
-  place-items: center;
+  justify-items: center;
+  align-content: start;
+  padding-top: clamp(72px, 18vh, 220px);
   z-index: 10;
 }
 .prompt-box {
@@ -911,6 +941,11 @@ body.resizing .rb-center { transition: none; }
 .cmd-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .cmd-hint { font: 11px var(--font-ui); color: var(--fg-dim); flex-shrink: 0; }
 .qo-item.active .cmd-hint { color: var(--fg-muted); }
+/* theme picker: dark / light chips; the one being previewed on the highlighted row lights up */
+.theme-kinds { display: inline-flex; gap: 6px; align-items: center; }
+/* fixed columns: a family without one variant leaves the slot empty so rows stay aligned */
+.theme-kinds .kind { width: 44px; text-align: center; border: 1px solid transparent; border-radius: 4px; padding: 0; }
+.theme-kinds .kind.on { color: var(--orange); border-color: var(--orange); }
 /* search hits: location on top, matched line beneath */
 .sr-item { white-space: normal; padding: 5px 10px; }
 .sr-loc { display: block; font-size: 11px; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

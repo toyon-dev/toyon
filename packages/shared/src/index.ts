@@ -133,6 +133,8 @@ export interface Theme {
   syntax?: Partial<Record<ThemeSyntaxToken, ThemeColor>>;
   /** id of this theme's opposite-kind sibling (Gruvbox Dark ↔ Gruvbox Light); guessed by name when absent */
   pair?: string;
+  /** picker row label shared by a dark/light pair ("Gruvbox"); derived from the name when absent */
+  family?: string;
 }
 
 export type ThemeColorKey = keyof Theme["colors"];

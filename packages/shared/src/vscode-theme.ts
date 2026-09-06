@@ -8,7 +8,7 @@
 // directly, so a coarse mapping is all we carry.
 
 import type { Theme, ThemeColorKey, ThemeSyntaxToken } from "./index.ts";
-import { composite, hex8, isDark, normalizeHex, parseHex } from "./themes.ts";
+import { composite, contrastRatio, hex8, isDark, normalizeHex, parseHex } from "./themes.ts";
 
 export interface VsCodeThemeJson {
   name?: string;
@@ -32,7 +32,9 @@ const workbenchKeys: Record<Exclude<ThemeColorKey, "scrim" | "shadow">, string[]
   blue: ["terminal.ansiBlue", "textLink.foreground"],
   aqua: ["terminal.ansiCyan", "terminal.ansiBrightCyan"],
   purple: ["terminal.ansiMagenta", "terminal.ansiBrightMagenta"],
-  orange: ["focusBorder", "button.background", "activityBarBadge.background", "progressBar.background", "terminal.ansiYellow"],
+  // the accent: first candidate that actually stands out from the editor background (focusBorder is
+  // often a subtle border; badges/buttons/links carry the brand color)
+  orange: ["activityBarBadge.background", "button.background", "progressBar.background", "focusBorder", "textLink.foreground", "terminal.ansiYellow"],
   addBg: ["diffEditor.insertedLineBackground", "diffEditor.insertedTextBackground"],
   delBg: ["diffEditor.removedLineBackground", "diffEditor.removedTextBackground"],
 };
@@ -75,9 +77,9 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
   if (!colors || !normalizeHex(colors["editor.background"] ?? "")) {
     throw new ThemeImportError("not a VS Code color theme: no colors[\"editor.background\"]");
   }
-  const kind: Theme["kind"] =
-    t.type === "light" ? "light" : t.type === "dark" || t.type === "hc-black" ? "dark"
-    : isDark(colors["editor.background"]!) ? "dark" : "light";
+  // the editor background is the ground truth: some theme files declare the wrong `type`
+  // (Tokyo Night Light ships "dark" and relies on its manifest's uiTheme to fix it)
+  const kind: Theme["kind"] = isDark(colors["editor.background"]!) ? "dark" : "light";
   const table = defaults[kind];
 
   const lookup = (keys: string[]): string | null => {
@@ -105,7 +107,12 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
   const fgDim = opaque(lookup(workbenchKeys.fgDim) ?? fgMuted, bg1);
   const accent = (k: keyof typeof workbenchKeys) => opaque(lookup(workbenchKeys[k])!, bg0);
   const red = accent("red"), green = accent("green"), yellow = accent("yellow");
-  const blue = accent("blue"), aqua = accent("aqua"), purple = accent("purple"), orange = accent("orange");
+  const blue = accent("blue"), aqua = accent("aqua"), purple = accent("purple");
+  const orange = workbenchKeys.orange
+    .map((k) => (typeof colors[k] === "string" ? normalizeHex(colors[k]!) : null))
+    .filter((c): c is string => !!c)
+    .map((c) => opaque(c, bg0))
+    .find((c) => contrastRatio(c, bg0) >= 2.5) ?? accent("yellow");
 
   const theme: Theme = {
     id: opts.id,

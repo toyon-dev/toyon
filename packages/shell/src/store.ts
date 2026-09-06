@@ -77,6 +77,8 @@ export interface State {
   previewTheme: Theme | null;
   /** dark / light / follow-system picker */
   showAppearance: boolean;
+  /** a sub-picker (theme, appearance) was opened from a palette: esc goes back there with the query restored */
+  paletteReturn: { mode: "commands" | "quick-open" | "keys"; q: string } | null;
   /** OS appearance (prefers-color-scheme), for themePrefs.mode === "system" */
   systemDark: boolean;
 }
@@ -122,6 +124,7 @@ export const initial: State = {
   showThemes: null,
   previewTheme: null,
   showAppearance: false,
+  paletteReturn: null,
   systemDark: typeof window !== "undefined" ? window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true : true,
 };
 
@@ -145,14 +148,22 @@ export type Action =
   | { a: "toggle-right" }
   | { a: "toggle-zen" }
   | { a: "show-keys"; v: boolean }
-  | { a: "show-themes"; v: State["showThemes"] }
-  | { a: "show-appearance"; v: boolean }
+  | { a: "show-themes"; v: State["showThemes"]; back?: boolean }
+  | { a: "show-appearance"; v: boolean; back?: boolean }
+  | { a: "palette-return"; v: State["paletteReturn"] }
   | { a: "preview-theme"; theme: Theme | null }
   | { a: "system-dark"; v: boolean }
   | { a: "show-commands"; v: boolean };
 
 /** the modal overlays are mutually exclusive: opening one closes the others */
 const NO_OVERLAYS = { showQuickOpen: false, showSearch: false, showPrompt: false, showKeys: false, showCommands: false, showThemes: null, showAppearance: false, previewTheme: null } as const;
+
+/** a sub-picker closed: with `back`, reopen the palette it came from (its query rides along in paletteReturn) */
+function paletteBack(s: State, back: boolean | undefined): Partial<State> {
+  const r = s.paletteReturn;
+  if (!back || !r) return { paletteReturn: null };
+  return r.mode === "commands" ? { showCommands: true } : r.mode === "keys" ? { showKeys: true } : { showQuickOpen: true };
+}
 
 export function reducer(s: State, action: Action): State {
   switch (action.a) {
@@ -167,7 +178,7 @@ export function reducer(s: State, action: Action): State {
     case "clear-prefill":
       return { ...s, prefill: null };
     case "quick-open":
-      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showQuickOpen: action.v };
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showQuickOpen: action.v, paletteReturn: null };
     case "show-search":
       return { ...s, ...(action.v ? NO_OVERLAYS : {}), showSearch: action.v };
     case "goto-line":
@@ -202,14 +213,18 @@ export function reducer(s: State, action: Action): State {
         toast: !s.zen ? { ok: true, message: "esc or ⌘. to exit" } : s.toast,
       };
     case "show-keys":
-      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showKeys: action.v };
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showKeys: action.v, paletteReturn: null };
     case "show-commands":
-      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showCommands: action.v };
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showCommands: action.v, paletteReturn: null };
     case "show-themes":
       // closing drops the live preview so the kept/previous theme paints again
-      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showThemes: action.v, previewTheme: null };
+      if (action.v) return { ...s, ...NO_OVERLAYS, showThemes: action.v };
+      return { ...s, showThemes: null, previewTheme: null, ...paletteBack(s, action.back) };
     case "show-appearance":
-      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showAppearance: action.v, previewTheme: null };
+      if (action.v) return { ...s, ...NO_OVERLAYS, showAppearance: true };
+      return { ...s, showAppearance: false, previewTheme: null, ...paletteBack(s, action.back) };
+    case "palette-return":
+      return { ...s, paletteReturn: action.v };
     case "preview-theme":
       return { ...s, previewTheme: action.theme };
     case "system-dark":

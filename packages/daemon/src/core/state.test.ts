@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { ensureDirs, makePaths } from "./paths.ts";
 import { loadState, saveState } from "./state.ts";
 
-const home = mkdtempSync(join(tmpdir(), "orch-state-"));
+const home = mkdtempSync(join(tmpdir(), "toyon-state-"));
 const paths = makePaths(home);
 ensureDirs(paths);
 afterAll(() => rmSync(home, { recursive: true, force: true }));

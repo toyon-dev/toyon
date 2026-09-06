@@ -17,7 +17,7 @@ export function sh(cwd: string, cmd: string, ...args: string[]): string {
 
 /** a real git repo on `main` with one commit, plus a throwaway TOYON home */
 export function tmpRepo(): { repo: string; paths: Paths; cleanup: () => void } {
-  const root = mkdtempSync(join(tmpdir(), "orch-t-"));
+  const root = mkdtempSync(join(tmpdir(), "toyon-t-"));
   const repo = join(root, "repo");
   sh(root, GIT, "init", "-q", "-b", "main", repo);
   sh(repo, GIT, "config", "user.email", "t@t");

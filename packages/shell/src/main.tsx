@@ -3,13 +3,15 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
 import { createStore, StoreProvider } from "./state/context.tsx";
-import { STORAGE } from "./state/keys.ts";
+import { migrateStorage, STORAGE } from "./state/keys.ts";
 import { initialState } from "./state/store.ts";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/surfaces.css";
 import { applyTheme, cachedTheme, prefersDark } from "./theme.ts";
 import { DaemonSocket } from "./ws.ts";
+
+migrateStorage();
 
 // paint the last-used theme before React mounts: the daemon's hello replaces it moments later
 const cached = cachedTheme();

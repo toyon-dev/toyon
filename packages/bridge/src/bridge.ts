@@ -11,10 +11,10 @@ import type { BridgeToShellMsg, ShellToBridgeMsg } from "@toyon/shared/protocol/
 
 declare global {
   interface Window {
-    __orchShellOrigins?: string[];
+    __toyonShellOrigins?: string[];
   }
 }
-const SHELL_ORIGINS: string[] = window.__orchShellOrigins ?? [];
+const SHELL_ORIGINS: string[] = window.__toyonShellOrigins ?? [];
 let shellOrigin: string | null = null;
 
 const post = (msg: BridgeToShellMsg) => {
@@ -289,9 +289,9 @@ function highlightFile(path: string, ranges: Array<[number, number]> | null) {
   }
 }
 
-// ---- headless self-test hook: #__orchtest=src/App.tsx@27-27 ----
-if (location.hash.startsWith("#__orchtest=")) {
-  const spec = decodeURIComponent(location.hash.slice("#__orchtest=".length));
+// ---- headless self-test hook: #__toyontest=src/App.tsx@27-27 ----
+if (location.hash.startsWith("#__toyontest=")) {
+  const spec = decodeURIComponent(location.hash.slice("#__toyontest=".length));
   const [path, span] = spec.split("@");
   const ranges: Array<[number, number]> | null = span
     ? [[Number(span.split("-")[0]), Number(span.split("-")[1] ?? span.split("-")[0])]]
@@ -299,7 +299,7 @@ if (location.hash.startsWith("#__orchtest=")) {
   setTimeout(() => {
     const { matched, fromFile, withSource } = matchElements(String(path), ranges);
     const out = document.createElement("pre");
-    out.id = "__orchtest";
+    out.id = "__toyontest";
     out.textContent = JSON.stringify(
       {
         path,

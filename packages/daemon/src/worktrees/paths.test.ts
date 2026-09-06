@@ -6,9 +6,9 @@ import { resolveInside } from "./paths.ts";
 
 // tmpdir() on macOS is itself a symlink (/tmp → /private/tmp): the resolver must cope with a
 // worktree that lives under one
-const root = mkdtempSync(join(tmpdir(), "orch-paths-"));
+const root = mkdtempSync(join(tmpdir(), "toyon-paths-"));
 const real = realpathSync(root);
-const outside = mkdtempSync(join(tmpdir(), "orch-outside-"));
+const outside = mkdtempSync(join(tmpdir(), "toyon-outside-"));
 mkdirSync(join(root, "src"));
 writeFileSync(join(root, "src", "a.ts"), "");
 writeFileSync(join(outside, "secret"), "");

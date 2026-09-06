@@ -16,7 +16,7 @@ export class BridgeScript {
 
   get(): string {
     if (this.cache) return this.cache;
-    const prelude = `window.__orchShellOrigins=${JSON.stringify(this.origins)};\n`;
+    const prelude = `window.__toyonShellOrigins=${JSON.stringify(this.origins)};\n`;
     if (existsSync(this.path)) {
       this.cache = prelude + readFileSync(this.path, "utf8");
       return this.cache;

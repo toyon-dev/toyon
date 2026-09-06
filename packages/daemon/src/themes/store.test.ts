@@ -7,7 +7,7 @@ import { ThemeStore } from "./store.ts";
 
 // extension discovery reads TOYON_THEME_DIRS at call time; point it at the fixtures
 process.env.TOYON_THEME_DIRS = join(import.meta.dir, "../../test/fixtures/extensions");
-const home = mkdtempSync(join(tmpdir(), "orch-themes-"));
+const home = mkdtempSync(join(tmpdir(), "toyon-themes-"));
 const themesDir = join(home, "themes");
 mkdirSync(themesDir, { recursive: true });
 

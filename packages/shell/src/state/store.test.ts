@@ -296,3 +296,49 @@ describe("git status", () => {
     expect(s.leftOpen).toBe(true);
   });
 });
+
+describe("streams and notices", () => {
+  test("proc logs keep the last 401 lines per worktree", () => {
+    const lines = Array.from({ length: 450 }, (_, i) =>
+      server({ t: "log", worktreeId: "a", proc: "dev", line: `l${i}` }),
+    );
+    const s = run([hello(wt("a")), ...lines]);
+    expect(localOf(s, "a").log.length).toBe(401);
+    expect(localOf(s, "a").log[0]).toBe("[dev] l49");
+    expect(localOf(s, "a").log.at(-1)).toBe("[dev] l449");
+  });
+  test("an error frame is a failure toast", () => {
+    const s = run([server({ t: "error", message: "nope" })]);
+    expect(s.toast).toEqual({ ok: false, message: "nope" });
+  });
+  test("a merged ship offers the cleanup ids; a plain ship does not", () => {
+    const base = [hello(wt("a"), wt("b"))];
+    const merged = run([...base, server({ t: "shipped", worktreeId: "a", ok: true, message: "m", merged: true })]);
+    expect(merged.toast?.removeIds).toEqual(["a"]);
+    const pr = run([...base, server({ t: "shipped", worktreeId: "a", ok: true, message: "m", url: "u" })]);
+    expect(pr.toast?.removeIds).toBeUndefined();
+    expect(pr.toast?.url).toBe("u");
+  });
+  test("a protocol mismatch marks the tab incompatible and disconnected", () => {
+    const s = run([{ a: "connected", v: true }, { a: "incompatible" }]);
+    expect(s.incompatible).toBe(true);
+    expect(s.connected).toBe(false);
+  });
+  test("entering zen tells you how to leave; leaving keeps whatever toast was up", () => {
+    const on = run([{ a: "toggle-zen" }]);
+    expect(on.zen).toBe(true);
+    expect(on.toast?.message).toMatch(/esc/);
+    const off = run([{ a: "dismiss-toast" }, { a: "toggle-zen" }], on);
+    expect(off.zen).toBe(false);
+    expect(off.toast).toBeNull();
+  });
+  test("a file-diff carries the pending goto line only for the file it was asked for", () => {
+    const s = run([
+      hello(wt("a")),
+      { a: "goto-line", v: { worktreeId: "a", path: "x.ts", line: 7 } },
+      server({ t: "file-diff", worktreeId: "a", path: "y.ts", before: "", after: "" }),
+    ]);
+    expect(s.diff?.line).toBeUndefined();
+    expect(s.gotoLine).toBeNull();
+  });
+});

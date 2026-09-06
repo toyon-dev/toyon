@@ -35,7 +35,8 @@ export function DiffView({
   }, [diff.worktreeId, diff.path, cached, sock]);
   const lineOff = cached?.offset ?? 0;
   return (
-    <div className="diff-pane" style={{ height }}>
+    // full mode takes whatever the terminal pane leaves rather than a fixed 100%
+    <div className={`diff-pane ${full ? "full" : ""}`} style={full ? undefined : { height }}>
       {!full && <div className="row-resize" onPointerDown={onDragStart} />}
       <div className="file-head">
         <span className="file-path">{diff.path}</span>

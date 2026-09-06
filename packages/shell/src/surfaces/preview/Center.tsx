@@ -13,6 +13,7 @@ const HAS_TOKEN = hasToken();
 
 import { DiffView } from "../changes/DiffView.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
+import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { previewUrl, relFile } from "../util.ts";
 
 /** the preview column: one persistent iframe per visited worktree (switching is a display toggle,
@@ -24,6 +25,7 @@ export function Center() {
   const active = useActive();
   const connected = useStore((s) => s.connected);
   const diff = useStore((s) => s.diff);
+  const termOpen = useStore((s) => s.termOpen);
   const reloadReq = useStore((s) => s.reloadReq);
   const theme = useTheme();
   const themeRef = useRef(theme);
@@ -132,12 +134,26 @@ export function Center() {
   const [diffFull, setDiffFull] = usePersisted(STORAGE.diffFull, false, (raw) =>
     raw === null ? undefined : raw === "1",
   );
+  // terminal pane: below the editor pane, same drag, its own persisted height
+  const [termH, setTermH] = usePersisted(STORAGE.termHeight, 240, (raw) => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 100 ? n : undefined;
+  });
+  const termPx = termOpen && activeId ? termH : 0;
   const startDiffDrag = useDragResize(
     (ev) => {
       const rect = centerRef.current?.getBoundingClientRect();
-      return rect ? Math.min(Math.max(rect.bottom - ev.clientY, 120), rect.height - 80) : null;
+      // the editor pane sits above the terminal, so its bottom edge is the terminal's top
+      return rect ? Math.min(Math.max(rect.bottom - termPx - ev.clientY, 120), rect.height - termPx - 80) : null;
     },
     (h) => setDiffH(Math.round(h)),
+  );
+  const startTermDrag = useDragResize(
+    (ev) => {
+      const rect = centerRef.current?.getBoundingClientRect();
+      return rect ? Math.min(Math.max(rect.bottom - ev.clientY, 100), rect.height - 80) : null;
+    },
+    (h) => setTermH(Math.round(h)),
   );
 
   return (
@@ -186,6 +202,9 @@ export function Center() {
           onToggleFull={() => setDiffFull(!diffFull)}
           onDragStart={startDiffDrag}
         />
+      )}
+      {termOpen && activeId && (
+        <TerminalPane key={activeId} worktreeId={activeId} height={termH} onDragStart={startTermDrag} />
       )}
       <Overlays />
     </div>

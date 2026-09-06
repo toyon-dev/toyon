@@ -10,6 +10,7 @@ export const STORAGE = {
   rightWidth: "toyon-rw",
   diffHeight: "toyon-dh",
   diffFull: "toyon-dfull",
+  termHeight: "toyon-th",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */
   client: "toyon-client",
 } as const;

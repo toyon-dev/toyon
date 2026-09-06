@@ -368,12 +368,39 @@ body.resizing iframe {
 .rb-path:focus {
   color: var(--fg1);
 }
-.diff-pane .file-head,
-.term-pane .file-head {
+.pane {
+  position: relative;
+  border-top: 1px solid var(--bg2);
+  background: var(--bg0);
+  flex-shrink: 0;
+}
+.pane .file-head {
   display: flex;
   gap: 12px;
   padding: 6px 16px;
   align-items: center;
+}
+.pane .file-path {
+  flex: 1;
+  font: var(--fs-sm) var(--font-mono);
+  color: var(--fg-muted);
+}
+.diff-pane {
+  height: 45%;
+  min-height: 120px;
+}
+.diff-pane.full {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.term-pane {
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+}
+.term-pane .file-head {
+  padding: 4px 12px;
 }
 .diff-pane .file-path,
 .term-pane .file-path {

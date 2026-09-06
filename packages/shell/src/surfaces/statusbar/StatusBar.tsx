@@ -33,13 +33,6 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
       >
         <Icon name="branch" />
       </button>
-      <button
-        className={`btn-icon toggle ${termOpen ? "on" : ""}`}
-        onClick={() => dispatch({ a: "toggle-terminal" })}
-        {...tip("Terminal", chord("terminal"))}
-      >
-        <Icon name="terminal" />
-      </button>
       <RouteBar worktreeId={id} ready={ready} left={navCenter} />
       {installEvt && (
         <button
@@ -65,7 +58,8 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
             {p.name} {p.status}
           </button>
         ))}
-      {/* right cluster: help · chat toggle · zen (zen last — it hides everything, so it sits at the edge) */}
+      {/* right cluster, with the worktree's own panes (chat, terminal) beside the rail they belong to;
+          zen last — it hides everything, so it sits at the edge */}
       <span className="bar-tools">
         <button
           className="btn-icon toggle keys-btn"
@@ -80,6 +74,13 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           {...tip("Chat panel", chord("right"))}
         >
           <Icon name="chat" />
+        </button>
+        <button
+          className={`btn-icon toggle ${termOpen ? "on" : ""}`}
+          onClick={() => dispatch({ a: "toggle-terminal" })}
+          {...tip("Terminal", chord("terminal"))}
+        >
+          <Icon name="terminal" />
         </button>
         <button
           className="btn-icon toggle"

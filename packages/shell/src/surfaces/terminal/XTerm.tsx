@@ -86,6 +86,13 @@ export default function XTerm({
 
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
+      // ⌘K clears, as in Terminal.app; while the terminal has focus, new-worktree is ⌘N or the palette
+      if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        e.stopPropagation();
+        term.clear();
+        return false;
+      }
       // a toyon chord is the shell's: xterm skips it and the event bubbles up to useChords
       if (matchChord(e)) return false;
       // escape belongs to whatever runs in here (vim), not to the shell's escape ladder

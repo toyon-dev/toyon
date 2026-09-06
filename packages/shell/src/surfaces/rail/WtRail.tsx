@@ -19,6 +19,7 @@ export function WtRail() {
   const activeId = useActiveId();
   const connected = useStore((s) => s.connected);
   const leftOpen = useStore((s) => s.leftOpen);
+  const termOpen = useStore((s) => s.termOpen);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const [graftMode, setGraftMode] = useState(false);
@@ -56,6 +57,15 @@ export function WtRail() {
         onClick: () => {
           dispatch({ a: "activate", id });
           if (!leftOpen) dispatch({ a: "toggle-left" });
+        },
+      });
+    }
+    if (w.worktree.kind !== "spare") {
+      items.push({
+        label: "open terminal",
+        onClick: () => {
+          dispatch({ a: "activate", id });
+          if (!termOpen) dispatch({ a: "toggle-terminal" });
         },
       });
     }

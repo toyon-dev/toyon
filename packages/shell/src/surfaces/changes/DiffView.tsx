@@ -3,7 +3,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { localOf, type State, worktreeById } from "../../state/store.ts";
-import { tip } from "../../ui/Tooltip.tsx";
+import { Pane } from "../../ui/Pane.tsx";
 import { OpenInMenu } from "./OpenInMenu.tsx";
 
 const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
@@ -36,25 +36,29 @@ export function DiffView({
   const lineOff = cached?.offset ?? 0;
   return (
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%
-    <div className={`diff-pane ${full ? "full" : ""}`} style={full ? undefined : { height }}>
-      {!full && <div className="row-resize" onPointerDown={onDragStart} />}
-      <div className="file-head">
-        <span className="file-path">{diff.path}</span>
-        <button
-          className="btn btn-outline deep-link"
-          onClick={onToggleFull}
-          data-tip={full ? "Split view — show the preview above" : "Full height — hide the preview"}
-        >
-          {full ? "◫ split" : "⬒ full"}
-        </button>
-        <OpenInMenu
-          absPath={absPath}
-          onReveal={() => sock?.send({ t: "reveal", worktreeId: diff.worktreeId, path: diff.path })}
-        />
-        <button onClick={() => dispatch({ a: "close-diff" })} {...tip("Close", "esc")}>
-          ✕
-        </button>
-      </div>
+    <Pane
+      className={`diff-pane ${full ? "full" : ""}`}
+      height={full ? undefined : height}
+      resizable={!full}
+      onDragStart={onDragStart}
+      title={diff.path}
+      onClose={() => dispatch({ a: "close-diff" })}
+      actions={
+        <>
+          <button
+            className="btn btn-outline deep-link"
+            onClick={onToggleFull}
+            data-tip={full ? "Split view — show the preview above" : "Full height — hide the preview"}
+          >
+            {full ? "◫ split" : "⬒ full"}
+          </button>
+          <OpenInMenu
+            absPath={absPath}
+            onReveal={() => sock?.send({ t: "reveal", worktreeId: diff.worktreeId, path: diff.path })}
+          />
+        </>
+      }
+    >
       <Suspense fallback={<div className="empty">loading diff…</div>}>
         <MonacoDiff
           before={diff.before}
@@ -74,6 +78,6 @@ export function DiffView({
           }}
         />
       </Suspense>
-    </div>
+    </Pane>
   );
 }

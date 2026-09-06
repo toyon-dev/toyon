@@ -2,8 +2,8 @@ import { lazy, Suspense, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
+import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
-import { chord } from "../util.ts";
 
 const XTerm = lazy(() => import("./XTerm.tsx"));
 
@@ -33,18 +33,21 @@ export function TerminalPane({
     setGen((g) => g + 1);
   };
   return (
-    <div className="term-pane" style={{ height }}>
-      <div className="row-resize" onPointerDown={onDragStart} />
-      <div className="file-head">
-        <span className="file-path">{branch}</span>
-        {exit !== null && <span className="term-exit">exited {exit}</span>}
-        <button className="btn btn-outline" onClick={restart} {...tip("Kill the shell and start a new one")}>
-          ↻ restart
-        </button>
-        <button onClick={() => dispatch({ a: "toggle-terminal" })} {...tip("Hide terminal", chord("terminal"))}>
-          ✕
-        </button>
-      </div>
+    <Pane
+      className="term-pane"
+      height={height}
+      onDragStart={onDragStart}
+      title={branch}
+      onClose={() => dispatch({ a: "toggle-terminal" })}
+      actions={
+        <>
+          {exit !== null && <span className="term-exit">exited {exit}</span>}
+          <button className="btn btn-outline" onClick={restart} {...tip("Kill the shell and start a new one")}>
+            ↻ restart
+          </button>
+        </>
+      }
+    >
       <div className="term-body">
         <Suspense fallback={<div className="empty">loading terminal…</div>}>
           <XTerm
@@ -57,6 +60,6 @@ export function TerminalPane({
           />
         </Suspense>
       </div>
-    </div>
+    </Pane>
   );
 }

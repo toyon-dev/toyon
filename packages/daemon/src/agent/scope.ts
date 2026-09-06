@@ -9,12 +9,12 @@
 // Reads are left open: the default sandbox allows them, and blocking them
 // breaks too much (global tool configs, resolved node_modules, /usr/lib).
 
-import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, resolve, sep } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { HookCallbackMatcher, SandboxSettings } from "@anthropic-ai/claude-agent-sdk";
 import { WRITE_TOOLS } from "@toyon/shared";
 import { git } from "../git/exec.ts";
+import { canonical, within } from "./bounds.ts";
 
 export interface BlockedWrite {
   tool: string;
@@ -31,30 +31,8 @@ const CACHE_DIRS = [".bun", ".npm", ".cache", ".yarn", ".pnpm-store", "Library/C
   resolve(homedir(), d),
 );
 
-/** Resolve symlinks on the deepest existing ancestor so a link inside the
- * worktree pointing elsewhere can't smuggle a write out. */
-export function canonical(p: string): string {
-  let probe = p;
-  const tail: string[] = [];
-  while (!existsSync(probe)) {
-    const parent = dirname(probe);
-    if (parent === probe) return p;
-    tail.unshift(probe.slice(parent.length + 1));
-    probe = parent;
-  }
-  try {
-    return resolve(realpathSync(probe), ...tail);
-  } catch {
-    return p;
-  }
-}
-
 function uniq<T>(xs: T[]): T[] {
   return [...new Set(xs)];
-}
-
-export function within(path: string, root: string): boolean {
-  return path === root || path.startsWith(root + sep);
 }
 
 export async function buildScope(cwd: string, onBlocked: (b: BlockedWrite) => void): Promise<Scope> {

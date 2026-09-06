@@ -6,7 +6,7 @@ import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } 
 import { dirname, join } from "node:path";
 import type { GitFileStatus, PickMeta, RepoInfo, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
 import { quickName } from "../agent/llm.ts";
-import { transcriptPathFor } from "../agent/session.ts";
+import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";

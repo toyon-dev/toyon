@@ -3,14 +3,12 @@
 // the wire protocol. Transcript JSONL in ~/.toyon/transcripts is the
 // source of truth for rendering; the SDK session id is only used for resume.
 
-import { existsSync, readFileSync } from "node:fs";
-import { appendFile } from "node:fs/promises";
-import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStatus, PickMeta } from "@toyon/shared";
-import { fireAndForget, log } from "../core/log.ts";
+import { fireAndForget } from "../core/log.ts";
 import type { AgentAdapter } from "./adapter.ts";
 import { buildScope, type Scope } from "./scope.ts";
+import { Transcript, type TranscriptEntry, transcriptPathFor } from "./transcript.ts";
 
 export type AgentEventListener = (event: AgentEvent, seq: number) => void;
 export type AgentStatusListener = (status: AgentStatus) => void;
@@ -23,13 +21,8 @@ const SYSTEM_APPEND = [
   "Keep the scope tight: do the asked task well, then stop. Suggest follow-ups in chat instead of expanding scope.",
 ].join(" ");
 
-export function transcriptPathFor(transcriptsDir: string, worktreeId: string): string {
-  return join(transcriptsDir, `${worktreeId}.jsonl`);
-}
-
 export class AgentSession implements AgentAdapter {
   status: AgentStatus = "idle";
-  private seq = 0;
   private queue: Array<{ text: string; context?: string; pick?: PickMeta }> = [];
   private running = false;
   private current: { interrupt?: () => Promise<void> } | null = null;
@@ -72,57 +65,23 @@ export class AgentSession implements AgentAdapter {
   constructor(
     readonly worktreeId: string,
     readonly cwd: string,
-    private transcriptsDir: string,
+    transcriptsDir: string,
     private getSessionId: () => string | undefined,
     private setSessionId: (id: string) => void,
     private onEvent: AgentEventListener,
     private onStatus: AgentStatusListener,
   ) {
-    // the transcript is read from disk once; from then on the in-memory copy is the source for
-    // backfills (a long session used to be re-parsed on every subscribe)
-    this.events = this.readTranscript();
-    this.seq = this.events.length;
+    this.log = new Transcript(transcriptPathFor(transcriptsDir, worktreeId), worktreeId);
   }
 
-  private events: Array<{ seq: number; event: AgentEvent }>;
+  private log: Transcript;
 
-  private transcriptPath() {
-    return transcriptPathFor(this.transcriptsDir, this.worktreeId);
+  transcript(): TranscriptEntry[] {
+    return this.log.entries;
   }
-
-  transcript(): Array<{ seq: number; event: AgentEvent }> {
-    return this.events;
-  }
-
-  private readTranscript(): Array<{ seq: number; event: AgentEvent }> {
-    const p = this.transcriptPath();
-    if (!existsSync(p)) return [];
-    const out: Array<{ seq: number; event: AgentEvent }> = [];
-    let torn = 0;
-    for (const line of readFileSync(p, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        out.push(JSON.parse(line));
-      } catch {
-        // a crash mid-append leaves a partial last line; one bad line must not make the whole
-        // worktree unbootable
-        torn++;
-      }
-    }
-    if (torn) log.warn(this.worktreeId, `transcript: skipped ${torn} unparsable line(s)`);
-    return out;
-  }
-
-  /** appends are chained so lines land in order without a sync write per streamed token */
-  private writes: Promise<void> = Promise.resolve();
 
   private emit(event: AgentEvent) {
-    const entry = { seq: this.seq++, event };
-    this.events.push(entry);
-    const line = `${JSON.stringify(entry)}\n`;
-    this.writes = this.writes
-      .then(() => appendFile(this.transcriptPath(), line))
-      .catch((e) => log.warn(this.worktreeId, "transcript append failed", e));
+    const entry = this.log.append(event);
     this.onEvent(event, entry.seq);
   }
 

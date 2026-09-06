@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { canonical, within } from "../agent/scope.ts";
+import { canonical, within } from "../agent/bounds.ts";
 import { UserError } from "../core/errors.ts";
 
 /**

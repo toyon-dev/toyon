@@ -3,7 +3,7 @@ import { existsSync, lstatSync, readlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
-import { transcriptPathFor } from "../agent/session.ts";
+import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";

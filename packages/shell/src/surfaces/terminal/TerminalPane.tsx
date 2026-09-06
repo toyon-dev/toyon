@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
@@ -40,8 +41,8 @@ export function TerminalPane({
       actions={
         <>
           {exit !== null && <span className="term-exit">exited {exit}</span>}
-          <button className="btn btn-outline" onClick={restart} {...tip("Kill the shell and start a new one")}>
-            ↻ restart
+          <button className="btn-icon" onClick={restart} {...tip("Restart the shell")}>
+            <Icon name="reload" />
           </button>
         </>
       }

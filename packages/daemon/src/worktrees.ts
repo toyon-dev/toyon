@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { basename, join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import type {
   AgentEvent,
   AgentStatus,
@@ -12,6 +12,7 @@ import type {
   WorktreeInfo,
   WorktreeStatus,
 } from "@orchardist/shared";
+import { AgentSession, quickName } from "./agent.ts";
 import { detectConfig } from "./config.ts";
 import {
   aheadBehind,
@@ -26,13 +27,12 @@ import {
   statusFilesWithCounts,
   withRepoLock,
 } from "./git.ts";
-import { watchDefaultBranch } from "./watcher.ts";
+import { WORKTREES_DIR } from "./paths.ts";
 import { allocateProxyPort, releasePort, reservePort } from "./ports.ts";
 import { startProxy, type WorktreeProxy } from "./proxy.ts";
-import { AgentSession, quickName } from "./agent.ts";
+import { loadState, type PersistedState, saveState } from "./state.ts";
 import { WorktreeProcs } from "./supervisor.ts";
-import { loadState, saveState, type PersistedState } from "./state.ts";
-import { WORKTREES_DIR } from "./paths.ts";
+import { watchDefaultBranch } from "./watcher.ts";
 
 export interface HubEvents {
   proc(worktreeId: string, proc: ProcState): void;
@@ -162,10 +162,10 @@ export class Manager {
 
   private async refreshSpare(repoId: string) {
     const entry = this.spares.get(repoId);
-    if (!entry || !entry.ready || entry.refreshing) return;
+    if (!entry?.ready || entry.refreshing) return;
     const repo = this.repo(repoId);
     const wt = this.worktree(entry.worktreeId);
-    if (!wt || wt.kind !== "spare") return;
+    if (wt?.kind !== "spare") return;
     entry.refreshing = (async () => {
       await withRepoLock(repo.path, () => {
         git(wt.path, "reset", "--hard", repo.defaultBranch);
@@ -191,7 +191,7 @@ export class Manager {
     // a refresh in flight serializes in front of the agent's first action
     if (entry.refreshing) await entry.refreshing;
     const wt = this.worktree(entry.worktreeId);
-    if (!wt || wt.kind !== "spare") return null;
+    if (wt?.kind !== "spare") return null;
     const repo = this.repo(repoId);
     await withRepoLock(repo.path, () => {
       gitOrThrow(wt.path, "switch", "-c", branch);
@@ -258,7 +258,7 @@ export class Manager {
     saveState(this.state);
     // persist next to the code so it's shared/committed and future registers skip the card
     try {
-      writeFileSync(join(repo.path, "orchardist.json"), JSON.stringify(config, null, 2) + "\n");
+      writeFileSync(join(repo.path, "orchardist.json"), `${JSON.stringify(config, null, 2)}\n`);
     } catch {}
     // (re)start procs for this repo's worktrees under the confirmed config
     for (const wt of this.state.worktrees.filter((w) => w.repoId === repoId && w.kind !== "spare")) {
@@ -509,7 +509,7 @@ export class Manager {
     const procEntries = repo.needsSetup ? {} : repo.config.procs;
 
     // start non-preview procs first so the preview proc can get their URLs
-    const previewName = repo.config.preview ?? (procEntries["web"] ? "web" : Object.keys(procEntries)[0]);
+    const previewName = repo.config.preview ?? (procEntries.web ? "web" : Object.keys(procEntries)[0]);
     const extraEnv: Record<string, string> = {};
     for (const [name, cmd] of Object.entries(procEntries)) {
       if (name === previewName) continue;
@@ -518,8 +518,8 @@ export class Manager {
       extraEnv[urlVar] = `http://127.0.0.1:${st.port}`;
       extraEnv[`VITE_${urlVar}`] = extraEnv[urlVar];
       if (name === "api") {
-        extraEnv["API_URL"] = extraEnv[urlVar];
-        extraEnv["VITE_API_URL"] = extraEnv[urlVar];
+        extraEnv.API_URL = extraEnv[urlVar];
+        extraEnv.VITE_API_URL = extraEnv[urlVar];
       }
     }
     if (previewName && procEntries[previewName]) {
@@ -581,9 +581,9 @@ export class Manager {
       const wt = this.worktree(worktreeId);
       if (!rt || !wt) return 0;
       const repo = this.repo(wt.repoId);
-      const previewName = repo.config.preview ?? (repo.config.procs["web"] ? "web" : Object.keys(repo.config.procs)[0]);
+      const previewName = repo.config.preview ?? (repo.config.procs.web ? "web" : Object.keys(repo.config.procs)[0]);
       const st = rt.procs.states().find((p) => p.name === previewName) ?? rt.procs.states()[0];
-      if (!st || st.status !== "running") return 0;
+      if (st?.status !== "running") return 0;
       const host = st.host?.includes(":") ? `[${st.host}]` : (st.host ?? "127.0.0.1");
       const res = await fetch(`http://${host}:${st.port}/${path}`, {
         signal: AbortSignal.timeout(1500),

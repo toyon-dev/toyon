@@ -1,14 +1,13 @@
-import { join, dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT } from "@orchardist/shared";
-import { Manager, type HubEvents } from "./worktrees.ts";
-import { startServer } from "./server.ts";
-import { statusFilesWithCounts } from "./git.ts";
-import { loadOrCreateToken } from "./state.ts";
-import { ensureDirs } from "./paths.ts";
 import { cloud } from "./cloud.ts";
+import { statusFilesWithCounts } from "./git.ts";
+import { ensureDirs } from "./paths.ts";
+import { startServer } from "./server.ts";
+import { loadOrCreateToken, saveState } from "./state.ts";
 import { ThemeStore } from "./themes.ts";
-import { saveState } from "./state.ts";
+import { type HubEvents, Manager } from "./worktrees.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SHELL_DIST = join(here, "../../shell/dist");

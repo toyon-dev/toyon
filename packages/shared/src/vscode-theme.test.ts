@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { vscodeToTheme, ThemeImportError } from "./vscode-theme.ts";
+import type { Theme } from "./index.ts";
 import {
   builtinThemes,
   composite,
@@ -20,7 +20,7 @@ import {
   vscodeDark2026,
   vscodeLight2026,
 } from "./themes.ts";
-import type { Theme } from "./index.ts";
+import { ThemeImportError, vscodeToTheme } from "./vscode-theme.ts";
 
 const fixture = (f: string) => JSON.parse(readFileSync(join(import.meta.dir, "../test/fixtures", f), "utf8"));
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/;
@@ -156,12 +156,12 @@ describe("families", () => {
   test("pairs collapse, singles stand alone, names derive when not explicit", () => {
     const fams = themeFamilies([...builtinThemes, ...ext]);
     const byName = Object.fromEntries(fams.map((f) => [f.name, f]));
-    expect(byName["Gruvbox"]?.dark?.id).toBe("gruvbox-dark-soft");
-    expect(byName["Gruvbox"]?.light?.id).toBe("gruvbox-light");
-    expect(byName["Nord"]?.light).toBeUndefined();
-    expect(byName["One"]?.dark?.id).toBe("vscode:a.x:one-dark");
-    expect(byName["One"]?.light?.id).toBe("vscode:a.x:one-light");
-    expect(byName["Solo"]?.dark?.id).toBe("vscode:a.x:solo");
+    expect(byName.Gruvbox?.dark?.id).toBe("gruvbox-dark-soft");
+    expect(byName.Gruvbox?.light?.id).toBe("gruvbox-light");
+    expect(byName.Nord?.light).toBeUndefined();
+    expect(byName.One?.dark?.id).toBe("vscode:a.x:one-dark");
+    expect(byName.One?.light?.id).toBe("vscode:a.x:one-light");
+    expect(byName.Solo?.dark?.id).toBe("vscode:a.x:solo");
     // every theme lands in exactly one family
     expect(fams.flatMap((f) => [f.dark, f.light].filter(Boolean)).length).toBe(builtinThemes.length + ext.length);
   });

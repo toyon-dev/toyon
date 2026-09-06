@@ -1,21 +1,19 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { pickTheme, type ClientMsg, type ServerMsg } from "@orchardist/shared";
-import type { Manager } from "./worktrees.ts";
+import { type ClientMsg, pickTheme, type ServerMsg } from "@orchardist/shared";
+import { cloud } from "./cloud.ts";
 import {
-  aheadBehind,
   changedRanges,
   commitWorktree,
-  committedFiles,
   fileBefore,
   mergeToMain,
   shipWorktree,
   statusFiles,
   syncFromMain,
 } from "./git.ts";
-import { cloud } from "./cloud.ts";
-import type { ThemeStore } from "./themes.ts";
 import { setWaitingColors } from "./proxy.ts";
+import type { ThemeStore } from "./themes.ts";
+import type { Manager } from "./worktrees.ts";
 
 const VERSION = "0.0.1";
 
@@ -177,7 +175,7 @@ export function startServer(opts: {
       case "chat": {
         const wt = manager.worktree(msg.worktreeId);
         if (!wt) throw new Error("unknown worktree");
-        let agent = manager.agentFor(msg.worktreeId);
+        const agent = manager.agentFor(msg.worktreeId);
         if (!agent) throw new Error("worktree still starting; try again in a moment");
         agent.send(msg.text, msg.context, msg.pick);
         hub.worktreesChanged(); // queued-count may have changed
@@ -430,7 +428,7 @@ export function startServer(opts: {
         if (!wt) throw new Error("unknown worktree");
         const { resolve } = await import("node:path");
         const target = resolve(wt.path, msg.path ?? ".");
-        if (target !== resolve(wt.path) && !target.startsWith(resolve(wt.path) + "/")) {
+        if (target !== resolve(wt.path) && !target.startsWith(`${resolve(wt.path)}/`)) {
           throw new Error("path escapes worktree");
         }
         // Finder reveal is macOS-only; elsewhere there is no viewer-side filesystem.
@@ -450,7 +448,7 @@ export function startServer(opts: {
         if (entry.xy === "??") {
           const { resolve } = await import("node:path");
           const target = resolve(wt.path, msg.path);
-          if (!target.startsWith(resolve(wt.path) + "/")) throw new Error("path escapes worktree");
+          if (!target.startsWith(`${resolve(wt.path)}/`)) throw new Error("path escapes worktree");
           const { unlinkSync } = await import("node:fs");
           unlinkSync(target);
         } else {
@@ -473,7 +471,7 @@ export function startServer(opts: {
         if (!wt) throw new Error("unknown worktree");
         const { resolve } = await import("node:path");
         const target = resolve(wt.path, msg.path);
-        if (!target.startsWith(resolve(wt.path) + "/")) throw new Error("path escapes worktree");
+        if (!target.startsWith(`${resolve(wt.path)}/`)) throw new Error("path escapes worktree");
         await Bun.write(target, msg.content);
         // no toast: autosave fires constantly; the changes list is the feedback
         sendGitStatus(wt.id, ws);

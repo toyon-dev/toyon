@@ -1,13 +1,14 @@
 // Lazy-loaded Monaco diff viewer (read-only). Loaded via React.lazy so the
 // editor bundle only downloads when a diff is first opened.
 
-import { useEffect, useRef } from "react";
-import * as monaco from "monaco-editor";
 import type { Theme } from "@orchardist/shared";
 import { gruvboxDarkSoft, hex8, scaleAlpha } from "@orchardist/shared";
+import * as monaco from "monaco-editor";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
+import { useEffect, useRef } from "react";
+
 // monaco 0.56 moved the TS language API off `monaco.languages.typescript` (now a deprecated stub)
 // to a top-level `typescript` export
 const { JsxEmit, ModuleKind, ModuleResolutionKind, ScriptTarget, javascriptDefaults, typescriptDefaults } =

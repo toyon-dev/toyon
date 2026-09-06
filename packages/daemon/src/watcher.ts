@@ -2,7 +2,7 @@
 // pull). fs events are noisy (.git/index churn etc.), so changes are debounced
 // and confirmed via rev-parse before firing.
 
-import { watch, type FSWatcher } from "node:fs";
+import { type FSWatcher, watch } from "node:fs";
 import { join } from "node:path";
 import { git } from "./git.ts";
 

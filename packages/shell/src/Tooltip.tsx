@@ -69,7 +69,7 @@ export function Tooltips() {
     };
     const onFocus = (e: FocusEvent) => {
       const el = target(e);
-      if (el && el.matches(":focus-visible")) {
+      if (el?.matches(":focus-visible")) {
         window.clearTimeout(timer);
         current = el;
         show(el);

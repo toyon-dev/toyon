@@ -3,21 +3,21 @@
 // Discovery is read-only; imports from the browser are written to THEMES_DIR
 // already converted, so the file is the source of truth from then on.
 
-import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { parse as parseJsonc } from "jsonc-parser";
 import {
   builtinThemes,
   defaultThemePrefs,
   slug,
-  vscodeToTheme,
-  ThemeImportError,
   type Theme,
+  ThemeImportError,
   type ThemePrefs,
+  vscodeToTheme,
 } from "@orchardist/shared";
-import { THEMES_DIR } from "./paths.ts";
+import { parse as parseJsonc } from "jsonc-parser";
 import { cloud } from "./cloud.ts";
+import { THEMES_DIR } from "./paths.ts";
 
 const home = homedir();
 const defaultExtensionDirs = [
@@ -113,7 +113,7 @@ export class ThemeStore {
       name: (json as { name?: string })?.name ?? base,
       source: "file",
     });
-    writeFileSync(join(THEMES_DIR, `${base}.json`), JSON.stringify(theme, null, 2) + "\n");
+    writeFileSync(join(THEMES_DIR, `${base}.json`), `${JSON.stringify(theme, null, 2)}\n`);
     this.load();
     return theme;
   }

@@ -709,7 +709,7 @@ export const themeColorKeys: ThemeColorKey[] = [
 
 /** bg0 → --bg0, fgMuted → --fg-muted, addBg → --add-bg */
 export function cssVarName(key: ThemeColorKey): string {
-  return "--" + key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+  return `--${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
 }
 
 export function themeToCssVars(theme: Theme): Record<string, string> {

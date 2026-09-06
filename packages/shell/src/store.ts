@@ -336,7 +336,7 @@ function onServer(s: State, msg: ServerMsg): State {
     case "git-status": {
       // ranges go stale whenever the worktree's git state moves
       const changedRanges = Object.fromEntries(
-        Object.entries(s.changedRanges).filter(([k]) => !k.startsWith(msg.worktreeId + ":")),
+        Object.entries(s.changedRanges).filter(([k]) => !k.startsWith(`${msg.worktreeId}:`)),
       );
       // session opened on a clean main: nothing to show — close the changes panel once
       let leftOpen = s.leftOpen;

@@ -3,9 +3,9 @@
 // the wire protocol. Transcript JSONL in ~/.orchardist/transcripts is the
 // source of truth for rendering; the SDK session id is only used for resume.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStatus, PickMeta } from "@orchardist/shared";
 import { TRANSCRIPTS_DIR } from "./paths.ts";
 import { buildScope, type Scope } from "./scope.ts";
@@ -89,7 +89,7 @@ export class AgentSession {
 
   private emit(event: AgentEvent) {
     const entry = { seq: this.seq++, event };
-    appendFileSync(this.transcriptPath(), JSON.stringify(entry) + "\n");
+    appendFileSync(this.transcriptPath(), `${JSON.stringify(entry)}\n`);
     this.onEvent(event, entry.seq);
   }
 
@@ -295,5 +295,5 @@ function summarizeToolResult(content: unknown): string {
 }
 
 function truncate(s: string, max = 4000): string {
-  return s.length > max ? s.slice(0, max) + `\n… (${s.length - max} more chars)` : s;
+  return s.length > max ? `${s.slice(0, max)}\n… (${s.length - max} more chars)` : s;
 }

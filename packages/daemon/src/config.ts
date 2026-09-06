@@ -19,11 +19,11 @@ export function detectConfig(repoPath: string): DetectedConfig {
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
     const scripts: Record<string, string> = pkg.scripts ?? {};
     const procs: Record<string, string> = {};
-    if (scripts["dev"]) procs["web"] = detectRunner(repoPath) + " run dev";
-    if (scripts["dev:api"]) procs["api"] = detectRunner(repoPath) + " run dev:api";
+    if (scripts.dev) procs.web = `${detectRunner(repoPath)} run dev`;
+    if (scripts["dev:api"]) procs.api = `${detectRunner(repoPath)} run dev:api`;
     if (Object.keys(procs).length > 0) {
       return {
-        config: { procs, setup: [detectRunner(repoPath) + " install"] },
+        config: { procs, setup: [`${detectRunner(repoPath)} install`] },
         needsSetup: true,
       };
     }

@@ -163,7 +163,7 @@ export function committedFiles(worktreePath: string, defaultBr: string): GitFile
     .map((line) => {
       const [status, ...rest] = line.split("\t");
       const path = rest[rest.length - 1] ?? "";
-      return { xy: (status ?? "M").slice(0, 1) + " ", path, ...(counts.get(path) ?? {}) };
+      return { xy: `${(status ?? "M").slice(0, 1)} `, path, ...(counts.get(path) ?? {}) };
     });
 }
 
@@ -243,7 +243,7 @@ export function shipWorktree(worktreePath: string, branch: string, defaultBr: st
   if (cErr) return cErr;
   const ahead = git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`);
   if (ahead.ok && ahead.out === "0") {
-    return { ok: false, message: "nothing to ship — no commits ahead of " + defaultBr };
+    return { ok: false, message: `nothing to ship — no commits ahead of ${defaultBr}` };
   }
 
   const remote = git(worktreePath, "remote", "get-url", "origin");

@@ -12,7 +12,7 @@ export function cachedTheme(): Theme {
     const raw = localStorage.getItem(CACHE_KEY);
     if (raw) {
       const t = JSON.parse(raw) as Theme;
-      if (t && t.colors && typeof t.colors.bg0 === "string") return t;
+      if (t?.colors && typeof t.colors.bg0 === "string") return t;
     }
   } catch {}
   return gruvboxDarkSoft;

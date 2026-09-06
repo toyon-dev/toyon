@@ -88,7 +88,7 @@ export function buildScope(cwd: string, onBlocked: (b: BlockedWrite) => void): S
       async (input) => {
         if (input.hook_event_name !== "PreToolUse" || !WRITE_TOOLS.has(input.tool_name)) return {};
         const ti = (input.tool_input ?? {}) as Record<string, unknown>;
-        const raw = (ti["file_path"] ?? ti["notebook_path"]) as string | undefined;
+        const raw = (ti.file_path ?? ti.notebook_path) as string | undefined;
         if (!raw) return {};
         const target = canonical(isAbsolute(raw) ? raw : resolve(cwd, raw));
         let reason: string | null = null;

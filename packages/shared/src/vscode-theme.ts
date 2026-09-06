@@ -192,7 +192,7 @@ function pickSyntax(tokenColors: VsCodeThemeJson["tokenColors"]): Theme["syntax"
       const scopes =
         typeof entry.scope === "string" ? entry.scope.split(",").map((s) => s.trim()) : (entry.scope ?? []);
       for (const s of scopes) {
-        if (!wanted.some((w) => s === w || s.startsWith(w + "."))) continue;
+        if (!wanted.some((w) => s === w || s.startsWith(`${w}.`))) continue;
         const n = normalizeHex(fg);
         if (n && (!best || s.length <= best.len)) best = { fg: n, len: s.length };
       }

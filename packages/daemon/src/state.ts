@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { RepoInfo, ThemePrefs, WorktreeInfo } from "@orchardist/shared";
-import { STATE_FILE, TOKEN_FILE, ensureDirs } from "./paths.ts";
+import { ensureDirs, STATE_FILE, TOKEN_FILE } from "./paths.ts";
 
 export interface PersistedState {
   repos: RepoInfo[];

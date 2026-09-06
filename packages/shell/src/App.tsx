@@ -1,13 +1,13 @@
-import { Fragment, Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
 import type { GitFileStatus, RepoInfo, SearchHit, Theme, ThemePrefs, WorktreeStatus } from "@orchardist/shared";
-import { DaemonSocket, hasToken } from "./ws.ts";
-import { currentTheme, initial, reducer, type ChatItem, type State } from "./store.ts";
-import { effectiveKind, pickFamily, resolveTheme, themeFamilies, type ThemeFamily } from "@orchardist/shared";
-import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "./theme.ts";
-import { Tooltips, tip } from "./Tooltip.tsx";
+import { effectiveKind, pickFamily, resolveTheme, type ThemeFamily, themeFamilies } from "@orchardist/shared";
+import DOMPurify from "dompurify";
+import { marked } from "marked";
+import { lazy, Suspense, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { matchPositions, rankFiles, splitPath } from "./quickOpen.ts";
+import { type ChatItem, currentTheme, initial, reducer, type State } from "./store.ts";
+import { Tooltips, tip } from "./Tooltip.tsx";
+import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "./theme.ts";
+import { DaemonSocket, hasToken } from "./ws.ts";
 
 const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
 
@@ -135,7 +135,7 @@ export function App() {
     // (⌘E arrives from the iframe too, via the bridge chord forwarding)
     const onMsg = (e: MessageEvent) => {
       const d = e.data;
-      if (d && d.__orchardist && d.type === "key" && d.meta) {
+      if (d?.__orchardist && d.type === "key" && d.meta) {
         window.dispatchEvent(new KeyboardEvent("keydown", { key: d.key, metaKey: true, shiftKey: !!d.shift }));
       }
     };
@@ -249,7 +249,7 @@ export function App() {
       <Tooltips />
       <StatusBar state={state} active={active} dispatch={dispatch} sock={sock} navCenter={navCenter} />
       <div className="docks">
-        <LeftDock state={state} dispatch={dispatch} sock={sock} width={leftW} />
+        <LeftDock state={state} sock={sock} width={leftW} />
         {state.leftOpen && <div className="dock-resize left" onPointerDown={startDrag("left")} />}
         <Center state={state} active={active} dispatch={dispatch} sock={sock} repo={repo} />
         {state.rightOpen && <div className="dock-resize right" onPointerDown={startDrag("right")} />}
@@ -296,7 +296,7 @@ function shiftRanges(cr: { ranges: Array<[number, number]>; offset: number }): A
 }
 
 function relFile(file: string, worktreePath?: string): string {
-  if (worktreePath && file.startsWith(worktreePath + "/")) return file.slice(worktreePath.length + 1);
+  if (worktreePath && file.startsWith(`${worktreePath}/`)) return file.slice(worktreePath.length + 1);
   const i = file.lastIndexOf("/src/");
   return i >= 0 ? file.slice(i + 1) : file;
 }
@@ -306,7 +306,7 @@ function clampW(n: number, fallback: number): number {
   return Math.min(Math.max(n, 170), Math.floor(window.innerWidth * 0.5));
 }
 
-function LeftDock({ state, dispatch, sock, width }: { state: State; dispatch: Dispatch; sock: Sock; width: number }) {
+function LeftDock({ state, sock, width }: { state: State; sock: Sock; width: number }) {
   const gitInfo = state.activeId ? state.git[state.activeId] : undefined;
   const files = gitInfo?.files ?? [];
   const ahead = gitInfo?.ahead ?? 0;
@@ -569,7 +569,7 @@ function WtRail({ state, dispatch, sock }: { state: State; dispatch: Dispatch; s
       <div className="rail-panel">
         {
           <div className="rail-list">
-            {state.worktrees.map((w, i) => (
+            {state.worktrees.map((w) => (
               <button
                 key={w.worktree.id}
                 className={`wt-item ${w.worktree.id === state.activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""} ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
@@ -792,7 +792,7 @@ function wtActions(sock: Sock) {
     rename(w: WorktreeStatus) {
       if (w.worktree.kind === "main") return;
       const title = window.prompt("Rename worktree (also renames its branch):", w.worktree.title);
-      if (title && title.trim()) {
+      if (title?.trim()) {
         sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
       }
     },
@@ -1154,6 +1154,7 @@ function ThemePicker({ state, dispatch, sock }: { state: State; dispatch: Dispat
   const [active, setActive] = useState<ThemeFamily | null>(null);
   const [peek, setPeek] = useState<"dark" | "light" | null>(null);
   const previewOf = (f: ThemeFamily, k: "dark" | "light" | null) => f[k ?? nowKind] ?? f.dark ?? f.light ?? null;
+  const families = useMemo(() => themeFamilies(state.themes), [state.themes]);
   useEffect(() => {
     if (slot === "theme") preview(active ? previewOf(active, peek) : null);
   }, [active, peek]);
@@ -1186,7 +1187,6 @@ function ThemePicker({ state, dispatch, sock }: { state: State; dispatch: Dispat
     );
   }
 
-  const families = useMemo(() => themeFamilies(state.themes), [state.themes]);
   return (
     <ListPicker
       items={families}
@@ -1340,7 +1340,7 @@ function Center({
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       const d = e.data;
-      if (!d || !d.__orchardist) return;
+      if (!d?.__orchardist) return;
       for (const [id, frame] of frameRefs.current) {
         if (frame.contentWindow === e.source) {
           if (d.type === "hmr") dispatch({ a: "hmr", id });
@@ -2238,6 +2238,7 @@ function RightDock({
 
 function Markdown({ text }: { text: string }) {
   const html = useMemo(() => DOMPurify.sanitize(marked.parse(text, { async: false }) as string), [text]);
+  // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
   return <div className="msg-assistant md" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
@@ -2309,7 +2310,7 @@ function ChatItemView({
 function toolHint(item: Extract<ChatItem, { kind: "tool" }>): string {
   const input = item.input as Record<string, unknown> | null;
   if (!input) return "";
-  const v = input["file_path"] ?? input["command"] ?? input["path"] ?? input["pattern"] ?? "";
+  const v = input.file_path ?? input.command ?? input.path ?? input.pattern ?? "";
   return typeof v === "string" ? v : "";
 }
 

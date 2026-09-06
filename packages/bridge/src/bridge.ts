@@ -150,7 +150,7 @@ function onPickMove(e: MouseEvent) {
   const comp = componentOf(fiber);
   const src = sourceOf(fiber);
   const label = comp
-    ? `<${comp}>${src ? ` · ${shortFile(src.file)}${src.line ? ":" + src.line : ""}` : ""}`
+    ? `<${comp}>${src ? ` · ${shortFile(src.file)}${src.line ? `:${src.line}` : ""}` : ""}`
     : el.tagName.toLowerCase();
   drawBox(el.getBoundingClientRect(), label);
 }
@@ -315,7 +315,7 @@ if (location.hash.startsWith("#__orchtest=")) {
 
 window.addEventListener("message", (e) => {
   const d = e.data;
-  if (!d || !d.__orchardist) return;
+  if (!d?.__orchardist) return;
   switch (d.type) {
     case "reload":
       location.reload();

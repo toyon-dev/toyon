@@ -1,6 +1,6 @@
+import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { mkdirSync } from "node:fs";
 
 // ORCHARDIST_HOME lets cloud mode keep state on a mounted volume (see cloud.ts)
 export const ORCH_HOME = process.env.ORCHARDIST_HOME ?? join(homedir(), ".orchardist");

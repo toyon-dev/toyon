@@ -4,9 +4,9 @@
 // v0.1 runs under bun (dev-mode); packaged single-binary distribution comes later.
 
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, existsSync, openSync, mkdirSync, writeFileSync, chmodSync, readdirSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT } from "@orchardist/shared";
 

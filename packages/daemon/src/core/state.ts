@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { RepoInfo, ThemePrefs, WorktreeInfo } from "@orchardist/shared";
+import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
 
@@ -68,4 +69,83 @@ export function loadOrCreateToken(paths: Paths): string {
   const token = randomBytes(32).toString("hex");
   writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
   return token;
+}
+
+/**
+ * The daemon's persisted state with lookups and a single save(). Hands out LIVE references on
+ * purpose: services mutate a worktree record in place (claim a spare, rename, set prUrl) and then
+ * call save(); cloning here would silently stop those writes from persisting.
+ */
+export class StateStore {
+  readonly state: PersistedState;
+
+  constructor(
+    private paths: Paths,
+    state?: PersistedState,
+  ) {
+    this.state = state ?? loadState(paths);
+  }
+
+  get repos(): RepoInfo[] {
+    return this.state.repos;
+  }
+  get worktrees(): WorktreeInfo[] {
+    return this.state.worktrees;
+  }
+
+  repo(id: string): RepoInfo | undefined {
+    return this.state.repos.find((r) => r.id === id);
+  }
+  requireRepo(id: string): RepoInfo {
+    const r = this.repo(id);
+    if (!r) throw new UserError(`unknown repo ${id}`);
+    return r;
+  }
+  worktree(id: string): WorktreeInfo | undefined {
+    return this.state.worktrees.find((w) => w.id === id);
+  }
+  requireWorktree(id: string): WorktreeInfo {
+    const w = this.worktree(id);
+    if (!w) throw new UserError("unknown worktree");
+    return w;
+  }
+
+  addRepo(repo: RepoInfo) {
+    this.state.repos.push(repo);
+    this.save();
+  }
+  addWorktree(wt: WorktreeInfo) {
+    this.state.worktrees.push(wt);
+    this.save();
+  }
+  /** drops the record and its session id; the caller has already stopped the runtime */
+  removeWorktree(id: string) {
+    this.state.worktrees = this.state.worktrees.filter((w) => w.id !== id);
+    delete this.state.sessions[id];
+    this.save();
+  }
+  /** keep only the worktrees the predicate accepts (boot-time pruning) */
+  pruneWorktrees(keep: (wt: WorktreeInfo) => boolean) {
+    this.state.worktrees = this.state.worktrees.filter(keep);
+  }
+
+  session(worktreeId: string): string | undefined {
+    return this.state.sessions[worktreeId];
+  }
+  setSession(worktreeId: string, sessionId: string) {
+    this.state.sessions[worktreeId] = sessionId;
+    this.save();
+  }
+
+  get theme(): ThemePrefs | undefined {
+    return this.state.theme;
+  }
+  setTheme(prefs: ThemePrefs) {
+    this.state.theme = prefs;
+    this.save();
+  }
+
+  save() {
+    saveState(this.paths, this.state);
+  }
 }

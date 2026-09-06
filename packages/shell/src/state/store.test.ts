@@ -32,7 +32,7 @@ const hello = (...w: WorktreeStatus[]): Action =>
   server({
     t: "hello",
     version: "0",
-    protocol: 1,
+    protocol: 2,
     repos: [],
     worktrees: w,
     themes: initial.themes,

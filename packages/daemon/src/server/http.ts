@@ -9,6 +9,10 @@ import type { RepoRegistry } from "../repos/registry.ts";
 
 export interface WsData {
   authed: boolean;
+  /** worktree ids this socket receives streams for */
+  subs: Set<string>;
+  sent: number;
+  bytes: number;
 }
 
 export interface HttpOpts {
@@ -18,6 +22,8 @@ export interface HttpOpts {
   repos: RepoRegistry;
   /** whether the portless http://orchardist.localhost listener came up (known after bind) */
   branded: () => boolean;
+  /** event-loop lag + per-socket traffic, for /health */
+  metrics: () => unknown;
 }
 
 export function createFetch(opts: HttpOpts) {
@@ -43,12 +49,12 @@ export function createFetch(opts: HttpOpts) {
 
     if (url.pathname === "/ws") {
       if (url.searchParams.get("token") !== opts.token) return new Response("unauthorized", { status: 401 });
-      if (srv.upgrade(req, { data: { authed: true } })) return undefined;
+      if (srv.upgrade(req, { data: { authed: true, subs: new Set<string>(), sent: 0, bytes: 0 } })) return undefined;
       return new Response("upgrade failed", { status: 400 });
     }
 
     if (url.pathname === "/health") {
-      return Response.json({ ok: true, version: opts.version, branded: opts.branded() });
+      return Response.json({ ok: true, version: opts.version, branded: opts.branded(), ...(opts.metrics() as object) });
     }
 
     // CLI: register a repo with the running daemon

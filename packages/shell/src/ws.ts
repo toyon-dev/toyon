@@ -21,10 +21,18 @@ export function hasToken(): boolean {
   return getToken() !== "";
 }
 
+/** reconnect delay: 1s doubling to 30s, with jitter so many tabs don't stampede a restarting daemon */
+const BACKOFF_MIN = 1000;
+const BACKOFF_MAX = 30_000;
+/** messages kept while disconnected; subscribe-shaped ones are deduped by worktree */
+const QUEUE_MAX = 50;
+
 export class DaemonSocket {
   private ws: WebSocket | null = null;
-  private queue: string[] = [];
+  private queue: Array<{ key: string | null; raw: string }> = [];
   private closed = false;
+  private attempt = 0;
+  private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private onMsg: (msg: ServerMsg) => void,
@@ -40,8 +48,9 @@ export class DaemonSocket {
     const ws = new WebSocket(url);
     this.ws = ws;
     ws.onopen = () => {
+      this.attempt = 0;
       this.onStatus(true);
-      for (const m of this.queue) ws.send(m);
+      for (const m of this.queue) ws.send(m.raw);
       this.queue = [];
     };
     ws.onmessage = (ev) => {
@@ -51,19 +60,29 @@ export class DaemonSocket {
     };
     ws.onclose = () => {
       this.onStatus(false);
-      setTimeout(() => this.connect(), 1500);
+      if (this.closed) return;
+      const base = Math.min(BACKOFF_MAX, BACKOFF_MIN * 2 ** this.attempt++);
+      this.timer = setTimeout(() => this.connect(), base / 2 + Math.random() * (base / 2));
     };
     ws.onerror = () => ws.close();
   }
 
   send(msg: ClientMsg) {
-    const s = JSON.stringify(msg);
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(s);
-    else this.queue.push(s);
+    const raw = JSON.stringify(msg);
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(raw);
+      return;
+    }
+    // offline: keep the intent, not the history. One subscribe per worktree, bounded.
+    const key = msg.t === "subscribe" || msg.t === "unsubscribe" ? `sub:${msg.worktreeId}` : null;
+    if (key) this.queue = this.queue.filter((q) => q.key !== key);
+    this.queue.push({ key, raw });
+    if (this.queue.length > QUEUE_MAX) this.queue.splice(0, this.queue.length - QUEUE_MAX);
   }
 
   dispose() {
     this.closed = true;
+    if (this.timer) clearTimeout(this.timer);
     this.ws?.close();
   }
 }

@@ -8,6 +8,7 @@ import pkg from "../package.json" with { type: "json" };
 import { cloud } from "./core/cloud.ts";
 import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
+import { startLagSampler } from "./core/metrics.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
 import { loadOrCreateToken, StateStore } from "./core/state.ts";
 import { FileService } from "./files/service.ts";
@@ -65,6 +66,13 @@ bridge.setShellOrigins(
       ],
 );
 
+const stopLagSampler = startLagSampler();
+if (cloud.enabled) {
+  // decided, not implicit: preview proxies bind 0.0.0.0 with no auth of their own. The platform
+  // (fly-replay / edge session check) must front them.
+  log.warn("daemon", "cloud mode: preview proxy ports are unauthenticated — the platform edge must gate them");
+}
+
 await repos.boot();
 
 // register a repo passed on the command line (used by the CLI)
@@ -99,6 +107,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   log.info("daemon", `${signal}: stopping dev servers`);
   repos.stopWatchers();
+  stopLagSampler();
   stopServer();
   const deadline = new Promise<void>((resolve) => setTimeout(resolve, 5000));
   await Promise.race([runtime.shutdown(), deadline]);

@@ -172,6 +172,10 @@ export class RuntimeRegistry {
     this.runtimes.get(id)?.procs?.restart(name);
   }
 
+  recentLogs(id: string): string[] {
+    return this.runtimes.get(id)?.procs?.recentLogs() ?? [];
+  }
+
   procStates(id: string): ProcState[] {
     return this.runtimes.get(id)?.procs?.states() ?? [];
   }

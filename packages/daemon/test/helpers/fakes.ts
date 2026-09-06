@@ -44,6 +44,9 @@ export class FakeProcs {
     for (const s of this.states_) s.status = "stopped";
   }
   restart() {}
+  recentLogs(): string[] {
+    return [];
+  }
   states(): ProcState[] {
     return this.states_.map((s) => ({ ...s }));
   }

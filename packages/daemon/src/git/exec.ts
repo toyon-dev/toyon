@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { lastGit } from "../core/metrics.ts";
 
 const LOCKFILES = [
   "bun.lock",
@@ -58,7 +59,11 @@ function resolveGit(): string {
 }
 
 export function git(cwd: string, ...args: string[]): GitResult {
+  const started = Date.now();
   const r = spawnSync(GIT, args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+  lastGit.cmd = `git ${args.slice(0, 3).join(" ")}`;
+  lastGit.ms = Date.now() - started;
+  lastGit.at = Date.now();
   const exit = r.status ?? r.signal ?? (r.error ? r.error.message : null);
   return { ok: r.status === 0, out: (r.stdout ?? "").trim(), err: (r.stderr ?? "").trim(), exit };
 }

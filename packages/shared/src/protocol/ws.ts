@@ -9,7 +9,7 @@ import type { GitFileStatus, OrchardistConfig, RepoInfo, Theme, ThemePrefs, Work
 import type { AgentEvent, PickMeta } from "./events.ts";
 
 /** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -30,7 +30,8 @@ export type ServerMsg =
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
   | { t: "log"; worktreeId: string; proc: string; line: string }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
-  | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }> }
+  /** on subscribe: the transcript so far and the dev servers' recent output */
+  | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }>; log?: string[] }
   | {
       t: "git-status";
       worktreeId: string;
@@ -86,7 +87,9 @@ export const themePrefsSchema = z.object({
 const variantSchema = z.object({ group: z.string(), index: z.number().int().min(1), of: z.number().int().min(1) });
 
 export const clientMsgSchema = z.discriminatedUnion("t", [
+  /** receive this worktree's stream (agent events, logs, queue, git status); replies with a backfill */
   z.object({ t: z.literal("subscribe"), worktreeId: id }),
+  z.object({ t: z.literal("unsubscribe"), worktreeId: id }),
   z.object({
     t: z.literal("chat"),
     worktreeId: id,

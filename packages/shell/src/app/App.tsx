@@ -15,6 +15,7 @@ import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
 
 const RAIL_PX = 40;
+const MRU_SUBSCRIPTIONS = 3;
 
 /** layout + app-wide effects; every surface reads its own state through selectors */
 export function App({ store }: { store: Store }) {
@@ -30,10 +31,24 @@ export function App({ store }: { store: Store }) {
   const toast = useStore((s) => s.toast);
   const worktrees = useWorktrees();
 
-  // subscribe when the active worktree changes (and again after a reconnect)
+  // the daemon streams only subscribed worktrees. Keep the last few visited subscribed so their
+  // previews still reload after an agent turn while hidden and switching back is instant; drop
+  // the oldest beyond that. A reconnect re-subscribes the whole set.
+  const subsRef = useRef<string[]>([]);
   useEffect(() => {
-    if (activeId && sock) sock.send({ t: "subscribe", worktreeId: activeId });
+    if (!sock) return;
+    if (activeId) {
+      const mru = [activeId, ...subsRef.current.filter((id) => id !== activeId)];
+      for (const gone of mru.splice(MRU_SUBSCRIPTIONS)) sock.send({ t: "unsubscribe", worktreeId: gone });
+      subsRef.current = mru;
+    }
+    for (const id of subsRef.current) sock.send({ t: "subscribe", worktreeId: id });
   }, [activeId, connected, sock]);
+  // worktrees that disappeared drop out of the set
+  useEffect(() => {
+    const alive = new Set(worktrees.map((w) => w.worktree.id));
+    subsRef.current = subsRef.current.filter((id) => alive.has(id));
+  }, [worktrees]);
 
   // window/app title follows the active worktree
   useEffect(() => {

@@ -30,6 +30,9 @@ export interface HandlerCtx {
   reply(msg: ServerMsg): void;
   /** to every connected socket */
   broadcast(msg: ServerMsg): void;
+  /** this socket wants (or stops wanting) a worktree's stream */
+  subscribe(worktreeId: string): void;
+  unsubscribe(worktreeId: string): void;
 }
 
 type Handler<K extends ClientMsg["t"]> = (
@@ -52,11 +55,21 @@ const gitStatus = (s: Services, ctx: HandlerCtx, worktreeId: string) => {
 
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   subscribe(msg, ctx, s) {
+    ctx.subscribe(msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);
     const events = agent?.transcript() ?? [];
-    ctx.reply({ t: "backfill", worktreeId: msg.worktreeId, events: events.slice(-1000) });
+    ctx.reply({
+      t: "backfill",
+      worktreeId: msg.worktreeId,
+      events: events.slice(-1000),
+      log: s.runtime.recentLogs(msg.worktreeId),
+    });
     ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: agent?.queueItems ?? [] });
     gitStatus(s, ctx, msg.worktreeId);
+  },
+
+  unsubscribe(msg, ctx) {
+    ctx.unsubscribe(msg.worktreeId);
   },
 
   chat(msg, _ctx, s) {

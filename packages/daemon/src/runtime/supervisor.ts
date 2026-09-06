@@ -187,6 +187,13 @@ export class WorktreeProcs {
     await Promise.all(exits);
   }
 
+  /** the tail of every proc's log ring, oldest first, in the shell's `[proc] line` format */
+  recentLogs(limit = 200): string[] {
+    const out: string[] = [];
+    for (const mp of this.procs.values()) for (const line of mp.logs) out.push(`[${mp.state.name}] ${line}`);
+    return out.slice(-limit);
+  }
+
   states(): ProcState[] {
     return [...this.procs.values()].map((p) => ({ ...p.state }));
   }

@@ -332,7 +332,7 @@ function onServer(s: State, msg: ServerMsg): State {
     case "backfill": {
       let chat: ChatItem[] = [];
       for (const { event } of msg.events) chat = applyEvent(chat, event);
-      return withLocal(s, msg.worktreeId, (l) => ({ ...l, chat }));
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, chat, log: msg.log ?? l.log }));
     }
     case "git-status": {
       // session opened on a clean main: nothing to show — close the changes panel once

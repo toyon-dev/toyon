@@ -29,8 +29,14 @@ function make() {
   const services: Services = { state, hub, repos, worktrees, files, runtime, themes };
   const replies: ServerMsg[] = [];
   const broadcasts: ServerMsg[] = [];
-  const ctx: HandlerCtx = { reply: (m) => replies.push(m), broadcast: (m) => broadcasts.push(m) };
-  return { ...t, services, ctx, replies, broadcasts, ...f };
+  const subs = new Set<string>();
+  const ctx: HandlerCtx = {
+    reply: (m) => replies.push(m),
+    broadcast: (m) => broadcasts.push(m),
+    subscribe: (id) => subs.add(id),
+    unsubscribe: (id) => subs.delete(id),
+  };
+  return { ...t, services, ctx, replies, broadcasts, subs, ...f };
 }
 
 describe("handlers", () => {
@@ -50,13 +56,16 @@ describe("handlers", () => {
     ).rejects.toBeInstanceOf(UserError);
   });
 
-  test("subscribe replies backfill + queue + git-status to the caller only", async () => {
-    const { services, ctx, replies, broadcasts, repo } = make();
+  test("subscribe registers the socket and replies backfill + queue + git-status to the caller only", async () => {
+    const { services, ctx, replies, broadcasts, subs, repo } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
     await dispatch({ t: "subscribe", worktreeId: main.id }, ctx, services);
     expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "git-status"]);
     expect(broadcasts.length).toBe(0);
+    expect([...subs]).toEqual([main.id]);
+    await dispatch({ t: "unsubscribe", worktreeId: main.id }, ctx, services);
+    expect(subs.size).toBe(0);
   });
 
   test("chat hands the text and pick to the agent", async () => {

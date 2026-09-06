@@ -62,10 +62,16 @@ button {
   background: var(--bg1);
   border: 1px solid var(--bg3);
   border-radius: 8px;
-  padding: 16px 24px;
+  padding: 18px 24px 20px;
   box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
   font: 13px var(--font-ui);
   color: var(--fg1);
+  /* two columns of sections: Worktrees | Find over Preview | Panels */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 40px;
+  row-gap: 18px;
+  align-items: start;
 }
 .keys-row {
   display: grid;
@@ -96,7 +102,6 @@ button {
   top: -0.5px;
 }
 .keys-d { color: var(--fg-muted); }
-.keys-section + .keys-section { margin-top: 12px; }
 .keys-h {
   font-size: 10px;
   letter-spacing: 0.08em;

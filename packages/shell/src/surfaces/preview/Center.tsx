@@ -34,9 +34,7 @@ export function Center() {
   // let the rest of the shell post commands into preview iframes
   useEffect(() => {
     previewBus.post = (id, m) =>
-      frameRefs.current
-        .get(id)
-        ?.contentWindow?.postMessage({ __toyon: true, ...m }, originRefs.current.get(id) ?? "*");
+      frameRefs.current.get(id)?.contentWindow?.postMessage({ __toyon: true, ...m }, originRefs.current.get(id) ?? "*");
     previewBus.broadcast = (m) => {
       for (const [id, f] of frameRefs.current)
         f.contentWindow?.postMessage({ __toyon: true, ...m }, originRefs.current.get(id) ?? "*");

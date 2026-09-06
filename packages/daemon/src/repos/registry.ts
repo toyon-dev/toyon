@@ -3,7 +3,7 @@
 
 import { existsSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { ToyonConfig, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { RepoInfo, ToyonConfig, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";

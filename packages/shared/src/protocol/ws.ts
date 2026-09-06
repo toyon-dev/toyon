@@ -5,7 +5,7 @@
 // arrive from a browser (public internet in cloud mode) and are validated before any handler runs.
 
 import { z } from "zod";
-import type { GitFileStatus, ToyonConfig, RepoInfo, Theme, ThemePrefs, WorktreeStatus } from "../model.ts";
+import type { GitFileStatus, RepoInfo, Theme, ThemePrefs, ToyonConfig, WorktreeStatus } from "../model.ts";
 import type { AgentEvent, PickMeta } from "./events.ts";
 
 /** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */

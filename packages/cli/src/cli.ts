@@ -70,9 +70,7 @@ try {
   const h = (await (await fetch(`${base}/health`)).json()) as { branded?: boolean };
   branded = h.branded === true;
 } catch {}
-const url = branded
-  ? `http://toyon.localhost/#token=${token}`
-  : `http://toyon.localhost:${port}/#token=${token}`;
+const url = branded ? `http://toyon.localhost/#token=${token}` : `http://toyon.localhost:${port}/#token=${token}`;
 // app windows use the always-bound port so they never hit a dead :80
 const appUrl = `http://toyon.localhost:${port}/#token=${token}`;
 

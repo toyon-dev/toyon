@@ -368,13 +368,15 @@ body.resizing iframe {
 .rb-path:focus {
   color: var(--fg1);
 }
-.diff-pane .file-head {
+.diff-pane .file-head,
+.term-pane .file-head {
   display: flex;
   gap: 12px;
   padding: 6px 16px;
   align-items: center;
 }
-.diff-pane .file-path {
+.diff-pane .file-path,
+.term-pane .file-path {
   flex: 1;
   font: var(--fs-sm) var(--font-mono);
   color: var(--fg-muted);
@@ -386,6 +388,36 @@ body.resizing iframe {
   border-top: 1px solid var(--bg2);
   background: var(--bg0);
   flex-shrink: 0;
+}
+.diff-pane.full {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.term-pane {
+  min-height: 100px;
+  position: relative;
+  border-top: 1px solid var(--bg2);
+  background: var(--bg0);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+.term-pane .file-head {
+  padding: 4px 12px;
+}
+.term-exit {
+  color: var(--red);
+  font: var(--fs-xs) var(--font-mono);
+}
+.term-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 4px 4px 8px;
+}
+.term-host,
+.term-host .xterm {
+  height: 100%;
 }
 .row-resize {
   position: absolute;

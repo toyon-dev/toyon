@@ -54,6 +54,9 @@ export function useChords() {
           case "keys":
             dispatch({ a: "toggle", overlay: { kind: "keys" } });
             break;
+          case "terminal":
+            dispatch({ a: "toggle-terminal" });
+            break;
         }
       } else if (e.key === "Escape") {
         if (s.overlay) {

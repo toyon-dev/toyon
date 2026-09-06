@@ -53,8 +53,14 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
     withSource: z.number(),
     ranges: z.array(range).nullable(),
   }),
-  /** an Toyon chord pressed while the preview had focus; the shell replays it as a keydown */
-  z.object({ type: z.literal("key"), key: z.string(), meta: z.literal(true), shift: z.boolean().optional() }),
+  /** a Toyon chord pressed while the preview had focus; the shell replays it as a keydown */
+  z.object({
+    type: z.literal("key"),
+    key: z.string(),
+    meta: z.boolean(),
+    ctrl: z.boolean().optional(),
+    shift: z.boolean().optional(),
+  }),
 ]);
 export type BridgeToShellMsg = z.infer<typeof bridgeToShellSchema>;
 

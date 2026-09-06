@@ -14,6 +14,7 @@ export type ChordId =
   | "pick"
   | "zen"
   | "new"
+  | "terminal"
   | "worktree";
 
 export type ChordSection = "Find" | "Panels" | "Preview" | "Worktrees";
@@ -29,6 +30,9 @@ export interface Chord {
   /** the key as KeyboardEvent.key, lower-case for letters; "1-9" for the worktree switcher */
   key: string;
   shift?: boolean;
+  /** ⌃ instead of ⌘: only for keys macOS takes before any browser sees them (⌘` cycles windows),
+   * where every editor has settled on the ⌃ form */
+  ctrl?: true;
   /** other keys that fire the same chord. ⌘⇧E for the palette because Firefox owns ⌘⇧P; ⌘N for
    * new-worktree because it is the muscle-memory key, though only an installed PWA lets the page
    * see it (Chrome tabs, Safari and Firefox all take ⌘N as new window before the page). */
@@ -66,6 +70,7 @@ export const CHORDS: readonly Chord[] = [
     label: "shortcuts & settings",
     section: "Panels",
   },
+  { id: "terminal", key: "`", ctrl: true, label: "terminal", section: "Panels" },
   { id: "pick", key: "e", label: "element picker", section: "Preview" },
   { id: "zen", key: ".", label: "full-bleed preview", section: "Preview" },
   {
@@ -83,9 +88,9 @@ export const CHORD_SECTIONS: readonly ChordSection[] = ["Find", "Panels", "Previ
 
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };
 
-/** Normalised chord detection for a keydown: ⌘ (no ⌃/⌥), letters case-insensitive so a browser
- * that reports "F" for ⌘⇧F and one that reports "f" agree; shift must match the table exactly
- * (⌘⇧B is not ⌘B). */
+/** Normalised chord detection for a keydown: ⌘ (no ⌃/⌥) for most rows, ⌃ alone for the rows that
+ * ask for it; letters case-insensitive so a browser that reports "F" for ⌘⇧F and one that reports
+ * "f" agree; shift must match the table exactly (⌘⇧B is not ⌘B). */
 export function matchChord(e: {
   key: string;
   metaKey: boolean;
@@ -93,12 +98,12 @@ export function matchChord(e: {
   ctrlKey?: boolean;
   altKey?: boolean;
 }): ChordMatch | null {
-  if (!e.metaKey || e.ctrlKey || e.altKey) return null;
+  if (e.altKey || !!e.ctrlKey === e.metaKey) return null;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  if (!e.shiftKey && key >= "1" && key <= "9") return { id: "worktree", digit: Number(key) };
+  if (e.metaKey && !e.shiftKey && key >= "1" && key <= "9") return { id: "worktree", digit: Number(key) };
   for (const c of CHORDS) {
     if (c.id === "worktree") continue;
-    if (!!c.shift !== e.shiftKey) continue;
+    if (!!c.ctrl !== !!e.ctrlKey || !!c.shift !== e.shiftKey) continue;
     if (c.key === key || c.aliases?.includes(key)) return { id: c.id };
   }
   return null;
@@ -116,7 +121,7 @@ export function chordLabel(id: ChordId, env: ChordEnv = {}): string {
   const c = chordOf(id);
   const key = c.advertise && env[c.advertise.when] ? c.advertise.key : c.key;
   const shown = key === "1-9" ? "1–9" : key.toUpperCase();
-  return `⌘${c.shift ? "⇧" : ""}${shown}`;
+  return `${c.ctrl ? "⌃" : "⌘"}${c.shift ? "⇧" : ""}${shown}`;
 }
 
 /** the ⌘N chord that reaches worktree i of count, if any: ⌘1–8 by position, ⌘9 always the last one */

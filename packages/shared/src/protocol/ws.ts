@@ -17,7 +17,7 @@ import type {
 import type { AgentEvent, PickMeta } from "./events.ts";
 
 /** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -63,7 +63,18 @@ export type ServerMsg =
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
   | { t: "queue"; worktreeId: string; items: string[] }
   | { t: "changed-ranges"; worktreeId: string; path: string; ranges: Array<[number, number]>; lineOffset: number }
+  /** raw shell output; only to sockets that opened that worktree's terminal pane (term-open) */
+  | { t: "term-data"; worktreeId: string; data: string }
+  /** reply to term-open: the recent output to replay into a reset terminal */
+  | { t: "term-snapshot"; worktreeId: string; data: string; alive: boolean }
+  | { t: "term-exit"; worktreeId: string; exitCode: number }
   | { t: "error"; message: string };
+
+/** the terminal stream: bytes for xterm, which the shell routes around its store */
+export type TermServerMsg = Extract<ServerMsg, { t: "term-data" | "term-snapshot" | "term-exit" }>;
+export function isTermMsg(m: ServerMsg): m is TermServerMsg {
+  return m.t === "term-data" || m.t === "term-snapshot" || m.t === "term-exit";
+}
 
 // ---- client → daemon: schemas are the source of truth ----
 
@@ -74,6 +85,9 @@ const relPath = z.string().min(1).max(4096);
 const prose = z.string().max(200_000);
 const prompt = z.string().max(20_000);
 const shellCommand = z.string().max(2_000);
+const termSize = z.number().int().min(1).max(500);
+/** keystrokes, or a paste the shell chunks */
+const termInput = z.string().max(65_536);
 
 export const pickMetaSchema = z.object({
   component: z.string().nullable(),
@@ -145,6 +159,14 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** raw VS Code theme JSON/JSONC text picked in the browser */
   z.object({ t: z.literal("import-theme"), name: z.string().max(300), source: z.string().max(2_000_000) }),
   z.object({ t: z.literal("rescan-themes") }),
+  /** open (or reopen) the worktree's shell at this size and receive its stream; replies term-snapshot */
+  z.object({ t: z.literal("term-open"), worktreeId: id, cols: termSize, rows: termSize }),
+  z.object({ t: z.literal("term-input"), worktreeId: id, data: termInput }),
+  z.object({ t: z.literal("term-resize"), worktreeId: id, cols: termSize, rows: termSize }),
+  /** kill the shell; the pane's next term-open starts a fresh one */
+  z.object({ t: z.literal("term-kill"), worktreeId: id }),
+  /** the pane went away: stop streaming to this socket (the shell keeps running) */
+  z.object({ t: z.literal("term-close"), worktreeId: id }),
 ]);
 
 export type ClientMsg = z.infer<typeof clientMsgSchema>;

@@ -75,7 +75,7 @@ window.addEventListener(
     if (!matchChord(e)) return;
     e.preventDefault();
     e.stopPropagation();
-    post({ type: "key", key: e.key, meta: true, shift: e.shiftKey });
+    post({ type: "key", key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, shift: e.shiftKey });
   },
   true,
 );

@@ -1,6 +1,6 @@
 /* every status-bar glyph comes from here — same 16px box, same 1.3 stroke — so the row reads as
    one family (font glyphs each brought their own weight) */
-export type IconName = "branch" | "chat" | "help" | "zen" | "back" | "forward" | "reload" | "pick";
+export type IconName = "branch" | "chat" | "help" | "zen" | "back" | "forward" | "reload" | "pick" | "terminal";
 
 const ICON_PATHS: Record<IconName, string> = {
   branch:
@@ -13,6 +13,8 @@ const ICON_PATHS: Record<IconName, string> = {
   reload: "M13.5 2.5v3.5H10 M12.4 9.2a4.8 4.8 0 1 1-1-4.9l2.1 1.7",
   // crosshair: ring with four ticks
   pick: "M8 4.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 1 0 0-7.6z M8 1.5v2.7 M8 11.8v2.7 M1.5 8h2.7 M11.8 8h2.7",
+  // a prompt: chevron + cursor line
+  terminal: "M2.5 3.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z M5 6l2.4 2L5 10 M8.6 10.5H11",
 };
 
 export function Icon({ name }: { name: IconName }) {

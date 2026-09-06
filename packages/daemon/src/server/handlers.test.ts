@@ -30,6 +30,7 @@ function make() {
   const replies: ServerMsg[] = [];
   const broadcasts: ServerMsg[] = [];
   const subs = new Set<string>();
+  const terms = new Set<string>();
   const ctx: HandlerCtx = {
     reply: (m) => replies.push(m),
     broadcast: (m) => broadcasts.push(m),
@@ -39,8 +40,10 @@ function make() {
       return true;
     },
     unsubscribe: (id) => subs.delete(id),
+    watchTerminal: (id) => terms.add(id),
+    unwatchTerminal: (id) => terms.delete(id),
   };
-  return { ...t, services, ctx, replies, broadcasts, subs, ...f };
+  return { ...t, services, ctx, replies, broadcasts, subs, terms, ...f };
 }
 
 describe("handlers", () => {
@@ -91,6 +94,33 @@ describe("handlers", () => {
     await expect(
       dispatch({ t: "write-file", worktreeId: main.id, path: "/etc/passwd", content: "" }, ctx, services),
     ).rejects.toThrow("escapes");
+  });
+
+  test("term-open replies a snapshot and watches; input reaches the shell; term-close unwatches", async () => {
+    const { services, ctx, replies, terms, repo, terminals } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await dispatch({ t: "term-open", worktreeId: main.id, cols: 80, rows: 24 }, ctx, services);
+    expect(replies).toEqual([{ t: "term-snapshot", worktreeId: main.id, data: "", alive: true }]);
+    expect([...terms]).toEqual([main.id]);
+    const term = terminals.get(main.id)![0]!;
+    term.emit("$ ");
+    await dispatch({ t: "term-input", worktreeId: main.id, data: "ls\r" }, ctx, services);
+    await dispatch({ t: "term-resize", worktreeId: main.id, cols: 100, rows: 30 }, ctx, services);
+    expect(term.writes).toEqual(["ls\r"]);
+    expect(term.resizes).toEqual([[100, 30]]);
+    // reopening replays what the shell printed; the pane resets and writes it back
+    await dispatch({ t: "term-open", worktreeId: main.id, cols: 100, rows: 30 }, ctx, services);
+    expect(replies.at(-1)).toEqual({ t: "term-snapshot", worktreeId: main.id, data: "$ ", alive: true });
+    term.exit(2);
+    await dispatch({ t: "term-input", worktreeId: main.id, data: "x" }, ctx, services);
+    expect(term.writes).toEqual(["ls\r"]);
+    await dispatch({ t: "term-close", worktreeId: main.id }, ctx, services);
+    expect(terms.size).toBe(0);
+    await dispatch({ t: "term-kill", worktreeId: main.id }, ctx, services);
+    await expect(
+      dispatch({ t: "term-open", worktreeId: "nope", cols: 1, rows: 1 }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
   });
 
   test("write-file then file-diff round-trips and replies git-status", async () => {

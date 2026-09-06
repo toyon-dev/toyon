@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentEvent, ServerMsg, WorktreeStatus } from "@toyon/shared";
-import { type Action, EMPTY_LOCAL, initialState, localOf, reducer, type State } from "./store.ts";
+import { type AgentEvent, PROTOCOL_VERSION, type WorktreeStatus } from "@toyon/shared";
+import { type Action, EMPTY_LOCAL, initialState, localOf, reducer, type State, type StoreServerMsg } from "./store.ts";
 
 // The reducer's rules the UI depends on and nothing else documents: which worktree becomes active,
 // how agent events fold into chat items, when a preview reload is requested, overlay exclusivity,
@@ -27,12 +27,12 @@ function wt(id: string, kind: WorktreeStatus["worktree"]["kind"] = "worktree", c
 }
 
 const initial = initialState({ clientId: ME });
-const server = (msg: ServerMsg): Action => ({ a: "server", msg });
+const server = (msg: StoreServerMsg): Action => ({ a: "server", msg });
 const hello = (...w: WorktreeStatus[]): Action =>
   server({
     t: "hello",
     version: "0",
-    protocol: 2,
+    protocol: PROTOCOL_VERSION,
     repos: [],
     worktrees: w,
     themes: initial.themes,
@@ -331,6 +331,12 @@ describe("streams and notices", () => {
     const off = run([{ a: "dismiss-toast" }, { a: "toggle-zen" }], on);
     expect(off.zen).toBe(false);
     expect(off.toast).toBeNull();
+  });
+  test("the terminal pane starts hidden and toggles", () => {
+    expect(initial.termOpen).toBe(false);
+    const on = run([{ a: "toggle-terminal" }]);
+    expect(on.termOpen).toBe(true);
+    expect(reducer(on, { a: "toggle-terminal" }).termOpen).toBe(false);
   });
   test("a file-diff carries the pending goto line only for the file it was asked for", () => {
     const s = run([

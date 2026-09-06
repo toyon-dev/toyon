@@ -66,6 +66,12 @@ export function buildCommands(
     () => dispatch({ a: "toggle-right" }),
     chord("right"),
   );
+  add(
+    "terminal",
+    `${state.termOpen ? "hide" : "show"} terminal`,
+    () => dispatch({ a: "toggle-terminal" }),
+    chord("terminal"),
+  );
   add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), chord("zen"));
   add("keys", "shortcuts & settings", () => dispatch({ a: "open", overlay: { kind: "keys" } }), chord("keys"));
 
@@ -141,7 +147,16 @@ export function buildCommands(
  * does not rebuild the list while ⌘P is open */
 export type CommandState = Pick<
   State,
-  "picking" | "leftOpen" | "rightOpen" | "themePrefs" | "themes" | "systemDark" | "worktrees" | "activeId" | "repos"
+  | "picking"
+  | "leftOpen"
+  | "rightOpen"
+  | "termOpen"
+  | "themePrefs"
+  | "themes"
+  | "systemDark"
+  | "worktrees"
+  | "activeId"
+  | "repos"
 >;
 
 export function useCommands(): Command[] {
@@ -150,6 +165,7 @@ export function useCommands(): Command[] {
   const picking = useStore((s) => s.picking);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
+  const termOpen = useStore((s) => s.termOpen);
   const themePrefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
@@ -161,6 +177,7 @@ export function useCommands(): Command[] {
       picking,
       leftOpen,
       rightOpen,
+      termOpen,
       themePrefs,
       themes,
       systemDark,
@@ -169,7 +186,20 @@ export function useCommands(): Command[] {
       repos,
     };
     return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repos[0] ?? null);
-  }, [picking, leftOpen, rightOpen, themePrefs, themes, systemDark, worktrees, activeId, repos, dispatch, sock]);
+  }, [
+    picking,
+    leftOpen,
+    rightOpen,
+    termOpen,
+    themePrefs,
+    themes,
+    systemDark,
+    worktrees,
+    activeId,
+    repos,
+    dispatch,
+    sock,
+  ]);
 }
 
 export function filterCommands(commands: Command[], q: string): Command[] {

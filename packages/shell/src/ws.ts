@@ -73,7 +73,10 @@ export class DaemonSocket {
       this.ws.send(raw);
       return;
     }
-    // offline: keep the intent, not the history. One subscribe per worktree, bounded.
+    // offline: keep the intent, not the history. One subscribe per worktree, bounded. Terminal
+    // frames are dropped outright: the pane re-opens itself on reconnect, and keystrokes replayed
+    // into a fresh shell would be wrong.
+    if (msg.t.startsWith("term-")) return;
     const key = msg.t === "subscribe" || msg.t === "unsubscribe" ? `sub:${msg.worktreeId}` : null;
     if (key) this.queue = this.queue.filter((q) => q.key !== key);
     this.queue.push({ key, raw });

@@ -33,10 +33,18 @@ describe("matchChord", () => {
     expect(matchChord(ev("3"))).toEqual({ id: "worktree", digit: 3 });
     expect(matchChord(ev("3", { shift: true }))).toBeNull();
   });
-  test("⌃ or ⌥ or no ⌘ never matches", () => {
+  test("⌃ or ⌥ or no ⌘ never matches a ⌘ row", () => {
     expect(matchChord(ev("k", { meta: false }))).toBeNull();
     expect(matchChord(ev("k", { ctrl: true }))).toBeNull();
+    expect(matchChord(ev("k", { meta: false, ctrl: true }))).toBeNull();
     expect(matchChord(ev("k", { alt: true }))).toBeNull();
+  });
+  test("a ⌃ row matches ⌃ alone: ⌃` is the terminal, ⌘` (macOS cycles windows) and ⌃⌘` are not", () => {
+    expect(matchChord(ev("`", { meta: false, ctrl: true }))).toEqual({ id: "terminal" });
+    expect(matchChord(ev("`"))).toBeNull();
+    expect(matchChord(ev("`", { ctrl: true }))).toBeNull();
+    expect(matchChord(ev("`", { meta: false, ctrl: true, shift: true }))).toBeNull();
+    expect(matchChord(ev("1", { meta: false, ctrl: true }))).toBeNull();
   });
   test("keys the table doesn't own pass through", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find
@@ -48,7 +56,7 @@ describe("matchChord", () => {
   test("every table entry round-trips through the matcher", () => {
     for (const c of CHORDS) {
       if (c.id === "worktree") continue;
-      expect(matchChord(ev(c.key, { shift: !!c.shift }))).toEqual({ id: c.id });
+      expect(matchChord(ev(c.key, { shift: !!c.shift, ctrl: !!c.ctrl, meta: !c.ctrl }))).toEqual({ id: c.id });
     }
   });
 });
@@ -64,6 +72,7 @@ describe("labels", () => {
     expect(chordLabel("keys")).toBe("⌘/");
     expect(chordLabel("search")).toBe("⌘⇧F");
     expect(chordLabel("zen")).toBe("⌘.");
+    expect(chordLabel("terminal")).toBe("⌃`");
     expect(chordLabel("worktree")).toBe("⌘1–9");
   });
   test("worktreeChord / worktreeIndex agree: ⌘9 is always the last", () => {

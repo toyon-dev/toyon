@@ -19,6 +19,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
+  const termOpen = useStore((s) => s.termOpen);
   const installEvt = useInstallPrompt();
   const id = active?.worktree.id ?? null;
   const ready = !!active && active.procs.some((p) => p.status === "running" || p.status === "starting");
@@ -31,6 +32,13 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
         {...tip("Changes panel", chord("left"))}
       >
         <Icon name="branch" />
+      </button>
+      <button
+        className={`btn-icon toggle ${termOpen ? "on" : ""}`}
+        onClick={() => dispatch({ a: "toggle-terminal" })}
+        {...tip("Terminal", chord("terminal"))}
+      >
+        <Icon name="terminal" />
       </button>
       <RouteBar worktreeId={id} ready={ready} left={navCenter} />
       {installEvt && (

@@ -39,15 +39,18 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     const json = JSON.stringify(msg);
     for (const ws of sockets) raw(ws, json);
   };
-  /** only sockets subscribed to the worktree: its agent stream, logs, queue, git status */
-  const sendTo = (worktreeId: string, msg: ServerMsg) => {
+  const sendWhere = (worktreeId: string, msg: ServerMsg, set: (d: WsData) => Set<string>) => {
     let json: string | null = null;
     for (const ws of sockets) {
-      if (!ws.data.subs.has(worktreeId)) continue;
+      if (!set(ws.data).has(worktreeId)) continue;
       json ??= JSON.stringify(msg);
       raw(ws, json);
     }
   };
+  /** only sockets subscribed to the worktree: its agent stream, logs, queue, git status */
+  const sendTo = (worktreeId: string, msg: ServerMsg) => sendWhere(worktreeId, msg, (d) => d.subs);
+  /** only sockets with the worktree's terminal pane open: a background shell streams nowhere */
+  const sendTerm = (worktreeId: string, msg: ServerMsg) => sendWhere(worktreeId, msg, (d) => d.terms);
   const metrics = () => ({
     lag,
     sockets: [...sockets].map(
@@ -84,6 +87,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("proc", (worktreeId, proc) => broadcast({ t: "proc", worktreeId, proc }));
   s.hub.on("log", (worktreeId, proc, line) => sendTo(worktreeId, { t: "log", worktreeId, proc, line }));
   s.hub.on("queue", (worktreeId, items) => sendTo(worktreeId, { t: "queue", worktreeId, items }));
+  s.hub.on("termData", (worktreeId, data) => sendTerm(worktreeId, { t: "term-data", worktreeId, data }));
+  s.hub.on("termExit", (worktreeId, exitCode) => sendTerm(worktreeId, { t: "term-exit", worktreeId, exitCode }));
   // keep the changes list live while the agent edits — coalesced: a turn with ten tool calls in a
   // second runs git status once, not ten times
   const gitStatusTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -165,6 +170,12 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           },
           unsubscribe: (id: string) => {
             ws.data.subs.delete(id);
+          },
+          watchTerminal: (id: string) => {
+            ws.data.terms.add(id);
+          },
+          unwatchTerminal: (id: string) => {
+            ws.data.terms.delete(id);
           },
         };
         try {

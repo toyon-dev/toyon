@@ -24,3 +24,11 @@ export const useOverlay = () => useStore((s) => s.overlay);
 
 /** the theme to paint right now (an element of the themes array, so its identity is stable) */
 export const useTheme = () => useStore(currentTheme);
+
+/** the active worktree's repo while its detected config is still unconfirmed (an element of the repos array) */
+export const useActiveRepoNeedingSetup = () =>
+  useStore((s) => {
+    const wt = worktreeById(s, s.activeId);
+    const repo = wt ? s.repos.find((r) => r.id === wt.worktree.repoId) : null;
+    return repo?.needsSetup ? repo : null;
+  });

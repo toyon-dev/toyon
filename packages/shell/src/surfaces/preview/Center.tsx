@@ -3,7 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useStore } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
-import { useActive, useActiveId, useLocalField, useTheme, useWorktrees } from "../../state/selectors.ts";
+import {
+  useActive,
+  useActiveId,
+  useActiveRepoNeedingSetup,
+  useLocalField,
+  useTheme,
+  useWorktrees,
+} from "../../state/selectors.ts";
 import { bridgeThemeMsg } from "../../theme.ts";
 import { useDragResize, usePersisted } from "../../ui/hooks.ts";
 import { hasToken } from "../../ws.ts";
@@ -14,6 +21,7 @@ const HAS_TOKEN = hasToken();
 import { DiffView } from "../changes/DiffView.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { previewUrl, relFile } from "../util.ts";
+import { SetupPane } from "./SetupPane.tsx";
 
 /** the preview column: one persistent iframe per visited worktree (switching is a display toggle,
  * so each preview keeps its app state + HMR socket while hidden), the editor pane, and the overlays */
@@ -30,6 +38,7 @@ export function Center() {
   themeRef.current = theme;
   const log = useLocalField(activeId, "log");
   const incompatible = useStore((s) => s.incompatible);
+  const needsSetup = useActiveRepoNeedingSetup();
 
   const [mounted, setMounted] = useState<string[]>([]);
   const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
@@ -159,7 +168,8 @@ export function Center() {
               style={{ display: w.worktree.id === activeId ? "block" : "none" }}
             />
           ))}
-          {!activeReady && (
+          {needsSetup && <SetupPane key={needsSetup.id} repo={needsSetup} />}
+          {!activeReady && !needsSetup && (
             <div className="empty">
               {incompatible
                 ? "toyon was updated — reload this page"

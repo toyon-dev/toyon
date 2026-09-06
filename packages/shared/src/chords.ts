@@ -55,9 +55,17 @@ export const CHORDS: readonly Chord[] = [
   { id: "search", key: "f", shift: true, label: "search in files", section: "Find" },
   { id: "left", key: "b", label: "changes", section: "Panels" },
   { id: "right", key: "j", label: "chat", section: "Panels" },
-  // ⌘, is the macOS preferences key; in an installed PWA Chrome otherwise takes it to its own
-  // settings page (a page can preempt it, unlike ⌘N/⌘T/⌘W), so it lands on ours instead
-  { id: "keys", key: "/", aliases: [","], label: "shortcuts & settings", section: "Panels" },
+  // ⌘, is the macOS preferences key. In an installed PWA Chrome would otherwise open its own
+  // settings page (a page can preempt it, unlike ⌘N/⌘T/⌘W), so there it lands on ours and is
+  // the key we advertise; in a tab ⌘/ stays the shown key since ⌘, reads as the browser's.
+  {
+    id: "keys",
+    key: "/",
+    aliases: [","],
+    advertise: { key: ",", when: "pwa" },
+    label: "shortcuts & settings",
+    section: "Panels",
+  },
   { id: "pick", key: "e", label: "element picker", section: "Preview" },
   { id: "zen", key: ".", label: "full-bleed preview", section: "Preview" },
   {

@@ -1040,85 +1040,92 @@ body.resizing .rb-center {
 /* ---- new worktree prompt overlay ---- */
 /* anchored near the top, not centered: a palette's height changes as you type, and a centered
    box would bob with it — the input stays put this way (editor/launcher convention) */
-/* ---- first-run config card ---- */
-.config-card {
-  width: min(640px, 92%);
+/* ---- repo setup pane (replaces the preview while a repo's config is unconfirmed) ---- */
+.setup-pane {
+  height: 100%;
+  overflow: auto;
+  padding: 48px 24px;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--fg1);
+  font: var(--fs-md) var(--font-ui);
 }
-.config-card .title b {
-  color: var(--orange);
+.setup-pane h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
 }
-.config-card .title code {
+.setup-lead {
+  margin: 0 0 12px;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+.setup-pane code {
   background: var(--bg0);
   border: 1px solid var(--bg2);
   border-radius: var(--r-xs);
   padding: 0 4px;
   font: var(--fs-xs) var(--font-mono);
 }
-.cfg-section {
-  font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--fg-dim);
-  margin: 12px 0 6px;
-}
-.cfg-proc {
+.setup-row {
   display: flex;
-  gap: 6px;
-  margin-bottom: 6px;
-  align-items: center;
+  gap: 12px;
+  align-items: flex-start;
 }
-.cfg-proc input {
+.setup-label {
+  width: 56px;
+  flex-shrink: 0;
+  padding-top: 5px;
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+}
+.setup-control {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.setup-control .field {
   padding: 5px 8px;
 }
-.cfg-name {
+.setup-control > .field {
+  width: 100%;
+}
+.setup-control textarea.field {
+  resize: none;
+  line-height: 1.6;
+}
+.setup-proc {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.setup-name {
   width: 90px;
   flex-shrink: 0;
 }
-.cfg-cmd {
+.setup-cmd {
   flex: 1;
   min-width: 0;
 }
-.cfg-proc button {
-  color: var(--fg-dim);
-  padding: 0 4px;
-}
-.cfg-proc button:hover {
-  color: var(--red);
-}
-.config-card .add-proc {
-  padding: 2px 0;
-  font-size: var(--fs-sm);
-}
-.cfg-setup {
-  width: 100%;
-  min-height: 54px;
-  font: var(--fs-sm) / 1.6 var(--font-mono);
-  padding: 6px 8px;
-  resize: vertical;
-}
-.cfg-exclusive {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: var(--fs-sm);
-  color: var(--fg-muted);
-  margin-top: 10px;
-  cursor: pointer;
-}
-.cfg-exclusive input {
-  accent-color: var(--orange);
-}
-.cfg-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 14px;
-}
-.cfg-note {
+.setup-hint {
   font-size: var(--fs-xs);
   color: var(--fg-dim);
 }
-.cfg-actions .ship-btn {
+.setup-add {
+  padding: 2px 0;
+  font-size: var(--fs-sm);
+}
+.setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+.setup-start {
   font-size: var(--fs-md);
   padding: 4px 16px;
 }

@@ -60,6 +60,8 @@ describe("labels", () => {
     expect(chordLabel("new", { firefox: true })).toBe("⌘K"); // ⌘N is an alias, not the Firefox key
     expect(chordLabel("new", { pwa: true })).toBe("⌘N"); // an installed PWA lets ⌘N through
     expect(chordLabel("commands", { pwa: true })).toBe("⌘⇧P");
+    expect(chordLabel("keys", { pwa: true })).toBe("⌘,"); // macOS preferences key, ours in a PWA
+    expect(chordLabel("keys")).toBe("⌘/");
     expect(chordLabel("search")).toBe("⌘⇧F");
     expect(chordLabel("zen")).toBe("⌘.");
     expect(chordLabel("worktree")).toBe("⌘1–9");

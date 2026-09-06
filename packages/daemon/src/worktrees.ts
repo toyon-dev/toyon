@@ -34,6 +34,7 @@ import { startProxy, type WorktreeProxy } from "./proxy.ts";
 import { loadState, type PersistedState, saveState } from "./state.ts";
 import { WorktreeProcs } from "./supervisor.ts";
 import { watchDefaultBranch } from "./watcher.ts";
+import { resolveInside } from "./worktrees/paths.ts";
 
 export interface HubEvents {
   proc(worktreeId: string, proc: ProcState): void;
@@ -617,7 +618,7 @@ export class Manager {
       });
       if (!res.ok) return 0;
       const served = await res.text();
-      const disk = readFileSync(join(wt.path, path), "utf8").split("\n");
+      const disk = readFileSync(resolveInside(wt.path, path), "utf8").split("\n");
       for (let i = 0; i < disk.length; i++) {
         const m = disk[i]!.match(/>([^<>{}\n]{6,60})</);
         const anchor = m?.[1]?.trim();

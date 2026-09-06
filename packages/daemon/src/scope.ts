@@ -34,7 +34,7 @@ const CACHE_DIRS = [".bun", ".npm", ".cache", ".yarn", ".pnpm-store", "Library/C
 
 /** Resolve symlinks on the deepest existing ancestor so a link inside the
  * worktree pointing elsewhere can't smuggle a write out. */
-function canonical(p: string): string {
+export function canonical(p: string): string {
   let probe = p;
   const tail: string[] = [];
   while (!existsSync(probe)) {
@@ -54,7 +54,7 @@ function uniq<T>(xs: T[]): T[] {
   return [...new Set(xs)];
 }
 
-function within(path: string, root: string): boolean {
+export function within(path: string, root: string): boolean {
   return path === root || path.startsWith(root + sep);
 }
 

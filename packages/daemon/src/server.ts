@@ -13,6 +13,7 @@ import {
 } from "./git.ts";
 import { setWaitingColors } from "./proxy.ts";
 import type { ThemeStore } from "./themes.ts";
+import { resolveInside } from "./worktrees/paths.ts";
 import type { Manager } from "./worktrees.ts";
 
 const VERSION = "0.0.1";
@@ -231,8 +232,9 @@ export function startServer(opts: {
         const wt = manager.worktree(msg.worktreeId);
         if (!wt) return;
         const repo = manager.repo(wt.repoId);
+        const target = resolveInside(wt.path, msg.path);
         const before = fileBefore(wt.path, repo.defaultBranch, msg.path);
-        const afterFile = Bun.file(join(wt.path, msg.path));
+        const afterFile = Bun.file(target);
         const after = (await afterFile.exists()) ? await afterFile.text() : "";
         const out: ServerMsg = { t: "file-diff", worktreeId: msg.worktreeId, path: msg.path, before, after };
         ws.send(JSON.stringify(out));
@@ -410,6 +412,7 @@ export function startServer(opts: {
         const wt = manager.worktree(msg.worktreeId);
         if (!wt) return;
         const repo = manager.repo(wt.repoId);
+        resolveInside(wt.path, msg.path);
         const ranges = changedRanges(wt.path, repo.defaultBranch, msg.path);
         const lineOffset = await manager.lineOffset(wt.id, msg.path);
         ws.send(
@@ -426,11 +429,7 @@ export function startServer(opts: {
       case "reveal": {
         const wt = manager.worktree(msg.worktreeId);
         if (!wt) throw new Error("unknown worktree");
-        const { resolve } = await import("node:path");
-        const target = resolve(wt.path, msg.path ?? ".");
-        if (target !== resolve(wt.path) && !target.startsWith(`${resolve(wt.path)}/`)) {
-          throw new Error("path escapes worktree");
-        }
+        const target = resolveInside(wt.path, msg.path ?? ".", { allowRoot: true });
         // Finder reveal is macOS-only; elsewhere there is no viewer-side filesystem.
         // An unhandled spawn 'error' (missing `open`) would take the daemon down.
         if (process.platform !== "darwin") throw new Error("reveal is only available on macOS");
@@ -443,12 +442,10 @@ export function startServer(opts: {
       case "discard-file": {
         const wt = manager.worktree(msg.worktreeId);
         if (!wt) throw new Error("unknown worktree");
+        const target = resolveInside(wt.path, msg.path);
         const entry = statusFiles(wt.path).find((f) => f.path === msg.path);
         if (!entry) throw new Error("file has no uncommitted changes");
         if (entry.xy === "??") {
-          const { resolve } = await import("node:path");
-          const target = resolve(wt.path, msg.path);
-          if (!target.startsWith(`${resolve(wt.path)}/`)) throw new Error("path escapes worktree");
           const { unlinkSync } = await import("node:fs");
           unlinkSync(target);
         } else {
@@ -469,9 +466,7 @@ export function startServer(opts: {
       case "write-file": {
         const wt = manager.worktree(msg.worktreeId);
         if (!wt) throw new Error("unknown worktree");
-        const { resolve } = await import("node:path");
-        const target = resolve(wt.path, msg.path);
-        if (!target.startsWith(`${resolve(wt.path)}/`)) throw new Error("path escapes worktree");
+        const target = resolveInside(wt.path, msg.path);
         await Bun.write(target, msg.content);
         // no toast: autosave fires constantly; the changes list is the feedback
         sendGitStatus(wt.id, ws);

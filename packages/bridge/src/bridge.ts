@@ -6,6 +6,8 @@
 // (postMessage drops a frame whose origin doesn't match, so posting once per candidate is safe);
 // inbound commands are accepted only from the parent frame at one of them. Without the list
 // (cloud with no known public host) both sides fall back to open.
+import type { BridgeToShellMsg, ShellToBridgeMsg } from "@orchardist/shared/protocol/bridge";
+
 declare global {
   interface Window {
     __orchShellOrigins?: string[];
@@ -14,7 +16,7 @@ declare global {
 const SHELL_ORIGINS: string[] = window.__orchShellOrigins ?? [];
 let shellOrigin: string | null = null;
 
-const post = (msg: Record<string, unknown>) => {
+const post = (msg: BridgeToShellMsg) => {
   try {
     const targets = shellOrigin ? [shellOrigin] : SHELL_ORIGINS.length ? SHELL_ORIGINS : ["*"];
     for (const t of targets) window.parent.postMessage({ __orchardist: true, ...msg }, t);
@@ -329,16 +331,17 @@ if (location.hash.startsWith("#__orchtest=")) {
 window.addEventListener("message", (e) => {
   if (e.source !== window.parent) return;
   if (SHELL_ORIGINS.length && !SHELL_ORIGINS.includes(e.origin)) return;
-  const d = e.data;
-  if (!d?.__orchardist) return;
+  const raw = e.data as { __orchardist?: boolean } | null;
+  if (!raw?.__orchardist) return;
   shellOrigin = e.origin;
+  const d = raw as unknown as ShellToBridgeMsg;
   switch (d.type) {
     case "reload":
       location.reload();
       break;
     case "navigate":
       // full navigation: always correct regardless of the app's router (or lack of one)
-      location.assign(String(d.path ?? "/"));
+      location.assign(d.path || "/");
       break;
     case "back":
       history.back();
@@ -353,13 +356,13 @@ window.addEventListener("message", (e) => {
       stopPicking();
       break;
     case "highlight-file":
-      highlightFile(String(d.path ?? ""), Array.isArray(d.ranges) ? d.ranges : null);
+      highlightFile(d.path, d.ranges ?? null);
       break;
     case "highlight-selector": {
       clearOverlay();
       try {
-        const el = document.querySelector(String(d.selector ?? ""));
-        if (el) drawBox(el.getBoundingClientRect(), String(d.label ?? "") || undefined);
+        const el = document.querySelector(d.selector);
+        if (el) drawBox(el.getBoundingClientRect(), d.label || undefined);
       } catch {}
       break;
     }
@@ -367,8 +370,8 @@ window.addEventListener("message", (e) => {
       clearOverlay();
       break;
     case "theme":
-      if (typeof d.accent === "string") accent = d.accent;
-      if (typeof d.accentFg === "string") accentFg = d.accentFg;
+      accent = d.accent;
+      accentFg = d.accentFg;
       break;
   }
 });

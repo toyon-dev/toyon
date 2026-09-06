@@ -1,6 +1,7 @@
 import type {
   AgentEvent,
   GitFileStatus,
+  PickedElement,
   RepoInfo,
   SearchHit,
   ServerMsg,
@@ -44,18 +45,7 @@ export interface State {
   pageCtx: Record<string, { url?: string; title?: string; errors: string[] }>;
   /** armed element picker + last picked element (pending chat attachment) */
   picking: boolean;
-  pick: {
-    worktreeId: string;
-    component: string | null;
-    file: string | null;
-    line: number | null;
-    tag: string;
-    classes: string;
-    text: string;
-    html: string;
-    route: string;
-    selector: string;
-  } | null;
+  pick: (PickedElement & { worktreeId: string }) | null;
   /** changed line ranges cache, keyed `${worktreeId}:${path}` */
   changedRanges: Record<string, { ranges: Array<[number, number]>; offset: number }>;
   showQuickOpen: boolean;

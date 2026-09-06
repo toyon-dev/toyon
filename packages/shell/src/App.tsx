@@ -1,5 +1,20 @@
-import type { GitFileStatus, RepoInfo, SearchHit, Theme, ThemePrefs, WorktreeStatus } from "@orchardist/shared";
-import { effectiveKind, pickFamily, resolveTheme, type ThemeFamily, themeFamilies } from "@orchardist/shared";
+import type {
+  GitFileStatus,
+  RepoInfo,
+  SearchHit,
+  ShellToBridgeMsg,
+  Theme,
+  ThemePrefs,
+  WorktreeStatus,
+} from "@orchardist/shared";
+import {
+  effectiveKind,
+  parseBridgeMsg,
+  pickFamily,
+  resolveTheme,
+  type ThemeFamily,
+  themeFamilies,
+} from "@orchardist/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { lazy, Suspense, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -278,8 +293,8 @@ type Dispatch = (a: Parameters<typeof reducer>[1]) => void;
 
 // module-level bridge to post into preview iframes (registered by Center)
 export const previewBus = {
-  post: (_id: string, _msg: Record<string, unknown>) => {},
-  broadcast: (_msg: Record<string, unknown>) => {},
+  post: (_id: string, _msg: ShellToBridgeMsg) => {},
+  broadcast: (_msg: ShellToBridgeMsg) => {},
 };
 
 // fiber lineNumbers may be preamble-shifted (daemon derives the offset per file)
@@ -1336,12 +1351,13 @@ function Center({
   // attribute bridge messages to their worktree via event.source
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
-      const d = e.data;
-      if (!d?.__orchardist) return;
+      if (!(e.data as { __orchardist?: boolean } | null)?.__orchardist) return;
       for (const [id, frame] of frameRefs.current) {
         if (frame.contentWindow === e.source) {
           if (e.origin !== originRefs.current.get(id)) return;
-          if (d.type === "key" && d.meta) {
+          const d = parseBridgeMsg(e.data);
+          if (!d) return;
+          if (d.type === "key") {
             // bridge chord forwarding: replay as a real keydown so App's handler sees it
             window.dispatchEvent(new KeyboardEvent("keydown", { key: d.key, metaKey: true, shiftKey: !!d.shift }));
           } else if (d.type === "hmr") dispatch({ a: "hmr", id });
@@ -1356,24 +1372,11 @@ function Center({
             );
           } else if (d.type === "navigated") dispatch({ a: "page", id, url: d.url });
           else if (d.type === "page-error") {
-            const where = d.source ? ` (${relFile(String(d.source))}:${d.line ?? "?"})` : "";
+            const where = d.source ? ` (${relFile(d.source)}:${d.line ?? "?"})` : "";
             dispatch({ a: "page", id, error: `${d.message}${where}` });
           } else if (d.type === "picked") {
-            dispatch({
-              a: "picked",
-              pick: {
-                worktreeId: id,
-                component: d.component ?? null,
-                file: d.file ?? null,
-                line: d.line ?? null,
-                tag: String(d.tag ?? ""),
-                classes: String(d.classes ?? ""),
-                text: String(d.text ?? ""),
-                html: String(d.html ?? ""),
-                route: String(d.route ?? ""),
-                selector: String(d.selector ?? ""),
-              },
-            });
+            const { type: _t, ...pick } = d;
+            dispatch({ a: "picked", pick: { worktreeId: id, ...pick } });
           } else if (d.type === "pick-cancel") dispatch({ a: "set-picking", v: false });
           return;
         }

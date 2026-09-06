@@ -2,7 +2,7 @@
 // title-bar tint, and a localStorage copy so the next load paints the right
 // colors before the daemon's hello arrives.
 
-import type { Theme } from "@orchardist/shared";
+import type { ShellToBridgeMsg, Theme } from "@orchardist/shared";
 import { contrastFg, gruvboxDarkSoft, themeToCssVars } from "@orchardist/shared";
 
 const CACHE_KEY = "orch-theme";
@@ -31,7 +31,7 @@ export function applyTheme(theme: Theme) {
 }
 
 /** what the bridge needs to paint its overlays in the shell's accent */
-export function bridgeThemeMsg(theme: Theme): Record<string, unknown> {
+export function bridgeThemeMsg(theme: Theme): ShellToBridgeMsg {
   return { type: "theme", accent: theme.colors.orange, accentFg: contrastFg(theme.colors.orange) };
 }
 

@@ -10,7 +10,8 @@
     "./model": "./src/model.ts",
     "./ports": "./src/ports.ts",
     "./protocol/events": "./src/protocol/events.ts",
-    "./protocol/ws": "./src/protocol/ws.ts"
+    "./protocol/ws": "./src/protocol/ws.ts",
+    "./protocol/bridge": "./src/protocol/bridge.ts"
   },
   "dependencies": {
     "zod": "^4.5.4"

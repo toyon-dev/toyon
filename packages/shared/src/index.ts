@@ -3,6 +3,7 @@
 
 export * from "./model.ts";
 export * from "./ports.ts";
+export * from "./protocol/bridge.ts";
 export * from "./protocol/events.ts";
 export * from "./protocol/ws.ts";
 export * from "./themes.ts";

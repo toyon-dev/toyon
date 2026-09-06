@@ -135,27 +135,48 @@ export class WorktreeProcs {
     }
   }
 
-  private killProc(mp: ManagedProc) {
-    const pid = mp.child?.pid;
-    if (pid) {
+  /** SIGTERM the process group, SIGKILL after 3s. Resolves once the child has exited (or shortly
+   * after the SIGKILL), so a daemon shutdown can wait for its dev servers instead of orphaning them. */
+  private killProc(mp: ManagedProc): Promise<void> {
+    const child = mp.child;
+    const pid = child?.pid;
+    if (!child || !pid || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+    return new Promise((resolve) => {
+      let done = false;
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(killTimer);
+        resolve();
+      };
+      child.once("exit", finish);
       try {
         process.kill(-pid, "SIGTERM");
-      } catch {}
-      setTimeout(() => {
+      } catch {
+        finish();
+        return;
+      }
+      killTimer = setTimeout(() => {
         try {
           process.kill(-pid, "SIGKILL");
         } catch {}
+        // the exit event follows the SIGKILL almost immediately; don't hang on a stuck one
+        setTimeout(finish, 200);
       }, 3000);
-    }
+    });
   }
 
-  stopAll() {
+  /** Stop every proc; resolves when they have all exited (bounded by the SIGKILL grace). */
+  async stopAll(): Promise<void> {
     this.stopped = true;
+    const exits: Promise<void>[] = [];
     for (const mp of this.procs.values()) {
       mp.state.status = "stopped";
-      this.killProc(mp);
+      exits.push(this.killProc(mp));
       releasePort(mp.state.port);
     }
+    await Promise.all(exits);
   }
 
   states(): ProcState[] {

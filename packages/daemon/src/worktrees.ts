@@ -707,12 +707,15 @@ export class Manager {
     return this.state.worktrees.find((w) => w.id === worktreeId);
   }
 
-  shutdown() {
+  /** Stop watchers, proxies and every proc group; resolves once the procs have exited. */
+  async shutdown(): Promise<void> {
     for (const stop of this.watchers.values()) stop();
-    for (const rt of this.runtimes.values()) {
-      rt.procs.stopAll();
-      rt.proxy.stop();
-    }
+    await Promise.all(
+      [...this.runtimes.values()].map(async (rt) => {
+        rt.proxy.stop();
+        await rt.procs.stopAll();
+      }),
+    );
   }
 }
 

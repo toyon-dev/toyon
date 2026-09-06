@@ -2,12 +2,18 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT } from "@orchardist/shared";
 import { cloud } from "./cloud.ts";
+import { fireAndForget, log } from "./core/log.ts";
 import { statusFilesWithCounts } from "./git.ts";
 import { ensureDirs } from "./paths.ts";
 import { startServer } from "./server.ts";
 import { loadOrCreateToken, saveState } from "./state.ts";
 import { ThemeStore } from "./themes.ts";
 import { type HubEvents, Manager } from "./worktrees.ts";
+
+// Bun exits the process on an unhandled rejection or exception. For a daemon that owns
+// every dev server and agent session, staying up and logging beats taking them all down.
+process.on("unhandledRejection", (e) => log.error("daemon", "unhandled rejection", e));
+process.on("uncaughtException", (e) => log.error("daemon", "uncaught exception", e));
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SHELL_DIST = join(here, "../../shell/dist");
@@ -32,7 +38,9 @@ const hubEvents: HubEvents = {
       if (wt) {
         try {
           broadcastRef?.({ t: "git-status", worktreeId, files: statusFilesWithCounts(wt.path) });
-        } catch {}
+        } catch (e) {
+          log.warn(worktreeId, "git status after agent edit failed", e);
+        }
       }
     }
   },
@@ -70,7 +78,7 @@ if (repoArg) {
   try {
     await manager.registerRepo(repoArg);
   } catch (e) {
-    console.error(`could not register ${repoArg}: ${e}`);
+    log.error("daemon", `could not register ${repoArg}`, e);
   }
 }
 
@@ -87,9 +95,17 @@ if (cloud.enabled) {
   console.log(`         (fallback: http://127.0.0.1:${port}/#token=${token})`);
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-function shutdown() {
-  manager.shutdown();
+// Wait for the dev servers to exit (SIGTERM, then SIGKILL after 3s) before leaving, so the
+// detached process groups don't outlive the daemon and squat their ports. Bounded: a stuck
+// exit can't hold the terminal hostage.
+let shuttingDown = false;
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log.info("daemon", `${signal}: stopping dev servers`);
+  const deadline = new Promise<void>((resolve) => setTimeout(resolve, 5000));
+  await Promise.race([manager.shutdown(), deadline]);
   process.exit(0);
 }
+process.on("SIGINT", () => fireAndForget("daemon", shutdown("SIGINT"), "shutdown"));
+process.on("SIGTERM", () => fireAndForget("daemon", shutdown("SIGTERM"), "shutdown"));

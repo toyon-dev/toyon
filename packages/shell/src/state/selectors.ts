@@ -1,7 +1,7 @@
 // Selector hooks. Each returns a field or a stable constant so a component re-renders only when
 // what it reads changes (useSyncExternalStore compares by identity: never build a fresh object here).
 
-import type { WorktreeStatus } from "@orchardist/shared";
+import type { WorktreeStatus } from "@toyon/shared";
 import { useStore } from "./context.tsx";
 import { currentTheme, localOf, type State, type WorktreeLocal } from "./store.ts";
 

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import type { RepoInfo, ThemePrefs, WorktreeInfo } from "@orchardist/shared";
+import type { RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -57,10 +57,10 @@ export function loadOrCreateToken(paths: Paths): string {
   const TOKEN_FILE = paths.tokenFile;
   // cloud mode seeds the token from a secret so the provisioner can print the URL;
   // hex-only because the shell's fragment parser (shell/src/ws.ts) only accepts hex
-  const seeded = process.env.ORCHARDIST_TOKEN;
+  const seeded = process.env.TOYON_TOKEN;
   if (seeded) {
     if (!/^[a-f0-9]{16,}$/.test(seeded)) {
-      throw new Error("ORCHARDIST_TOKEN must be lowercase hex, at least 16 chars");
+      throw new Error("TOYON_TOKEN must be lowercase hex, at least 16 chars");
     }
     writeFileSync(TOKEN_FILE, seeded, { mode: 0o600 });
     return seeded;

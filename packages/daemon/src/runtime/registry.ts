@@ -2,7 +2,7 @@
 // setup has run, its process group and preview proxy. Replaces the old runtimes + pendingAgents
 // pair, which four call sites each had to consult.
 
-import type { ProcState, RepoInfo, WorktreeInfo } from "@orchardist/shared";
+import type { ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import { AgentSession } from "../agent/session.ts";
 import type { Hub } from "../core/hub.ts";

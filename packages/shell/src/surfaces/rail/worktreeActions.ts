@@ -1,4 +1,4 @@
-import type { WorktreeStatus } from "@orchardist/shared";
+import type { WorktreeStatus } from "@toyon/shared";
 import type { DaemonSocket } from "../../ws.ts";
 
 /** confirm-then-send worktree actions, shared by the rail's context menu and the ⌘⇧P palette */

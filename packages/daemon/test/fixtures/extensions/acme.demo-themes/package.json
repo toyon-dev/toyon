@@ -1,0 +1,11 @@
+{
+  "name": "demo-themes",
+  "publisher": "acme",
+  "contributes": {
+    "themes": [
+      { "label": "Acme Night", "uiTheme": "vs-dark", "path": "./themes/night.json" },
+      { "label": "Acme Day", "uiTheme": "vs", "path": "./themes/day.json" },
+      { "label": "Broken", "uiTheme": "vs-dark", "path": "./themes/missing.json" }
+    ]
+  }
+}

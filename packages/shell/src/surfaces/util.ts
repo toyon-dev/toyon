@@ -1,4 +1,4 @@
-import { type ChordId, chordLabel, type WorktreeStatus } from "@orchardist/shared";
+import { type ChordId, chordLabel, type WorktreeStatus } from "@toyon/shared";
 
 /** Preview iframes hit the worktree's proxy port. Locally that is always loopback (the daemon
  * binds 127.0.0.1); in cloud mode the same port is a public TLS port on the host that served this

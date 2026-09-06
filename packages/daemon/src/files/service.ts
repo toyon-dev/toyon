@@ -3,7 +3,7 @@
 
 import { spawn } from "node:child_process";
 import { unlinkSync } from "node:fs";
-import type { SearchHit } from "@orchardist/shared";
+import type { SearchHit } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, git, run } from "../git/exec.ts";

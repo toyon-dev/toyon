@@ -1,4 +1,4 @@
-// Theme store: built-ins + ~/.orchardist/themes/*.json + themes contributed by
+// Theme store: built-ins + ~/.toyon/themes/*.json + themes contributed by
 // extensions installed in VS Code / Cursor / Windsurf (or their app bundles).
 // Discovery is read-only; imports from the browser are written to THEMES_DIR
 // already converted, so the file is the source of truth from then on.
@@ -14,7 +14,7 @@ import {
   ThemeImportError,
   type ThemePrefs,
   vscodeToTheme,
-} from "@orchardist/shared";
+} from "@toyon/shared";
 import { parse as parseJsonc } from "jsonc-parser";
 import { cloud } from "../core/cloud.ts";
 
@@ -35,7 +35,7 @@ const defaultExtensionDirs = [
 
 /** colon-separated override (tests, unusual installs); empty string disables discovery */
 export function extensionDirs(): string[] {
-  const env = process.env.ORCHARDIST_THEME_DIRS;
+  const env = process.env.TOYON_THEME_DIRS;
   if (env != null) return env.split(":").filter(Boolean);
   if (cloud.enabled) return [];
   return defaultExtensionDirs;
@@ -106,7 +106,7 @@ export class ThemeStore {
     const json = parseJsonc(source, [], { allowTrailingComma: true });
     if (json && typeof json === "object" && typeof (json as { include?: unknown }).include === "string") {
       throw new ThemeImportError(
-        "this theme file uses `include`; drop the whole extension folder's theme into ~/.orchardist/themes or install it in VS Code and rescan",
+        "this theme file uses `include`; drop the whole extension folder's theme into ~/.toyon/themes or install it in VS Code and rescan",
       );
     }
     const base = slug(basename(name).replace(/\.(json|jsonc)$/i, ""));
@@ -145,7 +145,7 @@ export function readVscodeTheme(file: string, depth = 0): Record<string, unknown
   return t;
 }
 
-/** ~/.orchardist/themes: Orchardist Theme JSON (has colors.bg0) or raw VS Code JSON */
+/** ~/.toyon/themes: Toyon Theme JSON (has colors.bg0) or raw VS Code JSON */
 function loadDir(dir: string): Theme[] {
   if (!existsSync(dir)) return [];
   const out: Theme[] = [];

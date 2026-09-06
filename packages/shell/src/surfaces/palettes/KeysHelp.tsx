@@ -1,4 +1,4 @@
-import { CHORD_SECTIONS, CHORDS, resolveTheme } from "@orchardist/shared";
+import { CHORD_SECTIONS, CHORDS, resolveTheme } from "@toyon/shared";
 import { useRef } from "react";
 import { useDispatch, useStore } from "../../state/context.tsx";
 import type { Action } from "../../state/store.ts";

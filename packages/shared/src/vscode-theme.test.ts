@@ -28,7 +28,7 @@ const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/;
 describe("vscodeToTheme", () => {
   test("full dark theme: precedence + normalized hex everywhere", () => {
     const t = vscodeToTheme(fixture("full-dark.json"), { id: "x" });
-    expect(t.name).toBe("Orchard Night");
+    expect(t.name).toBe("Acme Night");
     expect(t.kind).toBe("dark");
     for (const k of themeColorKeys) expect(t.colors[k]).toMatch(HEX);
     expect(t.colors.bg0).toBe("#101418");

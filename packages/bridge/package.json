@@ -1,5 +1,5 @@
 {
-  "name": "@orchardist/bridge",
+  "name": "@toyon/bridge",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -8,6 +8,6 @@
     "size": "bun scripts/size.ts"
   },
   "dependencies": {
-    "@orchardist/shared": "workspace:*"
+    "@toyon/shared": "workspace:*"
   }
 }

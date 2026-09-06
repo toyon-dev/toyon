@@ -20,7 +20,7 @@ export interface HttpOpts {
   shellDist: string;
   version: string;
   repos: RepoRegistry;
-  /** whether the portless http://orchardist.localhost listener came up (known after bind) */
+  /** whether the portless http://toyon.localhost listener came up (known after bind) */
   branded: () => boolean;
   /** event-loop lag + per-socket traffic, for /health */
   metrics: () => unknown;
@@ -74,6 +74,6 @@ export function createFetch(opts: HttpOpts) {
     if (existsSync(file) && Bun.file(file).size > 0) return new Response(Bun.file(file));
     const index = join(opts.shellDist, "index.html");
     if (existsSync(index)) return new Response(Bun.file(index));
-    return new Response("orchardist daemon running; shell not built (run: bun run build)", { status: 200 });
+    return new Response("toyon daemon running; shell not built (run: bun run build)", { status: 200 });
   };
 }

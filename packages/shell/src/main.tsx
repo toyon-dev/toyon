@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION } from "@orchardist/shared";
+import { PROTOCOL_VERSION } from "@toyon/shared";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
@@ -47,7 +47,7 @@ const sock = new DaemonSocket(
     // a daemon upgraded under a stale tab: the shell's protocol knowledge is baked at build, so stop
     // talking (and reconnecting) and ask for a reload rather than misread frames
     if (msg.t === "hello" && msg.protocol !== PROTOCOL_VERSION) {
-      store.dispatch({ a: "server", msg: { t: "error", message: "orchardist was updated — reload this page" } });
+      store.dispatch({ a: "server", msg: { t: "error", message: "toyon was updated — reload this page" } });
       sock.dispose();
       return;
     }

@@ -1,4 +1,4 @@
-import type { GitFileStatus } from "@orchardist/shared";
+import type { GitFileStatus } from "@toyon/shared";
 
 /** One ⌘P row: the path plus its uncommitted status, if any. */
 export interface QuickOpenRow {

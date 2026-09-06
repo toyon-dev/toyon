@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import type { ProcState } from "@orchardist/shared";
+import type { ProcState } from "@toyon/shared";
 import { allocatePort, releasePort } from "./ports.ts";
 
 const LOG_RING_SIZE = 500;

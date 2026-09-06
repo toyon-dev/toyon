@@ -7,8 +7,8 @@
 #   provision.sh destroy <app-name>  delete the app and its volume so nothing keeps billing
 #
 # Needs: flyctl (https://fly.io/docs/flyctl/install/), `fly auth login`, and an
-# agent auth for `up`: either ~/.orchardist/cloud/claude-oauth.token (from
-# `claude setup-token`, bills your Claude plan) or ~/.orchardist/cloud/anthropic.key
+# agent auth for `up`: either ~/.toyon/cloud/claude-oauth.token (from
+# `claude setup-token`, bills your Claude plan) or ~/.toyon/cloud/anthropic.key
 # (API key, pay-as-you-go). Env vars CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_API_KEY also work. No local Docker: the image is
 # built remotely. Region, VM size and proxy port range are knobs below.
 set -euo pipefail
@@ -27,7 +27,7 @@ cmd="${1:-}"; app="${2:-}"
 [ -n "$cmd" ] && [ -n "$app" ] || { sed -n '2,12p' "$0"; exit 1; }
 command -v fly >/dev/null || { echo "flyctl not found; install it and run: fly auth login" >&2; exit 1; }
 
-state_dir="$HOME/.orchardist/cloud"
+state_dir="$HOME/.toyon/cloud"
 token_file="$state_dir/$app.token"
 
 write_fly_toml() {
@@ -39,11 +39,11 @@ app = "$app"
 primary_region = "$REGION"
 
 [env]
-  ORCHARDIST_CLOUD = "1"
-  ORCHARDIST_PORT = "$DAEMON_PORT"
-  ORCHARDIST_HOME = "/data/orchardist"
-  ORCHARDIST_PROXY_PORTS = "$PROXY_FROM-$PROXY_TO"
-  ORCHARDIST_PUBLIC_HOST = "$app.fly.dev"
+  TOYON_CLOUD = "1"
+  TOYON_PORT = "$DAEMON_PORT"
+  TOYON_HOME = "/data/toyon"
+  TOYON_PROXY_PORTS = "$PROXY_FROM-$PROXY_TO"
+  TOYON_PUBLIC_HOST = "$app.fly.dev"
 
 [mounts]
   source = "orch_data"
@@ -121,7 +121,7 @@ case "$cmd" in
     if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
       echo "agent auth: Claude plan (setup-token)"
       fly secrets set -a "$app" --stage \
-        ORCHARDIST_TOKEN="$token" \
+        TOYON_TOKEN="$token" \
         CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
         ${DEMO_REPO_URL:+DEMO_REPO_URL="$DEMO_REPO_URL"}
       # an API key on the machine would take precedence over the plan token
@@ -129,7 +129,7 @@ case "$cmd" in
     else
       echo "agent auth: API key (credits)"
       fly secrets set -a "$app" --stage \
-        ORCHARDIST_TOKEN="$token" \
+        TOYON_TOKEN="$token" \
         ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
         ${DEMO_REPO_URL:+DEMO_REPO_URL="$DEMO_REPO_URL"}
     fi

@@ -13,7 +13,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 import type { HookCallbackMatcher, SandboxSettings } from "@anthropic-ai/claude-agent-sdk";
-import { WRITE_TOOLS } from "@orchardist/shared";
+import { WRITE_TOOLS } from "@toyon/shared";
 import { git } from "../git/exec.ts";
 
 export interface BlockedWrite {
@@ -92,9 +92,9 @@ export async function buildScope(cwd: string, onBlocked: (b: BlockedWrite) => vo
         const target = canonical(isAbsolute(raw) ? raw : resolve(cwd, raw));
         let reason: string | null = null;
         if (denyWrite.some((d) => within(target, d))) {
-          reason = `Writing to ${raw} is not allowed: agent settings under .claude/ are managed by Orchardist.`;
+          reason = `Writing to ${raw} is not allowed: agent settings under .claude/ are managed by Toyon.`;
         } else if (!allowWrite.some((a) => within(target, a))) {
-          reason = `Writing to ${raw} is outside this worktree (${cwd}). Orchardist confines edits to the worktree; work within it.`;
+          reason = `Writing to ${raw} is outside this worktree (${cwd}). Toyon confines edits to the worktree; work within it.`;
         }
         if (!reason) return {};
         onBlocked({ tool: input.tool_name, path: raw, reason });

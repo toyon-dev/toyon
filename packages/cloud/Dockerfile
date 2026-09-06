@@ -1,4 +1,4 @@
-# Orchardist daemon in a Fly Machine. Build context is the monorepo root
+# Toyon daemon in a Fly Machine. Build context is the monorepo root
 # (provision.sh passes it), never this directory alone: the daemon resolves
 # packages/shell/dist and packages/bridge/dist relative to its own source.
 #
@@ -24,10 +24,10 @@ RUN bun install --frozen-lockfile && bun run build && chown -R orch:orch /app
 COPY packages/cloud/entrypoint.sh /entrypoint.sh
 RUN chmod 0755 /entrypoint.sh
 
-ENV ORCHARDIST_CLOUD=1 \
-    ORCHARDIST_PORT=4141 \
-    ORCHARDIST_HOME=/data/orchardist \
-    ORCHARDIST_PROXY_PORTS=10001-10008 \
+ENV TOYON_CLOUD=1 \
+    TOYON_PORT=4141 \
+    TOYON_HOME=/data/toyon \
+    TOYON_PROXY_PORTS=10001-10008 \
     HOME=/data/home
 
 EXPOSE 4141 10001 10002 10003 10004 10005 10006 10007 10008

@@ -1,4 +1,4 @@
-import type { PickMeta } from "@orchardist/shared";
+import type { PickMeta } from "@toyon/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { memo, useMemo } from "react";

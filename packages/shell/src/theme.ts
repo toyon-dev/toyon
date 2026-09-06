@@ -2,8 +2,8 @@
 // title-bar tint, and a localStorage copy so the next load paints the right
 // colors before the daemon's hello arrives.
 
-import type { ShellToBridgeMsg, Theme } from "@orchardist/shared";
-import { contrastFg, gruvboxDarkSoft, themeToCssVars } from "@orchardist/shared";
+import type { ShellToBridgeMsg, Theme } from "@toyon/shared";
+import { contrastFg, gruvboxDarkSoft, themeToCssVars } from "@toyon/shared";
 import { STORAGE } from "./state/keys.ts";
 
 const CACHE_KEY = STORAGE.theme;

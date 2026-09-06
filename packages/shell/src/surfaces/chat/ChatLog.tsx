@@ -1,4 +1,4 @@
-import type { PickMeta, WorktreeStatus } from "@orchardist/shared";
+import type { PickMeta, WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";

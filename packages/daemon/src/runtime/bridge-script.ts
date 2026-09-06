@@ -21,6 +21,6 @@ export class BridgeScript {
       this.cache = prelude + readFileSync(this.path, "utf8");
       return this.cache;
     }
-    return "// orchardist bridge not built";
+    return "// toyon bridge not built";
   }
 }

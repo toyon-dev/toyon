@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentStatus, PickMeta, ProcState, WorktreeInfo } from "@orchardist/shared";
+import type { AgentEvent, AgentStatus, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
 import type { AgentAdapter } from "../../src/agent/adapter.ts";
 import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
 import type { RuntimeDeps } from "../../src/runtime/registry.ts";

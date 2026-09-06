@@ -4,7 +4,7 @@
 # (so ~/.claude and bun's cache survive restarts).
 set -eu
 
-mkdir -p /data/home /data/orchardist
+mkdir -p /data/home /data/toyon
 chown -R orch:orch /data
 
 exec runuser -u orch -- /bin/sh -c '
@@ -13,8 +13,8 @@ export HOME=/data/home
 export PATH="$HOME/.bun/bin:/usr/local/bin:$PATH"
 cd /app
 
-git config --global user.name  >/dev/null 2>&1 || git config --global user.name  "orchardist"
-git config --global user.email >/dev/null 2>&1 || git config --global user.email "orchardist@localhost"
+git config --global user.name  >/dev/null 2>&1 || git config --global user.name  "toyon"
+git config --global user.email >/dev/null 2>&1 || git config --global user.email "toyon@localhost"
 git config --global init.defaultBranch main
 
 REPO=/data/repo
@@ -40,9 +40,9 @@ export default defineConfig({
   },
 });
 EOF
-    # explicit config: without orchardist.json the daemon treats the detected
+    # explicit config: without toyon.json the daemon treats the detected
     # procs as a guess and starts nothing until the first-run card confirms
-    cat > "$REPO/orchardist.json" <<EOF
+    cat > "$REPO/toyon.json" <<EOF
 { "procs": { "web": "bun run dev" }, "setup": ["bun install"] }
 EOF
     (cd "$REPO" && bun install)

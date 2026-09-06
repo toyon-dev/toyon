@@ -1,4 +1,4 @@
-import type { GitFileStatus } from "@orchardist/shared";
+import type { GitFileStatus } from "@toyon/shared";
 import { memo } from "react";
 import { xyClass, xyLetter } from "../util.ts";
 

@@ -1,4 +1,4 @@
-import type { WorktreeStatus } from "@orchardist/shared";
+import type { WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveId, useWorktrees } from "../../state/selectors.ts";

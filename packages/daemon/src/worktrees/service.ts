@@ -4,7 +4,7 @@
 
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { PickMeta, RepoInfo, ServerMsg, WorktreeInfo, WorktreeStatus } from "@orchardist/shared";
+import type { PickMeta, RepoInfo, ServerMsg, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
 import { quickName } from "../agent/llm.ts";
 import { transcriptPathFor } from "../agent/session.ts";
 import { UserError } from "../core/errors.ts";
@@ -63,10 +63,10 @@ export class WorktreeService {
     const repo = this.d.state.requireRepo(repoId);
     // variants share a name base so they read as siblings in the list
     let slug = variant ? `${slugify(prompt, false)}-v${variant.index}` : slugify(prompt);
-    if (variant && (await git(repo.path, "show-ref", "--verify", `refs/heads/orchard/${slug}`)).ok) {
+    if (variant && (await git(repo.path, "show-ref", "--verify", `refs/heads/toyon/${slug}`)).ok) {
       slug = `${slug}-${shortId().slice(0, 3)}`;
     }
-    const branch = `orchard/${slug}`;
+    const branch = `toyon/${slug}`;
 
     // fork point: main's branch by default, or the base worktree's branch (stacking)
     const base = opts.baseWorktreeId ? this.d.state.worktree(opts.baseWorktreeId) : undefined;
@@ -177,13 +177,13 @@ export class WorktreeService {
     const clean = cleanTitle(title);
     if (!clean) return;
     await withRepoLock(repo.path, async () => {
-      let branch = `orchard/${clean}`;
+      let branch = `toyon/${clean}`;
       if (branch !== wt.branch) {
         // avoid collisions with an existing branch
         let n = 2;
         while (!(await git(wt.path, "branch", "-m", wt.branch, branch)).ok) {
           if (n > 5) return;
-          branch = `orchard/${clean}-${n++}`;
+          branch = `toyon/${clean}-${n++}`;
         }
         wt.branch = branch;
       }
@@ -222,10 +222,10 @@ export class WorktreeService {
       .map((w) => w.title.split("-")[0])
       .join("+")
       .slice(0, 40);
-    if ((await git(repo.path, "show-ref", "--verify", `refs/heads/orchard/${slug}`)).ok) {
+    if ((await git(repo.path, "show-ref", "--verify", `refs/heads/toyon/${slug}`)).ok) {
       slug = `${slug.slice(0, 34)}-${shortId().slice(0, 4)}`;
     }
-    const branch = `orchard/${slug}`;
+    const branch = `toyon/${slug}`;
     const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
 
     await withRepoLock(repo.path, async () => {

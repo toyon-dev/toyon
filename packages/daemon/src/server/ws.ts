@@ -1,7 +1,7 @@
 // WebSocket side of the daemon: socket registry, hello, inbound validation + dispatch, and the
 // table of what gets pushed when a hub event fires. Phase 6 scopes the pushes per subscription.
 
-import { PROTOCOL_VERSION, parseClientMsg, type ServerMsg } from "@orchardist/shared";
+import { PROTOCOL_VERSION, parseClientMsg, type ServerMsg } from "@toyon/shared";
 import type { Server, ServerWebSocket } from "bun";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
@@ -161,7 +161,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   };
 
   const server = Bun.serve<WsData, string>({ ...serverConfig, port: opts.port });
-  // best-effort port 80 so the branded http://orchardist.localhost works portless (macOS allows
+  // best-effort port 80 so the branded http://toyon.localhost works portless (macOS allows
   // unprivileged low-port binds; failure is fine, :4141 remains)
   let brandedServer: Server<WsData> | null = null;
   if (opts.port !== 80 && !cloud.enabled) {

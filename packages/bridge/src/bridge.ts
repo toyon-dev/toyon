@@ -1,13 +1,13 @@
 // Injected into preview pages by the per-worktree proxy.
 // Reports navigation/errors/HMR to the shell; runs the element picker and
-// file-highlight overlays; forwards Orchardist keyboard chords.
+// file-highlight overlays; forwards Toyon keyboard chords.
 
 // The proxy prepends the origins the shell can be served from. Outbound messages go only to those
 // (postMessage drops a frame whose origin doesn't match, so posting once per candidate is safe);
 // inbound commands are accepted only from the parent frame at one of them. Without the list
 // (cloud with no known public host) both sides fall back to open.
-import { matchChord } from "@orchardist/shared/chords";
-import type { BridgeToShellMsg, ShellToBridgeMsg } from "@orchardist/shared/protocol/bridge";
+import { matchChord } from "@toyon/shared/chords";
+import type { BridgeToShellMsg, ShellToBridgeMsg } from "@toyon/shared/protocol/bridge";
 
 declare global {
   interface Window {
@@ -20,7 +20,7 @@ let shellOrigin: string | null = null;
 const post = (msg: BridgeToShellMsg) => {
   try {
     const targets = shellOrigin ? [shellOrigin] : SHELL_ORIGINS.length ? SHELL_ORIGINS : ["*"];
-    for (const t of targets) window.parent.postMessage({ __orchardist: true, ...msg }, t);
+    for (const t of targets) window.parent.postMessage({ __toyon: true, ...msg }, t);
   } catch {
     // not framed; nothing to do
   }
@@ -61,7 +61,7 @@ history.replaceState = (...args) => {
 window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);
 
-// forward Orchardist chords to the shell even when the preview has focus (plain ⌘F stays the
+// forward Toyon chords to the shell even when the preview has focus (plain ⌘F stays the
 // page's own find: it isn't in the table)
 window.addEventListener(
   "keydown",
@@ -324,8 +324,8 @@ if (location.hash.startsWith("#__orchtest=")) {
 window.addEventListener("message", (e) => {
   if (e.source !== window.parent) return;
   if (SHELL_ORIGINS.length && !SHELL_ORIGINS.includes(e.origin)) return;
-  const raw = e.data as { __orchardist?: boolean } | null;
-  if (!raw?.__orchardist) return;
+  const raw = e.data as { __toyon?: boolean } | null;
+  if (!raw?.__toyon) return;
   shellOrigin = e.origin;
   const d = raw as unknown as ShellToBridgeMsg;
   switch (d.type) {

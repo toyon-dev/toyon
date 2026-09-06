@@ -13,8 +13,8 @@ import type {
   Theme,
   ThemePrefs,
   WorktreeStatus,
-} from "@orchardist/shared";
-import { builtinThemes, defaultThemePrefs, EDIT_TOOLS, gruvboxDarkSoft, resolveTheme } from "@orchardist/shared";
+} from "@toyon/shared";
+import { builtinThemes, defaultThemePrefs, EDIT_TOOLS, gruvboxDarkSoft, resolveTheme } from "@toyon/shared";
 
 export type ChatItem =
   | { kind: "user"; text: string; pick?: PickMeta }
@@ -102,7 +102,7 @@ export interface State {
   leftAuto: boolean;
   /** full-bleed preview: all chrome hidden */
   zen: boolean;
-  /** themes the daemon knows (built-ins, ~/.orchardist/themes, installed editors) + the selection */
+  /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
   themes: Theme[];
   themePrefs: ThemePrefs;
   /** picker highlight, applied live while browsing */

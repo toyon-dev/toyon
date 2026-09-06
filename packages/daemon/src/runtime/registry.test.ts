@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { RepoInfo, WorktreeInfo } from "@orchardist/shared";
+import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { Hub } from "../core/hub.ts";
@@ -18,7 +18,7 @@ const wt: WorktreeInfo = {
   id: "w1",
   repoId: "r",
   path: "/nowhere/w1",
-  branch: "orchard/w1",
+  branch: "toyon/w1",
   kind: "worktree",
   proxyPort: 1,
   title: "w1",

@@ -1,4 +1,4 @@
-import type { ClientMsg, ServerMsg } from "@orchardist/shared";
+import type { ClientMsg, ServerMsg } from "@toyon/shared";
 import { STORAGE } from "./state/keys.ts";
 
 function getToken(): string {

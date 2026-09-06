@@ -1,4 +1,4 @@
-import type { GitFileStatus } from "@orchardist/shared";
+import type { GitFileStatus } from "@toyon/shared";
 import { useCallback } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";

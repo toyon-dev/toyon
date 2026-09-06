@@ -1,11 +1,11 @@
-import type { Theme } from "@orchardist/shared";
-import { effectiveKind, pickFamily, type ThemeFamily, themeFamilies } from "@orchardist/shared";
+import type { Theme } from "@toyon/shared";
+import { effectiveKind, pickFamily, type ThemeFamily, themeFamilies } from "@toyon/shared";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { byName } from "./commands.ts";
 
-const sourceOf = (t: Theme) => (t.source === "file" ? "~/.orchardist/themes" : t.source === "vscode" ? "VS Code" : "");
+const sourceOf = (t: Theme) => (t.source === "file" ? "~/.toyon/themes" : t.source === "vscode" ? "VS Code" : "");
 
 /** Theme picker. Main mode lists families (a dark/light pair is one row; ←→ peeks at the other
  * variant, enter fills both slots and appearance stays as set). Slot overrides list single themes of that kind. */

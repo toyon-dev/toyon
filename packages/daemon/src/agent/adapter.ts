@@ -2,7 +2,7 @@
 // the one implementation today, and this is the
 // seam they plug into. Tests use a fake.
 
-import type { AgentEvent, AgentStatus, PickMeta } from "@orchardist/shared";
+import type { AgentEvent, AgentStatus, PickMeta } from "@toyon/shared";
 
 export interface AgentAdapter {
   readonly status: AgentStatus;

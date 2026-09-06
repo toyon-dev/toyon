@@ -2,8 +2,8 @@
 // compile error. Handlers marshal (pick fields, shape replies) and call a service; they do not
 // run git or decide policy.
 
-import type { ClientMsg, ServerMsg } from "@orchardist/shared";
-import { pickTheme } from "@orchardist/shared";
+import type { ClientMsg, ServerMsg } from "@toyon/shared";
+import { pickTheme } from "@toyon/shared";
 import { planTasks } from "../agent/llm.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";

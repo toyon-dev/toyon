@@ -2,11 +2,11 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultThemePrefs, gruvboxLight, type ThemePrefs } from "@orchardist/shared";
+import { defaultThemePrefs, gruvboxLight, type ThemePrefs } from "@toyon/shared";
 import { ThemeStore } from "./store.ts";
 
-// extension discovery reads ORCHARDIST_THEME_DIRS at call time; point it at the fixtures
-process.env.ORCHARDIST_THEME_DIRS = join(import.meta.dir, "../../test/fixtures/extensions");
+// extension discovery reads TOYON_THEME_DIRS at call time; point it at the fixtures
+process.env.TOYON_THEME_DIRS = join(import.meta.dir, "../../test/fixtures/extensions");
 const home = mkdtempSync(join(tmpdir(), "orch-themes-"));
 const themesDir = join(home, "themes");
 mkdirSync(themesDir, { recursive: true });
@@ -28,7 +28,7 @@ function makeStore() {
 beforeAll(() => {
   const dir = join(themesDir);
   mkdirSync(dir, { recursive: true });
-  // already-converted Orchardist theme
+  // already-converted Toyon theme
   writeFileSync(
     join(dir, "My Light.json"),
     JSON.stringify({ ...gruvboxLight, id: "ignored", name: "My Light", source: "builtin" }),
@@ -48,21 +48,21 @@ describe("ThemeStore", () => {
     expect(ids).toContain("file:my-light");
     expect(ids).toContain("file:raw");
     expect(ids).not.toContain("file:junk");
-    expect(ids).toContain("vscode:acme.orchard-themes:orchard-night");
-    expect(ids).toContain("vscode:acme.orchard-themes:orchard-day");
-    expect(ids).not.toContain("vscode:acme.orchard-themes:broken");
+    expect(ids).toContain("vscode:acme.demo-themes:acme-night");
+    expect(ids).toContain("vscode:acme.demo-themes:acme-day");
+    expect(ids).not.toContain("vscode:acme.demo-themes:broken");
 
     const mine = store.themes.find((t) => t.id === "file:my-light")!;
     expect(mine.name).toBe("My Light");
     expect(mine.source).toBe("file");
 
-    const night = store.themes.find((t) => t.id === "vscode:acme.orchard-themes:orchard-night")!;
+    const night = store.themes.find((t) => t.id === "vscode:acme.demo-themes:acme-night")!;
     expect(night.kind).toBe("dark");
     expect(night.colors.bg0).toBe("#101418"); // from the include
     expect(night.colors.orange).toBe("#ff9f43"); // own key
     expect(night.syntax).toEqual({ comment: "#5c6670", keyword: "#ff6b6b" }); // parent + child tokenColors
 
-    const day = store.themes.find((t) => t.id === "vscode:acme.orchard-themes:orchard-day")!;
+    const day = store.themes.find((t) => t.id === "vscode:acme.demo-themes:acme-day")!;
     expect(day.kind).toBe("light"); // uiTheme "vs" wins over the dark base
     expect(day.colors.bg0).toBe("#fdf6e3");
   });

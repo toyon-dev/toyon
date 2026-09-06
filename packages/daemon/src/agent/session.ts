@@ -1,12 +1,12 @@
 // Claude Code adapter. Internal shape mirrors ACP semantics (session lifecycle +
 // streamed updates) so a generic ACP adapter can replace this without touching
-// the wire protocol. Transcript JSONL in ~/.orchardist/transcripts is the
+// the wire protocol. Transcript JSONL in ~/.toyon/transcripts is the
 // source of truth for rendering; the SDK session id is only used for resume.
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentStatus, PickMeta } from "@orchardist/shared";
+import type { AgentEvent, AgentStatus, PickMeta } from "@toyon/shared";
 import { log } from "../core/log.ts";
 import type { AgentAdapter } from "./adapter.ts";
 import { buildScope, type Scope } from "./scope.ts";
@@ -15,9 +15,9 @@ export type AgentEventListener = (event: AgentEvent, seq: number) => void;
 export type AgentStatusListener = (status: AgentStatus) => void;
 
 const SYSTEM_APPEND = [
-  "You are working inside a dedicated git worktree managed by Orchardist.",
+  "You are working inside a dedicated git worktree managed by Toyon.",
   "Stay strictly within the current working directory; never modify files outside it.",
-  "Never run `git push`, delete branches, or create pull requests — shipping is handled by the Orchardist UI.",
+  "Never run `git push`, delete branches, or create pull requests — shipping is handled by the Toyon UI.",
   "Never run `git commit` unless the user explicitly asks you to — leave changes uncommitted for the user to review and commit themselves.",
   "Keep the scope tight: do the asked task well, then stop. Suggest follow-ups in chat instead of expanding scope.",
 ].join(" ");

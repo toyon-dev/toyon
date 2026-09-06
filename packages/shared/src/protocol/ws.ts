@@ -5,7 +5,7 @@
 // arrive from a browser (public internet in cloud mode) and are validated before any handler runs.
 
 import { z } from "zod";
-import type { GitFileStatus, OrchardistConfig, RepoInfo, Theme, ThemePrefs, WorktreeStatus } from "../model.ts";
+import type { GitFileStatus, ToyonConfig, RepoInfo, Theme, ThemePrefs, WorktreeStatus } from "../model.ts";
 import type { AgentEvent, PickMeta } from "./events.ts";
 
 /** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */
@@ -71,7 +71,7 @@ export const pickMetaSchema = z.object({
   selector: z.string(),
 });
 
-export const orchardistConfigSchema = z.object({
+export const toyonConfigSchema = z.object({
   procs: z.record(z.string(), z.string()),
   setup: z.array(z.string()).optional(),
   preview: z.string().optional(),
@@ -128,7 +128,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("unqueue"), worktreeId: id, index: z.number().int().min(0) }),
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("rename-worktree"), worktreeId: id, title: z.string().min(1).max(200) }),
-  z.object({ t: z.literal("confirm-config"), repoId: id, config: orchardistConfigSchema }),
+  z.object({ t: z.literal("confirm-config"), repoId: id, config: toyonConfigSchema }),
   z.object({ t: z.literal("set-theme"), prefs: themePrefsSchema }),
   /** raw VS Code theme JSON/JSONC text picked in the browser */
   z.object({ t: z.literal("import-theme"), name: z.string().max(300), source: z.string().max(2_000_000) }),
@@ -150,7 +150,7 @@ export function parseClientMsg(raw: unknown): { ok: true; msg: ClientMsg } | { o
 // shapes. These compile-time checks fail the build if either side drifts.
 type Same<A, B> = A extends B ? (B extends A ? true : never) : never;
 const _pickMeta: Same<z.infer<typeof pickMetaSchema>, PickMeta> = true;
-const _config: Same<z.infer<typeof orchardistConfigSchema>, OrchardistConfig> = true;
+const _config: Same<z.infer<typeof toyonConfigSchema>, ToyonConfig> = true;
 const _prefs: Same<z.infer<typeof themePrefsSchema>, ThemePrefs> = true;
 void _pickMeta;
 void _config;

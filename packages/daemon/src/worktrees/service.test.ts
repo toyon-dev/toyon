@@ -59,11 +59,11 @@ describe("register", () => {
 });
 
 describe("create / remove", () => {
-  test("create adds a git worktree on an orchard/ branch and the agent receives the prompt", async () => {
+  test("create adds a git worktree on an toyon/ branch and the agent receives the prompt", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "make the header sticky");
     expect(wt.kind).toBe("worktree");
-    expect(wt.branch.startsWith("orchard/make-the-header-sticky")).toBe(true);
+    expect(wt.branch.startsWith("toyon/make-the-header-sticky")).toBe(true);
     expect(existsSync(join(wt.path, "README.md"))).toBe(true);
     expect(w.agents.get(wt.id)?.sent[0]?.text).toBe("make the header sticky");
     await settle();
@@ -178,7 +178,7 @@ describe("combine", () => {
     sh(b.path, "git", "commit", "-qam", "b");
     await expect(w.worktrees.combine([a.id, b.id])).rejects.toBeInstanceOf(UserError);
     expect(w.state.worktrees.some((x) => x.kind === "combined")).toBe(false);
-    expect((await git(w.repo, "branch", "--list", "orchard/alpha+beta")).out).toBe("");
+    expect((await git(w.repo, "branch", "--list", "toyon/alpha+beta")).out).toBe("");
   });
 
   test("clean branches graft into a combined worktree", async () => {

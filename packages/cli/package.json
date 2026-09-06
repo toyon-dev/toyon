@@ -1,13 +1,13 @@
 {
-  "name": "orchardist",
+  "name": "toyon",
   "version": "0.0.1",
   "description": "Browser-first workbench for parallel AI coding agents: one chat per git worktree, every worktree running live.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "orchardist": "src/cli.ts"
+    "toyon": "src/cli.ts"
   },
   "dependencies": {
-    "@orchardist/shared": "workspace:*"
+    "@toyon/shared": "workspace:*"
   }
 }

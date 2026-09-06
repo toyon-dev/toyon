@@ -1,5 +1,5 @@
 /* Theme tokens. The colors are the Gruvbox Dark Soft defaults (no-JS fallback); theme.ts
-   overwrites every color on the root element from the selected Theme (see @orchardist/shared
+   overwrites every color on the root element from the selected Theme (see @toyon/shared
    themes.ts for the contract). Radii and sizes are the shell's own scale. */
 :root {
   color-scheme: dark;

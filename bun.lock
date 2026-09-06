@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "orchardist-monorepo",
+      "name": "toyon-monorepo",
       "devDependencies": {
         "@biomejs/biome": "^2.5.12",
         "@types/bun": "^1.2.0",
@@ -11,48 +11,48 @@
       },
     },
     "packages/bridge": {
-      "name": "@orchardist/bridge",
+      "name": "@toyon/bridge",
       "version": "0.0.1",
       "dependencies": {
-        "@orchardist/shared": "workspace:*",
+        "@toyon/shared": "workspace:*",
       },
     },
     "packages/cli": {
-      "name": "orchardist",
+      "name": "toyon",
       "version": "0.0.1",
       "bin": {
-        "orchardist": "src/cli.ts",
+        "toyon": "src/cli.ts",
       },
       "dependencies": {
-        "@orchardist/shared": "workspace:*",
+        "@toyon/shared": "workspace:*",
       },
     },
     "packages/cloud": {
-      "name": "@orchardist/cloud",
+      "name": "@toyon/cloud",
       "version": "0.0.1",
     },
     "packages/daemon": {
-      "name": "@orchardist/daemon",
+      "name": "@toyon/daemon",
       "version": "0.0.1",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "latest",
-        "@orchardist/shared": "workspace:*",
+        "@toyon/shared": "workspace:*",
         "hono": "^4.6.0",
         "jsonc-parser": "^3.3.1",
       },
     },
     "packages/shared": {
-      "name": "@orchardist/shared",
+      "name": "@toyon/shared",
       "version": "0.0.1",
       "dependencies": {
         "zod": "^4.5.4",
       },
     },
     "packages/shell": {
-      "name": "@orchardist/shell",
+      "name": "@toyon/shell",
       "version": "0.0.1",
       "dependencies": {
-        "@orchardist/shared": "workspace:*",
+        "@toyon/shared": "workspace:*",
         "dompurify": "^3.4.14",
         "marked": "^18.0.11",
         "monaco-editor": "^0.56.0",
@@ -214,16 +214,6 @@
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 
-    "@orchardist/bridge": ["@orchardist/bridge@workspace:packages/bridge"],
-
-    "@orchardist/cloud": ["@orchardist/cloud@workspace:packages/cloud"],
-
-    "@orchardist/daemon": ["@orchardist/daemon@workspace:packages/daemon"],
-
-    "@orchardist/shared": ["@orchardist/shared@workspace:packages/shared"],
-
-    "@orchardist/shell": ["@orchardist/shell@workspace:packages/shell"],
-
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-beta.27", "", {}, "sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA=="],
 
     "@rollup/rollup-android-arm-eabi": ["@rollup/rollup-android-arm-eabi@4.63.1", "", { "os": "android", "cpu": "arm" }, "sha512-UZ8sUxPTiHWYX9QNdJedb1kDZSpS1t/VPWBWGSgqHNi9w3Cu6IXvu2mzbhiTiPvtrqgTQJ+zqiAq2iPIPilpaQ=="],
@@ -277,6 +267,16 @@
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.63.1", "", { "os": "win32", "cpu": "x64" }, "sha512-at8QVep6S3h5Y6gSbdGU06bRY5WJkf6WUduM9YtvYMbYhB1MOFfUgc6kehitQXzOtMSaT70q7f9ydPhpqu821w=="],
 
     "@stablelib/base64": ["@stablelib/base64@1.0.1", "", {}, "sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ=="],
+
+    "@toyon/bridge": ["@toyon/bridge@workspace:packages/bridge"],
+
+    "@toyon/cloud": ["@toyon/cloud@workspace:packages/cloud"],
+
+    "@toyon/daemon": ["@toyon/daemon@workspace:packages/daemon"],
+
+    "@toyon/shared": ["@toyon/shared@workspace:packages/shared"],
+
+    "@toyon/shell": ["@toyon/shell@workspace:packages/shell"],
 
     "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA=="],
 
@@ -472,8 +472,6 @@
 
     "once": ["once@1.4.0", "", { "dependencies": { "wrappy": "1" } }, "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w=="],
 
-    "orchardist": ["orchardist@workspace:packages/cli"],
-
     "parseurl": ["parseurl@1.3.3", "", {}, "sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ=="],
 
     "path-key": ["path-key@3.1.1", "", {}, "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q=="],
@@ -541,6 +539,8 @@
     "tinyglobby": ["tinyglobby@0.2.17", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" } }, "sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g=="],
 
     "toidentifier": ["toidentifier@1.0.1", "", {}, "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA=="],
+
+    "toyon": ["toyon@workspace:packages/cli"],
 
     "ts-algebra": ["ts-algebra@2.0.0", "", {}, "sha512-FPAhNPFMrkwz76P7cdjdmiShwMynZYN6SgOujD1urY4oNm80Ou9oMdmbR45LotcKOXoy7wSmHkRFE6Mxbrhefw=="],
 

@@ -1,4 +1,4 @@
-import type { RepoInfo } from "@orchardist/shared";
+import type { RepoInfo } from "@toyon/shared";
 import { useState } from "react";
 import { useSock } from "../../state/context.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
@@ -70,7 +70,7 @@ export function ConfigCard({ repo }: { repo: RepoInfo }) {
         <span>exclusive — commands can't honor $PORT, run only the focused worktree</span>
       </label>
       <div className="cfg-actions">
-        <span className="cfg-note">saved to orchardist.json in the repo</span>
+        <span className="cfg-note">saved to toyon.json in the repo</span>
         <button
           className="btn btn-outline ship-btn"
           disabled={procs.every((p) => !p.name.trim() || !p.cmd.trim())}

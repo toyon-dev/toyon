@@ -1,4 +1,4 @@
-// Shell ↔ preview-bridge postMessage protocol. Both directions carry `__orchardist: true` on the
+// Shell ↔ preview-bridge postMessage protocol. Both directions carry `__toyon: true` on the
 // wire as a marker; the shapes below are the payloads.
 //
 // ShellToBridgeMsg is a plain union: the bridge accepts commands only from the shell's origin.
@@ -57,7 +57,7 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
     withSource: z.number(),
     ranges: z.array(range).nullable(),
   }),
-  /** an Orchardist chord pressed while the preview had focus; the shell replays it as a keydown */
+  /** an Toyon chord pressed while the preview had focus; the shell replays it as a keydown */
   z.object({ type: z.literal("key"), key: z.string(), meta: z.literal(true), shift: z.boolean().optional() }),
 ]);
 export type BridgeToShellMsg = z.infer<typeof bridgeToShellSchema>;

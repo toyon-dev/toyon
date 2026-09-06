@@ -1,15 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { OrchardistConfig } from "@orchardist/shared";
+import type { ToyonConfig } from "@toyon/shared";
 
 export interface DetectedConfig {
-  config: OrchardistConfig;
-  /** false when read from orchardist.json (user-authored = confirmed) */
+  config: ToyonConfig;
+  /** false when read from toyon.json (user-authored = confirmed) */
   needsSetup: boolean;
 }
 
 export function detectConfig(repoPath: string): DetectedConfig {
-  const explicit = join(repoPath, "orchardist.json");
+  const explicit = join(repoPath, "toyon.json");
   if (existsSync(explicit)) {
     return { config: JSON.parse(readFileSync(explicit, "utf8")), needsSetup: false };
   }

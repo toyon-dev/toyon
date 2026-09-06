@@ -1,4 +1,4 @@
-import { parseBridgeMsg } from "@orchardist/shared";
+import { parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useStore } from "../../state/context.tsx";
@@ -36,17 +36,17 @@ export function Center() {
     previewBus.post = (id, m) =>
       frameRefs.current
         .get(id)
-        ?.contentWindow?.postMessage({ __orchardist: true, ...m }, originRefs.current.get(id) ?? "*");
+        ?.contentWindow?.postMessage({ __toyon: true, ...m }, originRefs.current.get(id) ?? "*");
     previewBus.broadcast = (m) => {
       for (const [id, f] of frameRefs.current)
-        f.contentWindow?.postMessage({ __orchardist: true, ...m }, originRefs.current.get(id) ?? "*");
+        f.contentWindow?.postMessage({ __toyon: true, ...m }, originRefs.current.get(id) ?? "*");
     };
   }, []);
 
   // attribute bridge messages to their worktree via event.source, validate, dispatch
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
-      if (!(e.data as { __orchardist?: boolean } | null)?.__orchardist) return;
+      if (!(e.data as { __toyon?: boolean } | null)?.__toyon) return;
       for (const [id, frame] of frameRefs.current) {
         if (frame.contentWindow !== e.source) continue;
         if (e.origin !== originRefs.current.get(id)) return;
@@ -83,7 +83,7 @@ export function Center() {
             break;
           case "highlight-miss":
             console.warn(
-              `[orchardist] highlight miss on ${d.path}: ${d.fileMatched} elements from this file, ` +
+              `[toyon] highlight miss on ${d.path}: ${d.fileMatched} elements from this file, ` +
                 `${d.withSource} elements with source info on page, ranges=${JSON.stringify(d.ranges)}`,
             );
             break;
@@ -152,9 +152,9 @@ export function Center() {
               {!connected
                 ? hasToken()
                   ? "connecting to daemon…"
-                  : "no access token for this address —\nrun `orchardist` in your repo, or open the full URL\n(with #token=…) printed in ~/.orchardist/daemon.log"
+                  : "no access token for this address —\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
                 : !active
-                  ? "no worktrees yet — run `orchardist` inside a git repo"
+                  ? "no worktrees yet — run `toyon` inside a git repo"
                   : log.length > 0
                     ? log.slice(-20).join("\n")
                     : "starting dev servers…"}

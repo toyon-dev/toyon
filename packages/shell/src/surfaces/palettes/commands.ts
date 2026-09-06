@@ -1,8 +1,8 @@
 // Everything the UI can do, as typeable commands — chords first, then the context-menu long tail.
 // The ⌘⇧P palette and ⌘P's `>` mode share this list and its matcher, so highlight and score can't drift.
 
-import type { RepoInfo, ThemePrefs, WorktreeStatus } from "@orchardist/shared";
-import { resolveTheme, worktreeChord } from "@orchardist/shared";
+import type { RepoInfo, ThemePrefs, WorktreeStatus } from "@toyon/shared";
+import { resolveTheme, worktreeChord } from "@toyon/shared";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { Action, State } from "../../state/store.ts";

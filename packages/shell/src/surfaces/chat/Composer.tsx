@@ -1,5 +1,5 @@
-import type { WorktreeStatus } from "@orchardist/shared";
-import { pickMetaOf } from "@orchardist/shared";
+import type { WorktreeStatus } from "@toyon/shared";
+import { pickMetaOf } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";

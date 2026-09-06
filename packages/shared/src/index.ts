@@ -1,4 +1,4 @@
-// @orchardist/shared — everything two packages must agree on. Subpath exports (see package.json)
+// @toyon/shared — everything two packages must agree on. Subpath exports (see package.json)
 // let the bridge bundle import one table without pulling zod or the theme data in.
 
 export * from "./agent-tools.ts";

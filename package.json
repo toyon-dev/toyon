@@ -1,5 +1,5 @@
 {
-  "name": "orchardist-monorepo",
+  "name": "toyon-monorepo",
   "private": true,
   "workspaces": [
     "packages/*"

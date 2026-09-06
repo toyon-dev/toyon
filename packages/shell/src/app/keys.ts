@@ -1,4 +1,4 @@
-import { matchChord, worktreeIndex } from "@orchardist/shared";
+import { matchChord, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
 import type { Store } from "../state/context.tsx";
 import { previewBus } from "./previewBus.ts";

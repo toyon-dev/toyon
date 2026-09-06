@@ -3,7 +3,7 @@
 
 import { existsSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { OrchardistConfig, RepoInfo, WorktreeInfo } from "@orchardist/shared";
+import type { ToyonConfig, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -80,16 +80,16 @@ export class RepoRegistry {
     return repo;
   }
 
-  confirmConfig(repoId: string, config: OrchardistConfig) {
+  confirmConfig(repoId: string, config: ToyonConfig) {
     const repo = this.d.state.requireRepo(repoId);
     repo.config = config;
     repo.needsSetup = false;
     this.d.state.save();
     // persist next to the code so it's shared/committed and future registers skip the card
     try {
-      writeFileSync(join(repo.path, "orchardist.json"), `${JSON.stringify(config, null, 2)}\n`);
+      writeFileSync(join(repo.path, "toyon.json"), `${JSON.stringify(config, null, 2)}\n`);
     } catch (e) {
-      log.warn(repoId, "could not write orchardist.json", e);
+      log.warn(repoId, "could not write toyon.json", e);
     }
     // (re)start procs for this repo's worktrees under the confirmed config; agents stay
     for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind !== "spare")) {

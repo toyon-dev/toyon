@@ -1,4 +1,4 @@
-import { DAEMON_DEFAULT_PORT } from "@orchardist/shared/ports";
+import { DAEMON_DEFAULT_PORT } from "@toyon/shared/ports";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 

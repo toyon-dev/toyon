@@ -1,5 +1,5 @@
-import type { ThemePrefs } from "@orchardist/shared";
-import { effectiveKind, resolveTheme } from "@orchardist/shared";
+import type { ThemePrefs } from "@toyon/shared";
+import { effectiveKind, resolveTheme } from "@toyon/shared";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { appearanceLabel, byName } from "./commands.ts";

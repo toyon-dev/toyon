@@ -1,14 +1,14 @@
 // Daemon logger. One line per event on stderr: `HH:MM:SS level [tag] message {extra}`.
-// Level from ORCHARDIST_LOG (debug | info | warn | error), default info.
+// Level from TOYON_LOG (debug | info | warn | error), default info.
 // Every swallowed catch in the daemon should go through log.warn so a failure
-// is at least visible in ~/.orchardist/daemon.log instead of vanishing.
+// is at least visible in ~/.toyon/daemon.log instead of vanishing.
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 const LEVELS: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
 function envLevel(): LogLevel {
-  const v = process.env.ORCHARDIST_LOG;
+  const v = process.env.TOYON_LOG;
   return v && v in LEVELS ? (v as LogLevel) : "info";
 }
 

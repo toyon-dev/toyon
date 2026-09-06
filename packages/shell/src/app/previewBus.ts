@@ -1,4 +1,4 @@
-import type { ShellToBridgeMsg } from "@orchardist/shared";
+import type { ShellToBridgeMsg } from "@toyon/shared";
 
 /** Posts typed commands into preview iframes. Center registers the implementations once it owns
  * the frames (each post goes to that frame's known proxy origin); before that, posts are dropped. */

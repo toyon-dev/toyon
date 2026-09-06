@@ -2,7 +2,7 @@
 // - forwards HTTP to the worktree's preview proc
 // - bridges WebSocket upgrades both ways (Vite HMR, app sockets)
 // - injects the bridge script into text/html responses
-// - serves the bridge script itself at /__orchardist/bridge.js
+// - serves the bridge script itself at /__toyon/bridge.js
 
 import type { ServerWebSocket } from "bun";
 import { cloud } from "../core/cloud.ts";
@@ -44,7 +44,7 @@ export function startProxy(opts: {
       const url = new URL(req.url);
       target = opts.getTarget();
 
-      if (url.pathname === "/__orchardist/bridge.js") {
+      if (url.pathname === "/__toyon/bridge.js") {
         return new Response(opts.bridgeScript(), {
           headers: { "content-type": "text/javascript", "cache-control": "no-store" },
         });
@@ -146,7 +146,7 @@ export function startProxy(opts: {
 
 function injectBridge(html: string): string {
   // version-busted URL: every bridge bump is a guaranteed cache miss
-  const tag = `<script src="/__orchardist/bridge.js"></script>`;
+  const tag = `<script src="/__toyon/bridge.js"></script>`;
   if (html.includes("</head>")) return html.replace("</head>", `${tag}</head>`);
   if (html.includes("<body")) return html.replace(/<body([^>]*)>/, `<body$1>${tag}`);
   return html + tag;

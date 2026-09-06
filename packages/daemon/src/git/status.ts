@@ -3,7 +3,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { GitFileStatus } from "@orchardist/shared";
+import type { GitFileStatus } from "@toyon/shared";
 import { git, gitRaw } from "./exec.ts";
 
 export async function statusFiles(worktreePath: string): Promise<GitFileStatus[]> {

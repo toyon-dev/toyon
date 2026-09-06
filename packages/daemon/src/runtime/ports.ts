@@ -2,7 +2,7 @@
 // Small TOCTOU race is acceptable for v0.1; allocations are tracked to avoid
 // handing the same port out twice within one daemon lifetime.
 //
-// Cloud mode (ORCHARDIST_PROXY_PORTS=a-b) allocates worktree proxy ports from a
+// Cloud mode (TOYON_PROXY_PORTS=a-b) allocates worktree proxy ports from a
 // fixed range instead, because each one must be declared as a public TLS port.
 
 import { cloud } from "../core/cloud.ts";
@@ -43,7 +43,7 @@ export async function allocateProxyPort(): Promise<number> {
       return port;
     }
   }
-  throw new Error(`no free proxy port in ORCHARDIST_PROXY_PORTS=${range.from}-${range.to}; remove a worktree first`);
+  throw new Error(`no free proxy port in TOYON_PROXY_PORTS=${range.from}-${range.to}; remove a worktree first`);
 }
 
 /** mark a persisted port as taken (worktrees restored at boot keep their port) */

@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// `orchardist` in a repo: ensure the daemon is running, register the cwd repo,
+// `toyon` in a repo: ensure the daemon is running, register the cwd repo,
 // open the shell in the default browser.
 // v0.1 runs under bun (dev-mode); packaged single-binary distribution comes later.
 
@@ -8,15 +8,15 @@ import { chmodSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DAEMON_DEFAULT_PORT } from "@orchardist/shared";
+import { DAEMON_DEFAULT_PORT } from "@toyon/shared";
 
 const args = process.argv.slice(2);
 const wantsAppWindow = args.includes("--app") || args.includes("--pwa");
 const wantsInstallApp = args.includes("--install-app");
 
-const port = Number(process.env.ORCHARDIST_PORT ?? DAEMON_DEFAULT_PORT);
+const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 const base = `http://127.0.0.1:${port}`;
-const tokenFile = join(homedir(), ".orchardist", "token");
+const tokenFile = join(homedir(), ".toyon", "token");
 const here = dirname(fileURLToPath(import.meta.url));
 const daemonEntry = join(here, "../../daemon/src/index.ts");
 
@@ -30,8 +30,8 @@ async function healthy(): Promise<boolean> {
 }
 
 if (!(await healthy())) {
-  console.log("starting orchardist daemon…");
-  const logFd = openSync(join(homedir(), ".orchardist", "daemon.log"), "a");
+  console.log("starting toyon daemon…");
+  const logFd = openSync(join(homedir(), ".toyon", "daemon.log"), "a");
   const child = spawn("bun", ["run", daemonEntry], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
@@ -40,13 +40,13 @@ if (!(await healthy())) {
   child.unref();
   for (let i = 0; i < 40 && !(await healthy()); i++) await Bun.sleep(250);
   if (!(await healthy())) {
-    console.error("daemon failed to start; see ~/.orchardist/daemon.log");
+    console.error("daemon failed to start; see ~/.toyon/daemon.log");
     process.exit(1);
   }
 }
 
 if (!existsSync(tokenFile)) {
-  console.error("daemon token missing; see ~/.orchardist");
+  console.error("daemon token missing; see ~/.toyon");
   process.exit(1);
 }
 const token = readFileSync(tokenFile, "utf8").trim();
@@ -71,10 +71,10 @@ try {
   branded = h.branded === true;
 } catch {}
 const url = branded
-  ? `http://orchardist.localhost/#token=${token}`
-  : `http://orchardist.localhost:${port}/#token=${token}`;
+  ? `http://toyon.localhost/#token=${token}`
+  : `http://toyon.localhost:${port}/#token=${token}`;
 // app windows use the always-bound port so they never hit a dead :80
-const appUrl = `http://orchardist.localhost:${port}/#token=${token}`;
+const appUrl = `http://toyon.localhost:${port}/#token=${token}`;
 
 const CHROMIUMS = ["Google Chrome", "Arc", "Brave Browser", "Microsoft Edge", "Chromium"];
 // each browser's profile root under ~/Library/Application Support
@@ -92,7 +92,7 @@ const DATA_DIRS: Record<string, string> = {
 // origin). Cached per browser once found; the cache is trusted only while the app's manifest
 // resources dir still exists (i.e. it hasn't been uninstalled).
 const manifestId = new URL("/", appUrl).href;
-const pwaCacheDir = join(homedir(), ".orchardist", "pwa");
+const pwaCacheDir = join(homedir(), ".toyon", "pwa");
 function profilesOf(browser: string): string[] {
   const root = join(homedir(), "Library", "Application Support", DATA_DIRS[browser] ?? browser);
   if (!existsSync(root)) return [];
@@ -134,10 +134,10 @@ function openAppWindow(): boolean {
       spawn("open", ["-na", app, "--args", flag], { stdio: "ignore" }).unref();
       if (!id) {
         console.log(
-          `tip: install Orchardist as an app (⋮ menu → Install, or the install button in the top bar when opened in a tab)`,
+          `tip: install Toyon as an app (⋮ menu → Install, or the install button in the top bar when opened in a tab)`,
         );
         console.log(
-          `     — installed, it gets a native-style title bar; \`orchardist --app\` then launches the installed app`,
+          `     — installed, it gets a native-style title bar; \`toyon --app\` then launches the installed app`,
         );
       }
       return true;
@@ -147,7 +147,7 @@ function openAppWindow(): boolean {
 }
 
 function installApp() {
-  const appDir = join(homedir(), "Applications", "Orchardist.app");
+  const appDir = join(homedir(), "Applications", "Toyon.app");
   const macos = join(appDir, "Contents", "MacOS");
   const resources = join(appDir, "Contents", "Resources");
   rmSync(appDir, { recursive: true, force: true }); // ours to regenerate; stale files break the signature
@@ -158,12 +158,12 @@ function installApp() {
     `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleName</key><string>Orchardist</string>
-  <key>CFBundleDisplayName</key><string>Orchardist</string>
-  <key>CFBundleIdentifier</key><string>dev.orchardist.app</string>
+  <key>CFBundleName</key><string>Toyon</string>
+  <key>CFBundleDisplayName</key><string>Toyon</string>
+  <key>CFBundleIdentifier</key><string>dev.toyon.app</string>
   <key>CFBundleVersion</key><string>0.0.1</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>Orchardist</string>
+  <key>CFBundleExecutable</key><string>Toyon</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
 </dict></plist>
 `,
@@ -185,7 +185,7 @@ done
 # start the daemon if it isn't running
 if ! curl -s --max-time 1 http://127.0.0.1:${port}/health >/dev/null 2>&1; then
   if [ -n "$BUN" ] && [ -f "${daemonEntry}" ]; then
-    nohup "$BUN" run "${daemonEntry}" >> "$HOME/.orchardist/daemon.log" 2>&1 &
+    nohup "$BUN" run "${daemonEntry}" >> "$HOME/.toyon/daemon.log" 2>&1 &
     for _ in $(seq 1 40); do
       curl -s --max-time 1 http://127.0.0.1:${port}/health >/dev/null 2>&1 && break
       sleep 0.25
@@ -193,10 +193,10 @@ if ! curl -s --max-time 1 http://127.0.0.1:${port}/health >/dev/null 2>&1; then
   fi
 fi
 
-TOKEN=$(cat "$HOME/.orchardist/token" 2>/dev/null)
-URL="http://orchardist.localhost:${port}/#token=$TOKEN"
+TOKEN=$(cat "$HOME/.toyon/token" 2>/dev/null)
+URL="http://toyon.localhost:${port}/#token=$TOKEN"
 MANIFEST_ID="${manifestId}"
-CACHE_DIR="$HOME/.orchardist/pwa"
+CACHE_DIR="$HOME/.toyon/pwa"
 # installed PWA (native-style title bar) if any profile has it, else a plain app window.
 # The app id lives in the browser's sync DB right before the manifest id; cache it once found.
 find_pwa_id() { # $1 = data dir, $2 = cache file
@@ -226,8 +226,8 @@ exec open "$URL"
 `,
   );
   chmodSync(launcher, 0o755);
-  const stub = join(macos, "Orchardist");
-  const cSrc = join(homedir(), ".orchardist", "launcher.c");
+  const stub = join(macos, "Toyon");
+  const cSrc = join(homedir(), ".toyon", "launcher.c");
   writeFileSync(
     cSrc,
     `#include <mach-o/dyld.h>
@@ -257,7 +257,7 @@ int main(int argc, char **argv) {
   // best-effort icon: rasterize the shell's SVG -> iconset -> icns
   try {
     const svg = join(here, "../../shell/public/icon.svg");
-    const tmp = join(homedir(), ".orchardist", "iconset.tmp");
+    const tmp = join(homedir(), ".toyon", "iconset.tmp");
     const iconset = join(tmp, "AppIcon.iconset");
     mkdirSync(iconset, { recursive: true });
     spawnSync("qlmanage", ["-t", "-s", "1024", "-o", tmp, svg], { stdio: "ignore" });
@@ -276,20 +276,20 @@ int main(int argc, char **argv) {
   spawnSync("xattr", ["-cr", appDir], { stdio: "ignore" });
   const signed = spawnSync("codesign", ["--force", "--deep", "-s", "-", appDir], { stdio: "ignore" }).status === 0;
   if (!signed) console.warn("warning: could not codesign the app bundle; macOS may refuse to open it");
-  console.log(`installed ${appDir} — launch "Orchardist" from Spotlight or drag it to the Dock`);
+  console.log(`installed ${appDir} — launch "Toyon" from Spotlight or drag it to the Dock`);
 }
 
 if (wantsInstallApp) {
   installApp();
   // launch through the bundle we just wrote, so a Gatekeeper problem shows up now, not later
-  spawn("open", ["-a", join(homedir(), "Applications", "Orchardist.app")], { stdio: "ignore" }).unref();
+  spawn("open", ["-a", join(homedir(), "Applications", "Toyon.app")], { stdio: "ignore" }).unref();
 } else if (wantsAppWindow) {
-  console.log(`orchardist → app window (${appUrl.split("#")[0]})`);
+  console.log(`toyon → app window (${appUrl.split("#")[0]})`);
   if (!openAppWindow()) {
     console.log("no Chromium browser found — opening in default browser");
     spawn("open", [url], { stdio: "ignore" }).unref();
   }
 } else {
-  console.log(`orchardist → ${url}`);
+  console.log(`toyon → ${url}`);
   spawn("open", [url], { stdio: "ignore" }).unref();
 }

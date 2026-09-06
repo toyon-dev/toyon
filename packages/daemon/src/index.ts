@@ -3,7 +3,7 @@
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DAEMON_DEFAULT_PORT } from "@orchardist/shared";
+import { DAEMON_DEFAULT_PORT } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { cloud } from "./core/cloud.ts";
 import { Hub } from "./core/hub.ts";
@@ -31,7 +31,7 @@ const BRIDGE_JS = join(here, "../../bridge/dist/bridge.js");
 const paths = makePaths();
 ensureDirs(paths);
 const token = loadOrCreateToken(paths);
-const port = Number(process.env.ORCHARDIST_PORT ?? DAEMON_DEFAULT_PORT);
+const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 
 const state = new StateStore(paths);
 const hub = new Hub();
@@ -61,8 +61,8 @@ bridge.setShellOrigins(
     : [
         `http://127.0.0.1:${port}`,
         `http://localhost:${port}`,
-        `http://orchardist.localhost:${port}`,
-        ...(branded ? ["http://orchardist.localhost"] : []),
+        `http://toyon.localhost:${port}`,
+        ...(branded ? ["http://toyon.localhost"] : []),
       ],
 );
 
@@ -88,13 +88,13 @@ if (repoArg) {
 if (cloud.enabled) {
   const range = cloud.proxyPorts ? `${cloud.proxyPorts.from}-${cloud.proxyPorts.to}` : "ephemeral";
   const where = cloud.publicHost ? `https://${cloud.publicHost}/` : `http://0.0.0.0:${port}/`;
-  console.log(`orchardist daemon (cloud mode) on ${where}  proxy ports: ${range}`);
-  console.log(`         token is seeded from ORCHARDIST_TOKEN; not printed`);
+  console.log(`toyon daemon (cloud mode) on ${where}  proxy ports: ${range}`);
+  console.log(`         token is seeded from TOYON_TOKEN; not printed`);
 } else {
   const shellUrl = branded
-    ? `http://orchardist.localhost/#token=${token}`
-    : `http://orchardist.localhost:${port}/#token=${token}`;
-  console.log(`orchardist daemon on ${shellUrl}`);
+    ? `http://toyon.localhost/#token=${token}`
+    : `http://toyon.localhost:${port}/#token=${token}`;
+  console.log(`toyon daemon on ${shellUrl}`);
   console.log(`         (fallback: http://127.0.0.1:${port}/#token=${token})`);
 }
 

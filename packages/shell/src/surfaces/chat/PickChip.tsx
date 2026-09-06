@@ -1,4 +1,4 @@
-import type { PickMeta } from "@orchardist/shared";
+import type { PickMeta } from "@toyon/shared";
 import { pickLabel, relFile } from "../util.ts";
 
 /** a picked element as a chip: ⌖ <Component> · file:line. In the composer it can be removed;

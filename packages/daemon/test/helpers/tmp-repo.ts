@@ -15,7 +15,7 @@ export function sh(cwd: string, cmd: string, ...args: string[]): string {
   return r.stdout.trim();
 }
 
-/** a real git repo on `main` with one commit, plus a throwaway ORCHARDIST home */
+/** a real git repo on `main` with one commit, plus a throwaway TOYON home */
 export function tmpRepo(): { repo: string; paths: Paths; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "orch-t-"));
   const repo = join(root, "repo");

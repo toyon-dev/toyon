@@ -5,7 +5,7 @@
 // ensure() during warm-up is a no-op; refresh() and claim() key off `ready`.
 
 import { join } from "node:path";
-import type { RepoInfo, WorktreeInfo } from "@orchardist/shared";
+import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";

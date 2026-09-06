@@ -19,7 +19,7 @@ export function StatusBar({ navCenter }: { navCenter: number }) {
   const ready = !!active && active.procs.some((p) => p.status === "running" || p.status === "starting");
   return (
     <div className="status-bar top-bar">
-      {zen && <span className="zen-title">{active?.worktree.title ?? "orchardist"}</span>}
+      {zen && <span className="zen-title">{active?.worktree.title ?? "toyon"}</span>}
       <button
         className={`btn-icon toggle ${leftOpen ? "on" : ""}`}
         onClick={() => dispatch({ a: "toggle-left" })}
@@ -31,7 +31,7 @@ export function StatusBar({ navCenter }: { navCenter: number }) {
       {installEvt && (
         <button
           className="btn toggle"
-          data-tip="Install Orchardist as an app (own window, dock icon)"
+          data-tip="Install Toyon as an app (own window, dock icon)"
           onClick={() => void installEvt.prompt()}
         >
           ⇣ install app

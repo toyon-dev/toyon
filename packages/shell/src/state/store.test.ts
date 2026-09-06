@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentEvent, ServerMsg, WorktreeStatus } from "@orchardist/shared";
+import type { AgentEvent, ServerMsg, WorktreeStatus } from "@toyon/shared";
 import { type Action, EMPTY_LOCAL, initialState, localOf, reducer, type State } from "./store.ts";
 
 // The reducer's rules the UI depends on and nothing else documents: which worktree becomes active,
@@ -14,7 +14,7 @@ function wt(id: string, kind: WorktreeStatus["worktree"]["kind"] = "worktree", c
       id,
       repoId: "r",
       path: `/w/${id}`,
-      branch: `orchard/${id}`,
+      branch: `toyon/${id}`,
       kind,
       proxyPort: 1,
       title: id,

@@ -11,12 +11,12 @@ export interface Paths {
   tokenFile: string;
   transcriptsDir: string;
   worktreesDir: string;
-  /** user-dropped theme files: Orchardist Theme JSON or raw VS Code theme JSON/JSONC */
+  /** user-dropped theme files: Toyon Theme JSON or raw VS Code theme JSON/JSONC */
   themesDir: string;
 }
 
-/** ORCHARDIST_HOME lets cloud mode keep state on a mounted volume (see core/cloud.ts) */
-export function makePaths(home = process.env.ORCHARDIST_HOME ?? join(homedir(), ".orchardist")): Paths {
+/** TOYON_HOME lets cloud mode keep state on a mounted volume (see core/cloud.ts) */
+export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toyon")): Paths {
   return {
     home,
     stateFile: join(home, "state.json"),

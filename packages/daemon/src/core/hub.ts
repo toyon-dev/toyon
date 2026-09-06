@@ -2,7 +2,7 @@
 // push to which client. Synchronous on purpose: AgentSession.emit → hub → git status runs inline
 // today, and changing that backpressure is phase 6's job, not this file's.
 
-import type { AgentEvent, AgentStatus, ProcState } from "@orchardist/shared";
+import type { AgentEvent, AgentStatus, ProcState } from "@toyon/shared";
 import { log } from "./log.ts";
 
 export interface HubEvents {

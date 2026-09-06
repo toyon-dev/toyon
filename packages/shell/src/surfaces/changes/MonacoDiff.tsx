@@ -1,8 +1,8 @@
 // Lazy-loaded Monaco diff viewer (read-only). Loaded via React.lazy so the
 // editor bundle only downloads when a diff is first opened.
 
-import type { Theme } from "@orchardist/shared";
-import { gruvboxDarkSoft, hex8, scaleAlpha } from "@orchardist/shared";
+import type { Theme } from "@toyon/shared";
+import { gruvboxDarkSoft, hex8, scaleAlpha } from "@toyon/shared";
 import * as monaco from "monaco-editor";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
@@ -68,7 +68,7 @@ function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
   };
 }
 
-const THEME = "orchardist";
+const THEME = "toyon";
 monaco.editor.defineTheme(THEME, toMonacoTheme(gruvboxDarkSoft));
 
 export default function MonacoDiff({

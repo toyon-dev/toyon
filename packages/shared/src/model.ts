@@ -1,6 +1,6 @@
 // Domain records shared by daemon, shell and CLI: repos, worktrees, processes, git status, themes.
 
-export interface OrchardistConfig {
+export interface ToyonConfig {
   /** name -> foreground shell command; must listen on $PORT */
   procs: Record<string, string>;
   /** shell commands run once when a worktree is created */
@@ -16,7 +16,7 @@ export interface RepoInfo {
   path: string;
   name: string;
   defaultBranch: string;
-  config: OrchardistConfig;
+  config: ToyonConfig;
   /** config was auto-detected and not yet confirmed by the user */
   needsSetup: boolean;
 }

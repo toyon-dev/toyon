@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { clientMsgSchema, type ServerMsg } from "@orchardist/shared";
+import { clientMsgSchema, type ServerMsg } from "@toyon/shared";
 import { fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";

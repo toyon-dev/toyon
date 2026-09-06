@@ -1,4 +1,4 @@
-// VS Code color theme → Orchardist Theme. Pure: takes already-parsed JSON
+// VS Code color theme → Toyon Theme. Pure: takes already-parsed JSON
 // (the daemon handles JSONC and `include` resolution).
 //
 // Workbench colors map onto the ~18-key contract by a fallback chain per key;

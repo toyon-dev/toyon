@@ -68,10 +68,15 @@ window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);
 
 // forward Toyon chords to the shell even when the preview has focus (plain ⌘F stays the
-// page's own find: it isn't in the table)
+// page's own find: it isn't in the table). Escape is forwarded too but not taken: the shell
+// closes whatever it has open, and the page still gets it for its own dialogs.
 window.addEventListener(
   "keydown",
   (e) => {
+    if (e.key === "Escape") {
+      post({ type: "key", key: "Escape", meta: false });
+      return;
+    }
     if (!matchChord(e)) return;
     e.preventDefault();
     e.stopPropagation();

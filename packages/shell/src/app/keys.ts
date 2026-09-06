@@ -63,7 +63,7 @@ export function useChords() {
           // sub-pickers go back to the palette they came from; everything else just closes
           dispatch({ a: "close", back: isSubPicker(s.overlay) });
         } else if (s.picking) {
-          // (the bridge handles esc itself when the preview has focus; this covers focus in the shell)
+          // (while picking, the bridge cancels on its own Escape; this covers focus in the shell)
           if (s.activeId) previewBus.post(s.activeId, { type: "pick-cancel" });
           dispatch({ a: "set-picking", v: false });
         } else if (s.zen) dispatch({ a: "toggle-zen" });

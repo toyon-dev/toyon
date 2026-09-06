@@ -73,7 +73,7 @@ export function buildCommands(
     chord("terminal"),
   );
   add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), chord("zen"));
-  add("keys", "shortcuts & settings", () => dispatch({ a: "open", overlay: { kind: "keys" } }), chord("keys"));
+  add("keys", "settings & shortcuts", () => dispatch({ a: "open", overlay: { kind: "keys" } }), chord("keys"));
 
   const prefs = state.themePrefs;
   const themeName = (tid: string) => state.themes.find((t) => t.id === tid)?.name ?? tid;

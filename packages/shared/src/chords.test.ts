@@ -15,8 +15,8 @@ describe("matchChord", () => {
     expect(matchChord(ev("n"))).toEqual({ id: "new" }); // reaches the page only in a PWA
     expect(matchChord(ev("p"))).toEqual({ id: "quick-open" });
     expect(matchChord(ev("."))).toEqual({ id: "zen" });
-    expect(matchChord(ev("/"))).toEqual({ id: "keys" });
-    expect(matchChord(ev(","))).toEqual({ id: "keys" }); // ⌘, alias: macOS preferences key
+    expect(matchChord(ev(","))).toEqual({ id: "keys" }); // macOS preferences key
+    expect(matchChord(ev("/"))).toBeNull(); // left to Monaco's toggle-comment
   });
   test("shift chords match whether the browser reports upper or lower case", () => {
     expect(matchChord(ev("F", { shift: true }))).toEqual({ id: "search" });
@@ -68,8 +68,7 @@ describe("labels", () => {
     expect(chordLabel("new", { firefox: true })).toBe("⌘K"); // ⌘N is an alias, not the Firefox key
     expect(chordLabel("new", { pwa: true })).toBe("⌘N"); // an installed PWA lets ⌘N through
     expect(chordLabel("commands", { pwa: true })).toBe("⌘⇧P");
-    expect(chordLabel("keys", { pwa: true })).toBe("⌘,"); // macOS preferences key, ours in a PWA
-    expect(chordLabel("keys")).toBe("⌘/");
+    expect(chordLabel("keys")).toBe("⌘,");
     expect(chordLabel("search")).toBe("⌘⇧F");
     expect(chordLabel("zen")).toBe("⌘.");
     expect(chordLabel("terminal")).toBe("⌃`");

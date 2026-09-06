@@ -11,7 +11,7 @@ const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
   rows: CHORDS.filter((c) => c.section === title).map((c): [string, string] => [chord(c.id), c.label]),
 }));
 
-/** ? / ⌘/: settings card stacked over the shortcut card — the one non-worktree surface, so global
+/** gear / ⌘,: settings card stacked over the shortcut card — the one non-worktree surface, so global
  * settings live here as well as in the palette; esc from a picker opened here comes back */
 export function KeysHelp() {
   const dispatch = useDispatch();

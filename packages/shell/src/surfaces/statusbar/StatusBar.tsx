@@ -58,14 +58,14 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
             {p.name} {p.status}
           </button>
         ))}
-      {/* right cluster: help · chat · terminal · zen (zen last — it hides everything, so it sits at the edge) */}
+      {/* right cluster: settings · chat · terminal · zen (zen last — it hides everything, so it sits at the edge) */}
       <span className="bar-tools">
         <button
           className="btn-icon toggle keys-btn"
-          {...tip("Shortcuts & settings", chord("keys"))}
+          {...tip("Settings & shortcuts", chord("keys"))}
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
         >
-          <Icon name="help" />
+          <Icon name="settings" />
         </button>
         <button
           className={`btn-icon toggle ${rightOpen ? "on" : ""}`}

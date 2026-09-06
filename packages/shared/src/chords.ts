@@ -60,17 +60,10 @@ export const CHORDS: readonly Chord[] = [
   { id: "search", key: "f", shift: true, label: "search in files", section: "Find" },
   { id: "left", key: "b", label: "changes", section: "Panels" },
   { id: "right", key: "j", label: "chat", section: "Panels" },
-  // ⌘, is the macOS preferences key. In an installed PWA Chrome would otherwise open its own
-  // settings page (a page can preempt it, unlike ⌘N/⌘T/⌘W), so there it lands on ours and is
-  // the key we advertise; in a tab ⌘/ stays the shown key since ⌘, reads as the browser's.
-  {
-    id: "keys",
-    key: "/",
-    aliases: [","],
-    advertise: { key: ",", when: "pwa" },
-    label: "shortcuts & settings",
-    section: "Panels",
-  },
+  // ⌘, is the macOS preferences key, and unlike ⌘N/⌘T/⌘W a page may preempt it in a tab as
+  // well as in an installed app, so it is ours everywhere. ⌘/ is deliberately not bound: it is
+  // toggle-comment in Monaco (and every editor), and the shell listens on window.
+  { id: "keys", key: ",", label: "settings & shortcuts", section: "Panels" },
   { id: "terminal", key: "`", ctrl: true, label: "terminal", section: "Panels" },
   { id: "pick", key: "e", label: "element picker", section: "Preview" },
   { id: "zen", key: ".", label: "full-bleed preview", section: "Preview" },

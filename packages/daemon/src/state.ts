@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { RepoInfo, ThemePrefs, WorktreeInfo } from "@orchardist/shared";
+import { log } from "./core/log.ts";
 import { ensureDirs, STATE_FILE, TOKEN_FILE } from "./paths.ts";
 
 export interface PersistedState {
@@ -17,15 +18,36 @@ const empty: PersistedState = { repos: [], worktrees: [], sessions: {} };
 export function loadState(): PersistedState {
   ensureDirs();
   if (!existsSync(STATE_FILE)) return structuredClone(empty);
+  let raw: string;
   try {
-    return { ...structuredClone(empty), ...JSON.parse(readFileSync(STATE_FILE, "utf8")) };
-  } catch {
+    raw = readFileSync(STATE_FILE, "utf8");
+  } catch (e) {
+    log.error("state", `cannot read ${STATE_FILE}; starting empty`, e);
     return structuredClone(empty);
   }
+  let state: PersistedState;
+  try {
+    state = { ...structuredClone(empty), ...JSON.parse(raw) };
+  } catch (e) {
+    // never silently forget every repo and worktree: keep the bad file for recovery
+    const backup = `${STATE_FILE}.corrupt-${Date.now()}`;
+    try {
+      writeFileSync(backup, raw);
+    } catch {}
+    log.error("state", `${STATE_FILE} is not valid JSON; copied to ${backup} and starting empty`, e);
+    return structuredClone(empty);
+  }
+  // sessions belong to worktrees; a removed worktree's entry is an orphan
+  const ids = new Set(state.worktrees.map((w) => w.id));
+  for (const id of Object.keys(state.sessions)) if (!ids.has(id)) delete state.sessions[id];
+  return state;
 }
 
+/** Atomic: a crash mid-write must not leave a half-written state.json (which loadState would reject). */
 export function saveState(state: PersistedState) {
-  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  const tmp = `${STATE_FILE}.tmp`;
+  writeFileSync(tmp, JSON.stringify(state, null, 2));
+  renameSync(tmp, STATE_FILE);
 }
 
 export function loadOrCreateToken(): string {

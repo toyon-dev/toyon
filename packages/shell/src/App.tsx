@@ -27,6 +27,7 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { lazy, Suspense, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { matchPositions, rankFiles, splitPath } from "./quickOpen.ts";
+import { STORAGE } from "./state/keys.ts";
 import { type ChatItem, currentTheme, initial, reducer, type State } from "./store.ts";
 import { Tooltips, tip } from "./Tooltip.tsx";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "./theme.ts";
@@ -91,7 +92,7 @@ export function App() {
   useEffect(() => {
     if (state.activeId) {
       try {
-        localStorage.setItem("orch-active", state.activeId);
+        localStorage.setItem(STORAGE.active, state.activeId);
       } catch {}
     }
   }, [state.activeId]);
@@ -227,8 +228,8 @@ export function App() {
   }, [state.activeId]);
 
   // resizable docks, widths persisted per browser
-  const [leftW, setLeftW] = useState(() => clampW(Number(localStorage.getItem("orch-lw")), 220));
-  const [rightW, setRightW] = useState(() => clampW(Number(localStorage.getItem("orch-rw")), 380));
+  const [leftW, setLeftW] = useState(() => clampW(Number(localStorage.getItem(STORAGE.leftWidth)), 220));
+  const [rightW, setRightW] = useState(() => clampW(Number(localStorage.getItem(STORAGE.rightWidth)), 380));
   const railPx = 40;
   const startDrag = (side: "left" | "right") => (e: React.PointerEvent) => {
     e.preventDefault();
@@ -239,12 +240,12 @@ export function App() {
       if (side === "left") {
         const w = clampW(ev.clientX, 220);
         setLeftW(w);
-        localStorage.setItem("orch-lw", String(w));
+        localStorage.setItem(STORAGE.leftWidth, String(w));
       } else {
         // the worktree rail sits between the chat dock and the window edge
         const w = clampW(window.innerWidth - railPx - ev.clientX, 380);
         setRightW(w);
-        localStorage.setItem("orch-rw", String(w));
+        localStorage.setItem(STORAGE.rightWidth, String(w));
       }
     };
     const up = () => {
@@ -1432,13 +1433,13 @@ function Center({
   // editor pane: draggable height + full-height toggle, persisted
   const centerRef = useRef<HTMLDivElement>(null);
   const [diffH, setDiffH] = useState(() => {
-    const n = Number(localStorage.getItem("orch-dh"));
+    const n = Number(localStorage.getItem(STORAGE.diffHeight));
     return Number.isFinite(n) && n >= 120 ? n : 0; // 0 = default 45%
   });
-  const [diffFull, setDiffFull] = useState(() => localStorage.getItem("orch-dfull") === "1");
+  const [diffFull, setDiffFull] = useState(() => localStorage.getItem(STORAGE.diffFull) === "1");
   const toggleFull = () => {
     setDiffFull((f) => {
-      localStorage.setItem("orch-dfull", f ? "0" : "1");
+      localStorage.setItem(STORAGE.diffFull, f ? "0" : "1");
       return !f;
     });
   };
@@ -1452,7 +1453,7 @@ function Center({
       if (!rect) return;
       const h = Math.min(Math.max(rect.bottom - ev.clientY, 120), rect.height - 80);
       setDiffH(h);
-      localStorage.setItem("orch-dh", String(Math.round(h)));
+      localStorage.setItem(STORAGE.diffHeight, String(Math.round(h)));
     };
     const up = () => {
       document.body.classList.remove("resizing");

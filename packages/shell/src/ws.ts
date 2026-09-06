@@ -1,16 +1,17 @@
 import type { ClientMsg, ServerMsg } from "@orchardist/shared";
+import { STORAGE } from "./state/keys.ts";
 
 function getToken(): string {
   const m = location.hash.match(/token=([a-f0-9]+)/);
   if (m?.[1]) {
     // localStorage so an installed PWA (launches without the fragment) stays authed
     try {
-      localStorage.setItem("orch-token", m[1]);
+      localStorage.setItem(STORAGE.token, m[1]);
     } catch {}
     return m[1];
   }
   try {
-    return localStorage.getItem("orch-token") ?? sessionStorage.getItem("orch-token") ?? "";
+    return localStorage.getItem(STORAGE.token) ?? sessionStorage.getItem(STORAGE.token) ?? "";
   } catch {
     return "";
   }

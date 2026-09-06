@@ -4,8 +4,9 @@
 
 import type { ShellToBridgeMsg, Theme } from "@orchardist/shared";
 import { contrastFg, gruvboxDarkSoft, themeToCssVars } from "@orchardist/shared";
+import { STORAGE } from "./state/keys.ts";
 
-const CACHE_KEY = "orch-theme";
+const CACHE_KEY = STORAGE.theme;
 
 export function cachedTheme(): Theme {
   try {

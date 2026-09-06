@@ -10,6 +10,7 @@ import type {
   WorktreeStatus,
 } from "@orchardist/shared";
 import { builtinThemes, defaultThemePrefs, EDIT_TOOLS, resolveTheme } from "@orchardist/shared";
+import { STORAGE } from "./state/keys.ts";
 import { cachedTheme } from "./theme.ts";
 
 // until hello arrives, the theme painted last time is the selection (no flash back to the default)
@@ -252,7 +253,7 @@ function onServer(s: State, msg: ServerMsg): State {
       // restore the previously selected worktree across reloads
       let stored: string | null = null;
       try {
-        stored = localStorage.getItem("orch-active");
+        stored = localStorage.getItem(STORAGE.active);
       } catch {}
       const activeId =
         s.activeId && msg.worktrees.some((w) => w.worktree.id === s.activeId)

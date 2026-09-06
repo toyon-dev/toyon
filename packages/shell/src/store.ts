@@ -120,6 +120,9 @@ export type Action =
   | { a: "show-keys"; v: boolean }
   | { a: "show-commands"; v: boolean };
 
+/** the modal overlays are mutually exclusive: opening one closes the others */
+const NO_OVERLAYS = { showQuickOpen: false, showSearch: false, showPrompt: false, showKeys: false, showCommands: false } as const;
+
 export function reducer(s: State, action: Action): State {
   switch (action.a) {
     case "connected":
@@ -133,9 +136,9 @@ export function reducer(s: State, action: Action): State {
     case "clear-prefill":
       return { ...s, prefill: null };
     case "quick-open":
-      return { ...s, showQuickOpen: action.v };
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showQuickOpen: action.v };
     case "show-search":
-      return { ...s, showSearch: action.v };
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showSearch: action.v };
     case "goto-line":
       return { ...s, gotoLine: action.v };
     case "hmr":
@@ -156,7 +159,7 @@ export function reducer(s: State, action: Action): State {
     case "clear-pick":
       return { ...s, pick: null };
     case "show-prompt":
-      return { ...s, showPrompt: action.v };
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showPrompt: action.v };
     case "toggle-left":
       return { ...s, leftOpen: !s.leftOpen, leftAuto: false };
     case "toggle-right":
@@ -168,9 +171,9 @@ export function reducer(s: State, action: Action): State {
         toast: !s.zen ? { ok: true, message: "esc or ⌘. to exit" } : s.toast,
       };
     case "show-keys":
-      return { ...s, showKeys: action.v };
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showKeys: action.v };
     case "show-commands":
-      return { ...s, showCommands: action.v };
+      return { ...s, ...(action.v ? NO_OVERLAYS : {}), showCommands: action.v };
     case "server":
       return onServer(s, action.msg);
   }

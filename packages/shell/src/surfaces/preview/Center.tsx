@@ -58,7 +58,9 @@ export function Center() {
         switch (d.type) {
           case "key":
             // bridge chord forwarding: replay as a real keydown so the app's handler sees it
-            window.dispatchEvent(new KeyboardEvent("keydown", { key: d.key, metaKey: true, shiftKey: !!d.shift }));
+            window.dispatchEvent(
+              new KeyboardEvent("keydown", { key: d.key, metaKey: d.meta, ctrlKey: !!d.ctrl, shiftKey: !!d.shift }),
+            );
             break;
           case "hmr":
             dispatch({ a: "hmr", id });

@@ -105,6 +105,8 @@ export interface State {
   leftAuto: boolean;
   /** full-bleed preview: all chrome hidden */
   zen: boolean;
+  /** the terminal pane under the preview (one per worktree; the shells keep running when hidden) */
+  termOpen: boolean;
   /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
   themes: Theme[];
   themePrefs: ThemePrefs;
@@ -146,6 +148,7 @@ export function initialState(opts: InitialOpts): State {
     rightOpen: true,
     leftAuto: true,
     zen: false,
+    termOpen: false,
     themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
@@ -193,6 +196,7 @@ export type Action =
   | { a: "toggle-left" }
   | { a: "toggle-right" }
   | { a: "toggle-zen" }
+  | { a: "toggle-terminal" }
   | { a: "preview-theme"; theme: Theme | null }
   | { a: "system-dark"; v: boolean }
   | { a: "toast"; toast: NonNullable<State["toast"]> }
@@ -263,6 +267,8 @@ export function reducer(s: State, action: Action): State {
       return { ...s, rightOpen: !s.rightOpen };
     case "toggle-zen":
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "esc or ⌘. to exit" } : s.toast };
+    case "toggle-terminal":
+      return { ...s, termOpen: !s.termOpen };
     case "preview-theme":
       return { ...s, previewTheme: action.theme };
     case "system-dark":

@@ -332,6 +332,12 @@ describe("streams and notices", () => {
     expect(off.zen).toBe(false);
     expect(off.toast).toBeNull();
   });
+  test("the terminal pane starts hidden and toggles", () => {
+    expect(initial.termOpen).toBe(false);
+    const on = run([{ a: "toggle-terminal" }]);
+    expect(on.termOpen).toBe(true);
+    expect(reducer(on, { a: "toggle-terminal" }).termOpen).toBe(false);
+  });
   test("a file-diff carries the pending goto line only for the file it was asked for", () => {
     const s = run([
       hello(wt("a")),

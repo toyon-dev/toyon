@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build src/bridge.ts --outfile dist/bridge.js --minify"
+    "build": "bun build src/bridge.ts --outfile dist/bridge.js --minify && bun run size",
+    "size": "bun scripts/size.ts"
   },
   "dependencies": {
     "@orchardist/shared": "workspace:*"

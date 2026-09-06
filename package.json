@@ -1,7 +1,9 @@
 {
   "name": "orchardist-monorepo",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "daemon": "bun run packages/daemon/src/index.ts",
@@ -11,7 +13,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "bun test",
-    "check": "bun run typecheck && bun run lint && bun run test"
+    "check": "bun run typecheck && bun run lint && bun run test && bun run --cwd packages/bridge build"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",

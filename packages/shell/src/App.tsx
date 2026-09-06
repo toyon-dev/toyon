@@ -1,4 +1,5 @@
 import type {
+  ChordId,
   GitFileStatus,
   RepoInfo,
   SearchHit,
@@ -8,12 +9,18 @@ import type {
   WorktreeStatus,
 } from "@orchardist/shared";
 import {
+  CHORD_SECTIONS,
+  CHORDS,
+  chordLabel,
   effectiveKind,
+  matchChord,
   parseBridgeMsg,
   pickFamily,
   resolveTheme,
   type ThemeFamily,
   themeFamilies,
+  worktreeChord,
+  worktreeIndex,
 } from "@orchardist/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
@@ -82,54 +89,55 @@ export function App() {
   // keyboard: cmd+1..9 switch tabs; every other chord toggles its panel (cmd+k prompt, cmd+p jump, cmd+b/j docks…); esc closes
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey && e.key >= "1" && e.key <= "9") {
-        // ⌘9 always lands on the last worktree (macOS tab convention), whatever the count
-        const n = Number(e.key);
-        const wt = n === 9 ? state.worktrees[state.worktrees.length - 1] : state.worktrees[n - 1];
-        if (wt) {
-          e.preventDefault();
-          dispatch({ a: "activate", id: wt.worktree.id });
+      const chord = matchChord(e);
+      if (chord) {
+        e.preventDefault();
+        switch (chord.id) {
+          case "worktree": {
+            const i = worktreeIndex(chord.digit, state.worktrees.length);
+            const wt = i === null ? undefined : state.worktrees[i];
+            if (wt) dispatch({ a: "activate", id: wt.worktree.id });
+            break;
+          }
+          case "new":
+            dispatch({ a: "show-prompt", v: !state.showPrompt });
+            break;
+          case "quick-open":
+            if (state.showQuickOpen) {
+              dispatch({ a: "quick-open", v: false });
+            } else if (state.activeId) {
+              sockRef.current?.send({ t: "list-files", worktreeId: state.activeId });
+              dispatch({ a: "quick-open", v: true });
+            }
+            break;
+          case "pick":
+            if (state.picking) {
+              if (state.activeId) previewBus.post(state.activeId, { type: "pick-cancel" });
+              dispatch({ a: "set-picking", v: false });
+            } else if (state.activeId) {
+              previewBus.post(state.activeId, { type: "pick-start" });
+              dispatch({ a: "set-picking", v: true });
+            }
+            break;
+          case "search":
+            if (state.activeId) dispatch({ a: "show-search", v: !state.showSearch });
+            break;
+          case "commands":
+            dispatch({ a: "show-commands", v: !state.showCommands });
+            break;
+          case "zen":
+            dispatch({ a: "toggle-zen" });
+            break;
+          case "left":
+            dispatch({ a: "toggle-left" });
+            break;
+          case "right":
+            dispatch({ a: "toggle-right" });
+            break;
+          case "keys":
+            dispatch({ a: "show-keys", v: !state.showKeys });
+            break;
         }
-      } else if (e.metaKey && !e.shiftKey && e.key === "k") {
-        e.preventDefault();
-        dispatch({ a: "show-prompt", v: !state.showPrompt });
-      } else if (e.metaKey && !e.shiftKey && e.key === "p") {
-        e.preventDefault();
-        if (state.showQuickOpen) {
-          dispatch({ a: "quick-open", v: false });
-        } else if (state.activeId) {
-          sockRef.current?.send({ t: "list-files", worktreeId: state.activeId });
-          dispatch({ a: "quick-open", v: true });
-        }
-      } else if (e.metaKey && !e.shiftKey && e.key === "e") {
-        e.preventDefault();
-        if (state.picking) {
-          if (state.activeId) previewBus.post(state.activeId, { type: "pick-cancel" });
-          dispatch({ a: "set-picking", v: false });
-        } else if (state.activeId) {
-          previewBus.post(state.activeId, { type: "pick-start" });
-          dispatch({ a: "set-picking", v: true });
-        }
-      } else if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        if (state.activeId) dispatch({ a: "show-search", v: !state.showSearch });
-      } else if (e.metaKey && e.shiftKey && (e.key.toLowerCase() === "e" || e.key.toLowerCase() === "p")) {
-        // ⌘⇧P is the editor convention, but Firefox/Edge own it (new private window) and handle
-        // it before the page sees it — ⌘⇧E is the always-works alias
-        e.preventDefault();
-        dispatch({ a: "show-commands", v: !state.showCommands });
-      } else if (e.metaKey && e.key === ".") {
-        e.preventDefault();
-        dispatch({ a: "toggle-zen" });
-      } else if (e.metaKey && !e.shiftKey && e.key === "b") {
-        e.preventDefault();
-        dispatch({ a: "toggle-left" });
-      } else if (e.metaKey && !e.shiftKey && e.key === "j") {
-        e.preventDefault();
-        dispatch({ a: "toggle-right" });
-      } else if (e.metaKey && e.key === "/") {
-        e.preventDefault();
-        dispatch({ a: "show-keys", v: !state.showKeys });
       } else if (e.key === "Escape") {
         if (state.showThemes) dispatch({ a: "show-themes", v: null, back: true });
         else if (state.showAppearance) dispatch({ a: "show-appearance", v: false, back: true });
@@ -725,7 +733,7 @@ function WtRail({ state, dispatch, sock }: { state: State; dispatch: Dispatch; s
               <button
                 className="new-wt"
                 data-tip="New worktree"
-                data-tip-key="⌘K"
+                data-tip-key={chord("new")}
                 onClick={() => dispatch({ a: "show-prompt", v: true })}
               >
                 <span className="nw-full">+ new worktree</span>
@@ -847,7 +855,7 @@ function buildCommands(
   const wt = active;
   const id = wt?.worktree.id;
 
-  if (repo) add("new", "new worktree…", () => dispatch({ a: "show-prompt", v: true }), "⌘K");
+  if (repo) add("new", "new worktree…", () => dispatch({ a: "show-prompt", v: true }), chord("new"));
   if (id) {
     add(
       "jump",
@@ -856,9 +864,9 @@ function buildCommands(
         sock?.send({ t: "list-files", worktreeId: id });
         dispatch({ a: "quick-open", v: true });
       },
-      "⌘P",
+      chord("quick-open"),
     );
-    add("search", "search in files…", () => dispatch({ a: "show-search", v: true }), "⌘⇧F");
+    add("search", "search in files…", () => dispatch({ a: "show-search", v: true }), chord("search"));
     add(
       "pick",
       state.picking ? "cancel element picker" : "pick an element on the page",
@@ -871,14 +879,19 @@ function buildCommands(
           dispatch({ a: "set-picking", v: true });
         }
       },
-      "⌘E",
+      chord("pick"),
     );
     add("reload", "reload preview", () => previewBus.post(id, { type: "reload" }));
   }
-  add("left", `${state.leftOpen ? "hide" : "show"} changes panel`, () => dispatch({ a: "toggle-left" }), "⌘B");
-  add("right", `${state.rightOpen ? "hide" : "show"} chat panel`, () => dispatch({ a: "toggle-right" }), "⌘J");
-  add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), "⌘.");
-  add("keys", "shortcuts & settings", () => dispatch({ a: "show-keys", v: true }), "⌘/");
+  add("left", `${state.leftOpen ? "hide" : "show"} changes panel`, () => dispatch({ a: "toggle-left" }), chord("left"));
+  add(
+    "right",
+    `${state.rightOpen ? "hide" : "show"} chat panel`,
+    () => dispatch({ a: "toggle-right" }),
+    chord("right"),
+  );
+  add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), chord("zen"));
+  add("keys", "shortcuts & settings", () => dispatch({ a: "show-keys", v: true }), chord("keys"));
 
   const prefs = state.themePrefs;
   const themeName = (tid: string) => state.themes.find((t) => t.id === tid)?.name ?? tid;
@@ -942,7 +955,7 @@ function buildCommands(
       `go:${w.worktree.id}`,
       `switch to ${w.worktree.title}${v ? ` (v${v.index}/${v.of})` : ""}`,
       () => dispatch({ a: "activate", id: w.worktree.id }),
-      keyHint(i, state.worktrees.length)?.trim(),
+      worktreeChord(i, state.worktrees.length),
     );
   });
   return cmds;
@@ -2232,7 +2245,7 @@ function RightDock({
           <button
             className={`composer-pick ${state.picking ? "rb-on" : ""}`}
             disabled={!active}
-            {...tip("Pick an element on the page to attach", "⌘E")}
+            {...tip("Pick an element on the page to attach", chord("pick"))}
             onClick={() => {
               if (!active) return;
               if (state.picking) {
@@ -2420,48 +2433,14 @@ function SearchPalette({
   );
 }
 
-/** the ⌘N chord that reaches worktree i, if any: ⌘1–8 by position, ⌘9 always the last one */
-function keyHint(i: number, count: number): string | undefined {
-  if (i === count - 1) return "⌘9";
-  return i < 8 ? `⌘${i + 1}` : undefined;
-}
-
 // Firefox owns ⌘⇧P (new private window) before the page sees it; both chords work everywhere
 // else, so advertise the one that will actually fire in this browser
-const PALETTE_CHORD = /Firefox\//.test(navigator.userAgent) ? "⌘⇧E" : "⌘⇧P";
-const KEY_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
-  // grid order
-  {
-    title: "Find",
-    rows: [
-      ["⌘P", "jump to file"],
-      [PALETTE_CHORD, "command palette"],
-      ["⌘⇧F", "search in files"],
-    ],
-  },
-  {
-    title: "Panels",
-    rows: [
-      ["⌘B", "changes"],
-      ["⌘J", "chat"],
-      ["⌘/", "shortcuts & settings"],
-    ],
-  },
-  {
-    title: "Preview",
-    rows: [
-      ["⌘E", "element picker"],
-      ["⌘.", "full-bleed preview"],
-    ],
-  },
-  {
-    title: "Worktrees",
-    rows: [
-      ["⌘K", "new worktree"],
-      ["⌘1–9", "switch worktree"],
-    ],
-  },
-];
+const IS_FIREFOX = /Firefox\//.test(navigator.userAgent);
+const chord = (id: ChordId) => chordLabel(id, { firefox: IS_FIREFOX });
+const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
+  title,
+  rows: CHORDS.filter((c) => c.section === title).map((c): [string, string] => [chord(c.id), c.label]),
+}));
 /** ? / ⌘/: settings card stacked over the shortcut card — the one non-worktree surface, so global
  * settings live here as well as in the palette; esc from a picker opened here comes back */
 function KeysHelp({ state, dispatch, onClose }: { state: State; dispatch: Dispatch; onClose: () => void }) {
@@ -2608,7 +2587,7 @@ function StatusBar({
       <button
         className={`toggle icon ${state.leftOpen ? "on" : ""}`}
         onClick={() => dispatch({ a: "toggle-left" })}
-        {...tip("Changes panel", "⌘B")}
+        {...tip("Changes panel", chord("left"))}
       >
         <Icon name="branch" />
       </button>
@@ -2684,7 +2663,7 @@ function StatusBar({
       <span className="bar-tools">
         <button
           className="toggle icon keys-btn"
-          {...tip("Shortcuts & settings", "⌘/")}
+          {...tip("Shortcuts & settings", chord("keys"))}
           onClick={() => dispatch({ a: "show-keys", v: !state.showKeys })}
         >
           <Icon name="help" />
@@ -2692,13 +2671,13 @@ function StatusBar({
         <button
           className={`toggle icon ${state.rightOpen ? "on" : ""}`}
           onClick={() => dispatch({ a: "toggle-right" })}
-          {...tip("Chat panel", "⌘J")}
+          {...tip("Chat panel", chord("right"))}
         >
           <Icon name="chat" />
         </button>
         <button
           className="toggle icon keys-btn"
-          {...tip("Full-bleed preview", "⌘.")}
+          {...tip("Full-bleed preview", chord("zen"))}
           onClick={() => dispatch({ a: "toggle-zen" })}
         >
           <Icon name="zen" />

@@ -6,6 +6,7 @@
 // (postMessage drops a frame whose origin doesn't match, so posting once per candidate is safe);
 // inbound commands are accepted only from the parent frame at one of them. Without the list
 // (cloud with no known public host) both sides fall back to open.
+import { matchChord } from "@orchardist/shared/chords";
 import type { BridgeToShellMsg, ShellToBridgeMsg } from "@orchardist/shared/protocol/bridge";
 
 declare global {
@@ -60,23 +61,15 @@ history.replaceState = (...args) => {
 window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);
 
-// forward Orchardist chords to the shell even when the preview has focus
-const CHORD_KEYS = new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "k", "p", "b", "j", "e", "."]);
-const SHIFT_CHORD_KEYS = new Set(["f", "e", "p"]);
+// forward Orchardist chords to the shell even when the preview has focus (plain ⌘F stays the
+// page's own find: it isn't in the table)
 window.addEventListener(
   "keydown",
   (e) => {
-    if (e.metaKey && !e.shiftKey && !e.ctrlKey && !e.altKey && CHORD_KEYS.has(e.key)) {
-      e.preventDefault();
-      e.stopPropagation();
-      post({ type: "key", key: e.key, meta: true });
-    } else if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && SHIFT_CHORD_KEYS.has(e.key.toLowerCase())) {
-      // ⌘⇧F search-in-files and ⌘⇧P/⌘⇧E command palette work even with the preview focused
-      // (plain ⌘F stays the page's own find)
-      e.preventDefault();
-      e.stopPropagation();
-      post({ type: "key", key: e.key.toUpperCase(), meta: true, shift: true });
-    }
+    if (!matchChord(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    post({ type: "key", key: e.key, meta: true, shift: e.shiftKey });
   },
   true,
 );

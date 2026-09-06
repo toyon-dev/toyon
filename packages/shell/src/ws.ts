@@ -4,7 +4,9 @@ function getToken(): string {
   const m = location.hash.match(/token=([a-f0-9]+)/);
   if (m?.[1]) {
     // localStorage so an installed PWA (launches without the fragment) stays authed
-    try { localStorage.setItem("orch-token", m[1]); } catch {}
+    try {
+      localStorage.setItem("orch-token", m[1]);
+    } catch {}
     return m[1];
   }
   try {

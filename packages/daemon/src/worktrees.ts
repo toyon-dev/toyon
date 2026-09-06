@@ -3,12 +3,28 @@ import { spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import type {
-  AgentEvent, AgentStatus, OrchardistConfig, ProcState, RepoInfo, ServerMsg, WorktreeInfo, WorktreeStatus,
+  AgentEvent,
+  AgentStatus,
+  OrchardistConfig,
+  ProcState,
+  RepoInfo,
+  ServerMsg,
+  WorktreeInfo,
+  WorktreeStatus,
 } from "@orchardist/shared";
 import { detectConfig } from "./config.ts";
 import {
-  aheadBehind, committedFiles, defaultBranch, git, gitOrThrow, isGitRepo, lockfileHash,
-  repoRoot, statusFiles, statusFilesWithCounts, withRepoLock,
+  aheadBehind,
+  committedFiles,
+  defaultBranch,
+  git,
+  gitOrThrow,
+  isGitRepo,
+  lockfileHash,
+  repoRoot,
+  statusFiles,
+  statusFilesWithCounts,
+  withRepoLock,
 } from "./git.ts";
 import { watchDefaultBranch } from "./watcher.ts";
 import { allocateProxyPort, releasePort, reservePort } from "./ports.ts";
@@ -41,7 +57,10 @@ export class Manager {
   runtimes = new Map<string, Runtime>();
   private bridgeCache: string | null = null;
 
-  constructor(private hub: HubEvents, private bridgePath: string) {
+  constructor(
+    private hub: HubEvents,
+    private bridgePath: string,
+  ) {
     this.state = loadState();
   }
 
@@ -66,12 +85,15 @@ export class Manager {
 
   // ---- ref watcher + spare pool ----
 
-  private spares = new Map<string, {
-    worktreeId: string;
-    lockHash: string;
-    refreshing: Promise<void> | null;
-    ready: boolean;
-  }>();
+  private spares = new Map<
+    string,
+    {
+      worktreeId: string;
+      lockHash: string;
+      refreshing: Promise<void> | null;
+      ready: boolean;
+    }
+  >();
   private watchers = new Map<string, () => void>();
 
   private startWatcher(repo: RepoInfo) {
@@ -276,7 +298,9 @@ export class Manager {
 
     // perspective-diverse variants: same goal, different emphasis per attempt
     let agentPrompt =
-      variant && variant.of >= 2 ? `${prompt}\n\n${VARIANT_LENSES[(variant.index - 1) % VARIANT_LENSES.length]}` : prompt;
+      variant && variant.of >= 2
+        ? `${prompt}\n\n${VARIANT_LENSES[(variant.index - 1) % VARIANT_LENSES.length]}`
+        : prompt;
     if (context) agentPrompt = `${agentPrompt}\n\n${context}`;
 
     // fast path: claim the pre-warmed spare (main-based tasks only)
@@ -380,7 +404,11 @@ export class Manager {
     const wt = this.state.worktrees.find((w) => w.id === worktreeId);
     if (!wt || wt.kind === "main") return;
     const repo = this.repo(wt.repoId);
-    const clean = title.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    const clean = title
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40);
     if (!clean) return;
     await withRepoLock(repo.path, () => {
       let branch = `orchard/${clean}`;
@@ -419,7 +447,9 @@ export class Manager {
           this.hub.log(wt.id, "setup", `deps via ${how} in ${Date.now() - started}ms`);
           break;
         }
-        try { spawnSync("rm", ["-rf", dstNm]); } catch {}
+        try {
+          spawnSync("rm", ["-rf", dstNm]);
+        } catch {}
       }
     }
     for (const cmd of repo.config.setup ?? []) {
@@ -551,8 +581,7 @@ export class Manager {
       const wt = this.worktree(worktreeId);
       if (!rt || !wt) return 0;
       const repo = this.repo(wt.repoId);
-      const previewName =
-        repo.config.preview ?? (repo.config.procs["web"] ? "web" : Object.keys(repo.config.procs)[0]);
+      const previewName = repo.config.preview ?? (repo.config.procs["web"] ? "web" : Object.keys(repo.config.procs)[0]);
       const st = rt.procs.states().find((p) => p.name === previewName) ?? rt.procs.states()[0];
       if (!st || st.status !== "running") return 0;
       const host = st.host?.includes(":") ? `[${st.host}]` : (st.host ?? "127.0.0.1");
@@ -597,21 +626,23 @@ export class Manager {
   }
 
   statuses(): WorktreeStatus[] {
-    return this.state.worktrees.filter((wt) => wt.kind !== "spare").map((wt) => {
-      const rt = this.runtimes.get(wt.id);
-      const pending = this.pendingAgents.get(wt.id);
-      const { ahead, behind, dirty } = this.counts(wt);
-      const agent = rt?.agent ?? pending;
-      return {
-        worktree: wt,
-        procs: rt?.procs.states() ?? [],
-        agent: agent?.status ?? "idle",
-        ahead,
-        behind,
-        dirty,
-        queued: agent?.queueLength || undefined,
-      };
-    });
+    return this.state.worktrees
+      .filter((wt) => wt.kind !== "spare")
+      .map((wt) => {
+        const rt = this.runtimes.get(wt.id);
+        const pending = this.pendingAgents.get(wt.id);
+        const { ahead, behind, dirty } = this.counts(wt);
+        const agent = rt?.agent ?? pending;
+        return {
+          worktree: wt,
+          procs: rt?.procs.states() ?? [],
+          agent: agent?.status ?? "idle",
+          ahead,
+          behind,
+          dirty,
+          queued: agent?.queueLength || undefined,
+        };
+      });
   }
 
   /** Ephemeral local octopus merge of several worktree branches, as its own preview worktree. */
@@ -625,7 +656,10 @@ export class Manager {
     const repo = this.repo(repoId);
 
     // graft names are the recipe: <a>+<b> (the ⧉ icon marks it as a graft); random suffix only on collision
-    let slug = wts.map((w) => w.title.split("-")[0]).join("+").slice(0, 40);
+    let slug = wts
+      .map((w) => w.title.split("-")[0])
+      .join("+")
+      .slice(0, 40);
     if (git(repo.path, "show-ref", "--verify", `refs/heads/orchard/${slug}`).ok) {
       slug = `${slug.slice(0, 34)}-${shortId().slice(0, 4)}`;
     }
@@ -693,7 +727,12 @@ const VARIANT_LENSES = [
 ];
 
 function slugify(prompt: string, withRandom = true): string {
-  const words = prompt.toLowerCase().replace(/[^a-z0-9\s-]/g, "").split(/\s+/).filter(Boolean).slice(0, 4);
+  const words = prompt
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 4);
   const base = words.join("-").slice(0, 40) || "task";
   return withRandom ? `${base}-${randomBytes(2).toString("hex")}` : base;
 }

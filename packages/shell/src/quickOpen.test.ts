@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { matchPositions, rankFiles, splitPath, withStatus } from "./quickOpen.ts";
 
-const paths = ["src/pages/About.tsx", "src/pages/Home.tsx", ".gitignore", "index.html", "src/App.tsx", "src/main.tsx", "src/style.css", "vite.config.ts"];
+const paths = [
+  "src/pages/About.tsx",
+  "src/pages/Home.tsx",
+  ".gitignore",
+  "index.html",
+  "src/App.tsx",
+  "src/main.tsx",
+  "src/style.css",
+  "vite.config.ts",
+];
 const status = [
   { path: "src/App.tsx", xy: " M", add: 38, del: 29 },
   { path: "src/style.css", xy: " M", add: 6 },
@@ -23,8 +32,14 @@ describe("rankFiles", () => {
   test("empty query: changed files first in panel order, then the rest alphabetically", () => {
     const { rows, changed } = rankFiles(paths, status, "");
     expect(rows.map((r) => r.path)).toEqual([
-      "src/App.tsx", "src/style.css", "src/pages/About.tsx", "src/pages/Home.tsx",
-      ".gitignore", "index.html", "src/main.tsx", "vite.config.ts",
+      "src/App.tsx",
+      "src/style.css",
+      "src/pages/About.tsx",
+      "src/pages/Home.tsx",
+      ".gitignore",
+      "index.html",
+      "src/main.tsx",
+      "vite.config.ts",
     ]);
     expect(changed).toBe(4);
   });

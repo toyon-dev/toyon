@@ -34,7 +34,14 @@ const workbenchKeys: Record<Exclude<ThemeColorKey, "scrim" | "shadow">, string[]
   purple: ["terminal.ansiMagenta", "terminal.ansiBrightMagenta"],
   // the accent: first candidate that actually stands out from the editor background (focusBorder is
   // often a subtle border; badges/buttons/links carry the brand color)
-  orange: ["activityBarBadge.background", "button.background", "progressBar.background", "focusBorder", "textLink.foreground", "terminal.ansiYellow"],
+  orange: [
+    "activityBarBadge.background",
+    "button.background",
+    "progressBar.background",
+    "focusBorder",
+    "textLink.foreground",
+    "terminal.ansiYellow",
+  ],
   addBg: ["diffEditor.insertedLineBackground", "diffEditor.insertedTextBackground"],
   delBg: ["diffEditor.removedLineBackground", "diffEditor.removedTextBackground"],
 };
@@ -42,20 +49,36 @@ const workbenchKeys: Record<Exclude<ThemeColorKey, "scrim" | "shadow">, string[]
 /** VS Code Dark Modern / Light Modern, only the keys we read */
 const defaults: Record<"dark" | "light", Record<string, string>> = {
   dark: {
-    "editor.background": "#1f1f1f", "editor.foreground": "#cccccc",
-    "sideBar.background": "#181818", "list.hoverBackground": "#2a2d2e",
-    "panel.border": "#2b2b2b", "descriptionForeground": "#9d9d9d", "disabledForeground": "#7f7f7f",
-    "terminal.ansiRed": "#f14c4c", "terminal.ansiGreen": "#23d18b", "terminal.ansiYellow": "#f5f543",
-    "terminal.ansiBlue": "#3b8eea", "terminal.ansiCyan": "#29b8db", "terminal.ansiMagenta": "#d670d6",
-    "focusBorder": "#0078d4",
+    "editor.background": "#1f1f1f",
+    "editor.foreground": "#cccccc",
+    "sideBar.background": "#181818",
+    "list.hoverBackground": "#2a2d2e",
+    "panel.border": "#2b2b2b",
+    descriptionForeground: "#9d9d9d",
+    disabledForeground: "#7f7f7f",
+    "terminal.ansiRed": "#f14c4c",
+    "terminal.ansiGreen": "#23d18b",
+    "terminal.ansiYellow": "#f5f543",
+    "terminal.ansiBlue": "#3b8eea",
+    "terminal.ansiCyan": "#29b8db",
+    "terminal.ansiMagenta": "#d670d6",
+    focusBorder: "#0078d4",
   },
   light: {
-    "editor.background": "#ffffff", "editor.foreground": "#3b3b3b",
-    "sideBar.background": "#f8f8f8", "list.hoverBackground": "#f2f2f2",
-    "panel.border": "#e5e5e5", "descriptionForeground": "#3b3b3b", "disabledForeground": "#a0a0a0",
-    "terminal.ansiRed": "#cd3131", "terminal.ansiGreen": "#00bc00", "terminal.ansiYellow": "#949800",
-    "terminal.ansiBlue": "#0451a5", "terminal.ansiCyan": "#0598bc", "terminal.ansiMagenta": "#bc05bc",
-    "focusBorder": "#005fb8",
+    "editor.background": "#ffffff",
+    "editor.foreground": "#3b3b3b",
+    "sideBar.background": "#f8f8f8",
+    "list.hoverBackground": "#f2f2f2",
+    "panel.border": "#e5e5e5",
+    descriptionForeground: "#3b3b3b",
+    disabledForeground: "#a0a0a0",
+    "terminal.ansiRed": "#cd3131",
+    "terminal.ansiGreen": "#00bc00",
+    "terminal.ansiYellow": "#949800",
+    "terminal.ansiBlue": "#0451a5",
+    "terminal.ansiCyan": "#0598bc",
+    "terminal.ansiMagenta": "#bc05bc",
+    focusBorder: "#005fb8",
   },
 };
 
@@ -75,7 +98,7 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
   const t = (json ?? {}) as VsCodeThemeJson;
   const colors = t.colors && typeof t.colors === "object" ? t.colors : null;
   if (!colors || !normalizeHex(colors["editor.background"] ?? "")) {
-    throw new ThemeImportError("not a VS Code color theme: no colors[\"editor.background\"]");
+    throw new ThemeImportError('not a VS Code color theme: no colors["editor.background"]');
   }
   // the editor background is the ground truth: some theme files declare the wrong `type`
   // (Tokyo Night Light ships "dark" and relies on its manifest's uiTheme to fix it)
@@ -106,13 +129,18 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
   const fgMuted = opaque(lookup(workbenchKeys.fgMuted) ?? fg1, bg1);
   const fgDim = opaque(lookup(workbenchKeys.fgDim) ?? fgMuted, bg1);
   const accent = (k: keyof typeof workbenchKeys) => opaque(lookup(workbenchKeys[k])!, bg0);
-  const red = accent("red"), green = accent("green"), yellow = accent("yellow");
-  const blue = accent("blue"), aqua = accent("aqua"), purple = accent("purple");
-  const orange = workbenchKeys.orange
-    .map((k) => (typeof colors[k] === "string" ? normalizeHex(colors[k]!) : null))
-    .filter((c): c is string => !!c)
-    .map((c) => opaque(c, bg0))
-    .find((c) => contrastRatio(c, bg0) >= 2.5) ?? accent("yellow");
+  const red = accent("red"),
+    green = accent("green"),
+    yellow = accent("yellow");
+  const blue = accent("blue"),
+    aqua = accent("aqua"),
+    purple = accent("purple");
+  const orange =
+    workbenchKeys.orange
+      .map((k) => (typeof colors[k] === "string" ? normalizeHex(colors[k]!) : null))
+      .filter((c): c is string => !!c)
+      .map((c) => opaque(c, bg0))
+      .find((c) => contrastRatio(c, bg0) >= 2.5) ?? accent("yellow");
 
   const theme: Theme = {
     id: opts.id,
@@ -120,8 +148,20 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
     kind,
     source: opts.source ?? "vscode",
     colors: {
-      bg0, bg1, bg2, bg3, fg1, fgMuted, fgDim,
-      red, orange, yellow, green, aqua, blue, purple,
+      bg0,
+      bg1,
+      bg2,
+      bg3,
+      fg1,
+      fgMuted,
+      fgDim,
+      red,
+      orange,
+      yellow,
+      green,
+      aqua,
+      blue,
+      purple,
       addBg: lookup(workbenchKeys.addBg) ?? hex8(green, 0.12),
       delBg: lookup(workbenchKeys.delBg) ?? hex8(red, 0.12),
       scrim: hex8(bg0, 0.7),
@@ -149,7 +189,8 @@ function pickSyntax(tokenColors: VsCodeThemeJson["tokenColors"]): Theme["syntax"
     for (const entry of tokenColors) {
       const fg = entry?.settings?.foreground;
       if (!fg) continue;
-      const scopes = typeof entry.scope === "string" ? entry.scope.split(",").map((s) => s.trim()) : entry.scope ?? [];
+      const scopes =
+        typeof entry.scope === "string" ? entry.scope.split(",").map((s) => s.trim()) : (entry.scope ?? []);
       for (const s of scopes) {
         if (!wanted.some((w) => s === w || s.startsWith(w + "."))) continue;
         const n = normalizeHex(fg);
@@ -163,5 +204,10 @@ function pickSyntax(tokenColors: VsCodeThemeJson["tokenColors"]): Theme["syntax"
 
 /** "One Dark Pro" → "one-dark-pro" */
 export function slug(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "theme";
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "theme"
+  );
 }

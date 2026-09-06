@@ -5,15 +5,24 @@ import { join } from "node:path";
 import type { GitFileStatus } from "@orchardist/shared";
 
 const LOCKFILES = [
-  "bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
-  "uv.lock", "poetry.lock", "requirements.txt", "Cargo.lock",
+  "bun.lock",
+  "bun.lockb",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "uv.lock",
+  "poetry.lock",
+  "requirements.txt",
+  "Cargo.lock",
 ];
 
 /** Combined hash of all present lockfiles — spare deps re-setup only when this changes. */
 export function lockfileHash(dir: string): string {
   const h = createHash("sha1");
   for (const f of LOCKFILES) {
-    try { h.update(readFileSync(join(dir, f))); } catch {}
+    try {
+      h.update(readFileSync(join(dir, f)));
+    } catch {}
   }
   return h.digest("hex");
 }
@@ -49,7 +58,9 @@ export function defaultBranch(path: string): string {
 export function statusFiles(worktreePath: string): GitFileStatus[] {
   // no trim: porcelain lines for unstaged changes start with a significant space
   const r = spawnSync("git", ["status", "--porcelain"], {
-    cwd: worktreePath, encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
+    cwd: worktreePath,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
   });
   if (r.status !== 0) throw new Error(`git status failed: ${r.stderr}`);
   return (r.stdout ?? "")
@@ -57,7 +68,10 @@ export function statusFiles(worktreePath: string): GitFileStatus[] {
     .filter((line) => line.length > 3)
     .map((line) => ({
       xy: line.slice(0, 2),
-      path: line.slice(3).replace(/^"(.*)"$/, "$1").replace(/ -> .*$/, ""),
+      path: line
+        .slice(3)
+        .replace(/^"(.*)"$/, "$1")
+        .replace(/ -> .*$/, ""),
     }));
 }
 
@@ -132,7 +146,7 @@ export function statusFilesWithCounts(worktreePath: string): GitFileStatus[] {
   const counts = files.some((f) => f.xy !== "??") ? numstat(worktreePath, "HEAD") : new Map<string, LineCounts>();
   return files.map((f) => ({
     ...f,
-    ...(f.xy === "??" ? untrackedLines(worktreePath, f.path) : counts.get(f.path) ?? {}),
+    ...(f.xy === "??" ? untrackedLines(worktreePath, f.path) : (counts.get(f.path) ?? {})),
   }));
 }
 
@@ -143,11 +157,14 @@ export function committedFiles(worktreePath: string, defaultBr: string): GitFile
   const r = git(worktreePath, "diff", "--name-status", base.out, "HEAD");
   if (!r.ok || !r.out) return [];
   const counts = numstat(worktreePath, base.out, "HEAD");
-  return r.out.split("\n").filter(Boolean).map((line) => {
-    const [status, ...rest] = line.split("\t");
-    const path = rest[rest.length - 1] ?? "";
-    return { xy: (status ?? "M").slice(0, 1) + " ", path, ...(counts.get(path) ?? {}) };
-  });
+  return r.out
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [status, ...rest] = line.split("\t");
+      const path = rest[rest.length - 1] ?? "";
+      return { xy: (status ?? "M").slice(0, 1) + " ", path, ...(counts.get(path) ?? {}) };
+    });
 }
 
 /** Changed line ranges (new-file numbering) for one file vs merge-base with main,
@@ -175,7 +192,13 @@ export function aheadBehind(worktreePath: string, defaultBr: string): { ahead: n
 }
 
 /** Merge the worktree's branch into the default branch in the main checkout. Local-only, no remote. */
-export function mergeToMain(worktreePath: string, branch: string, repoPath: string, defaultBr: string, _title: string): ShipResult {
+export function mergeToMain(
+  worktreePath: string,
+  branch: string,
+  repoPath: string,
+  defaultBr: string,
+  _title: string,
+): ShipResult {
   const cErr = requireClean(worktreePath);
   if (cErr) return cErr;
 
@@ -189,7 +212,10 @@ export function mergeToMain(worktreePath: string, branch: string, repoPath: stri
   const m = git(repoPath, "merge", "--no-edit", branch);
   if (!m.ok) {
     git(repoPath, "merge", "--abort");
-    return { ok: false, message: `merge conflicts with ${defaultBr} — sync this worktree first (${m.err.slice(0, 200)})` };
+    return {
+      ok: false,
+      message: `merge conflicts with ${defaultBr} — sync this worktree first (${m.err.slice(0, 200)})`,
+    };
   }
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };
 }
@@ -203,7 +229,10 @@ export function syncFromMain(worktreePath: string, defaultBr: string): ShipResul
   const m = git(worktreePath, "merge", "--no-edit", defaultBr);
   if (!m.ok) {
     git(worktreePath, "merge", "--abort");
-    return { ok: false, message: `sync conflicts with ${defaultBr} — ask the agent to merge ${defaultBr} and resolve them` };
+    return {
+      ok: false,
+      message: `sync conflicts with ${defaultBr} — ask the agent to merge ${defaultBr} and resolve them`,
+    };
   }
   return { ok: true, message: `synced ${behind} commit(s) from ${defaultBr}` };
 }
@@ -227,7 +256,8 @@ export function shipWorktree(worktreePath: string, branch: string, defaultBr: st
 
   // gh if present -> real PR; else GitHub compare URL (user is logged in there)
   const gh = spawnSync("gh", ["pr", "create", "--fill", "--head", branch], {
-    cwd: worktreePath, encoding: "utf8",
+    cwd: worktreePath,
+    encoding: "utf8",
   });
   if (gh.status === 0) {
     const url = (gh.stdout ?? "").trim().split("\n").pop() ?? "";
@@ -244,8 +274,7 @@ export function shipWorktree(worktreePath: string, branch: string, defaultBr: st
 
 function compareUrl(remoteUrl: string, base: string, branch: string): string | null {
   const m =
-    remoteUrl.match(/^git@github\.com:(.+?)(?:\.git)?$/) ??
-    remoteUrl.match(/^https:\/\/github\.com\/(.+?)(?:\.git)?$/);
+    remoteUrl.match(/^git@github\.com:(.+?)(?:\.git)?$/) ?? remoteUrl.match(/^https:\/\/github\.com\/(.+?)(?:\.git)?$/);
   if (!m) return null;
   return `https://github.com/${m[1]}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch)}?expand=1`;
 }
@@ -258,6 +287,9 @@ const locks = new Map<string, Promise<unknown>>();
 export async function withRepoLock<T>(repoPath: string, fn: () => Promise<T> | T): Promise<T> {
   const prev = locks.get(repoPath) ?? Promise.resolve();
   const next = prev.then(fn, fn);
-  locks.set(repoPath, next.catch(() => {}));
+  locks.set(
+    repoPath,
+    next.catch(() => {}),
+  );
   return next;
 }

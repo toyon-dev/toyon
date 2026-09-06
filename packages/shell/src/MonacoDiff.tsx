@@ -10,7 +10,8 @@ import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 // monaco 0.56 moved the TS language API off `monaco.languages.typescript` (now a deprecated stub)
 // to a top-level `typescript` export
-const { JsxEmit, ModuleKind, ModuleResolutionKind, ScriptTarget, javascriptDefaults, typescriptDefaults } = monaco.typescript;
+const { JsxEmit, ModuleKind, ModuleResolutionKind, ScriptTarget, javascriptDefaults, typescriptDefaults } =
+  monaco.typescript;
 
 (self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
   // ts/tsx models route language requests (inlay hints, hover) to the TS worker;
@@ -40,9 +41,12 @@ for (const d of [typescriptDefaults, javascriptDefaults]) {
 /** Monaco theme derived from the shell's Theme so the diff pane never drifts from the chrome */
 function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
   const c = t.colors;
-  const rules: monaco.editor.ITokenThemeRule[] = [{ token: "", foreground: c.fg1.slice(1), background: c.bg0.slice(1) }];
+  const rules: monaco.editor.ITokenThemeRule[] = [
+    { token: "", foreground: c.fg1.slice(1), background: c.bg0.slice(1) },
+  ];
   for (const [token, color] of Object.entries(t.syntax ?? {})) {
-    if (color) rules.push({ token, foreground: color.slice(1), ...(token === "comment" ? { fontStyle: "italic" } : {}) });
+    if (color)
+      rules.push({ token, foreground: color.slice(1), ...(token === "comment" ? { fontStyle: "italic" } : {}) });
   }
   return {
     base: t.kind === "light" ? "vs" : "vs-dark",
@@ -66,7 +70,15 @@ function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
 const THEME = "orchardist";
 monaco.editor.defineTheme(THEME, toMonacoTheme(gruvboxDarkSoft));
 
-export default function MonacoDiff({ before, after, path, line: focusLine, theme, onSave, onLineHover }: {
+export default function MonacoDiff({
+  before,
+  after,
+  path,
+  line: focusLine,
+  theme,
+  onSave,
+  onLineHover,
+}: {
   before: string;
   after: string;
   path: string;

@@ -3,8 +3,22 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { vscodeToTheme, ThemeImportError } from "./vscode-theme.ts";
 import {
-  builtinThemes, composite, contrastFg, gruvboxDarkSoft, gruvboxLight, hex8, normalizeHex, pairOf, pickFamily, pickTheme,
-  resolveTheme, themeColorKeys, themeFamilies, themeToCssVars, vscodeDark2026, vscodeLight2026,
+  builtinThemes,
+  composite,
+  contrastFg,
+  gruvboxDarkSoft,
+  gruvboxLight,
+  hex8,
+  normalizeHex,
+  pairOf,
+  pickFamily,
+  pickTheme,
+  resolveTheme,
+  themeColorKeys,
+  themeFamilies,
+  themeToCssVars,
+  vscodeDark2026,
+  vscodeLight2026,
 } from "./themes.ts";
 import type { Theme } from "./index.ts";
 
@@ -29,8 +43,12 @@ describe("vscodeToTheme", () => {
     expect(t.colors.addBg).toBe("#8bd64920");
     expect(t.colors.scrim).toBe(hex8("#101418", 0.7));
     expect(t.syntax).toEqual({
-      comment: "#5c6670", keyword: "#ff6b6b", string: "#8bd649", number: "#d19bff",
-      function: "#5fd7d7", variable: "#78a9ff",
+      comment: "#5c6670",
+      keyword: "#ff6b6b",
+      string: "#8bd649",
+      number: "#d19bff",
+      function: "#5fd7d7",
+      variable: "#78a9ff",
     });
   });
 
@@ -73,8 +91,14 @@ describe("color helpers", () => {
 });
 
 describe("pairing", () => {
-  const mk = (id: string, name: string, kind: Theme["kind"], source: Theme["source"] = "vscode"): Theme =>
-    ({ ...gruvboxDarkSoft, id, name, kind, source, pair: undefined });
+  const mk = (id: string, name: string, kind: Theme["kind"], source: Theme["source"] = "vscode"): Theme => ({
+    ...gruvboxDarkSoft,
+    id,
+    name,
+    kind,
+    source,
+    pair: undefined,
+  });
   const ext = [
     mk("vscode:a.one:one-dark", "One Dark", "dark"),
     mk("vscode:a.one:one-light", "One Light", "light"),
@@ -95,8 +119,16 @@ describe("pairing", () => {
   });
   test("pickTheme fills the slot + sibling and follows the kind unless in system mode", () => {
     const p0 = { mode: "dark" as const, light: gruvboxLight.id, dark: gruvboxDarkSoft.id };
-    expect(pickTheme(p0, vscodeLight2026, all)).toEqual({ mode: "light", light: vscodeLight2026.id, dark: vscodeDark2026.id });
-    expect(pickTheme({ ...p0, mode: "system" }, ext[3]!, all)).toEqual({ mode: "system", light: gruvboxLight.id, dark: "vscode:a.one:lonely-dark" });
+    expect(pickTheme(p0, vscodeLight2026, all)).toEqual({
+      mode: "light",
+      light: vscodeLight2026.id,
+      dark: vscodeDark2026.id,
+    });
+    expect(pickTheme({ ...p0, mode: "system" }, ext[3]!, all)).toEqual({
+      mode: "system",
+      light: gruvboxLight.id,
+      dark: "vscode:a.one:lonely-dark",
+    });
   });
   test("resolveTheme by appearance", () => {
     const p = { mode: "system" as const, light: "vscode-2026-light", dark: "missing" };
@@ -107,8 +139,20 @@ describe("pairing", () => {
 });
 
 describe("families", () => {
-  const mk = (id: string, name: string, kind: Theme["kind"]): Theme => ({ ...gruvboxDarkSoft, id, name, kind, source: "vscode", pair: undefined, family: undefined });
-  const ext = [mk("vscode:a.x:one-dark", "One Dark", "dark"), mk("vscode:a.x:one-light", "One Light", "light"), mk("vscode:a.x:solo", "Solo Dark", "dark")];
+  const mk = (id: string, name: string, kind: Theme["kind"]): Theme => ({
+    ...gruvboxDarkSoft,
+    id,
+    name,
+    kind,
+    source: "vscode",
+    pair: undefined,
+    family: undefined,
+  });
+  const ext = [
+    mk("vscode:a.x:one-dark", "One Dark", "dark"),
+    mk("vscode:a.x:one-light", "One Light", "light"),
+    mk("vscode:a.x:solo", "Solo Dark", "dark"),
+  ];
   test("pairs collapse, singles stand alone, names derive when not explicit", () => {
     const fams = themeFamilies([...builtinThemes, ...ext]);
     const byName = Object.fromEntries(fams.map((f) => [f.name, f]));
@@ -123,7 +167,8 @@ describe("families", () => {
   });
   test("pickFamily fills the slots it has and keeps appearance unless it can't paint it", () => {
     const fams = themeFamilies(builtinThemes);
-    const cat = fams.find((f) => f.name === "Catppuccin")!, nord = fams.find((f) => f.name === "Nord")!;
+    const cat = fams.find((f) => f.name === "Catppuccin")!,
+      nord = fams.find((f) => f.name === "Nord")!;
     const p0 = { mode: "light" as const, light: gruvboxLight.id, dark: gruvboxDarkSoft.id };
     expect(pickFamily(p0, cat)).toEqual({ mode: "light", light: "catppuccin-latte", dark: "catppuccin-mocha" });
     expect(pickFamily(p0, nord)).toEqual({ mode: "dark", light: gruvboxLight.id, dark: "nord" });

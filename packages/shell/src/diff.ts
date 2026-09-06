@@ -15,7 +15,8 @@ export function lineDiff(before: string, after: string): DiffLine[] {
   }
 
   // LCS table (rows: a, cols: b)
-  const m = a.length, n = b.length;
+  const m = a.length,
+    n = b.length;
   const dp = new Uint32Array((m + 1) * (n + 1));
   const at = (i: number, j: number) => dp[i * (n + 1) + j]!;
   for (let i = m - 1; i >= 0; i--) {
@@ -25,21 +26,39 @@ export function lineDiff(before: string, after: string): DiffLine[] {
   }
 
   const raw: DiffLine[] = [];
-  let i = 0, j = 0;
+  let i = 0,
+    j = 0;
   while (i < m && j < n) {
-    if (a[i] === b[j]) { raw.push({ kind: "ctx", text: a[i]! }); i++; j++; }
-    else if (at(i + 1, j) >= at(i, j + 1)) { raw.push({ kind: "del", text: a[i]! }); i++; }
-    else { raw.push({ kind: "add", text: b[j]! }); j++; }
+    if (a[i] === b[j]) {
+      raw.push({ kind: "ctx", text: a[i]! });
+      i++;
+      j++;
+    } else if (at(i + 1, j) >= at(i, j + 1)) {
+      raw.push({ kind: "del", text: a[i]! });
+      i++;
+    } else {
+      raw.push({ kind: "add", text: b[j]! });
+      j++;
+    }
   }
-  while (i < m) { raw.push({ kind: "del", text: a[i]! }); i++; }
-  while (j < n) { raw.push({ kind: "add", text: b[j]! }); j++; }
+  while (i < m) {
+    raw.push({ kind: "del", text: a[i]! });
+    i++;
+  }
+  while (j < n) {
+    raw.push({ kind: "add", text: b[j]! });
+    j++;
+  }
 
   // collapse long runs of context into hunk separators
   const out: DiffLine[] = [];
   const CTX = 3;
   for (let k = 0; k < raw.length; k++) {
     const line = raw[k]!;
-    if (line.kind !== "ctx") { out.push(line); continue; }
+    if (line.kind !== "ctx") {
+      out.push(line);
+      continue;
+    }
     let run = 0;
     while (raw[k + run]?.kind === "ctx") run++;
     if (run <= CTX * 2 + 1) {

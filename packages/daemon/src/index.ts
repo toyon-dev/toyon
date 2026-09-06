@@ -53,7 +53,10 @@ const hubEvents: HubEvents = {
 const manager = new Manager(hubEvents, BRIDGE_JS);
 const themes = new ThemeStore({
   get: () => manager.state.theme,
-  set: (p) => { manager.state.theme = p; saveState(manager.state); },
+  set: (p) => {
+    manager.state.theme = p;
+    saveState(manager.state);
+  },
 });
 themes.load();
 const { hub, branded } = startServer({ port, token, manager, shellDist: SHELL_DIST, themes });

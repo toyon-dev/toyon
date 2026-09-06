@@ -67,7 +67,10 @@ export function buildScope(cwd: string, onBlocked: (b: BlockedWrite) => void): S
 
   // canonical forms so `/tmp` (→ /private/tmp on macOS) matches resolved targets
   const allowWrite = uniq(
-    [root, ...(gitDir && !within(gitDir, root) ? [gitDir] : []), "/tmp", ...CACHE_DIRS].flatMap((p) => [p, canonical(p)]),
+    [root, ...(gitDir && !within(gitDir, root) ? [gitDir] : []), "/tmp", ...CACHE_DIRS].flatMap((p) => [
+      p,
+      canonical(p),
+    ]),
   );
   // the agent must not be able to widen its own permissions from inside
   const denyWrite = [resolve(root, ".claude")];

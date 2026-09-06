@@ -2,7 +2,17 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pickTheme, type ClientMsg, type ServerMsg } from "@orchardist/shared";
 import type { Manager } from "./worktrees.ts";
-import { aheadBehind, changedRanges, commitWorktree, committedFiles, fileBefore, mergeToMain, shipWorktree, statusFiles, syncFromMain } from "./git.ts";
+import {
+  aheadBehind,
+  changedRanges,
+  commitWorktree,
+  committedFiles,
+  fileBefore,
+  mergeToMain,
+  shipWorktree,
+  statusFiles,
+  syncFromMain,
+} from "./git.ts";
 import { cloud } from "./cloud.ts";
 import type { ThemeStore } from "./themes.ts";
 import { setWaitingColors } from "./proxy.ts";
@@ -96,10 +106,7 @@ export function startServer(opts: {
       }
       const index = join(opts.shellDist, "index.html");
       if (existsSync(index)) return new Response(Bun.file(index));
-      return new Response(
-        "orchardist daemon running; shell not built (run: bun run build)",
-        { status: 200 },
-      );
+      return new Response("orchardist daemon running; shell not built (run: bun run build)", { status: 200 });
     },
     websocket: {
       open(ws: import("bun").ServerWebSocket<WsData>) {
@@ -157,9 +164,13 @@ export function startServer(opts: {
           events: events.slice(-1000),
         };
         ws.send(JSON.stringify(backfill));
-        ws.send(JSON.stringify({
-          t: "queue", worktreeId: msg.worktreeId, items: agent?.queueItems ?? [],
-        } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "queue",
+            worktreeId: msg.worktreeId,
+            items: agent?.queueItems ?? [],
+          } satisfies ServerMsg),
+        );
         sendGitStatus(msg.worktreeId, ws);
         break;
       }
@@ -178,9 +189,14 @@ export function startServer(opts: {
       }
       case "batch-worktrees": {
         const repo = manager.repo(msg.repoId);
-        ws.send(JSON.stringify({
-          t: "shipped", worktreeId: "", ok: true, message: "batch: planning tasks…",
-        } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "shipped",
+            worktreeId: "",
+            ok: true,
+            message: "batch: planning tasks…",
+          } satisfies ServerMsg),
+        );
         // plan + spawn in the background so the socket stays responsive
         void (async () => {
           const { planTasks } = await import("./agent.ts");
@@ -190,10 +206,14 @@ export function startServer(opts: {
               await manager.createWorktree(msg.repoId, task);
             } catch {}
           }
-          ws.send(JSON.stringify({
-            t: "shipped", worktreeId: "", ok: true,
-            message: `batch: ${tasks.length} worktree(s) started`,
-          } satisfies ServerMsg));
+          ws.send(
+            JSON.stringify({
+              t: "shipped",
+              worktreeId: "",
+              ok: true,
+              message: `batch: ${tasks.length} worktree(s) started`,
+            } satisfies ServerMsg),
+          );
         })();
         break;
       }
@@ -227,9 +247,15 @@ export function startServer(opts: {
         const repo = manager.repo(wt.repoId);
         const result = shipWorktree(wt.path, wt.branch, repo.defaultBranch, wt.title);
         if (result.prCreated && result.url) manager.setPrUrl(wt.id, result.url);
-        ws.send(JSON.stringify({
-          t: "shipped", worktreeId: wt.id, ok: result.ok, url: result.url, message: result.message,
-        } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "shipped",
+            worktreeId: wt.id,
+            ok: result.ok,
+            url: result.url,
+            message: result.message,
+          } satisfies ServerMsg),
+        );
         sendGitStatus(wt.id, ws);
         break;
       }
@@ -246,15 +272,20 @@ export function startServer(opts: {
         if (result.ok && wt.kind === "combined") {
           removeIds = [wt.id, ...(wt.sources ?? []).filter((id) => manager.worktree(id))];
         } else if (result.ok && wt.variant) {
-          removeIds = manager.state.worktrees
-            .filter((w) => w.variant?.group === wt.variant!.group)
-            .map((w) => w.id);
+          removeIds = manager.state.worktrees.filter((w) => w.variant?.group === wt.variant!.group).map((w) => w.id);
         } else if (result.ok) {
           removeIds = [wt.id];
         }
-        ws.send(JSON.stringify({
-          t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message, merged: result.ok, removeIds,
-        } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "shipped",
+            worktreeId: wt.id,
+            ok: result.ok,
+            message: result.message,
+            merged: result.ok,
+            removeIds,
+          } satisfies ServerMsg),
+        );
         sendGitStatus(wt.id, ws);
         break;
       }
@@ -267,11 +298,17 @@ export function startServer(opts: {
         const suggestion = result.ok
           ? undefined
           : `Merge ${repo.defaultBranch} into this branch and resolve the conflicts, then verify the app still works.`;
-        ws.send(JSON.stringify({
-          t: "shipped", worktreeId: wt.id, ok: result.ok,
-          message: result.ok ? result.message : `sync conflicts with ${repo.defaultBranch} — prompt prefilled in chat`,
-          suggestion,
-        } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "shipped",
+            worktreeId: wt.id,
+            ok: result.ok,
+            message: result.ok
+              ? result.message
+              : `sync conflicts with ${repo.defaultBranch} — prompt prefilled in chat`,
+            suggestion,
+          } satisfies ServerMsg),
+        );
         sendGitStatus(wt.id, ws);
         break;
       }
@@ -281,18 +318,27 @@ export function startServer(opts: {
         const message = msg.message.trim();
         if (!message) throw new Error("commit message required");
         const result = commitWorktree(wt.path, message);
-        ws.send(JSON.stringify({
-          t: "shipped", worktreeId: wt.id, ok: result.ok, message: result.message,
-        } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "shipped",
+            worktreeId: wt.id,
+            ok: result.ok,
+            message: result.message,
+          } satisfies ServerMsg),
+        );
         sendGitStatus(wt.id, ws);
         break;
       }
       case "combine": {
         const wt = await manager.combineWorktrees(msg.worktreeIds);
-        ws.send(JSON.stringify({
-          t: "shipped", worktreeId: wt.id, ok: true,
-          message: `grafted: ${wt.title} — local merge of ${msg.worktreeIds.length} branches, nothing pushed`,
-        } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "shipped",
+            worktreeId: wt.id,
+            ok: true,
+            message: `grafted: ${wt.title} — local merge of ${msg.worktreeIds.length} branches, nothing pushed`,
+          } satisfies ServerMsg),
+        );
         break;
       }
       case "rename-worktree": {
@@ -305,7 +351,9 @@ export function startServer(opts: {
         // tracked + untracked (respecting .gitignore)
         const { spawnSync } = await import("node:child_process");
         const r = spawnSync("git", ["ls-files", "-co", "--exclude-standard"], {
-          cwd: wt.path, encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
+          cwd: wt.path,
+          encoding: "utf8",
+          maxBuffer: 32 * 1024 * 1024,
         });
         const paths = (r.stdout ?? "").split("\n").filter(Boolean);
         ws.send(JSON.stringify({ t: "files", worktreeId: wt.id, paths } satisfies ServerMsg));
@@ -330,11 +378,22 @@ export function startServer(opts: {
             if (!row) continue;
             const m = /^(.+?):(\d+):(.*)$/.exec(row);
             if (!m) continue;
-            if (hits.length >= MAX) { truncated = true; break; }
+            if (hits.length >= MAX) {
+              truncated = true;
+              break;
+            }
             hits.push({ path: m[1]!, line: Number(m[2]), text: m[3]!.trim().slice(0, 200) });
           }
         }
-        ws.send(JSON.stringify({ t: "search-results", worktreeId: wt.id, query: msg.query, hits, truncated } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "search-results",
+            worktreeId: wt.id,
+            query: msg.query,
+            hits,
+            truncated,
+          } satisfies ServerMsg),
+        );
         break;
       }
       case "stop-agent": {
@@ -355,9 +414,15 @@ export function startServer(opts: {
         const repo = manager.repo(wt.repoId);
         const ranges = changedRanges(wt.path, repo.defaultBranch, msg.path);
         const lineOffset = await manager.lineOffset(wt.id, msg.path);
-        ws.send(JSON.stringify({
-          t: "changed-ranges", worktreeId: wt.id, path: msg.path, ranges, lineOffset,
-        } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "changed-ranges",
+            worktreeId: wt.id,
+            path: msg.path,
+            ranges,
+            lineOffset,
+          } satisfies ServerMsg),
+        );
         break;
       }
       case "reveal": {
@@ -392,7 +457,14 @@ export function startServer(opts: {
           const { spawnSync } = await import("node:child_process");
           spawnSync("git", ["checkout", "HEAD", "--", msg.path], { cwd: wt.path });
         }
-        ws.send(JSON.stringify({ t: "shipped", worktreeId: wt.id, ok: true, message: `discarded ${msg.path}` } satisfies ServerMsg));
+        ws.send(
+          JSON.stringify({
+            t: "shipped",
+            worktreeId: wt.id,
+            ok: true,
+            message: `discarded ${msg.path}`,
+          } satisfies ServerMsg),
+        );
         sendGitStatus(wt.id, ws);
         break;
       }

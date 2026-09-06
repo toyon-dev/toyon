@@ -80,10 +80,10 @@ const CHROMIUMS = ["Google Chrome", "Arc", "Brave Browser", "Microsoft Edge", "C
 // each browser's profile root under ~/Library/Application Support
 const DATA_DIRS: Record<string, string> = {
   "Google Chrome": "Google/Chrome",
-  "Arc": "Arc/User Data",
+  Arc: "Arc/User Data",
   "Brave Browser": "BraveSoftware/Brave-Browser",
   "Microsoft Edge": "Microsoft Edge",
-  "Chromium": "Chromium",
+  Chromium: "Chromium",
 };
 
 // An installed PWA gets window-controls-overlay (no OS title bar; our top bar is the title bar);
@@ -96,7 +96,9 @@ const pwaCacheDir = join(homedir(), ".orchardist", "pwa");
 function profilesOf(browser: string): string[] {
   const root = join(homedir(), "Library", "Application Support", DATA_DIRS[browser] ?? browser);
   if (!existsSync(root)) return [];
-  return readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(root, d.name));
+  return readdirSync(root, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => join(root, d.name));
 }
 function pwaStillInstalled(browser: string, id: string): boolean {
   return profilesOf(browser).some((p) => existsSync(join(p, "Web Applications", "Manifest Resources", id)));
@@ -131,8 +133,12 @@ function openAppWindow(): boolean {
       const flag = id ? `--app-id=${id}` : `--app=${appUrl}`;
       spawn("open", ["-na", app, "--args", flag], { stdio: "ignore" }).unref();
       if (!id) {
-        console.log(`tip: install Orchardist as an app (⋮ menu → Install, or the install button in the top bar when opened in a tab)`);
-        console.log(`     — installed, it gets a native-style title bar; \`orchardist --app\` then launches the installed app`);
+        console.log(
+          `tip: install Orchardist as an app (⋮ menu → Install, or the install button in the top bar when opened in a tab)`,
+        );
+        console.log(
+          `     — installed, it gets a native-style title bar; \`orchardist --app\` then launches the installed app`,
+        );
       }
       return true;
     }
@@ -258,7 +264,9 @@ int main(int argc, char **argv) {
     const big = join(tmp, "icon.svg.png");
     if (existsSync(big)) {
       for (const size of [16, 32, 64, 128, 256, 512, 1024]) {
-        spawnSync("sips", ["-z", String(size), String(size), big, "--out", join(iconset, `icon_${size}x${size}.png`)], { stdio: "ignore" });
+        spawnSync("sips", ["-z", String(size), String(size), big, "--out", join(iconset, `icon_${size}x${size}.png`)], {
+          stdio: "ignore",
+        });
       }
       spawnSync("iconutil", ["-c", "icns", iconset, "-o", join(resources, "AppIcon.icns")], { stdio: "ignore" });
     }

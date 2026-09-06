@@ -43,9 +43,7 @@ export async function allocateProxyPort(): Promise<number> {
       return port;
     }
   }
-  throw new Error(
-    `no free proxy port in ORCHARDIST_PROXY_PORTS=${range.from}-${range.to}; remove a worktree first`,
-  );
+  throw new Error(`no free proxy port in ORCHARDIST_PROXY_PORTS=${range.from}-${range.to}; remove a worktree first`);
 }
 
 /** mark a persisted port as taken (worktrees restored at boot keep their port) */

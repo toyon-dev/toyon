@@ -8,8 +8,13 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import {
-  builtinThemes, defaultThemePrefs, slug, vscodeToTheme, ThemeImportError,
-  type Theme, type ThemePrefs,
+  builtinThemes,
+  defaultThemePrefs,
+  slug,
+  vscodeToTheme,
+  ThemeImportError,
+  type Theme,
+  type ThemePrefs,
 } from "@orchardist/shared";
 import { THEMES_DIR } from "./paths.ts";
 import { cloud } from "./cloud.ts";
@@ -37,25 +42,29 @@ export function extensionDirs(): string[] {
   return defaultExtensionDirs;
 }
 
-interface ContributedTheme { label?: string; uiTheme?: string; path?: string }
+interface ContributedTheme {
+  label?: string;
+  uiTheme?: string;
+  path?: string;
+}
 
 export class ThemeStore {
   themes: Theme[] = builtinThemes;
 
-  constructor(
-    private prefsRef: { get: () => ThemePrefs | undefined; set: (p: ThemePrefs) => void },
-  ) {}
+  constructor(private prefsRef: { get: () => ThemePrefs | undefined; set: (p: ThemePrefs) => void }) {}
 
   /** saved prefs, normalized: legacy {mode:"fixed",theme} migrated, unknown ids (renamed built-in, uninstalled extension) → slot default */
   get prefs(): ThemePrefs {
     const raw = { ...defaultThemePrefs, ...this.prefsRef.get() } as ThemePrefs & { theme?: string };
     const known = (id: string | undefined) => !!id && this.themes.some((t) => t.id === id);
     let mode: ThemePrefs["mode"] = raw.mode === "system" || raw.mode === "light" ? raw.mode : "dark";
-    let light = raw.light, dark = raw.dark;
+    let light = raw.light,
+      dark = raw.dark;
     if ((raw.mode as string) === "fixed" && known(raw.theme)) {
       const t = this.themes.find((x) => x.id === raw.theme)!;
       mode = t.kind;
-      if (t.kind === "dark") dark = t.id; else light = t.id;
+      if (t.kind === "dark") dark = t.id;
+      else light = t.id;
     }
     return {
       mode,
@@ -78,7 +87,12 @@ export class ThemeStore {
   load() {
     const seen = new Set<string>();
     const out: Theme[] = [];
-    const add = (t: Theme) => { if (!seen.has(t.id)) { seen.add(t.id); out.push(t); } };
+    const add = (t: Theme) => {
+      if (!seen.has(t.id)) {
+        seen.add(t.id);
+        out.push(t);
+      }
+    };
     for (const t of builtinThemes) add(t);
     for (const t of loadDir(THEMES_DIR)) add(t);
     for (const dir of extensionDirs()) for (const t of discover(dir)) add(t);
@@ -89,10 +103,16 @@ export class ThemeStore {
   import(name: string, source: string): Theme {
     const json = parseJsonc(source, [], { allowTrailingComma: true });
     if (json && typeof json === "object" && typeof (json as { include?: unknown }).include === "string") {
-      throw new ThemeImportError("this theme file uses `include`; drop the whole extension folder's theme into ~/.orchardist/themes or install it in VS Code and rescan");
+      throw new ThemeImportError(
+        "this theme file uses `include`; drop the whole extension folder's theme into ~/.orchardist/themes or install it in VS Code and rescan",
+      );
     }
     const base = slug(basename(name).replace(/\.(json|jsonc)$/i, ""));
-    const theme = vscodeToTheme(json, { id: `file:${base}`, name: (json as { name?: string })?.name ?? base, source: "file" });
+    const theme = vscodeToTheme(json, {
+      id: `file:${base}`,
+      name: (json as { name?: string })?.name ?? base,
+      source: "file",
+    });
     writeFileSync(join(THEMES_DIR, `${base}.json`), JSON.stringify(theme, null, 2) + "\n");
     this.load();
     return theme;
@@ -113,8 +133,11 @@ export function readVscodeTheme(file: string, depth = 0): Record<string, unknown
     return {
       ...parent,
       ...t,
-      colors: { ...(parent.colors as object ?? {}), ...(t.colors as object ?? {}) },
-      tokenColors: [...(Array.isArray(parent.tokenColors) ? parent.tokenColors : []), ...(Array.isArray(t.tokenColors) ? t.tokenColors : [])],
+      colors: { ...((parent.colors as object) ?? {}), ...((t.colors as object) ?? {}) },
+      tokenColors: [
+        ...(Array.isArray(parent.tokenColors) ? parent.tokenColors : []),
+        ...(Array.isArray(t.tokenColors) ? t.tokenColors : []),
+      ],
     };
   }
   return t;
@@ -147,14 +170,20 @@ function discover(dir: string): Theme[] {
   if (!existsSync(dir)) return [];
   const out: Theme[] = [];
   let entries: string[];
-  try { entries = readdirSync(dir); } catch { return out; }
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return out;
+  }
   for (const name of entries) {
     const extDir = join(dir, name);
     const pkgFile = join(extDir, "package.json");
     try {
       if (!statSync(extDir).isDirectory() || !existsSync(pkgFile)) continue;
       const pkg = JSON.parse(readFileSync(pkgFile, "utf8")) as {
-        name?: string; publisher?: string; contributes?: { themes?: ContributedTheme[] };
+        name?: string;
+        publisher?: string;
+        contributes?: { themes?: ContributedTheme[] };
       };
       const themes = pkg.contributes?.themes;
       if (!Array.isArray(themes)) continue;
@@ -162,7 +191,11 @@ function discover(dir: string): Theme[] {
       // built-in extensions localize labels: "%darkModernThemeLabel%" → package.nls.json
       let nls: Record<string, string> = {};
       const nlsFile = join(extDir, "package.nls.json");
-      if (existsSync(nlsFile)) { try { nls = JSON.parse(readFileSync(nlsFile, "utf8")); } catch {} }
+      if (existsSync(nlsFile)) {
+        try {
+          nls = JSON.parse(readFileSync(nlsFile, "utf8"));
+        } catch {}
+      }
       for (const c of themes) {
         if (!c.path || !c.label) continue;
         const m = /^%(.+)%$/.exec(c.label);

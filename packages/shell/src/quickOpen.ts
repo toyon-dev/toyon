@@ -59,7 +59,8 @@ export function rankFiles(paths: string[], status: GitFileStatus[], query: strin
 
 /** positions the greedy subsequence walk in fuzzyScore lands on, for highlighting; null when no match */
 export function matchPositions(hay: string, needle: string): number[] | null {
-  const lower = hay.toLowerCase(), out: number[] = [];
+  const lower = hay.toLowerCase(),
+    out: number[] = [];
   let hi = 0;
   for (const ch of needle.toLowerCase()) {
     const found = lower.indexOf(ch, hi);
@@ -72,7 +73,9 @@ export function matchPositions(hay: string, needle: string): number[] | null {
 
 /** subsequence match; bonuses for consecutive hits and path-segment starts */
 export function fuzzyScore(hay: string, needle: string): number {
-  let score = 0, hi = 0, streak = 0;
+  let score = 0,
+    hi = 0,
+    streak = 0;
   for (const ch of needle) {
     const found = hay.indexOf(ch, hi);
     if (found === -1) return 0;

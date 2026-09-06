@@ -112,8 +112,16 @@ export function startProxy(opts: {
         upstream.onmessage = (ev) => {
           ws.send(typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data as ArrayBuffer));
         };
-        upstream.onclose = (ev) => { try { ws.close(ev.code, ev.reason); } catch {} };
-        upstream.onerror = () => { try { ws.close(1011, "upstream error"); } catch {} };
+        upstream.onclose = (ev) => {
+          try {
+            ws.close(ev.code, ev.reason);
+          } catch {}
+        };
+        upstream.onerror = () => {
+          try {
+            ws.close(1011, "upstream error");
+          } catch {}
+        };
       },
       message(ws: ServerWebSocket<BridgeData>, message) {
         const up = ws.data.upstream;
@@ -122,7 +130,9 @@ export function startProxy(opts: {
         else ws.data.queue.push(payload);
       },
       close(ws: ServerWebSocket<BridgeData>) {
-        try { ws.data.upstream?.close(); } catch {}
+        try {
+          ws.data.upstream?.close();
+        } catch {}
       },
     },
   });

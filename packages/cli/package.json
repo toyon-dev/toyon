@@ -4,7 +4,9 @@
   "description": "Browser-first workbench for parallel AI coding agents: one chat per git worktree, every worktree running live.",
   "license": "MIT",
   "type": "module",
-  "bin": { "orchardist": "src/cli.ts" },
+  "bin": {
+    "orchardist": "src/cli.ts"
+  },
   "dependencies": {
     "@orchardist/shared": "workspace:*"
   }

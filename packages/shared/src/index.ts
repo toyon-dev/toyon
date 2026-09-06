@@ -120,14 +120,26 @@ export interface Theme {
   /** where it came from — shown as a hint in the picker */
   source: "builtin" | "file" | "vscode";
   colors: {
-    bg0: ThemeColor; bg1: ThemeColor; bg2: ThemeColor; bg3: ThemeColor;
-    fg1: ThemeColor; fgMuted: ThemeColor; fgDim: ThemeColor;
-    red: ThemeColor; orange: ThemeColor; yellow: ThemeColor; green: ThemeColor;
-    aqua: ThemeColor; blue: ThemeColor; purple: ThemeColor;
+    bg0: ThemeColor;
+    bg1: ThemeColor;
+    bg2: ThemeColor;
+    bg3: ThemeColor;
+    fg1: ThemeColor;
+    fgMuted: ThemeColor;
+    fgDim: ThemeColor;
+    red: ThemeColor;
+    orange: ThemeColor;
+    yellow: ThemeColor;
+    green: ThemeColor;
+    aqua: ThemeColor;
+    blue: ThemeColor;
+    purple: ThemeColor;
     /** diff line tints (alpha hex) */
-    addBg: ThemeColor; delBg: ThemeColor;
+    addBg: ThemeColor;
+    delBg: ThemeColor;
     /** overlay backdrop and box-shadow color (alpha hex) */
-    scrim: ThemeColor; shadow: ThemeColor;
+    scrim: ThemeColor;
+    shadow: ThemeColor;
   };
   /** editor token colors; missing entries inherit Monaco's base theme */
   syntax?: Partial<Record<ThemeSyntaxToken, ThemeColor>>;
@@ -152,7 +164,14 @@ export interface ThemePrefs {
 export type SearchHit = { path: string; line: number; text: string };
 
 export type ServerMsg =
-  | { t: "hello"; version: string; repos: RepoInfo[]; worktrees: WorktreeStatus[]; themes: Theme[]; themePrefs: ThemePrefs }
+  | {
+      t: "hello";
+      version: string;
+      repos: RepoInfo[];
+      worktrees: WorktreeStatus[];
+      themes: Theme[];
+      themePrefs: ThemePrefs;
+    }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   | { t: "repos"; repos: RepoInfo[] }
   | { t: "worktrees"; worktrees: WorktreeStatus[] }
@@ -160,9 +179,25 @@ export type ServerMsg =
   | { t: "log"; worktreeId: string; proc: string; line: string }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
   | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }> }
-  | { t: "git-status"; worktreeId: string; files: GitFileStatus[]; committed?: GitFileStatus[]; ahead?: number; behind?: number }
+  | {
+      t: "git-status";
+      worktreeId: string;
+      files: GitFileStatus[];
+      committed?: GitFileStatus[];
+      ahead?: number;
+      behind?: number;
+    }
   | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string }
-  | { t: "shipped"; worktreeId: string; ok: boolean; url?: string; message: string; merged?: boolean; removeIds?: string[]; suggestion?: string }
+  | {
+      t: "shipped";
+      worktreeId: string;
+      ok: boolean;
+      url?: string;
+      message: string;
+      merged?: boolean;
+      removeIds?: string[];
+      suggestion?: string;
+    }
   | { t: "files"; worktreeId: string; paths: string[] }
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
   | { t: "queue"; worktreeId: string; items: string[] }
@@ -172,7 +207,15 @@ export type ServerMsg =
 export type ClientMsg =
   | { t: "subscribe"; worktreeId: string }
   | { t: "chat"; worktreeId: string; text: string; context?: string; pick?: PickMeta }
-  | { t: "create-worktree"; repoId: string; prompt: string; baseWorktreeId?: string; variant?: { group: string; index: number; of: number }; context?: string; pick?: PickMeta }
+  | {
+      t: "create-worktree";
+      repoId: string;
+      prompt: string;
+      baseWorktreeId?: string;
+      variant?: { group: string; index: number; of: number };
+      context?: string;
+      pick?: PickMeta;
+    }
   | { t: "batch-worktrees"; repoId: string; prompt: string }
   | { t: "remove-worktree"; worktreeId: string }
   | { t: "restart-proc"; worktreeId: string; proc: string }

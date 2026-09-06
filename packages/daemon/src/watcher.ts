@@ -6,11 +6,7 @@ import { watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 import { git } from "./git.ts";
 
-export function watchDefaultBranch(
-  repoPath: string,
-  branch: string,
-  onMove: () => void,
-): () => void {
+export function watchDefaultBranch(repoPath: string, branch: string, onMove: () => void): () => void {
   let last = git(repoPath, "rev-parse", branch).out;
   let timer: ReturnType<typeof setTimeout> | null = null;
 

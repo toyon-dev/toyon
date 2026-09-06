@@ -14,7 +14,12 @@ type ThemePrefs = import("@orchardist/shared").ThemePrefs;
 
 function makeStore() {
   let prefs: ThemePrefs | undefined;
-  const store = new ThemeStore({ get: () => prefs, set: (p) => { prefs = p; } });
+  const store = new ThemeStore({
+    get: () => prefs,
+    set: (p) => {
+      prefs = p;
+    },
+  });
   return { store, prefs: () => prefs };
 }
 
@@ -22,7 +27,10 @@ beforeAll(() => {
   const dir = join(home, "themes");
   mkdirSync(dir, { recursive: true });
   // already-converted Orchardist theme
-  writeFileSync(join(dir, "My Light.json"), JSON.stringify({ ...gruvboxLight, id: "ignored", name: "My Light", source: "builtin" }));
+  writeFileSync(
+    join(dir, "My Light.json"),
+    JSON.stringify({ ...gruvboxLight, id: "ignored", name: "My Light", source: "builtin" }),
+  );
   // raw VS Code theme dropped in by hand
   writeFileSync(join(dir, "raw.jsonc"), `{ /* raw */ "name": "Raw", "colors": { "editor.background": "#202020" }, }`);
   writeFileSync(join(dir, "junk.json"), `{ "hello": 1 }`);
@@ -69,14 +77,22 @@ describe("ThemeStore", () => {
 
   test("prefs migrate the legacy fixed/theme shape and drop unknown ids", () => {
     let saved: any = { mode: "fixed", theme: "gruvbox-light", light: "gruvbox-light-soft", dark: "nope" };
-    const store = new ThemeStore({ get: () => saved, set: (p) => { saved = p; } });
+    const store = new ThemeStore({
+      get: () => saved,
+      set: (p) => {
+        saved = p;
+      },
+    });
     store.load();
     expect(store.prefs).toEqual({ mode: "light", light: "gruvbox-light", dark: "gruvbox-dark-soft" });
   });
 
   test("import writes a converted file and refuses include", () => {
     const { store } = makeStore();
-    const t = store.import("Some Theme.json", `{ "name": "Imported", "type": "dark", "colors": { "editor.background": "#111111" } }`);
+    const t = store.import(
+      "Some Theme.json",
+      `{ "name": "Imported", "type": "dark", "colors": { "editor.background": "#111111" } }`,
+    );
     expect(t.id).toBe("file:some-theme");
     expect(t.source).toBe("file");
     expect(store.themes.some((x) => x.id === "file:some-theme")).toBe(true);

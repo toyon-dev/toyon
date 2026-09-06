@@ -1,5 +1,12 @@
 import type {
-  AgentEvent, GitFileStatus, RepoInfo, SearchHit, ServerMsg, Theme, ThemePrefs, WorktreeStatus,
+  AgentEvent,
+  GitFileStatus,
+  RepoInfo,
+  SearchHit,
+  ServerMsg,
+  Theme,
+  ThemePrefs,
+  WorktreeStatus,
 } from "@orchardist/shared";
 import { builtinThemes, defaultThemePrefs, resolveTheme } from "@orchardist/shared";
 import { cachedTheme } from "./theme.ts";
@@ -125,7 +132,8 @@ export const initial: State = {
   previewTheme: null,
   showAppearance: false,
   paletteReturn: null,
-  systemDark: typeof window !== "undefined" ? window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true : true,
+  systemDark:
+    typeof window !== "undefined" ? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true) : true,
 };
 
 export type Action =
@@ -156,13 +164,26 @@ export type Action =
   | { a: "show-commands"; v: boolean };
 
 /** the modal overlays are mutually exclusive: opening one closes the others */
-const NO_OVERLAYS = { showQuickOpen: false, showSearch: false, showPrompt: false, showKeys: false, showCommands: false, showThemes: null, showAppearance: false, previewTheme: null } as const;
+const NO_OVERLAYS = {
+  showQuickOpen: false,
+  showSearch: false,
+  showPrompt: false,
+  showKeys: false,
+  showCommands: false,
+  showThemes: null,
+  showAppearance: false,
+  previewTheme: null,
+} as const;
 
 /** a sub-picker closed: with `back`, reopen the palette it came from (its query rides along in paletteReturn) */
 function paletteBack(s: State, back: boolean | undefined): Partial<State> {
   const r = s.paletteReturn;
   if (!back || !r) return { paletteReturn: null };
-  return r.mode === "commands" ? { showCommands: true } : r.mode === "keys" ? { showKeys: true } : { showQuickOpen: true };
+  return r.mode === "commands"
+    ? { showCommands: true }
+    : r.mode === "keys"
+      ? { showKeys: true }
+      : { showQuickOpen: true };
 }
 
 export function reducer(s: State, action: Action): State {
@@ -248,9 +269,16 @@ function onServer(s: State, msg: ServerMsg): State {
           ? s.activeId
           : stored && msg.worktrees.some((w) => w.worktree.id === stored)
             ? stored
-            : msg.worktrees[0]?.worktree.id ?? null;
+            : (msg.worktrees[0]?.worktree.id ?? null);
       // an older daemon sends no themes: keep the built-ins rather than crashing the picker
-      return { ...s, repos: msg.repos, worktrees: msg.worktrees, activeId, themes: msg.themes ?? s.themes, themePrefs: msg.themePrefs ?? s.themePrefs };
+      return {
+        ...s,
+        repos: msg.repos,
+        worktrees: msg.worktrees,
+        activeId,
+        themes: msg.themes ?? s.themes,
+        themePrefs: msg.themePrefs ?? s.themePrefs,
+      };
     }
     case "themes":
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
@@ -269,9 +297,7 @@ function onServer(s: State, msg: ServerMsg): State {
     }
     case "proc": {
       const worktrees = s.worktrees.map((w) =>
-        w.worktree.id === msg.worktreeId
-          ? { ...w, procs: upsertProc(w.procs, msg.proc) }
-          : w,
+        w.worktree.id === msg.worktreeId ? { ...w, procs: upsertProc(w.procs, msg.proc) } : w,
       );
       return { ...s, worktrees };
     }
@@ -356,13 +382,16 @@ function onServer(s: State, msg: ServerMsg): State {
           ok: msg.ok,
           message: msg.message,
           url: msg.url,
-          removeIds: msg.merged && msg.ok ? msg.removeIds ?? [msg.worktreeId] : undefined,
+          removeIds: msg.merged && msg.ok ? (msg.removeIds ?? [msg.worktreeId]) : undefined,
         },
       };
     case "files":
       return { ...s, files: { ...s.files, [msg.worktreeId]: msg.paths } };
     case "search-results":
-      return { ...s, search: { worktreeId: msg.worktreeId, query: msg.query, hits: msg.hits, truncated: msg.truncated } };
+      return {
+        ...s,
+        search: { worktreeId: msg.worktreeId, query: msg.query, hits: msg.hits, truncated: msg.truncated },
+      };
     case "queue":
       return { ...s, queues: { ...s.queues, [msg.worktreeId]: msg.items } };
     case "error":

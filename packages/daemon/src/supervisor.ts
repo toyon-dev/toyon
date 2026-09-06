@@ -103,7 +103,12 @@ export class WorktreeProcs {
           const sock = await Bun.connect({
             hostname,
             port,
-            socket: { data() {}, open(s) { s.end(); } },
+            socket: {
+              data() {},
+              open(s) {
+                s.end();
+              },
+            },
           });
           sock.end();
           mp.state.host = hostname;
@@ -133,8 +138,14 @@ export class WorktreeProcs {
   private killProc(mp: ManagedProc) {
     const pid = mp.child?.pid;
     if (pid) {
-      try { process.kill(-pid, "SIGTERM"); } catch {}
-      setTimeout(() => { try { process.kill(-pid, "SIGKILL"); } catch {} }, 3000);
+      try {
+        process.kill(-pid, "SIGTERM");
+      } catch {}
+      setTimeout(() => {
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch {}
+      }, 3000);
     }
   }
 

@@ -25,7 +25,9 @@ export function applyTheme(theme: Theme) {
   root.dataset.theme = theme.kind;
   // installed PWA (window-controls-overlay): the caption area takes this color
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme.colors.bg1);
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(theme)); } catch {}
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(theme));
+  } catch {}
 }
 
 /** what the bridge needs to paint its overlays in the shell's accent */

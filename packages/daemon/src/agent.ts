@@ -179,8 +179,7 @@ export class AgentSession {
         const ev = msg.event;
         if (ev?.type === "content_block_delta") {
           if (ev.delta?.type === "text_delta") this.emit({ type: "text-delta", text: ev.delta.text });
-          else if (ev.delta?.type === "thinking_delta")
-            this.emit({ type: "thinking-delta", text: ev.delta.thinking });
+          else if (ev.delta?.type === "thinking_delta") this.emit({ type: "thinking-delta", text: ev.delta.thinking });
         }
         break;
       }

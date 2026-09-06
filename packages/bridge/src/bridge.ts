@@ -115,8 +115,7 @@ let overlay: HTMLDivElement | null = null;
 function ensureOverlay(): HTMLDivElement {
   if (overlay?.isConnected) return overlay;
   overlay = document.createElement("div");
-  overlay.style.cssText =
-    "position:fixed;inset:0;pointer-events:none;z-index:2147483647;";
+  overlay.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:2147483647;";
   document.documentElement.appendChild(overlay);
   return overlay;
 }
@@ -131,8 +130,7 @@ function drawBox(rect: DOMRect, label?: string) {
   if (label) {
     const tag = document.createElement("div");
     tag.textContent = label;
-    tag.style.cssText =
-      `position:absolute;left:0;top:-20px;background:${accent};color:${accentFg};font:11px -apple-system,sans-serif;padding:1px 6px;border-radius:3px;white-space:nowrap;`;
+    tag.style.cssText = `position:absolute;left:0;top:-20px;background:${accent};color:${accentFg};font:11px -apple-system,sans-serif;padding:1px 6px;border-radius:3px;white-space:nowrap;`;
     box.appendChild(tag);
   }
   ensureOverlay().appendChild(box);
@@ -151,7 +149,9 @@ function onPickMove(e: MouseEvent) {
   const fiber = fiberOf(el);
   const comp = componentOf(fiber);
   const src = sourceOf(fiber);
-  const label = comp ? `<${comp}>${src ? ` · ${shortFile(src.file)}${src.line ? ":" + src.line : ""}` : ""}` : el.tagName.toLowerCase();
+  const label = comp
+    ? `<${comp}>${src ? ` · ${shortFile(src.file)}${src.line ? ":" + src.line : ""}` : ""}`
+    : el.tagName.toLowerCase();
   drawBox(el.getBoundingClientRect(), label);
 }
 
@@ -259,9 +259,7 @@ function matchElements(path: string, ranges: Array<[number, number]> | null) {
     return { matched: above.slice(0, 1), fromFile, withSource };
   }
 
-  const matched = fromFile.filter((c) =>
-    ranges.some(([a, b]) => c.line >= a - 8 && c.line <= b + 1),
-  );
+  const matched = fromFile.filter((c) => ranges.some(([a, b]) => c.line >= a - 8 && c.line <= b + 1));
   return { matched, fromFile, withSource };
 }
 
@@ -296,10 +294,18 @@ if (location.hash.startsWith("#__orchtest=")) {
     out.id = "__orchtest";
     out.textContent = JSON.stringify(
       {
-        path, ranges, withSource, fileMatched: fromFile.length,
-        matched: matched.map((m) => ({ tag: m.el.tagName.toLowerCase(), line: m.line, text: m.el.textContent?.slice(0, 30) })),
+        path,
+        ranges,
+        withSource,
+        fileMatched: fromFile.length,
+        matched: matched.map((m) => ({
+          tag: m.el.tagName.toLowerCase(),
+          line: m.line,
+          text: m.el.textContent?.slice(0, 30),
+        })),
       },
-      null, 1,
+      null,
+      1,
     );
     document.body.appendChild(out);
   }, 1500);

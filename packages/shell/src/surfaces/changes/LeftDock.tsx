@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useSock, useStore } from "../../state/context.tsx";
-import { useActive, useActiveId, useLocal } from "../../state/selectors.ts";
+import { useActive, useActiveId, useLocalField } from "../../state/selectors.ts";
 import { editorItems, Menu } from "../../ui/Menu.tsx";
 import { shiftRanges } from "../util.ts";
 import { GitFileRow } from "./GitFileRow.tsx";
@@ -11,9 +11,8 @@ export function LeftDock({ width }: { width: number }) {
   const sock = useSock();
   const activeId = useActiveId();
   const active = useActive();
-  const local = useLocal(activeId);
   const leftOpen = useStore((s) => s.leftOpen);
-  const gitInfo = local.git;
+  const gitInfo = useLocalField(activeId, "git");
   const files = gitInfo?.files ?? [];
   const committed = gitInfo?.committed ?? [];
   const ahead = gitInfo?.ahead ?? 0;
@@ -34,7 +33,7 @@ export function LeftDock({ width }: { width: number }) {
 
   // hover a changed file -> highlight only its changed lines' elements
   const hoverPathRef = useRef<string | null>(null);
-  const ranges = local.changedRanges;
+  const ranges = useLocalField(activeId, "changedRanges");
   const hoverFile = useCallback(
     (path: string, entering: boolean) => {
       if (!activeId) return;

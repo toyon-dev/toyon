@@ -52,7 +52,7 @@ export function ConfigCard({ repo }: { repo: RepoInfo }) {
           </button>
         </div>
       ))}
-      <button className="new-wt" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
+      <button className="btn add-proc" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
         + add process
       </button>
       <div className="cfg-section">setup (run once per new worktree)</div>

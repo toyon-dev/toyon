@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { byName } from "./commands.ts";
+import { PaletteRow } from "./PaletteRow.tsx";
 
 const sourceOf = (t: Theme) => (t.source === "file" ? "~/.toyon/themes" : t.source === "vscode" ? "VS Code" : "");
 
@@ -27,6 +28,7 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
   const [peek, setPeek] = useState<"dark" | "light" | null>(null);
   const previewOf = (f: ThemeFamily, k: "dark" | "light" | null) => f[k ?? nowKind] ?? f.dark ?? f.light ?? null;
   const families = useMemo(() => themeFamilies(themes), [themes]);
+  const slotThemes = useMemo(() => themes.filter((t) => t.kind === slot), [themes, slot]);
   useEffect(() => {
     if (slot === "theme") preview(active ? previewOf(active, peek) : null);
   }, [active, peek]);
@@ -34,8 +36,9 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
   if (slot !== "theme") {
     return (
       <ListPicker
-        items={themes.filter((t) => t.kind === slot)}
+        items={slotThemes}
         filter={(ts, q) => ts.filter((t) => byName(q, t.name, t.id))}
+        rowClass={() => "cmd-item"}
         keyOf={(t) => t.id}
         initialIndex={(ts) => ts.findIndex((t) => t.id === selectedId)}
         onActive={preview}
@@ -46,15 +49,7 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
         onBack={back}
         placeholder={`${slot} slot override · ↑↓ preview · enter keeps · esc reverts`}
         empty="no matching theme"
-        row={(t) => (
-          <>
-            <span className="cmd-label">
-              {t.id === selectedId ? "● " : ""}
-              {t.name}
-            </span>
-            <span className="cmd-hint">{sourceOf(t)}</span>
-          </>
-        )}
+        row={(t) => <PaletteRow label={t.name} current={t.id === selectedId} hint={sourceOf(t)} />}
       />
     );
   }
@@ -63,6 +58,7 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
     <ListPicker
       items={families}
       filter={(fs, q) => fs.filter((f) => byName(q, f.name, f.dark?.name, f.light?.name))}
+      rowClass={() => "cmd-item"}
       keyOf={(f) => f.name + (f.dark?.id ?? f.light?.id)}
       initialIndex={(fs) => fs.findIndex((f) => f.dark?.id === selectedId || f.light?.id === selectedId)}
       onActive={setActive}
@@ -81,19 +77,19 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
         const src = sourceOf(f.dark ?? f.light!);
         const current = f.dark?.id === selectedId || f.light?.id === selectedId;
         return (
-          <>
-            <span className="cmd-label">
-              {current ? "● " : ""}
-              {f.name}
-            </span>
-            <span className="cmd-hint theme-kinds">
-              {src && <span>{src}</span>}
-              <span className={`kind ${isActive && shown?.kind === "dark" ? "on" : ""}`}>{f.dark ? "dark" : ""}</span>
-              <span className={`kind ${isActive && shown?.kind === "light" ? "on" : ""}`}>
-                {f.light ? "light" : ""}
+          <PaletteRow
+            label={f.name}
+            current={current}
+            hint={
+              <span className="theme-kinds">
+                {src && <span>{src}</span>}
+                <span className={`kind ${isActive && shown?.kind === "dark" ? "on" : ""}`}>{f.dark ? "dark" : ""}</span>
+                <span className={`kind ${isActive && shown?.kind === "light" ? "on" : ""}`}>
+                  {f.light ? "light" : ""}
+                </span>
               </span>
-            </span>
-          </>
+            }
+          />
         );
       }}
     />

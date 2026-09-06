@@ -1,11 +1,14 @@
 import { matchChord, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
-import type { Store } from "../state/context.tsx";
-import { previewBus } from "./previewBus.ts";
+import { useSock, useStoreInstance } from "../state/context.tsx";
+import { isSubPicker } from "../state/store.ts";
+import { previewBus, togglePick } from "./previewBus.ts";
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
  * the handler so the listener is installed once instead of re-subscribing on every state change. */
-export function useChords(store: Store, send: (msg: { t: "list-files"; worktreeId: string }) => void) {
+export function useChords() {
+  const store = useStoreInstance();
+  const sock = useSock();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = store.getState();
@@ -26,18 +29,12 @@ export function useChords(store: Store, send: (msg: { t: "list-files"; worktreeI
           case "quick-open":
             if (s.overlay?.kind === "quick-open") dispatch({ a: "close" });
             else if (s.activeId) {
-              send({ t: "list-files", worktreeId: s.activeId });
+              sock?.send({ t: "list-files", worktreeId: s.activeId });
               dispatch({ a: "open", overlay: { kind: "quick-open" } });
             }
             break;
           case "pick":
-            if (s.picking) {
-              if (s.activeId) previewBus.post(s.activeId, { type: "pick-cancel" });
-              dispatch({ a: "set-picking", v: false });
-            } else if (s.activeId) {
-              previewBus.post(s.activeId, { type: "pick-start" });
-              dispatch({ a: "set-picking", v: true });
-            }
+            if (s.activeId) togglePick(s.activeId, s.picking, dispatch);
             break;
           case "search":
             if (s.activeId) dispatch({ a: "toggle", overlay: { kind: "search" } });
@@ -61,7 +58,7 @@ export function useChords(store: Store, send: (msg: { t: "list-files"; worktreeI
       } else if (e.key === "Escape") {
         if (s.overlay) {
           // sub-pickers go back to the palette they came from; everything else just closes
-          dispatch({ a: "close", back: s.overlay.kind === "theme" || s.overlay.kind === "appearance" });
+          dispatch({ a: "close", back: isSubPicker(s.overlay) });
         } else if (s.picking) {
           // (the bridge handles esc itself when the preview has focus; this covers focus in the shell)
           if (s.activeId) previewBus.post(s.activeId, { type: "pick-cancel" });
@@ -72,5 +69,5 @@ export function useChords(store: Store, send: (msg: { t: "list-files"; worktreeI
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, send]);
+  }, [store, sock]);
 }

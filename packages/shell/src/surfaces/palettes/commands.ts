@@ -3,9 +3,10 @@
 
 import type { RepoInfo, ThemePrefs, WorktreeStatus } from "@toyon/shared";
 import { resolveTheme, worktreeChord } from "@toyon/shared";
-import { previewBus } from "../../app/previewBus.ts";
+import { useMemo } from "react";
+import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import type { Action, State } from "../../state/store.ts";
+import { type Action, type State, worktreeById } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { worktreeActions } from "../rail/worktreeActions.ts";
 import { chord } from "../util.ts";
@@ -26,7 +27,7 @@ export const appearanceLabel: Record<ThemePrefs["mode"], string> = {
 };
 
 export function buildCommands(
-  state: State,
+  state: CommandState,
   dispatch: (a: Action) => void,
   sock: DaemonSocket | null,
   active: WorktreeStatus | null,
@@ -53,15 +54,7 @@ export function buildCommands(
     add(
       "pick",
       state.picking ? "cancel element picker" : "pick an element on the page",
-      () => {
-        if (state.picking) {
-          previewBus.post(id, { type: "pick-cancel" });
-          dispatch({ a: "set-picking", v: false });
-        } else {
-          previewBus.post(id, { type: "pick-start" });
-          dispatch({ a: "set-picking", v: true });
-        }
-      },
+      () => togglePick(id, state.picking, dispatch),
       chord("pick"),
     );
     add("reload", "reload preview", () => previewBus.post(id, { type: "reload" }));
@@ -144,14 +137,39 @@ export function buildCommands(
   return cmds;
 }
 
-/** the command list for the open palette. Palettes are transient, so reading the whole state here
- * (and re-rendering on any change while open) is fine. */
+/** the fields buildCommands reads — selected one by one so a streaming agent (chat/log updates)
+ * does not rebuild the list while ⌘P is open */
+export type CommandState = Pick<
+  State,
+  "picking" | "leftOpen" | "rightOpen" | "themePrefs" | "themes" | "systemDark" | "worktrees" | "activeId" | "repos"
+>;
+
 export function useCommands(): Command[] {
-  const state = useStore((s) => s);
   const dispatch = useDispatch();
   const sock = useSock();
-  const active = state.worktrees.find((w) => w.worktree.id === state.activeId) ?? null;
-  return buildCommands(state, dispatch, sock, active, state.repos[0] ?? null);
+  const picking = useStore((s) => s.picking);
+  const leftOpen = useStore((s) => s.leftOpen);
+  const rightOpen = useStore((s) => s.rightOpen);
+  const themePrefs = useStore((s) => s.themePrefs);
+  const themes = useStore((s) => s.themes);
+  const systemDark = useStore((s) => s.systemDark);
+  const worktrees = useStore((s) => s.worktrees);
+  const activeId = useStore((s) => s.activeId);
+  const repos = useStore((s) => s.repos);
+  return useMemo(() => {
+    const st: CommandState = {
+      picking,
+      leftOpen,
+      rightOpen,
+      themePrefs,
+      themes,
+      systemDark,
+      worktrees,
+      activeId,
+      repos,
+    };
+    return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repos[0] ?? null);
+  }, [picking, leftOpen, rightOpen, themePrefs, themes, systemDark, worktrees, activeId, repos, dispatch, sock]);
 }
 
 export function filterCommands(commands: Command[], q: string): Command[] {

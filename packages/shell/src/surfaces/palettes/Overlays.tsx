@@ -1,5 +1,6 @@
 import { useStore } from "../../state/context.tsx";
 import { useActiveId, useOverlay } from "../../state/selectors.ts";
+import { worktreeById } from "../../state/store.ts";
 import { ConfigCard } from "../prompt/ConfigCard.tsx";
 import { PromptOverlay } from "../prompt/PromptOverlay.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
@@ -14,7 +15,7 @@ export function Overlays() {
   const overlay = useOverlay();
   const activeId = useActiveId();
   const repoNeedsSetup = useStore((s) => {
-    const wt = s.worktrees.find((w) => w.worktree.id === s.activeId);
+    const wt = worktreeById(s, s.activeId);
     const repo = wt ? s.repos.find((r) => r.id === wt.worktree.repoId) : null;
     return repo?.needsSetup ? repo : null;
   });

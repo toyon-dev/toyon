@@ -2,7 +2,7 @@ import type { PickMeta, WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
-import { useLocal } from "../../state/selectors.ts";
+import { useLocalField } from "../../state/selectors.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { pickLabel } from "../util.ts";
 import { ChatItemView } from "./ChatItemView.tsx";
@@ -12,8 +12,8 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const id = active?.worktree.id ?? null;
-  const local = useLocal(id);
-  const items = local.chat;
+  const items = useLocalField(id, "chat");
+  const queue = useLocalField(id, "queue");
   const logRef = useRef<HTMLDivElement>(null);
 
   // pin to bottom while streaming; offer a jump-down pill when scrolled up
@@ -77,7 +77,7 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
           </div>
         )}
         {id &&
-          local.queue.map((text, i) => (
+          queue.map((text, i) => (
             <div key={`q-${i}`} className="msg-user queued-msg">
               <span className="queued-tag">queued</span>
               <span className="queued-text">{text}</span>

@@ -50,7 +50,7 @@ export function StoreProvider({
   );
 }
 
-function useStoreInstance(): Store {
+export function useStoreInstance(): Store {
   const store = useContext(StoreContext);
   if (!store) throw new Error("useStore outside <StoreProvider>");
   return store;

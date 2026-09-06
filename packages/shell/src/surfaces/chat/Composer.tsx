@@ -1,9 +1,9 @@
 import type { WorktreeStatus } from "@toyon/shared";
 import { pickMetaOf } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
-import { previewBus } from "../../app/previewBus.ts";
+import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { useLocal } from "../../state/selectors.ts";
+import { useLocalField } from "../../state/selectors.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, pickLabel, relFile } from "../util.ts";
@@ -14,8 +14,8 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const id = active?.worktree.id ?? null;
-  const local = useLocal(id);
-  const text = local.draft;
+  const text = useLocalField(id, "draft");
+  const page = useLocalField(id, "page");
   const setText = (t: string) => id && dispatch({ a: "set-draft", id, text: t });
   const clientId = useStore((s) => s.clientId);
   const picking = useStore((s) => s.picking);
@@ -40,7 +40,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const buildContext = (): string | undefined => {
     if (!active) return undefined;
     const parts: string[] = [];
-    const pc = local.page;
+    const pc = page;
     if (pc.url) {
       try {
         const u = new URL(pc.url);
@@ -80,12 +80,6 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
     }
     if (pick) dispatch({ a: "clear-pick" });
     setText("");
-  };
-
-  const togglePick = () => {
-    if (!id) return;
-    previewBus.post(id, { type: picking ? "pick-cancel" : "pick-start" });
-    dispatch({ a: "set-picking", v: !picking });
   };
 
   return (
@@ -143,7 +137,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           className={`btn-icon composer-pick ${picking ? "on" : ""}`}
           disabled={!active}
           {...tip("Pick an element on the page to attach", chord("pick"))}
-          onClick={togglePick}
+          onClick={() => id && togglePick(id, picking, dispatch)}
         >
           <Icon name="pick" />
         </button>

@@ -25,7 +25,6 @@ export function ListPicker<T>({
   onActive,
   onSide,
   onQuery,
-  queryDelay = 150,
   placeholder,
   initialQuery = "",
   initialIndex,
@@ -45,9 +44,8 @@ export function ListPicker<T>({
   onActive?: (t: T | null) => void;
   /** ←→ on the highlighted row */
   onSide?: (t: T, dir: -1 | 1) => void;
-  /** debounced: the query changed and the source should fetch (async pickers) */
+  /** debounced (150ms): the query changed and the source should fetch (async pickers) */
   onQuery?: (q: string) => void;
-  queryDelay?: number;
   placeholder: string;
   initialQuery?: string;
   /** where the highlight starts (mount only); default 0 */
@@ -62,19 +60,11 @@ export function ListPicker<T>({
   const [idx, setIdx] = useState(() => Math.max(0, initialIndex?.(results) ?? 0));
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useFocusOnMount<HTMLInputElement>();
-  // typing resets the highlight; the mount keeps initialIndex
-  const prevQ = useRef(q);
-  useEffect(() => {
-    if (prevQ.current !== q) {
-      prevQ.current = q;
-      setIdx(0);
-    }
-  }, [q]);
   useEffect(() => {
     if (!onQuery) return;
-    const h = setTimeout(() => onQuery(q), queryDelay);
+    const h = setTimeout(() => onQuery(q), 150);
     return () => clearTimeout(h);
-  }, [q, onQuery, queryDelay]);
+  }, [q, onQuery]);
   // keyed on the row's key, not the results array: parents rebuild items every render, and a
   // re-report on identity change would reset any state they keep for the active row (←→ peek)
   const activeKey = results[idx] ? keyOf(results[idx]!) : null;
@@ -82,22 +72,25 @@ export function ListPicker<T>({
     listRef.current?.querySelector<HTMLElement>(".qo-item.active")?.scrollIntoView({ block: "nearest" });
     onActive?.(results[idx] ?? null);
   }, [activeKey]);
+  // results can shrink under the highlight (async sources): step from the visible row
   const clamped = Math.min(idx, Math.max(0, results.length - 1));
   return (
     <Overlay onClose={onBack} boxClass="quick-open">
       <input
         className="field field-lg"
         ref={inputRef}
-        autoFocus
         value={q}
-        onChange={(e) => setQ(e.target.value)}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setIdx(0); // typing resets the highlight; the mount keeps initialIndex
+        }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
-            setIdx((i) => step(i, 1, results.length));
+            setIdx(step(clamped, 1, results.length));
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            setIdx((i) => step(i, -1, results.length));
+            setIdx(step(clamped, -1, results.length));
           } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onSide && results[clamped]) {
             e.preventDefault();
             onSide(results[clamped]!, e.key === "ArrowLeft" ? -1 : 1);
@@ -112,9 +105,10 @@ export function ListPicker<T>({
         {results.map((t, i) => (
           <button
             key={keyOf(t)}
-            className={`qo-item ${rowClass?.(t) ?? "cmd-item"} ${i === clamped ? "active" : ""}`}
+            className={`qo-item ${rowClass?.(t) ?? ""} ${i === clamped ? "active" : ""}`}
             title={rowTitle?.(t)}
-            onMouseEnter={() => setIdx(i)}
+            // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
+            onMouseMove={() => i !== clamped && setIdx(i)}
             onClick={() => onPick(t, q)}
           >
             {row(t, i === clamped, q)}

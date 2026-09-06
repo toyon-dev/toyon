@@ -24,11 +24,16 @@ export function Menu({
   onClose: () => void;
 }) {
   useEffect(() => {
-    window.addEventListener("click", onClose);
+    // the click that opened the menu is still bubbling when this mounts: ignore events older than us
+    const openedAt = performance.now();
+    const onClick = (e: MouseEvent) => {
+      if (e.timeStamp > openedAt) onClose();
+    };
+    window.addEventListener("click", onClick);
     window.addEventListener("keydown", onClose);
     window.addEventListener("blur", onClose);
     return () => {
-      window.removeEventListener("click", onClose);
+      window.removeEventListener("click", onClick);
       window.removeEventListener("keydown", onClose);
       window.removeEventListener("blur", onClose);
     };
@@ -36,8 +41,10 @@ export function Menu({
   const x = anchor ? (align === "right" ? anchor.right - WIDTH : anchor.left) : (at?.x ?? 0);
   const y = anchor ? anchor.bottom + 4 : (at?.y ?? 0);
   const left = Math.max(4, Math.min(x, window.innerWidth - WIDTH - 4));
+  // ~32px per row; keep the whole menu on screen when opened near the bottom
+  const top = Math.max(4, Math.min(y, window.innerHeight - items.length * 32 - 12));
   return (
-    <div className="menu" style={{ position: "fixed", left, top: y }}>
+    <div className="menu" style={{ position: "fixed", left, top }}>
       {items.map((it, i) => (
         <button
           key={i}

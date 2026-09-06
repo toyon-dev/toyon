@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { useLocal, useTheme } from "../../state/selectors.ts";
-import type { State } from "../../state/store.ts";
+import { useTheme } from "../../state/selectors.ts";
+import { localOf, type State, worktreeById } from "../../state/store.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { OpenInMenu } from "./OpenInMenu.tsx";
 
@@ -25,13 +25,14 @@ export function DiffView({
   const dispatch = useDispatch();
   const sock = useSock();
   const theme = useTheme();
-  const wtPath = useStore((s) => s.worktrees.find((w) => w.worktree.id === diff.worktreeId)?.worktree.path);
+  const wtPath = useStore((s) => worktreeById(s, diff.worktreeId)?.worktree.path);
   const absPath = wtPath ? `${wtPath}/${diff.path}` : diff.path;
-  const cached = useLocal(diff.worktreeId).changedRanges[diff.path];
-  // warm the line-offset/ranges cache so line-hover highlights align
+  const cached = useStore((s) => localOf(s, diff.worktreeId).changedRanges[diff.path]);
+  // warm the line-offset/ranges cache so line-hover highlights align; a git-status wipes the
+  // cache, so `cached` is a dependency and the request re-fires
   useEffect(() => {
     if (!cached) sock?.send({ t: "changed-ranges", worktreeId: diff.worktreeId, path: diff.path });
-  }, [diff.worktreeId, diff.path]);
+  }, [diff.worktreeId, diff.path, cached, sock]);
   const lineOff = cached?.offset ?? 0;
   return (
     <div className="diff-pane" style={{ height }}>

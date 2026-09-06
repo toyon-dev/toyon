@@ -3,6 +3,7 @@ import { effectiveKind, resolveTheme } from "@toyon/shared";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { appearanceLabel, byName } from "./commands.ts";
+import { PaletteRow } from "./PaletteRow.tsx";
 
 const MODES: ThemePrefs["mode"][] = ["dark", "light", "system"];
 
@@ -19,6 +20,7 @@ export function AppearancePicker() {
     <ListPicker
       items={MODES}
       filter={(ms, q) => ms.filter((m) => byName(q, appearanceLabel[m]))}
+      rowClass={() => "cmd-item"}
       keyOf={(m) => m}
       initialIndex={(ms) => ms.indexOf(prefs.mode)}
       onActive={(m) =>
@@ -31,15 +33,11 @@ export function AppearancePicker() {
       onBack={() => dispatch({ a: "close", back: true })}
       placeholder="light/dark mode · ↑↓ preview · enter keeps · esc reverts"
       row={(m) => (
-        <>
-          <span className="cmd-label">
-            {m === prefs.mode ? "● " : ""}
-            {appearanceLabel[m]}
-          </span>
-          <span className="cmd-hint">
-            {m === "system" ? `${systemDark ? "dark" : "light"} now · ${slotName(m)}` : slotName(m)}
-          </span>
-        </>
+        <PaletteRow
+          label={appearanceLabel[m]}
+          current={m === prefs.mode}
+          hint={m === "system" ? `${systemDark ? "dark" : "light"} now · ${slotName(m)}` : slotName(m)}
+        />
       )}
     />
   );

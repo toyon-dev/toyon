@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef } from "react";
-import { type Store, useDispatch, useSock, useStore } from "../state/context.tsx";
+import { useEffect, useRef } from "react";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
 import { useActive, useActiveId, useTheme, useWorktrees } from "../state/selectors.ts";
 import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
@@ -9,7 +9,7 @@ import { WtRail } from "../surfaces/rail/WtRail.tsx";
 import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
 import { clampW } from "../surfaces/util.ts";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "../theme.ts";
-import { useDragResize, usePersisted, useWindowWidth } from "../ui/hooks.ts";
+import { useDragResize, usePersisted } from "../ui/hooks.ts";
 import { Tooltips } from "../ui/Tooltip.tsx";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
@@ -18,7 +18,8 @@ const RAIL_PX = 40;
 const MRU_SUBSCRIPTIONS = 3;
 
 /** layout + app-wide effects; every surface reads its own state through selectors */
-export function App({ store }: { store: Store }) {
+export function App() {
+  const store = useStoreInstance();
   const dispatch = useDispatch();
   const sock = useSock();
   const activeId = useActiveId();
@@ -28,6 +29,7 @@ export function App({ store }: { store: Store }) {
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
   const theme = useTheme();
+  const previewing = useStore((s) => s.previewTheme !== null);
   const toast = useStore((s) => s.toast);
   const worktrees = useWorktrees();
 
@@ -36,14 +38,18 @@ export function App({ store }: { store: Store }) {
   // the oldest beyond that. A reconnect re-subscribes the whole set.
   const subsRef = useRef<string[]>([]);
   useEffect(() => {
-    if (!sock) return;
-    if (activeId) {
-      const mru = [activeId, ...subsRef.current.filter((id) => id !== activeId)];
-      for (const gone of mru.splice(MRU_SUBSCRIPTIONS)) sock.send({ t: "unsubscribe", worktreeId: gone });
-      subsRef.current = mru;
-    }
-    for (const id of subsRef.current) sock.send({ t: "subscribe", worktreeId: id });
+    if (!sock || !connected || !activeId) return;
+    const mru = [activeId, ...subsRef.current.filter((id) => id !== activeId)];
+    for (const gone of mru.splice(MRU_SUBSCRIPTIONS)) sock.send({ t: "unsubscribe", worktreeId: gone });
+    // only the newcomer needs a subscribe (and its backfill); the others have been streaming all along
+    if (!subsRef.current.includes(activeId)) sock.send({ t: "subscribe", worktreeId: activeId });
+    subsRef.current = mru;
   }, [activeId, connected, sock]);
+  // a reconnect is a new socket: it knows nothing, so re-assert the whole set
+  useEffect(() => {
+    if (!sock || !connected) return;
+    for (const id of subsRef.current) sock.send({ t: "subscribe", worktreeId: id });
+  }, [connected, sock]);
   // worktrees that disappeared drop out of the set
   useEffect(() => {
     const alive = new Set(worktrees.map((w) => w.worktree.id));
@@ -57,9 +63,10 @@ export function App({ store }: { store: Store }) {
 
   // paint the selected theme (or the picker's live preview); previews get the accent for their overlays
   useEffect(() => {
-    applyTheme(theme);
+    // a picker preview paints but is not remembered: a crash mid-browse must not adopt it
+    applyTheme(theme, { remember: !previewing });
     previewBus.broadcast(bridgeThemeMsg(theme));
-  }, [theme]);
+  }, [theme, previewing]);
   useEffect(() => onPrefersDarkChange((v) => dispatch({ a: "system-dark", v })), [dispatch]);
 
   // remember the selection across reloads
@@ -70,8 +77,7 @@ export function App({ store }: { store: Store }) {
     } catch {}
   }, [activeId]);
 
-  const send = useCallback((m: { t: "list-files"; worktreeId: string }) => sock?.send(m), [sock]);
-  useChords(store, send);
+  useChords();
 
   // ship results: open PR/compare URLs, auto-dismiss toasts
   const openedRef = useRef<string | null>(null);
@@ -117,15 +123,11 @@ export function App({ store }: { store: Store }) {
   const dragLeft = useDragResize((ev) => clampW(ev.clientX, 220), setLeftW);
   // the worktree rail sits between the chat dock and the window edge
   const dragRight = useDragResize((ev) => clampW(window.innerWidth - RAIL_PX - ev.clientX, 380), setRightW);
-  const winW = useWindowWidth();
-  const leftPx = leftOpen ? leftW : 0;
-  const rightPx = (rightOpen ? rightW : 0) + RAIL_PX;
-  const navCenter = leftPx + (winW - leftPx - rightPx) / 2;
 
   return (
     <div className={`app ${zen ? "zen" : ""}`}>
       <Tooltips />
-      <StatusBar navCenter={navCenter} />
+      <StatusBar leftPx={leftOpen ? leftW : 0} rightPx={(rightOpen ? rightW : 0) + RAIL_PX} />
       <div className="docks">
         <LeftDock width={leftW} />
         {leftOpen && <div className="dock-resize left" onPointerDown={dragLeft} />}

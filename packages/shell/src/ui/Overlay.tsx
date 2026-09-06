@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useRef } from "react";
+import { type ReactNode, useRef } from "react";
 import { useDismissOutside } from "./hooks.ts";
 
 /** The palette/prompt frame: scrim over the preview column + a box. Every overlay dismisses the
@@ -6,21 +6,21 @@ import { useDismissOutside } from "./hooks.ts";
 export function Overlay({
   onClose,
   boxClass = "",
-  boxRef,
+  bare = false,
   children,
 }: {
   /** absent = the box can't be dismissed (first-run config must be confirmed) */
   onClose?: () => void;
   boxClass?: string;
-  boxRef?: RefObject<HTMLDivElement>;
+  /** no box chrome: the children bring their own cards (shortcuts + settings) */
+  bare?: boolean;
   children: ReactNode;
 }) {
-  const own = useRef<HTMLDivElement>(null);
-  const ref = boxRef ?? own;
+  const ref = useRef<HTMLDivElement>(null);
   useDismissOutside(ref, () => onClose?.());
   return (
     <div className="prompt-overlay">
-      <div className={`prompt-box ${boxClass}`} ref={ref}>
+      <div className={`${bare ? "" : "prompt-box"} ${boxClass}`} ref={ref}>
         {children}
       </div>
     </div>

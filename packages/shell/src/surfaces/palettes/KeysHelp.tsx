@@ -1,8 +1,7 @@
 import { CHORD_SECTIONS, CHORDS, resolveTheme } from "@toyon/shared";
-import { useRef } from "react";
 import { useDispatch, useStore } from "../../state/context.tsx";
 import type { Action } from "../../state/store.ts";
-import { useDismissOutside } from "../../ui/hooks.ts";
+import { Overlay } from "../../ui/Overlay.tsx";
 import { chord } from "../util.ts";
 import { appearanceLabel } from "./commands.ts";
 
@@ -22,49 +21,45 @@ export function KeysHelp() {
     dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
     dispatch(a);
   };
-  const boxRef = useRef<HTMLDivElement>(null);
-  useDismissOutside(boxRef, () => dispatch({ a: "close" }));
   return (
-    <div className="keys-overlay">
-      <div className="keys-stack" ref={boxRef}>
-        <div className="keys-card settings-card">
-          <div className="keys-h">Settings</div>
-          <div className="set-row">
-            <span className="keys-d">theme</span>
-            <button
-              className="btn btn-outline set-v"
-              onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}
-            >
-              {resolveTheme(prefs, themes, systemDark).name}
-            </button>
-          </div>
-          <div className="set-row">
-            <span className="keys-d">light/dark mode</span>
-            <button
-              className="btn btn-outline set-v"
-              onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}
-            >
-              {appearanceLabel[prefs.mode]}
-            </button>
-          </div>
+    <Overlay bare boxClass="keys-stack" onClose={() => dispatch({ a: "close" })}>
+      <div className="keys-card settings-card">
+        <div className="keys-h">Settings</div>
+        <div className="set-row">
+          <span className="keys-d">theme</span>
+          <button
+            className="btn btn-outline set-v"
+            onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}
+          >
+            {resolveTheme(prefs, themes, systemDark).name}
+          </button>
         </div>
-        <div className="keys-card">
-          {KEY_SECTIONS.map((sec) => (
-            <div className="keys-section" key={sec.title}>
-              <div className="keys-h">{sec.title}</div>
-              {sec.rows.map(([k, d]) => (
-                <div className="keys-row" key={k}>
-                  <span className="keys-k">
-                    {/^[⌘⇧⌥⌃]+/.test(k) && <span className="keys-mod">{k.match(/^[⌘⇧⌥⌃]+/)![0]}</span>}
-                    {k.replace(/^[⌘⇧⌥⌃]+/, "")}
-                  </span>
-                  <span className="keys-d">{d}</span>
-                </div>
-              ))}
-            </div>
-          ))}
+        <div className="set-row">
+          <span className="keys-d">light/dark mode</span>
+          <button
+            className="btn btn-outline set-v"
+            onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}
+          >
+            {appearanceLabel[prefs.mode]}
+          </button>
         </div>
       </div>
-    </div>
+      <div className="keys-card">
+        {KEY_SECTIONS.map((sec) => (
+          <div className="keys-section" key={sec.title}>
+            <div className="keys-h">{sec.title}</div>
+            {sec.rows.map(([k, d]) => (
+              <div className="keys-row" key={k}>
+                <span className="keys-k">
+                  {/^[⌘⇧⌥⌃]+/.test(k) && <span className="keys-mod">{k.match(/^[⌘⇧⌥⌃]+/)![0]}</span>}
+                  {k.replace(/^[⌘⇧⌥⌃]+/, "")}
+                </span>
+                <span className="keys-d">{d}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </Overlay>
   );
 }

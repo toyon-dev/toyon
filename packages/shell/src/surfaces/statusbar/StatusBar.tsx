@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { useActive, useLocal } from "../../state/selectors.ts";
+import { useActive, useLocalField } from "../../state/selectors.ts";
+import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord } from "../util.ts";
 
 /** the top bar: dock toggles, the route bar centered over the preview, unhealthy procs, tools */
-export function StatusBar({ navCenter }: { navCenter: number }) {
+/** `leftPx`/`rightPx`: the dock columns' widths, so the nav cluster can sit over the preview column */
+export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number }) {
+  // nav cluster stays centered over the preview column; only this surface re-renders on resize
+  const winW = useWindowWidth();
+  const navCenter = leftPx + (winW - leftPx - rightPx) / 2;
   const dispatch = useDispatch();
   const sock = useSock();
   const active = useActive();
@@ -69,7 +74,7 @@ export function StatusBar({ navCenter }: { navCenter: number }) {
           <Icon name="chat" />
         </button>
         <button
-          className="btn-icon toggle keys-btn"
+          className="btn-icon toggle"
           {...tip("Full-bleed preview", chord("zen"))}
           onClick={() => dispatch({ a: "toggle-zen" })}
         >
@@ -82,7 +87,7 @@ export function StatusBar({ navCenter }: { navCenter: number }) {
 
 /** Safari-style: back/forward/reload + the preview's route, anchored to the preview column's center */
 function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; ready: boolean; left: number }) {
-  const url = useLocal(id).page.url;
+  const url = useLocalField(id, "page").url;
   const path = useMemo(() => {
     if (!url) return "/";
     try {

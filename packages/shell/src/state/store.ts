@@ -96,6 +96,8 @@ export interface State {
   overlay: Overlay | null;
   /** a sub-picker (theme, appearance) was opened from a palette: esc goes back there with the query restored */
   paletteReturn: { mode: "commands" | "quick-open" | "keys"; q: string } | null;
+  /** the daemon speaks another protocol version than this build: stop, ask for a reload */
+  incompatible: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
   /** one-shot: auto-close the changes panel if the session starts on a clean main */
@@ -112,21 +114,22 @@ export interface State {
 }
 
 export interface InitialOpts {
+  /** this tab's id; two tabs must never share one or both would steal focus */
+  clientId: string;
   /** the theme painted last time, so there is no flash back to the default before hello */
   cached?: Theme;
   systemDark?: boolean;
   storedActive?: string | null;
-  clientId?: string;
 }
 
-export function initialState(opts: InitialOpts = {}): State {
+export function initialState(opts: InitialOpts): State {
   const cached = opts.cached ?? gruvboxDarkSoft;
   return {
     connected: false,
     repos: [],
     worktrees: [],
     activeId: null,
-    clientId: opts.clientId ?? "local",
+    clientId: opts.clientId,
     storedActive: opts.storedActive ?? null,
     local: {},
     diff: null,
@@ -137,6 +140,7 @@ export function initialState(opts: InitialOpts = {}): State {
     gotoLine: null,
     overlay: null,
     paletteReturn: null,
+    incompatible: false,
     leftOpen: true,
     rightOpen: true,
     leftAuto: true,
@@ -156,6 +160,12 @@ export function currentTheme(s: State): Theme {
 export function localOf(s: State, id: string | null | undefined): WorktreeLocal {
   return (id && s.local[id]) || EMPTY_LOCAL;
 }
+
+export function worktreeById(s: State, id: string | null | undefined): WorktreeStatus | null {
+  return (id && s.worktrees.find((w) => w.worktree.id === id)) || null;
+}
+
+export const isSubPicker = (o: Overlay) => o.kind === "theme" || o.kind === "appearance";
 
 export type Action =
   | { a: "server"; msg: ServerMsg }
@@ -180,7 +190,9 @@ export type Action =
   | { a: "toggle-right" }
   | { a: "toggle-zen" }
   | { a: "preview-theme"; theme: Theme | null }
-  | { a: "system-dark"; v: boolean };
+  | { a: "system-dark"; v: boolean }
+  | { a: "toast"; toast: NonNullable<State["toast"]> }
+  | { a: "incompatible" };
 
 function withLocal(s: State, id: string, fn: (l: WorktreeLocal) => WorktreeLocal): State {
   return { ...s, local: { ...s.local, [id]: fn(s.local[id] ?? EMPTY_LOCAL) } };
@@ -192,8 +204,6 @@ function paletteBack(s: State, back: boolean | undefined): Pick<State, "overlay"
   if (!back || !r) return { overlay: null, paletteReturn: null };
   return { overlay: { kind: r.mode }, paletteReturn: r };
 }
-
-const isSubPicker = (o: Overlay) => o.kind === "theme" || o.kind === "appearance";
 
 export function reducer(s: State, action: Action): State {
   switch (action.a) {
@@ -253,6 +263,10 @@ export function reducer(s: State, action: Action): State {
       return { ...s, previewTheme: action.theme };
     case "system-dark":
       return { ...s, systemDark: action.v };
+    case "toast":
+      return { ...s, toast: action.toast };
+    case "incompatible":
+      return { ...s, incompatible: true, connected: false };
     case "server":
       return onServer(s, action.msg);
   }

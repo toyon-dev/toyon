@@ -11,22 +11,6 @@
 }
 
 /* ---- keyboard shortcuts help ---- */
-.keys-btn {
-  width: 20px;
-  height: 20px;
-}
-/* same frame as the palettes (.prompt-overlay) so the card sits where the pickers do —
-   esc from a picker lands back here without the box jumping */
-.keys-overlay {
-  position: absolute;
-  inset: 0;
-  background: var(--scrim);
-  display: grid;
-  justify-items: center;
-  align-content: start;
-  padding-top: clamp(72px, 18vh, 220px);
-  z-index: 10;
-}
 .keys-card {
   background: var(--bg1);
   border: 1px solid var(--bg3);
@@ -265,9 +249,6 @@ body.resizing iframe {
   background: var(--bg2);
   color: var(--red);
 }
-.bulk-btn.combine-btn {
-  color: var(--aqua);
-}
 .graft-check {
   accent-color: var(--aqua);
   pointer-events: none;
@@ -339,10 +320,10 @@ body.resizing iframe {
   width: 18px;
   flex-shrink: 0;
 }
-.git-file .xy.added {
+.xy.added {
   color: var(--green);
 }
-.git-file .xy.deleted {
+.xy.deleted {
   color: var(--red);
 }
 .git-file .path {
@@ -353,7 +334,7 @@ body.resizing iframe {
   flex: 1;
   min-width: 0;
 }
-.git-file .counts {
+.counts {
   margin-left: auto;
   padding-left: 8px;
   flex-shrink: 0;
@@ -363,10 +344,10 @@ body.resizing iframe {
   opacity: 0.75;
   font-variant-numeric: tabular-nums;
 }
-.git-file .counts .add {
+.counts .add {
   color: var(--green);
 }
-.git-file .counts .del {
+.counts .del {
   color: var(--red);
 }
 
@@ -453,7 +434,7 @@ body.resizing .row-resize {
   padding: 24px;
 }
 
-/* ---- right dock (worktree switcher + chat) ---- */
+/* ---- right dock (chat) ---- */
 .right-dock {
   width: 380px;
   flex-shrink: 0;
@@ -501,10 +482,8 @@ body.resizing .row-resize {
     box-shadow 0.12s ease 50ms;
 }
 .rail-list {
-  max-height: none;
   flex: 1;
   overflow-y: auto;
-  border-top: none;
   background: var(--bg1);
   padding-top: 6px;
 }
@@ -790,7 +769,8 @@ body.resizing .row-resize {
 .tool-row .tool-name {
   color: var(--blue);
 }
-.tool-row .tool-hint {
+.tool-row .tool-hint,
+.blocked-row .tool-hint {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -828,12 +808,6 @@ body.resizing .row-resize {
 }
 .blocked-row .tool-name {
   color: var(--fg-muted);
-}
-.blocked-row .tool-hint {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--fg-dim);
 }
 
 .chat-input {
@@ -957,6 +931,7 @@ body.resizing .row-resize {
 
 /* ---- status bar ---- */
 .status-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -966,9 +941,6 @@ body.resizing .row-resize {
   font: var(--fs-xs) var(--font-mono);
   color: var(--fg-dim);
   min-height: 32px;
-}
-.status-bar {
-  position: relative;
 }
 /* installed PWA with window-controls-overlay: the browser drops its title bar and only the
    traffic lights float top-left, so the top bar becomes the title bar — draggable, inset past
@@ -1024,10 +996,6 @@ body.resizing .row-resize {
 }
 body.resizing .rb-center {
   transition: none;
-}
-.rb-center .rb-path {
-  flex: 1;
-  min-width: 0;
 }
 .status-bar .toggle:hover,
 .status-bar .toggle.on {
@@ -1139,7 +1107,7 @@ body.resizing .rb-center {
 .cfg-proc button:hover {
   color: var(--red);
 }
-.config-card .new-wt {
+.config-card .add-proc {
   padding: 2px 0;
   font-size: var(--fs-sm);
 }
@@ -1304,12 +1272,6 @@ body.resizing .rb-center {
   flex-shrink: 0;
   color: var(--yellow);
 }
-.qo-file .xy.added {
-  color: var(--green);
-}
-.qo-file .xy.deleted {
-  color: var(--red);
-}
 .qo-file .name {
   color: var(--fg1);
   flex-shrink: 0;
@@ -1326,22 +1288,6 @@ body.resizing .rb-center {
   text-overflow: ellipsis;
   direction: rtl;
   text-align: left;
-}
-.qo-file .counts {
-  margin-left: auto;
-  padding-left: 8px;
-  flex-shrink: 0;
-  display: inline-flex;
-  gap: 5px;
-  font-size: 0.9em;
-  opacity: 0.75;
-  font-variant-numeric: tabular-nums;
-}
-.qo-file .counts .add {
-  color: var(--green);
-}
-.qo-file .counts .del {
-  color: var(--red);
 }
 .qo-item:hover {
   background: var(--bg2);

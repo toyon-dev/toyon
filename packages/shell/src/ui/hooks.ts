@@ -40,7 +40,7 @@ export function usePersisted<T>(key: string, fallback: T, parse: (raw: string | 
   const set = (v: T) => {
     setValue(v);
     try {
-      localStorage.setItem(key, String(v));
+      localStorage.setItem(key, typeof v === "boolean" ? (v ? "1" : "0") : String(v));
     } catch {}
   };
   return [value, set] as const;

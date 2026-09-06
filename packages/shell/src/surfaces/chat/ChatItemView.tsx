@@ -1,12 +1,35 @@
 import type { PickMeta } from "@toyon/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { ChatItem } from "../../state/store.ts";
 import { PickChip } from "./PickChip.tsx";
 
+const render = (text: string) => DOMPurify.sanitize(marked.parse(text, { async: false }) as string);
+
+/** parsing a long message on every streamed token is O(n²); while it streams, re-render at most
+ * every ~100ms and settle immediately once the text stops changing */
+function useThrottledMarkdown(text: string): string {
+  const [html, setHtml] = useState(() => render(text));
+  const lastAt = useRef(0);
+  useEffect(() => {
+    const since = performance.now() - lastAt.current;
+    if (since >= 100) {
+      lastAt.current = performance.now();
+      setHtml(render(text));
+      return;
+    }
+    const t = setTimeout(() => {
+      lastAt.current = performance.now();
+      setHtml(render(text));
+    }, 100 - since);
+    return () => clearTimeout(t);
+  }, [text]);
+  return html;
+}
+
 function Markdown({ text }: { text: string }) {
-  const html = useMemo(() => DOMPurify.sanitize(marked.parse(text, { async: false }) as string), [text]);
+  const html = useThrottledMarkdown(text);
   // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
   return <div className="msg-assistant md" dangerouslySetInnerHTML={{ __html: html }} />;
 }

@@ -3,10 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useStore } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
-import { useActive, useActiveId, useLocal, useTheme, useWorktrees } from "../../state/selectors.ts";
+import { useActive, useActiveId, useLocalField, useTheme, useWorktrees } from "../../state/selectors.ts";
 import { bridgeThemeMsg } from "../../theme.ts";
 import { useDragResize, usePersisted } from "../../ui/hooks.ts";
 import { hasToken } from "../../ws.ts";
+
+/** read once at load (the token arrives in the URL fragment); calling it during render would write storage */
+const HAS_TOKEN = hasToken();
+
 import { DiffView } from "../changes/DiffView.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { previewUrl, relFile } from "../util.ts";
@@ -24,7 +28,8 @@ export function Center() {
   const theme = useTheme();
   const themeRef = useRef(theme);
   themeRef.current = theme;
-  const log = useLocal(activeId).log;
+  const log = useLocalField(activeId, "log");
+  const incompatible = useStore((s) => s.incompatible);
 
   const [mounted, setMounted] = useState<string[]>([]);
   const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
@@ -95,10 +100,19 @@ export function Center() {
 
   // agent finished a turn whose changes HMR couldn't cover: reload that preview (small delay so
   // backend --watch/--reload restarts settle first)
+  // per worktree: two agents finishing within 1.2s must both reload their own preview
+  const reloadTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   useEffect(() => {
     if (!reloadReq) return;
-    const timer = setTimeout(() => previewBus.post(reloadReq.id, { type: "reload" }), 1200);
-    return () => clearTimeout(timer);
+    const { id } = reloadReq;
+    clearTimeout(reloadTimers.current.get(id));
+    reloadTimers.current.set(
+      id,
+      setTimeout(() => {
+        reloadTimers.current.delete(id);
+        previewBus.post(id, { type: "reload" });
+      }, 1200),
+    );
   }, [reloadReq?.n]);
 
   const activeReady = !!active && active.procs.length > 0 && active.procs.some((p) => p.status !== "stopped");
@@ -147,15 +161,17 @@ export function Center() {
           ))}
           {!activeReady && (
             <div className="empty">
-              {!connected
-                ? hasToken()
-                  ? "connecting to daemon…"
-                  : "no access token for this address —\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
-                : !active
-                  ? "no worktrees yet — run `toyon` inside a git repo"
-                  : log.length > 0
-                    ? log.slice(-20).join("\n")
-                    : "starting dev servers…"}
+              {incompatible
+                ? "toyon was updated — reload this page"
+                : !connected
+                  ? HAS_TOKEN
+                    ? "connecting to daemon…"
+                    : "no access token for this address —\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
+                  : !active
+                    ? "no worktrees yet — run `toyon` inside a git repo"
+                    : log.length > 0
+                      ? log.slice(-20).join("\n")
+                      : "starting dev servers…"}
             </div>
           )}
         </div>

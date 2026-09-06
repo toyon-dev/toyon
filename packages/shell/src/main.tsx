@@ -49,7 +49,7 @@ const sock = new DaemonSocket(
     // a daemon upgraded under a stale tab: the shell's protocol knowledge is baked at build, so stop
     // talking (and reconnecting) and ask for a reload rather than misread frames
     if (msg.t === "hello" && msg.protocol !== PROTOCOL_VERSION) {
-      store.dispatch({ a: "server", msg: { t: "error", message: "toyon was updated — reload this page" } });
+      store.dispatch({ a: "incompatible" });
       sock.dispose();
       return;
     }
@@ -61,7 +61,7 @@ const sock = new DaemonSocket(
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <StoreProvider store={store} sock={sock}>
-      <App store={store} />
+      <App />
     </StoreProvider>
   </React.StrictMode>,
 );

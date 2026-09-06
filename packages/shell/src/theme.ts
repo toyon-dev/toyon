@@ -6,11 +6,9 @@ import type { ShellToBridgeMsg, Theme } from "@toyon/shared";
 import { contrastFg, gruvboxDarkSoft, themeToCssVars } from "@toyon/shared";
 import { STORAGE } from "./state/keys.ts";
 
-const CACHE_KEY = STORAGE.theme;
-
 export function cachedTheme(): Theme {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(STORAGE.theme);
     if (raw) {
       const t = JSON.parse(raw) as Theme;
       if (t?.colors && typeof t.colors.bg0 === "string") return t;
@@ -19,15 +17,16 @@ export function cachedTheme(): Theme {
   return gruvboxDarkSoft;
 }
 
-export function applyTheme(theme: Theme) {
+export function applyTheme(theme: Theme, opts: { remember?: boolean } = {}) {
   const root = document.documentElement;
   for (const [k, v] of Object.entries(themeToCssVars(theme))) root.style.setProperty(k, v);
   root.style.colorScheme = theme.kind;
   root.dataset.theme = theme.kind;
   // installed PWA (window-controls-overlay): the caption area takes this color
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme.colors.bg1);
+  if (opts.remember === false) return;
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(theme));
+    localStorage.setItem(STORAGE.theme, JSON.stringify(theme));
   } catch {}
 }
 

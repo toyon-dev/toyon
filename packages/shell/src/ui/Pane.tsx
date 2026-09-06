@@ -35,7 +35,7 @@ export function Pane({
       <div className={`file-head ${floating ? "floating" : ""}`}>
         <span className="file-path">{title}</span>
         {actions}
-        <button onClick={onClose} {...tip("Close", closeHint)}>
+        <button className="btn-icon" onClick={onClose} {...tip("Close", closeHint)}>
           ✕
         </button>
       </div>

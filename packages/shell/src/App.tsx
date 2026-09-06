@@ -1833,10 +1833,11 @@ function keyHint(i: number, count: number): string | undefined {
 }
 
 const KEY_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
-  { title: "Worktrees", rows: [["⌘1–9", "switch worktree"], ["⌘K", "new worktree"]] },
+  // grid order: Find | Preview over Panels | Worktrees
   { title: "Find", rows: [["⌘P", "jump to file"], ["⌘⇧F", "search in files"], ["⌘⇧P", "command palette"]] },
   { title: "Preview", rows: [["⌘E", "element picker"], ["⌘.", "full-bleed preview"]] },
   { title: "Panels", rows: [["⌘B", "changes"], ["⌘J", "chat"], ["⌘/", "this list"]] },
+  { title: "Worktrees", rows: [["⌘1–9", "switch worktree"], ["⌘K", "new worktree"]] },
 ];
 function KeysHelp({ onClose }: { onClose: () => void }) {
   return (

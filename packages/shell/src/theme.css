@@ -66,7 +66,7 @@ button {
   box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
   font: 13px var(--font-ui);
   color: var(--fg1);
-  /* two columns of sections: Worktrees | Find over Preview | Panels */
+  /* two columns of sections: Find | Preview over Panels | Worktrees */
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 40px;

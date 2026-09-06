@@ -13,6 +13,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 import type { HookCallbackMatcher, SandboxSettings } from "@anthropic-ai/claude-agent-sdk";
+import { WRITE_TOOLS } from "@orchardist/shared";
 import { git } from "./git.ts";
 
 export interface BlockedWrite {
@@ -25,8 +26,6 @@ export interface Scope {
   sandbox: SandboxSettings;
   hooks: Partial<Record<"PreToolUse", HookCallbackMatcher[]>>;
 }
-
-const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 const CACHE_DIRS = [".bun", ".npm", ".cache", ".yarn", ".pnpm-store", "Library/Caches"].map((d) =>
   resolve(homedir(), d),

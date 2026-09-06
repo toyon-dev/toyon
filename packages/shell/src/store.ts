@@ -9,7 +9,7 @@ import type {
   ThemePrefs,
   WorktreeStatus,
 } from "@orchardist/shared";
-import { builtinThemes, defaultThemePrefs, resolveTheme } from "@orchardist/shared";
+import { builtinThemes, defaultThemePrefs, EDIT_TOOLS, resolveTheme } from "@orchardist/shared";
 import { cachedTheme } from "./theme.ts";
 
 // until hello arrives, the theme painted last time is the selection (no flash back to the default)
@@ -307,7 +307,7 @@ function onServer(s: State, msg: ServerMsg): State {
           turnEdits: { ...next.turnEdits, [id]: false },
           turnHmr: { ...next.turnHmr, [id]: false },
         };
-      } else if (ev.type === "tool-start" && ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"].includes(ev.name)) {
+      } else if (ev.type === "tool-start" && EDIT_TOOLS.has(ev.name)) {
         next = { ...next, turnEdits: { ...next.turnEdits, [id]: true } };
       } else if (ev.type === "turn-end") {
         // edits happened but nothing hot-updated: the change is outside HMR's

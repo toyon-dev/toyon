@@ -12,7 +12,8 @@
     "./protocol/events": "./src/protocol/events.ts",
     "./protocol/ws": "./src/protocol/ws.ts",
     "./protocol/bridge": "./src/protocol/bridge.ts",
-    "./chords": "./src/chords.ts"
+    "./chords": "./src/chords.ts",
+    "./agent-tools": "./src/agent-tools.ts"
   },
   "dependencies": {
     "zod": "^4.5.4"

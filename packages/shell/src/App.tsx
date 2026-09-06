@@ -1832,29 +1832,28 @@ function keyHint(i: number, count: number): string | undefined {
   return i < 8 ? `⌘${i + 1}` : undefined;
 }
 
-const KEY_ROWS: Array<[string, string]> = [
-  ["⌘1–9", "switch worktree"],
-  ["⌘K", "new worktree"],
-  ["⌘P", "jump to file"],
-  ["⌘E", "element picker"],
-  ["⌘B", "changes panel"],
-  ["⌘J", "chat panel"],
-  ["⌘⇧F", "search in files"],
-  ["⌘⇧P", "command palette"],
-  ["⌘.", "full-bleed preview"],
-  ["⌘/", "this list"],
+const KEY_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
+  { title: "Worktrees", rows: [["⌘1–9", "switch worktree"], ["⌘K", "new worktree"]] },
+  { title: "Find", rows: [["⌘P", "jump to file"], ["⌘⇧F", "search in files"], ["⌘⇧P", "command palette"]] },
+  { title: "Preview", rows: [["⌘E", "element picker"], ["⌘.", "full-bleed preview"]] },
+  { title: "Panels", rows: [["⌘B", "changes"], ["⌘J", "chat"], ["⌘/", "this list"]] },
 ];
 function KeysHelp({ onClose }: { onClose: () => void }) {
   return (
     <div className="keys-overlay" onClick={onClose}>
       <div className="keys-card" onClick={(e) => e.stopPropagation()}>
-        {KEY_ROWS.map(([k, d]) => (
-          <div className="keys-row" key={k}>
-            <span className="keys-k">
-              {/^[⌘⇧⌥⌃]+/.test(k) && <span className="keys-mod">{k.match(/^[⌘⇧⌥⌃]+/)![0]}</span>}
-              {k.replace(/^[⌘⇧⌥⌃]+/, "")}
-            </span>
-            <span className="keys-d">{d}</span>
+        {KEY_SECTIONS.map((sec) => (
+          <div className="keys-section" key={sec.title}>
+            <div className="keys-h">{sec.title}</div>
+            {sec.rows.map(([k, d]) => (
+              <div className="keys-row" key={k}>
+                <span className="keys-k">
+                  {/^[⌘⇧⌥⌃]+/.test(k) && <span className="keys-mod">{k.match(/^[⌘⇧⌥⌃]+/)![0]}</span>}
+                  {k.replace(/^[⌘⇧⌥⌃]+/, "")}
+                </span>
+                <span className="keys-d">{d}</span>
+              </div>
+            ))}
           </div>
         ))}
       </div>

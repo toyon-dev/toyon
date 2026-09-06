@@ -1,13 +1,13 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT } from "@orchardist/shared";
-import { cloud } from "./cloud.ts";
+import { cloud } from "./core/cloud.ts";
 import { fireAndForget, log } from "./core/log.ts";
-import { statusFilesWithCounts } from "./git.ts";
-import { ensureDirs } from "./paths.ts";
+import { ensureDirs, makePaths } from "./core/paths.ts";
+import { loadOrCreateToken, saveState } from "./core/state.ts";
+import { statusFilesWithCounts } from "./git/status.ts";
 import { startServer } from "./server.ts";
-import { loadOrCreateToken, saveState } from "./state.ts";
-import { ThemeStore } from "./themes.ts";
+import { ThemeStore } from "./themes/store.ts";
 import { type HubEvents, Manager } from "./worktrees.ts";
 
 // Bun exits the process on an unhandled rejection or exception. For a daemon that owns
@@ -19,8 +19,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const SHELL_DIST = join(here, "../../shell/dist");
 const BRIDGE_JS = join(here, "../../bridge/dist/bridge.js");
 
-ensureDirs();
-const token = loadOrCreateToken();
+const paths = makePaths();
+ensureDirs(paths);
+const token = loadOrCreateToken(paths);
 const port = Number(process.env.ORCHARDIST_PORT ?? DAEMON_DEFAULT_PORT);
 
 // hub wiring is circular (manager -> hub -> server -> manager); use a mutable shim
@@ -57,14 +58,17 @@ const hubEvents: HubEvents = {
   },
 };
 
-const manager = new Manager(hubEvents, BRIDGE_JS);
-const themes = new ThemeStore({
-  get: () => manager.state.theme,
-  set: (p) => {
-    manager.state.theme = p;
-    saveState(manager.state);
+const manager = new Manager(hubEvents, BRIDGE_JS, paths);
+const themes = new ThemeStore(
+  {
+    get: () => manager.state.theme,
+    set: (p) => {
+      manager.state.theme = p;
+      saveState(paths, manager.state);
+    },
   },
-});
+  paths.themesDir,
+);
 themes.load();
 const { hub, branded } = startServer({ port, token, manager, shellDist: SHELL_DIST, themes });
 broadcastRef = hub.broadcast;

@@ -2,20 +2,13 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { type ClientMsg, PROTOCOL_VERSION, parseClientMsg, pickTheme, type ServerMsg } from "@orchardist/shared";
 import pkg from "../package.json" with { type: "json" };
-import { cloud } from "./cloud.ts";
+import { cloud } from "./core/cloud.ts";
 import { fireAndForget, log } from "./core/log.ts";
-import {
-  changedRanges,
-  commitWorktree,
-  fileBefore,
-  mergeToMain,
-  shipWorktree,
-  statusFiles,
-  syncFromMain,
-  withRepoLock,
-} from "./git.ts";
-import { setWaitingColors } from "./proxy.ts";
-import type { ThemeStore } from "./themes.ts";
+import { commitWorktree, mergeToMain, shipWorktree, syncFromMain } from "./git/land.ts";
+import { withRepoLock } from "./git/lock.ts";
+import { changedRanges, fileBefore, statusFiles } from "./git/status.ts";
+import { setWaitingColors } from "./runtime/proxy.ts";
+import type { ThemeStore } from "./themes/store.ts";
 import { resolveInside } from "./worktrees/paths.ts";
 import type { Manager } from "./worktrees.ts";
 
@@ -210,7 +203,7 @@ export function startServer(opts: {
         fireAndForget(
           msg.repoId,
           (async () => {
-            const { planTasks } = await import("./agent.ts");
+            const { planTasks } = await import("./agent/llm.ts");
             const tasks = (await planTasks(msg.prompt, repo.path)) ?? [msg.prompt];
             let failed = 0;
             for (const task of tasks) {

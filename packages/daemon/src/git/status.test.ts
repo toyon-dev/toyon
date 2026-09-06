@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parsePorcelain } from "./git.ts";
+import { parsePorcelain } from "./status.ts";
 
 describe("parsePorcelain", () => {
   test("plain modified / added / untracked", () => {

@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { RepoInfo, ThemePrefs, WorktreeInfo } from "@orchardist/shared";
-import { log } from "./core/log.ts";
-import { ensureDirs, STATE_FILE, TOKEN_FILE } from "./paths.ts";
+import { log } from "./log.ts";
+import { ensureDirs, type Paths } from "./paths.ts";
 
 export interface PersistedState {
   repos: RepoInfo[];
@@ -15,8 +15,9 @@ export interface PersistedState {
 
 const empty: PersistedState = { repos: [], worktrees: [], sessions: {} };
 
-export function loadState(): PersistedState {
-  ensureDirs();
+export function loadState(paths: Paths): PersistedState {
+  ensureDirs(paths);
+  const STATE_FILE = paths.stateFile;
   if (!existsSync(STATE_FILE)) return structuredClone(empty);
   let raw: string;
   try {
@@ -44,14 +45,15 @@ export function loadState(): PersistedState {
 }
 
 /** Atomic: a crash mid-write must not leave a half-written state.json (which loadState would reject). */
-export function saveState(state: PersistedState) {
-  const tmp = `${STATE_FILE}.tmp`;
+export function saveState(paths: Paths, state: PersistedState) {
+  const tmp = `${paths.stateFile}.tmp`;
   writeFileSync(tmp, JSON.stringify(state, null, 2));
-  renameSync(tmp, STATE_FILE);
+  renameSync(tmp, paths.stateFile);
 }
 
-export function loadOrCreateToken(): string {
-  ensureDirs();
+export function loadOrCreateToken(paths: Paths): string {
+  ensureDirs(paths);
+  const TOKEN_FILE = paths.tokenFile;
   // cloud mode seeds the token from a secret so the provisioner can print the URL;
   // hex-only because the shell's fragment parser (shell/src/ws.ts) only accepts hex
   const seeded = process.env.ORCHARDIST_TOKEN;

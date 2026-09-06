@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { canonical, within } from "../scope.ts";
+import { canonical, within } from "../agent/scope.ts";
 
 /**
  * Resolve a client-supplied relative path to an absolute path that is guaranteed to sit inside

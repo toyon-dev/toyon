@@ -12,28 +12,19 @@ import type {
   WorktreeInfo,
   WorktreeStatus,
 } from "@orchardist/shared";
-import { AgentSession, quickName, transcriptPathFor } from "./agent.ts";
-import { detectConfig } from "./config.ts";
+import { quickName } from "./agent/llm.ts";
+import { AgentSession, transcriptPathFor } from "./agent/session.ts";
 import { fireAndForget, log } from "./core/log.ts";
-import {
-  aheadBehind,
-  committedFiles,
-  defaultBranch,
-  git,
-  gitOrThrow,
-  isGitRepo,
-  lockfileHash,
-  repoRoot,
-  statusFiles,
-  statusFilesWithCounts,
-  withRepoLock,
-} from "./git.ts";
-import { WORKTREES_DIR } from "./paths.ts";
-import { allocateProxyPort, releasePort, reservePort } from "./ports.ts";
-import { startProxy, type WorktreeProxy } from "./proxy.ts";
-import { loadState, type PersistedState, saveState } from "./state.ts";
-import { WorktreeProcs } from "./supervisor.ts";
-import { watchDefaultBranch } from "./watcher.ts";
+import type { Paths } from "./core/paths.ts";
+import { loadState, type PersistedState, saveState } from "./core/state.ts";
+import { defaultBranch, git, gitOrThrow, isGitRepo, lockfileHash, repoRoot } from "./git/exec.ts";
+import { withRepoLock } from "./git/lock.ts";
+import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts } from "./git/status.ts";
+import { detectConfig } from "./repos/config.ts";
+import { watchDefaultBranch } from "./repos/watcher.ts";
+import { allocateProxyPort, releasePort, reservePort } from "./runtime/ports.ts";
+import { startProxy, type WorktreeProxy } from "./runtime/proxy.ts";
+import { WorktreeProcs } from "./runtime/supervisor.ts";
 import { resolveInside } from "./worktrees/paths.ts";
 
 export interface HubEvents {
@@ -62,8 +53,9 @@ export class Manager {
   constructor(
     private hub: HubEvents,
     private bridgePath: string,
+    readonly paths: Paths,
   ) {
-    this.state = loadState();
+    this.state = loadState(paths);
   }
 
   // ---- boot ----
@@ -78,7 +70,7 @@ export class Manager {
       const repo = this.repo(wt.repoId);
       await this.startRuntime(wt, repo);
     }
-    saveState(this.state);
+    saveState(this.paths, this.state);
     for (const repo of this.state.repos) {
       this.startWatcher(repo);
       this.adoptOrCreateSpare(repo.id);
@@ -138,7 +130,7 @@ export class Manager {
     this.spares.set(repoId, entry);
     try {
       const slug = `spare-${shortId().slice(0, 4)}`;
-      const wtPath = join(WORKTREES_DIR, repo.name, slug);
+      const wtPath = join(this.paths.worktreesDir, repo.name, slug);
       await withRepoLock(repo.path, () => {
         gitOrThrow(repo.path, "worktree", "add", "--detach", wtPath, repo.defaultBranch);
       });
@@ -154,7 +146,7 @@ export class Manager {
       };
       entry.worktreeId = wt.id;
       this.state.worktrees.push(wt);
-      saveState(this.state);
+      saveState(this.paths, this.state);
       await this.setupAndStart(wt, repo); // CoW deps + setup + warm servers
       entry.lockHash = lockfileHash(wt.path);
       entry.ready = true;
@@ -177,7 +169,7 @@ export class Manager {
         });
         this.state.worktrees = this.state.worktrees.filter((w) => w.id !== wt.id);
         releasePort(wt.proxyPort);
-        saveState(this.state);
+        saveState(this.paths, this.state);
       }
     }
   }
@@ -222,7 +214,7 @@ export class Manager {
     wt.branch = branch;
     wt.title = slug;
     wt.createdAt = Date.now();
-    saveState(this.state);
+    saveState(this.paths, this.state);
     fireAndForget(
       repoId,
       this.ensureSpare(repoId).then(() => this.hub.worktreesChanged()),
@@ -269,7 +261,7 @@ export class Manager {
       createdAt: Date.now(),
     };
     this.state.worktrees.push(main);
-    saveState(this.state);
+    saveState(this.paths, this.state);
     await this.startRuntime(main, repo);
     this.startWatcher(repo);
     fireAndForget(repo.id, this.ensureSpare(repo.id), "spare warm-up");
@@ -281,7 +273,7 @@ export class Manager {
     const repo = this.repo(repoId);
     repo.config = config;
     repo.needsSetup = false;
-    saveState(this.state);
+    saveState(this.paths, this.state);
     // persist next to the code so it's shared/committed and future registers skip the card
     try {
       writeFileSync(join(repo.path, "orchardist.json"), `${JSON.stringify(config, null, 2)}\n`);
@@ -343,7 +335,7 @@ export class Manager {
       const claimed = await this.claimSpare(repoId, branch, slug);
       if (claimed) {
         if (variant) claimed.variant = variant;
-        saveState(this.state);
+        saveState(this.paths, this.state);
         this.hub.worktreesChanged();
         const agent = this.agentFor(claimed.id) ?? this.makeAgent(claimed);
         agent.send(agentPrompt, undefined, pick);
@@ -352,7 +344,7 @@ export class Manager {
       }
     }
 
-    const wtPath = join(WORKTREES_DIR, repo.name, slug);
+    const wtPath = join(this.paths.worktreesDir, repo.name, slug);
     const baseBranch = fromMain ? repo.defaultBranch : base!.branch;
     await withRepoLock(repo.path, () => {
       gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, baseBranch);
@@ -370,7 +362,7 @@ export class Manager {
       ...(variant ? { variant } : {}),
     };
     this.state.worktrees.push(wt);
-    saveState(this.state);
+    saveState(this.paths, this.state);
     this.hub.worktreesChanged();
 
     // setup + procs warm in the background; agent starts immediately
@@ -429,7 +421,7 @@ export class Manager {
       await this.removeWorktree(sibling.id).catch(() => {});
     }
     delete wt.variant;
-    saveState(this.state);
+    saveState(this.paths, this.state);
     this.hub.worktreesChanged();
   }
 
@@ -437,7 +429,7 @@ export class Manager {
     const wt = this.state.worktrees.find((w) => w.id === worktreeId);
     if (!wt) return;
     wt.prUrl = url;
-    saveState(this.state);
+    saveState(this.paths, this.state);
     this.hub.worktreesChanged();
   }
 
@@ -445,7 +437,7 @@ export class Manager {
     const wt = this.state.worktrees.find((w) => w.id === worktreeId);
     if (!wt || wt.landed === landed || (landed && wt.kind === "main")) return;
     wt.landed = landed;
-    saveState(this.state);
+    saveState(this.paths, this.state);
     this.hub.worktreesChanged();
   }
 
@@ -471,7 +463,7 @@ export class Manager {
       }
       wt.title = clean;
     });
-    saveState(this.state);
+    saveState(this.paths, this.state);
     this.hub.worktreesChanged();
   }
 
@@ -526,12 +518,12 @@ export class Manager {
     this.state.worktrees = this.state.worktrees.filter((w) => w.id !== worktreeId);
     delete this.state.sessions[worktreeId];
     try {
-      rmSync(transcriptPathFor(worktreeId), { force: true });
+      rmSync(transcriptPathFor(this.paths.transcriptsDir, worktreeId), { force: true });
     } catch (e) {
       log.warn(worktreeId, "could not delete transcript", e);
     }
     releasePort(wt.proxyPort);
-    saveState(this.state);
+    saveState(this.paths, this.state);
     this.hub.worktreesChanged();
   }
 
@@ -543,10 +535,11 @@ export class Manager {
     const agent = new AgentSession(
       wt.id,
       wt.path,
+      this.paths.transcriptsDir,
       () => this.state.sessions[wt.id],
       (id) => {
         this.state.sessions[wt.id] = id;
-        saveState(this.state);
+        saveState(this.paths, this.state);
       },
       (event, seq) => this.hub.agent(wt.id, seq, event),
       (status) => this.hub.agentStatus(wt.id, status),
@@ -730,7 +723,7 @@ export class Manager {
       slug = `${slug.slice(0, 34)}-${shortId().slice(0, 4)}`;
     }
     const branch = `orchard/${slug}`;
-    const wtPath = join(WORKTREES_DIR, repo.name, slug);
+    const wtPath = join(this.paths.worktreesDir, repo.name, slug);
 
     await withRepoLock(repo.path, () => {
       gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch);
@@ -755,7 +748,7 @@ export class Manager {
       sources: wts.map((w) => w.id),
     };
     this.state.worktrees.push(wt);
-    saveState(this.state);
+    saveState(this.paths, this.state);
     this.hub.worktreesChanged();
     fireAndForget(
       wt.id,

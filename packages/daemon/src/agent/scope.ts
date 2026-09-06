@@ -14,7 +14,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 import type { HookCallbackMatcher, SandboxSettings } from "@anthropic-ai/claude-agent-sdk";
 import { WRITE_TOOLS } from "@orchardist/shared";
-import { git } from "./git.ts";
+import { git } from "../git/exec.ts";
 
 export interface BlockedWrite {
   tool: string;

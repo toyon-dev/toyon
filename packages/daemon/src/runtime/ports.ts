@@ -5,7 +5,7 @@
 // Cloud mode (ORCHARDIST_PROXY_PORTS=a-b) allocates worktree proxy ports from a
 // fixed range instead, because each one must be declared as a public TLS port.
 
-import { cloud } from "./cloud.ts";
+import { cloud } from "../core/cloud.ts";
 
 const allocated = new Set<number>();
 

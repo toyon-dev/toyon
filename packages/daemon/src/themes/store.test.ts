@@ -2,29 +2,31 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { defaultThemePrefs, gruvboxLight, type ThemePrefs } from "@orchardist/shared";
+import { ThemeStore } from "./store.ts";
 
-// paths.ts reads ORCHARDIST_HOME at import time — set it before importing the store
+// extension discovery reads ORCHARDIST_THEME_DIRS at call time; point it at the fixtures
+process.env.ORCHARDIST_THEME_DIRS = join(import.meta.dir, "../../test/fixtures/extensions");
 const home = mkdtempSync(join(tmpdir(), "orch-themes-"));
-process.env.ORCHARDIST_HOME = home;
-process.env.ORCHARDIST_THEME_DIRS = join(import.meta.dir, "../test/fixtures/extensions");
-
-const { ThemeStore } = await import("./themes.ts");
-const { defaultThemePrefs, gruvboxLight } = await import("@orchardist/shared");
-type ThemePrefs = import("@orchardist/shared").ThemePrefs;
+const themesDir = join(home, "themes");
+mkdirSync(themesDir, { recursive: true });
 
 function makeStore() {
   let prefs: ThemePrefs | undefined;
-  const store = new ThemeStore({
-    get: () => prefs,
-    set: (p) => {
-      prefs = p;
+  const store = new ThemeStore(
+    {
+      get: () => prefs,
+      set: (p) => {
+        prefs = p;
+      },
     },
-  });
+    themesDir,
+  );
   return { store, prefs: () => prefs };
 }
 
 beforeAll(() => {
-  const dir = join(home, "themes");
+  const dir = join(themesDir);
   mkdirSync(dir, { recursive: true });
   // already-converted Orchardist theme
   writeFileSync(
@@ -77,12 +79,15 @@ describe("ThemeStore", () => {
 
   test("prefs migrate the legacy fixed/theme shape and drop unknown ids", () => {
     let saved: any = { mode: "fixed", theme: "gruvbox-light", light: "gruvbox-light-soft", dark: "nope" };
-    const store = new ThemeStore({
-      get: () => saved,
-      set: (p) => {
-        saved = p;
+    const store = new ThemeStore(
+      {
+        get: () => saved,
+        set: (p) => {
+          saved = p;
+        },
       },
-    });
+      themesDir,
+    );
     store.load();
     expect(store.prefs).toEqual({ mode: "light", light: "gruvbox-light", dark: "gruvbox-dark-soft" });
   });

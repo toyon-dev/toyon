@@ -5,7 +5,7 @@
 // - serves the bridge script itself at /__orchardist/bridge.js
 
 import type { ServerWebSocket } from "bun";
-import { cloud } from "./cloud.ts";
+import { cloud } from "../core/cloud.ts";
 
 interface BridgeData {
   upstream?: WebSocket;

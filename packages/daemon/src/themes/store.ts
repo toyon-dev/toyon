@@ -16,8 +16,7 @@ import {
   vscodeToTheme,
 } from "@orchardist/shared";
 import { parse as parseJsonc } from "jsonc-parser";
-import { cloud } from "./cloud.ts";
-import { THEMES_DIR } from "./paths.ts";
+import { cloud } from "../core/cloud.ts";
 
 const home = homedir();
 const defaultExtensionDirs = [
@@ -51,7 +50,10 @@ interface ContributedTheme {
 export class ThemeStore {
   themes: Theme[] = builtinThemes;
 
-  constructor(private prefsRef: { get: () => ThemePrefs | undefined; set: (p: ThemePrefs) => void }) {}
+  constructor(
+    private prefsRef: { get: () => ThemePrefs | undefined; set: (p: ThemePrefs) => void },
+    private themesDir: string,
+  ) {}
 
   /** saved prefs, normalized: legacy {mode:"fixed",theme} migrated, unknown ids (renamed built-in, uninstalled extension) → slot default */
   get prefs(): ThemePrefs {
@@ -94,7 +96,7 @@ export class ThemeStore {
       }
     };
     for (const t of builtinThemes) add(t);
-    for (const t of loadDir(THEMES_DIR)) add(t);
+    for (const t of loadDir(this.themesDir)) add(t);
     for (const dir of extensionDirs()) for (const t of discover(dir)) add(t);
     this.themes = out;
   }
@@ -113,7 +115,7 @@ export class ThemeStore {
       name: (json as { name?: string })?.name ?? base,
       source: "file",
     });
-    writeFileSync(join(THEMES_DIR, `${base}.json`), `${JSON.stringify(theme, null, 2)}\n`);
+    writeFileSync(join(this.themesDir, `${base}.json`), `${JSON.stringify(theme, null, 2)}\n`);
     this.load();
     return theme;
   }

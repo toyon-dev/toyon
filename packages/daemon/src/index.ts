@@ -70,6 +70,21 @@ const { hub, branded } = startServer({ port, token, manager, shellDist: SHELL_DI
 broadcastRef = hub.broadcast;
 worktreesChangedRef = hub.worktreesChanged;
 
+// every origin the shell can be loaded from: the injected bridge accepts commands from, and
+// reports to, these only. Cloud without a known public host leaves it open (bridge falls back to "*").
+manager.setShellOrigins(
+  cloud.enabled
+    ? cloud.publicHost
+      ? [`https://${cloud.publicHost}`]
+      : []
+    : [
+        `http://127.0.0.1:${port}`,
+        `http://localhost:${port}`,
+        `http://orchardist.localhost:${port}`,
+        ...(branded ? ["http://orchardist.localhost"] : []),
+      ],
+);
+
 await manager.boot();
 
 // register a repo passed on the command line (used by the CLI)

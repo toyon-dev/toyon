@@ -132,17 +132,9 @@ export function App() {
       }
     };
     window.addEventListener("keydown", onKey);
-    // (⌘E arrives from the iframe too, via the bridge chord forwarding)
-    const onMsg = (e: MessageEvent) => {
-      const d = e.data;
-      if (d?.__orchardist && d.type === "key" && d.meta) {
-        window.dispatchEvent(new KeyboardEvent("keydown", { key: d.key, metaKey: true, shiftKey: !!d.shift }));
-      }
-    };
-    window.addEventListener("message", onMsg);
+    // (⌘E arrives from the iframe too: Center re-dispatches bridge "key" messages as keydown)
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("message", onMsg);
     };
   }, [
     state.worktrees,
@@ -1324,15 +1316,20 @@ function Center({
   // (instant, and each preview keeps its app state + HMR socket while hidden)
   const [mounted, setMounted] = useState<string[]>([]);
   const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
+  // each preview's origin: the only target we post to and the only sender we accept for that frame
+  const originRefs = useRef(new Map<string, string>());
   const stateRef = useRef(state);
   stateRef.current = state;
 
   // let the rest of the shell post commands into preview iframes
   useEffect(() => {
     previewBus.post = (id, m) =>
-      frameRefs.current.get(id)?.contentWindow?.postMessage({ __orchardist: true, ...m }, "*");
+      frameRefs.current
+        .get(id)
+        ?.contentWindow?.postMessage({ __orchardist: true, ...m }, originRefs.current.get(id) ?? "*");
     previewBus.broadcast = (m) => {
-      for (const f of frameRefs.current.values()) f.contentWindow?.postMessage({ __orchardist: true, ...m }, "*");
+      for (const [id, f] of frameRefs.current)
+        f.contentWindow?.postMessage({ __orchardist: true, ...m }, originRefs.current.get(id) ?? "*");
     };
   }, []);
 
@@ -1343,7 +1340,11 @@ function Center({
       if (!d?.__orchardist) return;
       for (const [id, frame] of frameRefs.current) {
         if (frame.contentWindow === e.source) {
-          if (d.type === "hmr") dispatch({ a: "hmr", id });
+          if (e.origin !== originRefs.current.get(id)) return;
+          if (d.type === "key" && d.meta) {
+            // bridge chord forwarding: replay as a real keydown so App's handler sees it
+            window.dispatchEvent(new KeyboardEvent("keydown", { key: d.key, metaKey: true, shiftKey: !!d.shift }));
+          } else if (d.type === "hmr") dispatch({ a: "hmr", id });
           else if (d.type === "loaded") {
             previewBus.post(id, bridgeThemeMsg(currentTheme(stateRef.current)));
             dispatch({ a: "hmr", id });
@@ -1388,7 +1389,7 @@ function Center({
     const req = state.reloadReq;
     if (!req) return;
     const timer = setTimeout(() => {
-      frameRefs.current.get(req.id)?.contentWindow?.postMessage({ __orchardist: true, type: "reload" }, "*");
+      previewBus.post(req.id, { type: "reload" });
     }, 1200);
     return () => clearTimeout(timer);
   }, [state.reloadReq?.n]);
@@ -1445,8 +1446,13 @@ function Center({
             <iframe
               key={w.worktree.id}
               ref={(el) => {
-                if (el) frameRefs.current.set(w.worktree.id, el);
-                else frameRefs.current.delete(w.worktree.id);
+                if (el) {
+                  frameRefs.current.set(w.worktree.id, el);
+                  originRefs.current.set(w.worktree.id, new URL(previewUrl(w.worktree.proxyPort)).origin);
+                } else {
+                  frameRefs.current.delete(w.worktree.id);
+                  originRefs.current.delete(w.worktree.id);
+                }
               }}
               src={previewUrl(w.worktree.proxyPort)}
               title={w.worktree.title}
@@ -1637,7 +1643,14 @@ function OpenInMenu({ absPath, onReveal }: { absPath: string; onReveal?: () => v
     if (!open) return;
     const close = () => setOpen(false);
     window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
+    window.addEventListener("keydown", close);
+    // clicks inside the preview iframe never bubble here, but they do steal focus
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", close);
+      window.removeEventListener("blur", close);
+    };
   }, [open]);
   return (
     <span style={{ position: "relative", alignSelf: "center" }}>

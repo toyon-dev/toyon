@@ -603,10 +603,18 @@ export class Manager {
     this.hub.worktreesChanged();
   }
 
+  /** origins the shell can be served from; the bridge only talks to these (empty = unknown, allow any) */
+  private shellOrigins: string[] = [];
+  setShellOrigins(origins: string[]) {
+    this.shellOrigins = origins;
+    this.bridgeCache = null;
+  }
+
   private bridgeScript(): string {
     if (this.bridgeCache) return this.bridgeCache;
+    const prelude = `window.__orchShellOrigins=${JSON.stringify(this.shellOrigins)};\n`;
     if (existsSync(this.bridgePath)) {
-      this.bridgeCache = readFileSync(this.bridgePath, "utf8");
+      this.bridgeCache = prelude + readFileSync(this.bridgePath, "utf8");
       return this.bridgeCache;
     }
     return "// orchardist bridge not built";

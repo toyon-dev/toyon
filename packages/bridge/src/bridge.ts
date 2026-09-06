@@ -2,9 +2,22 @@
 // Reports navigation/errors/HMR to the shell; runs the element picker and
 // file-highlight overlays; forwards Orchardist keyboard chords.
 
+// The proxy prepends the origins the shell can be served from. Outbound messages go only to those
+// (postMessage drops a frame whose origin doesn't match, so posting once per candidate is safe);
+// inbound commands are accepted only from the parent frame at one of them. Without the list
+// (cloud with no known public host) both sides fall back to open.
+declare global {
+  interface Window {
+    __orchShellOrigins?: string[];
+  }
+}
+const SHELL_ORIGINS: string[] = window.__orchShellOrigins ?? [];
+let shellOrigin: string | null = null;
+
 const post = (msg: Record<string, unknown>) => {
   try {
-    window.parent.postMessage({ __orchardist: true, ...msg }, "*");
+    const targets = shellOrigin ? [shellOrigin] : SHELL_ORIGINS.length ? SHELL_ORIGINS : ["*"];
+    for (const t of targets) window.parent.postMessage({ __orchardist: true, ...msg }, t);
   } catch {
     // not framed; nothing to do
   }
@@ -314,8 +327,11 @@ if (location.hash.startsWith("#__orchtest=")) {
 // ---- commands from the shell ----
 
 window.addEventListener("message", (e) => {
+  if (e.source !== window.parent) return;
+  if (SHELL_ORIGINS.length && !SHELL_ORIGINS.includes(e.origin)) return;
   const d = e.data;
   if (!d?.__orchardist) return;
+  shellOrigin = e.origin;
   switch (d.type) {
     case "reload":
       location.reload();

@@ -1,7 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
-import { worktreeById } from "../../state/store.ts";
 import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
@@ -23,7 +22,6 @@ export function TerminalPane({
   const sock = useSock();
   const theme = useTheme();
   const connected = useStore((s) => s.connected);
-  const branch = useStore((s) => worktreeById(s, worktreeId)?.worktree.branch);
   // bumping the generation remounts the terminal: term-close, then term-open spawns a fresh shell
   const [gen, setGen] = useState(0);
   const [exit, setExit] = useState<number | null>(null);
@@ -37,7 +35,6 @@ export function TerminalPane({
       className="term-pane"
       height={height}
       onDragStart={onDragStart}
-      title={branch}
       onClose={() => dispatch({ a: "toggle-terminal" })}
       actions={
         <>

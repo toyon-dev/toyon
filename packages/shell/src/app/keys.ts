@@ -67,8 +67,7 @@ export function useChords() {
           if (s.activeId) previewBus.post(s.activeId, { type: "pick-cancel" });
           dispatch({ a: "set-picking", v: false });
         } else if (s.zen) dispatch({ a: "toggle-zen" });
-        // the bottom panes close terminal first: a focused terminal keeps Escape for itself (vim),
-        // so this only fires with focus elsewhere
+        // bottom panes, terminal first (a full-screen program in it keeps Escape for itself)
         else if (s.termOpen) dispatch({ a: "toggle-terminal" });
         else if (s.diff) dispatch({ a: "close-diff" });
       }

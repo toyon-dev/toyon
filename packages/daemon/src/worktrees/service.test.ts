@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { transcriptPathFor } from "../agent/session.ts";
@@ -65,6 +65,7 @@ describe("create / remove", () => {
     expect(wt.kind).toBe("worktree");
     expect(wt.branch.startsWith("toyon/make-the-header-sticky")).toBe(true);
     expect(existsSync(join(wt.path, "README.md"))).toBe(true);
+    expect(wt.linkPath).toBeUndefined(); // the directory already carries the title
     expect(w.agents.get(wt.id)?.sent[0]?.text).toBe("make the header sticky");
     await settle();
     expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
@@ -105,6 +106,24 @@ describe("spare pool", () => {
     expect((await git(wt.path, "branch", "--show-current")).out).toBe(wt.branch);
     expect(spareAgent.sent[0]?.text).toBe("use the spare");
     expect(w.runtime.get(wt.id)?.agent).toBe(spareAgent);
+  });
+
+  test("a claimed spare keeps its directory but gets a title-named link that follows renames and removal", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const wt = await w.worktrees.create(repoId, "use the spare");
+    expect(wt.path.includes("spare-")).toBe(true);
+    const first = wt.linkPath!;
+    expect(first).toBe(join(dirname(wt.path), wt.title));
+    expect(readlinkSync(first)).toBe(wt.path);
+    await w.worktrees.rename(wt.id, "Better Name");
+    expect(wt.title).toBe("better-name");
+    expect(lstatSync(first, { throwIfNoEntry: false })).toBeUndefined();
+    expect(wt.linkPath).toBe(join(dirname(wt.path), "better-name"));
+    expect(readlinkSync(wt.linkPath!)).toBe(wt.path);
+    const link = wt.linkPath!;
+    await w.worktrees.remove(wt.id);
+    expect(lstatSync(link, { throwIfNoEntry: false })).toBeUndefined();
   });
 
   test("the spare's statuses row is hidden until claimed", async () => {

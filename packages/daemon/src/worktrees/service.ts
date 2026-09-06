@@ -2,8 +2,8 @@
 // transport layer (server/handlers.ts) calls in here and shapes replies; git/, runtime/ and the
 // spare pool do the work.
 
-import { existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { GitFileStatus, PickMeta, RepoInfo, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
 import { quickName } from "../agent/llm.ts";
 import { transcriptPathFor } from "../agent/session.ts";
@@ -62,6 +62,8 @@ export class WorktreeService {
       setupAndStart: (wt, repo) => this.setupAndStart(wt, repo),
       remove: (id) => this.remove(id, true),
     });
+    // worktrees claimed before links existed get theirs at boot
+    for (const wt of d.state.worktrees) this.refreshLink(wt);
   }
 
   // ---- create / remove / rename ----
@@ -94,6 +96,7 @@ export class WorktreeService {
       if (claimed) {
         if (variant) claimed.variant = variant;
         if (opts.createdBy) claimed.createdBy = opts.createdBy;
+        this.refreshLink(claimed);
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
         this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, undefined, pick);
@@ -165,6 +168,7 @@ export class WorktreeService {
     // deleted, and its session-info callback would re-add the session entry removed below
     await this.d.runtime.stop(worktreeId);
     await withRepoLock(repo.path, () => gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path));
+    this.dropLink(wt);
     this.d.state.removeWorktree(worktreeId);
     try {
       rmSync(transcriptPathFor(this.d.paths.transcriptsDir, worktreeId), { force: true });
@@ -194,8 +198,38 @@ export class WorktreeService {
       }
       wt.title = clean;
     });
+    this.refreshLink(wt);
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
+  }
+
+  /** `<repo>/<title>` → the directory, when its own name is not the title (a claimed spare keeps
+   * spare-xxxx). The terminal and editor links show the link; git and procs keep the real path.
+   * Moving the directory for real would restart the procs and the agent session (its cwd). */
+  private refreshLink(wt: WorktreeInfo) {
+    const desired = wt.kind === "worktree" ? join(dirname(wt.path), wt.title) : wt.path;
+    if (wt.linkPath && wt.linkPath !== desired) this.dropLink(wt);
+    if (desired === wt.path) return;
+    try {
+      const st = lstatSync(desired, { throwIfNoEntry: false });
+      // a real directory, or another worktree's link, keeps the name
+      if (st && !(st.isSymbolicLink() && readlinkSync(desired) === wt.path)) return;
+      if (!st) symlinkSync(wt.path, desired);
+      wt.linkPath = desired;
+    } catch (e) {
+      log.warn(wt.id, "could not link the title to the directory", e);
+    }
+  }
+
+  private dropLink(wt: WorktreeInfo) {
+    const p = wt.linkPath;
+    wt.linkPath = undefined;
+    if (!p) return;
+    try {
+      if (lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink()) unlinkSync(p);
+    } catch (e) {
+      log.warn(wt.id, "could not remove the title link", e);
+    }
   }
 
   /** Declare a variant the winner: remove its siblings, drop its variant badge. */

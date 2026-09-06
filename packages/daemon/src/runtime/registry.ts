@@ -224,9 +224,11 @@ export class RuntimeRegistry {
     const rt = this.ensureAgent(wt);
     let term = rt.terminal;
     if (!term?.alive) {
+      // PWD keeps zsh/bash on the logical (title-named) path instead of resolving the link
+      const cwd = wt.linkPath ?? wt.path;
       const opts: TerminalOpts = {
-        cwd: wt.path,
-        env: terminalEnv(process.env, wt, procUrlEnv(rt.procs?.states() ?? [], rt.previewName)),
+        cwd,
+        env: { ...terminalEnv(process.env, wt, procUrlEnv(rt.procs?.states() ?? [], rt.previewName)), PWD: cwd },
         cols,
         rows,
         shell: process.env.SHELL || "sh",

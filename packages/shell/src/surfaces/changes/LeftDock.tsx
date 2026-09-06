@@ -3,7 +3,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { useSock, useStore } from "../../state/context.tsx";
 import { useActive, useActiveId, useLocalField } from "../../state/selectors.ts";
 import { editorItems, Menu } from "../../ui/Menu.tsx";
-import { shiftRanges } from "../util.ts";
+import { shiftRanges, wtDir } from "../util.ts";
 import { GitFileRow } from "./GitFileRow.tsx";
 
 /** the changes panel: uncommitted + committed-not-landed files, land buttons, commit box */
@@ -179,7 +179,7 @@ export function LeftDock({ width }: { width: number }) {
           at={fileMenu}
           onClose={closeMenu}
           items={[
-            ...editorItems(`${active.worktree.path}/${fileMenu.path}`, () =>
+            ...editorItems(`${wtDir(active.worktree)}/${fileMenu.path}`, () =>
               sock?.send({ t: "reveal", worktreeId: active.worktree.id, path: fileMenu.path }),
             ),
             ...(fileMenu.canDiscard

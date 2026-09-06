@@ -95,8 +95,9 @@ export default function XTerm({
       }
       // a toyon chord is the shell's: xterm skips it and the event bubbles up to useChords
       if (matchChord(e)) return false;
-      // escape belongs to whatever runs in here (vim), not to the shell's escape ladder
-      if (e.key === "Escape") e.stopPropagation();
+      // a full-screen program (vim, less) is on the alternate buffer and owns Escape; at the
+      // prompt, Escape bubbles up and closes the pane like any other
+      if (e.key === "Escape" && term.buffer.active.type === "alternate") e.stopPropagation();
       return true;
     });
     const input = term.onData((d) => {

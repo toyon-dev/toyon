@@ -1,4 +1,4 @@
-import { type ChordId, chordLabel, type WorktreeStatus } from "@toyon/shared";
+import { type ChordId, chordLabel, type WorktreeInfo, type WorktreeStatus } from "@toyon/shared";
 
 /** Preview iframes hit the worktree's proxy port. Locally that is always loopback (the daemon
  * binds 127.0.0.1); in cloud mode the same port is a public TLS port on the host that served this
@@ -72,3 +72,7 @@ export const chord = (id: ChordId) => chordLabel(id, { firefox: IS_FIREFOX, pwa:
 export function pickLabel(p: { component: string | null; tag: string }): string {
   return p.component ? `<${p.component}>` : `<${p.tag}>`;
 }
+
+/** the path to show people for a worktree: the title-named link when the directory itself is a
+ * claimed spare's, else the directory (git and the procs always use `path`) */
+export const wtDir = (w: WorktreeInfo) => w.linkPath ?? w.path;

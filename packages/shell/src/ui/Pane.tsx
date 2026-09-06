@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import { tip } from "./Tooltip.tsx";
 
-/** A bottom pane of the preview column (the editor, the terminal): a drag handle on its top edge,
- * a header row with a title and actions, and a close button. Esc closes the open panes in order
- * (app/keys.ts owns that ladder, since it reads the store). */
+/** a bottom pane of the preview column (editor, terminal): drag handle, header row, close button.
+ * Esc closes them in order from app/keys.ts, which owns the ladder. */
 export function Pane({
   className,
   height,
@@ -20,7 +19,7 @@ export function Pane({
   height?: number | string;
   resizable?: boolean;
   onDragStart: (e: React.PointerEvent) => void;
-  title: ReactNode;
+  title?: ReactNode;
   actions?: ReactNode;
   onClose: () => void;
   closeHint?: string;

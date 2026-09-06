@@ -4,6 +4,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { localOf, type State, worktreeById } from "../../state/store.ts";
 import { Pane } from "../../ui/Pane.tsx";
+import { wtDir } from "../util.ts";
 import { OpenInMenu } from "./OpenInMenu.tsx";
 
 const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
@@ -25,7 +26,10 @@ export function DiffView({
   const dispatch = useDispatch();
   const sock = useSock();
   const theme = useTheme();
-  const wtPath = useStore((s) => worktreeById(s, diff.worktreeId)?.worktree.path);
+  const wtPath = useStore((s) => {
+    const w = worktreeById(s, diff.worktreeId)?.worktree;
+    return w && wtDir(w);
+  });
   const absPath = wtPath ? `${wtPath}/${diff.path}` : diff.path;
   const cached = useStore((s) => localOf(s, diff.worktreeId).changedRanges[diff.path]);
   // warm the line-offset/ranges cache so line-hover highlights align; a git-status wipes the

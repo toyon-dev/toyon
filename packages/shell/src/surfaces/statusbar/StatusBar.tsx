@@ -58,8 +58,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
             {p.name} {p.status}
           </button>
         ))}
-      {/* right cluster, with the worktree's own panes (chat, terminal) beside the rail they belong to;
-          zen last — it hides everything, so it sits at the edge */}
+      {/* right cluster: help · chat · terminal · zen (zen last — it hides everything, so it sits at the edge) */}
       <span className="bar-tools">
         <button
           className="btn-icon toggle keys-btn"

@@ -963,6 +963,17 @@ body.resizing .rb-center { transition: none; }
 .sr-line { color: var(--orange); }
 .sr-text { display: block; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qo-item.active .sr-loc, .qo-item.active .sr-text { color: var(--fg1); }
+/* ⌘P file rows: marker | filename | dim directory | line counts */
+.qo-file { display: flex; align-items: baseline; gap: 8px; }
+.qo-file .xy { width: 12px; flex-shrink: 0; color: var(--yellow); }
+.qo-file .xy.added { color: var(--green); }
+.qo-file .xy.deleted { color: var(--red); }
+.qo-file .name { color: var(--fg1); flex-shrink: 0; }
+.qo-item .hit { font-weight: inherit; color: var(--aqua); }
+.qo-file .dir { color: var(--fg-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.qo-file .counts { margin-left: auto; padding-left: 8px; flex-shrink: 0; display: inline-flex; gap: 5px; font-size: 0.9em; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.qo-file .counts .add { color: var(--green); }
+.qo-file .counts .del { color: var(--red); }
 .qo-item:hover { background: var(--bg2); }
 .qo-item.active { background: var(--bg2); color: var(--fg1); box-shadow: inset 2px 0 0 var(--orange); }
 .prompt-box textarea {

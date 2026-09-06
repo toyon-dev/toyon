@@ -7,6 +7,7 @@ import { currentTheme, initial, reducer, type ChatItem, type State } from "./sto
 import { effectiveKind, pickFamily, resolveTheme, themeFamilies, type ThemeFamily } from "@orchardist/shared";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "./theme.ts";
 import { Tooltips, tip } from "./Tooltip.tsx";
+import { matchPositions, rankFiles, splitPath } from "./quickOpen.ts";
 
 const MonacoDiff = lazy(() => import("./MonacoDiff.tsx"));
 
@@ -901,7 +902,7 @@ function ListPicker<T>({ items, filter, keyOf, row, onPick, onBack, onActive, on
   /** narrow the list for a query (empty query → everything) */
   filter: (items: T[], q: string) => T[];
   keyOf: (t: T) => string;
-  row: (t: T, active: boolean) => React.ReactNode;
+  row: (t: T, active: boolean, q: string) => React.ReactNode;
   onPick: (t: T, q: string) => void;
   /** esc / backdrop */
   onBack: () => void;
@@ -955,7 +956,7 @@ function ListPicker<T>({ items, filter, keyOf, row, onPick, onBack, onActive, on
         <div className="qo-list" ref={listRef}>
           {results.map((t, i) => (
             <button key={keyOf(t)} className={`qo-item cmd-item ${i === idx ? "active" : ""}`} onMouseEnter={() => setIdx(i)} onClick={() => onPick(t, q)}>
-              {row(t, i === idx)}
+              {row(t, i === idx, q)}
             </button>
           ))}
           {results.length === 0 && <div className="dock-empty">{empty}</div>}
@@ -1069,10 +1070,10 @@ function ThemePicker({ state, dispatch, sock }: { state: State; dispatch: Dispat
   );
 }
 
-function CommandRow({ c, active, onRun }: { c: Command; active: boolean; onRun: () => void }) {
+function CommandRow({ c, active, q, onRun }: { c: Command; active: boolean; q: string; onRun: () => void }) {
   return (
     <button className={`qo-item cmd-item ${active ? "active" : ""}`} onClick={onRun}>
-      <span className="cmd-label">{c.label}</span>
+      <span className="cmd-label">{markHits(c.label, q ? commandHits(c.label, q) : null, 0)}</span>
       {c.hint && <span className="cmd-hint">{c.hint}</span>}
     </button>
   );
@@ -1093,9 +1094,9 @@ function CommandPalette({ commands, onClose, initialQuery = "", onSub }: {
       placeholder="run a command…"
       initialQuery={initialQuery}
       empty="no matching command"
-      row={(c) => (
+      row={(c, _active, q) => (
         <>
-          <span className="cmd-label">{c.label}</span>
+          <span className="cmd-label">{markHits(c.label, q.trim() ? commandHits(c.label, q.trim()) : null, 0)}</span>
           {c.hint && <span className="cmd-hint">{c.hint}</span>}
         </>
       )}
@@ -1309,6 +1310,7 @@ function Center({ state, active, dispatch, sock, repo }: {
       {state.showQuickOpen && active && (
         <QuickOpen
           paths={state.files[active.worktree.id] ?? []}
+          status={state.git[active.worktree.id]?.files ?? []}
           commands={buildCommands(state, dispatch, sock, active, repo)}
           onPick={(path) => {
             sock?.send({ t: "file-diff", worktreeId: active.worktree.id, path });
@@ -1552,8 +1554,9 @@ function ConfigCard({ repo, sock }: { repo: State["repos"][number]; sock: Sock }
 }
 
 /** ⌘P: fuzzy file jump; a leading `>` switches the same box to the command palette (editor convention) */
-function QuickOpen({ paths, commands, onPick, onClose, initialQuery = "", onSub }: {
+function QuickOpen({ paths, status, commands, onPick, onClose, initialQuery = "", onSub }: {
   paths: string[];
+  status: GitFileStatus[];
   commands: Command[];
   onPick: (path: string) => void;
   onClose: () => void;
@@ -1564,18 +1567,9 @@ function QuickOpen({ paths, commands, onPick, onClose, initialQuery = "", onSub 
   const [idx, setIdx] = useState(0);
   const cmdMode = q.startsWith(">");
 
-  const results = useMemo(() => {
-    if (cmdMode) return [];
-    if (!q.trim()) return paths.slice(0, 50);
-    const needle = q.toLowerCase();
-    const scored: Array<{ p: string; score: number }> = [];
-    for (const p of paths) {
-      const s = fuzzyScore(p.toLowerCase(), needle);
-      if (s > 0) scored.push({ p, score: s });
-    }
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 50).map((x) => x.p);
-  }, [q, paths, cmdMode]);
+  // changed files lead an empty query (same order as the changes panel);
+  // once typing, it's fuzzy order with a small nudge for changed files
+  const results = useMemo(() => (cmdMode ? [] : rankFiles(paths, status, q).rows), [q, paths, status, cmdMode]);
   const cmdResults = useMemo(() => (cmdMode ? filterCommands(commands, q.slice(1)) : []), [q, commands, cmdMode]);
   const count = cmdMode ? cmdResults.length : results.length;
   const runCmd = (c: Command) => { if (c.sub && onSub) onSub(q); else onClose(); c.run(); };
@@ -1595,19 +1589,30 @@ function QuickOpen({ paths, commands, onPick, onClose, initialQuery = "", onSub 
             else if (e.key === "Enter") {
               e.preventDefault();
               if (cmdMode) { if (cmdResults[idx]) runCmd(cmdResults[idx]!); }
-              else if (results[idx]) onPick(results[idx]!);
+              else if (results[idx]) onPick(results[idx]!.path);
             }
           }}
           placeholder="jump to file · type > for commands"
         />
         <div className="qo-list">
           {cmdMode
-            ? cmdResults.map((c, i) => <CommandRow key={c.id} c={c} active={i === idx} onRun={() => runCmd(c)} />)
-            : results.map((p, i) => (
-                <button key={p} className={`qo-item ${i === idx ? "active" : ""}`} onClick={() => onPick(p)}>
-                  {p}
-                </button>
-              ))}
+            ? cmdResults.map((c, i) => <CommandRow key={c.id} c={c} active={i === idx} q={q.slice(1).trim()} onRun={() => runCmd(c)} />)
+            : results.map((r, i) => {
+                const [name, dir] = splitPath(r.path);
+                const hits = q.trim() ? matchPositions(r.path, q.trim()) : null;
+                return (
+                  <button
+                    key={r.path}
+                    className={`qo-item qo-file ${i === idx ? "active" : ""}`}
+                    onClick={() => onPick(r.path)}
+                  >
+                    <span className={`xy ${r.status ? xyClass(r.status.xy) : ""}`}>{r.status ? xyLetter(r.status.xy) : ""}</span>
+                    <span className="name">{markHits(name, hits, dir.length)}</span>
+                    <span className="dir">{dir && <>{"\u200e"}{markHits(dir, hits, 0)}{"\u200e"}</>}</span>
+                    {r.status && <LineCounts f={r.status} />}
+                  </button>
+                );
+              })}
           {count === 0 && <div className="dock-empty">{cmdMode ? "no matching command" : "no matches"}</div>}
         </div>
       </div>
@@ -1615,36 +1620,50 @@ function QuickOpen({ paths, commands, onPick, onClose, initialQuery = "", onSub 
   );
 }
 
+/** wrap the matched characters of one path segment (which starts at `offset` within the full path) */
+function markHits(text: string, hits: number[] | null, offset: number) {
+  if (!hits) return text;
+  const set = new Set(hits.map((h) => h - offset));
+  const out: Array<string | JSX.Element> = [];
+  let run = "";
+  for (let i = 0; i < text.length; i++) {
+    if (set.has(i)) { if (run) out.push(run); run = ""; out.push(<b key={i} className="hit">{text[i]}</b>); }
+    else run += text[i];
+  }
+  if (run) out.push(run);
+  return out;
+}
+
 // command labels are prose, not paths: a character may only skip ahead to the start of a word,
 // so "theem" can't scavenge t·h·e·e·m out of "switch to you-ve-hit-your-session-limit"
 function commandScore(hay: string, needle: string): number {
-  const wordStart = (i: number) => i === 0 || /[\s:\-–—/.(]/.test(hay[i - 1]!);
-  let score = 0, hi = 0, streak = 0;
-  for (const ch of needle) {
+  const hits = commandHits(hay, needle);
+  if (!hits) return 0;
+  let score = 0, streak = 0, prev = -1;
+  for (const found of hits) {
+    streak = found === prev + 1 ? streak + 1 : 1;
+    score += streak + (commandWordStart(hay, found) ? 3 : 0);
+    prev = found;
+  }
+  return score + Math.max(0, 40 - hay.length / 4);
+}
+const commandWordStart = (hay: string, i: number) => i === 0 || /[\s:\-–—/.(]/.test(hay[i - 1]!);
+/** positions each needle character lands on under the word-start rule (case-insensitive); null when no match */
+function commandHits(label: string, needle: string): number[] | null {
+  const hay = label.toLowerCase(), out: number[] = [];
+  let hi = 0;
+  for (const ch of needle.toLowerCase()) {
     let found = -1;
     if (hay[hi] === ch) found = hi;
     else if (ch === " ") found = hay.indexOf(" ", hi); // a typed space lands on the next word gap
-    else for (let i = hay.indexOf(ch, hi); i !== -1; i = hay.indexOf(ch, i + 1)) { if (wordStart(i)) { found = i; break; } }
-    if (found === -1) return 0;
-    streak = found === hi ? streak + 1 : 1;
-    score += streak + (wordStart(found) ? 3 : 0);
+    else for (let i = hay.indexOf(ch, hi); i !== -1; i = hay.indexOf(ch, i + 1)) { if (commandWordStart(hay, i)) { found = i; break; } }
+    if (found === -1) return null;
+    out.push(found);
     hi = found + 1;
   }
-  return score + Math.max(0, 40 - hay.length / 4);
+  return out;
 }
 
-// subsequence match; bonuses for consecutive hits and path-segment starts
-function fuzzyScore(hay: string, needle: string): number {
-  let score = 0, hi = 0, streak = 0;
-  for (const ch of needle) {
-    const found = hay.indexOf(ch, hi);
-    if (found === -1) return 0;
-    streak = found === hi ? streak + 1 : 1;
-    score += streak + (found === 0 || hay[found - 1] === "/" || hay[found - 1] === "." ? 3 : 0);
-    hi = found + 1;
-  }
-  return score + Math.max(0, 40 - hay.length / 4);
-}
 
 function PromptOverlay({ onSubmit, onClose }: {
   onSubmit: (t: string, variants: number, batch: boolean) => void;

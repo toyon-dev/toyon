@@ -47,15 +47,16 @@ window.addEventListener("hashchange", navigated);
 
 // forward Orchardist chords to the shell even when the preview has focus
 const CHORD_KEYS = new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "k", "p", "b", "j", "e", "."]);
+const SHIFT_CHORD_KEYS = new Set(["f", "e", "p"]);
 window.addEventListener(
   "keydown",
   (e) => {
-    if (e.metaKey && !e.ctrlKey && !e.altKey && CHORD_KEYS.has(e.key)) {
+    if (e.metaKey && !e.shiftKey && !e.ctrlKey && !e.altKey && CHORD_KEYS.has(e.key)) {
       e.preventDefault();
       e.stopPropagation();
       post({ type: "key", key: e.key, meta: true });
-    } else if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "e")) {
-      // ⌘⇧F search-in-files and ⌘⇧E command palette work even with the preview focused
+    } else if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && SHIFT_CHORD_KEYS.has(e.key.toLowerCase())) {
+      // ⌘⇧F search-in-files and ⌘⇧P/⌘⇧E command palette work even with the preview focused
       // (plain ⌘F stays the page's own find)
       e.preventDefault();
       e.stopPropagation();

@@ -66,7 +66,7 @@ export interface State {
   zen: boolean;
   /** keyboard shortcuts overlay (⌘/ or the ? button) */
   showKeys: boolean;
-  /** ⌘⇧E command palette */
+  /** ⌘⇧P (⌘⇧E on Firefox) command palette */
   showCommands: boolean;
   /** themes the daemon knows (built-ins, ~/.orchardist/themes, installed editors) + the selection */
   themes: Theme[];
@@ -197,7 +197,8 @@ export function reducer(s: State, action: Action): State {
     case "set-picking":
       return { ...s, picking: action.v };
     case "picked":
-      return { ...s, picking: false, pick: action.pick };
+      // the pick is a chat attachment, so make sure the chat is visible to receive it
+      return { ...s, picking: false, pick: action.pick, rightOpen: true };
     case "clear-pick":
       return { ...s, pick: null };
     case "show-prompt":

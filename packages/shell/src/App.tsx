@@ -71,7 +71,7 @@ export function App() {
         const n = Number(e.key);
         const wt = n === 9 ? state.worktrees[state.worktrees.length - 1] : state.worktrees[n - 1];
         if (wt) { e.preventDefault(); dispatch({ a: "activate", id: wt.worktree.id }); }
-      } else if (e.metaKey && e.key === "k") {
+      } else if (e.metaKey && !e.shiftKey && e.key === "k") {
         e.preventDefault();
         dispatch({ a: "show-prompt", v: !state.showPrompt });
       } else if (e.metaKey && !e.shiftKey && e.key === "p") {
@@ -94,18 +94,18 @@ export function App() {
       } else if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
         if (state.activeId) dispatch({ a: "show-search", v: !state.showSearch });
-      } else if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "e") {
-        // editors use ⌘⇧P, but Firefox/Edge own it (new private window) and browsers handle
-        // that before the page sees it — ⌘⇧E is unbound everywhere
+      } else if (e.metaKey && e.shiftKey && (e.key.toLowerCase() === "e" || e.key.toLowerCase() === "p")) {
+        // ⌘⇧P is the editor convention, but Firefox/Edge own it (new private window) and handle
+        // it before the page sees it — ⌘⇧E is the always-works alias
         e.preventDefault();
         dispatch({ a: "show-commands", v: !state.showCommands });
       } else if (e.metaKey && e.key === ".") {
         e.preventDefault();
         dispatch({ a: "toggle-zen" });
-      } else if (e.metaKey && e.key === "b") {
+      } else if (e.metaKey && !e.shiftKey && e.key === "b") {
         e.preventDefault();
         dispatch({ a: "toggle-left" });
-      } else if (e.metaKey && e.key === "j") {
+      } else if (e.metaKey && !e.shiftKey && e.key === "j") {
         e.preventDefault();
         dispatch({ a: "toggle-right" });
       } else if (e.metaKey && e.key === "/") {
@@ -761,7 +761,7 @@ function WtRail({ state, dispatch, sock }: {
   );
 }
 
-/** confirm-then-send worktree actions, shared by the rail's context menu and the ⌘⇧E palette */
+/** confirm-then-send worktree actions, shared by the rail's context menu and the ⌘⇧P palette */
 function wtActions(sock: Sock) {
   return {
     rename(w: WorktreeStatus) {
@@ -1757,6 +1757,14 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
 
   // ambient context: what the user is looking at, attached invisibly to every send
   const pick = state.pick && active && state.pick.worktreeId === active.worktree.id ? state.pick : null;
+  // picking happens inside the iframe, which takes focus; hand it back to the composer so the
+  // user can type about the element straight away (next frame: the dock may be re-appearing)
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!pick) return;
+    const f = requestAnimationFrame(() => composerRef.current?.focus());
+    return () => cancelAnimationFrame(f);
+  }, [pick]);
   const buildContext = (): string | undefined => {
     if (!active) return undefined;
     const parts: string[] = [];
@@ -1892,6 +1900,7 @@ function RightDock({ state, active, sock, dispatch, width }: { state: State; act
           </div>
         )}
         <textarea
+          ref={composerRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -2088,9 +2097,12 @@ function keyHint(i: number, count: number): string | undefined {
   return i < 8 ? `⌘${i + 1}` : undefined;
 }
 
+// Firefox owns ⌘⇧P (new private window) before the page sees it; both chords work everywhere
+// else, so advertise the one that will actually fire in this browser
+const PALETTE_CHORD = /Firefox\//.test(navigator.userAgent) ? "⌘⇧E" : "⌘⇧P";
 const KEY_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   // grid order
-  { title: "Find", rows: [["⌘P", "jump to file"], ["⌘⇧F", "search in files"], ["⌘⇧E", "command palette"]] },
+  { title: "Find", rows: [["⌘P", "jump to file"], [PALETTE_CHORD, "command palette"], ["⌘⇧F", "search in files"]] },
   { title: "Panels", rows: [["⌘B", "changes"], ["⌘J", "chat"], ["⌘/", "shortcuts & settings"]] },
   { title: "Preview", rows: [["⌘E", "element picker"], ["⌘.", "full-bleed preview"]] },
   { title: "Worktrees", rows: [["⌘K", "new worktree"], ["⌘1–9", "switch worktree"]] },
@@ -2207,6 +2219,7 @@ function StatusBar({ state, active, dispatch, sock, navCenter }: { state: State;
   };
   return (
     <div className="status-bar top-bar">
+      {state.zen && <span className="zen-title">{active?.worktree.title ?? "orchardist"}</span>}
       <button
         className={`toggle icon ${state.leftOpen ? "on" : ""}`}
         onClick={() => dispatch({ a: "toggle-left" })}

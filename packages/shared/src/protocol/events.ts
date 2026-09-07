@@ -23,8 +23,22 @@ export interface PickMeta {
   selector: string;
 }
 
+/** an image the user attached. The bytes live in the daemon's attachment store; the shell fetches
+ * them by worktree id + file. `n` counts per worktree session, not per message: the model keeps
+ * earlier images in context, so "image 2" two turns later must still mean the same image. */
+export interface ImageRef {
+  n: number;
+  name: string;
+  mimeType: string;
+  bytes: number;
+  width: number;
+  height: number;
+  /** basename under the store's <worktreeId>/ directory */
+  file: string;
+}
+
 export type AgentEvent =
-  | { type: "user-message"; text: string; ts: number; pick?: PickMeta }
+  | { type: "user-message"; text: string; ts: number; pick?: PickMeta; images?: ImageRef[] }
   | { type: "turn-start"; ts: number }
   | { type: "text-delta"; text: string }
   | { type: "thinking-delta"; text: string }

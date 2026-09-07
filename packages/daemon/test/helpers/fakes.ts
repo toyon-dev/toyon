@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentStatus, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
+import type { AgentEvent, AgentStatus, ImageInput, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
 import type { AgentAdapter } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
@@ -8,7 +8,7 @@ import type { TerminalHandle, TerminalOpts } from "../../src/runtime/terminal.ts
 
 export class FakeAgent implements AgentAdapter {
   status: AgentStatus = "idle";
-  sent: Array<{ text: string; context?: string; pick?: PickMeta }> = [];
+  sent: Array<{ text: string; context?: string; pick?: PickMeta; images?: ImageInput[] }> = [];
   stops = 0;
   onQueueChange: (() => void) | null = null;
   constructor(readonly worktreeId: string) {}
@@ -18,8 +18,8 @@ export class FakeAgent implements AgentAdapter {
   get queueItems(): string[] {
     return [];
   }
-  send(text: string, context?: string, pick?: PickMeta) {
-    this.sent.push({ text, context, pick });
+  send(text: string, context?: string, pick?: PickMeta, images?: ImageInput[]) {
+    this.sent.push({ text, context, pick, images });
   }
   stop() {
     this.stops++;

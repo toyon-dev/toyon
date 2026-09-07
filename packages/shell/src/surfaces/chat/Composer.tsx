@@ -8,15 +8,22 @@ import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
 import { chord, pickLabel, relFile } from "../util.ts";
+import { ImageChip } from "./ImageChip.tsx";
+import { dataUrl, nextImageNumber } from "./images.ts";
 import { PickChip } from "./PickChip.tsx";
+import { useImageIntake } from "./useImageIntake.ts";
 
-/** the message box: draft (kept per worktree), picked-element attachment, spawn-a-worktree toggle */
+/** the message box: draft (kept per worktree), picked-element and image attachments, spawn-a-worktree toggle */
 export function Composer({ active }: { active: WorktreeStatus | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const id = active?.worktree.id ?? null;
   const text = useLocalField(id, "draft");
   const page = useLocalField(id, "page");
+  const images = useLocalField(id, "images");
+  const chat = useLocalField(id, "chat");
+  const intake = useImageIntake(id);
+  const firstImageNumber = nextImageNumber(chat);
   const setText = (t: string) => id && dispatch({ a: "set-draft", id, text: t });
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
@@ -68,6 +75,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
     if (!active || !id || !text.trim()) return;
     const context = buildContext();
     const pickMeta = pick ? pickMetaOf(pick) : undefined;
+    const sent = images.length ? images.map(({ key: _key, bytes: _bytes, ...img }) => img) : undefined;
     if (spawnNew) {
       sock?.send({
         t: "create-worktree",
@@ -77,19 +85,54 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         baseWorktreeId: id,
         context,
         pick: pickMeta,
+        images: sent,
         // a stacked worktree continues with the same agent as its parent
         agent: active.worktree.agent,
         profile,
       });
     } else {
-      sock?.send({ t: "chat", worktreeId: id, text: text.trim(), context, pick: pickMeta });
+      sock?.send({ t: "chat", worktreeId: id, text: text.trim(), context, pick: pickMeta, images: sent });
     }
     if (pick) dispatch({ a: "clear-pick" });
+    if (images.length) dispatch({ a: "clear-images", id });
     setText("");
   };
 
+  // backspace in an empty box removes the last attachment, images first (they were added last)
+  const removeLast = (): boolean => {
+    if (!id) return false;
+    const last = images[images.length - 1];
+    if (last) {
+      dispatch({ a: "remove-image", id, key: last.key });
+      return true;
+    }
+    if (pick) {
+      dispatch({ a: "clear-pick" });
+      return true;
+    }
+    return false;
+  };
+
   return (
-    <div className="chat-input">
+    <div
+      className={`chat-input ${intake.over ? "drop-over" : ""}`}
+      onDragOver={intake.onDragOver}
+      onDragLeave={intake.onDragLeave}
+      onDrop={intake.onDrop}
+    >
+      {id &&
+        images.map((img, i) => (
+          <ImageChip
+            key={img.key}
+            src={dataUrl(img)}
+            n={firstImageNumber + i}
+            name={img.name}
+            width={img.width}
+            height={img.height}
+            bytes={img.bytes}
+            onRemove={() => dispatch({ a: "remove-image", id, key: img.key })}
+          />
+        ))}
       {pick && id && (
         <PickChip
           pick={pick}
@@ -111,10 +154,13 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         ref={composerRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
+        onPaste={intake.onPaste}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             send();
+          } else if (e.key === "Backspace" && text === "" && removeLast()) {
+            e.preventDefault();
           }
         }}
         placeholder={
@@ -122,7 +168,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             ? "no worktree selected"
             : spawnNew
               ? "describe a change — starts an agent in a new worktree…"
-              : `message agent on ${active.worktree.title}…`
+              : `message agent on ${active.worktree.title}… (paste or drop images)`
         }
         disabled={!active}
       />

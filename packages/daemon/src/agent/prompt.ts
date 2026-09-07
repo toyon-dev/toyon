@@ -3,6 +3,7 @@
 // it; the others get it prepended to the first prompt of a session.
 
 import type { ContentBlock } from "@agentclientprotocol/sdk";
+import type { ImageRef } from "@toyon/shared";
 
 export const SYSTEM_APPEND = [
   "You are working inside a dedicated git worktree managed by Toyon.",
@@ -12,9 +13,26 @@ export const SYSTEM_APPEND = [
   "Keep the scope tight: do the asked task well, then stop. Suggest follow-ups in chat instead of expanding scope.",
 ].join(" ");
 
-/** context (live-page state, picked elements) rides after the text; the visible transcript only
- * ever shows the text itself */
-export function buildPrompt(text: string, context?: string, prefix?: string): ContentBlock[] {
+/** what the model reads as an image's label: its session number (how the user will refer to it
+ * later) and where it came from */
+export function imageCaption(ref: ImageRef): string {
+  return `Image ${ref.n}: ${ref.name} (${ref.width}×${ref.height})`;
+}
+
+/** images go first, each behind its caption, then the text; context (live-page state, picked
+ * elements) rides after the text. The visible transcript only ever shows the text itself. */
+export function buildPrompt(
+  text: string,
+  context?: string,
+  prefix?: string,
+  images: Array<{ ref: ImageRef; bytes: Buffer }> = [],
+): ContentBlock[] {
   const body = context ? `${text}\n\n${context}` : text;
-  return [{ type: "text", text: prefix ? `${prefix}\n\n${body}` : body }];
+  const blocks: ContentBlock[] = [];
+  for (const { ref, bytes } of images) {
+    blocks.push({ type: "text", text: imageCaption(ref) });
+    blocks.push({ type: "image", mimeType: ref.mimeType, data: bytes.toString("base64") });
+  }
+  blocks.push({ type: "text", text: prefix ? `${prefix}\n\n${body}` : body });
+  return blocks;
 }

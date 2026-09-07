@@ -6,6 +6,7 @@ import type { ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
 import type { AgentAdapter } from "../agent/adapter.ts";
+import { AttachmentStore } from "../agent/attachments.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -33,6 +34,8 @@ export interface RuntimeDeps {
   state: StateStore;
   paths: Paths;
   agents: AgentRegistry;
+  /** shared with the http layer that serves the images back; built from paths when absent */
+  attachments?: AttachmentStore;
   bridgeScript: () => string;
   /** factories, overridable so tests run without spawning anything */
   makeAgent?: (wt: WorktreeInfo, deps: RuntimeDeps) => AgentAdapter;
@@ -102,6 +105,7 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
     },
     connect: (app, spec) => spawnAcp(app, d.agents.launch(spec), wt.path, wt.id),
     transcriptsDir: d.paths.transcriptsDir,
+    attachments: d.attachments ?? new AttachmentStore(d.paths.attachmentsDir),
     getSessionId: () => d.state.session(wt.id),
     setSessionId: (id) => d.state.setSession(wt.id, id),
     onEvent: (event, seq) => d.hub.emit("agent", wt.id, seq, event),

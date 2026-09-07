@@ -1135,6 +1135,51 @@ body.resizing .rb-center {
 .pick-chip.in-chat:hover {
   border-color: var(--orange);
 }
+
+/* image attachments: the pick-chip row with a thumbnail in the leading slot */
+.image-chip .image-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+  background: var(--bg2);
+  flex: none;
+}
+.image-chip .image-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.image-chip.in-chat {
+  display: flex;
+  padding: 3px 6px;
+}
+.image-chip.in-chat:hover .image-thumb {
+  /* a larger look without a popover: the thumb grows in place */
+  transform: scale(2.4);
+  transform-origin: left center;
+  z-index: 1;
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.4);
+}
+.msg-images {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.msg-images .pick-chip.in-chat {
+  margin: 0;
+}
+/* an image being dragged over the chat: the composer (or the whole panel) says it will take it */
+.chat-input.drop-over,
+.right-dock.drop-over .chat-input {
+  outline: 2px dashed var(--orange);
+  outline-offset: -4px;
+}
 .status-bar .branch {
   color: var(--orange);
 }

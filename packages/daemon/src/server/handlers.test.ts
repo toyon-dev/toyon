@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { clientMsgSchema, type ServerMsg } from "@toyon/shared";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
+import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
@@ -22,7 +23,16 @@ function make() {
   const hub = new Hub();
   const f = fakeFactories();
   const agents = fakeAgents();
-  const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
+  const attachments = new AttachmentStore(t.paths.attachmentsDir);
+  const runtime = new RuntimeRegistry({
+    hub,
+    state,
+    paths: t.paths,
+    agents,
+    attachments,
+    bridgeScript: () => "",
+    ...f.factories,
+  });
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
   const files = new FileService(state, runtime);
@@ -37,6 +47,7 @@ function make() {
     runtime,
     themes,
     agents,
+    attachments,
     planTasks: async () => planned.shift() ?? null,
   };
   const replies: ServerMsg[] = [];
@@ -93,7 +104,23 @@ describe("handlers", () => {
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
     const pick = { component: "App", file: "src/App.tsx", line: 3, tag: "div", selector: "div" };
     await dispatch({ t: "chat", worktreeId: main.id, text: "hi", context: "ctx", pick }, ctx, services);
-    expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: "ctx", pick }]);
+    expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: "ctx", pick, images: undefined }]);
+  });
+
+  test("chat images reach the agent as sent; the schema refuses formats the models do not take", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    const img = { name: "a.png", mimeType: "image/png" as const, data: "UE5H", width: 2, height: 1 };
+    await dispatch({ t: "chat", worktreeId: main.id, text: "see", images: [img] }, ctx, services);
+    expect(agents.get(main.id)?.sent[0]?.images).toEqual([img]);
+    const bad = clientMsgSchema.safeParse({
+      t: "chat",
+      worktreeId: "w",
+      text: "x",
+      images: [{ ...img, mimeType: "image/svg+xml" }],
+    });
+    expect(bad.success).toBe(false);
   });
 
   test("create-worktree forwards the agent; set-default-agent validates, persists and broadcasts", async () => {

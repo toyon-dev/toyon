@@ -1,5 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Server } from "bun";
+import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import { createFetch, type WsData } from "./http.ts";
@@ -17,11 +21,14 @@ const repos = {
     return { id: "r1" };
   },
 } as unknown as RepoRegistry;
+const attachmentsDir = mkdtempSync(join(tmpdir(), "toyon-http-"));
+afterAll(() => rmSync(attachmentsDir, { recursive: true, force: true }));
 const fetch = createFetch({
   token: "secret",
   shellDist: "/nonexistent",
   version: "0",
   repos,
+  attachments: new AttachmentStore(attachmentsDir),
   branded: () => false,
   metrics: () => ({ lag: 0 }),
 });
@@ -87,5 +94,23 @@ describe("/register", () => {
   test("success returns the repo id", async () => {
     const r = await fetch(post({ path: "/ok" }), srv());
     expect(await r?.json()).toEqual({ repoId: "r1" });
+  });
+});
+
+describe("/attachments", () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
+  const img = { name: "shot.png", mimeType: "image/png" as const, data: png, width: 2, height: 2 };
+  test("serves a stored image with the token, immutable", async () => {
+    await new AttachmentStore(attachmentsDir).put("wt1", 1, img);
+    const r = await fetch(req("/attachments/wt1/1.png?token=secret"), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("cache-control")).toContain("immutable");
+    expect(Buffer.from(await r!.arrayBuffer()).toString("base64")).toBe(png);
+  });
+  test("no token is 401; a missing or malformed path is 404", async () => {
+    expect((await fetch(req("/attachments/wt1/1.png"), srv()))?.status).toBe(401);
+    expect((await fetch(req("/attachments/wt1/9.png?token=secret"), srv()))?.status).toBe(404);
+    expect((await fetch(req("/attachments/..%2F..%2Fetc/passwd?token=secret"), srv()))?.status).toBe(404);
+    expect((await fetch(req("/attachments/wt1/1.png/x?token=secret"), srv()))?.status).toBe(404);
   });
 });

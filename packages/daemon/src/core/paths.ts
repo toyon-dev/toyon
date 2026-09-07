@@ -10,6 +10,8 @@ export interface Paths {
   stateFile: string;
   tokenFile: string;
   transcriptsDir: string;
+  /** images attached to chat messages, by worktree id (agent/attachments.ts) */
+  attachmentsDir: string;
   worktreesDir: string;
   /** user-dropped theme files: Toyon Theme JSON or raw VS Code theme JSON/JSONC */
   themesDir: string;
@@ -22,6 +24,7 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     stateFile: join(home, "state.json"),
     tokenFile: join(home, "token"),
     transcriptsDir: join(home, "transcripts"),
+    attachmentsDir: join(home, "attachments"),
     worktreesDir: join(home, "worktrees"),
     themesDir: join(home, "themes"),
   };
@@ -30,6 +33,7 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
 export function ensureDirs(p: Paths) {
   mkdirSync(p.home, { recursive: true, mode: 0o700 });
   mkdirSync(p.transcriptsDir, { recursive: true });
+  mkdirSync(p.attachmentsDir, { recursive: true });
   mkdirSync(p.worktreesDir, { recursive: true });
   mkdirSync(p.themesDir, { recursive: true });
 }

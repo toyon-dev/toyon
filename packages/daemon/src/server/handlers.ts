@@ -4,6 +4,7 @@
 
 import type { ClientMsg, ServerMsg } from "@toyon/shared";
 import { pickTheme } from "@toyon/shared";
+import type { AttachmentStore } from "../agent/attachments.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -24,6 +25,8 @@ export interface Services {
   runtime: RuntimeRegistry;
   themes: ThemeStore;
   agents: AgentRegistry;
+  /** images attached to chat messages; the http layer serves them back to the shell */
+  attachments: AttachmentStore;
   /** request → 1–5 independent tasks (Haiku by default; tests inject a stub) */
   planTasks: (prompt: string, cwd: string) => Promise<string[] | null>;
 }
@@ -91,7 +94,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.state.requireWorktree(msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
-    agent.send(msg.text, msg.context, msg.pick);
+    agent.send(msg.text, msg.context, msg.pick, msg.images);
     s.hub.emit("worktreesChanged"); // queued-count may have changed
   },
 
@@ -102,6 +105,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       variant: msg.variant,
       context: msg.context,
       pick: msg.pick,
+      images: msg.images,
       agent: msg.agent,
       profile: msg.profile,
     });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, readlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -71,6 +71,20 @@ describe("create / remove", () => {
     expect(wt.agent).toBe("claude");
     await settle();
     expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
+  });
+
+  test("gitignored local config is copied in, and an existing file is left alone", async () => {
+    const repoId = await registered();
+    writeFileSync(join(w.repo, ".dev.vars"), "AUTH_SECRET=frombase\n");
+    writeFileSync(join(w.repo, ".env"), "API=base\n");
+    const wt = await w.worktrees.create(repoId, "needs secrets");
+    await settle();
+    expect(readFileSync(join(wt.path, ".dev.vars"), "utf8")).toBe("AUTH_SECRET=frombase\n");
+    expect(readFileSync(join(wt.path, ".env"), "utf8")).toBe("API=base\n");
+    // a file the worktree already carries is never overwritten
+    writeFileSync(join(wt.path, ".env"), "API=mine\n");
+    await w.worktrees.setupAndStart(wt, w.state.repo(wt.repoId)!, w.repo);
+    expect(readFileSync(join(wt.path, ".env"), "utf8")).toBe("API=mine\n");
   });
 
   test("create stamps the requested agent, else the daemon default; unknown ids are UserErrors", async () => {

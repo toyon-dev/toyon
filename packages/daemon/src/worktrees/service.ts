@@ -24,6 +24,11 @@ import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 
+/** Gitignored local config a worktree needs and git will never bring over. Absent secrets fail
+ * deep inside app code rather than as missing config (an empty AUTH_SECRET reads as a zero-length
+ * HMAC key), so copy whatever the base checkout actually has. */
+const LOCAL_CONFIG_FILES = [".env", ".env.local", ".env.development", ".env.development.local", ".dev.vars"];
+
 export type Variant = { group: string; index: number; of: number };
 
 /** what `git status` + ahead/behind say about one worktree */
@@ -376,6 +381,13 @@ export class WorktreeService {
         }
         await run("rm", ["-rf", dstNm], wt.path);
       }
+    }
+    for (const f of LOCAL_CONFIG_FILES) {
+      const src = join(depsSource, f);
+      if (!existsSync(src) || existsSync(join(wt.path, f))) continue;
+      const r = await run("cp", [src, join(wt.path, f)], wt.path);
+      if (r.ok) this.d.hub.emit("log", wt.id, "setup", `copied ${f}`);
+      else log.warn(wt.id, `could not copy ${f}`, r.err);
     }
     // `bun install` and friends can take a minute: async, so every preview and agent stream keeps
     // flowing while a new worktree warms up

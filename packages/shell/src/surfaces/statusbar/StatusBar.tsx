@@ -85,18 +85,18 @@ function ProjectPill() {
   const dispatch = useDispatch();
   const repo = useActiveRepo();
   const repos = useStore((s) => s.repos);
+  const open = useStore((s) => s.overlay?.kind === "projects");
   const busyElsewhere = useStore((s) =>
     s.worktrees.some((w) => w.agent === "working" && w.worktree.repoId !== s.activeRepoId),
   );
   return (
     <button
-      className="btn project-pill"
+      className={`btn project-pill ${open ? "on" : ""}`}
       {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
       onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
     >
-      {repo?.name ?? "open project"}
-      <span className="pp-caret">⌄</span>
-      {busyElsewhere && <span className="pp-dot" />}
+      <span className="pp-name">{repo?.name ?? "open project"}</span>
+      {busyElsewhere && <span className="pp-dot" {...tip("An agent is working in another project")} />}
     </button>
   );
 }

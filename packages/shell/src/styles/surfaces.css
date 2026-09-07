@@ -1133,34 +1133,28 @@ body.resizing .rb-center {
   color: var(--fg1);
 }
 
-/* top-left project pill (Zed-style): the one piece of chrome that names what the shell is
-   scoped to, so it reads as a label until hovered rather than as another button */
+/* top-left project pill: it names what the shell is scoped to, so at rest it is a label and
+   nothing more — .btn already gives the hover background and .on the open one, which is the
+   whole visual vocabulary here */
 .project-pill {
-  position: relative;
-  gap: 3px;
-  padding: 2px 7px;
+  flex: none;
+}
+.project-pill.on {
   color: var(--fg1);
   background: var(--bg2);
-  flex: none;
-  max-width: 180px;
 }
-.project-pill:hover {
-  background: var(--bg3);
-}
-.pp-caret {
-  color: var(--fg-dim);
-  /* the glyph sits low in the line box; nudge it onto the text's optical center */
-  transform: translateY(-1px);
+.pp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
 }
 /* an agent is working in a project that is not on screen: the only reason to look away from here */
 .pp-dot {
-  position: absolute;
-  top: 1px;
-  right: 1px;
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: var(--yellow);
+  flex: none;
 }
 
 .pick-chip {

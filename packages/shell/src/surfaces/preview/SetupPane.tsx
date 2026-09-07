@@ -1,6 +1,7 @@
 import type { RepoInfo } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
+import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
 type Proc = { name: string; cmd: string };
@@ -98,7 +99,7 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
                   {...tip("Remove")}
                   onClick={() => setProcs(procs.filter((_, j) => j !== i))}
                 >
-                  ✕
+                  <Icon name="close" />
                 </button>
               )}
             </div>
@@ -125,7 +126,7 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
           </button>
         )}
         <button className="btn btn-outline setup-start" disabled={!canStart} onClick={start}>
-          {onClose ? "save + restart ▸" : "start ▸"}
+          {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
         </button>
       </div>
     </div>

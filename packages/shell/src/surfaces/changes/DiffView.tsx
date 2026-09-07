@@ -3,6 +3,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { localOf, type State, worktreeById } from "../../state/store.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { wtDir } from "../util.ts";
 import { OpenInMenu } from "./OpenInMenu.tsx";
@@ -52,9 +53,9 @@ export function DiffView({
           <button
             className="btn btn-outline deep-link"
             onClick={onToggleFull}
-            data-tip={full ? "Split view — show the preview above" : "Full height — hide the preview"}
+            data-tip={full ? "Split view: show the preview above" : "Full height: hide the preview"}
           >
-            {full ? "◫ split" : "⬒ full"}
+            <Icon name={full ? "split" : "full"} className="icon-inline" /> {full ? "split" : "full"}
           </button>
           <OpenInMenu
             absPath={absPath}

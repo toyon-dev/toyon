@@ -39,7 +39,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           data-tip="Install Toyon as an app (own window, dock icon)"
           onClick={() => void installEvt.prompt()}
         >
-          ⇣ install app
+          <Icon name="download" className="icon-inline" /> install app
         </button>
       )}
       <span className="grow" />
@@ -151,7 +151,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
         className="field rb-path"
         value={ready ? val : ""}
         disabled={!ready}
-        placeholder={ready ? "/" : "—"}
+        placeholder={ready ? "/" : ""}
         onFocus={() => setEditing(true)}
         onBlur={() => setEditing(false)}
         onChange={(e) => setVal(e.target.value)}

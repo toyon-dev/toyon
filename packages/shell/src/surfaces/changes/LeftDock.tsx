@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useSock, useStore } from "../../state/context.tsx";
 import { useActive, useActiveId, useLocalField } from "../../state/selectors.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { editorItems, Menu } from "../../ui/Menu.tsx";
 import { shiftRanges, wtDir } from "../util.ts";
 import { GitFileRow } from "./GitFileRow.tsx";
@@ -87,7 +88,7 @@ export function LeftDock({ width }: { width: number }) {
             )}
             {active?.worktree.landed && (
               <span className="landed-badge" data-tip="Merged into main">
-                ✓ landed
+                <Icon name="check" className="icon-inline" /> landed
               </span>
             )}
           </span>
@@ -108,7 +109,7 @@ export function LeftDock({ width }: { width: number }) {
                     className="btn btn-outline ship-btn"
                     data-tip={
                       active.worktree.prUrl
-                        ? "Merge locally — the open PR will show as merged once main is pushed"
+                        ? "Merge locally: the open PR will show as merged once main is pushed"
                         : "Merge into main locally (no push)"
                     }
                     onClick={() => sock?.send({ t: "merge-main", worktreeId: active.worktree.id })}
@@ -118,10 +119,10 @@ export function LeftDock({ width }: { width: number }) {
                   {active.worktree.prUrl ? (
                     <button
                       className="btn btn-outline ship-btn pr-open"
-                      data-tip={`PR open — click to view · ${active.worktree.prUrl}`}
+                      data-tip={`PR open: click to view · ${active.worktree.prUrl}`}
                       onClick={() => window.open(active.worktree.prUrl, "_blank")}
                     >
-                      pr open ↗
+                      pr open <Icon name="external" className="icon-inline" />
                     </button>
                   ) : (
                     <button
@@ -129,7 +130,7 @@ export function LeftDock({ width }: { width: number }) {
                       data-tip="Push and open a PR"
                       onClick={() => sock?.send({ t: "ship", worktreeId: active.worktree.id })}
                     >
-                      pr ↗
+                      pr <Icon name="external" className="icon-inline" />
                     </button>
                   )}
                 </>

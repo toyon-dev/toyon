@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { pickLabel } from "../util.ts";
 import { ChatItemView } from "./ChatItemView.tsx";
@@ -72,7 +73,7 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
               data-tip="Stop the agent (context up to here is kept; queued messages dropped)"
               onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
             >
-              ■ stop
+              <Icon name="stop" className="icon-inline" /> stop
             </button>
           </div>
         )}
@@ -83,19 +84,19 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
               <span className="queued-text">{text}</span>
               <span className="queued-actions">
                 <button
-                  {...tip("Edit — removes from queue, puts it back in the input")}
+                  {...tip("Edit: removes from queue, puts it back in the input")}
                   onClick={() => {
                     sock?.send({ t: "unqueue", worktreeId: id, index: i });
                     dispatch({ a: "set-draft", id, text });
                   }}
                 >
-                  ✎
+                  <Icon name="edit" className="icon-inline" />
                 </button>
                 <button
                   {...tip("Remove from queue")}
                   onClick={() => sock?.send({ t: "unqueue", worktreeId: id, index: i })}
                 >
-                  ✕
+                  <Icon name="close" className="icon-inline" />
                 </button>
               </span>
             </div>

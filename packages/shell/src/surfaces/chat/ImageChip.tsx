@@ -1,4 +1,5 @@
 import type { ImageRef } from "@toyon/shared";
+import { Icon } from "../../ui/Icon.tsx";
 import { fmtBytes } from "./images.ts";
 
 /** an attached image as a chip: thumbnail, its session number, name and size. In the composer it
@@ -46,7 +47,7 @@ export function ImageChip({
       )}
       {onRemove && (
         <button data-tip="Remove image" aria-label="Remove image" onClick={onRemove}>
-          ✕
+          <Icon name="close" className="icon-inline" />
         </button>
       )}
     </div>

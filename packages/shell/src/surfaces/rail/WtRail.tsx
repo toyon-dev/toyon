@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
 import { useActiveId, useVisibleWorktrees } from "../../state/selectors.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -123,7 +124,7 @@ export function WtRail() {
               )}
               <span className={`dot ${dotClass(w)}`} />
               <span className="branch">
-                {w.worktree.kind === "combined" ? "⧉ " : ""}
+                {w.worktree.kind === "combined" && <Icon name="layers" className="icon-inline" />}
                 {w.worktree.title}
               </span>
               {(() => {
@@ -201,7 +202,7 @@ export function WtRail() {
                   setMenu({ at: { x: r.left - 140, y: r.bottom + 4 }, id: w.worktree.id });
                 }}
               >
-                ⋯
+                <Icon name="more" className="icon-inline" />
               </span>
             </button>
           ))}
@@ -216,7 +217,7 @@ export function WtRail() {
                   cancelGraft();
                 }}
               >
-                ⧉ graft {sel.length}
+                <Icon name="layers" className="icon-inline" /> graft {sel.length}
               </button>
               <button
                 className="btn bulk-btn"
@@ -250,7 +251,7 @@ export function WtRail() {
                 remove…
               </button>
               <button className="btn bulk-btn" {...tip("Cancel", "esc")} onClick={cancelGraft}>
-                ✕
+                <Icon name="close" className="icon-inline" />
               </button>
             </div>
           )}
@@ -261,8 +262,12 @@ export function WtRail() {
               data-tip-key={chord("new")}
               onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
             >
-              <span className="nw-full">+ new worktree</span>
-              <span className="nw-mini">+</span>
+              <span className="nw-full">
+                <Icon name="plus" className="icon-inline" /> new worktree
+              </span>
+              <span className="nw-mini">
+                <Icon name="plus" />
+              </span>
               <Kbd k={chord("new")} className="kbd-hint nw-full" />
             </button>
           )}

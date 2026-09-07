@@ -85,6 +85,14 @@ button {
   background: none;
 }
 
+/* an Icon set inline with text: the 16px box is drawn for a 20px button, so next to 12px type it
+   needs the smaller optical size and a nudge onto the text's baseline */
+.icon-inline {
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
+}
+
 /* ---- fields ---- */
 .field {
   background: var(--bg0);

@@ -1,7 +1,8 @@
 import type { PickMeta } from "@toyon/shared";
+import { Icon } from "../../ui/Icon.tsx";
 import { pickLabel, relFile } from "../util.ts";
 
-/** a picked element as a chip: ⌖ <Component> · file:line. In the composer it can be removed;
+/** a picked element as a chip: crosshair, <Component>, then file:line. In the composer it can be removed;
  * in the chat it just highlights on hover. */
 export function PickChip({
   pick,
@@ -26,7 +27,7 @@ export function PickChip({
       onMouseLeave={() => onHover?.(false)}
     >
       <span className="pick-target">
-        ⌖ {pickLabel(pick)}
+        <Icon name="pick" className="icon-inline" /> {pickLabel(pick)}
         {pick.file && (
           <span className="pick-file">
             {" "}
@@ -37,7 +38,7 @@ export function PickChip({
       </span>
       {onRemove && (
         <button data-tip="Remove attachment" aria-label="Remove attachment" onClick={onRemove}>
-          ✕
+          <Icon name="close" className="icon-inline" />
         </button>
       )}
     </div>

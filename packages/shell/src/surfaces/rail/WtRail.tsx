@@ -7,6 +7,7 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass } from "../util.ts";
+import { HealthDot } from "./HealthDot.tsx";
 import { worktreeActions } from "./worktreeActions.ts";
 
 type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
@@ -266,13 +267,7 @@ export function WtRail() {
             </button>
           )}
         </div>
-        <div
-          className={`rail-foot ${connected ? "" : "off"}`}
-          data-tip={connected ? "Connected to daemon" : "Reconnecting to daemon"}
-        >
-          <span className="nw-full conn-label">{connected ? "connected" : "reconnecting…"}</span>
-          <span className="conn-dot" />
-        </div>
+        <HealthDot connected={connected} />
         {menu && menuWt && <Menu at={menu.at} onClose={closeMenu} items={menuItems(menuWt, menu.land)} />}
       </div>
     </div>

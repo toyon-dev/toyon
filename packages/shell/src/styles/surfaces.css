@@ -545,11 +545,13 @@ body.resizing .row-resize {
   background: var(--bg1);
   padding-top: 6px;
 }
-/* daemon connection, pinned to the foot of the rail (distinct from worktree dots: smaller, muted) */
+/* health, pinned to the foot of the rail: one dot for the worst of daemon connection and the
+   active worktree's procs (distinct from worktree dots: smaller, muted when all is well) */
 .rail-foot {
   flex-shrink: 0;
   /* 40px: centers the dot on the composer's bottom row (10px pad + 20px picker box) so it lines up with the element picker */
   height: 40px;
+  width: 100%;
   display: flex;
   align-items: center;
   /* dot on the right, 17px in: the rail panel is right-anchored, so the dot stays put
@@ -557,9 +559,16 @@ body.resizing .row-resize {
   justify-content: flex-end;
   gap: 8px;
   padding: 0 17px 0 12px;
+  border: 0;
+  background: none;
+  font: inherit;
   font-size: var(--fs-xs);
   color: var(--fg-dim);
   white-space: nowrap;
+  cursor: default;
+}
+.rail-foot[aria-disabled="false"] {
+  cursor: pointer;
 }
 .conn-dot {
   width: 6px;
@@ -567,14 +576,29 @@ body.resizing .row-resize {
   border-radius: 50%;
   background: var(--fg-dim);
   flex-shrink: 0;
-}
-.rail-foot.off .conn-dot {
-  background: transparent;
-  border: 1px solid var(--orange);
   box-sizing: border-box;
 }
-.rail-foot.off {
+.rail-foot[data-level="offline"] {
   color: var(--orange);
+}
+.rail-foot[data-level="offline"] .conn-dot {
+  background: transparent;
+  border: 1px solid var(--orange);
+}
+.rail-foot[data-level="crashed"] {
+  color: var(--red);
+}
+.rail-foot[data-level="crashed"] .conn-dot {
+  background: var(--red);
+}
+.rail-foot[data-level="stopped"] {
+  color: var(--yellow);
+}
+.rail-foot[data-level="stopped"] .conn-dot {
+  background: var(--yellow);
+}
+.rail-foot[data-level="starting"] .conn-dot {
+  animation: pulse 1.2s ease-in-out infinite;
 }
 /* stale rail while the socket is down */
 .wt-rail.offline .rail-list {
@@ -1124,12 +1148,6 @@ body.resizing .rb-center {
   align-items: center;
   gap: 20px;
 }
-.status-bar .proc {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
 /* ---- new worktree prompt overlay ---- */
 /* anchored near the top, not centered: a palette's height changes as you type, and a centered
    box would bob with it — the input stays put this way (editor/launcher convention) */

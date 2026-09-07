@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useStore } from "../../state/context.tsx";
 import { useActive, useLocalField } from "../../state/selectors.ts";
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, isInstalledApp } from "../util.ts";
 
-/** the top bar: dock toggles, the route bar centered over the preview, unhealthy procs, tools */
+/** the top bar: dock toggles, the route bar centered over the preview, tools (proc health lives in the rail foot) */
 /** `leftPx`/`rightPx`: the dock columns' widths, so the nav cluster can sit over the preview column */
 export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number }) {
   // nav cluster stays centered over the preview column; only this surface re-renders on resize
   const winW = useWindowWidth();
   const navCenter = leftPx + (winW - leftPx - rightPx) / 2;
   const dispatch = useDispatch();
-  const sock = useSock();
   const active = useActive();
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
@@ -44,20 +43,6 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
         </button>
       )}
       <span className="grow" />
-      {/* procs surface only when something needs attention — healthy is silence */}
-      {active?.procs
-        .filter((p) => p.status !== "running")
-        .map((p) => (
-          <button
-            key={p.name}
-            className="proc"
-            data-tip={`${p.command} — ${p.status} on :${p.port} · click to restart`}
-            onClick={() => sock?.send({ t: "restart-proc", worktreeId: active.worktree.id, proc: p.name })}
-          >
-            <span className={`dot ${p.status === "crashed" ? "crashed" : "starting"}`} />
-            {p.name} {p.status}
-          </button>
-        ))}
       {/* right cluster: settings · chat · terminal · zen (zen last — it hides everything, so it sits at the edge) */}
       <span className="bar-tools">
         <button

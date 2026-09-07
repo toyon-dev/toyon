@@ -31,7 +31,8 @@ export function AppearancePicker() {
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close", back: true })}
-      placeholder="light/dark mode · ↑↓ preview · enter keeps · esc reverts"
+      placeholder="light/dark mode"
+      keys={{ nav: "preview", pick: "keeps", back: "reverts" }}
       row={(m) => (
         <PaletteRow
           label={appearanceLabel[m]}

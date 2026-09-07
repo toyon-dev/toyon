@@ -936,14 +936,28 @@ body.resizing .row-resize {
   color: var(--fg-muted);
 }
 
+/* the composer is one big editor, not a small box inside a panel: the whole region below the
+   transcript is the typing surface, so the textarea drops the field's border and fills it, and the
+   knobs row sits at the bottom edge */
 .chat-input {
+  display: flex;
+  flex-direction: column;
   border-top: 1px solid var(--bg2);
   padding: 10px;
+  min-height: 160px;
+}
+.chat-input:focus-within {
+  border-top-color: var(--bg3);
 }
 .chat-input textarea {
+  flex: 1;
   width: 100%;
+  min-height: 0;
   resize: none;
-  min-height: 60px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
 }
 .chat-hint {
   font-size: var(--fs-xs);
@@ -972,6 +986,13 @@ body.resizing .row-resize {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+/* .btn-icon is a grid box, so an inline wrapper would stack the two tools; keep them on one line */
+.spawn-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 .profile-chip {
   font: var(--fs-xs) var(--font-mono);
@@ -1411,6 +1432,23 @@ body.resizing .rb-center {
   width: 100%;
   font-family: var(--font-mono);
 }
+/* the keyboard row under a picker's rows: what enter and the arrows do here. Outside .qo-list so
+   it stays put while the rows scroll. */
+.lp-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 7px 10px;
+  color: var(--fg-dim);
+  font: var(--fs-xs) / 1 var(--font-ui);
+  border-top: 1px solid var(--bg2);
+}
+.lp-key {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
 /* ghost completion: the typed part is hidden but still laid out, so the suffix lands exactly
    where the caret is. Metrics must match .field/.field-lg or the tail drifts. */
 .lp-input {

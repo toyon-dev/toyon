@@ -40,6 +40,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       }}
       onBack={() => dispatch({ a: "close" })}
       placeholder="search in files…"
+      keys={{ pick: "opens the file", back: "closes" }}
       empty={(q) => (q.trim().length < MIN ? "type at least two characters" : isStale(q) ? "searching…" : "no matches")}
       footer={(q, rows) =>
         results?.truncated && !isStale(q) && rows.length > 0 ? (

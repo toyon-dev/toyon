@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusOnMount } from "./hooks.ts";
+import { Kbd } from "./Kbd.tsx";
 import { Overlay } from "./Overlay.tsx";
 
 /** ↑↓ with wrap-around */
@@ -32,6 +33,7 @@ export function ListPicker<T>({
   initialIndex,
   empty = "no matches",
   footer,
+  keys,
 }: {
   items: T[];
   /** narrow the list for a query (empty query → everything) */
@@ -62,6 +64,11 @@ export function ListPicker<T>({
   empty?: string | ((q: string) => string);
   /** below the rows (result counts, hints) */
   footer?: (q: string, results: T[]) => ReactNode;
+  /** what this picker's keys do, as the verb for each one. The picker owns the keyboard, so it
+   * draws the row and each palette says only what its keys mean. Arrow and modifier characters
+   * belong here rather than in `placeholder`, which can only hold a string. `side` and
+   * `complete` are ignored unless `onSide` / `completionOf` are wired up. */
+  keys?: { nav?: string; side?: string; complete?: string; pick?: string; back?: string };
 }) {
   const [q, setQ] = useState(initialQuery);
   const results = useMemo(() => filter(items, q), [items, q, filter]);
@@ -95,6 +102,12 @@ export function ListPicker<T>({
     completion && completion.length > q.length && completion.toLowerCase().startsWith(q.toLowerCase())
       ? completion.slice(q.length)
       : null;
+  const hints: Array<[string, string]> = [];
+  if (keys?.nav) hints.push(["↑↓", keys.nav]);
+  if (keys?.side && onSide) hints.push(["←→", keys.side]);
+  if (keys?.complete && completionOf) hints.push(["tab", keys.complete]);
+  if (keys?.pick) hints.push(["enter", keys.pick]);
+  if (keys?.back) hints.push(["esc", keys.back]);
   return (
     <Overlay onClose={onBack} boxClass="quick-open">
       <div className="lp-input">
@@ -151,6 +164,16 @@ export function ListPicker<T>({
         {results.length === 0 && <div className="dock-empty">{typeof empty === "function" ? empty(q) : empty}</div>}
         {footer?.(q, results)}
       </div>
+      {hints.length > 0 && (
+        <div className="lp-keys">
+          {hints.map(([k, label]) => (
+            <span key={k} className="lp-key">
+              <Kbd k={k} />
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
     </Overlay>
   );
 }

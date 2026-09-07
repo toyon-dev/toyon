@@ -53,6 +53,7 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
       }}
       onBack={() => dispatch({ a: "close" })}
       placeholder="jump to file · type > for commands"
+      keys={{ pick: "opens", back: "closes" }}
       initialQuery={initialQuery}
       empty={(q) => (q.startsWith(">") ? "no matching command" : "no matches")}
       row={(r, _active, q) => {

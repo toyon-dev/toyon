@@ -87,6 +87,7 @@ export function ProjectPicker() {
       }}
       onBack={() => dispatch({ a: "close", back: true })}
       placeholder={repos.length > 1 ? "switch project, or type a path to open one" : "type a path to open a project"}
+      keys={{ complete: "completes the path", pick: "opens", back: "closes" }}
       empty={(q) => (q ? "nothing here; keep typing a path (~/… or /…)" : "no projects")}
       row={(r) =>
         r.kind === "repo" ? (

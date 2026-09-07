@@ -28,6 +28,7 @@ export function AgentPicker() {
       }}
       onBack={() => dispatch({ a: "close", back: true })}
       placeholder="default agent for new worktrees"
+      keys={{ pick: "sets", back: "closes" }}
       row={(a) => (
         <PaletteRow
           label={a.name}

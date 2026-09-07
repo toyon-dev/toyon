@@ -164,6 +164,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("confirm-config"), repoId: id, config: toyonConfigSchema }),
   z.object({ t: z.literal("set-theme"), prefs: themePrefsSchema }),
   z.object({ t: z.literal("set-default-agent"), agent: id }),
+  /** (re)download an agent's adapter; progress arrives as `agents` broadcasts */
+  z.object({ t: z.literal("install-agent"), agent: id }),
   /** raw VS Code theme JSON/JSONC text picked in the browser */
   z.object({ t: z.literal("import-theme"), name: z.string().max(300), source: z.string().max(2_000_000) }),
   z.object({ t: z.literal("rescan-themes") }),

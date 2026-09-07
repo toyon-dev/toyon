@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentEvent, AgentStatus, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
 import type { AgentAdapter } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
@@ -123,7 +126,10 @@ export function fakeAgents(): AgentRegistry {
     loginHint: `${id}: log in`,
     ...extra,
   });
-  return new AgentRegistry([spec("claude"), spec("codex", { mode: "agent" })]);
+  return new AgentRegistry(
+    [spec("claude"), spec("codex", { mode: "agent" })],
+    mkdtempSync(join(tmpdir(), "toyon-agents-")),
+  );
 }
 
 /** RuntimeDeps factories that build the fakes above and remember them by worktree id */

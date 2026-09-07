@@ -38,7 +38,8 @@ const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 const state = new StateStore(paths);
 const hub = new Hub();
 const bridge = new BridgeScript(BRIDGE_JS);
-const agents = loadAgentRegistry(paths);
+const agents = loadAgentRegistry(paths.home, paths.agentsDir);
+agents.onChange = () => hub.emit("agentsChanged");
 const runtime = new RuntimeRegistry({ hub, state, paths, agents, bridgeScript: () => bridge.get() });
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
 const files = new FileService(state, runtime);
@@ -80,6 +81,9 @@ if (cloud.enabled) {
 }
 
 await repos.boot();
+// the adapters are fetched on first boot (and after a version bump), not shipped: the default
+// agent first, so the first prompt waits on one download at most
+fireAndForget("agents", agents.installMissing(), "agent adapter install");
 
 // register a repo passed on the command line (used by the CLI)
 const repoArg = process.argv[2];

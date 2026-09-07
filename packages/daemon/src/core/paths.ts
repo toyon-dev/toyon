@@ -13,6 +13,8 @@ export interface Paths {
   worktreesDir: string;
   /** user-dropped theme files: Toyon Theme JSON or raw VS Code theme JSON/JSONC */
   themesDir: string;
+  /** one npm install per agent adapter (<id>/node_modules/...), fetched on demand */
+  agentsDir: string;
 }
 
 /** TOYON_HOME lets cloud mode keep state on a mounted volume (see core/cloud.ts) */
@@ -24,6 +26,8 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     transcriptsDir: join(home, "transcripts"),
     worktreesDir: join(home, "worktrees"),
     themesDir: join(home, "themes"),
+    // the cloud image pre-installs the adapters into the image (a volume cannot be filled at build)
+    agentsDir: process.env.TOYON_AGENTS_DIR ?? join(home, "agents"),
   };
 }
 
@@ -32,4 +36,5 @@ export function ensureDirs(p: Paths) {
   mkdirSync(p.transcriptsDir, { recursive: true });
   mkdirSync(p.worktreesDir, { recursive: true });
   mkdirSync(p.themesDir, { recursive: true });
+  mkdirSync(p.agentsDir, { recursive: true });
 }

@@ -1,42 +1,95 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { UserError } from "../core/errors.ts";
-import { AgentRegistry, BUILTIN_AGENTS, parseCustomAgents, resolveNpmBin } from "./registry.ts";
+import { AgentRegistry, BUILTIN_AGENTS, type Installer, parseCustomAgents } from "./registry.ts";
+
+/** an installer that "downloads" by writing the package's bin into place; a rejected pkg fails */
+function fakeInstaller(fail = new Set<string>()): { installer: Installer; calls: string[] } {
+  const calls: string[] = [];
+  const installer: Installer = async (dir, pkg, version) => {
+    calls.push(`${pkg}@${version}`);
+    if (fail.has(pkg)) return { ok: false, err: "registry unreachable" };
+    const pkgDir = join(dir, "node_modules", pkg);
+    mkdirSync(join(pkgDir, "dist"), { recursive: true });
+    writeFileSync(
+      join(pkgDir, "package.json"),
+      JSON.stringify({ version, bin: { [pkg.split("/")[1]!]: "dist/index.js" } }),
+    );
+    writeFileSync(join(pkgDir, "dist", "index.js"), "");
+    return { ok: true, err: "" };
+  };
+  return { installer, calls };
+}
+
+function tmp() {
+  const dir = mkdtempSync(join(tmpdir(), "toyon-registry-"));
+  process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
 
 describe("agent registry", () => {
-  test("both builtin adapters resolve to a script and launch under the current runtime", () => {
-    const reg = new AgentRegistry(BUILTIN_AGENTS);
-    for (const id of ["claude", "codex"]) {
-      const spec = reg.require(id);
-      const l = reg.launch(spec);
-      expect(l.command).toBe(process.execPath);
-      expect(l.args[0]).toMatch(/dist\/index\.js$/);
-    }
-    expect(reg.infos().map((i) => [i.id, i.available, i.sandboxed])).toEqual([
-      ["claude", true, true],
-      ["codex", true, true],
+  test("builtins start uninstalled; installMissing fetches them in order and they become launchable", async () => {
+    const { installer, calls } = fakeInstaller();
+    const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), installer);
+    const changes: string[][] = [];
+    reg.onChange = () =>
+      changes.push(reg.infos().map((i) => `${i.id}:${i.installing ? "installing" : i.available ? "ok" : i.reason}`));
+    expect(reg.infos().map((i) => [i.id, i.available, i.reason])).toEqual([
+      ["claude", false, "not installed yet"],
+      ["codex", false, "not installed yet"],
     ]);
-    expect(resolveNpmBin("@toyon/nope", "x")).toBeNull();
+    expect(() => reg.require("claude")).toThrow(/not ready/);
+    await reg.installMissing();
+    expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.75.1", "@agentclientprotocol/codex-acp@1.10.0"]);
+    expect(changes[0]).toEqual(["claude:installing", "codex:not installed yet"]);
+    expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok"]);
+    const l = reg.launch(reg.require("claude"));
+    expect(l.command).toBe(process.execPath);
+    expect(l.args[0]).toMatch(/claude-agent-acp\/dist\/index\.js$/);
+    expect(JSON.parse(readFileSync(join(l.args[0]!, "../../package.json"), "utf8")).version).toBe("0.75.1");
+    // already at the pinned version: nothing to do
+    await reg.installMissing();
+    expect(calls).toHaveLength(2);
   });
 
-  test("unknown and uninstalled agents are UserErrors with a reason", () => {
-    const reg = new AgentRegistry([
-      ...BUILTIN_AGENTS,
-      {
-        id: "ghost",
-        name: "Ghost",
-        builtin: false,
-        run: { kind: "command", command: "definitely-not-a-binary-xyz" },
-        confinement: "none",
-        systemPrompt: "prompt-prefix",
-        loginHint: "",
-      },
-    ]);
+  test("a failed install is remembered as the reason and can be retried; concurrent installs share one run", async () => {
+    const fail = new Set(["@agentclientprotocol/codex-acp"]);
+    const { installer, calls } = fakeInstaller(fail);
+    const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), installer);
+    await Promise.all([reg.install("codex"), reg.install("codex")]);
+    expect(calls).toHaveLength(1);
+    expect(reg.infos()[1]).toMatchObject({
+      id: "codex",
+      available: false,
+      reason: "install failed: registry unreachable",
+    });
+    fail.clear();
+    await reg.install("codex");
+    expect(reg.infos()[1]).toMatchObject({ id: "codex", available: true });
+  });
+
+  test("unknown ids and uninstalled custom commands are UserErrors with a reason", () => {
+    const reg = new AgentRegistry(
+      [
+        ...BUILTIN_AGENTS,
+        {
+          id: "ghost",
+          name: "Ghost",
+          builtin: false,
+          run: { kind: "command", command: "definitely-not-a-binary-xyz" },
+          confinement: "none",
+          systemPrompt: "prompt-prefix",
+          loginHint: "",
+        },
+      ],
+      tmp(),
+    );
     expect(() => reg.require("nope")).toThrow(UserError);
-    expect(() => reg.require("ghost")).toThrow(/not installed/);
+    expect(() => reg.require("ghost")).toThrow(/not found on PATH/);
     const ghost = reg.infos().find((i) => i.id === "ghost")!;
-    expect(ghost.available).toBe(false);
-    expect(ghost.reason).toContain("not found on PATH");
-    expect(ghost.sandboxed).toBe(false);
+    expect(ghost).toMatchObject({ available: false, sandboxed: false });
   });
 
   test("custom agents: valid entries are kept, invalid ones skipped, builtins can be shadowed", () => {
@@ -59,7 +112,7 @@ describe("agent registry", () => {
       systemPrompt: "prompt-prefix",
     });
     expect(specs[1]).toMatchObject({ confinement: "adapter-sandbox", mode: "agent" });
-    const reg = new AgentRegistry([...BUILTIN_AGENTS, ...specs]);
+    const reg = new AgentRegistry([...BUILTIN_AGENTS, ...specs], tmp());
     expect(reg.get("claude")?.builtin).toBe(false);
     expect(parseCustomAgents("not json")).toEqual([]);
     expect(parseCustomAgents("[]")).toEqual([]);

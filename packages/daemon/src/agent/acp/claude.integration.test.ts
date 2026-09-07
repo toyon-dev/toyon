@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@toyon/shared";
 import { sh, tmpRepo } from "../../../test/helpers/tmp-repo.ts";
+import { makePaths } from "../../core/paths.ts";
 import { GIT } from "../../git/exec.ts";
 import { AgentRegistry, BUILTIN_AGENTS } from "../registry.ts";
 import { SETTINGS_REL } from "../sandbox.ts";
@@ -29,7 +30,8 @@ function world() {
   const t = tmpRepo();
   const wt = join(t.repo, "..", "wt");
   sh(t.repo, GIT, "worktree", "add", "-q", "-b", "feat", wt, "main");
-  const registry = new AgentRegistry(BUILTIN_AGENTS);
+  // the real adapter, installed into the machine's ~/.toyon/agents once and reused across runs
+  const registry = new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir);
   const events: AgentEvent[] = [];
   let sessionId: string | undefined;
   const session = new AcpSession({
@@ -58,6 +60,10 @@ function world() {
 }
 
 describe.skipIf(!enabled)("claude via ACP (integration)", () => {
+  test("the adapter installs on demand", async () => {
+    await new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir).install("claude");
+  }, 300_000);
+
   test("edits inside the worktree land; the sandbox file is written and ignored by git", async () => {
     const { t, wt, events, session, settle } = world();
     try {

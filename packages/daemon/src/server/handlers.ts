@@ -260,6 +260,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.hub.emit("themesChanged");
   },
 
+  "install-agent"(msg, _ctx, s) {
+    if (!s.agents.get(msg.agent)) throw new UserError(`unknown agent "${msg.agent}"`);
+    fireAndForget(msg.agent, s.agents.install(msg.agent), "agent install");
+  },
+
   "set-default-agent"(msg, _ctx, s) {
     s.agents.require(msg.agent);
     s.state.setDefaultAgent(msg.agent);

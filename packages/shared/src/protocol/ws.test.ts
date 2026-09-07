@@ -16,6 +16,7 @@ describe("parseClientMsg", () => {
       { t: "create-worktree", repoId: "r", prompt: "x", agent: "codex" },
       { t: "batch-worktrees", repoId: "r", prompt: "x", agent: "claude" },
       { t: "set-default-agent", agent: "codex" },
+      { t: "install-agent", agent: "codex" },
       { t: "combine", worktreeIds: ["a", "b"] },
       { t: "confirm-config", repoId: "r", config: { procs: { web: "bun dev" } } },
       { t: "set-theme", prefs: { mode: "system", light: "l", dark: "d" } },

@@ -8,6 +8,7 @@ import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
+import { DEFAULT_AGENT_ID } from "../runtime/registry.ts";
 import { dispatch, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
 
@@ -126,6 +127,13 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   };
   s.hub.on("themesChanged", themesChanged);
   themesChanged();
+  const agentsMsg = () =>
+    ({
+      t: "agents",
+      agents: s.agents.infos(),
+      defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
+    }) satisfies ServerMsg;
+  s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
 
   let branded = false;
   const serverConfig = {
@@ -142,6 +150,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           worktrees: await s.worktrees.statuses(),
           themes: s.themes.themes,
           themePrefs: s.themes.prefs,
+          agents: s.agents.infos(),
+          defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
         });
       },
       close(ws: ServerWebSocket<WsData>) {

@@ -3,8 +3,10 @@
 // pair, which four call sites each had to consult.
 
 import type { ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import { AcpSession } from "../agent/acp/session.ts";
+import { spawnAcp } from "../agent/acp/transport.ts";
 import type { AgentAdapter } from "../agent/adapter.ts";
-import { AgentSession } from "../agent/session.ts";
+import type { AgentRegistry } from "../agent/registry.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { log } from "../core/log.ts";
@@ -29,6 +31,7 @@ export interface RuntimeDeps {
   hub: Hub;
   state: StateStore;
   paths: Paths;
+  agents: AgentRegistry;
   bridgeScript: () => string;
   /** factories, overridable so tests run without spawning anything */
   makeAgent?: (wt: WorktreeInfo, deps: RuntimeDeps) => AgentAdapter;
@@ -79,16 +82,30 @@ export function terminalEnv(
   return { ...env, ...urls, TERM: "xterm-256color", COLORTERM: "truecolor", TOYON_WORKTREE: wt.id };
 }
 
+export const DEFAULT_AGENT_ID = "claude";
+
 function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
-  const agent = new AgentSession(
-    wt.id,
-    wt.path,
-    d.paths.transcriptsDir,
-    () => d.state.session(wt.id),
-    (id) => d.state.setSession(wt.id, id),
-    (event, seq) => d.hub.emit("agent", wt.id, seq, event),
-    (status) => d.hub.emit("agentStatus", wt.id, status),
-  );
+  const agent = new AcpSession({
+    worktreeId: wt.id,
+    cwd: wt.path,
+    // resolved at spawn time: a spare is stamped with the task's agent when claimed, and rows from
+    // before the registry existed get the default the first time they are used
+    spec: () => {
+      const w = d.state.requireWorktree(wt.id);
+      if (!w.agent) {
+        w.agent = d.state.defaultAgent ?? DEFAULT_AGENT_ID;
+        d.state.save();
+        d.hub.emit("worktreesChanged");
+      }
+      return d.agents.require(w.agent);
+    },
+    connect: (app, spec) => spawnAcp(app, d.agents.launch(spec), wt.path, wt.id),
+    transcriptsDir: d.paths.transcriptsDir,
+    getSessionId: () => d.state.session(wt.id),
+    setSessionId: (id) => d.state.setSession(wt.id, id),
+    onEvent: (event, seq) => d.hub.emit("agent", wt.id, seq, event),
+    onStatus: (status) => d.hub.emit("agentStatus", wt.id, status),
+  });
   agent.onQueueChange = () => d.hub.emit("queue", wt.id, agent.queueItems);
   return agent;
 }
@@ -209,10 +226,9 @@ export class RuntimeRegistry {
     const rt = this.runtimes.get(id);
     if (!rt) return;
     this.runtimes.delete(id);
-    rt.agent.stop();
     rt.terminal?.kill();
     rt.proxy?.stop();
-    await rt.procs?.stopAll();
+    await Promise.all([rt.agent.close(), rt.procs?.stopAll()]);
   }
 
   /** the worktree's shell, spawned on the first open or after it exited; what a fresh pane needs

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
-import { fakeFactories } from "../../test/helpers/fakes.ts";
+import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
@@ -36,7 +36,8 @@ function make() {
   const state = new StateStore(t.paths, { repos: [repo], worktrees: [wt, spare], sessions: {} });
   const hub = new Hub();
   const f = fakeFactories();
-  const registry = new RuntimeRegistry({ hub, state, paths: t.paths, bridgeScript: () => "", ...f.factories });
+  const agents = fakeAgents();
+  const registry = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
   return { state, hub, registry, ...f };
 }
 
@@ -72,7 +73,7 @@ describe("RuntimeRegistry", () => {
     const { registry, agents, procs, proxies } = make();
     await registry.start(wt, repo);
     await registry.stop(wt.id);
-    expect(agents.get(wt.id)?.stops).toBe(1);
+    expect(agents.get(wt.id)?.closes).toBe(1);
     expect(procs.get(wt.id)?.stopped).toBe(true);
     expect(proxies.get(wt.id)?.stopped).toBe(true);
     expect(registry.get(wt.id)).toBeUndefined();
@@ -83,7 +84,7 @@ describe("RuntimeRegistry", () => {
     await registry.start(wt, repo);
     const a = registry.get(wt.id)!.agent;
     await registry.stopProcs(wt.id);
-    expect(agents.get(wt.id)?.stops).toBe(0);
+    expect(agents.get(wt.id)?.closes).toBe(0);
     expect(registry.get(wt.id)?.procs).toBeNull();
     await registry.start(wt, repo);
     expect(registry.get(wt.id)?.agent).toBe(a);

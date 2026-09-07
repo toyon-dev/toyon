@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import type {
+  AgentInfo,
   GitFileStatus,
   RepoInfo,
   Theme,
@@ -17,7 +18,7 @@ import type {
 import type { AgentEvent, PickMeta } from "./events.ts";
 
 /** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -31,8 +32,12 @@ export type ServerMsg =
       worktrees: WorktreeStatus[];
       themes: Theme[];
       themePrefs: ThemePrefs;
+      /** the daemon's agent registry and which entry new worktrees get by default */
+      agents: AgentInfo[];
+      defaultAgent: string;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
+  | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
   | { t: "repos"; repos: RepoInfo[] }
   | { t: "worktrees"; worktrees: WorktreeStatus[] }
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
@@ -133,8 +138,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     variant: variantSchema.optional(),
     context: prose.optional(),
     pick: pickMetaSchema.optional(),
+    /** registry id; the daemon's default when absent */
+    agent: id.optional(),
   }),
-  z.object({ t: z.literal("batch-worktrees"), repoId: id, prompt }),
+  z.object({ t: z.literal("batch-worktrees"), repoId: id, prompt, agent: id.optional() }),
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
   z.object({ t: z.literal("restart-proc"), worktreeId: id, proc: z.string() }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
@@ -156,6 +163,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("rename-worktree"), worktreeId: id, title: z.string().min(1).max(200) }),
   z.object({ t: z.literal("confirm-config"), repoId: id, config: toyonConfigSchema }),
   z.object({ t: z.literal("set-theme"), prefs: themePrefsSchema }),
+  z.object({ t: z.literal("set-default-agent"), agent: id }),
   /** raw VS Code theme JSON/JSONC text picked in the browser */
   z.object({ t: z.literal("import-theme"), name: z.string().max(300), source: z.string().max(2_000_000) }),
   z.object({ t: z.literal("rescan-themes") }),

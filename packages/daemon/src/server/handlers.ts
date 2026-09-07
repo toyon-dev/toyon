@@ -4,7 +4,7 @@
 
 import type { ClientMsg, ServerMsg } from "@toyon/shared";
 import { pickTheme } from "@toyon/shared";
-import { planTasks } from "../agent/llm.ts";
+import type { AgentRegistry } from "../agent/registry.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -23,6 +23,9 @@ export interface Services {
   files: FileService;
   runtime: RuntimeRegistry;
   themes: ThemeStore;
+  agents: AgentRegistry;
+  /** request → 1–5 independent tasks (Haiku by default; tests inject a stub) */
+  planTasks: (prompt: string, cwd: string) => Promise<string[] | null>;
 }
 
 export interface HandlerCtx {
@@ -99,6 +102,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       variant: msg.variant,
       context: msg.context,
       pick: msg.pick,
+      agent: msg.agent,
     });
   },
 
@@ -110,11 +114,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     fireAndForget(
       msg.repoId,
       (async () => {
-        const tasks = (await planTasks(msg.prompt, repo.path)) ?? [msg.prompt];
+        const tasks = (await s.planTasks(msg.prompt, repo.path)) ?? [msg.prompt];
         let failed = 0;
         for (const task of tasks) {
           try {
-            await s.worktrees.create(msg.repoId, task);
+            await s.worktrees.create(msg.repoId, task, { agent: msg.agent });
           } catch (e) {
             failed++;
             log.warn(msg.repoId, `batch: could not start "${task.slice(0, 60)}"`, e);
@@ -254,6 +258,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     const theme = s.themes.import(msg.name, msg.source);
     s.themes.setPrefs(pickTheme(s.themes.prefs, theme, s.themes.themes));
     s.hub.emit("themesChanged");
+  },
+
+  "set-default-agent"(msg, _ctx, s) {
+    s.agents.require(msg.agent);
+    s.state.setDefaultAgent(msg.agent);
+    s.hub.emit("agentsChanged");
   },
 
   "rescan-themes"(_msg, _ctx, s) {

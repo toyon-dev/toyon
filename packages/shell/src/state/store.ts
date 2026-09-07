@@ -4,6 +4,7 @@
 
 import type {
   AgentEvent,
+  AgentInfo,
   GitFileStatus,
   PickedElement,
   PickMeta,
@@ -13,15 +14,26 @@ import type {
   TermServerMsg,
   Theme,
   ThemePrefs,
+  ToolKind,
   WorktreeStatus,
 } from "@toyon/shared";
-import { builtinThemes, defaultThemePrefs, EDIT_TOOLS, gruvboxDarkSoft, resolveTheme } from "@toyon/shared";
+import { builtinThemes, defaultThemePrefs, gruvboxDarkSoft, isEditTool, resolveTheme } from "@toyon/shared";
 
 export type ChatItem =
   | { kind: "user"; text: string; pick?: PickMeta }
   | { kind: "assistant"; text: string }
   | { kind: "thinking"; text: string }
-  | { kind: "tool"; id: string; name: string; input: unknown; output?: string; isError?: boolean; done: boolean }
+  | {
+      kind: "tool";
+      id: string;
+      name: string;
+      input: unknown;
+      output?: string;
+      isError?: boolean;
+      done: boolean;
+      toolKind?: ToolKind;
+      title?: string;
+    }
   | { kind: "error"; text: string }
   | { kind: "blocked"; tool: string; path: string; reason: string };
 
@@ -73,7 +85,9 @@ export type Overlay =
   | { kind: "keys" }
   /** theme picker: which pref slot Enter writes */
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
-  | { kind: "appearance" };
+  | { kind: "appearance" }
+  /** default-agent picker */
+  | { kind: "agent" };
 
 export interface State {
   connected: boolean;
@@ -114,6 +128,9 @@ export interface State {
   previewTheme: Theme | null;
   /** OS appearance (prefers-color-scheme), for themePrefs.mode === "system" */
   systemDark: boolean;
+  /** the daemon's agent registry and the default for new worktrees */
+  agents: AgentInfo[];
+  defaultAgent: string;
 }
 
 export interface InitialOpts {
@@ -153,6 +170,8 @@ export function initialState(opts: InitialOpts): State {
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
     systemDark: opts.systemDark ?? true,
+    agents: [],
+    defaultAgent: "claude",
   };
 }
 
@@ -169,7 +188,7 @@ export function worktreeById(s: State, id: string | null | undefined): WorktreeS
   return (id && s.worktrees.find((w) => w.worktree.id === id)) || null;
 }
 
-export const isSubPicker = (o: Overlay) => o.kind === "theme" || o.kind === "appearance";
+export const isSubPicker = (o: Overlay) => o.kind === "theme" || o.kind === "appearance" || o.kind === "agent";
 
 /** what reaches the reducer: terminal frames are routed to the pane before dispatch (main.tsx) */
 export type StoreServerMsg = Exclude<ServerMsg, TermServerMsg>;
@@ -307,10 +326,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
         local: pruneLocal(s.local, msg.worktrees),
         themes: msg.themes ?? s.themes,
         themePrefs: msg.themePrefs ?? s.themePrefs,
+        agents: msg.agents,
+        defaultAgent: msg.defaultAgent,
       };
     }
     case "themes":
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
+    case "agents":
+      return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent };
     case "repos":
       return { ...s, repos: msg.repos };
     case "worktrees": {
@@ -342,7 +365,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const chat = applyEvent(l.chat, ev);
         let turn = l.turn;
         if (ev.type === "turn-start") turn = { edits: false, hmr: false };
-        else if (ev.type === "tool-start" && EDIT_TOOLS.has(ev.name)) turn = { ...turn, edits: true };
+        else if (ev.type === "tool-start" && isEditTool(ev)) turn = { ...turn, edits: true };
         return { ...l, chat, turn };
       });
       if (ev.type === "turn-end") {
@@ -436,7 +459,18 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
       if (last?.kind === "thinking") return [...items.slice(0, -1), { ...last, text: last.text + event.text }];
       return [...items, { kind: "thinking", text: event.text }];
     case "tool-start":
-      return [...items, { kind: "tool", id: event.toolId, name: event.name, input: event.input, done: false }];
+      return [
+        ...items,
+        {
+          kind: "tool",
+          id: event.toolId,
+          name: event.name,
+          input: event.input,
+          done: false,
+          ...(event.kind ? { toolKind: event.kind } : {}),
+          ...(event.title ? { title: event.title } : {}),
+        },
+      ];
     case "tool-end": {
       const idx = items.findLastIndex((i) => i.kind === "tool" && i.id === event.toolId);
       if (idx === -1) return items;

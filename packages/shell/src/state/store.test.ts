@@ -37,6 +37,8 @@ const hello = (...w: WorktreeStatus[]): Action =>
     worktrees: w,
     themes: initial.themes,
     themePrefs: initial.themePrefs,
+    agents: [],
+    defaultAgent: "claude",
   });
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });

@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentStatus, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
 import type { AgentAdapter } from "../../src/agent/adapter.ts";
+import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
 import type { RuntimeDeps } from "../../src/runtime/registry.ts";
 import type { WorktreeProcs } from "../../src/runtime/supervisor.ts";
@@ -22,6 +23,10 @@ export class FakeAgent implements AgentAdapter {
   }
   stop() {
     this.stops++;
+  }
+  closes = 0;
+  async close() {
+    this.closes++;
   }
   unqueue() {}
   transcript(): Array<{ seq: number; event: AgentEvent }> {
@@ -104,6 +109,21 @@ export class FakeTerminal implements TerminalHandle {
     this.alive = false;
     this.onExit(code);
   }
+}
+
+/** two always-launchable agents (the command is `true`), so services validate ids without npm */
+export function fakeAgents(): AgentRegistry {
+  const spec = (id: string, extra: Partial<AgentSpec> = {}): AgentSpec => ({
+    id,
+    name: id,
+    builtin: true,
+    run: { kind: "command", command: "true" },
+    confinement: "none",
+    systemPrompt: "prompt-prefix",
+    loginHint: `${id}: log in`,
+    ...extra,
+  });
+  return new AgentRegistry([spec("claude"), spec("codex", { mode: "agent" })]);
 }
 
 /** RuntimeDeps factories that build the fakes above and remember them by worktree id */

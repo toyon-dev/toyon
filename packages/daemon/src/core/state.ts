@@ -8,10 +8,12 @@ import { ensureDirs, type Paths } from "./paths.ts";
 export interface PersistedState {
   repos: RepoInfo[];
   worktrees: WorktreeInfo[];
-  /** worktreeId -> Claude session id, for resume */
+  /** worktreeId -> the agent's own session id, for resume (only meaningful for that worktree's agent) */
   sessions: Record<string, string>;
   /** shell theme selection (shared by every browser that connects) */
   theme?: ThemePrefs;
+  /** registry id new worktrees get when the prompt does not pick one */
+  defaultAgent?: string;
 }
 
 const empty: PersistedState = { repos: [], worktrees: [], sessions: {} };
@@ -142,6 +144,14 @@ export class StateStore {
   }
   setSession(worktreeId: string, sessionId: string) {
     this.state.sessions[worktreeId] = sessionId;
+    this.save();
+  }
+
+  get defaultAgent(): string | undefined {
+    return this.state.defaultAgent;
+  }
+  setDefaultAgent(id: string) {
+    this.state.defaultAgent = id;
     this.save();
   }
 

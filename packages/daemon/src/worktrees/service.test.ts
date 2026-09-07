@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, readlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fakeFactories } from "../../test/helpers/fakes.ts";
+import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
@@ -20,10 +20,11 @@ function world() {
   const state = new StateStore(t.paths);
   const hub = new Hub();
   const f = fakeFactories();
-  const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, bridgeScript: () => "", ...f.factories });
-  const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, namer: async () => null });
+  const agents = fakeAgents();
+  const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
+  const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
-  return { ...t, state, hub, runtime, worktrees, repos, ...f };
+  return { ...t, state, hub, runtime, worktrees, repos, registry: agents, ...f };
 }
 
 let w: World;
@@ -67,8 +68,17 @@ describe("create / remove", () => {
     expect(existsSync(join(wt.path, "README.md"))).toBe(true);
     expect(wt.linkPath).toBeUndefined(); // the directory already carries the title
     expect(w.agents.get(wt.id)?.sent[0]?.text).toBe("make the header sticky");
+    expect(wt.agent).toBe("claude");
     await settle();
     expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
+  });
+
+  test("create stamps the requested agent, else the daemon default; unknown ids are UserErrors", async () => {
+    const repoId = await registered();
+    expect((await w.worktrees.create(repoId, "a", { agent: "codex" })).agent).toBe("codex");
+    w.state.setDefaultAgent("codex");
+    expect((await w.worktrees.create(repoId, "b")).agent).toBe("codex");
+    await expect(w.worktrees.create(repoId, "c", { agent: "nope" })).rejects.toBeInstanceOf(UserError);
   });
 
   test("remove stops the agent and procs, deletes the directory, transcript and state row", async () => {
@@ -77,7 +87,7 @@ describe("create / remove", () => {
     await settle();
     writeFileSync(transcriptPathFor(w.paths.transcriptsDir, wt.id), "{}\n");
     await w.worktrees.remove(wt.id);
-    expect(w.agents.get(wt.id)?.stops).toBe(1);
+    expect(w.agents.get(wt.id)?.closes).toBe(1);
     expect(w.procs.get(wt.id)?.stopped).toBe(true);
     expect(existsSync(wt.path)).toBe(false);
     expect(existsSync(transcriptPathFor(w.paths.transcriptsDir, wt.id))).toBe(false);
@@ -106,6 +116,8 @@ describe("spare pool", () => {
     expect((await git(wt.path, "branch", "--show-current")).out).toBe(wt.branch);
     expect(spareAgent.sent[0]?.text).toBe("use the spare");
     expect(w.runtime.get(wt.id)?.agent).toBe(spareAgent);
+    // the spare had no agent; the task's choice is stamped before its first prompt
+    expect(wt.agent).toBe("claude");
   });
 
   test("a claimed spare keeps its directory but gets a title-named link that follows renames and removal", async () => {
@@ -249,6 +261,7 @@ describe("boot", () => {
       hub: hub2,
       state: state2,
       paths: w.paths,
+      agents: w.registry,
       bridgeScript: () => "",
       ...f2.factories,
     });
@@ -257,6 +270,7 @@ describe("boot", () => {
       hub: hub2,
       runtime: runtime2,
       paths: w.paths,
+      agents: w.registry,
       namer: async () => null,
     });
     const repos2 = new RepoRegistry({ state: state2, hub: hub2, runtime: runtime2, worktrees: worktrees2 });

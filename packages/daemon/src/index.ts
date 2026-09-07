@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
+import { planTasks } from "./agent/llm.ts";
+import { loadAgentRegistry } from "./agent/registry.ts";
 import { cloud } from "./core/cloud.ts";
 import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
@@ -36,8 +38,9 @@ const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 const state = new StateStore(paths);
 const hub = new Hub();
 const bridge = new BridgeScript(BRIDGE_JS);
-const runtime = new RuntimeRegistry({ hub, state, paths, bridgeScript: () => bridge.get() });
-const worktrees = new WorktreeService({ state, hub, runtime, paths });
+const agents = loadAgentRegistry(paths);
+const runtime = new RuntimeRegistry({ hub, state, paths, agents, bridgeScript: () => bridge.get() });
+const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
 const files = new FileService(state, runtime);
 const repos = new RepoRegistry({ state, hub, runtime, worktrees });
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);
@@ -48,7 +51,7 @@ const { branded, stop: stopServer } = startServer({
   token,
   shellDist: SHELL_DIST,
   version: pkg.version,
-  services: { state, hub, repos, worktrees, files, runtime, themes },
+  services: { state, hub, repos, worktrees, files, runtime, themes, agents, planTasks },
 });
 
 // every origin the shell can be loaded from: the injected bridge accepts commands from, and

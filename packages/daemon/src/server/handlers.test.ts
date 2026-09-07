@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { clientMsgSchema, type ServerMsg } from "@toyon/shared";
-import { fakeFactories } from "../../test/helpers/fakes.ts";
+import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
@@ -21,12 +21,24 @@ function make() {
   const state = new StateStore(t.paths);
   const hub = new Hub();
   const f = fakeFactories();
-  const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, bridgeScript: () => "", ...f.factories });
-  const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, namer: async () => null });
+  const agents = fakeAgents();
+  const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
+  const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
   const files = new FileService(state, runtime);
   const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, t.paths.themesDir);
-  const services: Services = { state, hub, repos, worktrees, files, runtime, themes };
+  const planned: string[][] = [];
+  const services: Services = {
+    state,
+    hub,
+    repos,
+    worktrees,
+    files,
+    runtime,
+    themes,
+    agents,
+    planTasks: async () => planned.shift() ?? null,
+  };
   const replies: ServerMsg[] = [];
   const broadcasts: ServerMsg[] = [];
   const subs = new Set<string>();
@@ -43,7 +55,7 @@ function make() {
     watchTerminal: (id) => terms.add(id),
     unwatchTerminal: (id) => terms.delete(id),
   };
-  return { ...t, services, ctx, replies, broadcasts, subs, terms, ...f };
+  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, ...f };
 }
 
 describe("handlers", () => {
@@ -82,6 +94,31 @@ describe("handlers", () => {
     const pick = { component: "App", file: "src/App.tsx", line: 3, tag: "div", selector: "div" };
     await dispatch({ t: "chat", worktreeId: main.id, text: "hi", context: "ctx", pick }, ctx, services);
     expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: "ctx", pick }]);
+  });
+
+  test("create-worktree forwards the agent; set-default-agent validates, persists and broadcasts", async () => {
+    const { services, ctx, broadcasts, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "x", agent: "codex" }, ctx, services);
+    expect(services.state.worktrees.find((x) => x.kind === "worktree")?.agent).toBe("codex");
+    await expect(dispatch({ t: "set-default-agent", agent: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+    await dispatch({ t: "set-default-agent", agent: "codex" }, ctx, services);
+    expect(services.state.defaultAgent).toBe("codex");
+    // the hub fans out to the socket layer, which tests do not wire; the handler's job ends at the emit
+    expect(broadcasts.length).toBe(0);
+  });
+
+  test("batch-worktrees plans with the injected planner and creates one worktree per task", async () => {
+    const { services, ctx, replies, planned, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    planned.push(["first task", "second task"]);
+    await dispatch({ t: "batch-worktrees", repoId: r.id, prompt: "do two things", agent: "codex" }, ctx, services);
+    for (let i = 0; i < 100 && replies.length < 2; i++) await Bun.sleep(10);
+    const made = services.state.worktrees.filter((x) => x.kind === "worktree");
+    expect(made.map((x) => x.agent)).toEqual(["codex", "codex"]);
+    expect(replies.at(-1)).toMatchObject({ t: "shipped", ok: true, message: "batch: 2 worktree(s) started" });
   });
 
   test("file-diff and write-file refuse paths outside the worktree", async () => {

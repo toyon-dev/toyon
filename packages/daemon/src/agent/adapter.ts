@@ -1,6 +1,5 @@
-// What the rest of the daemon needs from an agent session. ClaudeSession (agent/session.ts) is
-// the one implementation today, and this is the
-// seam they plug into. Tests use a fake.
+// What the rest of the daemon needs from an agent session. AcpSession (agent/acp/session.ts) is
+// the implementation; tests use a fake.
 
 import type { AgentEvent, AgentStatus, PickMeta } from "@toyon/shared";
 
@@ -16,4 +15,6 @@ export interface AgentAdapter {
   stop(): void;
   unqueue(index: number): void;
   transcript(): Array<{ seq: number; event: AgentEvent }>;
+  /** the worktree (or the daemon) is going away: stop the turn and kill the agent's process */
+  close(): Promise<void>;
 }

@@ -47,6 +47,8 @@ export interface WorktreeInfo {
   prUrl?: string;
   /** the shell tab that asked for it (client nonce); that tab focuses it, others don't */
   createdBy?: string;
+  /** registry id of the agent working here (stamped at creation, or on first use for older rows) */
+  agent?: string;
 }
 
 export type ProcStatus = "starting" | "running" | "crashed" | "stopped";

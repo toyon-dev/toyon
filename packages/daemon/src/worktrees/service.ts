@@ -6,6 +6,7 @@ import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } 
 import { dirname, join } from "node:path";
 import type { GitFileStatus, PickMeta, RepoInfo, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
 import { quickName } from "../agent/llm.ts";
+import type { AgentRegistry } from "../agent/registry.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -17,7 +18,7 @@ import { commitWorktree, mergeToMain, type ShipResult, shipWorktree, syncFromMai
 import { withRepoLock } from "../git/lock.ts";
 import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts } from "../git/status.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
-import type { RuntimeRegistry } from "../runtime/registry.ts";
+import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 
@@ -34,6 +35,8 @@ export interface GitInfo {
 export interface CreateOpts {
   /** the shell tab that asked; stored as createdBy so only that tab auto-focuses the result */
   createdBy?: string;
+  /** registry id; the daemon's default when absent */
+  agent?: string;
   baseWorktreeId?: string;
   variant?: Variant;
   context?: string;
@@ -45,6 +48,7 @@ export interface WorktreeServiceDeps {
   hub: Hub;
   runtime: RuntimeRegistry;
   paths: Paths;
+  agents: AgentRegistry;
   /** task → short kebab-case name (Haiku by default; tests inject a stub) */
   namer?: (prompt: string, cwd: string) => Promise<string | null>;
 }
@@ -71,6 +75,8 @@ export class WorktreeService {
   async create(repoId: string, prompt: string, opts: CreateOpts = {}): Promise<WorktreeInfo> {
     const { variant, context, pick } = opts;
     const repo = this.d.state.requireRepo(repoId);
+    // validated up front: an unknown or uninstalled agent is a toast now, not a dead worktree later
+    const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
     // variants share a name base so they read as siblings in the list
     let slug = variant ? `${slugify(prompt, false)}-v${variant.index}` : slugify(prompt);
     if (variant && (await git(repo.path, "show-ref", "--verify", `refs/heads/toyon/${slug}`)).ok) {
@@ -96,6 +102,8 @@ export class WorktreeService {
       if (claimed) {
         if (variant) claimed.variant = variant;
         if (opts.createdBy) claimed.createdBy = opts.createdBy;
+        // the spare's agent has no process yet; it reads the stamp on its first prompt
+        claimed.agent = agent;
         this.refreshLink(claimed);
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
@@ -118,6 +126,7 @@ export class WorktreeService {
       proxyPort: await allocateProxyPort(),
       title: slug,
       createdAt: Date.now(),
+      agent,
       ...(variant ? { variant } : {}),
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
     };

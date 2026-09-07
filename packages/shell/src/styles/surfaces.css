@@ -966,6 +966,40 @@ body.resizing .row-resize {
   border-top: 1px solid var(--bg2);
   padding: 10px;
   min-height: 160px;
+  /* the offset parent for the @ and slash menu */
+  position: relative;
+}
+/* The @ / slash menu, anchored to the composer and opening upward over the transcript so the rows
+   never cover what is being typed. No portal and no measurement: the dock sets no overflow, and
+   the palette scrim lives in another column entirely, so nothing clips or outranks this. */
+.inline-picker {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 100%;
+  margin-bottom: 4px;
+  z-index: 5;
+  background: var(--bg1);
+  border: 1px solid var(--bg3);
+  border-radius: var(--r-sm);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
+  padding: 4px;
+}
+/* .qo-list is half the viewport for a centred palette; anchored here that would bury the chat */
+.inline-picker .qo-list {
+  max-height: min(280px, 40vh);
+  margin-top: 0;
+}
+.inline-picker .lp-keys {
+  border-top: 1px solid var(--bg2);
+  margin-top: 4px;
+  padding-top: 6px;
+}
+/* the argument hint sits left of the key hints, where the eye lands after picking */
+.ip-hint {
+  margin-right: auto;
+  color: var(--fg-dim);
+  font: var(--fs-sm) / 1 var(--font-mono);
 }
 /* chips ride on that same tone, so they take the panel's to stay raised */
 .chat-input .pick-chip {

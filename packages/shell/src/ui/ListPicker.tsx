@@ -1,12 +1,10 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusOnMount } from "./hooks.ts";
 import { Kbd } from "./Kbd.tsx";
+import { useListNav } from "./listNav.ts";
 import { Overlay } from "./Overlay.tsx";
 
-/** ↑↓ with wrap-around */
-export function step(i: number, delta: number, n: number): number {
-  return n === 0 ? 0 : (i + delta + n) % n;
-}
+export { step } from "./listNav.ts";
 
 /**
  * The one list-picker: overlay + filter input + rows, ↑↓ wrap, enter picks, ←→ optional, hover
@@ -72,7 +70,6 @@ export function ListPicker<T>({
 }) {
   const [q, setQ] = useState(initialQuery);
   const results = useMemo(() => filter(items, q), [items, q, filter]);
-  const [idx, setIdx] = useState(() => Math.max(0, initialIndex?.(results) ?? 0));
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useFocusOnMount<HTMLInputElement>();
   useEffect(() => {
@@ -80,28 +77,20 @@ export function ListPicker<T>({
     const h = setTimeout(() => onQuery(q), 150);
     return () => clearTimeout(h);
   }, [q, onQuery]);
-  // keyed on the row's key, not the results array: parents rebuild items every render, and a
-  // re-report on identity change would reset any state they keep for the active row (←→ peek)
-  const activeKey = results[idx] ? keyOf(results[idx]!) : null;
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(".qo-item.active")?.scrollIntoView({ block: "nearest" });
-    onActive?.(results[idx] ?? null);
-  }, [activeKey]);
-  // results can shrink under the highlight (async sources): step from the visible row
-  const clamped = Math.min(idx, Math.max(0, results.length - 1));
-  const pick = (t: T) => {
-    const next = narrowTo?.(t, q);
-    if (next == null) return onPick(t, q);
-    setQ(next);
-    setIdx(0);
-  };
-  // the ghost is only ever the tail of what the row would complete to, so what is drawn under the
-  // caret stays exactly what was typed (a case-insensitive match must not repaint the typed part)
-  const completion = results[clamped] ? completionOf?.(results[clamped]!, q) : null;
-  const ghost =
-    completion && completion.length > q.length && completion.toLowerCase().startsWith(q.toLowerCase())
-      ? completion.slice(q.length)
-      : null;
+  const nav = useListNav({
+    results,
+    keyOf,
+    q,
+    onPick,
+    listRef,
+    onActive,
+    onSide,
+    completionOf,
+    narrowTo,
+    setQ,
+    initialIndex,
+  });
+  const { index: clamped, ghost } = nav;
   const hints: Array<[string, string]> = [];
   if (keys?.nav) hints.push(["↑↓", keys.nav]);
   if (keys?.side && onSide) hints.push(["←→", keys.side]);
@@ -117,28 +106,9 @@ export function ListPicker<T>({
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
-            setIdx(0); // typing resets the highlight; the mount keeps initialIndex
+            nav.setIndex(0); // typing resets the highlight; the mount keeps initialIndex
           }}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setIdx(step(clamped, 1, results.length));
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setIdx(step(clamped, -1, results.length));
-            } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onSide && results[clamped]) {
-              e.preventDefault();
-              onSide(results[clamped]!, e.key === "ArrowLeft" ? -1 : 1);
-            } else if (e.key === "Tab" && ghost) {
-              // tab completes without picking: the point is to keep narrowing
-              e.preventDefault();
-              setQ(q + ghost);
-              setIdx(0);
-            } else if (e.key === "Enter" && results[clamped]) {
-              e.preventDefault();
-              pick(results[clamped]!);
-            }
-          }}
+          onKeyDown={nav.onKeyDown}
           placeholder={placeholder}
         />
         {ghost && (
@@ -155,8 +125,8 @@ export function ListPicker<T>({
             className={`qo-item ${rowClass?.(t) ?? ""} ${i === clamped ? "active" : ""}`}
             title={rowTitle?.(t)}
             // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
-            onMouseMove={() => i !== clamped && setIdx(i)}
-            onClick={() => pick(t)}
+            onMouseMove={() => i !== clamped && nav.setIndex(i)}
+            onClick={() => nav.pick(t)}
           >
             {row(t, i === clamped, q)}
           </button>

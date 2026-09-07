@@ -56,29 +56,30 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
       keys={{ pick: "opens", back: "closes" }}
       initialQuery={initialQuery}
       empty={(q) => (q.startsWith(">") ? "no matching command" : "no matches")}
-      row={(r, _active, q) => {
-        if (r.kind === "cmd") return commandRow(r.c, q.slice(1));
-        const [name, dir] = splitPath(r.path);
-        const hits = q.trim() ? matchPositions(r.path, q.trim()) : null;
-        return (
-          <>
-            <span className={`xy ${r.status ? xyClass(r.status.xy) : ""}`}>
-              {r.status ? xyLetter(r.status.xy) : ""}
-            </span>
-            <span className="name">{markHits(name, hits, dir.length)}</span>
-            <span className="dir">
-              {dir && (
-                <>
-                  {"\u200e"}
-                  {markHits(dir, hits, 0)}
-                  {"\u200e"}
-                </>
-              )}
-            </span>
-            {r.status && <LineCounts f={r.status} />}
-          </>
-        );
-      }}
+      row={(r, _active, q) => (r.kind === "cmd" ? commandRow(r.c, q.slice(1)) : fileRow(r.path, r.status, q))}
     />
+  );
+}
+
+/** one file row: status letter, highlighted basename, dimmed directory, line counts. Exported so
+ * the composer's `@` menu draws the same row as ⌘P rather than a lookalike. */
+export function fileRow(path: string, status: GitFileStatus | undefined, q: string) {
+  const [name, dir] = splitPath(path);
+  const hits = q.trim() ? matchPositions(path, q.trim()) : null;
+  return (
+    <>
+      <span className={`xy ${status ? xyClass(status.xy) : ""}`}>{status ? xyLetter(status.xy) : ""}</span>
+      <span className="name">{markHits(name, hits, dir.length)}</span>
+      <span className="dir">
+        {dir && (
+          <>
+            {"\u200e"}
+            {markHits(dir, hits, 0)}
+            {"\u200e"}
+          </>
+        )}
+      </span>
+      {status && <LineCounts f={status} />}
+    </>
   );
 }

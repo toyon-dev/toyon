@@ -268,7 +268,7 @@ export function filterCommands(commands: Command[], q: string): Command[] {
 
 // command labels are prose, not paths: a character may only skip ahead to the start of a word,
 // so "theem" can't scavenge t·h·e·e·m out of "switch to you-ve-hit-your-session-limit"
-function commandScore(hay: string, needle: string): number {
+export function commandScore(hay: string, needle: string): number {
   const hits = commandHits(hay, needle);
   if (!hits) return 0;
   let score = 0;

@@ -1,17 +1,46 @@
-import type { WorktreeStatus } from "@toyon/shared";
+import type { AgentCommand, GitFileStatus, WorktreeStatus } from "@toyon/shared";
 import { pickMetaOf } from "@toyon/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { InlinePicker } from "../../ui/InlinePicker.tsx";
+import { useListNav } from "../../ui/listNav.ts";
 import { tip } from "../../ui/Tooltip.tsx";
+import { commandHits } from "../palettes/commands.ts";
+import { markHits } from "../palettes/highlight.tsx";
+import { PaletteRow } from "../palettes/PaletteRow.tsx";
+import { fileRow } from "../palettes/QuickOpen.tsx";
+import { rankFiles } from "../palettes/quickOpen.ts";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
 import { chord, pickLabel, relFile } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl, nextImageNumber } from "./images.ts";
+import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { PickChip } from "./PickChip.tsx";
 import { useImageIntake } from "./useImageIntake.ts";
+
+/** what the inline `@` / `/` menu can offer */
+type Row =
+  | { kind: "file"; path: string; status?: GitFileStatus }
+  | { kind: "changes"; n: number }
+  | { kind: "cmd"; c: AgentCommand };
+
+const cmdRow = (c: AgentCommand): Row => ({ kind: "cmd", c });
+
+/** the two empty states worth telling apart: nothing matched, versus nothing to match yet */
+function emptyMenu(kind: Row["kind"] | "command" | "file", files: string[] | undefined, commandCount: number) {
+  if (kind === "command") return commandCount === 0 ? "the agent has not started yet" : "no matching command";
+  return files ? "no matches" : "listing files…";
+}
+
+/** what picking a row puts in the draft. A file is a reference, never its contents: the agent
+ * reads it with its own tools, at the range it wants and with line numbers attached. */
+function insertionFor(r: Row): string {
+  if (r.kind === "cmd") return `/${r.c.name} `; // verbatim: the adapter re-expands mcp: names
+  return r.kind === "changes" ? "@changes " : `@${r.path} `;
+}
 
 /** the message box: draft (kept per worktree), picked-element and image attachments, spawn-a-worktree
  * toggle, and the per-worktree tools (terminal, element picker) */
@@ -33,6 +62,30 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const termOpen = useStore((s) => s.termOpen);
   const pick = useStore((s) => (s.pick && s.pick.worktreeId === id ? s.pick : null));
 
+  // the @ / slash menu: local state, not an overlay. s.overlay is modal and exclusive, and the
+  // global esc handler would close this from anywhere in the app.
+  const files = useLocalField(id, "files");
+  const git = useLocalField(id, "git");
+  const commands = useLocalField(id, "commands");
+  const [caret, setCaret] = useState(0);
+  /** the mention the user dismissed with esc, so it does not reopen on the next keystroke */
+  const [dismissed, setDismissed] = useState<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const trigger = id ? triggerAt(text, caret) : null;
+  const menuOpen = trigger !== null && trigger.from !== dismissed && (trigger.kind === "file" || commands.length > 0);
+  const rows = useMemo((): Row[] => {
+    if (!trigger) return [];
+    if (trigger.kind === "command") return filterCommands(commands, trigger.query).slice(0, 8).map(cmdRow);
+    const out: Row[] = [];
+    // "review @changes" is the common ask and should not need one chip per file
+    const changed = git?.files.length ?? 0;
+    if (changed > 0 && "changes".startsWith(trigger.query.toLowerCase())) out.push({ kind: "changes", n: changed });
+    for (const r of rankFiles(files ?? [], git?.files ?? [], trigger.query, 8).rows)
+      out.push({ kind: "file", path: r.path, status: r.status });
+    return out;
+  }, [trigger?.kind, trigger?.query, files, git, commands]);
+
   // spawn-a-worktree default: on for main (protect the working copy), off on worktrees (continue
   // that conversation); user can override per tab
   const isMain = active?.worktree.kind === "main";
@@ -47,6 +100,37 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
     const f = requestAnimationFrame(() => composerRef.current?.focus());
     return () => cancelAnimationFrame(f);
   }, [pick]);
+
+  const nav = useListNav<Row>({
+    results: rows,
+    keyOf: (r) => (r.kind === "cmd" ? `c:${r.c.name}` : r.kind === "changes" ? "changes" : `f:${r.path}`),
+    q: trigger?.query ?? "",
+    listRef,
+    tabPicks: true,
+    onPick: (r) => {
+      if (!trigger) return;
+      const { text: next, caret: at } = insertAt(text, trigger, insertionFor(r));
+      setText(next);
+      setDismissed(trigger.from);
+      // the draft round-trips through the store, so the caret has to be placed after that render
+      requestAnimationFrame(() => {
+        const el = composerRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(at, at);
+        setCaret(at);
+      });
+    },
+  });
+
+  // the listing is cached and never invalidated, so refresh on open: the agent may have created a
+  // file this turn. Cached rows render immediately meanwhile, so the menu never looks empty.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    const opening = menuOpen && trigger?.kind === "file" && !wasOpen.current;
+    wasOpen.current = menuOpen;
+    if (opening && id) sock?.send({ t: "list-files", worktreeId: id });
+  }, [menuOpen, trigger?.kind, id, sock]);
 
   // ambient context: what the user is looking at, attached invisibly to every send
   const buildContext = (): string | undefined => {
@@ -151,13 +235,57 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           onRemove={() => dispatch({ a: "clear-pick" })}
         />
       )}
+      {menuOpen && trigger && (
+        <InlinePicker
+          results={rows}
+          keyOf={(r) => (r.kind === "cmd" ? `c:${r.c.name}` : r.kind === "changes" ? "changes" : `f:${r.path}`)}
+          rowClass={(r) => (r.kind === "file" ? "qo-file" : "cmd-item")}
+          nav={nav}
+          listRef={listRef}
+          hint={nav.active?.kind === "cmd" ? nav.active.c.hint : undefined}
+          empty={emptyMenu(trigger.kind, files, commands.length)}
+          row={(r) => {
+            if (r.kind === "file") return fileRow(r.path, r.status, trigger.query);
+            if (r.kind === "changes")
+              return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
+            const needle = trigger.query.trim();
+            return (
+              <PaletteRow
+                label={markHits(r.c.name, needle ? commandHits(r.c.name, needle) : null, 0)}
+                hint={r.c.description}
+              />
+            );
+          }}
+        />
+      )}
       <textarea
         className="field field-lg"
         ref={composerRef}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setCaret(e.target.selectionStart ?? e.target.value.length);
+          nav.setIndex(0);
+          setDismissed(null);
+        }}
+        // arrow keys and clicks move the caret without changing the text, and the menu follows it
+        onKeyUp={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+        onClick={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
         onPaste={intake.onPaste}
         onKeyDown={(e) => {
+          // an IME builds a word out of several keystrokes; a menu opening mid-composition would
+          // fight the candidate list
+          if (e.nativeEvent.isComposing) return;
+          if (menuOpen) {
+            if (e.key === "Escape") {
+              // no overlay is open, so the app-wide esc would toggle the terminal instead
+              e.preventDefault();
+              e.stopPropagation();
+              setDismissed(trigger?.from ?? null);
+              return;
+            }
+            if (nav.onKeyDown(e)) return;
+          }
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             send();

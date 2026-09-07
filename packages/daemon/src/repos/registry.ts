@@ -2,7 +2,6 @@
 // persisted repo and worktree back up).
 
 import { existsSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { RepoInfo, ToyonConfig, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
@@ -14,6 +13,7 @@ import { allocateProxyPort, releasePort, reservePort } from "../runtime/ports.ts
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
+import { expandTilde } from "./browse.ts";
 import { detectConfig, readConfigFile } from "./config.ts";
 import { watchConfigFile, watchDefaultBranch } from "./watcher.ts";
 
@@ -48,7 +48,7 @@ export class RepoRegistry {
 
   async register(rawPath: string): Promise<RepoInfo> {
     // typed into the project picker: "~/x" is how people write paths, and a shell never expanded it
-    const path = rawPath === "~" || rawPath.startsWith("~/") ? join(homedir(), rawPath.slice(1)) : rawPath;
+    const path = expandTilde(rawPath);
     if (!existsSync(path)) throw new UserError(`${path} does not exist`);
     if (!(await isGitRepo(path))) throw new UserError(`${path} is not a git repository`);
     const root = await repoRoot(path);

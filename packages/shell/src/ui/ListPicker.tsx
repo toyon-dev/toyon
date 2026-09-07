@@ -25,6 +25,8 @@ export function ListPicker<T>({
   onActive,
   onSide,
   onQuery,
+  completionOf,
+  narrowTo,
   placeholder,
   initialQuery = "",
   initialIndex,
@@ -46,6 +48,12 @@ export function ListPicker<T>({
   onSide?: (t: T, dir: -1 | 1) => void;
   /** debounced (150ms): the query changed and the source should fetch (async pickers) */
   onQuery?: (q: string) => void;
+  /** what the highlighted row would complete the query to; the remainder is drawn as ghost text
+   * after the caret and tab accepts it. Return null when the row cannot extend what was typed. */
+  completionOf?: (t: T, q: string) => string | null;
+  /** a row that narrows the search instead of ending it (a folder to descend into): return the
+   * query it becomes and the picker stays open; null means hand the row to onPick as usual */
+  narrowTo?: (t: T, q: string) => string | null;
   placeholder: string;
   initialQuery?: string;
   /** where the highlight starts (mount only); default 0 */
@@ -74,33 +82,59 @@ export function ListPicker<T>({
   }, [activeKey]);
   // results can shrink under the highlight (async sources): step from the visible row
   const clamped = Math.min(idx, Math.max(0, results.length - 1));
+  const pick = (t: T) => {
+    const next = narrowTo?.(t, q);
+    if (next == null) return onPick(t, q);
+    setQ(next);
+    setIdx(0);
+  };
+  // the ghost is only ever the tail of what the row would complete to, so what is drawn under the
+  // caret stays exactly what was typed (a case-insensitive match must not repaint the typed part)
+  const completion = results[clamped] ? completionOf?.(results[clamped]!, q) : null;
+  const ghost =
+    completion && completion.length > q.length && completion.toLowerCase().startsWith(q.toLowerCase())
+      ? completion.slice(q.length)
+      : null;
   return (
     <Overlay onClose={onBack} boxClass="quick-open">
-      <input
-        className="field field-lg"
-        ref={inputRef}
-        value={q}
-        onChange={(e) => {
-          setQ(e.target.value);
-          setIdx(0); // typing resets the highlight; the mount keeps initialIndex
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setIdx(step(clamped, 1, results.length));
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setIdx(step(clamped, -1, results.length));
-          } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onSide && results[clamped]) {
-            e.preventDefault();
-            onSide(results[clamped]!, e.key === "ArrowLeft" ? -1 : 1);
-          } else if (e.key === "Enter" && results[clamped]) {
-            e.preventDefault();
-            onPick(results[clamped]!, q);
-          }
-        }}
-        placeholder={placeholder}
-      />
+      <div className="lp-input">
+        <input
+          className="field field-lg"
+          ref={inputRef}
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setIdx(0); // typing resets the highlight; the mount keeps initialIndex
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setIdx(step(clamped, 1, results.length));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setIdx(step(clamped, -1, results.length));
+            } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onSide && results[clamped]) {
+              e.preventDefault();
+              onSide(results[clamped]!, e.key === "ArrowLeft" ? -1 : 1);
+            } else if (e.key === "Tab" && ghost) {
+              // tab completes without picking: the point is to keep narrowing
+              e.preventDefault();
+              setQ(q + ghost);
+              setIdx(0);
+            } else if (e.key === "Enter" && results[clamped]) {
+              e.preventDefault();
+              pick(results[clamped]!);
+            }
+          }}
+          placeholder={placeholder}
+        />
+        {ghost && (
+          <div className="lp-ghost" aria-hidden="true">
+            <span className="lp-typed">{q}</span>
+            {ghost}
+          </div>
+        )}
+      </div>
       <div className="qo-list" ref={listRef}>
         {results.map((t, i) => (
           <button
@@ -109,7 +143,7 @@ export function ListPicker<T>({
             title={rowTitle?.(t)}
             // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
             onMouseMove={() => i !== clamped && setIdx(i)}
-            onClick={() => onPick(t, q)}
+            onClick={() => pick(t)}
           >
             {row(t, i === clamped, q)}
           </button>

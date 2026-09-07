@@ -8,6 +8,7 @@ import { z } from "zod";
 import type {
   AgentInfo,
   GitFileStatus,
+  PathEntry,
   RepoInfo,
   Theme,
   ThemePrefs,
@@ -39,6 +40,8 @@ export type ServerMsg =
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
   | { t: "repos"; repos: RepoInfo[] }
+  /** directories matching what the project picker has typed so far */
+  | { t: "path-entries"; query: string; entries: PathEntry[] }
   | { t: "worktrees"; worktrees: WorktreeStatus[] }
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
   | { t: "log"; worktreeId: string; proc: string; line: string }
@@ -221,6 +224,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("confirm-config"), repoId: id, config: toyonConfigSchema }),
   /** open another repo in this daemon (the project switcher's "open folder"); `~` is expanded */
   z.object({ t: z.literal("register-repo"), path: z.string().min(1).max(4_000) }),
+  /** what directories could complete this partial path (project picker autocomplete) */
+  z.object({ t: z.literal("browse-path"), path: z.string().max(4_000) }),
   /** drop a repo from the daemon; refused while it still has task worktrees */
   z.object({ t: z.literal("forget-repo"), repoId: id }),
   z.object({ t: z.literal("set-theme"), prefs: themePrefsSchema }),

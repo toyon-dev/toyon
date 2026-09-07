@@ -36,6 +36,15 @@ export interface RepoInfo {
   needsSetup: boolean;
 }
 
+/** one directory offered by the project picker's path completion */
+export interface PathEntry {
+  /** absolute path, tilde-collapsed for display and for typing back in */
+  path: string;
+  name: string;
+  /** a git repo, so it can be opened as a project; otherwise a folder to descend into */
+  isRepo: boolean;
+}
+
 export type WorktreeKind = "main" | "worktree" | "spare" | "combined";
 
 export interface WorktreeInfo {

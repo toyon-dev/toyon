@@ -9,6 +9,7 @@ import type {
   GitFileStatus,
   ImageInput,
   ImageRef,
+  PathEntry,
   PickedElement,
   PickMeta,
   RepoInfo,
@@ -156,6 +157,8 @@ export interface State {
   previewTheme: Theme | null;
   /** OS appearance (prefers-color-scheme), for themePrefs.mode === "system" */
   systemDark: boolean;
+  /** the project picker's path completion: directories the daemon found for `query` */
+  paths: { query: string; entries: PathEntry[] };
   /** the daemon's agent registry and the default for new worktrees */
   agents: AgentInfo[];
   defaultAgent: string;
@@ -205,6 +208,7 @@ export function initialState(opts: InitialOpts): State {
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
     systemDark: opts.systemDark ?? true,
+    paths: { query: "", entries: [] },
     agents: [],
     defaultAgent: "claude",
   };
@@ -427,6 +431,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "agents":
       return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent };
+    case "path-entries":
+      return { ...s, paths: { query: msg.query, entries: msg.entries } };
     case "repos": {
       const known = new Set(s.repos.map((r) => r.id));
       const added = msg.repos.find((r) => !known.has(r.id));

@@ -1128,6 +1128,11 @@ body.resizing .row-resize {
 body.resizing .rb-center {
   transition: none;
 }
+/* .btn is 11px/1.4 text in 1px padding (~17px) while .btn-icon is a fixed 20px square, so a bar
+   mixing them looks ragged; in here they share the icon box's height */
+.status-bar .btn {
+  min-height: 20px;
+}
 .status-bar .toggle:hover,
 .status-bar .toggle.on {
   color: var(--fg1);
@@ -1397,6 +1402,24 @@ body.resizing .rb-center {
 .prompt-box.quick-open input {
   width: 100%;
   font-family: var(--font-mono);
+}
+/* ghost completion: the typed part is hidden but still laid out, so the suffix lands exactly
+   where the caret is. Metrics must match .field/.field-lg or the tail drifts. */
+.lp-input {
+  position: relative;
+}
+.lp-ghost {
+  position: absolute;
+  inset: 1px;
+  padding: 8px 10px;
+  font: var(--fs-md) / 1.5 var(--font-mono);
+  color: var(--fg-dim);
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+}
+.lp-typed {
+  visibility: hidden;
 }
 .qo-list {
   max-height: 50vh;

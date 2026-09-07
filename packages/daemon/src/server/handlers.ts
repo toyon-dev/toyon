@@ -11,6 +11,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { FileService } from "../files/service.ts";
+import { browsePath } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import type { ThemeStore } from "../themes/store.ts";
@@ -261,6 +262,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async "register-repo"(msg, ctx, s) {
     const repo = await s.repos.register(msg.path);
     ctx.reply(toast("", true, `opened ${repo.name}`));
+  },
+
+  async "browse-path"(msg, ctx, _s) {
+    ctx.reply({ t: "path-entries", query: msg.path, entries: await browsePath(msg.path) });
   },
 
   async "forget-repo"(msg, ctx, s) {

@@ -15,7 +15,6 @@ export function InlinePicker<T>({
   rowClass,
   nav,
   listRef,
-  hint,
   empty,
 }: {
   results: T[];
@@ -24,8 +23,6 @@ export function InlinePicker<T>({
   rowClass?: (t: T) => string;
   nav: ListNav<T>;
   listRef: RefObject<HTMLDivElement>;
-  /** what the highlighted row expects after it, when it takes arguments */
-  hint?: string;
   empty: ReactNode;
 }) {
   return (
@@ -48,7 +45,6 @@ export function InlinePicker<T>({
         {results.length === 0 && <div className="dock-empty">{empty}</div>}
       </div>
       <div className="lp-keys">
-        {hint && <span className="ip-hint">{hint}</span>}
         <span className="lp-key">
           <Kbd k="↑↓" />
           moves

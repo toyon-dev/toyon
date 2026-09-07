@@ -975,10 +975,23 @@ body.resizing .row-resize {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ip-hint {
-  margin-right: auto;
+/* What a just-inserted command still expects, drawn after the caret rather than listed in the
+   menu: it is only useful once the command is chosen, and in the row it competed with the
+   descriptions. The metrics have to match .field-lg exactly or the ghost drifts off the caret. */
+.composer-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.composer-ghost {
+  position: absolute;
+  inset: 0;
+  font: var(--fs-md) / 1.5 var(--font-ui);
   color: var(--fg-dim);
-  font: var(--fs-sm) / 1 var(--font-mono);
+  white-space: pre-wrap;
+  overflow: hidden;
+  pointer-events: none;
 }
 /* chips ride on that same tone, so they take the panel's to stay raised */
 .chat-input .pick-chip {

@@ -79,6 +79,8 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const [caret, setCaret] = useState(0);
   /** the mention the user dismissed with esc, so it does not reopen on the next keystroke */
   const [dismissed, setDismissed] = useState<number | null>(null);
+  /** the command just inserted, so the draft can show what it still expects */
+  const [inserted, setInserted] = useState<{ name: string; hint: string } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const trigger = id ? triggerAt(text, caret) : null;
@@ -122,6 +124,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
       const { text: next, caret: at } = insertAt(text, trigger, insertionFor(r));
       setText(next);
       setDismissed(trigger.from);
+      setInserted(r.kind === "cmd" && r.c.hint ? { name: r.c.name, hint: r.c.hint } : null);
       // the draft round-trips through the store, so the caret has to be placed after that render
       requestAnimationFrame(() => {
         const el = composerRef.current;
@@ -132,6 +135,10 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
       });
     },
   });
+
+  // what the inserted command still expects, drawn after the caret. Only while nothing has been
+  // typed after it: once the arguments are being written, the hint is in the way rather than help.
+  const argGhost = inserted && text === `/${inserted.name} ` ? inserted.hint : null;
 
   // the listing is cached and never invalidated, so refresh on open: the agent may have created a
   // file this turn. Cached rows render immediately meanwhile, so the menu never looks empty.
@@ -277,7 +284,6 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           rowClass={(r) => (r.kind === "file" ? "qo-file" : r.kind === "changes" ? "cmd-item" : "cmd-item ip-cmd")}
           nav={nav}
           listRef={listRef}
-          hint={nav.active?.kind === "cmd" ? nav.active.c.hint : undefined}
           empty={emptyMenu(trigger.kind, files, commands.length)}
           row={(r) => {
             if (r.kind === "file") return fileRow(r.path, r.status, trigger.query);
@@ -296,50 +302,58 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           }}
         />
       )}
-      <textarea
-        className="field field-lg"
-        ref={composerRef}
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setCaret(e.target.selectionStart ?? e.target.value.length);
-          nav.setIndex(0);
-          setDismissed(null);
-        }}
-        // arrow keys and clicks move the caret without changing the text, and the menu follows it
-        onKeyUp={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-        onClick={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-        onPaste={onPaste}
-        onKeyDown={(e) => {
-          // an IME builds a word out of several keystrokes; a menu opening mid-composition would
-          // fight the candidate list
-          if (e.nativeEvent.isComposing) return;
-          if (menuOpen) {
-            if (e.key === "Escape") {
-              // no overlay is open, so the app-wide esc would toggle the terminal instead
-              e.preventDefault();
-              e.stopPropagation();
-              setDismissed(trigger?.from ?? null);
-              return;
+      <div className="composer-field">
+        <textarea
+          className="field field-lg"
+          ref={composerRef}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setCaret(e.target.selectionStart ?? e.target.value.length);
+            nav.setIndex(0);
+            setDismissed(null);
+          }}
+          // arrow keys and clicks move the caret without changing the text, and the menu follows it
+          onKeyUp={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+          onClick={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+          onPaste={onPaste}
+          onKeyDown={(e) => {
+            // an IME builds a word out of several keystrokes; a menu opening mid-composition would
+            // fight the candidate list
+            if (e.nativeEvent.isComposing) return;
+            if (menuOpen) {
+              if (e.key === "Escape") {
+                // no overlay is open, so the app-wide esc would toggle the terminal instead
+                e.preventDefault();
+                e.stopPropagation();
+                setDismissed(trigger?.from ?? null);
+                return;
+              }
+              if (nav.onKeyDown(e)) return;
             }
-            if (nav.onKeyDown(e)) return;
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            } else if (e.key === "Backspace" && text === "" && removeLast()) {
+              e.preventDefault();
+            }
+          }}
+          placeholder={
+            !active
+              ? "no worktree selected"
+              : spawnNew
+                ? "describe a change; starts an agent in a new worktree…"
+                : `message agent on ${active.worktree.title}…`
           }
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            send();
-          } else if (e.key === "Backspace" && text === "" && removeLast()) {
-            e.preventDefault();
-          }
-        }}
-        placeholder={
-          !active
-            ? "no worktree selected"
-            : spawnNew
-              ? "describe a change; starts an agent in a new worktree…"
-              : `message agent on ${active.worktree.title}…`
-        }
-        disabled={!active}
-      />
+          disabled={!active}
+        />
+        {argGhost && (
+          <div className="composer-ghost" aria-hidden="true">
+            <span className="lp-typed">{text}</span>
+            {argGhost}
+          </div>
+        )}
+      </div>
       <div className="chat-hint spawn-row">
         <span className="spawn-left">
           <label

@@ -37,6 +37,31 @@ export interface ImageRef {
   file: string;
 }
 
+/** a long paste the shell collapsed into a chip rather than dropping into the textarea. The text
+ * lives in the daemon's attachment store like an image, so a 100k paste does not ride in every
+ * backfill; `n` counts per worktree session, same rule as ImageRef. */
+export interface PasteRef {
+  n: number;
+  /** set when the paste came from a file rather than a text selection */
+  name?: string;
+  chars: number;
+  lines: number;
+  /** first non-empty line, trimmed and capped: the chip's label and the prompt's header */
+  preview: string;
+  /** basename under the store's <worktreeId>/ directory */
+  file: string;
+}
+
+/** one slash command the worktree's agent session advertises. `name` is verbatim as the agent
+ * gave it: the Claude adapter re-expands `/mcp:server:cmd` on the way back, so normalising it
+ * here would break MCP prompts. */
+export interface AgentCommand {
+  name: string;
+  description: string;
+  /** what the arguments are, when the command takes any */
+  hint?: string;
+}
+
 /** one way to log the agent in, as it advertised over ACP */
 export interface AuthMethodInfo {
   id: string;
@@ -50,7 +75,7 @@ export interface AuthMethodInfo {
 }
 
 export type AgentEvent =
-  | { type: "user-message"; text: string; ts: number; pick?: PickMeta; images?: ImageRef[] }
+  | { type: "user-message"; text: string; ts: number; pick?: PickMeta; images?: ImageRef[]; pastes?: PasteRef[] }
   | { type: "turn-start"; ts: number }
   | { type: "text-delta"; text: string }
   | { type: "thinking-delta"; text: string }

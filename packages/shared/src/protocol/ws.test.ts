@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseClientMsg } from "./ws.ts";
+import { PASTE_MAX_CHARS, PASTES_PER_MESSAGE, parseClientMsg } from "./ws.ts";
 
 describe("parseClientMsg", () => {
   test("accepts every well-formed kind it is given", () => {
@@ -32,6 +32,9 @@ describe("parseClientMsg", () => {
         },
       },
       { t: "create-worktree", repoId: "r", prompt: "x", profile: "fe" },
+      { t: "chat", worktreeId: "a", text: "hi", pastes: [{ text: "a\nb" }] },
+      { t: "chat", worktreeId: "a", text: "hi", pastes: [{ text: "x", name: "App.tsx" }] },
+      { t: "create-worktree", repoId: "r", prompt: "x", pastes: [{ text: "x" }] },
       { t: "set-worktree-profile", worktreeId: "a", profile: "full" },
       { t: "set-theme", prefs: { mode: "system", light: "l", dark: "d" } },
       { t: "rescan-themes" },
@@ -73,6 +76,16 @@ describe("parseClientMsg", () => {
     for (const c of bad) expect(cfg(c).ok, JSON.stringify(c)).toBe(false);
     const r = cfg(bad[0]);
     if (!r.ok) expect(r.reason).toMatch(/profiles\.a\.procs: unknown proc "nope"/);
+  });
+
+  test("a paste must have text, and there are caps on size and count", () => {
+    const chat = (pastes: unknown) => parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", pastes });
+    expect(chat([{ text: "" }]).ok).toBe(false);
+    expect(chat([{ text: "x".repeat(PASTE_MAX_CHARS + 1) }]).ok).toBe(false);
+    expect(chat(Array(PASTES_PER_MESSAGE + 1).fill({ text: "x" })).ok).toBe(false);
+    expect(chat(Array(PASTES_PER_MESSAGE).fill({ text: "x" })).ok).toBe(true);
+    const r = chat([{ text: "" }]);
+    if (!r.ok) expect(r.reason).toMatch(/^pastes/);
   });
 
   test("combine needs at least two worktrees; unqueue index is a non-negative integer", () => {

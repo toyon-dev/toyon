@@ -3,6 +3,7 @@
 // reducer is testable.
 
 import type {
+  AgentCommand,
   AgentEvent,
   AgentInfo,
   AuthMethodInfo,
@@ -10,6 +11,8 @@ import type {
   ImageInput,
   ImageRef,
   LogLine,
+  PasteInput,
+  PasteRef,
   PathEntry,
   PickedElement,
   PickMeta,
@@ -32,7 +35,7 @@ import {
 } from "@toyon/shared";
 
 export type ChatItem =
-  | { kind: "user"; text: string; pick?: PickMeta; images?: ImageRef[] }
+  | { kind: "user"; text: string; pick?: PickMeta; images?: ImageRef[]; pastes?: PasteRef[] }
   | { kind: "assistant"; text: string }
   | { kind: "thinking"; text: string }
   | {
@@ -88,6 +91,11 @@ export interface WorktreeLocal {
   /** images pasted or dropped on the composer, not yet sent; `key` is local (the daemon numbers
    * them on send) */
   images: PendingImage[];
+  /** long text pasted on the composer, not yet sent; `key` is local (the daemon numbers them on
+   * send, like images) */
+  pastes: PendingPaste[];
+  /** the slash commands this worktree's agent advertises; empty until it has run once */
+  commands: AgentCommand[];
   /** which stream the terminal pane is showing for this worktree: its shell or one of its procs.
    * Per worktree so switching back lands on the tab you left, and in the store so the rail can
    * open a crashed proc's tab. */
@@ -97,6 +105,13 @@ export interface WorktreeLocal {
 export interface PendingImage extends ImageInput {
   key: string;
   bytes: number;
+}
+
+export interface PendingPaste extends PasteInput {
+  key: string;
+  chars: number;
+  lines: number;
+  preview: string;
 }
 
 export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
@@ -109,6 +124,8 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   search: null,
   draft: "",
   images: [],
+  pastes: [],
+  commands: [],
   termStream: SHELL_STREAM,
 }) as WorktreeLocal;
 
@@ -293,6 +310,9 @@ export type Action =
   | { a: "add-images"; id: string; images: PendingImage[] }
   | { a: "remove-image"; id: string; key: string }
   | { a: "clear-images"; id: string }
+  | { a: "add-paste"; id: string; paste: PendingPaste }
+  | { a: "remove-paste"; id: string; key: string }
+  | { a: "clear-pastes"; id: string }
   | { a: "goto-line"; v: State["gotoLine"] }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
@@ -358,6 +378,12 @@ function reduce(s: State, action: Action): State {
       return withLocal(s, action.id, (l) => ({ ...l, images: l.images.filter((i) => i.key !== action.key) }));
     case "clear-images":
       return withLocal(s, action.id, (l) => (l.images.length ? { ...l, images: [] } : l));
+    case "add-paste":
+      return withLocal(s, action.id, (l) => ({ ...l, pastes: [...l.pastes, action.paste] }));
+    case "remove-paste":
+      return withLocal(s, action.id, (l) => ({ ...l, pastes: l.pastes.filter((p) => p.key !== action.key) }));
+    case "clear-pastes":
+      return withLocal(s, action.id, (l) => (l.pastes.length ? { ...l, pastes: [] } : l));
     case "goto-line":
       return { ...s, gotoLine: action.v };
     case "hmr":
@@ -575,8 +601,17 @@ function onServer(s: State, msg: StoreServerMsg): State {
       }));
     case "queue":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, queue: msg.items }));
+    case "agent-commands":
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, commands: msg.commands }));
     case "error":
       return { ...s, toast: { ok: false, message: msg.message } };
+    default: {
+      // exhaustive at compile time, but a daemon one version ahead can still send a `t` this
+      // build has never heard of, and returning undefined here blanks the tab on the next read
+      const unknown: never = msg;
+      void unknown;
+      return s;
+    }
   }
 }
 
@@ -594,7 +629,13 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
     case "user-message":
       return [
         ...items,
-        { kind: "user", text: event.text, pick: event.pick, ...(event.images?.length ? { images: event.images } : {}) },
+        {
+          kind: "user",
+          text: event.text,
+          pick: event.pick,
+          ...(event.images?.length ? { images: event.images } : {}),
+          ...(event.pastes?.length ? { pastes: event.pastes } : {}),
+        },
       ];
     case "text-delta":
       if (last?.kind === "assistant") return [...items.slice(0, -1), { ...last, text: last.text + event.text }];

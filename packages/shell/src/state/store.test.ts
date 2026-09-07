@@ -356,6 +356,35 @@ describe("attachments", () => {
     const s = run([hello(wt("a")), agent("a", { type: "user-message", text: "see", ts: 0, images: [ref] })]);
     expect(s.local.a?.chat[0]).toEqual({ kind: "user", text: "see", pick: undefined, images: [ref] });
   });
+
+  const paste = { key: "p1", text: "a\nb", chars: 3, lines: 2, preview: "a" };
+  test("pending pastes are kept per worktree, removable by key, cleared on send", () => {
+    let s = run([hello(wt("a"), wt("b")), { a: "add-paste", id: "a", paste }]);
+    s = run([{ a: "add-paste", id: "a", paste: { ...paste, key: "p2" } }], s);
+    expect(s.local.a?.pastes.map((p) => p.key)).toEqual(["p1", "p2"]);
+    expect(localOf(s, "b").pastes).toEqual([]);
+    s = run([{ a: "remove-paste", id: "a", key: "p1" }], s);
+    expect(s.local.a?.pastes.map((p) => p.key)).toEqual(["p2"]);
+    s = run([{ a: "clear-pastes", id: "a" }], s);
+    expect(s.local.a?.pastes).toEqual([]);
+  });
+  test("a sent message keeps its paste refs for the bubble", () => {
+    const ref = { n: 1, chars: 3, lines: 2, preview: "a", file: "1.txt" };
+    const s = run([hello(wt("a")), agent("a", { type: "user-message", text: "this", ts: 0, pastes: [ref] })]);
+    expect(s.local.a?.chat[0]).toEqual({ kind: "user", text: "this", pick: undefined, pastes: [ref] });
+  });
+});
+
+describe("agent slash commands", () => {
+  test("the advertised list is kept per worktree and replaced wholesale", () => {
+    const one = [{ name: "review", description: "review a PR" }];
+    let s = run([hello(wt("a"), wt("b")), server({ t: "agent-commands", worktreeId: "a", commands: one })]);
+    expect(s.local.a?.commands).toEqual(one);
+    expect(localOf(s, "b").commands).toEqual([]);
+    const two = [{ name: "ship", description: "ship it", hint: "<branch>" }];
+    s = run([server({ t: "agent-commands", worktreeId: "a", commands: two })], s);
+    expect(s.local.a?.commands).toEqual(two);
+  });
 });
 
 describe("drafts", () => {

@@ -18,10 +18,10 @@ import type {
   WorktreeStatus,
 } from "../model.ts";
 import { SHELL_STREAM } from "../model.ts";
-import type { AgentEvent, PickMeta } from "./events.ts";
+import type { AgentCommand, AgentEvent, PickMeta } from "./events.ts";
 
 /** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -72,6 +72,9 @@ export type ServerMsg =
   | { t: "files"; worktreeId: string; paths: string[] }
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
   | { t: "queue"; worktreeId: string; items: string[] }
+  /** the slash commands this worktree's agent session advertises. Ephemeral, never a transcript
+   * event (the backfill trims to the last 1000), so it is replayed on subscribe like `queue`. */
+  | { t: "agent-commands"; worktreeId: string; commands: AgentCommand[] }
   | { t: "changed-ranges"; worktreeId: string; path: string; ranges: Array<[number, number]>; lineOffset: number }
   /** raw stream output; only to sockets that opened that exact tab (term-open) */
   | { t: "term-data"; worktreeId: string; stream: string; data: string }
@@ -120,6 +123,22 @@ export const imageInputSchema = z.object({
 });
 export type ImageInput = z.infer<typeof imageInputSchema>;
 const images = z.array(imageInputSchema).max(IMAGES_PER_MESSAGE).optional();
+
+/** when a paste collapses into a chip instead of filling the textarea. Either bound trips it: a
+ * wall of prose has few lines, a stack trace has short ones. */
+export const PASTE_MIN_CHARS = 1200;
+export const PASTE_MIN_LINES = 10;
+export const PASTE_MAX_CHARS = 100_000;
+export const PASTES_PER_MESSAGE = 4;
+
+/** a paste as the shell sends it; the daemon derives the counts rather than trusting them */
+export const pasteInputSchema = z.object({
+  text: z.string().min(1).max(PASTE_MAX_CHARS),
+  /** the file it came from, when it was pasted or dropped as one */
+  name: z.string().max(200).optional(),
+});
+export type PasteInput = z.infer<typeof pasteInputSchema>;
+const pastes = z.array(pasteInputSchema).max(PASTES_PER_MESSAGE).optional();
 
 export const pickMetaSchema = z.object({
   component: z.string().nullable(),
@@ -188,6 +207,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     context: prose.optional(),
     pick: pickMetaSchema.optional(),
     images,
+    pastes,
   }),
   z.object({
     t: z.literal("create-worktree"),
@@ -200,6 +220,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     context: prose.optional(),
     pick: pickMetaSchema.optional(),
     images,
+    pastes,
     /** registry id; the daemon's default when absent */
     agent: id.optional(),
     /** one of the repo's profiles; its defaultProfile when absent */

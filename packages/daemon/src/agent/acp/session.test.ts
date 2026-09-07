@@ -438,17 +438,17 @@ describe("AcpSession", () => {
     );
     const w = world(fake, claudeSpec, 10);
     expect(await w.session.ask("You name things.", "Name this: sticky header")).toBe("sticky-header");
-    // spawning opened the main session; the question ran on a second one with its own system
-    // prompt, switched to the read-only mode, and wrote nothing to the transcript
-    expect(fake.newSessions).toHaveLength(2);
-    expect(fake.newSessions[1]!._meta).toEqual({ systemPrompt: "You name things." });
+    // the question ran on a session of its own with its own system prompt, switched to the
+    // read-only mode, and wrote nothing to the transcript; no chat session was opened for it
+    expect(fake.newSessions).toHaveLength(1);
+    expect(fake.newSessions[0]!._meta).toEqual({ systemPrompt: "You name things." });
     expect(fake.modes).toEqual(["read-only"]);
-    // the only transcript line is the spawn's session-info; nothing the question said
-    expect(w.types()).toEqual(["session-info"]);
-    // the main session is separate and unaffected
+    expect(w.events).toEqual([]);
+    // the chat session opens on the same process when the first prompt arrives
     w.session.send("hello");
     await w.idle();
     expect(fake.newSessions).toHaveLength(2);
+    expect(w.links).toHaveLength(1);
     expect(w.events.filter((e) => e.type === "text-delta").map((e) => (e as { text: string }).text)).toEqual([
       "main reply",
     ]);

@@ -19,7 +19,7 @@ import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AuthObservation } from "../accounts.ts";
 import type { AgentAdapter, AuthOutcome, SendOpts } from "../adapter.ts";
-import type { AttachmentStore, StoredImage } from "../attachments.ts";
+import type { AttachmentStore, StoredImage, StoredPaste } from "../attachments.ts";
 import { decide, pickOption } from "../policy.ts";
 import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
@@ -341,17 +341,22 @@ export class AcpSession implements AgentAdapter {
     return /connection closed/i.test(message) ? (this.conn?.link.exitInfo() ?? message) : message;
   }
 
-  private async runTurn({ text, context, pick, images }: QueueItem) {
+  private async runTurn({ text, context, pick, images, pastes }: QueueItem) {
     // numbered and written in send order before anything is shown, so the bubble and the prompt
-    // agree on "image N"
+    // agree on "image N" and "pasted text N"
     const stored: StoredImage[] = [];
-    for (const img of images ?? []) stored.push(await this.d.attachments.put(this.d.worktreeId, ++this.imageSeq, img));
+    for (const img of images ?? [])
+      stored.push(await this.d.attachments.putImage(this.d.worktreeId, ++this.imageSeq, img));
+    const storedPastes: StoredPaste[] = [];
+    for (const p of pastes ?? [])
+      storedPastes.push(await this.d.attachments.putText(this.d.worktreeId, ++this.pasteSeq, p.text, p.name));
     this.emit({
       type: "user-message",
       text,
       ts: Date.now(),
       pick,
       ...(stored.length ? { images: stored.map((s) => s.ref) } : {}),
+      ...(storedPastes.length ? { pastes: storedPastes.map((p) => p.ref) } : {}),
     });
     this.emit({ type: "turn-start", ts: Date.now() });
     const live = await this.ensureLive();
@@ -369,7 +374,7 @@ export class AcpSession implements AgentAdapter {
     live.prefixPending = false;
     const res = await live.conn.ctx.request(acp.methods.agent.session.prompt, {
       sessionId: live.sessionId,
-      prompt: buildPrompt(text, context, prefix, carried),
+      prompt: buildPrompt(text, context, prefix, carried, storedPastes),
     });
     this.emit({ type: "turn-end", stopReason: mapStopReason(res.stopReason), ts: Date.now() });
   }

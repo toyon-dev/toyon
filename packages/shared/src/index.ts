@@ -4,6 +4,7 @@
 export * from "./agent-tools.ts";
 export * from "./chords.ts";
 export * from "./model.ts";
+export * from "./paste.ts";
 export * from "./ports.ts";
 export * from "./protocol/bridge.ts";
 export * from "./protocol/events.ts";

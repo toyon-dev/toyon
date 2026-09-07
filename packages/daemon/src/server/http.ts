@@ -83,7 +83,8 @@ export function createFetch(opts: HttpOpts) {
       }
     }
 
-    // images the shell attached to chat messages, back for the transcript's thumbnails. The token
+    // what the shell attached to chat messages (image thumbnails, the text behind a paste chip),
+    // back for the transcript. Bun.file types the response from the extension. The token
     // rides in the query like /ws does: an <img src> cannot carry a header. Files never change
     // once written, so the browser may keep them.
     if (url.pathname.startsWith("/attachments/")) {

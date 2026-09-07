@@ -604,6 +604,34 @@ describe("AcpSession", () => {
     await w2.session.close();
   });
 
+  test("pastes: stored as .txt, numbered per session, fenced ahead of the text", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    w.session.send("fix this", { pastes: [{ text: "one\ntwo" }, { text: "x", name: "App.tsx" }] });
+    await w.idle();
+    expect(w.events[0]).toMatchObject({
+      type: "user-message",
+      text: "fix this",
+      pastes: [
+        { n: 1, chars: 7, lines: 2, preview: "one", file: "1.txt" },
+        { n: 2, name: "App.tsx", file: "2.txt" },
+      ],
+    });
+    expect(readFileSync(join(home, "attachments", w.id, "1.txt"), "utf8")).toBe("one\ntwo");
+    const blocks = fake.prompts[0]!.prompt as Array<{ text: string }>;
+    expect(blocks[0]!.text).toBe(
+      "Pasted text 1 (2 lines, 7 chars), begins: one\n<pasted-text 1>\none\ntwo\n</pasted-text>",
+    );
+    expect(blocks[2]!.text).toBe("fix this");
+    // numbering continues over a restart, so "pasted text 3" still means the same block
+    await w.session.close();
+    const w2 = world(fake, claudeSpec, 60_000, w.id);
+    w2.session.send("and this", { pastes: [{ text: "z" }] });
+    await w2.idle();
+    expect(w2.events[0]).toMatchObject({ type: "user-message", pastes: [{ n: 3, file: "3.txt" }] });
+    await w2.session.close();
+  });
+
   test("an agent without image support gets the text only, and the person is told", async () => {
     const fake = fakeAgent(say("ok"));
     const w = world(fake);

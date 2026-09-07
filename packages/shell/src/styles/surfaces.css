@@ -573,8 +573,9 @@ body.resizing .row-resize {
   background: var(--bg1);
   padding-top: 6px;
 }
-/* health, pinned to the foot of the rail: one dot for the worst of daemon connection and the
-   active worktree's procs (distinct from worktree dots: smaller, muted when all is well) */
+/* the foot of the rail, empty unless the socket is down: proc health reads off the worktree dots
+   above it and off the terminal's own tabs, so nothing is drawn here while all is well. The row
+   keeps its height either way, or the list would grow by 40px on every reconnect. */
 .rail-foot {
   flex-shrink: 0;
   /* 40px: centers the dot on the composer's bottom row (10px pad + 20px picker box) so it lines up with the element picker */
@@ -587,46 +588,21 @@ body.resizing .row-resize {
   justify-content: flex-end;
   gap: 8px;
   padding: 0 17px 0 12px;
-  border: 0;
-  background: none;
-  font: inherit;
   font-size: var(--fs-xs);
-  color: var(--fg-dim);
   white-space: nowrap;
   cursor: default;
 }
-.rail-foot[aria-disabled="false"] {
-  cursor: pointer;
+.rail-foot.offline {
+  color: var(--orange);
 }
 .conn-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--fg-dim);
   flex-shrink: 0;
   box-sizing: border-box;
-}
-.rail-foot[data-level="offline"] {
-  color: var(--orange);
-}
-.rail-foot[data-level="offline"] .conn-dot {
-  background: transparent;
+  /* hollow: reconnecting is a state to notice, not a fault to act on */
   border: 1px solid var(--orange);
-}
-.rail-foot[data-level="crashed"] {
-  color: var(--red);
-}
-.rail-foot[data-level="crashed"] .conn-dot {
-  background: var(--red);
-}
-.rail-foot[data-level="stopped"] {
-  color: var(--yellow);
-}
-.rail-foot[data-level="stopped"] .conn-dot {
-  background: var(--yellow);
-}
-.rail-foot[data-level="starting"] .conn-dot {
-  animation: pulse 1.2s ease-in-out infinite;
 }
 /* stale rail while the socket is down */
 .wt-rail.offline .rail-list {
@@ -998,6 +974,26 @@ body.resizing .row-resize {
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
 .composer-pick.on {
   color: var(--orange);
+}
+/* a crashed proc in this worktree, badged on the terminal button: the only status this row shows,
+   and only because the tab that explains it is one click away */
+.term-btn {
+  position: relative;
+}
+.term-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--red);
+  /* ringed in the surface behind it so the dot stays round against the icon's strokes */
+  box-shadow: 0 0 0 1.5px var(--bg0);
+}
+.term-btn:hover .term-badge,
+.term-btn.on .term-badge {
+  box-shadow: 0 0 0 1.5px var(--bg2);
 }
 .spawn-row label {
   display: flex;

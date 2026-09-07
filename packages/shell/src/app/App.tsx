@@ -23,6 +23,7 @@ export function App() {
   const dispatch = useDispatch();
   const sock = useSock();
   const activeId = useActiveId();
+  const activeRepoId = useStore((s) => s.activeRepoId);
   const active = useActive();
   const connected = useStore((s) => s.connected);
   const zen = useStore((s) => s.zen);
@@ -76,6 +77,12 @@ export function App() {
       localStorage.setItem(STORAGE.active, activeId);
     } catch {}
   }, [activeId]);
+  useEffect(() => {
+    if (!activeRepoId) return;
+    try {
+      localStorage.setItem(STORAGE.repo, activeRepoId);
+    } catch {}
+  }, [activeRepoId]);
 
   useChords();
 

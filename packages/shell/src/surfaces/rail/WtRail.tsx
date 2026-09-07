@@ -2,7 +2,7 @@ import type { WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
-import { useActiveId, useWorktrees } from "../../state/selectors.ts";
+import { useActiveId, useVisibleWorktrees } from "../../state/selectors.ts";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -17,7 +17,7 @@ type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
 export function WtRail() {
   const dispatch = useDispatch();
   const sock = useSock();
-  const worktrees = useWorktrees();
+  const worktrees = useVisibleWorktrees();
   const activeId = useActiveId();
   const connected = useStore((s) => s.connected);
   const leftOpen = useStore((s) => s.leftOpen);

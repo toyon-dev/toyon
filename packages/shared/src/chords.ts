@@ -15,7 +15,8 @@ export type ChordId =
   | "zen"
   | "new"
   | "terminal"
-  | "worktree";
+  | "worktree"
+  | "project";
 
 export type ChordSection = "Find" | "Panels" | "Preview" | "Worktrees";
 
@@ -76,6 +77,9 @@ export const CHORDS: readonly Chord[] = [
     section: "Worktrees",
   },
   { id: "worktree", key: "1-9", label: "switch worktree", section: "Worktrees" },
+  // ⌘⇧O: Zed's recent-projects key is ⌘⌥O, but ⌥ is how macOS types symbols and matchChord
+  // refuses it; ⇧O is free in every browser we run in
+  { id: "project", key: "o", shift: true, label: "switch project", section: "Worktrees" },
 ];
 
 export const CHORD_SECTIONS: readonly ChordSection[] = ["Find", "Panels", "Preview", "Worktrees"];

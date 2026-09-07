@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useActiveRepo } from "../../state/selectors.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
 
@@ -7,7 +8,7 @@ import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
 export function PromptOverlay() {
   const dispatch = useDispatch();
   const sock = useSock();
-  const repo = useStore((s) => s.repos[0] ?? null);
+  const repo = useActiveRepo();
   const clientId = useStore((s) => s.clientId);
   const rightOpen = useStore((s) => s.rightOpen);
   const agents = useStore((s) => s.agents);

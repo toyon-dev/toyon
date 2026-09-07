@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useStore } from "../../state/context.tsx";
-import { useActive, useLocalField } from "../../state/selectors.ts";
+import { useActive, useActiveRepo, useLocalField } from "../../state/selectors.ts";
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -25,6 +25,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   return (
     <div className="status-bar top-bar">
       {zen && <span className="zen-title">{active?.worktree.title ?? "toyon"}</span>}
+      <ProjectPill />
       <button
         className={`btn-icon toggle ${leftOpen ? "on" : ""}`}
         onClick={() => dispatch({ a: "toggle-left" })}
@@ -75,6 +76,28 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
         </button>
       </span>
     </div>
+  );
+}
+
+/** top-left, Zed-style: the project the shell is scoped to; opens the switcher. A dot means an
+ * agent is working in a project that is not on screen. */
+function ProjectPill() {
+  const dispatch = useDispatch();
+  const repo = useActiveRepo();
+  const repos = useStore((s) => s.repos);
+  const busyElsewhere = useStore((s) =>
+    s.worktrees.some((w) => w.agent === "working" && w.worktree.repoId !== s.activeRepoId),
+  );
+  return (
+    <button
+      className="btn project-pill"
+      {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
+      onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
+    >
+      {repo?.name ?? "open project"}
+      <span className="pp-caret">⌄</span>
+      {busyElsewhere && <span className="pp-dot" />}
+    </button>
   );
 }
 

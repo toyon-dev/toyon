@@ -1,9 +1,9 @@
 // Selector hooks. Each returns a field or a stable constant so a component re-renders only when
 // what it reads changes (useSyncExternalStore compares by identity: never build a fresh object here).
 
-import type { WorktreeStatus } from "@toyon/shared";
+import type { RepoInfo, WorktreeStatus } from "@toyon/shared";
 import { useStore } from "./context.tsx";
-import { currentTheme, localOf, type WorktreeLocal, worktreeById } from "./store.ts";
+import { currentTheme, localOf, repoById, type WorktreeLocal, worktreeById } from "./store.ts";
 
 export const useActiveId = () => useStore((s) => s.activeId);
 
@@ -11,6 +11,12 @@ export const useActiveId = () => useStore((s) => s.activeId);
 export const useActive = (): WorktreeStatus | null => useStore((s) => worktreeById(s, s.activeId));
 
 export const useWorktrees = () => useStore((s) => s.worktrees);
+
+/** the active project's worktrees: what the rail lists and ⌘1–9 count over */
+export const useVisibleWorktrees = () => useStore((s) => s.visible);
+
+/** the project the shell is scoped to (an element of the repos array, so its identity is stable) */
+export const useActiveRepo = (): RepoInfo | null => useStore((s) => repoById(s, s.activeRepoId));
 
 /** the per-worktree record (the shared EMPTY_LOCAL when unknown, so the identity is stable).
  * Prefer useLocalField: the record's identity changes on every log line and keystroke. */

@@ -41,6 +41,7 @@ const store = createStore(
     cached,
     systemDark: prefersDark(),
     storedActive: read(localStorage, STORAGE.active),
+    storedRepo: read(localStorage, STORAGE.repo),
     clientId: clientId(),
   }),
 );

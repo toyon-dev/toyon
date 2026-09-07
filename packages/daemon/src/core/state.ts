@@ -123,6 +123,11 @@ export class StateStore {
     this.state.repos.push(repo);
     this.save();
   }
+  /** drops the repo record only; the caller has removed its worktrees and stopped its runtimes */
+  removeRepo(id: string) {
+    this.state.repos = this.state.repos.filter((r) => r.id !== id);
+    this.save();
+  }
   addWorktree(wt: WorktreeInfo) {
     this.state.worktrees.push(wt);
     this.save();

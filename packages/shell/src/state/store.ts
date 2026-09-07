@@ -103,17 +103,29 @@ export type Overlay =
   /** default-agent picker */
   | { kind: "agent" }
   /** the setup pane for a repo that is already configured (install + start commands) */
-  | { kind: "setup"; repoId: string };
+  | { kind: "setup"; repoId: string }
+  /** the project switcher: pick a registered repo, or type a path to open another */
+  | { kind: "projects" };
 
 export interface State {
   connected: boolean;
   repos: RepoInfo[];
   worktrees: WorktreeStatus[];
+  /** the project the shell is scoped to: the rail, ⌘1–9, ⌘K and settings show only its worktrees.
+   * The daemon keeps every repo's procs and agents running regardless; this is a view choice. */
+  activeRepoId: string | null;
+  /** `worktrees` narrowed to the active repo (kept in step by the reducer so selectors stay stable) */
+  visible: WorktreeStatus[];
+  /** the worktree last selected in each repo: switching back to a project lands where you left it */
+  lastActive: Record<string, string>;
+  /** an "open project" was sent: the next repo the daemon adds becomes the active one */
+  pendingOpen: boolean;
   activeId: string | null;
   /** this tab's id; a worktree created from here steals focus, one created elsewhere does not */
   clientId: string;
   /** worktree selected before the last reload, restored on hello */
   storedActive: string | null;
+  storedRepo: string | null;
   local: Record<string, WorktreeLocal>;
   diff: { worktreeId: string; path: string; before: string; after: string; line?: number } | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
@@ -156,6 +168,8 @@ export interface InitialOpts {
   cached?: Theme;
   systemDark?: boolean;
   storedActive?: string | null;
+  /** project selected before the last reload, restored on hello */
+  storedRepo?: string | null;
 }
 
 export function initialState(opts: InitialOpts): State {
@@ -164,9 +178,14 @@ export function initialState(opts: InitialOpts): State {
     connected: false,
     repos: [],
     worktrees: [],
+    activeRepoId: null,
+    visible: [],
+    lastActive: {},
+    pendingOpen: false,
     activeId: null,
     clientId: opts.clientId,
     storedActive: opts.storedActive ?? null,
+    storedRepo: opts.storedRepo ?? null,
     local: {},
     diff: null,
     toast: null,
@@ -204,6 +223,32 @@ export function worktreeById(s: State, id: string | null | undefined): WorktreeS
   return (id && s.worktrees.find((w) => w.worktree.id === id)) || null;
 }
 
+export function repoById(s: State, id: string | null | undefined): RepoInfo | null {
+  return (id && s.repos.find((r) => r.id === id)) || null;
+}
+
+/** the active repo's worktrees; every repo's when nothing is selected (a daemon with no repos) */
+function visibleOf(worktrees: WorktreeStatus[], repoId: string | null): WorktreeStatus[] {
+  return repoId ? worktrees.filter((w) => w.worktree.repoId === repoId) : worktrees;
+}
+
+/** the worktree to land on in a repo: the one last selected there, else its first row (main) */
+function landingIn(s: State, repoId: string | null, worktrees = s.worktrees): string | null {
+  if (!repoId) return worktrees[0]?.worktree.id ?? null;
+  const last = s.lastActive[repoId];
+  if (last && worktrees.some((w) => w.worktree.id === last)) return last;
+  return worktrees.find((w) => w.worktree.repoId === repoId)?.worktree.id ?? null;
+}
+
+/** select a worktree, and with it its repo (a chord or a rail click never leaves you scoped to
+ * a project that is not the one on screen) */
+function activate(s: State, id: string | null): State {
+  const wt = worktreeById(s, id);
+  const activeRepoId = wt ? wt.worktree.repoId : s.activeRepoId;
+  const lastActive = wt ? { ...s.lastActive, [wt.worktree.repoId]: wt.worktree.id } : s.lastActive;
+  return { ...s, activeId: id, activeRepoId, lastActive, diff: null };
+}
+
 export const isSubPicker = (o: Overlay) => o.kind === "theme" || o.kind === "appearance" || o.kind === "agent";
 
 /** what reaches the reducer: terminal frames are routed to the pane before dispatch (main.tsx) */
@@ -213,6 +258,10 @@ export type Action =
   | { a: "server"; msg: StoreServerMsg }
   | { a: "connected"; v: boolean }
   | { a: "activate"; id: string }
+  /** switch the shell to another registered repo */
+  | { a: "activate-repo"; id: string }
+  /** an "open project" request went to the daemon: adopt the repo it adds */
+  | { a: "open-repo" }
   | { a: "close-diff" }
   | { a: "dismiss-toast" }
   | { a: "set-draft"; id: string; text: string }
@@ -252,11 +301,24 @@ function paletteBack(s: State, back: boolean | undefined): Pick<State, "overlay"
 }
 
 export function reducer(s: State, action: Action): State {
+  const next = reduce(s, action);
+  if (next.worktrees === s.worktrees && next.activeRepoId === s.activeRepoId) return next;
+  return { ...next, visible: visibleOf(next.worktrees, next.activeRepoId) };
+}
+
+function reduce(s: State, action: Action): State {
   switch (action.a) {
     case "connected":
       return { ...s, connected: action.v };
     case "activate":
-      return { ...s, activeId: action.id, diff: null };
+      return activate(s, action.id);
+    case "activate-repo": {
+      if (action.id === s.activeRepoId || !repoById(s, action.id)) return s;
+      const id = landingIn(s, action.id);
+      return { ...activate(s, id), activeRepoId: action.id };
+    }
+    case "open-repo":
+      return { ...s, pendingOpen: true };
     case "close-diff":
       return { ...s, diff: null };
     case "dismiss-toast":
@@ -338,16 +400,22 @@ function onServer(s: State, msg: StoreServerMsg): State {
     case "hello": {
       // restore the previously selected worktree across reloads
       const has = (id: string | null) => !!id && msg.worktrees.some((w) => w.worktree.id === id);
+      const hasRepo = (id: string | null) => !!id && msg.repos.some((r) => r.id === id);
+      // the project narrows the fallback: a stored repo whose stored worktree is gone still opens
+      // on that repo, not on whichever worktree the daemon lists first
+      const repoId = hasRepo(s.activeRepoId) ? s.activeRepoId : hasRepo(s.storedRepo) ? s.storedRepo : null;
       const activeId = has(s.activeId)
         ? s.activeId
         : has(s.storedActive)
           ? s.storedActive
-          : (msg.worktrees[0]?.worktree.id ?? null);
+          : landingIn(s, repoId, msg.worktrees);
+      const wt = msg.worktrees.find((w) => w.worktree.id === activeId);
       return {
         ...s,
         repos: msg.repos,
         worktrees: msg.worktrees,
         activeId,
+        activeRepoId: wt?.worktree.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
         local: pruneLocal(s.local, msg.worktrees),
         themes: msg.themes ?? s.themes,
         themePrefs: msg.themePrefs ?? s.themePrefs,
@@ -359,12 +427,26 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "agents":
       return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent };
-    case "repos":
-      return { ...s, repos: msg.repos };
+    case "repos": {
+      const known = new Set(s.repos.map((r) => r.id));
+      const added = msg.repos.find((r) => !known.has(r.id));
+      let activeRepoId = s.activeRepoId;
+      let pendingOpen = s.pendingOpen;
+      if (added && (pendingOpen || !activeRepoId)) {
+        // the project this tab asked to open (or the daemon's first repo ever): switch to it; its
+        // worktrees frame follows and the landing rule below picks its main row
+        activeRepoId = added.id;
+        pendingOpen = false;
+      } else if (!msg.repos.some((r) => r.id === activeRepoId)) {
+        activeRepoId = msg.repos[0]?.id ?? null;
+      }
+      if (activeRepoId === s.activeRepoId) return { ...s, repos: msg.repos, pendingOpen };
+      return { ...s, repos: msg.repos, pendingOpen, activeRepoId, activeId: landingIn(s, activeRepoId), diff: null };
+    }
     case "worktrees": {
       let activeId = s.activeId;
       if (!activeId || !msg.worktrees.some((w) => w.worktree.id === activeId)) {
-        activeId = msg.worktrees[0]?.worktree.id ?? null;
+        activeId = landingIn(s, s.activeRepoId, msg.worktrees);
       }
       // auto-focus a worktree THIS tab just created (the "prompt spawns a tab" moment); one made
       // from another tab or the CLI stays where it is
@@ -373,7 +455,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         (w) => !known.has(w.worktree.id) && w.worktree.kind === "worktree" && w.worktree.createdBy === s.clientId,
       );
       if (fresh && s.worktrees.length > 0) activeId = fresh.worktree.id;
-      return { ...s, worktrees: msg.worktrees, activeId, local: pruneLocal(s.local, msg.worktrees) };
+      return activate({ ...s, worktrees: msg.worktrees, local: pruneLocal(s.local, msg.worktrees) }, activeId);
     }
     case "proc": {
       const worktrees = s.worktrees.map((w) =>
@@ -438,7 +520,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
     case "shipped": {
       // a suggestion lands in that worktree's composer and focuses it
       const next = msg.suggestion
-        ? withLocal({ ...s, activeId: msg.worktreeId }, msg.worktreeId, (l) => ({ ...l, draft: msg.suggestion! }))
+        ? withLocal(activate(s, msg.worktreeId), msg.worktreeId, (l) => ({ ...l, draft: msg.suggestion! }))
         : s;
       return {
         ...next,

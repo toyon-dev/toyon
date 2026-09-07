@@ -71,8 +71,17 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
           title: memo.title,
         });
       }
-      if (update.title) memo.title = update.title;
-      if (update.kind) memo.kind = update.kind;
+      const refined: Extract<AgentEvent, { type: "tool-update" }> = { type: "tool-update", toolId: update.toolCallId };
+      if (update.title && update.title !== memo.title) {
+        memo.title = update.title;
+        refined.title = update.title;
+        // a placeholder title ("Preparing file…") was the name too; the real title is a better one
+        if (!update.name && memo.name !== update.title) refined.name = memo.name = update.title;
+      }
+      if (update.name && update.name !== memo.name) refined.name = memo.name = update.name;
+      if (update.kind && update.kind !== memo.kind) refined.kind = memo.kind = update.kind;
+      if (update.rawInput !== undefined) refined.input = update.rawInput;
+      if (Object.keys(refined).length > 2 && !memo.ended && out.length === 0) out.push(refined);
       if (update.content) memo.content = [...memo.content, ...update.content];
       if (update.rawOutput !== undefined) memo.rawOutput = update.rawOutput;
       if ((update.status === "completed" || update.status === "failed") && !memo.ended) {

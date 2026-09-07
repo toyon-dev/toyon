@@ -29,6 +29,8 @@ export type AgentEvent =
   | { type: "text-delta"; text: string }
   | { type: "thinking-delta"; text: string }
   | { type: "tool-start"; toolId: string; name: string; input: unknown; kind?: ToolKind; title?: string }
+  /** the agent refined a running tool call (a placeholder title became the real one, input arrived) */
+  | { type: "tool-update"; toolId: string; name?: string; title?: string; input?: unknown; kind?: ToolKind }
   | { type: "tool-end"; toolId: string; output?: string; isError?: boolean }
   | { type: "turn-end"; stopReason: string; ts: number }
   | { type: "session-info"; sessionId: string; model?: string }

@@ -36,6 +36,12 @@ describe("mapUpdate", () => {
         {
           sessionUpdate: "tool_call_update",
           toolCallId: "c1",
+          title: "Write /a",
+          rawInput: { file_path: "/a", content: "y" },
+        },
+        {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "c1",
           status: "completed",
           content: [{ type: "diff", path: "/a", oldText: "x", newText: "y\nz" }],
         },
@@ -51,6 +57,13 @@ describe("mapUpdate", () => {
         input: { file_path: "/a" },
         kind: "edit",
         title: "Edit files",
+      },
+      {
+        type: "tool-update",
+        toolId: "c1",
+        title: "Write /a",
+        name: "Write /a",
+        input: { file_path: "/a", content: "y" },
       },
       { type: "tool-end", toolId: "c1", output: "--- /a\n-x\n+y\n+z", isError: false },
     ]);

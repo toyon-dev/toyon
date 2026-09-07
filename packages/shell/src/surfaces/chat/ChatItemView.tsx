@@ -36,9 +36,10 @@ function Markdown({ text }: { text: string }) {
 
 function toolHint(item: Extract<ChatItem, { kind: "tool" }>): string {
   const input = item.input as Record<string, unknown> | null;
-  if (!input) return "";
-  const v = input.file_path ?? input.command ?? input.path ?? input.pattern ?? "";
-  return typeof v === "string" ? v : "";
+  const v = input ? (input.file_path ?? input.command ?? input.path ?? input.pattern) : undefined;
+  if (typeof v === "string" && v) return v;
+  // ACP agents describe the call in the title ("Write src/a.ts"); avoid repeating the name
+  return item.title && item.title !== item.name ? item.title : "";
 }
 
 /** one chat row; memoized so a streaming delta re-renders only the item it touches */

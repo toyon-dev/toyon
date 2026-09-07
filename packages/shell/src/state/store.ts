@@ -471,6 +471,20 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
           ...(event.title ? { title: event.title } : {}),
         },
       ];
+    case "tool-update": {
+      const idx = items.findLastIndex((i) => i.kind === "tool" && i.id === event.toolId);
+      if (idx === -1) return items;
+      const next = items.slice();
+      const tool = next[idx] as Extract<ChatItem, { kind: "tool" }>;
+      next[idx] = {
+        ...tool,
+        ...(event.name ? { name: event.name } : {}),
+        ...(event.title ? { title: event.title } : {}),
+        ...(event.input !== undefined ? { input: event.input } : {}),
+        ...(event.kind ? { toolKind: event.kind } : {}),
+      };
+      return next;
+    }
     case "tool-end": {
       const idx = items.findLastIndex((i) => i.kind === "tool" && i.id === event.toolId);
       if (idx === -1) return items;

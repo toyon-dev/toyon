@@ -24,7 +24,7 @@ export interface Services {
   runtime: RuntimeRegistry;
   themes: ThemeStore;
   agents: AgentRegistry;
-  /** request → 1–5 independent tasks (Haiku by default; tests inject a stub) */
+  /** request → 1–5 independent tasks (the default agent by default; tests inject a stub) */
   planTasks: (prompt: string, cwd: string) => Promise<string[] | null>;
 }
 

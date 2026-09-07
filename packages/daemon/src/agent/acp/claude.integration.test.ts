@@ -7,8 +7,10 @@ import type { AgentEvent } from "@toyon/shared";
 import { sh, tmpRepo } from "../../../test/helpers/tmp-repo.ts";
 import { makePaths } from "../../core/paths.ts";
 import { GIT } from "../../git/exec.ts";
+import { askFreshAgent } from "../oneshot.ts";
 import { AgentRegistry, BUILTIN_AGENTS } from "../registry.ts";
 import { SETTINGS_REL } from "../sandbox.ts";
+import { NAME_SYSTEM, namePrompt, PLAN_SYSTEM, parseName, parsePlan, planPrompt } from "../tasks.ts";
 import { AcpSession } from "./session.ts";
 import { spawnAcp } from "./transport.ts";
 
@@ -78,6 +80,29 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
       const settings = JSON.parse(readFileSync(join(wt, SETTINGS_REL), "utf8"));
       expect(settings.sandbox.enabled).toBe(true);
       expect(sh(wt, GIT, "status", "--porcelain")).toBe("?? hello.txt");
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 180_000);
+
+  test("ask() names a task on a side session without touching the transcript; a fresh agent plans a batch", async () => {
+    const { t, wt, events, session } = world();
+    try {
+      const name = parseName(await session.ask(NAME_SYSTEM, namePrompt("make the header sticky on scroll")));
+      expect(name).toMatch(/^[a-z0-9]+(-[a-z0-9]+){1,3}$/);
+      expect(events.map((e) => e.type)).toEqual(["session-info"]);
+      const registry = new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir);
+      const plan = parsePlan(
+        await askFreshAgent(
+          registry,
+          "claude",
+          wt,
+          PLAN_SYSTEM,
+          planPrompt("add a dark mode toggle and fix the footer typo"),
+        ),
+      );
+      expect(plan?.length).toBeGreaterThanOrEqual(1);
     } finally {
       await session.close();
       t.cleanup();

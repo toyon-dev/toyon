@@ -14,6 +14,7 @@ import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, worktreeBounds, writeClaudeLocalSettings } from "../sandbox.ts";
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
+import { askOnce } from "./ask.ts";
 import { mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
 import type { AcpLink } from "./transport.ts";
 
@@ -58,6 +59,9 @@ interface Live {
   bounds: Bounds;
   spec: AgentSpec;
   authMethods: acp.AuthMethod[];
+  closeSupported: boolean;
+  /** side sessions (ask): text listeners by session id */
+  side: Map<string, (text: string) => void>;
   /** SYSTEM_APPEND still owed to the first prompt (agents without a system-prompt override) */
   prefixPending: boolean;
   tools: ToolMemos;
@@ -75,6 +79,8 @@ export class AcpSession implements AgentAdapter {
   /** session/load replays the history as updates; nothing from before the load resolves is new */
   private loading = false;
   private reaper: ReturnType<typeof setTimeout> | null = null;
+  /** questions in flight on side sessions; the reaper waits for them */
+  private asking = 0;
   private log: Transcript;
 
   constructor(private d: AcpSessionDeps) {
@@ -185,6 +191,33 @@ export class AcpSession implements AgentAdapter {
       this.interrupted = false;
       this.running = false;
       if (!this.stopped && this.live) this.armReaper();
+    }
+  }
+
+  async ask(system: string, prompt: string): Promise<string | null> {
+    if (this.stopped) return null;
+    this.asking++;
+    this.clearReaper();
+    try {
+      const live = await this.ensureLive();
+      return await askOnce(live.ctx, {
+        cwd: this.d.cwd,
+        system,
+        prompt,
+        spec: live.spec,
+        route: (id, onText) => {
+          live.side.set(id, onText);
+          return () => live.side.delete(id);
+        },
+        closeSupported: live.closeSupported,
+        tag: this.d.worktreeId,
+      });
+    } catch (e) {
+      log.warn(this.d.worktreeId, "ask failed", e);
+      return null;
+    } finally {
+      this.asking--;
+      if (!this.running && !this.asking && this.live && !this.stopped) this.armReaper();
     }
   }
 
@@ -316,6 +349,8 @@ export class AcpSession implements AgentAdapter {
         bounds,
         spec,
         authMethods: init.authMethods ?? [],
+        closeSupported: !!init.agentCapabilities?.sessionCapabilities?.close,
+        side: new Map(),
         prefixPending: !resumed && spec.systemPrompt === "prompt-prefix",
         tools,
       };
@@ -328,6 +363,12 @@ export class AcpSession implements AgentAdapter {
 
   private onUpdate(params: acp.SessionNotification, tools: ToolMemos) {
     if (this.loading) return;
+    const side = this.live?.side.get(params.sessionId);
+    if (side) {
+      const u = params.update;
+      if (u.sessionUpdate === "agent_message_chunk" && u.content.type === "text") side(u.content.text);
+      return;
+    }
     if (this.live && params.sessionId !== this.live.sessionId) {
       return log.debug(this.d.worktreeId, `acp: update for another session ${params.sessionId} dropped`);
     }
@@ -355,7 +396,7 @@ export class AcpSession implements AgentAdapter {
     this.clearReaper();
     const t = setTimeout(() => {
       this.reaper = null;
-      if (this.running || !this.live) return;
+      if (this.running || this.asking || !this.live) return;
       log.debug(this.d.worktreeId, "agent idle; stopping its process");
       fireAndForget(this.d.worktreeId, this.dropLive(), "reap agent");
     }, this.d.idleMs ?? DEFAULT_IDLE_MS);

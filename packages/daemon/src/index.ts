@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
-import { planTasks } from "./agent/llm.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
+import { makePlanner } from "./agent/tasks.ts";
 import { cloud } from "./core/cloud.ts";
 import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
@@ -52,7 +52,7 @@ const { branded, stop: stopServer } = startServer({
   token,
   shellDist: SHELL_DIST,
   version: pkg.version,
-  services: { state, hub, repos, worktrees, files, runtime, themes, agents, planTasks },
+  services: { state, hub, repos, worktrees, files, runtime, themes, agents, planTasks: makePlanner(agents, state) },
 });
 
 // every origin the shell can be loaded from: the injected bridge accepts commands from, and

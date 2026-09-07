@@ -22,6 +22,9 @@ export interface AgentAdapter {
   stop(): void;
   unqueue(index: number): void;
   transcript(): Array<{ seq: number; event: AgentEvent }>;
+  /** one question on a side session (no tools, its own system prompt): the reply text, or null.
+   * Spawns the agent if it is not running; never touches the worktree's transcript. */
+  ask(system: string, prompt: string): Promise<string | null>;
   /** log in with one of the methods the agent offered (see the agent-auth-required event) */
   authenticate(methodId: string, apiKey?: string): Promise<AuthOutcome>;
   /** send the message that was refused for want of credentials again */

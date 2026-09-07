@@ -53,7 +53,10 @@ interface FakeAgent {
   failLoad: boolean;
 }
 
-function fakeAgent(script: PromptScript, opts: { loadSession?: boolean; withModes?: boolean } = {}): FakeAgent {
+function fakeAgent(
+  script: PromptScript,
+  opts: { loadSession?: boolean; withModes?: boolean; currentMode?: string } = {},
+): FakeAgent {
   const f: FakeAgent = {
     newSessions: [],
     loads: [],
@@ -68,7 +71,7 @@ function fakeAgent(script: PromptScript, opts: { loadSession?: boolean; withMode
   let n = 0;
   const modes = opts.withModes
     ? {
-        currentModeId: "read-only",
+        currentModeId: opts.currentMode ?? "read-only",
         availableModes: [
           { id: "read-only", name: "ro" },
           { id: "agent", name: "agent" },
@@ -423,6 +426,36 @@ describe("AcpSession", () => {
       type: "agent-error",
       message: "agent process exited (signal SIGKILL): oom",
     });
+  });
+
+  test("ask() runs a side session with its own system prompt in a read-only mode; the main transcript is untouched", async () => {
+    const fake = fakeAgent(
+      async (p, client) => {
+        const text = (p.prompt[0] as { text: string }).text;
+        return say(text.startsWith("Name") ? "sticky-header" : "main reply")(p, client);
+      },
+      { withModes: true, currentMode: "agent" },
+    );
+    const w = world(fake, claudeSpec, 10);
+    expect(await w.session.ask("You name things.", "Name this: sticky header")).toBe("sticky-header");
+    // spawning opened the main session; the question ran on a second one with its own system
+    // prompt, switched to the read-only mode, and wrote nothing to the transcript
+    expect(fake.newSessions).toHaveLength(2);
+    expect(fake.newSessions[1]!._meta).toEqual({ systemPrompt: "You name things." });
+    expect(fake.modes).toEqual(["read-only"]);
+    // the only transcript line is the spawn's session-info; nothing the question said
+    expect(w.types()).toEqual(["session-info"]);
+    // the main session is separate and unaffected
+    w.session.send("hello");
+    await w.idle();
+    expect(fake.newSessions).toHaveLength(2);
+    expect(w.events.filter((e) => e.type === "text-delta").map((e) => (e as { text: string }).text)).toEqual([
+      "main reply",
+    ]);
+    // the reaper was armed after the question and again after the turn
+    for (let i = 0; i < 100 && !w.links[0]!.killed; i++) await Bun.sleep(5);
+    expect(w.links[0]!.killed).toBe(true);
+    await w.session.close();
   });
 
   test("close() never stores a session id afterwards and drops later sends", async () => {

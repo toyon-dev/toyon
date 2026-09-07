@@ -166,6 +166,15 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("set-default-agent"), agent: id }),
   /** (re)download an agent's adapter; progress arrives as `agents` broadcasts */
   z.object({ t: z.literal("install-agent"), agent: id }),
+  /** log the worktree's agent in with one of the methods it offered; a key rides along when asked for */
+  z.object({
+    t: z.literal("agent-auth"),
+    worktreeId: id,
+    methodId: z.string().max(100),
+    apiKey: z.string().max(1000).optional(),
+  }),
+  /** send the message that was refused for want of credentials again */
+  z.object({ t: z.literal("agent-retry"), worktreeId: id }),
   /** raw VS Code theme JSON/JSONC text picked in the browser */
   z.object({ t: z.literal("import-theme"), name: z.string().max(300), source: z.string().max(2_000_000) }),
   z.object({ t: z.literal("rescan-themes") }),

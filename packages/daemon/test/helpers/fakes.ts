@@ -31,6 +31,15 @@ export class FakeAgent implements AgentAdapter {
   async close() {
     this.closes++;
   }
+  auths: Array<[string, string | undefined]> = [];
+  async authenticate(methodId: string, apiKey?: string) {
+    this.auths.push([methodId, apiKey]);
+    return methodId === "terminal" ? { kind: "terminal" as const, line: "login --now" } : { kind: "done" as const };
+  }
+  retries = 0;
+  retry() {
+    this.retries++;
+  }
   unqueue() {}
   transcript(): Array<{ seq: number; event: AgentEvent }> {
     return [];

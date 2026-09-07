@@ -39,6 +39,7 @@ function world() {
     cwd: wt,
     spec: () => registry.require("claude"),
     connect: (app, spec) => spawnAcp(app, registry.launch(spec), wt, "it"),
+    launch: (spec) => registry.launch(spec),
     transcriptsDir: t.paths.transcriptsDir,
     getSessionId: () => sessionId,
     setSessionId: (id) => {

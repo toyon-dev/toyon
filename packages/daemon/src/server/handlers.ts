@@ -265,6 +265,19 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     fireAndForget(msg.agent, s.agents.install(msg.agent), "agent install");
   },
 
+  async "agent-auth"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
+    const agent = s.runtime.agentFor(msg.worktreeId);
+    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+    const r = await agent.authenticate(msg.methodId, msg.apiKey);
+    if (r.kind === "terminal") s.runtime.terminalLine(msg.worktreeId, r.line);
+  },
+
+  "agent-retry"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
+    s.runtime.agentFor(msg.worktreeId)?.retry();
+  },
+
   "set-default-agent"(msg, _ctx, s) {
     s.agents.require(msg.agent);
     s.state.setDefaultAgent(msg.agent);

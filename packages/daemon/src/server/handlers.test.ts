@@ -109,6 +109,26 @@ describe("handlers", () => {
     expect(broadcasts.length).toBe(0);
   });
 
+  test("agent-auth: an agent method just runs; a terminal method types its line once a pane opens", async () => {
+    const { services, ctx, replies, terminals, agents, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    const agent = agents.get(main.id)!;
+    await dispatch({ t: "agent-auth", worktreeId: main.id, methodId: "api-key", apiKey: "sk-1" }, ctx, services);
+    expect(agent.auths).toEqual([["api-key", "sk-1"]]);
+    // no pane yet: the line waits for term-open, then lands after the prompt has painted
+    await dispatch({ t: "agent-auth", worktreeId: main.id, methodId: "terminal" }, ctx, services);
+    await dispatch({ t: "term-open", worktreeId: main.id, cols: 80, rows: 24 }, ctx, services);
+    expect(replies.at(-1)?.t).toBe("term-snapshot");
+    await Bun.sleep(350);
+    expect(terminals.get(main.id)?.[0]?.writes).toEqual(["login --now\r"]);
+    // a live pane gets it straight away
+    await dispatch({ t: "agent-auth", worktreeId: main.id, methodId: "terminal" }, ctx, services);
+    expect(terminals.get(main.id)?.[0]?.writes).toEqual(["login --now\r", "login --now\r"]);
+    await dispatch({ t: "agent-retry", worktreeId: main.id }, ctx, services);
+    expect(agent.retries).toBe(1);
+  });
+
   test("batch-worktrees plans with the injected planner and creates one worktree per task", async () => {
     const { services, ctx, replies, planned, repo } = make();
     const r = await services.repos.register(repo);

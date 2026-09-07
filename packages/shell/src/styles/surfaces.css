@@ -790,6 +790,42 @@ body.resizing .row-resize {
 .msg-error {
   color: var(--red);
 }
+.auth-card {
+  margin: 6px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--bg2);
+  border-radius: 8px;
+  background: var(--bg0);
+}
+.auth-card.done {
+  color: var(--fg-dim);
+}
+.auth-title {
+  font-size: var(--fs-sm);
+  color: var(--fg1);
+  margin-bottom: 8px;
+}
+.auth-card.done .auth-title {
+  color: var(--fg-dim);
+  margin-bottom: 0;
+}
+.auth-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.auth-methods .btn.on {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+.auth-key {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.auth-key .field {
+  flex: 1;
+}
 .msg-thinking {
   font-size: var(--fs-sm);
   color: var(--fg-dim);

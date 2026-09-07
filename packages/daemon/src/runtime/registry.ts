@@ -25,6 +25,8 @@ export interface Runtime {
   previewName: string | undefined;
   /** null until a pane first opens it; survives hiding the pane, dies with the worktree */
   terminal: TerminalHandle | null;
+  /** a command line to type into the shell once a pane opens one (agent login) */
+  pendingLine: string | null;
 }
 
 export interface RuntimeDeps {
@@ -100,6 +102,7 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
       return d.agents.require(w.agent);
     },
     connect: (app, spec) => spawnAcp(app, d.agents.launch(spec), wt.path, wt.id),
+    launch: (spec) => d.agents.launch(spec),
     transcriptsDir: d.paths.transcriptsDir,
     getSessionId: () => d.state.session(wt.id),
     setSessionId: (id) => d.state.setSession(wt.id, id),
@@ -175,6 +178,7 @@ export class RuntimeRegistry {
       proxy: null,
       previewName: undefined,
       terminal: null,
+      pendingLine: null,
     };
     this.runtimes.set(wt.id, rt);
     return rt;
@@ -264,7 +268,22 @@ export class RuntimeRegistry {
     } else if (term.cols !== cols || term.rows !== rows) {
       term.resize(cols, rows);
     }
+    if (rt.pendingLine) {
+      // after the shell has printed its prompt, so the line reads as typed rather than pasted first
+      const line = rt.pendingLine;
+      rt.pendingLine = null;
+      const t = term;
+      setTimeout(() => t.alive && t.write(`${line}\r`), 300);
+    }
     return { snapshot: term.snapshot(), alive: term.alive };
+  }
+
+  /** type a command into the worktree's shell: now if a pane has one open, else when one opens */
+  terminalLine(id: string, line: string) {
+    const rt = this.runtimes.get(id);
+    if (!rt) return;
+    if (rt.terminal?.alive) rt.terminal.write(`${line}\r`);
+    else rt.pendingLine = line;
   }
 
   terminalInput(id: string, data: string) {

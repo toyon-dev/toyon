@@ -80,6 +80,11 @@ function fakeAgent(script: PromptScript, opts: { loadSession?: boolean; withMode
     .onRequest(acp.methods.agent.initialize, () => ({
       protocolVersion: acp.PROTOCOL_VERSION,
       agentCapabilities: { loadSession: f.loadSession },
+      authMethods: [
+        { id: "api-key", name: "API Key" },
+        { id: "chat-gpt", name: "ChatGPT", description: "browser" },
+        { id: "claude-login", name: "Claude login", type: "terminal", args: ["--cli", "auth", "login"] },
+      ],
     }))
     .onRequest(acp.methods.agent.session.new, (c) => {
       f.newSessions.push(c.params);
@@ -150,6 +155,7 @@ function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000) {
     cwd: wt,
     spec: () => spec,
     connect,
+    launch: () => ({ command: "/bin/agent", args: ["run.js"] }),
     transcriptsDir: home,
     getSessionId: () => sessionId,
     setSessionId: (s) => {
@@ -330,17 +336,60 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
-  test("authRequired becomes an agent-error carrying the login hint; the next prompt starts fresh", async () => {
+  test("authRequired becomes an auth card; a login over the same connection sends the message again", async () => {
     let failures = 1;
+    const auths: acp.AuthenticateRequest[] = [];
     const fake = fakeAgent(async (p, client) => {
       if (failures-- > 0) throw acp.RequestError.authRequired();
+      return say("ok")(p, client);
+    });
+    fake.app.onRequest(acp.methods.agent.authenticate, (c) => {
+      auths.push(c.params);
+      return {};
+    });
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.session.status).toBe("error");
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
+    expect(card.type).toBe("agent-auth-required");
+    expect(card.agentName).toBe("Claude");
+    expect(card.methods).toEqual([
+      { id: "api-key", name: "API Key", kind: "agent", needsKey: true },
+      { id: "chat-gpt", name: "ChatGPT", description: "browser", kind: "agent" },
+      { id: "claude-login", name: "Claude login", kind: "terminal" },
+    ]);
+    expect(w.links).toHaveLength(1);
+    expect(w.links[0]!.killed).toBe(false);
+    // a terminal method hands back the adapter's own command line with the method's args
+    expect(await w.session.authenticate("claude-login")).toEqual({
+      kind: "terminal",
+      line: "/bin/agent run.js --cli auth login",
+    });
+    // an agent method runs over the live connection, then the refused message goes again
+    expect(await w.session.authenticate("api-key", "sk-test")).toEqual({ kind: "done" });
+    expect(auths).toEqual([{ methodId: "api-key", _meta: { "api-key": { apiKey: "sk-test" } } }]);
+    await w.idle();
+    expect(w.session.status).toBe("idle");
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(2);
+    expect(w.types()).toContain("agent-auth-ok");
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
+    expect(w.links).toHaveLength(1);
+    await expect(w.session.authenticate("nope")).rejects.toThrow(/no login method/);
+    await w.session.close();
+  });
+
+  test("a non-auth failure still drops the process and reports the message", async () => {
+    let failures = 1;
+    const fake = fakeAgent(async (p, client) => {
+      if (failures-- > 0) throw new acp.RequestError(-32603, "model overloaded");
       return say("ok")(p, client);
     });
     const w = world(fake);
     w.session.send("a");
     await w.idle();
     expect(w.session.status).toBe("error");
-    expect(w.events.at(-1)).toMatchObject({ type: "agent-error", message: "please log in" });
+    expect(w.events.at(-1)).toMatchObject({ type: "agent-error", message: "model overloaded" });
     expect(w.links[0]!.killed).toBe(true);
     w.session.send("b");
     await w.idle();

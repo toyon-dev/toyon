@@ -5,9 +5,10 @@
 // resume.
 
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentEvent, AgentStatus, PickMeta } from "@toyon/shared";
+import type { AgentEvent, AgentStatus, AuthMethodInfo, PickMeta } from "@toyon/shared";
+import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
-import type { AgentAdapter } from "../adapter.ts";
+import type { AgentAdapter, AuthOutcome } from "../adapter.ts";
 import { decide, pickOption } from "../policy.ts";
 import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
@@ -26,6 +27,8 @@ export interface AcpSessionDeps {
   spec: () => AgentSpec;
   /** spawn (or, in tests, connect in-process) the agent for this client app */
   connect: (app: acp.ClientApp, spec: AgentSpec) => AcpLink;
+  /** the command line that starts the adapter (terminal-type login methods run it with extra args) */
+  launch: (spec: AgentSpec) => { command: string; args: string[] };
   transcriptsDir: string;
   getSessionId: () => string | undefined;
   setSessionId: (id: string) => void;
@@ -46,12 +49,15 @@ async function defaultPrepare(cwd: string, spec: AgentSpec): Promise<Bounds> {
   return bounds;
 }
 
+type Item = { text: string; context?: string; pick?: PickMeta };
+
 interface Live {
   link: AcpLink;
   ctx: acp.ClientContext;
   sessionId: string;
   bounds: Bounds;
   spec: AgentSpec;
+  authMethods: acp.AuthMethod[];
   /** SYSTEM_APPEND still owed to the first prompt (agents without a system-prompt override) */
   prefixPending: boolean;
   tools: ToolMemos;
@@ -59,7 +65,9 @@ interface Live {
 
 export class AcpSession implements AgentAdapter {
   status: AgentStatus = "idle";
-  private queue: Array<{ text: string; context?: string; pick?: PickMeta }> = [];
+  private queue: Item[] = [];
+  /** the message refused for want of credentials; sent again after a login */
+  private refused: Item | null = null;
   private running = false;
   private interrupted = false;
   private stopped = false;
@@ -144,9 +152,10 @@ export class AcpSession implements AgentAdapter {
     this.running = true;
     this.clearReaper();
     this.setStatus("working");
+    let item: Item | null = null;
     try {
       while (this.queue.length > 0 && !this.interrupted) {
-        const item = this.queue.shift()!;
+        item = this.queue.shift()!;
         this.queueChanged();
         await this.runTurn(item.text, item.context, item.pick);
       }
@@ -155,6 +164,17 @@ export class AcpSession implements AgentAdapter {
       if (this.interrupted) {
         this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
         this.setStatus("idle");
+      } else if (isAuthRequired(e) && this.live) {
+        // the process stays: a login runs over the same connection, then the message goes again
+        this.refused = item;
+        this.emit({
+          type: "agent-auth-required",
+          agent: this.live.spec.id,
+          agentName: this.live.spec.name,
+          methods: this.live.authMethods.map(authMethodInfo),
+          ts: Date.now(),
+        });
+        this.setStatus("error");
       } else {
         this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
         this.setStatus("error");
@@ -168,8 +188,35 @@ export class AcpSession implements AgentAdapter {
     }
   }
 
+  async authenticate(methodId: string, apiKey?: string): Promise<AuthOutcome> {
+    const live = await this.ensureLive();
+    const method = live.authMethods.find((m) => m.id === methodId);
+    if (!method) throw new UserError(`${live.spec.name} offers no login method "${methodId}"`);
+    if ("type" in method && method.type === "terminal") {
+      const l = this.d.launch(live.spec);
+      return { kind: "terminal", line: [l.command, ...l.args, ...(method.args ?? [])].map(shellQuote).join(" ") };
+    }
+    try {
+      await live.ctx.request(acp.methods.agent.authenticate, {
+        methodId,
+        ...(apiKey ? { _meta: { "api-key": { apiKey } } } : {}),
+      });
+    } catch (e) {
+      throw new UserError(`${live.spec.name} login failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    this.emit({ type: "agent-auth-ok", ts: Date.now() });
+    this.retry();
+    return { kind: "done" };
+  }
+
+  retry() {
+    const item = this.refused;
+    this.refused = null;
+    if (item) this.send(item.text, item.context, item.pick);
+  }
+
   private describe(e: unknown): string {
-    if (e instanceof acp.RequestError && e.code === -32000) return this.live?.spec.loginHint ?? this.d.spec().loginHint;
+    if (isAuthRequired(e)) return this.live?.spec.loginHint ?? this.d.spec().loginHint;
     const message = e instanceof Error ? e.message : String(e);
     // the SDK's generic close message; the process's own exit is the useful part
     return /connection closed/i.test(message) ? (this.live?.link.exitInfo() ?? message) : message;
@@ -268,6 +315,7 @@ export class AcpSession implements AgentAdapter {
         sessionId: sessionId!,
         bounds,
         spec,
+        authMethods: init.authMethods ?? [],
         prefixPending: !resumed && spec.systemPrompt === "prompt-prefix",
         tools,
       };
@@ -328,4 +376,23 @@ export class AcpSession implements AgentAdapter {
     live.link.conn.close();
     await live.link.kill();
   }
+}
+
+function isAuthRequired(e: unknown): boolean {
+  return e instanceof acp.RequestError && e.code === -32000;
+}
+
+function authMethodInfo(m: acp.AuthMethod): AuthMethodInfo {
+  const terminal = "type" in m && m.type === "terminal";
+  return {
+    id: m.id,
+    name: m.name,
+    ...(m.description ? { description: m.description } : {}),
+    kind: terminal ? "terminal" : "agent",
+    ...(!terminal && /api[-_ ]?key/i.test(`${m.id} ${m.name}`) ? { needsKey: true } : {}),
+  };
+}
+
+function shellQuote(s: string): string {
+  return /^[A-Za-z0-9_/.:=@%+,-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
 }

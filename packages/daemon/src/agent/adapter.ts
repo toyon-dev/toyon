@@ -3,6 +3,13 @@
 
 import type { AgentEvent, AgentStatus, PickMeta } from "@toyon/shared";
 
+/** what a login attempt needs from the caller next */
+export type AuthOutcome =
+  /** run this line in the worktree's terminal; the agent's own CLI takes it from there */
+  | { kind: "terminal"; line: string }
+  /** the adapter did it; the refused message has been sent again */
+  | { kind: "done" };
+
 export interface AgentAdapter {
   readonly status: AgentStatus;
   readonly queueLength: number;
@@ -15,6 +22,10 @@ export interface AgentAdapter {
   stop(): void;
   unqueue(index: number): void;
   transcript(): Array<{ seq: number; event: AgentEvent }>;
+  /** log in with one of the methods the agent offered (see the agent-auth-required event) */
+  authenticate(methodId: string, apiKey?: string): Promise<AuthOutcome>;
+  /** send the message that was refused for want of credentials again */
+  retry(): void;
   /** the worktree (or the daemon) is going away: stop the turn and kill the agent's process */
   close(): Promise<void>;
 }

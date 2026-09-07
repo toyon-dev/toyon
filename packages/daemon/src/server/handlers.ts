@@ -211,6 +211,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     await s.worktrees.rename(msg.worktreeId, msg.title);
   },
 
+  "list-commands"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
+    const agent = s.runtime.agentFor(msg.worktreeId);
+    // best effort and slow (it spawns the adapter): the reply, if any, is the agent-commands push
+    if (agent) fireAndForget(msg.worktreeId, agent.warmCommands(), "warm commands");
+  },
+
   async "list-files"(msg, ctx, s) {
     ctx.reply({ t: "files", worktreeId: msg.worktreeId, paths: await s.files.list(msg.worktreeId) });
   },

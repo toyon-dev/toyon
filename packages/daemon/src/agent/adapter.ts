@@ -28,6 +28,8 @@ export interface AgentAdapter {
   readonly commands: AgentCommand[];
   /** notified when that list changes: session start, and any change the agent reports after */
   onCommandsChange: ((commands: AgentCommand[]) => void) | null;
+  /** start the session early so `commands` exists before the first message; best effort */
+  warmCommands(): Promise<void>;
   /** context (live-page state, picked elements) reaches the prompt but never the visible transcript */
   send(text: string, opts?: SendOpts): void;
   /** interrupt the running turn and drop anything queued */

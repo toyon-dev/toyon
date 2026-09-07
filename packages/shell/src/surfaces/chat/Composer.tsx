@@ -32,12 +32,10 @@ const cmdRow = (c: AgentCommand): Row => ({ kind: "cmd", c });
 
 /** the two empty states worth telling apart: nothing matched, versus nothing to match yet */
 function emptyMenu(kind: Row["kind"] | "command" | "file", files: string[] | undefined, commandCount: number) {
-  // the list only exists once the agent has run once here, so say what to do rather than what
-  // happened: this is the state a brand new worktree is in
+  // an empty list means the agent has not run here yet; opening the menu starts it, so this is a
+  // wait rather than a dead end
   if (kind === "command")
-    return commandCount === 0
-      ? "send a message first: the agent lists its commands when it starts"
-      : "no matching command";
+    return commandCount === 0 ? "starting the agent to see what it offers…" : "no matching command";
   return files ? "no matches" : "listing files…";
 }
 
@@ -140,14 +138,18 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   // typed after it: once the arguments are being written, the hint is in the way rather than help.
   const argGhost = inserted && text === `/${inserted.name} ` ? inserted.hint : null;
 
-  // the listing is cached and never invalidated, so refresh on open: the agent may have created a
-  // file this turn. Cached rows render immediately meanwhile, so the menu never looks empty.
+  // On open: the file listing is cached and never invalidated, so refresh it (the agent may have
+  // written a file this turn); cached rows render meanwhile so the menu never looks empty. An
+  // empty command list means this worktree's agent has not run, so ask the daemon to start it
+  // rather than making the person send a message to find out what they could have typed.
   const wasOpen = useRef(false);
   useEffect(() => {
-    const opening = menuOpen && trigger?.kind === "file" && !wasOpen.current;
+    const opening = menuOpen && !wasOpen.current;
     wasOpen.current = menuOpen;
-    if (opening && id) sock?.send({ t: "list-files", worktreeId: id });
-  }, [menuOpen, trigger?.kind, id, sock]);
+    if (!opening || !id) return;
+    if (trigger?.kind === "file") sock?.send({ t: "list-files", worktreeId: id });
+    else if (commands.length === 0) sock?.send({ t: "list-commands", worktreeId: id });
+  }, [menuOpen, trigger?.kind, commands.length, id, sock]);
 
   // ambient context: what the user is looking at, attached invisibly to every send
   const buildContext = (): string | undefined => {

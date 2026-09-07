@@ -35,6 +35,7 @@ describe("parseClientMsg", () => {
       { t: "chat", worktreeId: "a", text: "hi", pastes: [{ text: "a\nb" }] },
       { t: "chat", worktreeId: "a", text: "hi", pastes: [{ text: "x", name: "App.tsx" }] },
       { t: "create-worktree", repoId: "r", prompt: "x", pastes: [{ text: "x" }] },
+      { t: "list-commands", worktreeId: "a" },
       { t: "set-worktree-profile", worktreeId: "a", profile: "full" },
       { t: "set-theme", prefs: { mode: "system", light: "l", dark: "d" } },
       { t: "rescan-themes" },

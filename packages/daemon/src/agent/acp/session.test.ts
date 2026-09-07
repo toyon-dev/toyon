@@ -376,6 +376,27 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("warmCommands starts the session so the menu has something before the first message", async () => {
+    const fake = fakeAgent(say("ok"), { commands: { s1: [{ name: "review", description: "look" }] } });
+    const w = world(fake);
+    expect(w.session.commands).toEqual([]);
+    await w.session.warmCommands();
+    expect(w.session.commands.map((c) => c.name)).toEqual(["review"]);
+    // it started a session but no turn: nothing was said on the worktree's behalf
+    expect(fake.prompts).toHaveLength(0);
+    expect(w.types()).toEqual(["session-info"]);
+    await w.session.close();
+  });
+
+  test("warmCommands does nothing once the list is known, and swallows an agent that will not start", async () => {
+    const fake = fakeAgent(say("ok"), { commands: { s1: [{ name: "review", description: "look" }] } });
+    const w = world(fake);
+    await w.session.warmCommands();
+    await w.session.warmCommands();
+    expect(fake.newSessions).toHaveLength(1);
+    await w.session.close();
+  });
+
   test("the command list survives the reaper, so `/` still works with no process running", async () => {
     const fake = fakeAgent(say("ok"), { commands: { s1: [{ name: "review", description: "mine" }] } });
     const w = world(fake, claudeSpec, 10);

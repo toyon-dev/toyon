@@ -17,6 +17,10 @@ export class FakeAgent implements AgentAdapter {
   onQueueChange: (() => void) | null = null;
   commands: AgentCommand[] = [];
   onCommandsChange: ((commands: AgentCommand[]) => void) | null = null;
+  warms = 0;
+  async warmCommands() {
+    this.warms++;
+  }
   constructor(readonly worktreeId: string) {}
   get queueLength() {
     return 0;

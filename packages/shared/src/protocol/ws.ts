@@ -239,6 +239,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("sync-main"), worktreeId: id }),
   z.object({ t: z.literal("write-file"), worktreeId: id, path: relPath, content: z.string().max(10_000_000) }),
   z.object({ t: z.literal("list-files"), worktreeId: id }),
+  /** open the `/` menu on a worktree whose agent has not run yet: start it so it says what
+   * commands it has. Answered by an `agent-commands` push, or by nothing if it will not start. */
+  z.object({ t: z.literal("list-commands"), worktreeId: id }),
   z.object({ t: z.literal("search"), worktreeId: id, query: z.string().max(500) }),
   z.object({ t: z.literal("discard-file"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),

@@ -100,7 +100,7 @@ export function LeftDock({ width }: { width: number }) {
                   data-tip={`Pull ${behind} commit(s) from main into this worktree`}
                   onClick={() => sock?.send({ t: "sync-main", worktreeId: active.worktree.id })}
                 >
-                  sync ↓
+                  sync <Icon name="pull" className="icon-inline" />
                 </button>
               )}
               {ahead > 0 && (

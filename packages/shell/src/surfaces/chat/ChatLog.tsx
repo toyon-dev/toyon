@@ -104,7 +104,7 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
       </div>
       {showJump && (
         <button className="jump-down" onClick={jumpDown} data-tip="Jump to latest">
-          ↓ new messages
+          <Icon name="caret" className="icon-inline" /> new messages
         </button>
       )}
     </div>

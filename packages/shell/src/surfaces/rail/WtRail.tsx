@@ -231,7 +231,7 @@ export function WtRail() {
                   cancelGraft();
                 }}
               >
-                ↓ sync
+                <Icon name="pull" className="icon-inline" /> sync
               </button>
               <button
                 className="btn bulk-btn danger"

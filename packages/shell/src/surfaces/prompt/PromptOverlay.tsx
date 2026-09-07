@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
+import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
 
 /** ⌘K: describe a change → an agent starts on it in a new worktree (or N variants, or a batch) */
 export function PromptOverlay() {
@@ -15,6 +16,7 @@ export function PromptOverlay() {
   const [variants, setVariants] = useState(1);
   const [batch, setBatch] = useState(false);
   const [agent, setAgent] = useState(defaultAgent);
+  const [profile, setProfile] = useNewWorktreeProfile(repo);
   if (!repo) return null;
 
   const submit = () => {
@@ -32,10 +34,11 @@ export function PromptOverlay() {
           prompt,
           variant: { group, index: i + 1, of: variants },
           agent,
+          profile,
         });
       }
     } else {
-      sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt, agent });
+      sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt, agent, profile });
     }
     dispatch({ a: "close" });
     // the agent starts talking in the chat panel — make sure it's on screen
@@ -88,6 +91,7 @@ export function PromptOverlay() {
             ))}
           </span>
         )}
+        {!batch && <ProfileChip repo={repo} value={profile} onChange={setProfile} />}
         <label data-tip="An agent decomposes the request into independent tasks and starts a worktree for each">
           <input type="checkbox" checked={batch} onChange={(e) => setBatch(e.target.checked)} />
           <span>batch</span>

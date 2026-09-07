@@ -21,6 +21,10 @@ export function worktreeActions(sock: DaemonSocket | null) {
         sock?.send({ t: "pick-variant", worktreeId: w.worktree.id });
       }
     },
+    /** run under another profile: only its procs restart, so no confirm */
+    setProfile(w: WorktreeStatus, profile: string) {
+      sock?.send({ t: "set-worktree-profile", worktreeId: w.worktree.id, profile });
+    },
     remove(w: WorktreeStatus) {
       if (w.worktree.kind === "main") return;
       const ok = window.confirm(

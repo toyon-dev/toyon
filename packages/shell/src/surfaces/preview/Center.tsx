@@ -41,6 +41,13 @@ export function Center() {
   const log = useLocalField(activeId, "log");
   const incompatible = useStore((s) => s.incompatible);
   const needsSetup = useActiveRepoNeedingSetup();
+  // reopened from settings / the palette for a repo that is already configured
+  const reopened = useStore((s) =>
+    s.overlay?.kind === "setup"
+      ? (s.repos.find((r) => r.id === (s.overlay as { repoId: string }).repoId) ?? null)
+      : null,
+  );
+  const setupRepo = needsSetup ?? reopened;
 
   const [mounted, setMounted] = useState<string[]>([]);
   const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
@@ -183,11 +190,17 @@ export function Center() {
               }}
               src={previewUrl(w.worktree.proxyPort)}
               title={w.worktree.title}
-              style={{ display: w.worktree.id === activeId ? "block" : "none" }}
+              style={{ display: w.worktree.id === activeId && !setupRepo ? "block" : "none" }}
             />
           ))}
-          {needsSetup && <SetupPane key={needsSetup.id} repo={needsSetup} />}
-          {!activeReady && !needsSetup && (
+          {setupRepo && (
+            <SetupPane
+              key={setupRepo.id}
+              repo={setupRepo}
+              onClose={needsSetup ? undefined : () => dispatch({ a: "close" })}
+            />
+          )}
+          {!activeReady && !setupRepo && (
             <div className="empty">
               {incompatible
                 ? "toyon was updated — reload this page"

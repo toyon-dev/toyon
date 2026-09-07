@@ -899,6 +899,16 @@ body.resizing .row-resize {
   gap: 5px;
   cursor: pointer;
 }
+.spawn-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.profile-chip {
+  font: var(--fs-xs) var(--font-mono);
+  padding: 0 6px;
+}
 .spawn-row input {
   accent-color: var(--orange);
 }
@@ -971,6 +981,9 @@ body.resizing .row-resize {
 }
 .variant-badge {
   color: var(--purple);
+}
+.profile-badge {
+  color: var(--blue);
 }
 .land-btns {
   display: flex;
@@ -1142,6 +1155,11 @@ body.resizing .rb-center {
   margin: 0 0 12px;
   color: var(--fg-muted);
   line-height: 1.5;
+}
+.setup-aside {
+  margin-top: -6px;
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
 }
 .setup-pane code {
   background: var(--bg0);

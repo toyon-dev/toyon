@@ -1,0 +1,66 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { detectConfig, readConfigFile } from "./config.ts";
+
+let dir = "";
+afterEach(() => dir && rmSync(dir, { recursive: true, force: true }));
+function repo(files: Record<string, string>): string {
+  dir = mkdtempSync(join(tmpdir(), "toyon-cfg-"));
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
+  return dir;
+}
+const pkg = (scripts: Record<string, string>, extra: Record<string, unknown> = {}) =>
+  JSON.stringify({ name: "x", scripts, ...extra });
+
+describe("detectConfig", () => {
+  test("dev script → web, dev:api → api, runner from the lockfile", () => {
+    const d = detectConfig(repo({ "package.json": pkg({ dev: "vite", "dev:api": "x" }), "bun.lock": "" }));
+    expect(d).toEqual({
+      config: { procs: { web: "bun run dev", api: "bun run dev:api" }, setup: ["bun install"] },
+      needsSetup: true,
+    });
+  });
+
+  test("start script counts when there is no dev; yarn from yarn.lock or packageManager", () => {
+    expect(detectConfig(repo({ "package.json": pkg({ start: "vite" }), "yarn.lock": "" })).config.procs).toEqual({
+      web: "yarn run start",
+    });
+    expect(
+      detectConfig(repo({ "package.json": pkg({ start: "vite" }, { packageManager: "yarn@4.12.0" }) })).config,
+    ).toEqual({ procs: { web: "yarn run start" }, setup: ["yarn install"] });
+    // dev wins over start when both exist
+    expect(detectConfig(repo({ "package.json": pkg({ dev: "a", start: "b" }) })).config.procs).toEqual({
+      web: "npm run dev",
+    });
+  });
+
+  test("start.sh, then nothing", () => {
+    expect(detectConfig(repo({ "start.sh": "#!/bin/sh" })).config.procs).toEqual({ app: "./start.sh" });
+    expect(detectConfig(repo({}))).toEqual({ config: { procs: {} }, needsSetup: true });
+  });
+
+  test("a valid toyon.json is confirmed as written, profiles included", () => {
+    const cfg = {
+      procs: { api: "a", web: "w" },
+      profiles: { full: { procs: ["api", "web"] }, fe: { procs: ["web"], env: { X: "1" } } },
+      defaultProfile: "fe",
+    };
+    expect(detectConfig(repo({ "toyon.json": JSON.stringify(cfg) }))).toEqual({ config: cfg, needsSetup: false });
+  });
+
+  test("an invalid toyon.json is reported and detection falls through", () => {
+    const bad = repo({ "toyon.json": "{ nope", "package.json": pkg({ dev: "vite" }) });
+    const f = readConfigFile(bad);
+    expect(f?.ok).toBe(false);
+    if (f && !f.ok) expect(f.reason).toMatch(/not valid JSON/);
+    expect(detectConfig(bad).needsSetup).toBe(true);
+    expect(detectConfig(bad).config.procs.web).toBe("npm run dev");
+
+    const typo = repo({ "toyon.json": JSON.stringify({ procs: { web: "w" }, profiles: { a: { procs: ["nope"] } } }) });
+    const t = readConfigFile(typo);
+    if (t && !t.ok) expect(t.reason).toMatch(/profiles\.a\.procs: unknown proc "nope"/);
+    expect(readConfigFile(repo({}))).toBeNull();
+  });
+});

@@ -102,12 +102,43 @@ export const pickMetaSchema = z.object({
   selector: z.string(),
 });
 
-export const toyonConfigSchema = z.object({
-  procs: z.record(z.string().max(100), shellCommand),
-  setup: z.array(shellCommand).max(50).optional(),
-  preview: z.string().max(100).optional(),
-  exclusive: z.boolean().optional(),
+const procName = z.string().max(100);
+const runProfileSchema = z.object({
+  procs: z.array(procName).max(50),
+  env: z.record(z.string().max(100), z.string().max(2_000)).optional(),
+  preview: procName.optional(),
 });
+
+export const toyonConfigSchema = z
+  .object({
+    procs: z.record(procName, shellCommand),
+    setup: z.array(shellCommand).max(50).optional(),
+    preview: procName.optional(),
+    exclusive: z.boolean().optional(),
+    profiles: z.record(procName, runProfileSchema).optional(),
+    defaultProfile: procName.optional(),
+  })
+  .superRefine((c, ctx) => {
+    // a profile may only name procs that exist, and the default must be a profile: caught here so
+    // a typo is a toast at confirm/reload time, not a worktree that silently runs nothing
+    if (!c.profiles) {
+      if (c.defaultProfile !== undefined)
+        ctx.addIssue({ code: "custom", path: ["defaultProfile"], message: "defaultProfile without profiles" });
+      return;
+    }
+    for (const [name, p] of Object.entries(c.profiles)) {
+      for (const proc of p.procs) {
+        if (!(proc in c.procs))
+          ctx.addIssue({ code: "custom", path: ["profiles", name, "procs"], message: `unknown proc "${proc}"` });
+      }
+      if (p.preview !== undefined && !p.procs.includes(p.preview))
+        ctx.addIssue({ code: "custom", path: ["profiles", name, "preview"], message: "preview is not in procs" });
+    }
+    if (c.defaultProfile === undefined)
+      ctx.addIssue({ code: "custom", path: ["defaultProfile"], message: "required when profiles are set" });
+    else if (!(c.defaultProfile in c.profiles))
+      ctx.addIssue({ code: "custom", path: ["defaultProfile"], message: `unknown profile "${c.defaultProfile}"` });
+  });
 
 export const themePrefsSchema = z.object({
   mode: z.enum(["dark", "light", "system"]),
@@ -140,8 +171,12 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     pick: pickMetaSchema.optional(),
     /** registry id; the daemon's default when absent */
     agent: id.optional(),
+    /** one of the repo's profiles; its defaultProfile when absent */
+    profile: z.string().max(100).optional(),
   }),
   z.object({ t: z.literal("batch-worktrees"), repoId: id, prompt, agent: id.optional() }),
+  /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
+  z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
   z.object({ t: z.literal("restart-proc"), worktreeId: id, proc: z.string() }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),

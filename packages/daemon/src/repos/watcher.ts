@@ -52,3 +52,27 @@ export function watchDefaultBranch(repoPath: string, branch: string, onMove: () 
     if (timer) clearTimeout(timer);
   };
 }
+
+/** fires (debounced) when `<repo>/toyon.json` is written, created or replaced. Watches the
+ * directory, not the file: editors save by rename, which would orphan a watcher on the inode. */
+export function watchConfigFile(repoPath: string, onChange: () => void): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let watcher: FSWatcher | null = null;
+  try {
+    watcher = watch(repoPath, (_event, filename) => {
+      if (filename && filename !== "toyon.json") return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        onChange();
+      }, 300);
+    });
+    watcher.on("error", (e) => log.warn(repoPath, "toyon.json watcher error", e));
+  } catch (e) {
+    log.warn(repoPath, "not watching toyon.json", e);
+  }
+  return () => {
+    watcher?.close();
+    if (timer) clearTimeout(timer);
+  };
+}

@@ -178,6 +178,132 @@ describe("confirmConfig", () => {
   });
 });
 
+describe("profiles", () => {
+  const profiled = {
+    procs: { api: "true", web: "true" },
+    profiles: { full: { procs: ["api", "web"] }, fe: { procs: ["web"] } },
+    defaultProfile: "fe",
+  };
+  async function registeredWithProfiles(): Promise<string> {
+    const repoId = await registered();
+    w.state.requireRepo(repoId).config = profiled;
+    w.state.save();
+    return repoId;
+  }
+  const names = (id: string) => w.procs.get(id)!.started.map((p) => p.name);
+
+  test("create runs the requested profile; a claimed spare restarts under it and keeps its agent", async () => {
+    const repoId = await registeredWithProfiles();
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    expect(names(spare.id)).toEqual(["web"]); // warmed under the default
+    const spareProcs = w.procs.get(spare.id)!;
+    const spareAgent = w.agents.get(spare.id)!;
+    const wt = await w.worktrees.create(repoId, "full stack task", { profile: "full" });
+    await settle();
+    expect(wt.id).toBe(spare.id);
+    expect(wt.profile).toBe("full");
+    expect(spareProcs.stopped).toBe(true);
+    expect(names(wt.id)).toEqual(["api", "web"]);
+    expect(w.runtime.get(wt.id)?.agent).toBe(spareAgent);
+    expect(spareAgent.sent[0]?.text).toBe("full stack task");
+    // the default profile claims without a restart
+    await settle();
+    const wt2 = await w.worktrees.create(repoId, "fe task");
+    await settle();
+    expect(wt2.profile).toBeUndefined();
+    expect(w.procs.get(wt2.id)!.stopped).toBe(false);
+  });
+
+  test("an unknown profile is a UserError before anything is created", async () => {
+    const repoId = await registeredWithProfiles();
+    const before = w.state.worktrees.length;
+    await expect(w.worktrees.create(repoId, "x", { profile: "nope" })).rejects.toBeInstanceOf(UserError);
+    expect(w.state.worktrees.length).toBe(before);
+    const wt = await w.worktrees.create(repoId, "x");
+    expect(() => w.worktrees.setProfile(wt.id, "nope")).toThrow(UserError);
+  });
+
+  test("setProfile restarts only that worktree's procs and persists the choice", async () => {
+    const repoId = await registeredWithProfiles();
+    const a = await w.worktrees.create(repoId, "a");
+    const b = await w.worktrees.create(repoId, "b");
+    await settle();
+    const aProcs = w.procs.get(a.id)!;
+    const bProcs = w.procs.get(b.id)!;
+    const agent = w.runtime.get(a.id)!.agent;
+    w.worktrees.setProfile(a.id, "full");
+    await settle();
+    expect(a.profile).toBe("full");
+    expect(aProcs.stopped).toBe(true);
+    expect(names(a.id)).toEqual(["api", "web"]);
+    expect(bProcs.stopped).toBe(false);
+    expect(w.runtime.get(a.id)!.agent).toBe(agent);
+    expect(w.state.worktree(a.id)?.profile).toBe("full");
+    // same profile again: nothing happens
+    const after = w.procs.get(a.id)!;
+    w.worktrees.setProfile(a.id, "full");
+    await settle();
+    expect(w.procs.get(a.id)).toBe(after);
+  });
+
+  test("a graft inherits the sources' profile when they agree", async () => {
+    const repoId = await registeredWithProfiles();
+    const a = await w.worktrees.create(repoId, "a", { profile: "full" });
+    const b = await w.worktrees.create(repoId, "b", { profile: "full" });
+    await settle();
+    sh(a.path, "sh", "-c", "echo a > a.txt && git add -A && git commit -qm a");
+    sh(b.path, "sh", "-c", "echo b > b.txt && git add -A && git commit -qm b");
+    const g = await w.worktrees.combine([a.id, b.id]);
+    expect(g.profile).toBe("full");
+  });
+});
+
+describe("config reload", () => {
+  test("a toyon.json edit becomes the config, restarts the repo's worktrees, and a broken edit is ignored", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    const procsBefore = w.procs.get(wt.id)!;
+    let repos = 0;
+    w.hub.on("reposChanged", () => repos++);
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ procs: { web: "true", api: "true" } }));
+    w.repos.reloadConfig(repoId);
+    await settle();
+    expect(w.state.requireRepo(repoId).config.procs).toEqual({ web: "true", api: "true" });
+    expect(procsBefore.stopped).toBe(true);
+    expect(
+      w.procs
+        .get(wt.id)!
+        .started.map((p) => p.name)
+        .sort(),
+    ).toEqual(["api", "web"]);
+    expect(repos).toBe(1);
+
+    const procsNow = w.procs.get(wt.id)!;
+    const lines: string[] = [];
+    w.hub.on("log", (_id, proc, line) => proc === "config" && lines.push(line));
+    writeFileSync(join(w.repo, "toyon.json"), "{ broken");
+    w.repos.reloadConfig(repoId);
+    await settle();
+    expect(w.state.requireRepo(repoId).config.procs).toEqual({ web: "true", api: "true" });
+    expect(w.procs.get(wt.id)).toBe(procsNow);
+    expect(lines[0]).toMatch(/not valid JSON/);
+    expect(repos).toBe(1);
+  });
+
+  test("boot picks up a toyon.json written while the daemon was down", async () => {
+    const repoId = await registered();
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ procs: { api: "true" } }));
+    // a second registry over the same state, as a restart would build
+    const again = new RepoRegistry({ state: w.state, hub: w.hub, runtime: w.runtime, worktrees: w.worktrees });
+    await again.boot();
+    again.stopWatchers();
+    expect(w.state.requireRepo(repoId).config.procs).toEqual({ api: "true" });
+    expect(w.state.requireRepo(repoId).needsSetup).toBe(false);
+  });
+});
+
 describe("landing", () => {
   test("commit then merge lands on main, marks landed, and offers the worktree for cleanup", async () => {
     const repoId = await registered();

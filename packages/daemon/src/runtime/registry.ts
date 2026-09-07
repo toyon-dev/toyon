@@ -12,6 +12,7 @@ import type { Hub } from "../core/hub.ts";
 import { log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
+import { expandEnv, resolveRun } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { WorktreeProcs } from "./supervisor.ts";
 import { type TerminalHandle, type TerminalOpts, WorktreeTerminal } from "./terminal.ts";
@@ -146,11 +147,6 @@ function previewTargetOf(procs: WorktreeProcs, previewName: string | undefined):
   return { port: st.port, host: st.host ?? "127.0.0.1" };
 }
 
-/** which proc the preview iframe shows: config.preview, else "web", else the first */
-export function previewProcName(repo: RepoInfo, procs: Record<string, string>): string | undefined {
-  return repo.config.preview ?? (procs.web ? "web" : Object.keys(procs)[0]);
-}
-
 export class RuntimeRegistry {
   private runtimes = new Map<string, Runtime>();
 
@@ -180,7 +176,8 @@ export class RuntimeRegistry {
     return rt;
   }
 
-  /** start the worktree's procs and proxy under the repo's config; no-op if already running */
+  /** start the worktree's procs and proxy under the repo's config, narrowed by the worktree's
+   * profile; no-op if already running */
   async start(wt: WorktreeInfo, repo: RepoInfo): Promise<void> {
     if (!this.deps.state.worktree(wt.id)) return; // removed while setup was running
     const rt = this.ensureAgent(wt);
@@ -188,17 +185,23 @@ export class RuntimeRegistry {
 
     const procs = (this.deps.makeProcs ?? defaultProcs)(wt, this.deps);
     rt.procs = procs;
-    // unconfirmed detection: no procs until the user confirms the config card
-    const procEntries = repo.needsSetup ? {} : repo.config.procs;
-    const previewName = previewProcName(repo, procEntries);
+    // unconfirmed detection: no procs until the user confirms the setup pane
+    const run = repo.needsSetup ? { procs: {}, env: {}, preview: undefined } : resolveRun(repo, wt);
+    const previewName = run.preview;
     rt.previewName = previewName;
 
-    // start non-preview procs first so the preview proc can get their URLs
-    for (const [name, cmd] of Object.entries(procEntries)) {
-      if (name !== previewName) await procs.start(name, cmd);
+    // start non-preview procs first so the preview proc can get their URLs. Every proc gets the
+    // profile env; a `$API_URL` in it resolves against whatever siblings are already up, so the
+    // api proc itself sees it unexpanded and the preview proc sees the address
+    const envFor = () => {
+      const urls = procUrlEnv(procs.states(), previewName);
+      return { ...urls, ...expandEnv(run.env, urls) };
+    };
+    for (const [name, cmd] of Object.entries(run.procs)) {
+      if (name !== previewName) await procs.start(name, cmd, envFor());
     }
-    if (previewName && procEntries[previewName]) {
-      await procs.start(previewName, procEntries[previewName]!, procUrlEnv(procs.states(), previewName));
+    if (previewName && run.procs[previewName]) {
+      await procs.start(previewName, run.procs[previewName]!, envFor());
     }
 
     if (!this.deps.state.worktree(wt.id) || this.runtimes.get(wt.id) !== rt) {

@@ -18,6 +18,7 @@ import { commitWorktree, mergeToMain, type ShipResult, shipWorktree, syncFromMai
 import { withRepoLock } from "../git/lock.ts";
 import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts } from "../git/status.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
+import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
 import { SparePool } from "./spare.ts";
@@ -41,6 +42,8 @@ export interface CreateOpts {
   variant?: Variant;
   context?: string;
   pick?: PickMeta;
+  /** one of the repo's profiles; the repo's default when absent */
+  profile?: string;
 }
 
 export interface WorktreeServiceDeps {
@@ -77,6 +80,7 @@ export class WorktreeService {
     const repo = this.d.state.requireRepo(repoId);
     // validated up front: an unknown or uninstalled agent is a toast now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
+    const profile = this.checkProfile(repo, opts.profile);
     // variants share a name base so they read as siblings in the list
     let slug = variant ? `${slugify(prompt, false)}-v${variant.index}` : slugify(prompt);
     if (variant && (await git(repo.path, "show-ref", "--verify", `refs/heads/toyon/${slug}`)).ok) {
@@ -105,6 +109,12 @@ export class WorktreeService {
         // the spare's agent has no process yet; it reads the stamp on its first prompt
         claimed.agent = agent;
         this.refreshLink(claimed);
+        // the spare was warmed under the default profile; another one means its procs restart
+        // (the agent stays, and gets the prompt now rather than after the restart)
+        if (profile !== undefined && profile !== resolveRun(repo, claimed).profile) {
+          claimed.profile = profile;
+          this.restartProcs(claimed, repo);
+        }
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
         this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, undefined, pick);
@@ -129,6 +139,7 @@ export class WorktreeService {
       agent,
       ...(variant ? { variant } : {}),
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
+      ...(profile !== undefined ? { profile } : {}),
     };
     this.d.state.addWorktree(wt);
     this.d.hub.emit("worktreesChanged");
@@ -139,6 +150,34 @@ export class WorktreeService {
     this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, undefined, pick);
     this.scheduleNaming(wt, prompt, repo, variant);
     return wt;
+  }
+
+  /** a profile name the repo actually has, or undefined for "the default"; a typo is a toast */
+  private checkProfile(repo: RepoInfo, name: string | undefined): string | undefined {
+    if (name === undefined) return undefined;
+    if (!repo.config.profiles?.[name]) throw new UserError(`no profile "${name}" in ${repo.name}'s toyon.json`);
+    return name;
+  }
+
+  /** procs and proxy come back under the worktree's current profile; the agent is untouched */
+  private restartProcs(wt: WorktreeInfo, repo: RepoInfo) {
+    fireAndForget(
+      wt.id,
+      this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),
+      "profile restart",
+    );
+  }
+
+  /** Run this worktree under another of the repo's profiles. Only its procs restart. */
+  setProfile(worktreeId: string, name: string) {
+    const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
+    if (wt.kind === "spare") throw new UserError("no profile for a spare worktree");
+    const profile = this.checkProfile(repo, name);
+    if (profile === wt.profile) return;
+    wt.profile = profile;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+    this.restartProcs(wt, repo);
   }
 
   /** Async pretty-naming: solo worktrees rename directly; variant groups rename together
@@ -290,6 +329,9 @@ export class WorktreeService {
       }
     });
 
+    // a graft runs the sources' profile when they agree, else the default
+    const profiles = new Set(wts.map((w) => w.profile));
+    const profile = profiles.size === 1 ? wts[0]!.profile : undefined;
     const wt: WorktreeInfo = {
       id: shortId(),
       repoId,
@@ -300,6 +342,7 @@ export class WorktreeService {
       title: slug,
       createdAt: Date.now(),
       sources: wts.map((w) => w.id),
+      ...(profile !== undefined ? { profile } : {}),
     };
     this.d.state.addWorktree(wt);
     this.d.hub.emit("worktreesChanged");

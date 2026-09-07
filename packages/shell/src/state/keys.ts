@@ -13,6 +13,8 @@ export const STORAGE = {
   termHeight: "toyon-th",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */
   client: "toyon-client",
+  /** + repo id: the profile the composer last started a worktree with, for that repo */
+  profilePrefix: "toyon-profile-",
 } as const;
 
 /** the same keys under the pre-rename prefix; migrated once on load so nobody loses a token or layout */

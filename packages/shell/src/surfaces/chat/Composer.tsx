@@ -6,6 +6,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
 import { chord, pickLabel, relFile } from "../util.ts";
 import { PickChip } from "./PickChip.tsx";
 
@@ -18,6 +19,8 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const page = useLocalField(id, "page");
   const setText = (t: string) => id && dispatch({ a: "set-draft", id, text: t });
   const clientId = useStore((s) => s.clientId);
+  const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
+  const [profile, setProfile] = useNewWorktreeProfile(repo);
   const picking = useStore((s) => s.picking);
   const pick = useStore((s) => (s.pick && s.pick.worktreeId === id ? s.pick : null));
 
@@ -76,6 +79,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         pick: pickMeta,
         // a stacked worktree continues with the same agent as its parent
         agent: active.worktree.agent,
+        profile,
       });
     } else {
       sock?.send({ t: "chat", worktreeId: id, text: text.trim(), context, pick: pickMeta });
@@ -123,18 +127,21 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         disabled={!active}
       />
       <div className="chat-hint spawn-row">
-        <label
-          data-tip={
-            isMain
-              ? "Unchecked: the agent edits your main working copy directly"
-              : "Checked: fork a new worktree from this one instead of continuing here"
-          }
-        >
-          <input type="checkbox" checked={spawnNew} onChange={(e) => setSpawnNew(e.target.checked)} />
-          <span>
-            new worktree from <b>{active?.worktree.title ?? "—"}</b>
-          </span>
-        </label>
+        <span className="spawn-left">
+          <label
+            data-tip={
+              isMain
+                ? "Unchecked: the agent edits your main working copy directly"
+                : "Checked: fork a new worktree from this one instead of continuing here"
+            }
+          >
+            <input type="checkbox" checked={spawnNew} onChange={(e) => setSpawnNew(e.target.checked)} />
+            <span>
+              new worktree from <b>{active?.worktree.title ?? "—"}</b>
+            </span>
+          </label>
+          {spawnNew && <ProfileChip repo={repo} value={profile} onChange={setProfile} />}
+        </span>
         <button
           className={`btn-icon composer-pick ${picking ? "on" : ""}`}
           disabled={!active}

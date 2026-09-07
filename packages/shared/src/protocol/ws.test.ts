@@ -18,6 +18,17 @@ describe("parseClientMsg", () => {
       { t: "set-default-agent", agent: "codex" },
       { t: "combine", worktreeIds: ["a", "b"] },
       { t: "confirm-config", repoId: "r", config: { procs: { web: "bun dev" } } },
+      {
+        t: "confirm-config",
+        repoId: "r",
+        config: {
+          procs: { web: "w", api: "a" },
+          profiles: { full: { procs: ["api", "web"], env: { X: "$API_URL" } }, fe: { procs: ["web"], preview: "web" } },
+          defaultProfile: "fe",
+        },
+      },
+      { t: "create-worktree", repoId: "r", prompt: "x", profile: "fe" },
+      { t: "set-worktree-profile", worktreeId: "a", profile: "full" },
       { t: "set-theme", prefs: { mode: "system", light: "l", dark: "d" } },
       { t: "rescan-themes" },
       { t: "term-open", worktreeId: "a", cols: 80, rows: 24 },
@@ -43,6 +54,21 @@ describe("parseClientMsg", () => {
     if (!r.ok) expect(r.reason).toMatch(/config\.procs/);
     const w = parseClientMsg({ t: "write-file", worktreeId: "a", path: "", content: "" });
     if (!w.ok) expect(w.reason).toMatch(/^path/);
+  });
+
+  test("profiles must name real procs, a default, and a preview inside the profile", () => {
+    const cfg = (config: unknown) => parseClientMsg({ t: "confirm-config", repoId: "r", config });
+    const procs = { web: "w", api: "a" };
+    const bad = [
+      { procs, profiles: { a: { procs: ["nope"] } }, defaultProfile: "a" },
+      { procs, profiles: { a: { procs: ["web"] } } },
+      { procs, profiles: { a: { procs: ["web"] } }, defaultProfile: "b" },
+      { procs, profiles: { a: { procs: ["web"], preview: "api" } }, defaultProfile: "a" },
+      { procs, defaultProfile: "a" },
+    ];
+    for (const c of bad) expect(cfg(c).ok, JSON.stringify(c)).toBe(false);
+    const r = cfg(bad[0]);
+    if (!r.ok) expect(r.reason).toMatch(/profiles\.a\.procs: unknown proc "nope"/);
   });
 
   test("combine needs at least two worktrees; unqueue index is a non-negative integer", () => {

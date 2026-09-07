@@ -1,6 +1,7 @@
 import type { WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { profileNames, profileOf } from "../../state/profiles.ts";
 import { useActiveId, useWorktrees } from "../../state/selectors.ts";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
@@ -20,6 +21,8 @@ export function WtRail() {
   const connected = useStore((s) => s.connected);
   const leftOpen = useStore((s) => s.leftOpen);
   const termOpen = useStore((s) => s.termOpen);
+  const repos = useStore((s) => s.repos);
+  const repoOf = (w: WorktreeStatus) => repos.find((r) => r.id === w.worktree.repoId) ?? null;
   const [menu, setMenu] = useState<MenuState | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const [graftMode, setGraftMode] = useState(false);
@@ -70,6 +73,12 @@ export function WtRail() {
       });
     }
     items.push({ label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
+    // main runs procs too, and is where switching is wanted most; flat items — Menu has no submenus
+    const repo = repoOf(w);
+    const current = profileOf(w.worktree, repo);
+    for (const name of profileNames(repo)) {
+      if (name !== current) items.push({ label: `run with ${name}`, onClick: () => acts.setProfile(w, name) });
+    }
     if (w.worktree.kind !== "main") {
       items.push({ label: "rename…", onClick: () => acts.rename(w) });
       if (w.worktree.variant) items.push({ label: "keep this variant…", onClick: () => acts.pickVariant(w) });
@@ -116,6 +125,16 @@ export function WtRail() {
                 {w.worktree.kind === "combined" ? "⧉ " : ""}
                 {w.worktree.title}
               </span>
+              {(() => {
+                // only the non-default profile is worth a tag: it is the one you need to notice
+                const repo = repoOf(w);
+                const p = profileOf(w.worktree, repo);
+                return p && p !== repo?.config.defaultProfile ? (
+                  <span className="row-badge profile-badge" data-tip={`runs the ${p} profile`}>
+                    {p}
+                  </span>
+                ) : null;
+              })()}
               {w.worktree.variant && (
                 <span
                   className="row-badge variant-badge clickable"

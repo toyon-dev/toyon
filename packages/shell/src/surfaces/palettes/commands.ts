@@ -6,6 +6,7 @@ import { resolveTheme, worktreeChord } from "@toyon/shared";
 import { useMemo } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { profileNames, profileOf } from "../../state/profiles.ts";
 import { type Action, type State, worktreeById } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { worktreeActions } from "../rail/worktreeActions.ts";
@@ -40,6 +41,10 @@ export function buildCommands(
   const id = wt?.worktree.id;
 
   if (repo) add("new", "new worktree…", () => dispatch({ a: "open", overlay: { kind: "prompt" } }), chord("new"));
+  for (const r of state.repos)
+    add(`setup:${r.id}`, `set up ${r.name}… (install + start)`, () =>
+      dispatch({ a: "open", overlay: { kind: "setup", repoId: r.id } }),
+    );
   if (id) {
     add(
       "jump",
@@ -127,6 +132,11 @@ export function buildCommands(
         sock?.send({ t: "restart-proc", worktreeId: id, proc: p.name }),
       );
     add("reveal", `reveal in Finder — ${t}`, () => sock?.send({ t: "reveal", worktreeId: id }));
+    const repo = state.repos.find((r) => r.id === wt.worktree.repoId) ?? null;
+    const current = profileOf(wt.worktree, repo);
+    for (const name of profileNames(repo)) {
+      if (name !== current) add(`profile:${name}`, `run ${t} with ${name}`, () => acts.setProfile(wt, name));
+    }
     if ((wt.behind ?? 0) > 0)
       add("sync", `sync main into ${t} (${wt.behind} behind)`, () => sock?.send({ t: "sync-main", worktreeId: id }));
     if (wt.worktree.kind !== "main") {

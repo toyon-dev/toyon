@@ -103,7 +103,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       context: msg.context,
       pick: msg.pick,
       agent: msg.agent,
+      profile: msg.profile,
     });
+  },
+
+  "set-worktree-profile"(msg, _ctx, s) {
+    s.worktrees.setProfile(msg.worktreeId, msg.profile);
   },
 
   "batch-worktrees"(msg, ctx, s) {

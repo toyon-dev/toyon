@@ -1,5 +1,16 @@
 // Domain records shared by daemon, shell and CLI: repos, worktrees, processes, git status, themes.
 
+/** one way to run a repo: which of its procs, with what extra environment */
+export interface RunProfile {
+  /** keys of ToyonConfig.procs, started in this order */
+  procs: string[];
+  /** merged into every proc of the profile; `$API_URL` / `${API_URL}` expand to the sibling-URL
+   * variables the daemon computes for the procs already up (unknown refs are left as written) */
+  env?: Record<string, string>;
+  /** preview proc for this profile; must be one of `procs` */
+  preview?: string;
+}
+
 export interface ToyonConfig {
   /** name -> foreground shell command; must listen on $PORT */
   procs: Record<string, string>;
@@ -9,6 +20,10 @@ export interface ToyonConfig {
   preview?: string;
   /** commands can't honor $PORT: only the focused worktree's procs run */
   exclusive?: boolean;
+  /** named subsets of procs a worktree can run (full stack vs frontend-against-staging) */
+  profiles?: Record<string, RunProfile>;
+  /** the profile a worktree runs when it has none; required when profiles exist */
+  defaultProfile?: string;
 }
 
 export interface RepoInfo {
@@ -49,6 +64,8 @@ export interface WorktreeInfo {
   createdBy?: string;
   /** registry id of the agent working here (stamped at creation, or on first use for older rows) */
   agent?: string;
+  /** which of the repo's profiles this worktree runs (the repo's defaultProfile when absent) */
+  profile?: string;
 }
 
 export type ProcStatus = "starting" | "running" | "crashed" | "stopped";

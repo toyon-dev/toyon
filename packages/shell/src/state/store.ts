@@ -87,7 +87,9 @@ export type Overlay =
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
   | { kind: "appearance" }
   /** default-agent picker */
-  | { kind: "agent" };
+  | { kind: "agent" }
+  /** the setup pane for a repo that is already configured (install + start commands) */
+  | { kind: "setup"; repoId: string };
 
 export interface State {
   connected: boolean;

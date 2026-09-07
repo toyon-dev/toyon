@@ -36,11 +36,11 @@ export class FakeAgent implements AgentAdapter {
 
 /** records starts/stops; never spawns */
 export class FakeProcs {
-  started: Array<{ name: string; command: string }> = [];
+  started: Array<{ name: string; command: string; env: Record<string, string> }> = [];
   stopped = false;
   private states_: ProcState[] = [];
-  async start(name: string, command: string): Promise<ProcState> {
-    this.started.push({ name, command });
+  async start(name: string, command: string, env: Record<string, string> = {}): Promise<ProcState> {
+    this.started.push({ name, command, env });
     const st: ProcState = { name, command, port: 40000 + this.started.length, status: "running", host: "127.0.0.1" };
     this.states_.push(st);
     return st;

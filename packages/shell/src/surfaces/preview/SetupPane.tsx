@@ -1,5 +1,5 @@
 import type { RepoInfo } from "@toyon/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
@@ -7,8 +7,15 @@ type Proc = { name: string; cmd: string };
 
 /** shown in place of the preview while a repo's detected config is unconfirmed: nothing is
  * spawned for its worktrees until the person says how the project installs and starts */
-export function SetupPane({ repo }: { repo: RepoInfo }) {
+export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => void }) {
   const sock = useSock();
+  // reopened for a configured repo: esc leaves it, the way every other overlay does
+  useEffect(() => {
+    if (!onClose) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   const [procs, setProcs] = useState<Proc[]>(() => {
     const detected = Object.entries(repo.config.procs).map(([name, cmd]) => ({ name, cmd }));
     return detected.length > 0 ? detected : [{ name: "web", cmd: "" }];
@@ -24,6 +31,8 @@ export function SetupPane({ repo }: { repo: RepoInfo }) {
       t: "confirm-config",
       repoId: repo.id,
       config: {
+        // keys the pane does not edit (preview, profiles) survive a hand-written file
+        ...repo.config,
         procs: Object.fromEntries(
           procs.filter((p) => p.name.trim() && p.cmd.trim()).map((p) => [p.name.trim(), p.cmd.trim()]),
         ),
@@ -33,6 +42,7 @@ export function SetupPane({ repo }: { repo: RepoInfo }) {
           .filter(Boolean),
       },
     });
+    onClose?.();
   };
 
   return (
@@ -41,6 +51,11 @@ export function SetupPane({ repo }: { repo: RepoInfo }) {
       <p className="setup-lead">
         toyon runs every worktree of this repo side by side, each on its own port. Tell it how the project installs and
         starts; the answer is saved as <code>toyon.json</code>.
+      </p>
+      <p className="setup-lead setup-aside">
+        {onClose
+          ? "Saving restarts every worktree of this repo. Profiles and other keys in the file are kept."
+          : "You can already edit, chat and commit here; this only powers the live preview."}
       </p>
 
       <label className="setup-row">
@@ -104,8 +119,13 @@ export function SetupPane({ repo }: { repo: RepoInfo }) {
       </div>
 
       <div className="setup-actions">
+        {onClose && (
+          <button className="btn" onClick={onClose}>
+            cancel
+          </button>
+        )}
         <button className="btn btn-outline setup-start" disabled={!canStart} onClick={start}>
-          start ▸
+          {onClose ? "save + restart ▸" : "start ▸"}
         </button>
       </div>
     </div>

@@ -18,6 +18,8 @@ export interface HubEvents {
   worktreesChanged: () => void;
   /** the repo's default branch moved: badges + git-status need refreshing */
   repoTick: (repoId: string) => void;
+  /** a repo's config or setup state changed (confirmed, or toyon.json edited) */
+  reposChanged: () => void;
   themesChanged: () => void;
   /** the default agent (or the registry) changed */
   agentsChanged: () => void;

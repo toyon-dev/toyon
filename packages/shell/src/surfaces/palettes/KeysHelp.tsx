@@ -20,6 +20,7 @@ export function KeysHelp() {
   const systemDark = useStore((s) => s.systemDark);
   const agents = useStore((s) => s.agents);
   const defaultAgent = useStore((s) => s.defaultAgent);
+  const repos = useStore((s) => s.repos);
   const open = (a: Action) => {
     dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
     dispatch(a);
@@ -52,6 +53,19 @@ export function KeysHelp() {
             {agents.find((a) => a.id === defaultAgent)?.name ?? defaultAgent}
           </button>
         </div>
+        {/* per-repo: how it installs and starts (toyon.json); the pane replaces the preview */}
+        {repos.map((r) => (
+          <div className="set-row" key={r.id}>
+            <span className="keys-d">{r.name}</span>
+            <button
+              className="btn btn-outline set-v"
+              data-tip={`edit the install + start commands in ${r.name}'s toyon.json`}
+              onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: r.id } })}
+            >
+              {Object.keys(r.config.procs).join(" + ") || "not set up"}
+            </button>
+          </div>
+        ))}
       </div>
       <div className="keys-card">
         {KEY_SECTIONS.map((sec) => (

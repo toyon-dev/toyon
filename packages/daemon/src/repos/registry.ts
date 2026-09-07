@@ -13,8 +13,8 @@ import { allocateProxyPort, reservePort } from "../runtime/ports.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
-import { detectConfig } from "./config.ts";
-import { watchDefaultBranch } from "./watcher.ts";
+import { detectConfig, readConfigFile } from "./config.ts";
+import { watchConfigFile, watchDefaultBranch } from "./watcher.ts";
 
 export interface RepoRegistryDeps {
   state: StateStore;
@@ -32,6 +32,8 @@ export class RepoRegistry {
   async boot(): Promise<void> {
     const { state, runtime } = this.d;
     state.pruneWorktrees((wt) => existsSync(wt.path) && state.repos.some((r) => r.id === wt.repoId));
+    // toyon.json may have been edited while the daemon was down
+    for (const repo of state.repos) this.applyConfigFile(repo, false);
     for (const wt of state.worktrees) reservePort(wt.proxyPort);
     for (const wt of state.worktrees) {
       await runtime.start(wt, state.requireRepo(wt.repoId));
@@ -101,19 +103,60 @@ export class RepoRegistry {
       );
     }
     fireAndForget(repoId, this.d.worktrees.spare.ensure(repoId), "spare warm-up");
+    this.d.hub.emit("reposChanged");
     this.d.hub.emit("worktreesChanged");
+  }
+
+  /** toyon.json changed on disk (an editor, the agent, a checkout): take it as the config. Profiles
+   * are file-only, so without this a JSON edit would be invisible until the repo was re-registered.
+   * A broken file keeps the last good config and says so in the main worktree's log. */
+  reloadConfig(repoId: string) {
+    const repo = this.d.state.requireRepo(repoId);
+    if (!this.applyConfigFile(repo, true)) return;
+    for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId)) {
+      fireAndForget(
+        wt.id,
+        this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),
+        "runtime restart",
+      );
+    }
+    fireAndForget(repoId, this.d.worktrees.spare.ensure(repoId), "spare warm-up");
+    this.d.hub.emit("reposChanged");
+    this.d.hub.emit("worktreesChanged");
+  }
+
+  /** read the file into the repo record; true when the config actually changed */
+  private applyConfigFile(repo: RepoInfo, announce: boolean): boolean {
+    const file = readConfigFile(repo.path);
+    if (!file) return false; // deleted or never written: keep what we have
+    if (!file.ok) {
+      log.warn(repo.id, file.reason);
+      if (announce) {
+        const main = this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main");
+        if (main) this.d.hub.emit("log", main.id, "config", `${file.reason} — keeping the previous config`);
+      }
+      return false;
+    }
+    const same = !repo.needsSetup && JSON.stringify(repo.config) === JSON.stringify(file.config);
+    if (same) return false;
+    repo.config = file.config;
+    repo.needsSetup = false;
+    this.d.state.save();
+    return true;
   }
 
   private startWatcher(repo: RepoInfo) {
     if (this.watchers.has(repo.id)) return;
-    this.watchers.set(
-      repo.id,
-      watchDefaultBranch(repo.path, repo.defaultBranch, () => {
-        this.d.worktrees.invalidateCounts();
-        this.d.hub.emit("repoTick", repo.id);
-        fireAndForget(repo.id, this.d.worktrees.spare.refresh(repo.id), "spare refresh");
-      }),
-    );
+    const stopRef = watchDefaultBranch(repo.path, repo.defaultBranch, () => {
+      this.d.worktrees.invalidateCounts();
+      this.d.hub.emit("repoTick", repo.id);
+      fireAndForget(repo.id, this.d.worktrees.spare.refresh(repo.id), "spare refresh");
+    });
+    const stopCfg = watchConfigFile(repo.path, () => this.reloadConfig(repo.id));
+    this.watchers.set(repo.id, () => {
+      stopRef();
+      stopCfg();
+    });
   }
 
   stopWatchers() {

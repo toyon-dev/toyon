@@ -99,6 +99,34 @@ describe("RuntimeRegistry", () => {
     expect(procs.size).toBe(0);
   });
 
+  test("a profile narrows and orders the procs, and its env reaches every proc with $API_URL expanded", async () => {
+    const { registry, procs } = make();
+    const profiled: RepoInfo = {
+      ...repo,
+      config: {
+        procs: { api: "true", web: "true", worker: "true" },
+        profiles: {
+          full: { procs: ["api", "web"], env: { VITE_BACKEND_URL: "$API_URL", MODE: "local" } },
+          fe: { procs: ["web"], env: { VITE_ENVIRONMENT: "staging" } },
+        },
+        defaultProfile: "fe",
+      },
+    };
+    await registry.start({ ...wt, profile: "full" }, profiled);
+    const started = procs.get(wt.id)!.started;
+    expect(started.map((p) => p.name)).toEqual(["api", "web"]);
+    // nothing is up when api starts: the reference stays literal
+    expect(started[0]?.env).toEqual({ VITE_BACKEND_URL: "$API_URL", MODE: "local" });
+    expect(started[1]?.env.VITE_BACKEND_URL).toBe(started[1]?.env.API_URL);
+    expect(started[1]?.env.MODE).toBe("local");
+    expect(registry.get(wt.id)?.previewName).toBe("web");
+
+    await registry.stopProcs(wt.id);
+    await registry.start(wt, profiled); // no profile on the row → the default
+    expect(procs.get(wt.id)!.started.map((p) => p.name)).toEqual(["web"]);
+    expect(procs.get(wt.id)!.started[0]?.env).toEqual({ VITE_ENVIRONMENT: "staging" });
+  });
+
   test("previewTarget() is the running preview proc", async () => {
     const { registry } = make();
     await registry.start(wt, repo);

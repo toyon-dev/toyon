@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentEvent, AgentStatus, AuthStatus } from "@toyon/shared";
+import type { AgentCommand, AgentEvent, AgentStatus, AuthStatus } from "@toyon/shared";
 import type { AuthObservation } from "../accounts.ts";
 import { AttachmentStore } from "../attachments.ts";
 import { SYSTEM_APPEND } from "../prompt.ts";
@@ -65,6 +65,9 @@ function fakeAgent(
     images?: boolean;
     logout?: boolean;
     authStatus?: AuthStatus;
+    /** commands to push from inside session/new, keyed by the id it is about to return: that is
+     * when real adapters send them, before the client knows the session exists */
+    commands?: Record<string, Array<{ name: string; description?: string; input?: { hint: string } }>>;
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
@@ -107,10 +110,18 @@ function fakeAgent(
         ],
       };
     })
-    .onRequest(acp.methods.agent.session.new, (c) => {
+    .onRequest(acp.methods.agent.session.new, async (c) => {
       f.newSessions.push(c.params);
+      const id = `s${++n}`;
+      const pushed = opts.commands?.[id];
+      if (pushed) {
+        await c.client.notify(acp.methods.client.session.update, {
+          sessionId: id,
+          update: { sessionUpdate: "available_commands_update", availableCommands: pushed },
+        });
+      }
       return {
-        sessionId: `s${++n}`,
+        sessionId: id,
         modes,
         configOptions: [
           { id: "model", name: "m", category: "model", type: "select", currentValue: "test-model", options: [] },
@@ -200,14 +211,17 @@ describe("AcpSession", () => {
   test("a turn: user-message, turn-start, session-info, deltas, turn-end; transcript on disk; status back to idle", async () => {
     const fake = fakeAgent(say("hello"));
     const w = world(fake);
-    w.session.send("hi", "ctx");
+    w.session.send("hi", { context: "ctx" });
     await w.idle();
     expect(w.types()).toEqual(["user-message", "turn-start", "session-info", "text-delta", "turn-end"]);
     expect(w.events[2]).toMatchObject({ sessionId: "s1", model: "test-model" });
     expect(w.events[4]).toMatchObject({ stopReason: "end_turn" });
     expect(w.statuses).toEqual(["working", "idle"]);
     // context reaches the prompt but never the transcript
-    expect(fake.prompts[0]!.prompt).toEqual([{ type: "text", text: "hi\n\nctx" }]);
+    expect(fake.prompts[0]!.prompt).toEqual([
+      { type: "text", text: "hi" },
+      { type: "text", text: "ctx" },
+    ]);
     expect((w.events[0] as { text: string }).text).toBe("hi");
     expect(fake.newSessions[0]!._meta).toEqual({ systemPrompt: { append: SYSTEM_APPEND } });
     expect(w.sessionId()).toBe("s1");
@@ -306,6 +320,45 @@ describe("AcpSession", () => {
     expect((fake.prompts[0]!.prompt[0] as { text: string }).text).toBe(`${SYSTEM_APPEND}\n\na`);
     expect((fake.prompts[1]!.prompt[0] as { text: string }).text).toBe("b");
     expect(fake.modes).toEqual(["agent"]);
+    await w.session.close();
+  });
+
+  test("the command list pushed from inside session/new still lands: `live` is null when it arrives", async () => {
+    const review = { name: "review", description: "review a PR", input: { hint: "<pr>" } };
+    const fake = fakeAgent(say("ok"), { commands: { s1: [review] } });
+    const w = world(fake);
+    const seen: AgentCommand[][] = [];
+    w.session.onCommandsChange = (c) => seen.push(c);
+    w.session.send("hi");
+    await w.idle();
+    expect(w.session.commands).toEqual([{ name: "review", description: "review a PR", hint: "<pr>" }]);
+    expect(seen).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("an ask session's commands never clobber the worktree's", async () => {
+    const fake = fakeAgent(say("ok"), {
+      commands: { s1: [{ name: "review", description: "mine" }], s2: [{ name: "namer", description: "theirs" }] },
+    });
+    const w = world(fake);
+    w.session.send("hi");
+    await w.idle();
+    expect(w.session.commands.map((c) => c.name)).toEqual(["review"]);
+    // the ask session pushes its list before askOnce has registered the id, which is the race
+    await w.session.ask("be brief", "name this");
+    expect(fake.newSessions).toHaveLength(2);
+    expect(w.session.commands.map((c) => c.name)).toEqual(["review"]);
+    await w.session.close();
+  });
+
+  test("the command list survives the reaper, so `/` still works with no process running", async () => {
+    const fake = fakeAgent(say("ok"), { commands: { s1: [{ name: "review", description: "mine" }] } });
+    const w = world(fake, claudeSpec, 10);
+    w.session.send("first");
+    await w.idle();
+    for (let i = 0; i < 100 && !w.links[0]!.killed; i++) await Bun.sleep(5);
+    expect(w.links[0]!.killed).toBe(true);
+    expect(w.session.commands.map((c) => c.name)).toEqual(["review"]);
     await w.session.close();
   });
 
@@ -523,7 +576,7 @@ describe("AcpSession", () => {
   test("images: stored, numbered per session, captioned ahead of the text; numbering survives a restart", async () => {
     const fake = fakeAgent(say("ok"), { images: true });
     const w = world(fake);
-    w.session.send("what is this", "ctx", undefined, [png, { ...png, name: "two.png" }]);
+    w.session.send("what is this", { context: "ctx", images: [png, { ...png, name: "two.png" }] });
     await w.idle();
     expect(w.events[0]).toMatchObject({
       type: "user-message",
@@ -538,13 +591,14 @@ describe("AcpSession", () => {
       { type: "image", mimeType: "image/png", data: "UE5H" },
       { type: "text", text: "Image 2: two.png (8×4)" },
       { type: "image", mimeType: "image/png", data: "UE5H" },
-      { type: "text", text: "what is this\n\nctx" },
+      { type: "text", text: "what is this" },
+      { type: "text", text: "ctx" },
     ]);
     expect(readFileSync(join(home, "attachments", w.id, "2.png"), "utf8")).toBe("PNG");
     await w.session.close();
     // a new AcpSession over the same transcript continues the count: "image 3" is unambiguous
     const w2 = world(fake, claudeSpec, 60_000, w.id);
-    w2.session.send("and this", undefined, undefined, [png]);
+    w2.session.send("and this", { images: [png] });
     await w2.idle();
     expect(w2.events[0]).toMatchObject({ type: "user-message", images: [{ n: 3, file: "3.png" }] });
     await w2.session.close();
@@ -553,7 +607,7 @@ describe("AcpSession", () => {
   test("an agent without image support gets the text only, and the person is told", async () => {
     const fake = fakeAgent(say("ok"));
     const w = world(fake);
-    w.session.send("look", undefined, undefined, [png]);
+    w.session.send("look", { images: [png] });
     await w.idle();
     expect(w.types()).toEqual(["user-message", "turn-start", "session-info", "agent-error", "text-delta", "turn-end"]);
     expect(w.events[3]).toMatchObject({ message: "Claude does not accept images; the message went without it" });

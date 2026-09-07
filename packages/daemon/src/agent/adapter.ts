@@ -1,7 +1,7 @@
 // What the rest of the daemon needs from an agent session. AcpSession (agent/acp/session.ts) is
 // the implementation; tests use a fake.
 
-import type { AgentEvent, AgentStatus, ImageInput, PickMeta } from "@toyon/shared";
+import type { AgentCommand, AgentEvent, AgentStatus, ImageInput, PasteInput, PickMeta } from "@toyon/shared";
 
 /** what a login attempt needs from the caller next */
 export type AuthOutcome =
@@ -10,14 +10,26 @@ export type AuthOutcome =
   /** the adapter did it; the refused message has been sent again */
   | { kind: "done" };
 
+/** everything a message carries besides its text */
+export interface SendOpts {
+  context?: string;
+  pick?: PickMeta;
+  images?: ImageInput[];
+  pastes?: PasteInput[];
+}
+
 export interface AgentAdapter {
   readonly status: AgentStatus;
   readonly queueLength: number;
   readonly queueItems: string[];
   /** notified whenever the pending queue changes (send/consume/unqueue/stop) */
   onQueueChange: (() => void) | null;
+  /** the slash commands this worktree's session advertises; empty until the agent has run once */
+  readonly commands: AgentCommand[];
+  /** notified when that list changes: session start, and any change the agent reports after */
+  onCommandsChange: ((commands: AgentCommand[]) => void) | null;
   /** context (live-page state, picked elements) reaches the prompt but never the visible transcript */
-  send(text: string, context?: string, pick?: PickMeta, images?: ImageInput[]): void;
+  send(text: string, opts?: SendOpts): void;
   /** interrupt the running turn and drop anything queued */
   stop(): void;
   unqueue(index: number): void;

@@ -6,11 +6,19 @@
 // need, and a Live session on top of it that the chat turns use.
 
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentEvent, AgentStatus, AuthMethodInfo, ImageInput, PickMeta } from "@toyon/shared";
+import type {
+  AgentCommand,
+  AgentEvent,
+  AgentStatus,
+  AuthMethodInfo,
+  ImageInput,
+  PasteInput,
+  PickMeta,
+} from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AuthObservation } from "../accounts.ts";
-import type { AgentAdapter, AuthOutcome } from "../adapter.ts";
+import type { AgentAdapter, AuthOutcome, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, StoredImage } from "../attachments.ts";
 import { decide, pickOption } from "../policy.ts";
 import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
@@ -19,7 +27,7 @@ import { type Bounds, worktreeBounds, writeClaudeLocalSettings } from "../sandbo
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
 import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
-import { mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
+import { mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
 import type { AcpLink } from "./transport.ts";
 
 export type AgentEventListener = (event: AgentEvent, seq: number) => void;
@@ -71,6 +79,10 @@ interface Conn {
   acceptsImages: boolean;
   /** side sessions (ask): text listeners by session id */
   side: Map<string, (text: string) => void>;
+  /** commands pushed per session id, including sessions we have not adopted yet. Adapters send
+   * available_commands_update as soon as a session exists, which is before session/new resolves
+   * and for ask sessions too, so the id is the only reliable way to tell whose list this is. */
+  commands: Map<string, AgentCommand[]>;
 }
 
 /** the worktree's conversation on that connection */
@@ -87,6 +99,7 @@ interface QueueItem {
   context?: string;
   pick?: PickMeta;
   images?: ImageInput[];
+  pastes?: PasteInput[];
 }
 
 export class AcpSession implements AgentAdapter {
@@ -110,14 +123,34 @@ export class AcpSession implements AgentAdapter {
   /** last image number handed out in this worktree's session; continues across daemon restarts
    * because the transcript remembers every image sent */
   private imageSeq: number;
+  /** the same for pastes; the two are numbered separately and cannot collide in the store */
+  private pasteSeq: number;
+  /** the live session's advertised commands. Deliberately not a transcript event: the backfill is
+   * the last 1000 entries, so a long session would trim the list away. An instance field survives
+   * the adapter reap, which is the point; it starts empty again after a daemon restart. */
+  private commandList: AgentCommand[] = [];
 
   constructor(private d: AcpSessionDeps) {
     this.log = new Transcript(transcriptPathFor(d.transcriptsDir, d.worktreeId), d.worktreeId);
     this.imageSeq = 0;
+    this.pasteSeq = 0;
     for (const { event } of this.log.entries) {
-      if (event.type === "user-message")
-        for (const img of event.images ?? []) this.imageSeq = Math.max(this.imageSeq, img.n);
+      if (event.type !== "user-message") continue;
+      for (const img of event.images ?? []) this.imageSeq = Math.max(this.imageSeq, img.n);
+      for (const p of event.pastes ?? []) this.pasteSeq = Math.max(this.pasteSeq, p.n);
     }
+  }
+
+  get commands(): AgentCommand[] {
+    return this.commandList;
+  }
+  onCommandsChange: ((commands: AgentCommand[]) => void) | null = null;
+
+  private setCommands(next: AgentCommand[]) {
+    // adapters re-push an unchanged list on every session start; do not wake the shell for it
+    if (sameCommands(this.commandList, next)) return;
+    this.commandList = next;
+    this.onCommandsChange?.(next);
   }
 
   get queueLength() {
@@ -155,9 +188,16 @@ export class AcpSession implements AgentAdapter {
     this.d.onStatus(s);
   }
 
-  send(text: string, context?: string, pick?: PickMeta, images?: ImageInput[]) {
+  send(text: string, opts: SendOpts = {}) {
     if (this.stopped) return log.warn(this.d.worktreeId, "send after close dropped");
-    this.queue.push({ text, context, pick, ...(images?.length ? { images } : {}) });
+    const { context, pick, images, pastes } = opts;
+    this.queue.push({
+      text,
+      context,
+      pick,
+      ...(images?.length ? { images } : {}),
+      ...(pastes?.length ? { pastes } : {}),
+    });
     this.queueChanged();
     if (!this.running) fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
   }
@@ -284,7 +324,7 @@ export class AcpSession implements AgentAdapter {
   retry() {
     const item = this.refused;
     this.refused = null;
-    if (item) this.send(item.text, item.context, item.pick, item.images);
+    if (item) this.send(item.text, item);
   }
 
   /** worth offering the login methods for: the agent has a credential and the provider refused it.
@@ -348,10 +388,11 @@ export class AcpSession implements AgentAdapter {
     const spec = this.d.spec();
     const bounds = await (this.d.prepare ?? defaultPrepare)(this.d.cwd, spec);
     const side = new Map<string, (text: string) => void>();
+    const commands = new Map<string, AgentCommand[]>();
     const app = acp
       .client({ name: "toyon" })
       .onRequest(acp.methods.client.session.requestPermission, (c) => this.onPermission(c.params, bounds))
-      .onNotification(acp.methods.client.session.update, (c) => this.onUpdate(c.params, side))
+      .onNotification(acp.methods.client.session.update, (c) => this.onUpdate(c.params, side, commands))
       // the agent pushes its identity unasked, here and whenever it changes; settings shows the last one
       .onNotification(AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, (c) => {
         if (c.params) this.d.onAuth?.(spec.id, { status: c.params });
@@ -383,6 +424,7 @@ export class AcpSession implements AgentAdapter {
         closeSupported: !!init.agentCapabilities?.sessionCapabilities?.close,
         acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
         side,
+        commands,
       };
       this.d.onAuth?.(spec.id, { canLogout: supportsLogout(init.agentCapabilities) });
       return this.conn;
@@ -448,10 +490,28 @@ export class AcpSession implements AgentAdapter {
       prefixPending: !resumed && conn.spec.systemPrompt === "prompt-prefix",
       tools: new Map(),
     };
+    // the push that landed while session/new was in flight, now that the id is known. Only when
+    // there is one: an agent that does not re-push on resume keeps the list it already had.
+    const pushed = conn.commands.get(sessionId!);
+    if (pushed) this.setCommands(pushed);
     return this.live;
   }
 
-  private onUpdate(params: acp.SessionNotification, side: Map<string, (text: string) => void>) {
+  private onUpdate(
+    params: acp.SessionNotification,
+    side: Map<string, (text: string) => void>,
+    commands: Map<string, AgentCommand[]>,
+  ) {
+    // ahead of both guards below: the list arrives before session/new resolves (so `live` is still
+    // null) and again during a session/load replay (so `loading` is true). Buffered rather than
+    // published, because an ask session's list lands before askOnce has registered its id in
+    // `side` and must not win over the worktree's own.
+    if (params.update.sessionUpdate === "available_commands_update") {
+      const mapped = mapCommands(params.update.availableCommands);
+      commands.set(params.sessionId, mapped);
+      if (this.live && params.sessionId === this.live.sessionId) this.setCommands(mapped);
+      return;
+    }
     if (this.loading) return;
     const listener = side.get(params.sessionId);
     if (listener) {
@@ -539,4 +599,11 @@ function authMethodInfo(m: acp.AuthMethod): AuthMethodInfo {
 
 function shellQuote(s: string): string {
   return /^[A-Za-z0-9_/.:=@%+,-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+function sameCommands(a: AgentCommand[], b: AgentCommand[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((c, i) => c.name === b[i]?.name && c.description === b[i]?.description && c.hint === b[i]?.hint)
+  );
 }

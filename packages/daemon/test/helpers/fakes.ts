@@ -1,9 +1,9 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentStatus, ImageInput, LogLine, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
+import type { AgentCommand, AgentEvent, AgentStatus, LogLine, ProcState, WorktreeInfo } from "@toyon/shared";
 import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
-import type { AgentAdapter } from "../../src/agent/adapter.ts";
+import type { AgentAdapter, SendOpts } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
 import type { PtyHandle, PtyOpts } from "../../src/runtime/pty.ts";
@@ -12,9 +12,11 @@ import type { WorktreeProcs } from "../../src/runtime/supervisor.ts";
 
 export class FakeAgent implements AgentAdapter {
   status: AgentStatus = "idle";
-  sent: Array<{ text: string; context?: string; pick?: PickMeta; images?: ImageInput[] }> = [];
+  sent: Array<{ text: string } & SendOpts> = [];
   stops = 0;
   onQueueChange: (() => void) | null = null;
+  commands: AgentCommand[] = [];
+  onCommandsChange: ((commands: AgentCommand[]) => void) | null = null;
   constructor(readonly worktreeId: string) {}
   get queueLength() {
     return 0;
@@ -22,8 +24,8 @@ export class FakeAgent implements AgentAdapter {
   get queueItems(): string[] {
     return [];
   }
-  send(text: string, context?: string, pick?: PickMeta, images?: ImageInput[]) {
-    this.sent.push({ text, context, pick, images });
+  send(text: string, opts: SendOpts = {}) {
+    this.sent.push({ text, ...opts });
   }
   stop() {
     this.stops++;

@@ -4,7 +4,15 @@
 
 import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { GitFileStatus, ImageInput, PickMeta, RepoInfo, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
+import type {
+  GitFileStatus,
+  ImageInput,
+  PasteInput,
+  PickMeta,
+  RepoInfo,
+  WorktreeInfo,
+  WorktreeStatus,
+} from "@toyon/shared";
 import { attachmentsDirFor } from "../agent/attachments.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer } from "../agent/tasks.ts";
@@ -52,6 +60,7 @@ export interface CreateOpts {
   /** one of the repo's profiles; the repo's default when absent */
   profile?: string;
   images?: ImageInput[];
+  pastes?: PasteInput[];
 }
 
 export interface WorktreeServiceDeps {
@@ -84,7 +93,7 @@ export class WorktreeService {
   // ---- create / remove / rename ----
 
   async create(repoId: string, prompt: string, opts: CreateOpts = {}): Promise<WorktreeInfo> {
-    const { variant, context, pick, images } = opts;
+    const { variant, context, pick, images, pastes } = opts;
     const repo = this.d.state.requireRepo(repoId);
     // validated up front: an unknown or uninstalled agent is a toast now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
@@ -101,11 +110,10 @@ export class WorktreeService {
     const fromMain = !base || base.kind === "main";
 
     // perspective-diverse variants: same goal, different emphasis per attempt
-    let agentPrompt =
+    const agentPrompt =
       variant && variant.of >= 2
         ? `${prompt}\n\n${VARIANT_LENSES[(variant.index - 1) % VARIANT_LENSES.length]}`
         : prompt;
-    if (context) agentPrompt = `${agentPrompt}\n\n${context}`;
 
     // fast path: claim the pre-warmed spare (main-based tasks only). Its runtime — agent
     // included — already exists, so the task's first message goes to the spare's agent.
@@ -125,7 +133,7 @@ export class WorktreeService {
         }
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
-        this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, undefined, pick, images);
+        this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, { context, pick, images, pastes });
         this.scheduleNaming(claimed, prompt, repo, variant);
         return claimed;
       }
@@ -155,7 +163,7 @@ export class WorktreeService {
     // setup + procs warm in the background; the agent starts immediately
     // RuntimeRegistry.start emits worktreesChanged once the procs are up
     fireAndForget(wt.id, this.setupAndStart(wt, repo, base?.path ?? repo.path), "setup + start");
-    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, undefined, pick, images);
+    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context, pick, images, pastes });
     this.scheduleNaming(wt, prompt, repo, variant);
     return wt;
   }

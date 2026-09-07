@@ -87,6 +87,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       log: s.runtime.recentLogs(msg.worktreeId),
     });
     ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: agent?.queueItems ?? [] });
+    ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: agent?.commands ?? [] });
     await gitStatus(s, ctx, msg.worktreeId);
   },
 
@@ -98,7 +99,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.state.requireWorktree(msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
-    agent.send(msg.text, msg.context, msg.pick, msg.images);
+    agent.send(msg.text, { context: msg.context, pick: msg.pick, images: msg.images, pastes: msg.pastes });
     s.hub.emit("worktreesChanged"); // queued-count may have changed
   },
 

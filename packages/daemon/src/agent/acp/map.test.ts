@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionUpdate } from "@agentclientprotocol/sdk";
-import { mapStopReason, mapUpdate, summarizeToolOutput, type ToolMemos, truncate } from "./map.ts";
+import { mapCommands, mapStopReason, mapUpdate, summarizeToolOutput, type ToolMemos, truncate } from "./map.ts";
 
 const run = (updates: SessionUpdate[], memos: ToolMemos = new Map()) =>
   updates.flatMap((u) => mapUpdate(u, memos, "t"));
@@ -131,5 +131,25 @@ describe("summarizeToolOutput / truncate / stop reasons", () => {
   test("cancelled reads as interrupted, others pass through", () => {
     expect(mapStopReason("cancelled")).toBe("interrupted");
     expect(mapStopReason("end_turn")).toBe("end_turn");
+  });
+});
+
+describe("mapCommands", () => {
+  test("lifts the hint out of the input, defaults a missing description", () => {
+    expect(mapCommands([{ name: "review", description: "look at a PR", input: { hint: "<pr>" } }])).toEqual([
+      { name: "review", description: "look at a PR", hint: "<pr>" },
+    ]);
+    expect(mapCommands([{ name: "ship" } as never])).toEqual([{ name: "ship", description: "" }]);
+  });
+
+  test("keeps an MCP name verbatim: the adapter re-expands it on the way back", () => {
+    expect(mapCommands([{ name: "mcp:linear:issue", description: "" }])[0]!.name).toBe("mcp:linear:issue");
+  });
+
+  test("drops nameless entries and caps a flood", () => {
+    expect(mapCommands([{ name: "", description: "" }])).toEqual([]);
+    expect(mapCommands([{ name: "x".repeat(200), description: "" }])).toEqual([]);
+    const many = Array.from({ length: 400 }, (_, i) => ({ name: `c${i}`, description: "" }));
+    expect(mapCommands(many)).toHaveLength(300);
   });
 });

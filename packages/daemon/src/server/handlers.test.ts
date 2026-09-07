@@ -97,12 +97,12 @@ describe("handlers", () => {
     ).rejects.toBeInstanceOf(UserError);
   });
 
-  test("subscribe registers the socket and replies backfill + queue + git-status to the caller only", async () => {
+  test("subscribe registers the socket and replies backfill + queue + commands + git-status to the caller only", async () => {
     const { services, ctx, replies, broadcasts, subs, repo } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
     await dispatch({ t: "subscribe", worktreeId: main.id }, ctx, services);
-    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "git-status"]);
+    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands", "git-status"]);
     expect(broadcasts.length).toBe(0);
     expect([...subs]).toEqual([main.id]);
     await dispatch({ t: "unsubscribe", worktreeId: main.id }, ctx, services);

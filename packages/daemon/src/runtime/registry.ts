@@ -120,6 +120,7 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
     onAuth: (agentId, o) => d.accounts?.observe(agentId, o),
   });
   agent.onQueueChange = () => d.hub.emit("queue", wt.id, agent.queueItems);
+  agent.onCommandsChange = (commands) => d.hub.emit("agentCommands", wt.id, commands);
   return agent;
 }
 

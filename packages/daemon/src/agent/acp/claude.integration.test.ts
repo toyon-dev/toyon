@@ -94,12 +94,9 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
     const red =
       "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAS0lEQVR42u3PQQkAAAgAsetfWiP4FgYrsKZeS0BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEDgsqnc8OJg6Ln3AAAAAElFTkSuQmCC";
     try {
-      session.send(
-        "Reply with exactly one word, the dominant color of image 1. Do not use any tools.",
-        undefined,
-        undefined,
-        [{ name: "swatch.png", mimeType: "image/png", data: red, width: 64, height: 64 }],
-      );
+      session.send("Reply with exactly one word, the dominant color of image 1. Do not use any tools.", {
+        images: [{ name: "swatch.png", mimeType: "image/png", data: red, width: 64, height: 64 }],
+      });
       await settle();
       expect(session.status).toBe("idle");
       expect(events[0]).toMatchObject({ type: "user-message", images: [{ n: 1, file: "1.png" }] });

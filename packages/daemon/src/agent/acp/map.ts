@@ -2,8 +2,8 @@
 // any number of `tool_call_update`s; the transcript wants one tool-start and one tool-end, so a
 // small memo per tool call id carries the pieces until the status settles.
 
-import type { SessionUpdate, StopReason, ToolCallContent, ToolKind } from "@agentclientprotocol/sdk";
-import type { AgentEvent } from "@toyon/shared";
+import type { AvailableCommand, SessionUpdate, StopReason, ToolCallContent, ToolKind } from "@agentclientprotocol/sdk";
+import type { AgentCommand, AgentEvent } from "@toyon/shared";
 import { log } from "../../core/log.ts";
 
 export interface ToolMemo {
@@ -96,7 +96,8 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
         : [];
     }
     default:
-      // plans, slash commands, mode/usage/compaction updates: nothing renders them yet
+      // plans, mode/usage/compaction updates: nothing renders them yet. Slash commands
+      // are taken by the session before they reach here, since they are not transcript content.
       log.debug(tag, `acp: ignoring ${update.sessionUpdate}`);
       return [];
   }
@@ -143,6 +144,23 @@ export function summarizeToolOutput(content: ToolCallContent[], rawOutput: unkno
 
 export function truncate(s: string, max = 4000): string {
   return s.length > max ? `${s.slice(0, max)}\n… (${s.length - max} more chars)` : s;
+}
+
+/** What the composer's `/` picker renders, out of what the agent advertised. Names go through
+ * verbatim: the Claude adapter re-expands `/mcp:server:cmd` into `/server:cmd (MCP)` on the way
+ * back, so normalising one here would break MCP prompts. Capped so a chatty adapter cannot flood
+ * every subscribed socket on each change. */
+export function mapCommands(cmds: AvailableCommand[]): AgentCommand[] {
+  return cmds
+    .filter((c) => typeof c.name === "string" && c.name.length > 0 && c.name.length <= 120)
+    .slice(0, 300)
+    .map((c) => ({
+      name: c.name,
+      description: c.description ?? "",
+      // SDK 1.4.0: AvailableCommandInput is the unstructured variant, so the hint is always here.
+      // The v2 schema widens it to a union and this will need a `c.input.type` check first.
+      ...(c.input?.hint ? { hint: c.input.hint } : {}),
+    }));
 }
 
 /** ACP's "cancelled" is what the old transcripts call "interrupted"; keep one word in the shell */

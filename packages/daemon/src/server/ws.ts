@@ -150,6 +150,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("proc", (worktreeId, proc) => broadcast({ t: "proc", worktreeId, proc }));
   s.hub.on("log", (worktreeId, proc, line) => sendTo(worktreeId, { t: "log", worktreeId, proc, line }));
   s.hub.on("queue", (worktreeId, items) => sendTo(worktreeId, { t: "queue", worktreeId, items }));
+  s.hub.on("agentCommands", (worktreeId, commands) =>
+    sendTo(worktreeId, { t: "agent-commands", worktreeId, commands }),
+  );
   s.hub.on("termData", (worktreeId, stream, data) => queueTerm(worktreeId, stream, data));
   s.hub.on("termExit", (worktreeId, stream, exitCode) =>
     sendTerm(worktreeId, stream, { t: "term-exit", worktreeId, stream, exitCode }),

@@ -2,21 +2,22 @@ import { useStore } from "../../state/context.tsx";
 import { useActive } from "../../state/selectors.ts";
 import { ChatLog } from "./ChatLog.tsx";
 import { Composer } from "./Composer.tsx";
-import { useImageIntake } from "./useImageIntake.ts";
+import { chatPanel } from "./useImageIntake.ts";
 
 /** the chat panel: transcript above, composer below */
 export function RightDock({ width }: { width: number }) {
   const rightOpen = useStore((s) => s.rightOpen);
   const active = useActive();
-  // a screenshot dropped anywhere on the chat panel attaches to the composer
-  const { over, onDragOver, onDragLeave, onDrop } = useImageIntake(active?.worktree.id ?? null);
+  // dropped files attach here, but the drop is taken on the window (see useFileDrop): this only
+  // lends it the panel's bounds and shows the highlight while the pointer is inside them
+  const over = useStore((s) => s.dragFiles);
   return (
     <div
       className={`right-dock ${rightOpen ? "" : "collapsed"} ${over ? "drop-over" : ""}`}
       style={{ width }}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+      ref={(el) => {
+        chatPanel.el = el;
+      }}
     >
       <ChatLog active={active} />
       <Composer active={active} />

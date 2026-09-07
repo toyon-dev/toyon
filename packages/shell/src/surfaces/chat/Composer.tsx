@@ -11,7 +11,7 @@ import { chord, pickLabel, relFile } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl, nextImageNumber } from "./images.ts";
 import { PickChip } from "./PickChip.tsx";
-import { useImageIntake } from "./useImageIntake.ts";
+import { useImagePaste } from "./useImageIntake.ts";
 
 /** the message box: draft (kept per worktree), picked-element and image attachments, spawn-a-worktree
  * toggle, and the per-worktree tools (terminal, element picker) */
@@ -23,7 +23,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const page = useLocalField(id, "page");
   const images = useLocalField(id, "images");
   const chat = useLocalField(id, "chat");
-  const intake = useImageIntake(id);
+  const onPaste = useImagePaste(id);
   const firstImageNumber = nextImageNumber(chat);
   const setText = (t: string) => id && dispatch({ a: "set-draft", id, text: t });
   const clientId = useStore((s) => s.clientId);
@@ -116,12 +116,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   };
 
   return (
-    <div
-      className={`chat-input ${intake.over ? "drop-over" : ""}`}
-      onDragOver={intake.onDragOver}
-      onDragLeave={intake.onDragLeave}
-      onDrop={intake.onDrop}
-    >
+    <div className="chat-input">
       {id &&
         images.map((img, i) => (
           <ImageChip
@@ -156,7 +151,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         ref={composerRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onPaste={intake.onPaste}
+        onPaste={onPaste}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();

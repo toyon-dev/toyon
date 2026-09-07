@@ -526,6 +526,8 @@ body.resizing .row-resize {
   border-left: 1px solid var(--bg2);
   display: flex;
   flex-direction: column;
+  /* containing block for the drop wash */
+  position: relative;
 }
 
 /* ---- far-right worktree rail: 40px dot strip, hover peeks the full panel
@@ -1290,11 +1292,16 @@ body.resizing .rb-center {
 .msg-images .pick-chip.in-chat {
   margin: 0;
 }
-/* an image being dragged over the chat: the composer (or the whole panel) says it will take it */
-.chat-input.drop-over,
-.right-dock.drop-over .chat-input {
-  outline: 2px dashed var(--orange);
-  outline-offset: -4px;
+/* an image dragged over the chat: the whole panel takes it, so the whole panel lights up. A wash
+   and a hairline rather than a dashed box: the drop is the obvious reading of a file over the
+   chat, and the marker only has to confirm the target, not shout at it */
+.right-dock.drop-over::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--orange) 6%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 35%, transparent);
 }
 .status-bar .branch {
   color: var(--orange);

@@ -1,7 +1,7 @@
 import { parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { useDispatch, useStore } from "../../state/context.tsx";
+import { useDispatch, useStore, useStoreInstance } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
 import {
   useActive,
@@ -19,6 +19,7 @@ import { hasToken } from "../../ws.ts";
 const HAS_TOKEN = hasToken();
 
 import { DiffView } from "../changes/DiffView.tsx";
+import { missedFileDrop, noteFileDrag } from "../chat/useImageIntake.ts";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, previewUrl, relFile } from "../util.ts";
@@ -28,6 +29,7 @@ import { SetupPane } from "./SetupPane.tsx";
  * so each preview keeps its app state + HMR socket while hidden), the editor pane, and the overlays */
 export function Center() {
   const dispatch = useDispatch();
+  const store = useStoreInstance();
   const worktrees = useWorktrees();
   const activeId = useActiveId();
   const active = useActive();
@@ -104,6 +106,16 @@ export function Center() {
           case "pick-cancel":
             dispatch({ a: "set-picking", v: false });
             break;
+          case "drag-files":
+            // the pointer is inside a preview, so it is not over the chat panel; the shell's own
+            // window sees no dragover in here to tell it that
+            noteFileDrag(store, false);
+            break;
+          case "drop-files":
+            // a file drop the page didn't take: the bridge swallowed it so the frame wouldn't
+            // navigate to the file, and it attaches nowhere from out there
+            missedFileDrop(store);
+            break;
           case "highlight-miss":
             console.warn(
               `[toyon] highlight miss on ${d.path}: ${d.fileMatched} elements from this file, ` +
@@ -116,7 +128,7 @@ export function Center() {
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [dispatch]);
+  }, [dispatch, store]);
 
   // agent finished a turn whose changes HMR couldn't cover: reload that preview (small delay so
   // backend --watch/--reload restarts settle first)

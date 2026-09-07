@@ -2,10 +2,15 @@
 // what it reads changes (useSyncExternalStore compares by identity: never build a fresh object here).
 
 import type { RepoInfo, WorktreeStatus } from "@toyon/shared";
+import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
 import { currentTheme, localOf, repoById, type WorktreeLocal, worktreeById } from "./store.ts";
 
 export const useActiveId = () => useStore((s) => s.activeId);
+
+/** the socket has been down long enough to be worth saying so. It is down on first paint and for
+ * a blink on every reconnect; painting either reads as the app still loading. */
+export const useOffline = (): boolean => useSettled(!useStore((s) => s.connected), 900);
 
 /** the active worktree's status row (identity changes with every worktrees/proc message, like before) */
 export const useActive = (): WorktreeStatus | null => useStore((s) => worktreeById(s, s.activeId));

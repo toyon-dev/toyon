@@ -69,6 +69,22 @@ export function useDragResize(measure: (e: PointerEvent) => number | null, onSiz
   };
 }
 
+/** True only once `on` has held for `ms`, false the instant it drops. For states worth showing
+ * when they persist and not worth a flash when they don't: the socket is down on first paint and
+ * for a blink on every reconnect, and painting that immediately reads as the app still loading. */
+export function useSettled(on: boolean, ms: number): boolean {
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!on) {
+      setSettled(false);
+      return;
+    }
+    const t = setTimeout(() => setSettled(true), ms);
+    return () => clearTimeout(t);
+  }, [on, ms]);
+  return settled;
+}
+
 /** window.innerWidth, live */
 export function useWindowWidth(): number {
   const [w, setW] = useState(window.innerWidth);

@@ -7,7 +7,8 @@ import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, isInstalledApp } from "../util.ts";
 
-/** the top bar: dock toggles, the route bar centered over the preview, tools (proc health lives in the rail foot) */
+/** the top bar: dock toggles, the route bar centered over the preview, tools (proc health badges the
+ * composer's terminal button; a dead socket colours the worktree rail) */
 /** `leftPx`/`rightPx`: the dock columns' widths, so the nav cluster can sit over the preview column */
 export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number }) {
   // nav cluster stays centered over the preview column; only this surface re-renders on resize

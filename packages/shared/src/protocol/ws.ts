@@ -20,8 +20,16 @@ import type {
 import { SHELL_STREAM } from "../model.ts";
 import type { AgentCommand, AgentEvent, PickMeta } from "./events.ts";
 
-/** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */
-export const PROTOCOL_VERSION = 7;
+/**
+ * Bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello and
+ * stops talking rather than misreading frames.
+ *
+ * A *new* ClientMsg kind counts, however additive it looks: the shell ships from dist and the
+ * daemon from source, so a reloaded tab routinely talks to a daemon that has not restarted, and
+ * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
+ * same goes for a new required field on an existing kind.
+ */
+export const PROTOCOL_VERSION = 8;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };

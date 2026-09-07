@@ -942,12 +942,16 @@ body.resizing .row-resize {
 .chat-input {
   display: flex;
   flex-direction: column;
+  /* the field's own background, now carried by the whole region: level with the transcript it
+     would read as a disabled box rather than somewhere to type */
+  background: var(--bg0);
   border-top: 1px solid var(--bg2);
   padding: 10px;
   min-height: 160px;
 }
-.chat-input:focus-within {
-  border-top-color: var(--bg3);
+/* chips ride on that same tone, so they take the panel's to stay raised */
+.chat-input .pick-chip {
+  background: var(--bg1);
 }
 .chat-input textarea {
   flex: 1;

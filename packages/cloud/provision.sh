@@ -100,8 +100,13 @@ case "$cmd" in
     # Auth for the agent inside the VM, in order of preference:
     #   1. claude-oauth.token  — from `claude setup-token`; bills your Claude plan
     #   2. anthropic.key       — API key; pay-as-you-go credits
+    #   3. openai.key          — optional; lets a worktree run Codex (ChatGPT login needs a browser)
     oauth_file="$state_dir/claude-oauth.token"
     key_file="$state_dir/anthropic.key"
+    openai_file="$state_dir/openai.key"
+    if [ -z "${OPENAI_API_KEY:-}" ] && [ -f "$openai_file" ]; then
+      OPENAI_API_KEY="$(tr -d '[:space:]' < "$openai_file")"
+    fi
     CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN:-}"
     [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -f "$oauth_file" ] && CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '[:space:]' < "$oauth_file")"
     if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f "$key_file" ]; then
@@ -123,6 +128,7 @@ case "$cmd" in
       fly secrets set -a "$app" --stage \
         TOYON_TOKEN="$token" \
         CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
+        ${OPENAI_API_KEY:+OPENAI_API_KEY="$OPENAI_API_KEY"} \
         ${DEMO_REPO_URL:+DEMO_REPO_URL="$DEMO_REPO_URL"}
       # an API key on the machine would take precedence over the plan token
       fly secrets list -a "$app" 2>/dev/null | grep -q ANTHROPIC_API_KEY && fly secrets unset -a "$app" --stage ANTHROPIC_API_KEY
@@ -131,6 +137,7 @@ case "$cmd" in
       fly secrets set -a "$app" --stage \
         TOYON_TOKEN="$token" \
         ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+        ${OPENAI_API_KEY:+OPENAI_API_KEY="$OPENAI_API_KEY"} \
         ${DEMO_REPO_URL:+DEMO_REPO_URL="$DEMO_REPO_URL"}
     fi
     fly deploy "$ROOT" --config "$HERE/fly.toml" --dockerfile "$HERE/Dockerfile" \

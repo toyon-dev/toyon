@@ -4,7 +4,10 @@
 #
 # glibc base so the agent SDK / esbuild / rollup pick their -linux-x64 builds.
 # bubblewrap + socat: Claude Code sandboxes Bash by default and refuses to run
-# without them (SandboxSettings.failIfUnavailable defaults to true).
+# without them (SandboxSettings.failIfUnavailable defaults to true). Codex's
+# workspace-write sandbox on Linux uses bubblewrap/landlock too. The ACP
+# adapters for both are daemon dependencies, so `bun install` below is the
+# only install step and no node binary is needed: they run under bun.
 FROM oven/bun:1-debian
 
 RUN apt-get update \

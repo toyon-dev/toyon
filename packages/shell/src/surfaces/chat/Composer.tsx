@@ -14,13 +14,13 @@ import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
-import { chord, pickLabel, relFile } from "../util.ts";
+import { chord, pickLabel, procTrouble, relFile } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl, nextImageNumber, nextPasteNumber } from "./images.ts";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { useIntake } from "./useIntake.ts";
+import { useComposerPaste } from "./useIntake.ts";
 
 /** what the inline `@` / `/` menu can offer */
 type Row =
@@ -54,7 +54,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const images = useLocalField(id, "images");
   const pastes = useLocalField(id, "pastes");
   const chat = useLocalField(id, "chat");
-  const intake = useIntake(id);
+  const onPaste = useComposerPaste(id);
   const firstImageNumber = nextImageNumber(chat);
   const firstPasteNumber = nextPasteNumber(chat);
   const setText = (t: string) => id && dispatch({ a: "set-draft", id, text: t });
@@ -64,6 +64,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const picking = useStore((s) => s.picking);
   const termOpen = useStore((s) => s.termOpen);
   const pick = useStore((s) => (s.pick && s.pick.worktreeId === id ? s.pick : null));
+  const trouble = procTrouble(active?.procs ?? []);
 
   // the @ / slash menu: local state, not an overlay. s.overlay is modal and exclusive, and the
   // global esc handler would close this from anywhere in the app.
@@ -221,12 +222,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   };
 
   return (
-    <div
-      className={`chat-input ${intake.over ? "drop-over" : ""}`}
-      onDragOver={intake.onDragOver}
-      onDragLeave={intake.onDragLeave}
-      onDrop={intake.onDrop}
-    >
+    <div className="chat-input">
       {id &&
         images.map((img, i) => (
           <ImageChip
@@ -304,7 +300,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         // arrow keys and clicks move the caret without changing the text, and the menu follows it
         onKeyUp={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
         onClick={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-        onPaste={intake.onPaste}
+        onPaste={onPaste}
         onKeyDown={(e) => {
           // an IME builds a word out of several keystrokes; a menu opening mid-composition would
           // fight the candidate list
@@ -355,12 +351,18 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar */}
           <button
-            className={`btn-icon ${termOpen ? "on" : ""}`}
+            className={`btn-icon term-btn ${termOpen ? "on" : ""}`}
             disabled={!active}
-            {...tip("Terminal", chord("terminal"))}
-            onClick={() => dispatch({ a: "toggle-terminal" })}
+            {...tip(trouble ? trouble.tip : "Terminal", chord("terminal"))}
+            onClick={() => {
+              // opening onto the badge's own tab: the dot is the only thing that says a proc died,
+              // so following it should land on the crash, not on whichever tab you left open
+              if (trouble && !termOpen && id) dispatch({ a: "term-stream", id, stream: trouble.stream });
+              else dispatch({ a: "toggle-terminal" });
+            }}
           >
             <Icon name="terminal" />
+            {trouble && <span className="term-badge" />}
           </button>
           <button
             className={`btn-icon composer-pick ${picking ? "on" : ""}`}

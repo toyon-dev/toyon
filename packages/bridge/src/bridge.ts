@@ -85,6 +85,26 @@ window.addEventListener(
   true,
 );
 
+// A file dropped on a page that doesn't take it navigates that frame to the file: drop a
+// screenshot on the preview and the running app is gone. Swallow those and tell the shell, which
+// says where the drop should have gone. A page keeps its own drop zones: a handler that called
+// preventDefault has claimed the drag, and this backs off.
+const fileDrag = (e: DragEvent) => !e.defaultPrevented && !!e.dataTransfer?.types.includes("Files");
+window.addEventListener("dragover", (e) => {
+  if (!fileDrag(e)) return;
+  e.preventDefault();
+  // nothing in here takes a file, and the cursor should say so before the drop
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
+  // the shell's window sees nothing while the pointer is in here, so each dragover is also what
+  // tells it the drag has left the chat panel (it coalesces them; nothing re-renders)
+  post({ type: "drag-files" });
+});
+window.addEventListener("drop", (e) => {
+  if (!fileDrag(e)) return;
+  e.preventDefault();
+  post({ type: "drop-files" });
+});
+
 // ---- React fiber source mapping ----
 
 type Fiber = {

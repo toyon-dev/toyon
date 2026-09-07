@@ -97,6 +97,17 @@ export function startProxy(opts: {
         h.delete("content-encoding");
         return new Response(injected, { status: res.status, headers: h });
       }
+      // fetch() decompresses transparently but leaves the upstream's content-encoding on the
+      // response. Passing that header back with an already decoded body makes the browser try to
+      // gunzip plain text: it fails with ERR_CONTENT_DECODING_FAILED and drops the resource, so a
+      // preview loads its HTML and none of its script or style. The html branch above already
+      // strips it; every other response needs the same treatment.
+      if (res.headers.has("content-encoding")) {
+        const h = new Headers(res.headers);
+        h.delete("content-encoding");
+        h.delete("content-length");
+        return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+      }
       return res;
     },
     websocket: {

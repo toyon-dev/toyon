@@ -53,6 +53,12 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
     withSource: z.number(),
     ranges: z.array(range).nullable(),
   }),
+  /** a file drag is over the preview: the shell's window sees no dragover while the pointer is
+   * inside a frame, and would otherwise still believe the drag is wherever it saw it last */
+  z.object({ type: z.literal("drag-files") }),
+  /** a file dropped on the preview that the page itself did not take. The bridge swallowed it:
+   * left alone the frame navigates to the file and the running app is gone */
+  z.object({ type: z.literal("drop-files") }),
   /** a Toyon chord pressed while the preview had focus; the shell replays it as a keydown */
   z.object({
     type: z.literal("key"),

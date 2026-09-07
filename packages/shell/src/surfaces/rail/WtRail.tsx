@@ -8,7 +8,7 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass } from "../util.ts";
-import { HealthDot } from "./HealthDot.tsx";
+import { ConnDot } from "./ConnDot.tsx";
 import { worktreeActions } from "./worktreeActions.ts";
 
 type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
@@ -272,7 +272,7 @@ export function WtRail() {
             </button>
           )}
         </div>
-        <HealthDot connected={connected} />
+        <ConnDot connected={connected} />
         {menu && menuWt && <Menu at={menu.at} onClose={closeMenu} items={menuItems(menuWt, menu.land)} />}
       </div>
     </div>

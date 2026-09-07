@@ -4,6 +4,7 @@ import { STORAGE } from "../state/keys.ts";
 import { useActive, useActiveId, useTheme, useWorktrees } from "../state/selectors.ts";
 import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
 import { RightDock } from "../surfaces/chat/RightDock.tsx";
+import { useFileDrop } from "../surfaces/chat/useIntake.ts";
 import { Center } from "../surfaces/preview/Center.tsx";
 import { WtRail } from "../surfaces/rail/WtRail.tsx";
 import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
@@ -85,6 +86,9 @@ export function App() {
   }, [activeRepoId]);
 
   useChords();
+  // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the
+  // browser's own answer to a stray file drop is to navigate the tab to it, session and all
+  useFileDrop(activeId);
 
   // ship results: open PR/compare URLs, auto-dismiss toasts
   const openedRef = useRef<string | null>(null);

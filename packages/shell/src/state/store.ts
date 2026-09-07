@@ -170,6 +170,8 @@ export interface State {
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
+  /** a file is being dragged over the chat panel, which is the one place a drop attaches */
+  dragFiles: boolean;
   /** armed element picker + last picked element (pending chat attachment) */
   picking: boolean;
   pick: (PickedElement & { worktreeId: string }) | null;
@@ -231,6 +233,7 @@ export function initialState(opts: InitialOpts): State {
     diff: null,
     toast: null,
     reloadReq: null,
+    dragFiles: false,
     picking: false,
     pick: null,
     gotoLine: null,
@@ -316,6 +319,7 @@ export type Action =
   | { a: "goto-line"; v: State["gotoLine"] }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
+  | { a: "drag-files"; v: boolean }
   | { a: "set-picking"; v: boolean }
   | { a: "picked"; pick: NonNullable<State["pick"]> }
   | { a: "clear-pick" }
@@ -373,7 +377,11 @@ function reduce(s: State, action: Action): State {
     case "set-draft":
       return withLocal(s, action.id, (l) => ({ ...l, draft: action.text }));
     case "add-images":
-      return withLocal(s, action.id, (l) => ({ ...l, images: [...l.images, ...action.images] }));
+      // the chips are the only sign an attachment landed, so a drop on a collapsed chat opens it
+      return withLocal({ ...s, rightOpen: true }, action.id, (l) => ({
+        ...l,
+        images: [...l.images, ...action.images],
+      }));
     case "remove-image":
       return withLocal(s, action.id, (l) => ({ ...l, images: l.images.filter((i) => i.key !== action.key) }));
     case "clear-images":
@@ -397,6 +405,8 @@ function reduce(s: State, action: Action): State {
           errors: action.fresh ? [] : action.error ? [...l.page.errors.slice(-2), action.error] : l.page.errors,
         },
       }));
+    case "drag-files":
+      return s.dragFiles === action.v ? s : { ...s, dragFiles: action.v };
     case "set-picking":
       return { ...s, picking: action.v };
     case "picked":

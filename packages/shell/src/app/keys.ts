@@ -18,13 +18,16 @@ export function useChords() {
         e.preventDefault();
         switch (chord.id) {
           case "worktree": {
-            const i = worktreeIndex(chord.digit, s.worktrees.length);
-            const wt = i === null ? undefined : s.worktrees[i];
+            const i = worktreeIndex(chord.digit, s.visible.length);
+            const wt = i === null ? undefined : s.visible[i];
             if (wt) dispatch({ a: "activate", id: wt.worktree.id });
             break;
           }
           case "new":
             dispatch({ a: "toggle", overlay: { kind: "prompt" } });
+            break;
+          case "project":
+            dispatch({ a: "toggle", overlay: { kind: "projects" } });
             break;
           case "quick-open":
             if (s.overlay?.kind === "quick-open") dispatch({ a: "close" });

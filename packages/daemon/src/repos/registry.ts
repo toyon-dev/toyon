@@ -2,6 +2,7 @@
 // persisted repo and worktree back up).
 
 import { existsSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { RepoInfo, ToyonConfig, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
@@ -9,7 +10,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { defaultBranch, isGitRepo, repoRoot } from "../git/exec.ts";
-import { allocateProxyPort, reservePort } from "../runtime/ports.ts";
+import { allocateProxyPort, releasePort, reservePort } from "../runtime/ports.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
@@ -45,7 +46,10 @@ export class RepoRegistry {
     }
   }
 
-  async register(path: string): Promise<RepoInfo> {
+  async register(rawPath: string): Promise<RepoInfo> {
+    // typed into the project picker: "~/x" is how people write paths, and a shell never expanded it
+    const path = rawPath === "~" || rawPath.startsWith("~/") ? join(homedir(), rawPath.slice(1)) : rawPath;
+    if (!existsSync(path)) throw new UserError(`${path} does not exist`);
     if (!(await isGitRepo(path))) throw new UserError(`${path} is not a git repository`);
     const root = await repoRoot(path);
     const existing = this.d.state.repos.find((r) => r.path === root);
@@ -78,8 +82,33 @@ export class RepoRegistry {
     await this.d.runtime.start(main, repo);
     this.startWatcher(repo);
     fireAndForget(repo.id, this.d.worktrees.spare.ensure(repo.id), "spare warm-up");
+    this.d.hub.emit("reposChanged");
     this.d.hub.emit("worktreesChanged");
     return repo;
+  }
+
+  /** drop a repo from the daemon: its main runtime and spare stop, their records go, the checkout
+   * stays untouched. Task worktrees are the person's work in progress, so a repo that still has
+   * any is refused rather than silently removed with them. */
+  async forget(repoId: string): Promise<void> {
+    const repo = this.d.state.requireRepo(repoId);
+    const mine = this.d.state.worktrees.filter((w) => w.repoId === repoId);
+    const tasks = mine.filter((w) => w.kind !== "main" && w.kind !== "spare");
+    if (tasks.length > 0) {
+      throw new UserError(
+        `${repo.name} still has ${tasks.length} worktree${tasks.length === 1 ? "" : "s"}; remove them first`,
+      );
+    }
+    this.stopWatcher(repoId);
+    for (const wt of mine.filter((w) => w.kind === "spare")) await this.d.worktrees.remove(wt.id, true);
+    for (const wt of mine.filter((w) => w.kind === "main")) {
+      await this.d.runtime.stop(wt.id);
+      this.d.state.removeWorktree(wt.id);
+      releasePort(wt.proxyPort);
+    }
+    this.d.state.removeRepo(repoId);
+    this.d.hub.emit("reposChanged");
+    this.d.hub.emit("worktreesChanged");
   }
 
   confirmConfig(repoId: string, config: ToyonConfig) {
@@ -157,6 +186,11 @@ export class RepoRegistry {
       stopRef();
       stopCfg();
     });
+  }
+
+  private stopWatcher(repoId: string) {
+    this.watchers.get(repoId)?.();
+    this.watchers.delete(repoId);
   }
 
   stopWatchers() {

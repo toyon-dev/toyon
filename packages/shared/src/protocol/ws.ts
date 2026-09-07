@@ -18,7 +18,7 @@ import type {
 import type { AgentEvent, PickMeta } from "./events.ts";
 
 /** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -219,6 +219,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("rename-worktree"), worktreeId: id, title: z.string().min(1).max(200) }),
   z.object({ t: z.literal("confirm-config"), repoId: id, config: toyonConfigSchema }),
+  /** open another repo in this daemon (the project switcher's "open folder"); `~` is expanded */
+  z.object({ t: z.literal("register-repo"), path: z.string().min(1).max(4_000) }),
+  /** drop a repo from the daemon; refused while it still has task worktrees */
+  z.object({ t: z.literal("forget-repo"), repoId: id }),
   z.object({ t: z.literal("set-theme"), prefs: themePrefsSchema }),
   z.object({ t: z.literal("set-default-agent"), agent: id }),
   /** (re)download an agent's adapter; progress arrives as `agents` broadcasts */

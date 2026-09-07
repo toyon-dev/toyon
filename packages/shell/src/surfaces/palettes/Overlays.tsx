@@ -4,6 +4,7 @@ import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
+import { ProjectPicker } from "./ProjectPicker.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import { SearchPalette } from "./SearchPalette.tsx";
 import { ThemePicker } from "./ThemePicker.tsx";
@@ -22,6 +23,7 @@ export function Overlays() {
       {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "commands" && <CommandPalette />}
       {overlay?.kind === "prompt" && <PromptOverlay />}
+      {overlay?.kind === "projects" && <ProjectPicker />}
     </>
   );
 }

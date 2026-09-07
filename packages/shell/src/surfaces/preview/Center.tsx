@@ -21,7 +21,7 @@ const HAS_TOKEN = hasToken();
 import { DiffView } from "../changes/DiffView.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
-import { previewUrl, relFile } from "../util.ts";
+import { chord, previewUrl, relFile } from "../util.ts";
 import { SetupPane } from "./SetupPane.tsx";
 
 /** the preview column: one persistent iframe per visited worktree (switching is a display toggle,
@@ -209,7 +209,7 @@ export function Center() {
                     ? "connecting to daemon…"
                     : "no access token for this address —\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
                   : !active
-                    ? "no worktrees yet — run `toyon` inside a git repo"
+                    ? `no worktrees yet — press ${chord("project")} to open a project, or run \`toyon\` inside a git repo`
                     : log.length > 0
                       ? log.slice(-20).join("\n")
                       : "starting dev servers…"}

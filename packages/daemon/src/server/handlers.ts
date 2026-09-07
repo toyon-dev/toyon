@@ -258,6 +258,17 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.repos.confirmConfig(msg.repoId, msg.config);
   },
 
+  async "register-repo"(msg, ctx, s) {
+    const repo = await s.repos.register(msg.path);
+    ctx.reply(toast("", true, `opened ${repo.name}`));
+  },
+
+  async "forget-repo"(msg, ctx, s) {
+    const name = s.state.requireRepo(msg.repoId).name;
+    await s.repos.forget(msg.repoId);
+    ctx.reply(toast("", true, `forgot ${name}`));
+  },
+
   "set-theme"(msg, _ctx, s) {
     s.themes.setPrefs(msg.prefs);
     s.hub.emit("themesChanged");

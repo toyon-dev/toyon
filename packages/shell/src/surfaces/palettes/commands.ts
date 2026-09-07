@@ -7,7 +7,7 @@ import { useMemo } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
-import { type Action, type State, worktreeById } from "../../state/store.ts";
+import { type Action, repoById, type State, worktreeById } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { worktreeActions } from "../rail/worktreeActions.ts";
 import { chord } from "../util.ts";
@@ -41,10 +41,25 @@ export function buildCommands(
   const id = wt?.worktree.id;
 
   if (repo) add("new", "new worktree…", () => dispatch({ a: "open", overlay: { kind: "prompt" } }), chord("new"));
-  for (const r of state.repos)
-    add(`setup:${r.id}`, `set up ${r.name}… (install + start)`, () =>
-      dispatch({ a: "open", overlay: { kind: "setup", repoId: r.id } }),
+  add(
+    "project",
+    state.repos.length > 1 ? "switch project…" : "open project…",
+    () => dispatch({ a: "open", overlay: { kind: "projects" } }),
+    chord("project"),
+  );
+  if (repo) {
+    add(`setup:${repo.id}`, `set up ${repo.name}… (install + start)`, () =>
+      dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } }),
     );
+    add(`forget:${repo.id}`, `forget project — ${repo.name}…`, () => {
+      if (
+        window.confirm(
+          `Forget ${repo.name}?\n\nIts procs stop and it leaves the project list. The checkout is not touched; open it again any time.`,
+        )
+      )
+        sock?.send({ t: "forget-repo", repoId: repo.id });
+    });
+  }
   if (id) {
     add(
       "jump",
@@ -147,16 +162,20 @@ export function buildCommands(
       add("remove", `remove worktree — ${t}…`, () => acts.remove(wt));
     }
   }
-  state.worktrees.forEach((w, i) => {
+  state.visible.forEach((w, i) => {
     if (w.worktree.id === id) return;
     const v = w.worktree.variant;
     add(
       `go:${w.worktree.id}`,
       `switch to ${w.worktree.title}${v ? ` (v${v.index}/${v.of})` : ""}`,
       () => dispatch({ a: "activate", id: w.worktree.id }),
-      worktreeChord(i, state.worktrees.length),
+      worktreeChord(i, state.visible.length),
     );
   });
+  for (const r of state.repos) {
+    if (r.id === repo?.id) continue;
+    add(`repo:${r.id}`, `switch to project ${r.name}`, () => dispatch({ a: "activate-repo", id: r.id }));
+  }
   return cmds;
 }
 
@@ -172,7 +191,9 @@ export type CommandState = Pick<
   | "themes"
   | "systemDark"
   | "worktrees"
+  | "visible"
   | "activeId"
+  | "activeRepoId"
   | "repos"
   | "agents"
   | "defaultAgent"
@@ -189,7 +210,9 @@ export function useCommands(): Command[] {
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
   const worktrees = useStore((s) => s.worktrees);
+  const visible = useStore((s) => s.visible);
   const activeId = useStore((s) => s.activeId);
+  const activeRepoId = useStore((s) => s.activeRepoId);
   const repos = useStore((s) => s.repos);
   const agents = useStore((s) => s.agents);
   const defaultAgent = useStore((s) => s.defaultAgent);
@@ -203,12 +226,14 @@ export function useCommands(): Command[] {
       themes,
       systemDark,
       worktrees,
+      visible,
       activeId,
+      activeRepoId,
       repos,
       agents,
       defaultAgent,
     };
-    return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repos[0] ?? null);
+    return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repoById(st as State, activeRepoId));
   }, [
     picking,
     leftOpen,
@@ -218,7 +243,9 @@ export function useCommands(): Command[] {
     themes,
     systemDark,
     worktrees,
+    visible,
     activeId,
+    activeRepoId,
     repos,
     agents,
     defaultAgent,

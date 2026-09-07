@@ -1,5 +1,6 @@
 import { CHORD_SECTIONS, CHORDS, resolveTheme } from "@toyon/shared";
 import { useDispatch, useStore } from "../../state/context.tsx";
+import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
@@ -20,7 +21,7 @@ export function KeysHelp() {
   const systemDark = useStore((s) => s.systemDark);
   const agents = useStore((s) => s.agents);
   const defaultAgent = useStore((s) => s.defaultAgent);
-  const repos = useStore((s) => s.repos);
+  const repo = useActiveRepo();
   const open = (a: Action) => {
     dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
     dispatch(a);
@@ -53,19 +54,20 @@ export function KeysHelp() {
             {agents.find((a) => a.id === defaultAgent)?.name ?? defaultAgent}
           </button>
         </div>
-        {/* per-repo: how it installs and starts (toyon.json); the pane replaces the preview */}
-        {repos.map((r) => (
-          <div className="set-row" key={r.id}>
-            <span className="keys-d">{r.name}</span>
+        {/* the current project only: how it installs and starts (toyon.json); the pane replaces
+            the preview. Other projects are a switch away (⌘⇧O), not rows here. */}
+        {repo && (
+          <div className="set-row">
+            <span className="keys-d">{repo.name}</span>
             <button
               className="btn btn-outline set-v"
-              data-tip={`edit the install + start commands in ${r.name}'s toyon.json`}
-              onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: r.id } })}
+              data-tip={`edit the install + start commands in ${repo.name}'s toyon.json`}
+              onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
             >
-              {Object.keys(r.config.procs).join(" + ") || "not set up"}
+              {Object.keys(repo.config.procs).join(" + ") || "not set up"}
             </button>
           </div>
-        ))}
+        )}
       </div>
       <div className="keys-card">
         {KEY_SECTIONS.map((sec) => (

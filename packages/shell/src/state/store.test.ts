@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type AgentEvent, PROTOCOL_VERSION, type WorktreeStatus } from "@toyon/shared";
+import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
 import { type Action, EMPTY_LOCAL, initialState, localOf, reducer, type State, type StoreServerMsg } from "./store.ts";
 
 // The reducer's rules the UI depends on and nothing else documents: which worktree becomes active,
@@ -8,11 +8,16 @@ import { type Action, EMPTY_LOCAL, initialState, localOf, reducer, type State, t
 
 const ME = "tab-1";
 
-function wt(id: string, kind: WorktreeStatus["worktree"]["kind"] = "worktree", createdBy?: string): WorktreeStatus {
+function wt(
+  id: string,
+  kind: WorktreeStatus["worktree"]["kind"] = "worktree",
+  createdBy?: string,
+  repoId = "r",
+): WorktreeStatus {
   return {
     worktree: {
       id,
-      repoId: "r",
+      repoId,
       path: `/w/${id}`,
       branch: `toyon/${id}`,
       kind,
@@ -28,19 +33,29 @@ function wt(id: string, kind: WorktreeStatus["worktree"]["kind"] = "worktree", c
 
 const initial = initialState({ clientId: ME });
 const server = (msg: StoreServerMsg): Action => ({ a: "server", msg });
-const hello = (...w: WorktreeStatus[]): Action =>
+const repo = (id: string): RepoInfo => ({
+  id,
+  path: `/p/${id}`,
+  name: id,
+  defaultBranch: "main",
+  config: { procs: {} },
+  needsSetup: false,
+});
+const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
   server({
     t: "hello",
     version: "0",
     protocol: PROTOCOL_VERSION,
-    repos: [],
+    repos,
     worktrees: w,
     themes: initial.themes,
     themePrefs: initial.themePrefs,
     agents: [],
     defaultAgent: "claude",
   });
+const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w });
+const repos = (...r: RepoInfo[]): Action => server({ t: "repos", repos: r });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });
 
 function run(actions: Action[], from: State = initial): State {
@@ -430,5 +445,87 @@ describe("streams and notices", () => {
     ]);
     expect(s.diff?.line).toBeUndefined();
     expect(s.gotoLine).toBeNull();
+  });
+});
+
+// The shell is scoped to one project at a time while the daemon runs them all: `visible` is what
+// the rail and ⌘1–9 see, and switching projects must never leave the scope and the selection
+// disagreeing.
+describe("projects", () => {
+  const two = () =>
+    helloIn(
+      [repo("r1"), repo("r2")],
+      wt("m1", "main", undefined, "r1"),
+      wt("a", "worktree", undefined, "r1"),
+      wt("m2", "main", undefined, "r2"),
+      wt("b", "worktree", undefined, "r2"),
+    );
+
+  test("hello scopes to the active worktree's project and shows only its worktrees", () => {
+    const s = run([two()]);
+    expect(s.activeRepoId).toBe("r1");
+    expect(s.visible.map((w) => w.worktree.id)).toEqual(["m1", "a"]);
+  });
+
+  test("a stored project outlives a stored worktree that is gone", () => {
+    const from = initialState({ clientId: ME, storedActive: "deleted", storedRepo: "r2" });
+    const s = run([two()], from);
+    expect(s.activeRepoId).toBe("r2");
+    expect(s.activeId).toBe("m2");
+  });
+
+  test("switching projects lands on that project's main, then returns to where you left off", () => {
+    let s = run([two(), { a: "activate", id: "a" }]);
+    s = reducer(s, { a: "activate-repo", id: "r2" });
+    expect(s.activeId).toBe("m2");
+    expect(s.visible.map((w) => w.worktree.id)).toEqual(["m2", "b"]);
+    s = reducer(s, { a: "activate", id: "b" });
+    // back to r1: the worktree selected there last, not its main
+    s = reducer(s, { a: "activate-repo", id: "r1" });
+    expect(s.activeId).toBe("a");
+    s = reducer(s, { a: "activate-repo", id: "r2" });
+    expect(s.activeId).toBe("b");
+  });
+
+  test("selecting a worktree carries its project with it (a chord can't split the two)", () => {
+    const s = reducer(run([two()]), { a: "activate", id: "b" });
+    expect(s.activeRepoId).toBe("r2");
+    expect(s.visible.map((w) => w.worktree.id)).toEqual(["m2", "b"]);
+  });
+
+  test("removing the active worktree falls back inside the project, not to the daemon's first row", () => {
+    const s = run([two(), { a: "activate", id: "b" }]);
+    const next = reducer(
+      s,
+      worktrees(
+        wt("m1", "main", undefined, "r1"),
+        wt("a", "worktree", undefined, "r1"),
+        wt("m2", "main", undefined, "r2"),
+      ),
+    );
+    expect(next.activeId).toBe("m2");
+    expect(next.activeRepoId).toBe("r2");
+  });
+
+  test("a project opened from this tab becomes the active one; other tabs' do not", () => {
+    let s = run([two()]);
+    s = reducer(s, repos(repo("r1"), repo("r2"), repo("r3")));
+    expect(s.activeRepoId).toBe("r1");
+    s = reducer(run([two(), { a: "open-repo" }]), repos(repo("r1"), repo("r2"), repo("r3")));
+    expect(s.activeRepoId).toBe("r3");
+    // and the flag is spent: the next repo to arrive does not steal the scope again
+    expect(reducer(s, repos(repo("r1"), repo("r2"), repo("r3"), repo("r4"))).activeRepoId).toBe("r3");
+  });
+
+  test("forgetting the active project moves the scope to a remaining one", () => {
+    let s = run([two(), { a: "activate", id: "b" }]);
+    s = reducer(s, repos(repo("r1")));
+    expect(s.activeRepoId).toBe("r1");
+    expect(s.activeId).toBe("m1");
+  });
+
+  test("the first repo the daemon ever reports becomes the scope without an open request", () => {
+    const s = reducer(run([hello()]), repos(repo("r1")));
+    expect(s.activeRepoId).toBe("r1");
   });
 });

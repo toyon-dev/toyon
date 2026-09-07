@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { clientMsgSchema, type ServerMsg } from "@toyon/shared";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -14,6 +16,12 @@ import { WorktreeService } from "../worktrees/service.ts";
 import { dispatch, type HandlerCtx, handlers, type Services } from "./handlers.ts";
 
 let cleanup = () => {};
+
+/** the text of the last toast reply (toasts ride the `shipped` frame) */
+function lastToast(replies: ServerMsg[]): string | undefined {
+  const m = replies.at(-1);
+  return m?.t === "shipped" ? m.message : undefined;
+}
 afterEach(() => cleanup());
 
 function make() {
@@ -205,6 +213,36 @@ describe("handlers", () => {
     await expect(
       dispatch({ t: "term-open", worktreeId: "nope", cols: 1, rows: 1 }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("register-repo opens a repo and toasts; forget-repo refuses while task worktrees remain", async () => {
+    const { services, ctx, replies, repo } = make();
+    const hubEvents: string[] = [];
+    services.hub.on("reposChanged", () => hubEvents.push("repos"));
+    await dispatch({ t: "register-repo", path: repo }, ctx, services);
+    const r = services.state.repos[0]!;
+    expect(lastToast(replies)).toBe(`opened ${r.name}`);
+    expect(hubEvents).toEqual(["repos"]);
+    // a second register of the same path is the same repo, not a duplicate
+    await dispatch({ t: "register-repo", path: repo }, ctx, services);
+    expect(services.state.repos.length).toBe(1);
+    await expect(dispatch({ t: "register-repo", path: "/nope/never" }, ctx, services)).rejects.toBeInstanceOf(
+      UserError,
+    );
+
+    r.needsSetup = false;
+    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "x" }, ctx, services);
+    const task = services.state.worktrees.find((x) => x.kind === "worktree")!;
+    await expect(dispatch({ t: "forget-repo", repoId: r.id }, ctx, services)).rejects.toBeInstanceOf(UserError);
+    expect(services.state.repos.length).toBe(1);
+
+    await dispatch({ t: "remove-worktree", worktreeId: task.id }, ctx, services);
+    await dispatch({ t: "forget-repo", repoId: r.id }, ctx, services);
+    expect(services.state.repos).toEqual([]);
+    expect(services.state.worktrees).toEqual([]);
+    expect(lastToast(replies)).toBe(`forgot ${r.name}`);
+    // the checkout itself is untouched
+    expect(existsSync(join(repo, "README.md"))).toBe(true);
   });
 
   test("write-file then file-diff round-trips and replies git-status", async () => {

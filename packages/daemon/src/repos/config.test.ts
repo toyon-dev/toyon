@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { detectConfig, readConfigFile } from "./config.ts";
@@ -8,7 +8,10 @@ let dir = "";
 afterEach(() => dir && rmSync(dir, { recursive: true, force: true }));
 function repo(files: Record<string, string>): string {
   dir = mkdtempSync(join(tmpdir(), "toyon-cfg-"));
-  for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
+  for (const [name, body] of Object.entries(files)) {
+    if (name.endsWith("/")) mkdirSync(join(dir, name));
+    else writeFileSync(join(dir, name), body);
+  }
   return dir;
 }
 const pkg = (scripts: Record<string, string>, extra: Record<string, unknown> = {}) =>
@@ -34,6 +37,41 @@ describe("detectConfig", () => {
     expect(detectConfig(repo({ "package.json": pkg({ dev: "a", start: "b" }) })).config.procs).toEqual({
       web: "npm run dev",
     });
+  });
+
+  test("wrangler config plus functions detects as a pages app, not the dev script", () => {
+    const d = detectConfig(
+      repo({
+        "package.json": pkg({ dev: "vite", build: "vite build" }),
+        "wrangler.jsonc": '{\n  // trailing comma and comment\n  "pages_build_output_dir": "dist",\n}',
+        "functions/": "",
+      }),
+    );
+    expect(d).toEqual({
+      config: {
+        procs: { web: "npm run build && npx wrangler pages dev dist --ip 127.0.0.1 --port $PORT" },
+        setup: ["npm install"],
+      },
+      needsSetup: true,
+    });
+  });
+
+  test("pages detection needs all three signals, else the dev script wins", () => {
+    const wrangler = '{ "pages_build_output_dir": "dist" }';
+    // no functions/ directory: a plain worker, whose dev server does serve everything
+    expect(
+      detectConfig(repo({ "package.json": pkg({ dev: "vite", build: "b" }), "wrangler.jsonc": wrangler })).config.procs,
+    ).toEqual({ web: "npm run dev" });
+    // no build script: nothing to point wrangler at
+    expect(
+      detectConfig(repo({ "package.json": pkg({ dev: "vite" }), "wrangler.jsonc": wrangler, "functions/": "" })).config
+        .procs,
+    ).toEqual({ web: "npm run dev" });
+    // no output dir in the config
+    expect(
+      detectConfig(repo({ "package.json": pkg({ dev: "vite", build: "b" }), "wrangler.jsonc": "{}", "functions/": "" }))
+        .config.procs,
+    ).toEqual({ web: "npm run dev" });
   });
 
   test("start.sh, then nothing", () => {

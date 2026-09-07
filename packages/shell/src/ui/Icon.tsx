@@ -24,7 +24,8 @@ export type IconName =
   | "plus"
   | "download"
   | "layers"
-  | "pull";
+  | "pull"
+  | "text";
 
 const ICON_PATHS: Record<IconName, string> = {
   branch:
@@ -62,6 +63,7 @@ const ICON_PATHS: Record<IconName, string> = {
   pull: "M8 3.2v7.4 M4.9 7.4 8 10.6l3.1-3.2",
   // two stacked panes: a worktree that is a local merge of several branches
   layers: "M6 2.5h7.5V10 M2.5 6h8v7.5h-8z",
+  text: "M3.5 3.5h9 M3.5 6.5h9 M3.5 9.5h9 M3.5 12.5h5",
 };
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {

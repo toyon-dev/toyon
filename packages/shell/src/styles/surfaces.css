@@ -996,6 +996,12 @@ body.resizing .row-resize {
   padding-top: 6px;
 }
 /* the argument hint sits left of the key hints, where the eye lands after picking */
+/* the paste chip borrows the image chip's link row; its own line is the counts */
+.paste-chip .pick-file {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .ip-hint {
   margin-right: auto;
   color: var(--fg-dim);

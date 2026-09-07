@@ -5,6 +5,8 @@ import { IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, IMAGE_MIME_TYPES, type ImageMimeType }
 import type { ChatItem, PendingImage } from "../../state/store.ts";
 
 const ACCEPTED = new Set<string>(IMAGE_MIME_TYPES);
+/** past this a "text" file is not something anyone means to paste into a message */
+const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 
 /** the image files in a paste or drop, in the order the OS lists them */
 export function imageFiles(dt: DataTransfer | null): File[] {
@@ -20,11 +22,44 @@ export function imageFiles(dt: DataTransfer | null): File[] {
   return out;
 }
 
+/** everything else the OS handed over: a file copied in Finder or dragged in arrives here, and a
+ * text one becomes a paste chip. The browser never exposes its path, so a file that happens to
+ * live in the worktree still cannot become an @ reference; its contents travel instead. */
+export function otherFiles(dt: DataTransfer | null): File[] {
+  if (!dt) return [];
+  const out: File[] = [];
+  for (const item of Array.from(dt.items ?? [])) {
+    if (item.kind !== "file" || item.type.startsWith("image/")) continue;
+    const f = item.getAsFile();
+    if (f) out.push(f);
+  }
+  if (out.length === 0) for (const f of Array.from(dt.files ?? [])) if (!f.type.startsWith("image/")) out.push(f);
+  return out;
+}
+
+/** a file's text, or null when it is not text at all. Decoded strictly, so a binary comes back
+ * null rather than as a screen of replacement characters. */
+export async function readText(file: File): Promise<string | null> {
+  if (file.size > MAX_TEXT_FILE_BYTES) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
 /** the number the daemon will give the next image sent from this worktree: the count is per
  * session, so the composer's chips can show it before the send */
 export function nextImageNumber(chat: ChatItem[]): number {
   let n = 0;
   for (const item of chat) if (item.kind === "user") for (const img of item.images ?? []) n = Math.max(n, img.n);
+  return n + 1;
+}
+
+/** the same for pastes, which the daemon numbers on their own sequence */
+export function nextPasteNumber(chat: ChatItem[]): number {
+  let n = 0;
+  for (const item of chat) if (item.kind === "user") for (const p of item.pastes ?? []) n = Math.max(n, p.n);
   return n + 1;
 }
 

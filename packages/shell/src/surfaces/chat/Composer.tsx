@@ -16,10 +16,11 @@ import { rankFiles } from "../palettes/quickOpen.ts";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
 import { chord, pickLabel, relFile } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
-import { dataUrl, nextImageNumber } from "./images.ts";
+import { dataUrl, nextImageNumber, nextPasteNumber } from "./images.ts";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
+import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { useImageIntake } from "./useImageIntake.ts";
+import { useIntake } from "./useIntake.ts";
 
 /** what the inline `@` / `/` menu can offer */
 type Row =
@@ -51,9 +52,11 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const text = useLocalField(id, "draft");
   const page = useLocalField(id, "page");
   const images = useLocalField(id, "images");
+  const pastes = useLocalField(id, "pastes");
   const chat = useLocalField(id, "chat");
-  const intake = useImageIntake(id);
+  const intake = useIntake(id);
   const firstImageNumber = nextImageNumber(chat);
+  const firstPasteNumber = nextPasteNumber(chat);
   const setText = (t: string) => id && dispatch({ a: "set-draft", id, text: t });
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
@@ -162,6 +165,9 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
     const context = buildContext();
     const pickMeta = pick ? pickMetaOf(pick) : undefined;
     const sent = images.length ? images.map(({ key: _key, bytes: _bytes, ...img }) => img) : undefined;
+    const sentPastes = pastes.length
+      ? pastes.map((p) => ({ text: p.text, ...(p.name ? { name: p.name } : {}) }))
+      : undefined;
     if (spawnNew) {
       sock?.send({
         t: "create-worktree",
@@ -172,21 +178,36 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         context,
         pick: pickMeta,
         images: sent,
+        pastes: sentPastes,
         // a stacked worktree continues with the same agent as its parent
         agent: active.worktree.agent,
         profile,
       });
     } else {
-      sock?.send({ t: "chat", worktreeId: id, text: text.trim(), context, pick: pickMeta, images: sent });
+      sock?.send({
+        t: "chat",
+        worktreeId: id,
+        text: text.trim(),
+        context,
+        pick: pickMeta,
+        images: sent,
+        pastes: sentPastes,
+      });
     }
     if (pick) dispatch({ a: "clear-pick" });
     if (images.length) dispatch({ a: "clear-images", id });
+    if (pastes.length) dispatch({ a: "clear-pastes", id });
     setText("");
   };
 
-  // backspace in an empty box removes the last attachment, images first (they were added last)
+  // backspace in an empty box removes the last attachment, newest kind first
   const removeLast = (): boolean => {
     if (!id) return false;
+    const lastPaste = pastes[pastes.length - 1];
+    if (lastPaste) {
+      dispatch({ a: "remove-paste", id, key: lastPaste.key });
+      return true;
+    }
     const last = images[images.length - 1];
     if (last) {
       dispatch({ a: "remove-image", id, key: last.key });
@@ -217,6 +238,18 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             height={img.height}
             bytes={img.bytes}
             onRemove={() => dispatch({ a: "remove-image", id, key: img.key })}
+          />
+        ))}
+      {id &&
+        pastes.map((p, i) => (
+          <PasteChip
+            key={p.key}
+            n={firstPasteNumber + i}
+            name={p.name}
+            lines={p.lines}
+            chars={p.chars}
+            preview={p.preview}
+            onRemove={() => dispatch({ a: "remove-paste", id, key: p.key })}
           />
         ))}
       {pick && id && (

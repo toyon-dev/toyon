@@ -6,6 +6,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { attachmentUrl } from "../../ws.ts";
 import { SentImageChip } from "./ImageChip.tsx";
+import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 
 const render = (text: string) => DOMPurify.sanitize(marked.parse(text, { async: false }) as string);
@@ -152,6 +153,22 @@ export const ChatItemView = memo(function ChatItemView({
             <div className="msg-images">
               {item.images.map((img) => (
                 <SentImageChip key={img.n} img={img} src={attachmentUrl(worktreeId, img.file)} />
+              ))}
+            </div>
+          )}
+          {item.pastes && worktreeId && (
+            <div className="msg-images">
+              {item.pastes.map((p) => (
+                <PasteChip
+                  key={p.n}
+                  className="in-chat"
+                  n={p.n}
+                  name={p.name}
+                  lines={p.lines}
+                  chars={p.chars}
+                  preview={p.preview}
+                  href={attachmentUrl(worktreeId, p.file)}
+                />
               ))}
             </div>
           )}

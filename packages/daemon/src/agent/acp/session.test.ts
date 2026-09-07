@@ -10,7 +10,7 @@ import { SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import type { Bounds } from "../sandbox.ts";
 import { AUTH_STATUS_UPDATE_METHOD } from "./authstatus.ts";
-import { AcpSession } from "./session.ts";
+import { AcpSession, type AcpSessionDeps } from "./session.ts";
 import type { AcpLink } from "./transport.ts";
 
 // The session talks to an in-process acp.agent() through the SDK's transport-less connect, so
@@ -162,7 +162,13 @@ const say =
     return { stopReason: "end_turn" };
   };
 
-function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000, id = `w${Math.random().toString(36).slice(2, 8)}`) {
+function world(
+  fake: FakeAgent,
+  spec = claudeSpec,
+  idleMs = 60_000,
+  id = `w${Math.random().toString(36).slice(2, 8)}`,
+  extra: Partial<AcpSessionDeps> = {},
+) {
   const events: AgentEvent[] = [];
   const statuses: AgentStatus[] = [];
   const auths: Array<[string, AuthObservation]> = [];
@@ -199,6 +205,7 @@ function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000, id = `w${Mat
     onAuth: (agentId, o) => auths.push([agentId, o]),
     idleMs,
     prepare: async () => bounds,
+    ...extra,
   });
   const idle = async () => {
     for (let i = 0; i < 200 && (session.status === "working" || session.queueLength > 0); i++) await Bun.sleep(5);
@@ -348,6 +355,24 @@ describe("AcpSession", () => {
     await w.session.ask("be brief", "name this");
     expect(fake.newSessions).toHaveLength(2);
     expect(w.session.commands.map((c) => c.name)).toEqual(["review"]);
+    await w.session.close();
+  });
+
+  test("a worktree serves the seeded list before its own agent has ever run", async () => {
+    const seed = [{ name: "review", description: "from the last worktree on this repo" }];
+    const fake = fakeAgent(say("ok"), { commands: { s1: [{ name: "ship", description: "its own" }] } });
+    const learned: AgentCommand[][] = [];
+    const w = world(fake, claudeSpec, 60_000, `w${Math.random().toString(36).slice(2, 8)}`, {
+      seedCommands: () => seed,
+      onCommandsLearned: (c) => learned.push(c),
+    });
+    // no prompt sent yet, so no adapter process exists
+    expect(w.session.commands).toEqual(seed);
+    w.session.send("hi");
+    await w.idle();
+    // the agent's own list replaces the seed, and is kept for the next worktree
+    expect(w.session.commands.map((c) => c.name)).toEqual(["ship"]);
+    expect(learned).toEqual([[{ name: "ship", description: "its own" }]]);
     await w.session.close();
   });
 

@@ -51,6 +51,10 @@ export interface AcpSessionDeps {
   onStatus: AgentStatusListener;
   /** whatever this connection learns about the agent's credentials, for the per-agent cache */
   onAuth?: (agentId: string, o: AuthObservation) => void;
+  /** what the `/` menu shows before this worktree's own agent has advertised anything */
+  seedCommands?: () => AgentCommand[];
+  /** the list this agent advertised, kept for the next worktree on the same repo */
+  onCommandsLearned?: (commands: AgentCommand[]) => void;
   /** how long an idle adapter process lives after its last turn */
   idleMs?: number;
   /** the worktree's write bounds, and the settings file that makes Claude Code enforce them */
@@ -131,6 +135,9 @@ export class AcpSession implements AgentAdapter {
   private commandList: AgentCommand[] = [];
 
   constructor(private d: AcpSessionDeps) {
+    // the real list only arrives once the adapter is up, which is this worktree's first prompt.
+    // Until then the last one this agent gave for this repo is a far better answer than nothing.
+    this.commandList = d.seedCommands?.() ?? [];
     this.log = new Transcript(transcriptPathFor(d.transcriptsDir, d.worktreeId), d.worktreeId);
     this.imageSeq = 0;
     this.pasteSeq = 0;
@@ -150,6 +157,7 @@ export class AcpSession implements AgentAdapter {
     // adapters re-push an unchanged list on every session start; do not wake the shell for it
     if (sameCommands(this.commandList, next)) return;
     this.commandList = next;
+    this.d.onCommandsLearned?.(next);
     this.onCommandsChange?.(next);
   }
 

@@ -118,6 +118,11 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
     onEvent: (event, seq) => d.hub.emit("agent", wt.id, seq, event),
     onStatus: (status) => d.hub.emit("agentStatus", wt.id, status),
     onAuth: (agentId, o) => d.accounts?.observe(agentId, o),
+    // the agent is resolved lazily (a spare is stamped when claimed), so both of these read it at
+    // call time rather than closing over a value that may not exist yet
+    seedCommands: () => d.state.cachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId),
+    onCommandsLearned: (commands) =>
+      d.state.setCachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId, commands),
   });
   agent.onQueueChange = () => d.hub.emit("queue", wt.id, agent.queueItems);
   agent.onCommandsChange = (commands) => d.hub.emit("agentCommands", wt.id, commands);

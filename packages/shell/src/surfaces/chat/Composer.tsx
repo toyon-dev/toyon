@@ -77,7 +77,8 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const listRef = useRef<HTMLDivElement>(null);
 
   const trigger = id ? triggerAt(text, caret) : null;
-  const menuOpen = trigger !== null && trigger.from !== dismissed && (trigger.kind === "file" || commands.length > 0);
+  // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing
+  const menuOpen = trigger !== null && trigger.from !== dismissed;
   const rows = useMemo((): Row[] => {
     if (!trigger) return [];
     if (trigger.kind === "command") return filterCommands(commands, trigger.query).slice(0, 8).map(cmdRow);

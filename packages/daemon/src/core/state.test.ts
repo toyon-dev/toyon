@@ -33,6 +33,21 @@ describe("state", () => {
     expect(loadState(paths).sessions).toEqual({ a: "s1" });
   });
 
+  test("the command cache round-trips and is keyed by agent and repo", () => {
+    const cmds = [{ name: "review", description: "look at a PR" }];
+    saveState(paths, {
+      repos: [],
+      worktrees: [wt("a")],
+      sessions: {},
+      commandCache: { "claude:r1": cmds },
+    });
+    const loaded = loadState(paths);
+    expect(loaded.commandCache).toEqual({ "claude:r1": cmds });
+    // an entry for a repo that is gone is harmless: it is only ever a seed, and the agent
+    // replaces it the moment it says anything
+    expect(loadState(paths).commandCache?.["claude:nope"]).toBeUndefined();
+  });
+
   test("corrupt file is backed up, not silently discarded", () => {
     writeFileSync(paths.stateFile, '{"repos": [');
     const s = loadState(paths);

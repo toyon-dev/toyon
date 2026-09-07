@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import type { RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
+import type { AgentCommand, RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -10,6 +10,11 @@ export interface PersistedState {
   worktrees: WorktreeInfo[];
   /** worktreeId -> the agent's own session id, for resume (only meaningful for that worktree's agent) */
   sessions: Record<string, string>;
+  /** the slash commands an agent last advertised, keyed `<agentId>:<repoId>`. Only a seed: a new
+   * worktree shows these until its own agent starts and says otherwise. The list is really a
+   * function of the repo's .claude/ plus the user's settings, so the last one is a good guess and
+   * beats an empty menu on every worktree until the first prompt. */
+  commandCache?: Record<string, AgentCommand[]>;
   /** shell theme selection (shared by every browser that connects) */
   theme?: ThemePrefs;
   /** registry id new worktrees get when the prompt does not pick one */
@@ -149,6 +154,16 @@ export class StateStore {
   }
   setSession(worktreeId: string, sessionId: string) {
     this.state.sessions[worktreeId] = sessionId;
+    this.save();
+  }
+
+  /** what a worktree's `/` menu shows before its own agent has said anything */
+  cachedCommands(agentId: string, repoId: string): AgentCommand[] {
+    return this.state.commandCache?.[`${agentId}:${repoId}`] ?? [];
+  }
+  setCachedCommands(agentId: string, repoId: string, commands: AgentCommand[]) {
+    this.state.commandCache ??= {};
+    this.state.commandCache[`${agentId}:${repoId}`] = commands;
     this.save();
   }
 

@@ -56,7 +56,7 @@ interface FakeAgent {
 
 function fakeAgent(
   script: PromptScript,
-  opts: { loadSession?: boolean; withModes?: boolean; images?: boolean } = {},
+  opts: { loadSession?: boolean; withModes?: boolean; currentMode?: string; images?: boolean } = {},
 ): FakeAgent {
   const f: FakeAgent = {
     newSessions: [],
@@ -72,7 +72,7 @@ function fakeAgent(
   let n = 0;
   const modes = opts.withModes
     ? {
-        currentModeId: "read-only",
+        currentModeId: opts.currentMode ?? "read-only",
         availableModes: [
           { id: "read-only", name: "ro" },
           { id: "agent", name: "agent" },
@@ -84,6 +84,11 @@ function fakeAgent(
     .onRequest(acp.methods.agent.initialize, () => ({
       protocolVersion: acp.PROTOCOL_VERSION,
       agentCapabilities: { loadSession: f.loadSession, promptCapabilities: { image: opts.images ?? false } },
+      authMethods: [
+        { id: "api-key", name: "API Key" },
+        { id: "chat-gpt", name: "ChatGPT", description: "browser" },
+        { id: "claude-login", name: "Claude login", type: "terminal", args: ["--cli", "auth", "login"] },
+      ],
     }))
     .onRequest(acp.methods.agent.session.new, (c) => {
       f.newSessions.push(c.params);
@@ -153,6 +158,7 @@ function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000, id = `w${Mat
     cwd: wt,
     spec: () => spec,
     connect,
+    launch: () => ({ command: "/bin/agent", args: ["run.js"] }),
     transcriptsDir: home,
     attachments: new AttachmentStore(join(home, "attachments")),
     getSessionId: () => sessionId,
@@ -334,17 +340,60 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
-  test("authRequired becomes an agent-error carrying the login hint; the next prompt starts fresh", async () => {
+  test("authRequired becomes an auth card; a login over the same connection sends the message again", async () => {
     let failures = 1;
+    const auths: acp.AuthenticateRequest[] = [];
     const fake = fakeAgent(async (p, client) => {
       if (failures-- > 0) throw acp.RequestError.authRequired();
+      return say("ok")(p, client);
+    });
+    fake.app.onRequest(acp.methods.agent.authenticate, (c) => {
+      auths.push(c.params);
+      return {};
+    });
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.session.status).toBe("error");
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
+    expect(card.type).toBe("agent-auth-required");
+    expect(card.agentName).toBe("Claude");
+    expect(card.methods).toEqual([
+      { id: "api-key", name: "API Key", kind: "agent", needsKey: true },
+      { id: "chat-gpt", name: "ChatGPT", description: "browser", kind: "agent" },
+      { id: "claude-login", name: "Claude login", kind: "terminal" },
+    ]);
+    expect(w.links).toHaveLength(1);
+    expect(w.links[0]!.killed).toBe(false);
+    // a terminal method hands back the adapter's own command line with the method's args
+    expect(await w.session.authenticate("claude-login")).toEqual({
+      kind: "terminal",
+      line: "/bin/agent run.js --cli auth login",
+    });
+    // an agent method runs over the live connection, then the refused message goes again
+    expect(await w.session.authenticate("api-key", "sk-test")).toEqual({ kind: "done" });
+    expect(auths).toEqual([{ methodId: "api-key", _meta: { "api-key": { apiKey: "sk-test" } } }]);
+    await w.idle();
+    expect(w.session.status).toBe("idle");
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(2);
+    expect(w.types()).toContain("agent-auth-ok");
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
+    expect(w.links).toHaveLength(1);
+    await expect(w.session.authenticate("nope")).rejects.toThrow(/no login method/);
+    await w.session.close();
+  });
+
+  test("a non-auth failure still drops the process and reports the message", async () => {
+    let failures = 1;
+    const fake = fakeAgent(async (p, client) => {
+      if (failures-- > 0) throw new acp.RequestError(-32603, "model overloaded");
       return say("ok")(p, client);
     });
     const w = world(fake);
     w.session.send("a");
     await w.idle();
     expect(w.session.status).toBe("error");
-    expect(w.events.at(-1)).toMatchObject({ type: "agent-error", message: "please log in" });
+    expect(w.events.at(-1)).toMatchObject({ type: "agent-error", message: "model overloaded" });
     expect(w.links[0]!.killed).toBe(true);
     w.session.send("b");
     await w.idle();
@@ -427,6 +476,36 @@ describe("AcpSession", () => {
     expect(w.events[3]).toMatchObject({ message: "Claude does not accept images; the message went without it" });
     expect(fake.prompts[0]!.prompt).toEqual([{ type: "text", text: "look" }]);
     expect(w.statuses).toEqual(["working", "idle"]);
+    await w.session.close();
+  });
+
+  test("ask() runs a side session with its own system prompt in a read-only mode; the main transcript is untouched", async () => {
+    const fake = fakeAgent(
+      async (p, client) => {
+        const text = (p.prompt[0] as { text: string }).text;
+        return say(text.startsWith("Name") ? "sticky-header" : "main reply")(p, client);
+      },
+      { withModes: true, currentMode: "agent" },
+    );
+    const w = world(fake, claudeSpec, 10);
+    expect(await w.session.ask("You name things.", "Name this: sticky header")).toBe("sticky-header");
+    // the question ran on a session of its own with its own system prompt, switched to the
+    // read-only mode, and wrote nothing to the transcript; no chat session was opened for it
+    expect(fake.newSessions).toHaveLength(1);
+    expect(fake.newSessions[0]!._meta).toEqual({ systemPrompt: "You name things." });
+    expect(fake.modes).toEqual(["read-only"]);
+    expect(w.events).toEqual([]);
+    // the chat session opens on the same process when the first prompt arrives
+    w.session.send("hello");
+    await w.idle();
+    expect(fake.newSessions).toHaveLength(2);
+    expect(w.links).toHaveLength(1);
+    expect(w.events.filter((e) => e.type === "text-delta").map((e) => (e as { text: string }).text)).toEqual([
+      "main reply",
+    ]);
+    // the reaper was armed after the question and again after the turn
+    for (let i = 0; i < 100 && !w.links[0]!.killed; i++) await Bun.sleep(5);
+    expect(w.links[0]!.killed).toBe(true);
     await w.session.close();
   });
 

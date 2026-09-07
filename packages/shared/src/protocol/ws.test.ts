@@ -16,6 +16,9 @@ describe("parseClientMsg", () => {
       { t: "create-worktree", repoId: "r", prompt: "x", agent: "codex" },
       { t: "batch-worktrees", repoId: "r", prompt: "x", agent: "claude" },
       { t: "set-default-agent", agent: "codex" },
+      { t: "install-agent", agent: "codex" },
+      { t: "agent-auth", worktreeId: "a", methodId: "api-key", apiKey: "sk-x" },
+      { t: "agent-retry", worktreeId: "a" },
       { t: "combine", worktreeIds: ["a", "b"] },
       { t: "confirm-config", repoId: "r", config: { procs: { web: "bun dev" } } },
       {

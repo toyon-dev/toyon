@@ -1,15 +1,16 @@
 // Which agents toyon can run, as data. Every agent speaks ACP over stdio; an entry is a launch
-// command plus how it is confined and told about the worktree. Two builtins ship; a user adds
-// more in ~/.toyon/agents.json (per machine and possibly holding keys, so not in the repo's
-// toyon.json).
+// command plus how it is confined and told about the worktree. The two builtins are npm packages
+// installed on demand into ~/.toyon/agents/<id> (the daemon starts fetching both at boot, so the
+// app's own install stays small); a user adds any other ACP agent in ~/.toyon/agents.json (per
+// machine and possibly holding keys, so not in the repo's toyon.json).
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import type { AgentInfo } from "@toyon/shared";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
-import type { Paths } from "../core/paths.ts";
+import { run } from "../git/exec.ts";
 
 /** how shell commands the agent runs are kept inside the worktree */
 export type Confinement =
@@ -25,7 +26,7 @@ export interface AgentSpec {
   name: string;
   builtin: boolean;
   run:
-    | { kind: "npm-bin"; pkg: string; bin: string; args?: string[] }
+    | { kind: "npm-bin"; pkg: string; version: string; bin: string; args?: string[] }
     | { kind: "command"; command: string; args?: string[] };
   env?: Record<string, string>;
   confinement: Confinement;
@@ -33,7 +34,7 @@ export interface AgentSpec {
   systemPrompt: "meta-append" | "prompt-prefix";
   /** session/set_mode after new/load when the agent advertises modes */
   mode?: string;
-  /** what the person reads when the agent answers a prompt with "not logged in" */
+  /** what the person reads when the agent answers a prompt with "not logged in" and offers no way in */
   loginHint: string;
 }
 
@@ -42,24 +43,23 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     id: "claude",
     name: "Claude Code",
     builtin: true,
-    run: { kind: "npm-bin", pkg: "@agentclientprotocol/claude-agent-acp", bin: "claude-agent-acp" },
+    run: { kind: "npm-bin", pkg: "@agentclientprotocol/claude-agent-acp", version: "0.75.1", bin: "claude-agent-acp" },
     confinement: "claude-settings",
     systemPrompt: "meta-append",
-    loginHint:
-      "Claude is not logged in: run `claude login` (or set ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN) and try again",
+    loginHint: "Claude is not logged in",
   },
   {
     id: "codex",
     name: "Codex",
     builtin: true,
-    run: { kind: "npm-bin", pkg: "@agentclientprotocol/codex-acp", bin: "codex-acp" },
+    run: { kind: "npm-bin", pkg: "@agentclientprotocol/codex-acp", version: "1.10.0", bin: "codex-acp" },
     // "agent" is Codex's workspace-write mode: its own OS sandbox around every shell command.
     // No browser in the cloud: the login method that opens one would hang there.
     env: { INITIAL_AGENT_MODE: "agent", ...(cloud.enabled ? { NO_BROWSER: "1" } : {}) },
     confinement: "adapter-sandbox",
     systemPrompt: "prompt-prefix",
     mode: "agent",
-    loginHint: "Codex is not logged in: run `codex login` (or set OPENAI_API_KEY) and try again",
+    loginHint: "Codex is not logged in",
   },
 ];
 
@@ -69,25 +69,13 @@ export interface Launch {
   env: Record<string, string>;
 }
 
-/** the script an npm package's `bin` entry points at, or null when the package is missing */
-export function resolveNpmBin(pkg: string, bin: string): string | null {
-  let pkgJson: string;
-  try {
-    pkgJson = Bun.resolveSync(`${pkg}/package.json`, import.meta.dir);
-  } catch {
-    return null;
-  }
-  try {
-    const meta = JSON.parse(readFileSync(pkgJson, "utf8")) as { bin?: string | Record<string, string> };
-    const rel = typeof meta.bin === "string" ? meta.bin : meta.bin?.[bin];
-    if (!rel) return null;
-    const script = join(dirname(pkgJson), rel);
-    return existsSync(script) ? script : null;
-  } catch (e) {
-    log.warn("agents", `cannot read ${pkgJson}`, e);
-    return null;
-  }
-}
+/** installs `pkg@version` into `dir` (a package.json is already there); tests fake it */
+export type Installer = (dir: string, pkg: string, version: string) => Promise<{ ok: boolean; err: string }>;
+
+const bunInstall: Installer = async (dir) => {
+  const r = await run(process.execPath, ["install", "--no-progress", "--no-summary"], dir);
+  return { ok: r.ok, err: r.err.split("\n").slice(-3).join(" ") };
+};
 
 /** TOYON_ACP_RUNTIME=node runs the adapters under node instead of bun (the escape hatch if an
  * adapter trips over a bun incompatibility; the cloud image has no node, so bun is the default) */
@@ -102,8 +90,16 @@ function jsRuntime(): string {
 
 export class AgentRegistry {
   private specs = new Map<string, AgentSpec>();
+  private installing = new Map<string, Promise<void>>();
+  private installErrors = new Map<string, string>();
+  /** the shell wants to know when availability changes (install started, landed, failed) */
+  onChange: (() => void) | null = null;
 
-  constructor(specs: AgentSpec[]) {
+  constructor(
+    specs: AgentSpec[],
+    private dir: string,
+    private installer: Installer = bunInstall,
+  ) {
     for (const s of specs) this.specs.set(s.id, s);
   }
 
@@ -120,14 +116,33 @@ export class AgentRegistry {
     const spec = this.specs.get(id);
     if (!spec) throw new UserError(`unknown agent "${id}"`);
     const why = this.unavailable(spec);
-    if (why) throw new UserError(`${spec.name} is not installed: ${why}`);
+    if (why) throw new UserError(`${spec.name} is not ready: ${why}`);
     return spec;
+  }
+
+  /** the script an installed npm adapter's `bin` entry points at, or null */
+  private npmBin(spec: AgentSpec): string | null {
+    if (spec.run.kind !== "npm-bin") return null;
+    const pkgJson = join(this.dir, spec.id, "node_modules", spec.run.pkg, "package.json");
+    if (!existsSync(pkgJson)) return null;
+    try {
+      const meta = JSON.parse(readFileSync(pkgJson, "utf8")) as { bin?: string | Record<string, string> };
+      const rel = typeof meta.bin === "string" ? meta.bin : meta.bin?.[spec.run.bin];
+      if (!rel) return null;
+      const script = join(dirname(pkgJson), rel);
+      return existsSync(script) ? script : null;
+    } catch (e) {
+      log.warn("agents", `cannot read ${pkgJson}`, e);
+      return null;
+    }
   }
 
   /** null when launchable, else the reason it is not */
   unavailable(spec: AgentSpec): string | null {
     if (spec.run.kind === "npm-bin") {
-      return resolveNpmBin(spec.run.pkg, spec.run.bin) ? null : `${spec.run.pkg} is not installed`;
+      if (this.npmBin(spec)) return null;
+      if (this.installing.has(spec.id)) return "installing";
+      return this.installErrors.get(spec.id) ?? "not installed yet";
     }
     const cmd = spec.run.command;
     if (isAbsolute(cmd) ? existsSync(cmd) : Bun.which(cmd)) return null;
@@ -136,13 +151,68 @@ export class AgentRegistry {
 
   launch(spec: AgentSpec): Launch {
     const why = this.unavailable(spec);
-    if (why) throw new UserError(`${spec.name} is not installed: ${why}`);
+    if (why) throw new UserError(`${spec.name} is not ready: ${why}`);
     const env = { ...spec.env };
     if (spec.run.kind === "npm-bin") {
-      const script = resolveNpmBin(spec.run.pkg, spec.run.bin)!;
-      return { command: jsRuntime(), args: [script, ...(spec.run.args ?? [])], env };
+      return { command: jsRuntime(), args: [this.npmBin(spec)!, ...(spec.run.args ?? [])], env };
     }
     return { command: spec.run.command, args: [...(spec.run.args ?? [])], env };
+  }
+
+  /** Install (or upgrade) an npm adapter into its own directory. Idempotent; concurrent calls share
+   * one install. Resolves when done; failures are remembered as the unavailable reason. */
+  install(id: string): Promise<void> {
+    const spec = this.specs.get(id);
+    if (!spec) throw new UserError(`unknown agent "${id}"`);
+    if (spec.run.kind !== "npm-bin") return Promise.resolve();
+    const running = this.installing.get(id);
+    if (running) return running;
+    if (this.npmBin(spec) && this.installedVersion(spec) === spec.run.version) return Promise.resolve();
+    const { pkg, version } = spec.run;
+    const dir = join(this.dir, id);
+    const p = (async () => {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, "package.json"),
+        `${JSON.stringify({ name: `toyon-agent-${id}`, private: true, dependencies: { [pkg]: version } }, null, 2)}\n`,
+      );
+      log.info("agents", `installing ${pkg}@${version} for ${id}`);
+      const r = await this.installer(dir, pkg, version);
+      if (r.ok && this.npmBin(spec)) {
+        this.installErrors.delete(id);
+        log.info("agents", `${id} ready`);
+      } else {
+        const why = `install failed: ${r.err || "no bin after install"}`;
+        this.installErrors.set(id, why);
+        log.warn("agents", `${id}: ${why}`);
+      }
+    })().finally(() => {
+      this.installing.delete(id);
+      this.onChange?.();
+    });
+    this.installing.set(id, p);
+    this.onChange?.();
+    return p;
+  }
+
+  private installedVersion(spec: AgentSpec): string | null {
+    if (spec.run.kind !== "npm-bin") return null;
+    const pkgJson = join(this.dir, spec.id, "node_modules", spec.run.pkg, "package.json");
+    try {
+      return (JSON.parse(readFileSync(pkgJson, "utf8")) as { version?: string }).version ?? null;
+    } catch {
+      // missing or unreadable: install() treats it as not installed
+      return null;
+    }
+  }
+
+  /** boot: fetch every builtin that is missing or on another version, one at a time, default first */
+  async installMissing(order: string[] = ["claude", "codex"]): Promise<void> {
+    for (const id of order) {
+      const spec = this.specs.get(id);
+      if (!spec || spec.run.kind !== "npm-bin") continue;
+      await this.install(id);
+    }
   }
 
   infos(): AgentInfo[] {
@@ -153,6 +223,7 @@ export class AgentRegistry {
         name: spec.name,
         available: !reason,
         ...(reason ? { reason } : {}),
+        ...(this.installing.has(spec.id) ? { installing: true } : {}),
         sandboxed: spec.confinement !== "none",
       };
     });
@@ -204,15 +275,15 @@ export function parseCustomAgents(raw: string): AgentSpec[] {
       confinement: (e.confinement as Confinement | undefined) ?? "none",
       systemPrompt: "prompt-prefix",
       ...(str("mode") ? { mode: str("mode") } : {}),
-      loginHint: str("loginHint") ?? `${str("name") ?? id} is not logged in; log in with its CLI and try again`,
+      loginHint: str("loginHint") ?? `${str("name") ?? id} is not logged in`,
     });
   }
   return out;
 }
 
 /** builtins plus the user's file; a custom entry may shadow a builtin id on purpose */
-export function loadAgentRegistry(paths: Paths): AgentRegistry {
-  const file = join(paths.home, "agents.json");
+export function loadAgentRegistry(home: string, agentsDir: string): AgentRegistry {
+  const file = join(home, "agents.json");
   const custom = existsSync(file) ? parseCustomAgents(readFileSync(file, "utf8")) : [];
-  return new AgentRegistry([...BUILTIN_AGENTS, ...custom]);
+  return new AgentRegistry([...BUILTIN_AGENTS, ...custom], agentsDir);
 }

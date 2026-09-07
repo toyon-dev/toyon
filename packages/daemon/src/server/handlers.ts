@@ -27,7 +27,7 @@ export interface Services {
   agents: AgentRegistry;
   /** images attached to chat messages; the http layer serves them back to the shell */
   attachments: AttachmentStore;
-  /** request → 1–5 independent tasks (Haiku by default; tests inject a stub) */
+  /** request → 1–5 independent tasks (the default agent by default; tests inject a stub) */
   planTasks: (prompt: string, cwd: string) => Promise<string[] | null>;
 }
 
@@ -267,6 +267,24 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     const theme = s.themes.import(msg.name, msg.source);
     s.themes.setPrefs(pickTheme(s.themes.prefs, theme, s.themes.themes));
     s.hub.emit("themesChanged");
+  },
+
+  "install-agent"(msg, _ctx, s) {
+    if (!s.agents.get(msg.agent)) throw new UserError(`unknown agent "${msg.agent}"`);
+    fireAndForget(msg.agent, s.agents.install(msg.agent), "agent install");
+  },
+
+  async "agent-auth"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
+    const agent = s.runtime.agentFor(msg.worktreeId);
+    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+    const r = await agent.authenticate(msg.methodId, msg.apiKey);
+    if (r.kind === "terminal") s.runtime.terminalLine(msg.worktreeId, r.line);
+  },
+
+  "agent-retry"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
+    s.runtime.agentFor(msg.worktreeId)?.retry();
   },
 
   "set-default-agent"(msg, _ctx, s) {

@@ -6,8 +6,8 @@ import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } 
 import { dirname, join } from "node:path";
 import type { GitFileStatus, ImageInput, PickMeta, RepoInfo, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
 import { attachmentsDirFor } from "../agent/attachments.ts";
-import { quickName } from "../agent/llm.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
+import { makeNamer } from "../agent/tasks.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -54,8 +54,8 @@ export interface WorktreeServiceDeps {
   runtime: RuntimeRegistry;
   paths: Paths;
   agents: AgentRegistry;
-  /** task → short kebab-case name (Haiku by default; tests inject a stub) */
-  namer?: (prompt: string, cwd: string) => Promise<string | null>;
+  /** task → short kebab-case name (the worktree's own agent by default; tests inject a stub) */
+  namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
 }
 
 export class WorktreeService {
@@ -188,7 +188,7 @@ export class WorktreeService {
     if (!variant) {
       fireAndForget(
         wt.id,
-        (this.d.namer ?? quickName)(prompt, repo.path).then((name) => {
+        (this.d.namer ?? makeNamer(this.d.runtime))(prompt, wt).then((name) => {
           if (name) return this.rename(wt.id, name);
         }),
         "auto-naming",
@@ -198,7 +198,7 @@ export class WorktreeService {
     if (variant.index !== 1) return; // sibling 1 names the whole group
     fireAndForget(
       wt.id,
-      (this.d.namer ?? quickName)(prompt, repo.path).then(async (name) => {
+      (this.d.namer ?? makeNamer(this.d.runtime))(prompt, wt).then(async (name) => {
         if (!name) return;
         for (const sibling of this.d.state.worktrees.filter((w) => w.variant?.group === variant.group)) {
           await this.rename(sibling.id, `${name}-v${sibling.variant!.index}`).catch((e) => {

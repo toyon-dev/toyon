@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentEvent, AgentStatus, ImageInput, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
 import type { AgentAdapter } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
@@ -27,6 +30,21 @@ export class FakeAgent implements AgentAdapter {
   closes = 0;
   async close() {
     this.closes++;
+  }
+  asked: Array<[string, string]> = [];
+  answer: string | null = null;
+  async ask(system: string, prompt: string) {
+    this.asked.push([system, prompt]);
+    return this.answer;
+  }
+  auths: Array<[string, string | undefined]> = [];
+  async authenticate(methodId: string, apiKey?: string) {
+    this.auths.push([methodId, apiKey]);
+    return methodId === "terminal" ? { kind: "terminal" as const, line: "login --now" } : { kind: "done" as const };
+  }
+  retries = 0;
+  retry() {
+    this.retries++;
   }
   unqueue() {}
   transcript(): Array<{ seq: number; event: AgentEvent }> {
@@ -123,7 +141,10 @@ export function fakeAgents(): AgentRegistry {
     loginHint: `${id}: log in`,
     ...extra,
   });
-  return new AgentRegistry([spec("claude"), spec("codex", { mode: "agent" })]);
+  return new AgentRegistry(
+    [spec("claude"), spec("codex", { mode: "agent" })],
+    mkdtempSync(join(tmpdir(), "toyon-agents-")),
+  );
 }
 
 /** RuntimeDeps factories that build the fakes above and remember them by worktree id */

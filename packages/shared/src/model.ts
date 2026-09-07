@@ -91,6 +91,8 @@ export interface AgentInfo {
   available: boolean;
   /** why not, when unavailable */
   reason?: string;
+  /** its adapter is being downloaded right now */
+  installing?: boolean;
   /** runs shell commands under an OS sandbox confined to the worktree */
   sandboxed: boolean;
 }

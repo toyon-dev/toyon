@@ -5,10 +5,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@toyon/shared";
 import { sh, tmpRepo } from "../../../test/helpers/tmp-repo.ts";
+import { makePaths } from "../../core/paths.ts";
 import { GIT } from "../../git/exec.ts";
 import { AttachmentStore } from "../attachments.ts";
+import { askFreshAgent } from "../oneshot.ts";
 import { AgentRegistry, BUILTIN_AGENTS } from "../registry.ts";
 import { SETTINGS_REL } from "../sandbox.ts";
+import { NAME_SYSTEM, namePrompt, PLAN_SYSTEM, parseName, parsePlan, planPrompt } from "../tasks.ts";
 import { AcpSession } from "./session.ts";
 import { spawnAcp } from "./transport.ts";
 
@@ -30,7 +33,8 @@ function world() {
   const t = tmpRepo();
   const wt = join(t.repo, "..", "wt");
   sh(t.repo, GIT, "worktree", "add", "-q", "-b", "feat", wt, "main");
-  const registry = new AgentRegistry(BUILTIN_AGENTS);
+  // the real adapter, installed into the machine's ~/.toyon/agents once and reused across runs
+  const registry = new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir);
   const events: AgentEvent[] = [];
   let sessionId: string | undefined;
   const session = new AcpSession({
@@ -38,6 +42,7 @@ function world() {
     cwd: wt,
     spec: () => registry.require("claude"),
     connect: (app, spec) => spawnAcp(app, registry.launch(spec), wt, "it"),
+    launch: (spec) => registry.launch(spec),
     transcriptsDir: t.paths.transcriptsDir,
     attachments: new AttachmentStore(t.paths.attachmentsDir),
     getSessionId: () => sessionId,
@@ -60,6 +65,10 @@ function world() {
 }
 
 describe.skipIf(!enabled)("claude via ACP (integration)", () => {
+  test("the adapter installs on demand", async () => {
+    await new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir).install("claude");
+  }, 300_000);
+
   test("edits inside the worktree land; the sandbox file is written and ignored by git", async () => {
     const { t, wt, events, session, settle } = world();
     try {
@@ -97,6 +106,29 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
       expect(events.some((e) => e.type === "agent-error")).toBe(false);
       expect(said().toLowerCase(), `the agent said: ${said()}`).toContain("red");
       expect(existsSync(join(t.paths.attachmentsDir, "it", "1.png"))).toBe(true);
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 180_000);
+
+  test("ask() names a task on a side session without touching the transcript; a fresh agent plans a batch", async () => {
+    const { t, wt, events, session } = world();
+    try {
+      const name = parseName(await session.ask(NAME_SYSTEM, namePrompt("make the header sticky on scroll")));
+      expect(name).toMatch(/^[a-z0-9]+(-[a-z0-9]+){1,3}$/);
+      expect(events).toEqual([]);
+      const registry = new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir);
+      const plan = parsePlan(
+        await askFreshAgent(
+          registry,
+          "claude",
+          wt,
+          PLAN_SYSTEM,
+          planPrompt("add a dark mode toggle and fix the footer typo"),
+        ),
+      );
+      expect(plan?.length).toBeGreaterThanOrEqual(1);
     } finally {
       await session.close();
       t.cleanup();

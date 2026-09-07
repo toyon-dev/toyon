@@ -37,6 +37,18 @@ export interface ImageRef {
   file: string;
 }
 
+/** one way to log the agent in, as it advertised over ACP */
+export interface AuthMethodInfo {
+  id: string;
+  name: string;
+  description?: string;
+  /** terminal: toyon runs a command in the worktree's terminal pane; agent: the adapter does it
+   * itself (opens a browser, takes a pasted key) */
+  kind: "terminal" | "agent";
+  /** the adapter wants an API key with the request */
+  needsKey?: boolean;
+}
+
 export type AgentEvent =
   | { type: "user-message"; text: string; ts: number; pick?: PickMeta; images?: ImageRef[] }
   | { type: "turn-start"; ts: number }
@@ -49,4 +61,7 @@ export type AgentEvent =
   | { type: "turn-end"; stopReason: string; ts: number }
   | { type: "session-info"; sessionId: string; model?: string }
   | { type: "agent-error"; message: string; ts: number }
+  /** the turn was refused for want of credentials; the shell offers the methods as buttons */
+  | { type: "agent-auth-required"; agent: string; agentName: string; methods: AuthMethodInfo[]; ts: number }
+  | { type: "agent-auth-ok"; ts: number }
   | { type: "agent-blocked"; tool: string; path: string; reason: string; ts: number };

@@ -5,6 +5,7 @@
 import type {
   AgentEvent,
   AgentInfo,
+  AuthMethodInfo,
   GitFileStatus,
   ImageInput,
   ImageRef,
@@ -37,7 +38,9 @@ export type ChatItem =
       title?: string;
     }
   | { kind: "error"; text: string }
-  | { kind: "blocked"; tool: string; path: string; reason: string };
+  | { kind: "blocked"; tool: string; path: string; reason: string }
+  /** the agent wants credentials; `done` once a login went through */
+  | { kind: "auth"; agent: string; agentName: string; methods: AuthMethodInfo[]; done: boolean };
 
 export interface GitInfo {
   files: GitFileStatus[];
@@ -522,6 +525,18 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
       return [...items, { kind: "error", text: event.message }];
     case "agent-blocked":
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
+    case "agent-auth-required":
+      return [
+        ...items,
+        { kind: "auth", agent: event.agent, agentName: event.agentName, methods: event.methods, done: false },
+      ];
+    case "agent-auth-ok": {
+      const idx = items.findLastIndex((i) => i.kind === "auth" && !i.done);
+      if (idx === -1) return items;
+      const next = items.slice();
+      next[idx] = { ...(next[idx] as Extract<ChatItem, { kind: "auth" }>), done: true };
+      return next;
+    }
     default:
       return items;
   }

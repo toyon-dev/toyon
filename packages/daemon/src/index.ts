@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { AttachmentStore } from "./agent/attachments.ts";
-import { planTasks } from "./agent/llm.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
+import { makePlanner } from "./agent/tasks.ts";
 import { cloud } from "./core/cloud.ts";
 import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
@@ -39,7 +39,8 @@ const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 const state = new StateStore(paths);
 const hub = new Hub();
 const bridge = new BridgeScript(BRIDGE_JS);
-const agents = loadAgentRegistry(paths);
+const agents = loadAgentRegistry(paths.home, paths.agentsDir);
+agents.onChange = () => hub.emit("agentsChanged");
 const attachments = new AttachmentStore(paths.attachmentsDir);
 const runtime = new RuntimeRegistry({ hub, state, paths, agents, attachments, bridgeScript: () => bridge.get() });
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
@@ -53,7 +54,18 @@ const { branded, stop: stopServer } = startServer({
   token,
   shellDist: SHELL_DIST,
   version: pkg.version,
-  services: { state, hub, repos, worktrees, files, runtime, themes, agents, attachments, planTasks },
+  services: {
+    state,
+    hub,
+    repos,
+    worktrees,
+    files,
+    runtime,
+    themes,
+    agents,
+    attachments,
+    planTasks: makePlanner(agents, state),
+  },
 });
 
 // every origin the shell can be loaded from: the injected bridge accepts commands from, and
@@ -82,6 +94,9 @@ if (cloud.enabled) {
 }
 
 await repos.boot();
+// the adapters are fetched on first boot (and after a version bump), not shipped: the default
+// agent first, so the first prompt waits on one download at most
+fireAndForget("agents", agents.installMissing(), "agent adapter install");
 
 // register a repo passed on the command line (used by the CLI)
 const repoArg = process.argv[2];

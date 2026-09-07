@@ -180,6 +180,17 @@ describe("chat folding", () => {
     ]);
   });
 
+  test("an auth request becomes a card that closes on auth-ok", () => {
+    const methods = [{ id: "api-key", name: "API Key", kind: "agent" as const, needsKey: true }];
+    let s = run([
+      hello(wt("a")),
+      agent("a", { type: "agent-auth-required", agent: "codex", agentName: "Codex", methods, ts: 0 }),
+    ]);
+    expect(s.local.a?.chat).toEqual([{ kind: "auth", agent: "codex", agentName: "Codex", methods, done: false }]);
+    s = reducer(s, agent("a", { type: "agent-auth-ok", ts: 1 }));
+    expect(s.local.a?.chat[0]).toMatchObject({ kind: "auth", done: true });
+  });
+
   test("hello and agents carry the registry and the default", () => {
     const list = [{ id: "claude", name: "Claude", available: true, sandboxed: true }];
     let s = run([hello(wt("a"))]);

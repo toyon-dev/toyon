@@ -573,38 +573,7 @@ body.resizing .row-resize {
   background: var(--bg1);
   padding-top: 6px;
 }
-/* the foot of the rail, empty unless the socket is down: proc health reads off the worktree dots
-   above it and off the terminal's own tabs, so nothing is drawn here while all is well. The row
-   keeps its height either way, or the list would grow by 40px on every reconnect. */
-.rail-foot {
-  flex-shrink: 0;
-  /* 40px: centers the dot on the composer's bottom row (10px pad + 20px picker box) so it lines up with the element picker */
-  height: 40px;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  /* dot on the right, 17px in: the rail panel is right-anchored, so the dot stays put
-     in the 40px column while the label slides in from the left on expand */
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 0 17px 0 12px;
-  font-size: var(--fs-xs);
-  white-space: nowrap;
-  cursor: default;
-}
-.rail-foot.offline {
-  color: var(--orange);
-}
-.conn-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-sizing: border-box;
-  /* hollow: reconnecting is a state to notice, not a fault to act on */
-  border: 1px solid var(--orange);
-}
-/* stale rail while the socket is down */
+/* the rail's rows are stale while the socket is down; the bar says why */
 .wt-rail.offline .rail-list {
   opacity: 0.45;
 }
@@ -1201,6 +1170,26 @@ body.resizing .rb-center {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 160px;
+}
+/* the daemon is gone: sits beside the project it was serving, and only while that is true */
+.conn-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 1px 8px;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--orange);
+  cursor: default;
+}
+.conn-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--orange);
+  flex: none;
 }
 /* an agent is working in a project that is not on screen: the only reason to look away from here */
 .pp-dot {

@@ -2,13 +2,12 @@ import type { WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
-import { useActiveId, useVisibleWorktrees } from "../../state/selectors.ts";
+import { useActiveId, useOffline, useVisibleWorktrees } from "../../state/selectors.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass } from "../util.ts";
-import { ConnDot } from "./ConnDot.tsx";
 import { worktreeActions } from "./worktreeActions.ts";
 
 type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
@@ -20,7 +19,8 @@ export function WtRail() {
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
   const activeId = useActiveId();
-  const connected = useStore((s) => s.connected);
+  // the list only dims: what the socket is doing is the bar's to say, not the rail's
+  const offline = useOffline();
   const leftOpen = useStore((s) => s.leftOpen);
   const termOpen = useStore((s) => s.termOpen);
   const repos = useStore((s) => s.repos);
@@ -97,7 +97,7 @@ export function WtRail() {
   };
 
   return (
-    <div className={`wt-rail ${graftMode || menu ? "hold" : ""} ${connected ? "" : "offline"}`}>
+    <div className={`wt-rail ${graftMode || menu ? "hold" : ""} ${offline ? "offline" : ""}`}>
       <div className="rail-panel">
         <div className="rail-list">
           {worktrees.map((w) => (
@@ -272,7 +272,6 @@ export function WtRail() {
             </button>
           )}
         </div>
-        <ConnDot connected={connected} />
         {menu && menuWt && <Menu at={menu.at} onClose={closeMenu} items={menuItems(menuWt, menu.land)} />}
       </div>
     </div>

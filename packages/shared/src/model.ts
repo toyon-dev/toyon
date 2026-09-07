@@ -92,6 +92,18 @@ export interface ProcState {
 
 export type AgentStatus = "idle" | "working" | "error";
 
+/** Who an agent says it is paying as. Both builtin adapters push this over ACP's `_auth/status_update`
+ * extension, so it is what the agent itself reports, not what toyon guesses from its files. */
+export interface AuthStatus {
+  /** none: the agent knows it is logged out. The other kinds each carry a working credential. */
+  kind: "none" | "api_key" | "account" | "external" | "gateway";
+  /** the agent's own one-line name for it ("Claude Max", "Anthropic API key") */
+  label: string;
+  /** where the credential comes from (the key's source, the gateway host) */
+  detail?: string;
+  account?: { email?: string; organization?: string; plan?: string };
+}
+
 /** one entry of the daemon's agent registry, as the shell's pickers see it */
 export interface AgentInfo {
   id: string;
@@ -104,6 +116,10 @@ export interface AgentInfo {
   installing?: boolean;
   /** runs shell commands under an OS sandbox confined to the worktree */
   sandboxed: boolean;
+  /** the identity it last reported, from any connection; absent until one has run */
+  auth?: AuthStatus;
+  /** it advertised ACP's logout method, so settings can offer to sign it out */
+  canLogout?: boolean;
 }
 
 export interface WorktreeStatus {

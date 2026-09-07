@@ -1,8 +1,10 @@
-import { CHORD_SECTIONS, CHORDS, resolveTheme } from "@toyon/shared";
-import { useDispatch, useStore } from "../../state/context.tsx";
+import { type AgentInfo, CHORD_SECTIONS, CHORDS, resolveTheme } from "@toyon/shared";
+import { useCallback, useState } from "react";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
 import { Kbd } from "../../ui/Kbd.tsx";
+import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { chord } from "../util.ts";
 import { appearanceLabel } from "./commands.ts";
@@ -54,6 +56,11 @@ export function KeysHelp() {
             {agents.find((a) => a.id === defaultAgent)?.name ?? defaultAgent}
           </button>
         </div>
+        {/* per agent: who it is logged in as, so a refused or stale credential is fixable here
+            rather than only in the terminal that wrote it */}
+        {agents.map((a) => (
+          <AgentRow key={a.id} agent={a} />
+        ))}
         {/* the current project only: how it installs and starts (toyon.json); the pane replaces
             the preview. Other projects are a switch away (⌘⇧O), not rows here. */}
         {repo && (
@@ -83,5 +90,50 @@ export function KeysHelp() {
         ))}
       </div>
     </Overlay>
+  );
+}
+
+/** what the agent last reported about its own credentials; the row says nothing it was not told */
+function authLabel(a: AgentInfo): string {
+  if (!a.available) return a.installing ? "installing" : "not installed";
+  if (!a.auth) return "ready";
+  return a.auth.kind === "none" ? "not logged in" : a.auth.label;
+}
+
+function authTip(a: AgentInfo): string {
+  if (!a.available) return a.reason ?? "not installed";
+  if (!a.auth) return "installed; it names the account it runs on the first time it runs";
+  const who = [a.auth.detail, a.auth.account?.email, a.auth.account?.organization].filter(Boolean).join(" · ");
+  return who || a.auth.label;
+}
+
+/** One agent: its login state, and the actions that change it. Logging *in* stays in the chat,
+ * where the auth card can also run a method that needs the worktree's terminal. */
+function AgentRow({ agent }: { agent: AgentInfo }) {
+  const sock = useSock();
+  const [menu, setMenu] = useState<DOMRect | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const items: MenuItem[] = [];
+  if (agent.canLogout && agent.auth?.kind !== "none")
+    items.push({
+      label: "log out",
+      danger: true,
+      onClick: () => sock?.send({ t: "agent-logout", agent: agent.id }),
+    });
+  if (!agent.available && !agent.installing)
+    items.push({ label: "install again", onClick: () => sock?.send({ t: "install-agent", agent: agent.id }) });
+  return (
+    <div className="set-row">
+      <span className="keys-d">{agent.name}</span>
+      <button
+        className="btn btn-outline set-v"
+        data-tip={authTip(agent)}
+        disabled={items.length === 0}
+        onClick={(e) => setMenu(e.currentTarget.getBoundingClientRect())}
+      >
+        {authLabel(agent)}
+      </button>
+      {menu && <Menu anchor={menu} align="right" items={items} onClose={closeMenu} />}
+    </div>
   );
 }

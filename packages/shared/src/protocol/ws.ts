@@ -241,6 +241,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   }),
   /** send the message that was refused for want of credentials again */
   z.object({ t: z.literal("agent-retry"), worktreeId: id }),
+  /** drop this agent's stored credential (ACP logout), whatever worktree it was logged in from */
+  z.object({ t: z.literal("agent-logout"), agent: id }),
   /** raw VS Code theme JSON/JSONC text picked in the browser */
   z.object({ t: z.literal("import-theme"), name: z.string().max(300), source: z.string().max(2_000_000) }),
   z.object({ t: z.literal("rescan-themes") }),

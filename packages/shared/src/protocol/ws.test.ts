@@ -19,6 +19,7 @@ describe("parseClientMsg", () => {
       { t: "install-agent", agent: "codex" },
       { t: "agent-auth", worktreeId: "a", methodId: "api-key", apiKey: "sk-x" },
       { t: "agent-retry", worktreeId: "a" },
+      { t: "agent-logout", agent: "codex" },
       { t: "combine", worktreeIds: ["a", "b"] },
       { t: "confirm-config", repoId: "r", config: { procs: { web: "bun dev" } } },
       {

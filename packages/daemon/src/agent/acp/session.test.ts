@@ -3,11 +3,13 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentEvent, AgentStatus } from "@toyon/shared";
+import type { AgentEvent, AgentStatus, AuthStatus } from "@toyon/shared";
+import type { AuthObservation } from "../accounts.ts";
 import { AttachmentStore } from "../attachments.ts";
 import { SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import type { Bounds } from "../sandbox.ts";
+import { AUTH_STATUS_UPDATE_METHOD } from "./authstatus.ts";
 import { AcpSession } from "./session.ts";
 import type { AcpLink } from "./transport.ts";
 
@@ -56,7 +58,14 @@ interface FakeAgent {
 
 function fakeAgent(
   script: PromptScript,
-  opts: { loadSession?: boolean; withModes?: boolean; currentMode?: string; images?: boolean } = {},
+  opts: {
+    loadSession?: boolean;
+    withModes?: boolean;
+    currentMode?: string;
+    images?: boolean;
+    logout?: boolean;
+    authStatus?: AuthStatus;
+  } = {},
 ): FakeAgent {
   const f: FakeAgent = {
     newSessions: [],
@@ -81,15 +90,23 @@ function fakeAgent(
     : null;
   f.app = acp
     .agent({ name: "fake" })
-    .onRequest(acp.methods.agent.initialize, () => ({
-      protocolVersion: acp.PROTOCOL_VERSION,
-      agentCapabilities: { loadSession: f.loadSession, promptCapabilities: { image: opts.images ?? false } },
-      authMethods: [
-        { id: "api-key", name: "API Key" },
-        { id: "chat-gpt", name: "ChatGPT", description: "browser" },
-        { id: "claude-login", name: "Claude login", type: "terminal", args: ["--cli", "auth", "login"] },
-      ],
-    }))
+    .onRequest(acp.methods.agent.initialize, async (c) => {
+      // the identity push goes out before the response, as both real adapters send it
+      if (opts.authStatus) await c.client.notify(AUTH_STATUS_UPDATE_METHOD, { authStatus: opts.authStatus });
+      return {
+        protocolVersion: acp.PROTOCOL_VERSION,
+        agentCapabilities: {
+          loadSession: f.loadSession,
+          promptCapabilities: { image: opts.images ?? false },
+          ...(opts.logout ? { auth: { logout: {} } } : {}),
+        },
+        authMethods: [
+          { id: "api-key", name: "API Key" },
+          { id: "chat-gpt", name: "ChatGPT", description: "browser" },
+          { id: "claude-login", name: "Claude login", type: "terminal", args: ["--cli", "auth", "login"] },
+        ],
+      };
+    })
     .onRequest(acp.methods.agent.session.new, (c) => {
       f.newSessions.push(c.params);
       return {
@@ -137,6 +154,7 @@ const say =
 function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000, id = `w${Math.random().toString(36).slice(2, 8)}`) {
   const events: AgentEvent[] = [];
   const statuses: AgentStatus[] = [];
+  const auths: Array<[string, AuthObservation]> = [];
   let sessionId: string | undefined;
   const links: Array<{ killed: boolean }> = [];
   const connect = (app: acp.ClientApp): AcpLink => {
@@ -167,6 +185,7 @@ function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000, id = `w${Mat
     },
     onEvent: (e) => events.push(e),
     onStatus: (s) => statuses.push(s),
+    onAuth: (agentId, o) => auths.push([agentId, o]),
     idleMs,
     prepare: async () => bounds,
   });
@@ -174,7 +193,7 @@ function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000, id = `w${Mat
     for (let i = 0; i < 200 && (session.status === "working" || session.queueLength > 0); i++) await Bun.sleep(5);
   };
   const types = () => events.map((e) => e.type);
-  return { session, events, statuses, types, idle, links, sessionId: () => sessionId, id };
+  return { session, events, statuses, auths, types, idle, links, sessionId: () => sessionId, id };
 }
 
 describe("AcpSession", () => {
@@ -380,6 +399,70 @@ describe("AcpSession", () => {
     expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
     expect(w.links).toHaveLength(1);
     await expect(w.session.authenticate("nope")).rejects.toThrow(/no login method/);
+    await w.session.close();
+  });
+
+  test("a refused credential also becomes an auth card, after the provider's own words", async () => {
+    let failures = 1;
+    const fake = fakeAgent(async (p, client) => {
+      // what an adapter passes on when the provider rejects the key it is holding: no ACP auth
+      // code, just the turn failing with a 401
+      if (failures-- > 0)
+        throw new acp.RequestError(-32603, "unexpected status 401 Unauthorized: Incorrect API key provided: sk-bogus");
+      return say("ok")(p, client);
+    });
+    fake.app.onRequest(acp.methods.agent.authenticate, () => ({}));
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.session.status).toBe("error");
+    // the error stays: an agent that thinks it is logged in must not be contradicted silently
+    const err = w.events.at(-2) as Extract<AgentEvent, { type: "agent-error" }>;
+    expect(err.type).toBe("agent-error");
+    expect(err.message).toContain("401");
+    expect(w.events.at(-1)).toMatchObject({ type: "agent-auth-required", rejected: true, agentName: "Claude" });
+    // the process stays up, so the login runs over it and the refused message goes again
+    expect(w.links[0]!.killed).toBe(false);
+    expect(await w.session.authenticate("api-key", "sk-good")).toEqual({ kind: "done" });
+    await w.idle();
+    expect(w.session.status).toBe("idle");
+    expect(w.types().filter((ty) => ty === "user-message")).toHaveLength(2);
+    await w.session.close();
+  });
+
+  test("a failure that only mentions permission is not read as a credential problem", async () => {
+    const fake = fakeAgent(async () => {
+      throw new acp.RequestError(-32603, "403 Forbidden: your organization must enable this model");
+    });
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.events.at(-1)).toMatchObject({ type: "agent-error" });
+    expect(w.types()).not.toContain("agent-auth-required");
+    await w.session.close();
+  });
+
+  test("the agent's logout capability and the identity it pushes are reported once per connection", async () => {
+    const fake = fakeAgent(say("ok"), {
+      logout: true,
+      authStatus: { kind: "account", label: "Claude Max", account: { email: "who@example.com" } },
+    });
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.auths).toEqual([
+      ["claude", { status: { kind: "account", label: "Claude Max", account: { email: "who@example.com" } } }],
+      ["claude", { canLogout: true }],
+    ]);
+    await w.session.close();
+  });
+
+  test("an agent that reports neither is left alone", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.auths).toEqual([["claude", { canLogout: false }]]);
     await w.session.close();
   });
 

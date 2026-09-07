@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { clientMsgSchema, type ServerMsg } from "@toyon/shared";
-import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
+import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
@@ -31,12 +31,14 @@ function make() {
   const hub = new Hub();
   const f = fakeFactories();
   const agents = fakeAgents();
+  const accounts = fakeAccounts(agents);
   const attachments = new AttachmentStore(t.paths.attachmentsDir);
   const runtime = new RuntimeRegistry({
     hub,
     state,
     paths: t.paths,
     agents,
+    accounts,
     attachments,
     bridgeScript: () => "",
     ...f.factories,
@@ -55,6 +57,7 @@ function make() {
     runtime,
     themes,
     agents,
+    accounts,
     attachments,
     planTasks: async () => planned.shift() ?? null,
   };
@@ -162,6 +165,13 @@ describe("handlers", () => {
     expect(terminals.get(main.id)?.[0]?.writes).toEqual(["login --now\r", "login --now\r"]);
     await dispatch({ t: "agent-retry", worktreeId: main.id }, ctx, services);
     expect(agent.retries).toBe(1);
+  });
+
+  test("agent-logout: an unknown agent reaches the person as a toast", async () => {
+    const { services, ctx } = make();
+    // signing out is AgentAccounts' own test; what belongs here is that the message routes to it
+    // and that its refusals surface instead of being swallowed
+    await expect(dispatch({ t: "agent-logout", agent: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
   });
 
   test("batch-worktrees plans with the injected planner and creates one worktree per task", async () => {

@@ -55,6 +55,14 @@
   color: var(--orange);
   border-color: var(--orange);
 }
+/* a row with nothing to change reads as a value, not a control: :hover still fires on a disabled
+   button, so the hover state has to be overridden too */
+.set-v:disabled,
+.set-v:disabled:hover {
+  background: var(--bg0);
+  color: var(--fg-dim);
+  border-color: var(--bg2);
+}
 .keys-row {
   display: grid;
   grid-template-columns: 76px 1fr;

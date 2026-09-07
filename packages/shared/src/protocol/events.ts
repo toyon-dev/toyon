@@ -61,7 +61,16 @@ export type AgentEvent =
   | { type: "turn-end"; stopReason: string; ts: number }
   | { type: "session-info"; sessionId: string; model?: string }
   | { type: "agent-error"; message: string; ts: number }
-  /** the turn was refused for want of credentials; the shell offers the methods as buttons */
-  | { type: "agent-auth-required"; agent: string; agentName: string; methods: AuthMethodInfo[]; ts: number }
+  /** the turn was refused for want of credentials; the shell offers the methods as buttons.
+   * `rejected` distinguishes "the credential it has was refused" from "it has none" — the second
+   * comes from ACP's auth_required code, the first from reading the provider's 401 */
+  | {
+      type: "agent-auth-required";
+      agent: string;
+      agentName: string;
+      methods: AuthMethodInfo[];
+      rejected?: boolean;
+      ts: number;
+    }
   | { type: "agent-auth-ok"; ts: number }
   | { type: "agent-blocked"; tool: string; path: string; reason: string; ts: number };

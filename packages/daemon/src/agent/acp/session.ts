@@ -9,6 +9,7 @@ import * as acp from "@agentclientprotocol/sdk";
 import type { AgentEvent, AgentStatus, AuthMethodInfo, ImageInput, PickMeta } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
+import type { AuthObservation } from "../accounts.ts";
 import type { AgentAdapter, AuthOutcome } from "../adapter.ts";
 import type { AttachmentStore, StoredImage } from "../attachments.ts";
 import { decide, pickOption } from "../policy.ts";
@@ -17,6 +18,7 @@ import type { AgentSpec } from "../registry.ts";
 import { type Bounds, worktreeBounds, writeClaudeLocalSettings } from "../sandbox.ts";
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
 import { askOnce } from "./ask.ts";
+import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
 import { mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
 import type { AcpLink } from "./transport.ts";
 
@@ -39,6 +41,8 @@ export interface AcpSessionDeps {
   setSessionId: (id: string) => void;
   onEvent: AgentEventListener;
   onStatus: AgentStatusListener;
+  /** whatever this connection learns about the agent's credentials, for the per-agent cache */
+  onAuth?: (agentId: string, o: AuthObservation) => void;
   /** how long an idle adapter process lives after its last turn */
   idleMs?: number;
   /** the worktree's write bounds, and the settings file that makes Claude Code enforce them */
@@ -200,7 +204,11 @@ export class AcpSession implements AgentAdapter {
       if (this.interrupted) {
         this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
         this.setStatus("idle");
-      } else if (isAuthRequired(e) && this.conn) {
+      } else if (this.conn && (isAuthRequired(e) || this.rejectedCredential(e))) {
+        const rejected = !isAuthRequired(e);
+        // a refused credential is a plain turn failure, so the provider's own words go out first:
+        // without them "not logged in" would contradict an agent that thinks it is
+        if (rejected) this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
         // the process stays: a login runs over the same connection, then the message goes again
         this.refused = item;
         this.emit({
@@ -208,6 +216,7 @@ export class AcpSession implements AgentAdapter {
           agent: this.conn.spec.id,
           agentName: this.conn.spec.name,
           methods: this.conn.authMethods.map(authMethodInfo),
+          ...(rejected ? { rejected: true } : {}),
           ts: Date.now(),
         });
         this.setStatus("error");
@@ -278,6 +287,13 @@ export class AcpSession implements AgentAdapter {
     if (item) this.send(item.text, item.context, item.pick, item.images);
   }
 
+  /** worth offering the login methods for: the agent has a credential and the provider refused it.
+   * Only asked when a connection is up, and only when that connection offered a way back in. */
+  private rejectedCredential(e: unknown): boolean {
+    if (!this.conn?.authMethods.length) return false;
+    return REJECTED_CREDENTIAL_RE.test(e instanceof Error ? e.message : String(e));
+  }
+
   private describe(e: unknown): string {
     if (isAuthRequired(e)) return this.conn?.spec.loginHint ?? this.d.spec().loginHint;
     const message = e instanceof Error ? e.message : String(e);
@@ -335,7 +351,11 @@ export class AcpSession implements AgentAdapter {
     const app = acp
       .client({ name: "toyon" })
       .onRequest(acp.methods.client.session.requestPermission, (c) => this.onPermission(c.params, bounds))
-      .onNotification(acp.methods.client.session.update, (c) => this.onUpdate(c.params, side));
+      .onNotification(acp.methods.client.session.update, (c) => this.onUpdate(c.params, side))
+      // the agent pushes its identity unasked, here and whenever it changes; settings shows the last one
+      .onNotification(AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, (c) => {
+        if (c.params) this.d.onAuth?.(spec.id, { status: c.params });
+      });
     const link = this.d.connect(app, spec);
     const ctx = link.conn.agent;
     // the process dying while idle must not leave a dead handle for the next prompt to use
@@ -364,6 +384,7 @@ export class AcpSession implements AgentAdapter {
         acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
         side,
       };
+      this.d.onAuth?.(spec.id, { canLogout: supportsLogout(init.agentCapabilities) });
       return this.conn;
     } catch (e) {
       fireAndForget(this.d.worktreeId, link.kill(), "kill agent after failed start");
@@ -497,6 +518,13 @@ export class AcpSession implements AgentAdapter {
 function isAuthRequired(e: unknown): boolean {
   return e instanceof acp.RequestError && e.code === -32000;
 }
+
+/** ACP's auth_required code means "no credential"; a credential the provider rejected has no code
+ * of its own and arrives as the failed turn's text, so the provider's wording is all there is to
+ * read. Kept to phrasings that can only be about credentials — a 403 is usually about permission
+ * or quota, and asking someone to log in again would not help. */
+const REJECTED_CREDENTIAL_RE =
+  /\b401\b|unauthorized|invalid[\s_-]?api[\s_-]?key|authentication[\s_-]?(error|failed)|api key (is )?(invalid|expired|incorrect)|incorrect api key|(token|credential)s? (have |has )?expired|expired (token|credential)|not (logged in|authenticated)/i;
 
 function authMethodInfo(m: acp.AuthMethod): AuthMethodInfo {
   const terminal = "type" in m && m.type === "terminal";

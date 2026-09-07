@@ -40,8 +40,16 @@ export type ChatItem =
     }
   | { kind: "error"; text: string }
   | { kind: "blocked"; tool: string; path: string; reason: string }
-  /** the agent wants credentials; `done` once a login went through */
-  | { kind: "auth"; agent: string; agentName: string; methods: AuthMethodInfo[]; done: boolean };
+  /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
+   * credential and the provider refused it, so the error above this card says what went wrong */
+  | {
+      kind: "auth";
+      agent: string;
+      agentName: string;
+      methods: AuthMethodInfo[];
+      rejected?: boolean;
+      done: boolean;
+    };
 
 export interface GitInfo {
   files: GitFileStatus[];
@@ -616,7 +624,14 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
     case "agent-auth-required":
       return [
         ...items,
-        { kind: "auth", agent: event.agent, agentName: event.agentName, methods: event.methods, done: false },
+        {
+          kind: "auth",
+          agent: event.agent,
+          agentName: event.agentName,
+          methods: event.methods,
+          ...(event.rejected ? { rejected: true } : {}),
+          done: false,
+        },
       ];
     case "agent-auth-ok": {
       const idx = items.findLastIndex((i) => i.kind === "auth" && !i.done);

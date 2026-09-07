@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
+import { AgentAccounts } from "./agent/accounts.ts";
+import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { makePlanner } from "./agent/tasks.ts";
@@ -41,8 +43,23 @@ const hub = new Hub();
 const bridge = new BridgeScript(BRIDGE_JS);
 const agents = loadAgentRegistry(paths.home, paths.agentsDir);
 agents.onChange = () => hub.emit("agentsChanged");
+// a sign-out spawns the adapter on its own, with no session and no worktree: the daemon's home is
+// only where the process runs, never written to
+const accounts = new AgentAccounts({
+  require: (id) => agents.require(id),
+  connect: (app, spec) => spawnAcp(app, agents.launch(spec), paths.home, `auth:${spec.id}`),
+});
+accounts.onChange = () => hub.emit("agentsChanged");
 const attachments = new AttachmentStore(paths.attachmentsDir);
-const runtime = new RuntimeRegistry({ hub, state, paths, agents, attachments, bridgeScript: () => bridge.get() });
+const runtime = new RuntimeRegistry({
+  hub,
+  state,
+  paths,
+  agents,
+  accounts,
+  attachments,
+  bridgeScript: () => bridge.get(),
+});
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
 const files = new FileService(state, runtime);
 const repos = new RepoRegistry({ state, hub, runtime, worktrees });
@@ -63,6 +80,7 @@ const { branded, stop: stopServer } = startServer({
     runtime,
     themes,
     agents,
+    accounts,
     attachments,
     planTasks: makePlanner(agents, state),
   },

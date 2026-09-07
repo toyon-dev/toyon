@@ -3,6 +3,7 @@
 // pair, which four call sites each had to consult.
 
 import type { ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { AgentAccounts } from "../agent/accounts.ts";
 import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
 import type { AgentAdapter } from "../agent/adapter.ts";
@@ -36,6 +37,8 @@ export interface RuntimeDeps {
   state: StateStore;
   paths: Paths;
   agents: AgentRegistry;
+  /** told what each agent session learns about its agent's credentials; absent in tests */
+  accounts?: AgentAccounts;
   /** shared with the http layer that serves the images back; built from paths when absent */
   attachments?: AttachmentStore;
   bridgeScript: () => string;
@@ -113,6 +116,7 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
     setSessionId: (id) => d.state.setSession(wt.id, id),
     onEvent: (event, seq) => d.hub.emit("agent", wt.id, seq, event),
     onStatus: (status) => d.hub.emit("agentStatus", wt.id, status),
+    onAuth: (agentId, o) => d.accounts?.observe(agentId, o),
   });
   agent.onQueueChange = () => d.hub.emit("queue", wt.id, agent.queueItems);
   return agent;

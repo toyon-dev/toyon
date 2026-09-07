@@ -48,7 +48,8 @@ function toolHint(item: Extract<ChatItem, { kind: "tool" }>): string {
 /** the agent asked for credentials: one button per login method it offered. A terminal method runs
  * in the worktree's terminal pane (the daemon types the command once the pane is open); an agent
  * method runs inside the adapter (browser, or the key pasted here). The refused message is sent
- * again by the daemon after a successful login; "send again" covers the terminal path. */
+ * again by the daemon after a successful login; "send again" covers the terminal path. `rejected`
+ * means the agent had a credential and the provider refused it: the error above says what it said. */
 function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
   const sock = useSock();
   const dispatch = useDispatch();
@@ -64,7 +65,11 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
   return (
     <div className={`auth-card ${item.done ? "done" : ""}`}>
       <div className="auth-title">
-        {item.done ? `${item.agentName} is logged in` : `${item.agentName} is not logged in`}
+        {item.done
+          ? `${item.agentName} is logged in`
+          : item.rejected
+            ? `${item.agentName}'s credentials were refused`
+            : `${item.agentName} is not logged in`}
       </div>
       {!item.done && (
         <div className="auth-methods">

@@ -128,10 +128,12 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   };
   s.hub.on("themesChanged", themesChanged);
   themesChanged();
+  // the registry knows what is installed, accounts knows who each one is logged in as
+  const agentInfos = () => s.accounts.describe(s.agents.infos());
   const agentsMsg = () =>
     ({
       t: "agents",
-      agents: s.agents.infos(),
+      agents: agentInfos(),
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
@@ -162,7 +164,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           worktrees: await s.worktrees.statuses(),
           themes: s.themes.themes,
           themePrefs: s.themes.prefs,
-          agents: s.agents.infos(),
+          agents: agentInfos(),
           defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
         });
       },

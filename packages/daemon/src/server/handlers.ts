@@ -4,6 +4,7 @@
 
 import type { ClientMsg, ServerMsg } from "@toyon/shared";
 import { pickTheme } from "@toyon/shared";
+import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { UserError } from "../core/errors.ts";
@@ -26,6 +27,8 @@ export interface Services {
   runtime: RuntimeRegistry;
   themes: ThemeStore;
   agents: AgentRegistry;
+  /** per-agent login state, and the one write on it (sign out) */
+  accounts: AgentAccounts;
   /** images attached to chat messages; the http layer serves them back to the shell */
   attachments: AttachmentStore;
   /** request → 1–5 independent tasks (the default agent by default; tests inject a stub) */
@@ -301,6 +304,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   "agent-retry"(msg, _ctx, s) {
     s.state.requireWorktree(msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.retry();
+  },
+
+  async "agent-logout"(msg, _ctx, s) {
+    await s.accounts.logout(msg.agent);
+    s.hub.emit("agentsChanged");
   },
 
   "set-default-agent"(msg, _ctx, s) {

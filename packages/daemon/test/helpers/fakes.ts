@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, AgentStatus, ImageInput, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
+import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
 import type { AgentAdapter } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
@@ -145,6 +146,19 @@ export function fakeAgents(): AgentRegistry {
     [spec("claude"), spec("codex", { mode: "agent" })],
     mkdtempSync(join(tmpdir(), "toyon-agents-")),
   );
+}
+
+/** Nothing to connect to by default: a test that reads the cache needs no adapter, and one that
+ * signs an agent out passes an in-process connect of its own. */
+export function fakeAccounts(agents: AgentRegistry, connect?: AgentAccountsDeps["connect"]): AgentAccounts {
+  return new AgentAccounts({
+    require: (id) => agents.require(id),
+    connect:
+      connect ??
+      (() => {
+        throw new Error("fakeAccounts: no adapter to connect to");
+      }),
+  });
 }
 
 /** RuntimeDeps factories that build the fakes above and remember them by worktree id */

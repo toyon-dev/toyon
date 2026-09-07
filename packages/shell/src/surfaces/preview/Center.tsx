@@ -194,13 +194,16 @@ export function Center() {
               ref={(el) => {
                 if (el) {
                   frameRefs.current.set(w.worktree.id, el);
-                  originRefs.current.set(w.worktree.id, new URL(previewUrl(w.worktree.proxyPort)).origin);
+                  originRefs.current.set(
+                    w.worktree.id,
+                    new URL(previewUrl(w.worktree.id, w.worktree.proxyPort)).origin,
+                  );
                 } else {
                   frameRefs.current.delete(w.worktree.id);
                   originRefs.current.delete(w.worktree.id);
                 }
               }}
-              src={previewUrl(w.worktree.proxyPort)}
+              src={previewUrl(w.worktree.id, w.worktree.proxyPort)}
               title={w.worktree.title}
               style={{ display: w.worktree.id === activeId && !setupRepo ? "block" : "none" }}
             />

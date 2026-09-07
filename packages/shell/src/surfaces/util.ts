@@ -2,11 +2,23 @@ import { type ChordId, chordLabel, type ProcState, type WorktreeInfo, type Workt
 
 /** Preview iframes hit the worktree's proxy port. Locally that is always loopback (the daemon
  * binds 127.0.0.1); in cloud mode the same port is a public TLS port on the host that served this
- * page, so follow the page's origin. */
-export function previewUrl(proxyPort: number): string {
+ * page, so follow the page's origin.
+ *
+ * The host matters as much as the port. "Same site" is scheme + registrable domain and ignores
+ * the port, so a preview served from `<id>.toyon.localhost` lands on the shell's own site and its
+ * cookies stop counting as third-party. That is what makes cookie login work inside the iframe:
+ * Safari blocks third-party cookies unconditionally, and Chrome does whenever the setting is on.
+ * The per-worktree label earns its keep too, because cookies ignore the port: one shared host
+ * would mean one shared jar, and two worktrees running the same app would stomp each other's
+ * session.
+ *
+ * Only a shell already served from a *.localhost name can do this. From bare `localhost`,
+ * `<id>.localhost` is its own registrable domain and would be cross-site anyway, so stay on
+ * loopback there rather than pretend. */
+export function previewUrl(worktreeId: string, proxyPort: number): string {
   const h = location.hostname;
-  const local = h === "127.0.0.1" || h === "localhost" || h.endsWith(".localhost");
-  if (local) return `http://127.0.0.1:${proxyPort}/`;
+  if (h.endsWith(".localhost")) return `http://w${worktreeId}.${h}:${proxyPort}/`;
+  if (h === "127.0.0.1" || h === "localhost") return `http://127.0.0.1:${proxyPort}/`;
   return `${location.protocol}//${h}:${proxyPort}/`;
 }
 

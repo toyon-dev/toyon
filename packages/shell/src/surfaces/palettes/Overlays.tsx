@@ -1,5 +1,6 @@
 import { useActiveId, useOverlay } from "../../state/selectors.ts";
 import { PromptOverlay } from "../prompt/PromptOverlay.tsx";
+import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
@@ -18,6 +19,7 @@ export function Overlays() {
       {overlay?.kind === "keys" && <KeysHelp />}
       {overlay?.kind === "theme" && <ThemePicker slot={overlay.slot} />}
       {overlay?.kind === "appearance" && <AppearancePicker />}
+      {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "commands" && <CommandPalette />}
       {overlay?.kind === "prompt" && <PromptOverlay />}
     </>

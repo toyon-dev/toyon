@@ -9,16 +9,19 @@ export function PromptOverlay() {
   const repo = useStore((s) => s.repos[0] ?? null);
   const clientId = useStore((s) => s.clientId);
   const rightOpen = useStore((s) => s.rightOpen);
+  const agents = useStore((s) => s.agents);
+  const defaultAgent = useStore((s) => s.defaultAgent);
   const [text, setText] = useState("");
   const [variants, setVariants] = useState(1);
   const [batch, setBatch] = useState(false);
+  const [agent, setAgent] = useState(defaultAgent);
   if (!repo) return null;
 
   const submit = () => {
     const prompt = text.trim();
     if (!prompt) return;
     if (batch) {
-      sock?.send({ t: "batch-worktrees", repoId: repo.id, prompt });
+      sock?.send({ t: "batch-worktrees", repoId: repo.id, prompt, agent });
     } else if (variants > 1) {
       const group = Math.random().toString(36).slice(2, 10);
       for (let i = 0; i < variants; i++) {
@@ -28,10 +31,11 @@ export function PromptOverlay() {
           repoId: repo.id,
           prompt,
           variant: { group, index: i + 1, of: variants },
+          agent,
         });
       }
     } else {
-      sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt });
+      sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt, agent });
     }
     dispatch({ a: "close" });
     // the agent starts talking in the chat panel — make sure it's on screen
@@ -63,6 +67,27 @@ export function PromptOverlay() {
         }
       />
       <div className="variants-row">
+        {agents.length > 1 && (
+          <span className="agent-chips">
+            {agents.map((a) => (
+              <button
+                key={a.id}
+                className={`btn btn-outline variant-chip ${agent === a.id ? "on" : ""}`}
+                disabled={!a.available}
+                data-tip={
+                  !a.available
+                    ? `not installed: ${a.reason ?? ""}`
+                    : a.sandboxed
+                      ? undefined
+                      : "runs without an OS sandbox"
+                }
+                onClick={() => setAgent(a.id)}
+              >
+                {a.name}
+              </button>
+            ))}
+          </span>
+        )}
         <label data-tip="An agent decomposes the request into independent tasks and starts a worktree for each">
           <input type="checkbox" checked={batch} onChange={(e) => setBatch(e.target.checked)} />
           <span>batch</span>

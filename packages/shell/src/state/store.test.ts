@@ -147,6 +147,48 @@ describe("chat folding", () => {
       ["t2", false],
     ]);
   });
+  test("tool-update refines a running tool row in place", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", {
+        type: "tool-start",
+        toolId: "t1",
+        name: "Preparing file…",
+        input: {},
+        kind: "edit",
+        title: "Preparing file…",
+      }),
+      agent("a", {
+        type: "tool-update",
+        toolId: "t1",
+        name: "Write x.ts",
+        title: "Write x.ts",
+        input: { file_path: "x.ts" },
+      }),
+      agent("a", { type: "tool-update", toolId: "nope", name: "ignored" }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      {
+        kind: "tool",
+        id: "t1",
+        name: "Write x.ts",
+        input: { file_path: "x.ts" },
+        done: false,
+        toolKind: "edit",
+        title: "Write x.ts",
+      },
+    ]);
+  });
+
+  test("hello and agents carry the registry and the default", () => {
+    const list = [{ id: "claude", name: "Claude", available: true, sandboxed: true }];
+    let s = run([hello(wt("a"))]);
+    expect(s.agents).toEqual([]);
+    s = reducer(s, server({ t: "agents", agents: list, defaultAgent: "claude" }));
+    expect(s.agents).toEqual(list);
+    expect(s.defaultAgent).toBe("claude");
+  });
+
   test("backfill rebuilds the chat from the transcript", () => {
     const s = run([
       hello(wt("a")),
@@ -187,6 +229,17 @@ describe("preview reload after a turn", () => {
   });
   test("a read-only turn does not", () => {
     expect(run([hello(wt("a")), ...turn("a", false, false)]).reloadReq).toBeNull();
+  });
+  test("an ACP tool kind decides when present: execute edits, read does not, whatever the name", () => {
+    const kinded = (kind: "execute" | "read") =>
+      run([
+        hello(wt("a")),
+        agent("a", { type: "turn-start", ts: 0 }),
+        agent("a", { type: "tool-start", toolId: "t", name: "Edit", input: {}, kind }),
+        agent("a", { type: "turn-end", stopReason: "done", ts: 0 }),
+      ]);
+    expect(kinded("execute").reloadReq?.n).toBe(1);
+    expect(kinded("read").reloadReq).toBeNull();
   });
   test("each qualifying turn bumps the counter", () => {
     expect(run([hello(wt("a")), ...turn("a", true, false), ...turn("a", true, false)]).reloadReq?.n).toBe(2);

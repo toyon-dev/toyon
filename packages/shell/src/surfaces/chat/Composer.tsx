@@ -74,6 +74,8 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         baseWorktreeId: id,
         context,
         pick: pickMeta,
+        // a stacked worktree continues with the same agent as its parent
+        agent: active.worktree.agent,
       });
     } else {
       sock?.send({ t: "chat", worktreeId: id, text: text.trim(), context, pick: pickMeta });

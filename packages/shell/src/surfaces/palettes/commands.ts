@@ -91,6 +91,13 @@ export function buildCommands(
     appearanceLabel[prefs.mode],
     true,
   );
+  add(
+    "agent",
+    "default agent…",
+    () => dispatch({ a: "open", overlay: { kind: "agent" } }),
+    state.agents.find((a) => a.id === state.defaultAgent)?.name ?? state.defaultAgent,
+    true,
+  );
   add("theme-import", "theme: import VS Code theme file…", () =>
     pickThemeFile((name, source) => sock?.send({ t: "import-theme", name, source })),
   );
@@ -157,6 +164,8 @@ export type CommandState = Pick<
   | "worktrees"
   | "activeId"
   | "repos"
+  | "agents"
+  | "defaultAgent"
 >;
 
 export function useCommands(): Command[] {
@@ -172,6 +181,8 @@ export function useCommands(): Command[] {
   const worktrees = useStore((s) => s.worktrees);
   const activeId = useStore((s) => s.activeId);
   const repos = useStore((s) => s.repos);
+  const agents = useStore((s) => s.agents);
+  const defaultAgent = useStore((s) => s.defaultAgent);
   return useMemo(() => {
     const st: CommandState = {
       picking,
@@ -184,6 +195,8 @@ export function useCommands(): Command[] {
       worktrees,
       activeId,
       repos,
+      agents,
+      defaultAgent,
     };
     return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repos[0] ?? null);
   }, [
@@ -197,6 +210,8 @@ export function useCommands(): Command[] {
     worktrees,
     activeId,
     repos,
+    agents,
+    defaultAgent,
     dispatch,
     sock,
   ]);

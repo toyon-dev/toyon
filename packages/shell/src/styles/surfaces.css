@@ -1237,6 +1237,19 @@ body.resizing .rb-center {
   color: var(--orange);
   border-color: var(--orange);
 }
+.agent-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
+.variant-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.cmd-item.dim .cmd-label {
+  color: var(--fg-muted);
+}
 .prompt-box.quick-open {
   padding: 8px;
 }

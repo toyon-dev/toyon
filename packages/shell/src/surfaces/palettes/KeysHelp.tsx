@@ -18,6 +18,8 @@ export function KeysHelp() {
   const prefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
+  const agents = useStore((s) => s.agents);
+  const defaultAgent = useStore((s) => s.defaultAgent);
   const open = (a: Action) => {
     dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
     dispatch(a);
@@ -42,6 +44,12 @@ export function KeysHelp() {
             onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}
           >
             {appearanceLabel[prefs.mode]}
+          </button>
+        </div>
+        <div className="set-row">
+          <span className="keys-d">default agent</span>
+          <button className="btn btn-outline set-v" onClick={() => open({ a: "open", overlay: { kind: "agent" } })}>
+            {agents.find((a) => a.id === defaultAgent)?.name ?? defaultAgent}
           </button>
         </div>
       </div>

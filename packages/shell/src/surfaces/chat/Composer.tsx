@@ -168,7 +168,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             ? "no worktree selected"
             : spawnNew
               ? "describe a change — starts an agent in a new worktree…"
-              : `message agent on ${active.worktree.title}… (paste or drop images)`
+              : `message agent on ${active.worktree.title}…`
         }
         disabled={!active}
       />

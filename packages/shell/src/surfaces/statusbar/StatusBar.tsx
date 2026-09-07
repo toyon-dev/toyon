@@ -18,14 +18,12 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
-  const termOpen = useStore((s) => s.termOpen);
   const installEvt = useInstallPrompt();
   const id = active?.worktree.id ?? null;
   const ready = !!active && active.procs.some((p) => p.status === "running" || p.status === "starting");
   return (
     <div className="status-bar top-bar">
       {zen && <span className="zen-title">{active?.worktree.title ?? "toyon"}</span>}
-      <ProjectPill />
       <button
         className={`btn-icon toggle ${leftOpen ? "on" : ""}`}
         onClick={() => dispatch({ a: "toggle-left" })}
@@ -33,6 +31,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
       >
         <Icon name="branch" />
       </button>
+      <ProjectPill />
       <RouteBar worktreeId={id} ready={ready} left={navCenter} />
       {installEvt && (
         <button
@@ -44,7 +43,8 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
         </button>
       )}
       <span className="grow" />
-      {/* right cluster: settings · chat · terminal · zen (zen last — it hides everything, so it sits at the edge) */}
+      {/* right cluster: settings · chat · zen (zen last — it hides everything, so it sits at the edge).
+          the terminal toggle lives in the composer: one shell per worktree, not app chrome. */}
       <span className="bar-tools">
         <button
           className="btn-icon toggle keys-btn"
@@ -61,13 +61,6 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           <Icon name="chat" />
         </button>
         <button
-          className={`btn-icon toggle ${termOpen ? "on" : ""}`}
-          onClick={() => dispatch({ a: "toggle-terminal" })}
-          {...tip("Terminal", chord("terminal"))}
-        >
-          <Icon name="terminal" />
-        </button>
-        <button
           className="btn-icon toggle"
           {...tip("Full-bleed preview", chord("zen"))}
           onClick={() => dispatch({ a: "toggle-zen" })}
@@ -79,7 +72,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   );
 }
 
-/** top-left, Zed-style: the project the shell is scoped to; opens the switcher. A dot means an
+/** Zed-style, next to the changes toggle: the project the shell is scoped to; opens the switcher. A dot means an
  * agent is working in a project that is not on screen. */
 function ProjectPill() {
   const dispatch = useDispatch();

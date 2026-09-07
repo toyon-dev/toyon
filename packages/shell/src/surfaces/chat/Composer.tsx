@@ -13,7 +13,8 @@ import { dataUrl, nextImageNumber } from "./images.ts";
 import { PickChip } from "./PickChip.tsx";
 import { useImageIntake } from "./useImageIntake.ts";
 
-/** the message box: draft (kept per worktree), picked-element and image attachments, spawn-a-worktree toggle */
+/** the message box: draft (kept per worktree), picked-element and image attachments, spawn-a-worktree
+ * toggle, and the per-worktree tools (terminal, element picker) */
 export function Composer({ active }: { active: WorktreeStatus | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -29,6 +30,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
   const [profile, setProfile] = useNewWorktreeProfile(repo);
   const picking = useStore((s) => s.picking);
+  const termOpen = useStore((s) => s.termOpen);
   const pick = useStore((s) => (s.pick && s.pick.worktreeId === id ? s.pick : null));
 
   // spawn-a-worktree default: on for main (protect the working copy), off on worktrees (continue
@@ -188,14 +190,26 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           </label>
           {spawnNew && <ProfileChip repo={repo} value={profile} onChange={setProfile} />}
         </span>
-        <button
-          className={`btn-icon composer-pick ${picking ? "on" : ""}`}
-          disabled={!active}
-          {...tip("Pick an element on the page to attach", chord("pick"))}
-          onClick={() => id && togglePick(id, picking, dispatch)}
-        >
-          <Icon name="pick" />
-        </button>
+        <span className="spawn-tools">
+          {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
+              actions rather than in the app's top bar */}
+          <button
+            className={`btn-icon ${termOpen ? "on" : ""}`}
+            disabled={!active}
+            {...tip("Terminal", chord("terminal"))}
+            onClick={() => dispatch({ a: "toggle-terminal" })}
+          >
+            <Icon name="terminal" />
+          </button>
+          <button
+            className={`btn-icon composer-pick ${picking ? "on" : ""}`}
+            disabled={!active}
+            {...tip("Pick an element on the page to attach", chord("pick"))}
+            onClick={() => id && togglePick(id, picking, dispatch)}
+          >
+            <Icon name="pick" />
+          </button>
+        </span>
       </div>
     </div>
   );

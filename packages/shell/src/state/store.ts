@@ -9,6 +9,7 @@ import type {
   GitFileStatus,
   ImageInput,
   ImageRef,
+  LogLine,
   PathEntry,
   PickedElement,
   PickMeta,
@@ -21,7 +22,14 @@ import type {
   ToolKind,
   WorktreeStatus,
 } from "@toyon/shared";
-import { builtinThemes, defaultThemePrefs, gruvboxDarkSoft, isEditTool, resolveTheme } from "@toyon/shared";
+import {
+  builtinThemes,
+  defaultThemePrefs,
+  gruvboxDarkSoft,
+  isEditTool,
+  resolveTheme,
+  SHELL_STREAM,
+} from "@toyon/shared";
 
 export type ChatItem =
   | { kind: "user"; text: string; pick?: PickMeta; images?: ImageRef[] }
@@ -61,7 +69,7 @@ export interface GitInfo {
 /** everything the shell tracks for one worktree; dropped when the worktree disappears */
 export interface WorktreeLocal {
   chat: ChatItem[];
-  log: string[];
+  log: LogLine[];
   git?: GitInfo;
   /** quick-open listing (requested on ⌘P) */
   files?: string[];
@@ -80,6 +88,10 @@ export interface WorktreeLocal {
   /** images pasted or dropped on the composer, not yet sent; `key` is local (the daemon numbers
    * them on send) */
   images: PendingImage[];
+  /** which stream the terminal pane is showing for this worktree: its shell or one of its procs.
+   * Per worktree so switching back lands on the tab you left, and in the store so the rail can
+   * open a crashed proc's tab. */
+  termStream: string;
 }
 
 export interface PendingImage extends ImageInput {
@@ -97,6 +109,7 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   search: null,
   draft: "",
   images: [],
+  termStream: SHELL_STREAM,
 }) as WorktreeLocal;
 
 /** the modal overlays are mutually exclusive: exactly one (or none) is open */
@@ -296,6 +309,8 @@ export type Action =
   | { a: "toggle-right" }
   | { a: "toggle-zen" }
   | { a: "toggle-terminal" }
+  /** show this worktree's stream in the terminal pane, opening the pane if it was hidden */
+  | { a: "term-stream"; id: string; stream: string }
   | { a: "preview-theme"; theme: Theme | null }
   | { a: "system-dark"; v: boolean }
   | { a: "toast"; toast: NonNullable<State["toast"]> }
@@ -387,6 +402,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "esc or ⌘. to exit" } : s.toast };
     case "toggle-terminal":
       return { ...s, termOpen: !s.termOpen };
+    case "term-stream":
+      return withLocal({ ...s, termOpen: true }, action.id, (l) => ({ ...l, termStream: action.stream }));
     case "preview-theme":
       return { ...s, previewTheme: action.theme };
     case "system-dark":
@@ -478,7 +495,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, worktrees };
     }
     case "log":
-      return withLocal(s, msg.worktreeId, (l) => ({ ...l, log: [...l.log.slice(-400), `[${msg.proc}] ${msg.line}`] }));
+      return withLocal(s, msg.worktreeId, (l) => ({
+        ...l,
+        log: [...l.log.slice(-400), { proc: msg.proc, line: msg.line }],
+      }));
     case "agent": {
       const ev = msg.event;
       const id = msg.worktreeId;

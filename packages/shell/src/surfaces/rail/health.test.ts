@@ -27,7 +27,7 @@ describe("health", () => {
     expect(h.level).toBe("crashed");
     expect(h.restart).toEqual(["api", "db"]);
     expect(h.label).toBe("3 procs crashed");
-    expect(h.tip).toEndWith("· click to restart");
+    expect(h.tip).toEndWith("· click to open its tab");
   });
 
   test("a lone starting proc has no click action", () => {

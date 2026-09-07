@@ -10,10 +10,11 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
-import { git, gitOrThrow, lockfileHash, run } from "../git/exec.ts";
+import { git, gitOrThrow, lockfileHash } from "../git/exec.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { allocateProxyPort } from "../runtime/ports.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
+import { runSetup } from "../runtime/setup.ts";
 import { shortId } from "./naming.ts";
 
 interface SpareEntry {
@@ -109,8 +110,13 @@ export class SparePool {
       if (h !== entry.lockHash) {
         entry.lockHash = h;
         for (const cmd of repo.config.setup ?? []) {
-          const r = await run("sh", ["-c", cmd], wt.path);
-          if (!r.ok) log.warn(wt.id, `spare setup failed: ${cmd}`, r.err);
+          // nobody is watching a spare, so its output goes to the daemon log rather than the hub
+          const tail: string[] = [];
+          const code = await runSetup(cmd, wt.path, (line) => {
+            tail.push(line);
+            if (tail.length > 20) tail.shift();
+          });
+          if (code !== 0) log.warn(wt.id, `spare setup failed (exit ${code}): ${cmd}`, tail.join("\n"));
         }
       }
     })().finally(() => {

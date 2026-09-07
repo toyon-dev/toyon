@@ -144,7 +144,7 @@ export function buildCommands(
     if (wt.agent === "working") add("stop", `stop agent · ${t}`, () => sock?.send({ t: "stop-agent", worktreeId: id }));
     for (const p of wt.procs)
       add(`restart:${p.name}`, `restart ${p.name} (${p.status})`, () =>
-        sock?.send({ t: "restart-proc", worktreeId: id, proc: p.name }),
+        sock?.send({ t: "term-restart", worktreeId: id, stream: p.name }),
       );
     add("reveal", `reveal in Finder · ${t}`, () => sock?.send({ t: "reveal", worktreeId: id }));
     const repo = state.repos.find((r) => r.id === wt.worktree.repoId) ?? null;

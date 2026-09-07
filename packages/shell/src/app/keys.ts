@@ -1,7 +1,7 @@
-import { matchChord, worktreeIndex } from "@toyon/shared";
+import { matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
 import { useSock, useStoreInstance } from "../state/context.tsx";
-import { isSubPicker } from "../state/store.ts";
+import { isSubPicker, localOf } from "../state/store.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
@@ -60,6 +60,18 @@ export function useChords() {
           case "terminal":
             dispatch({ a: "toggle-terminal" });
             break;
+          case "term-tab": {
+            const wt = s.worktrees.find((w) => w.worktree.id === s.activeId);
+            if (!wt) break;
+            const streams = [SHELL_STREAM, ...wt.procs.map((p) => p.name)];
+            const at = streams.indexOf(localOf(s, s.activeId).termStream);
+            dispatch({
+              a: "term-stream",
+              id: wt.worktree.id,
+              stream: streams[(at + 1) % streams.length] ?? SHELL_STREAM,
+            });
+            break;
+          }
         }
       } else if (e.key === "Escape") {
         if (s.overlay) {

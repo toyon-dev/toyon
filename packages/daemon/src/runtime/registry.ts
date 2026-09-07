@@ -2,7 +2,8 @@
 // setup has run, its process group and preview proxy. Replaces the old runtimes + pendingAgents
 // pair, which four call sites each had to consult.
 
-import type { ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { LogLine, ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import { SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
@@ -16,8 +17,8 @@ import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
 import { expandEnv, resolveRun } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
+import { type PtyHandle, type PtyOpts, PtyStream } from "./pty.ts";
 import { WorktreeProcs } from "./supervisor.ts";
-import { type TerminalHandle, type TerminalOpts, WorktreeTerminal } from "./terminal.ts";
 
 export interface Runtime {
   info: WorktreeInfo;
@@ -27,7 +28,7 @@ export interface Runtime {
   proxy: WorktreeProxy | null;
   previewName: string | undefined;
   /** null until a pane first opens it; survives hiding the pane, dies with the worktree */
-  terminal: TerminalHandle | null;
+  shell: PtyHandle | null;
   /** a command line to type into the shell once a pane opens one (agent login) */
   pendingLine: string | null;
 }
@@ -53,10 +54,10 @@ export interface RuntimeDeps {
   ) => WorktreeProxy;
   makeTerminal?: (
     wt: WorktreeInfo,
-    opts: TerminalOpts,
+    opts: PtyOpts,
     onData: (data: string) => void,
     onExit: (exitCode: number) => void,
-  ) => TerminalHandle;
+  ) => PtyHandle;
 }
 
 /** the sibling-URL variables a proc (or a shell) gets for the procs already up: `<NAME>_URL` and
@@ -127,16 +128,18 @@ function defaultProcs(wt: WorktreeInfo, d: RuntimeDeps): WorktreeProcs {
     wt.path,
     (p) => d.hub.emit("proc", wt.id, p),
     (proc, line) => d.hub.emit("log", wt.id, proc, line),
+    (proc, data) => d.hub.emit("termData", wt.id, proc, data),
+    (proc, code) => d.hub.emit("termExit", wt.id, proc, code),
   );
 }
 
 function defaultTerminal(
   _wt: WorktreeInfo,
-  opts: TerminalOpts,
+  opts: PtyOpts,
   onData: (data: string) => void,
   onExit: (exitCode: number) => void,
-): TerminalHandle {
-  return new WorktreeTerminal(opts, onData, onExit);
+): PtyHandle {
+  return new PtyStream(opts, onData, onExit);
 }
 
 function defaultProxy(wt: WorktreeInfo, previewName: string | undefined, procs: WorktreeProcs, d: RuntimeDeps) {
@@ -181,7 +184,7 @@ export class RuntimeRegistry {
       procs: null,
       proxy: null,
       previewName: undefined,
-      terminal: null,
+      shell: null,
       pendingLine: null,
     };
     this.runtimes.set(wt.id, rt);
@@ -241,41 +244,42 @@ export class RuntimeRegistry {
     const rt = this.runtimes.get(id);
     if (!rt) return;
     this.runtimes.delete(id);
-    rt.terminal?.kill();
     rt.proxy?.stop();
-    await Promise.all([rt.agent.close(), rt.procs?.stopAll()]);
+    await Promise.all([rt.agent.close(), rt.procs?.stopAll(), rt.shell?.kill()]);
   }
 
-  /** the worktree's shell, spawned on the first open or after it exited; what a fresh pane needs
-   * to paint. Resizes before snapshotting: a TUI redraws on SIGWINCH and that redraw arrives as
-   * live data after the snapshot, so the pane ends up showing the current screen. */
-  openTerminal(id: string, cols: number, rows: number): { snapshot: string; alive: boolean } {
+  /** one of the worktree's streams: its shell (spawned on the first open or after it exited) or a
+   * proc, which the supervisor already has running. What a fresh tab needs to paint. Resizes
+   * before snapshotting: a TUI redraws on SIGWINCH and that redraw arrives as live data after the
+   * snapshot, so the tab ends up showing the current screen. */
+  openTerminal(id: string, stream: string, cols: number, rows: number): { snapshot: string; alive: boolean } {
+    if (stream !== SHELL_STREAM) return this.openProcStream(id, stream, cols, rows);
     const wt = this.deps.state.requireWorktree(id);
     if (wt.kind === "spare") throw new UserError("no terminal for a spare worktree");
     const rt = this.ensureAgent(wt);
-    let term = rt.terminal;
+    let term = rt.shell;
     if (!term?.alive) {
       // PWD keeps zsh/bash on the logical (title-named) path instead of resolving the link
       const cwd = wt.linkPath ?? wt.path;
-      const opts: TerminalOpts = {
+      const opts: PtyOpts = {
         cwd,
         env: { ...terminalEnv(process.env, wt, procUrlEnv(rt.procs?.states() ?? [], rt.previewName)), PWD: cwd },
         cols,
         rows,
-        shell: process.env.SHELL || "sh",
+        file: process.env.SHELL || "sh",
         args: ["-l"],
       };
       try {
         term = (this.deps.makeTerminal ?? defaultTerminal)(
           wt,
           opts,
-          (data) => this.deps.hub.emit("termData", wt.id, data),
-          (code) => this.deps.hub.emit("termExit", wt.id, code),
+          (data) => this.deps.hub.emit("termData", wt.id, SHELL_STREAM, data),
+          (code) => this.deps.hub.emit("termExit", wt.id, SHELL_STREAM, code),
         );
       } catch (e) {
         throw new UserError(`could not start a shell: ${e instanceof Error ? e.message : String(e)}`);
       }
-      rt.terminal = term;
+      rt.shell = term;
     } else if (term.cols !== cols || term.rows !== rows) {
       term.resize(cols, rows);
     }
@@ -289,34 +293,47 @@ export class RuntimeRegistry {
     return { snapshot: term.snapshot(), alive: term.alive };
   }
 
+  /** a proc's stream: the supervisor owns it, so a tab only attaches to what is already running */
+  private openProcStream(id: string, stream: string, cols: number, rows: number): { snapshot: string; alive: boolean } {
+    const procs = this.runtimes.get(id)?.procs;
+    const pty = procs?.stream(stream);
+    // a tab can open before its proc has spawned (setup still running, or mid-restart): an empty
+    // snapshot is right, and the tab fills in when the proc starts streaming
+    if (!pty) return { snapshot: "", alive: false };
+    if (pty.cols !== cols || pty.rows !== rows) procs?.resize(stream, cols, rows);
+    return { snapshot: pty.snapshot(), alive: pty.alive };
+  }
+
   /** type a command into the worktree's shell: now if a pane has one open, else when one opens */
   terminalLine(id: string, line: string) {
     const rt = this.runtimes.get(id);
     if (!rt) return;
-    if (rt.terminal?.alive) rt.terminal.write(`${line}\r`);
+    if (rt.shell?.alive) rt.shell.write(`${line}\r`);
     else rt.pendingLine = line;
   }
 
-  terminalInput(id: string, data: string) {
-    const term = this.runtimes.get(id)?.terminal;
+  terminalInput(id: string, stream: string, data: string) {
+    const rt = this.runtimes.get(id);
+    if (stream !== SHELL_STREAM) return rt?.procs?.write(stream, data);
     // a keystroke that lands after the shell exited (or before a pane opened one) is not an error
-    if (!term?.alive) return log.debug("terminal", `input for ${id} with no live shell dropped`);
-    term.write(data);
+    if (!rt?.shell?.alive) return log.debug("terminal", `input for ${id} with no live shell dropped`);
+    rt.shell.write(data);
   }
 
-  terminalResize(id: string, cols: number, rows: number) {
-    this.runtimes.get(id)?.terminal?.resize(cols, rows);
+  terminalResize(id: string, stream: string, cols: number, rows: number) {
+    const rt = this.runtimes.get(id);
+    if (stream === SHELL_STREAM) rt?.shell?.resize(cols, rows);
+    else rt?.procs?.resize(stream, cols, rows);
   }
 
-  killTerminal(id: string) {
-    this.runtimes.get(id)?.terminal?.kill();
+  /** restart a stream: a proc goes back under supervision, the shell dies and the tab reopens it */
+  async restartStream(id: string, stream: string): Promise<void> {
+    const rt = this.runtimes.get(id);
+    if (stream === SHELL_STREAM) await rt?.shell?.kill();
+    else rt?.procs?.restart(stream);
   }
 
-  restartProc(id: string, name: string) {
-    this.runtimes.get(id)?.procs?.restart(name);
-  }
-
-  recentLogs(id: string): string[] {
+  recentLogs(id: string): LogLine[] {
     return this.runtimes.get(id)?.procs?.recentLogs() ?? [];
   }
 

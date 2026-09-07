@@ -1,7 +1,7 @@
 // WebSocket side of the daemon: socket registry, hello, inbound validation + dispatch, and the
 // table of what gets pushed when a hub event fires. Phase 6 scopes the pushes per subscription.
 
-import { PROTOCOL_VERSION, parseClientMsg, type ServerMsg, ThemeImportError } from "@toyon/shared";
+import { PROTOCOL_VERSION, parseClientMsg, type ServerMsg, streamKey, ThemeImportError } from "@toyon/shared";
 import type { Server, ServerWebSocket } from "bun";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
@@ -11,6 +11,16 @@ import { setWaitingColors } from "../runtime/proxy.ts";
 import { DEFAULT_AGENT_ID } from "../runtime/registry.ts";
 import { dispatch, type Services } from "./handlers.ts";
 import { createFetch, type WsData } from "./http.ts";
+
+/** how far behind a socket may fall before its terminal output is dropped instead of queued */
+const DROP_ABOVE_BYTES = 4 * 1024 * 1024;
+const DROPPED_NOTICE = "\r\n[toyon] output dropped: this pane was too far behind\r\n";
+
+interface TermChunk {
+  worktreeId: string;
+  stream: string;
+  data: string;
+}
 
 export interface ServerOpts {
   port: number;
@@ -50,8 +60,59 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   };
   /** only sockets subscribed to the worktree: its agent stream, logs, queue, git status */
   const sendTo = (worktreeId: string, msg: ServerMsg) => sendWhere(worktreeId, msg, (d) => d.subs);
-  /** only sockets with the worktree's terminal pane open: a background shell streams nowhere */
-  const sendTerm = (worktreeId: string, msg: ServerMsg) => sendWhere(worktreeId, msg, (d) => d.terms);
+  /** only sockets with that exact tab open: a stream nobody is looking at streams nowhere */
+  const sendTerm = (worktreeId: string, stream: string, msg: ServerMsg) => {
+    const key = streamKey(worktreeId, stream);
+    let json: string | null = null;
+    for (const ws of sockets) {
+      if (!ws.data.terms.has(key)) continue;
+      json ??= JSON.stringify(msg);
+      raw(ws, json);
+    }
+  };
+
+  // term-data is the only high-rate frame, and Hub.emit is synchronous, so a pty read loop runs
+  // the whole fan-out inline. Coalesce a tick's worth per socket per stream into one frame, and
+  // when a socket is already behind, drop what piled up rather than queueing it forever.
+  const pending = new Map<ServerWebSocket<WsData>, Map<string, TermChunk>>();
+  let flushQueued = false;
+  const queueTerm = (worktreeId: string, stream: string, data: string) => {
+    const key = streamKey(worktreeId, stream);
+    for (const ws of sockets) {
+      if (!ws.data.terms.has(key)) continue;
+      let perSocket = pending.get(ws);
+      if (!perSocket) {
+        perSocket = new Map();
+        pending.set(ws, perSocket);
+      }
+      const chunk = perSocket.get(key);
+      if (chunk) chunk.data += data;
+      else perSocket.set(key, { worktreeId, stream, data });
+    }
+    if (pending.size > 0 && !flushQueued) {
+      flushQueued = true;
+      setImmediate(flushTerm);
+    }
+  };
+  const flushTerm = () => {
+    flushQueued = false;
+    for (const [ws, perSocket] of pending) {
+      const behind = ws.getBufferedAmount() > DROP_ABOVE_BYTES;
+      for (const [key, chunk] of perSocket) {
+        if (behind) {
+          // one notice per stream until it catches up, else the notice becomes the flood
+          if (!ws.data.dropped.has(key)) {
+            ws.data.dropped.add(key);
+            send(ws, { t: "term-data", worktreeId: chunk.worktreeId, stream: chunk.stream, data: DROPPED_NOTICE });
+          }
+          continue;
+        }
+        ws.data.dropped.delete(key);
+        send(ws, { t: "term-data", worktreeId: chunk.worktreeId, stream: chunk.stream, data: chunk.data });
+      }
+    }
+    pending.clear();
+  };
   const metrics = () => ({
     lag,
     sockets: [...sockets].map(
@@ -89,8 +150,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("proc", (worktreeId, proc) => broadcast({ t: "proc", worktreeId, proc }));
   s.hub.on("log", (worktreeId, proc, line) => sendTo(worktreeId, { t: "log", worktreeId, proc, line }));
   s.hub.on("queue", (worktreeId, items) => sendTo(worktreeId, { t: "queue", worktreeId, items }));
-  s.hub.on("termData", (worktreeId, data) => sendTerm(worktreeId, { t: "term-data", worktreeId, data }));
-  s.hub.on("termExit", (worktreeId, exitCode) => sendTerm(worktreeId, { t: "term-exit", worktreeId, exitCode }));
+  s.hub.on("termData", (worktreeId, stream, data) => queueTerm(worktreeId, stream, data));
+  s.hub.on("termExit", (worktreeId, stream, exitCode) =>
+    sendTerm(worktreeId, stream, { t: "term-exit", worktreeId, stream, exitCode }),
+  );
   // keep the changes list live while the agent edits — coalesced: a turn with ten tool calls in a
   // second runs git status once, not ten times
   const gitStatusTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -195,11 +258,13 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           unsubscribe: (id: string) => {
             ws.data.subs.delete(id);
           },
-          watchTerminal: (id: string) => {
-            ws.data.terms.add(id);
+          watchTerminal: (id: string, stream: string) => {
+            ws.data.terms.add(streamKey(id, stream));
           },
-          unwatchTerminal: (id: string) => {
-            ws.data.terms.delete(id);
+          unwatchTerminal: (id: string, stream: string) => {
+            const key = streamKey(id, stream);
+            ws.data.terms.delete(key);
+            ws.data.dropped.delete(key);
           },
         };
         try {

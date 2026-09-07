@@ -90,6 +90,23 @@ export interface ProcState {
   host?: string;
 }
 
+/** the worktree's own shell, as a stream name. Every other stream is a proc, named by its key in
+ * toyon.json, which is why that key cannot be this. */
+export const SHELL_STREAM = "shell";
+
+/** how both sides key a stream in their own maps: the ws watch sets, the shell's terminal bus */
+export function streamKey(worktreeId: string, stream: string): string {
+  return `${worktreeId}/${stream}`;
+}
+
+/** one line of a worktree's output, derived from a proc's pty (or emitted by setup and config).
+ * The proc name travels beside the text rather than prefixed into it, so only the surface that
+ * shows it decides how it reads. */
+export interface LogLine {
+  proc: string;
+  line: string;
+}
+
 export type AgentStatus = "idle" | "working" | "error";
 
 /** Who an agent says it is paying as. Both builtin adapters push this over ACP's `_auth/status_update`

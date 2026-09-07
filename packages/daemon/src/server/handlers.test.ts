@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { clientMsgSchema, type ServerMsg } from "@toyon/shared";
+import { clientMsgSchema, type ServerMsg, SHELL_STREAM, streamKey } from "@toyon/shared";
 import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
@@ -74,8 +74,8 @@ function make() {
       return true;
     },
     unsubscribe: (id) => subs.delete(id),
-    watchTerminal: (id) => terms.add(id),
-    unwatchTerminal: (id) => terms.delete(id),
+    watchTerminal: (id, stream) => terms.add(streamKey(id, stream)),
+    unwatchTerminal: (id, stream) => terms.delete(streamKey(id, stream)),
   };
   return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, ...f };
 }
@@ -156,7 +156,7 @@ describe("handlers", () => {
     expect(agent.auths).toEqual([["api-key", "sk-1"]]);
     // no pane yet: the line waits for term-open, then lands after the prompt has painted
     await dispatch({ t: "agent-auth", worktreeId: main.id, methodId: "terminal" }, ctx, services);
-    await dispatch({ t: "term-open", worktreeId: main.id, cols: 80, rows: 24 }, ctx, services);
+    await dispatch({ t: "term-open", worktreeId: main.id, stream: SHELL_STREAM, cols: 80, rows: 24 }, ctx, services);
     expect(replies.at(-1)?.t).toBe("term-snapshot");
     await Bun.sleep(350);
     expect(terminals.get(main.id)?.[0]?.writes).toEqual(["login --now\r"]);
@@ -202,26 +202,32 @@ describe("handlers", () => {
     const { services, ctx, replies, terms, repo, terminals } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await dispatch({ t: "term-open", worktreeId: main.id, cols: 80, rows: 24 }, ctx, services);
-    expect(replies).toEqual([{ t: "term-snapshot", worktreeId: main.id, data: "", alive: true }]);
-    expect([...terms]).toEqual([main.id]);
+    await dispatch({ t: "term-open", worktreeId: main.id, stream: SHELL_STREAM, cols: 80, rows: 24 }, ctx, services);
+    expect(replies).toEqual([{ t: "term-snapshot", worktreeId: main.id, stream: SHELL_STREAM, data: "", alive: true }]);
+    expect([...terms]).toEqual([streamKey(main.id, SHELL_STREAM)]);
     const term = terminals.get(main.id)![0]!;
     term.emit("$ ");
-    await dispatch({ t: "term-input", worktreeId: main.id, data: "ls\r" }, ctx, services);
-    await dispatch({ t: "term-resize", worktreeId: main.id, cols: 100, rows: 30 }, ctx, services);
+    await dispatch({ t: "term-input", worktreeId: main.id, stream: SHELL_STREAM, data: "ls\r" }, ctx, services);
+    await dispatch({ t: "term-resize", worktreeId: main.id, stream: SHELL_STREAM, cols: 100, rows: 30 }, ctx, services);
     expect(term.writes).toEqual(["ls\r"]);
     expect(term.resizes).toEqual([[100, 30]]);
     // reopening replays what the shell printed; the pane resets and writes it back
-    await dispatch({ t: "term-open", worktreeId: main.id, cols: 100, rows: 30 }, ctx, services);
-    expect(replies.at(-1)).toEqual({ t: "term-snapshot", worktreeId: main.id, data: "$ ", alive: true });
+    await dispatch({ t: "term-open", worktreeId: main.id, stream: SHELL_STREAM, cols: 100, rows: 30 }, ctx, services);
+    expect(replies.at(-1)).toEqual({
+      t: "term-snapshot",
+      worktreeId: main.id,
+      stream: SHELL_STREAM,
+      data: "$ ",
+      alive: true,
+    });
     term.exit(2);
-    await dispatch({ t: "term-input", worktreeId: main.id, data: "x" }, ctx, services);
+    await dispatch({ t: "term-input", worktreeId: main.id, stream: SHELL_STREAM, data: "x" }, ctx, services);
     expect(term.writes).toEqual(["ls\r"]);
-    await dispatch({ t: "term-close", worktreeId: main.id }, ctx, services);
+    await dispatch({ t: "term-close", worktreeId: main.id, stream: SHELL_STREAM }, ctx, services);
     expect(terms.size).toBe(0);
-    await dispatch({ t: "term-kill", worktreeId: main.id }, ctx, services);
+    await dispatch({ t: "term-restart", worktreeId: main.id, stream: SHELL_STREAM }, ctx, services);
     await expect(
-      dispatch({ t: "term-open", worktreeId: "nope", cols: 1, rows: 1 }, ctx, services),
+      dispatch({ t: "term-open", worktreeId: "nope", stream: SHELL_STREAM, cols: 1, rows: 1 }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
   });
 

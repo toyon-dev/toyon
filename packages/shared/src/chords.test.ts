@@ -43,7 +43,8 @@ describe("matchChord", () => {
     expect(matchChord(ev("`", { meta: false, ctrl: true }))).toEqual({ id: "terminal" });
     expect(matchChord(ev("`"))).toEqual({ id: "terminal" });
     expect(matchChord(ev("`", { ctrl: true }))).toBeNull();
-    expect(matchChord(ev("`", { meta: false, ctrl: true, shift: true }))).toBeNull();
+    // ⇧ is its own row (cycle the terminal pane's tabs), not a miss on the toggle
+    expect(matchChord(ev("`", { meta: false, ctrl: true, shift: true }))).toEqual({ id: "term-tab" });
     expect(matchChord(ev("1", { meta: false, ctrl: true }))).toBeNull();
   });
   test("keys the table doesn't own pass through", () => {

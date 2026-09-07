@@ -30,7 +30,7 @@ export function health(connected: boolean, procs: ProcState[]): Health {
   return {
     level,
     label,
-    tip: restart.length ? `${what} · click to restart` : what,
+    tip: restart.length ? `${what} · click to open its tab` : what,
     restart,
   };
 }

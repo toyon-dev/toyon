@@ -8,6 +8,7 @@ import { z } from "zod";
 import type {
   AgentInfo,
   GitFileStatus,
+  LogLine,
   PathEntry,
   RepoInfo,
   Theme,
@@ -16,10 +17,11 @@ import type {
   WorktreeInfo,
   WorktreeStatus,
 } from "../model.ts";
+import { SHELL_STREAM } from "../model.ts";
 import type { AgentEvent, PickMeta } from "./events.ts";
 
 /** bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -47,7 +49,7 @@ export type ServerMsg =
   | { t: "log"; worktreeId: string; proc: string; line: string }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
   /** on subscribe: the transcript so far and the dev servers' recent output */
-  | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }>; log?: string[] }
+  | { t: "backfill"; worktreeId: string; events: Array<{ seq: number; event: AgentEvent }>; log?: LogLine[] }
   | {
       t: "git-status";
       worktreeId: string;
@@ -71,11 +73,11 @@ export type ServerMsg =
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
   | { t: "queue"; worktreeId: string; items: string[] }
   | { t: "changed-ranges"; worktreeId: string; path: string; ranges: Array<[number, number]>; lineOffset: number }
-  /** raw shell output; only to sockets that opened that worktree's terminal pane (term-open) */
-  | { t: "term-data"; worktreeId: string; data: string }
+  /** raw stream output; only to sockets that opened that exact tab (term-open) */
+  | { t: "term-data"; worktreeId: string; stream: string; data: string }
   /** reply to term-open: the recent output to replay into a reset terminal */
-  | { t: "term-snapshot"; worktreeId: string; data: string; alive: boolean }
-  | { t: "term-exit"; worktreeId: string; exitCode: number }
+  | { t: "term-snapshot"; worktreeId: string; stream: string; data: string; alive: boolean }
+  | { t: "term-exit"; worktreeId: string; stream: string; exitCode: number }
   | { t: "error"; message: string };
 
 /** the terminal stream: bytes for xterm, which the shell routes around its store */
@@ -96,6 +98,8 @@ const shellCommand = z.string().max(2_000);
 const termSize = z.number().int().min(1).max(500);
 /** keystrokes, or a paste the shell chunks */
 const termInput = z.string().max(65_536);
+/** which of a worktree's streams: SHELL_STREAM, or a proc named in toyon.json */
+const streamName = z.string().min(1).max(100);
 
 /** image formats the models accept; the shell re-encodes anything else (and anything too large) */
 export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
@@ -126,6 +130,8 @@ export const pickMetaSchema = z.object({
 });
 
 const procName = z.string().max(100);
+/** a proc is a tab in the terminal pane, so it cannot take the shell's name out from under it */
+const declaredProcName = procName.refine((n) => n !== SHELL_STREAM, `"${SHELL_STREAM}" is reserved for the shell tab`);
 const runProfileSchema = z.object({
   procs: z.array(procName).max(50),
   env: z.record(z.string().max(100), z.string().max(2_000)).optional(),
@@ -134,7 +140,7 @@ const runProfileSchema = z.object({
 
 export const toyonConfigSchema = z
   .object({
-    procs: z.record(procName, shellCommand),
+    procs: z.record(declaredProcName, shellCommand),
     setup: z.array(shellCommand).max(50).optional(),
     preview: procName.optional(),
     exclusive: z.boolean().optional(),
@@ -203,7 +209,6 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
-  z.object({ t: z.literal("restart-proc"), worktreeId: id, proc: z.string() }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
   z.object({ t: z.literal("file-diff"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("ship"), worktreeId: id }),
@@ -246,14 +251,15 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** raw VS Code theme JSON/JSONC text picked in the browser */
   z.object({ t: z.literal("import-theme"), name: z.string().max(300), source: z.string().max(2_000_000) }),
   z.object({ t: z.literal("rescan-themes") }),
-  /** open (or reopen) the worktree's shell at this size and receive its stream; replies term-snapshot */
-  z.object({ t: z.literal("term-open"), worktreeId: id, cols: termSize, rows: termSize }),
-  z.object({ t: z.literal("term-input"), worktreeId: id, data: termInput }),
-  z.object({ t: z.literal("term-resize"), worktreeId: id, cols: termSize, rows: termSize }),
-  /** kill the shell; the pane's next term-open starts a fresh one */
-  z.object({ t: z.literal("term-kill"), worktreeId: id }),
-  /** the pane went away: stop streaming to this socket (the shell keeps running) */
-  z.object({ t: z.literal("term-close"), worktreeId: id }),
+  /** open (or reopen) one of the worktree's streams at this size and receive it; replies
+   * term-snapshot. `stream` is SHELL_STREAM or a proc's name. */
+  z.object({ t: z.literal("term-open"), worktreeId: id, stream: streamName, cols: termSize, rows: termSize }),
+  z.object({ t: z.literal("term-input"), worktreeId: id, stream: streamName, data: termInput }),
+  z.object({ t: z.literal("term-resize"), worktreeId: id, stream: streamName, cols: termSize, rows: termSize }),
+  /** restart the stream: a proc goes back under supervision, the shell comes back empty */
+  z.object({ t: z.literal("term-restart"), worktreeId: id, stream: streamName }),
+  /** the tab went away: stop streaming to this socket (the stream keeps running) */
+  z.object({ t: z.literal("term-close"), worktreeId: id, stream: streamName }),
 ]);
 
 export type ClientMsg = z.infer<typeof clientMsgSchema>;

@@ -113,7 +113,7 @@ describe("per-worktree records", () => {
       server({ t: "log", worktreeId: "a", proc: "web", line: "ready" }),
       server({ t: "log", worktreeId: "main", proc: "web", line: "ready" }),
     ]);
-    expect(s.local.a?.log).toEqual(["[web] ready"]);
+    expect(s.local.a?.log).toEqual([{ proc: "web", line: "ready" }]);
     const after = reducer(s, worktrees(wt("main", "main")));
     expect(after.local.a).toBeUndefined();
     expect(after.local.main).toBe(s.local.main);
@@ -396,6 +396,23 @@ describe("git status", () => {
   });
 });
 
+describe("terminal tabs", () => {
+  test("a worktree starts on its shell and remembers the tab it was left on", () => {
+    const s = run([hello(wt("a"), wt("b"))]);
+    expect(localOf(s, "a").termStream).toBe("shell");
+    const onWeb = reducer(s, { a: "term-stream", id: "a", stream: "web" });
+    expect(localOf(onWeb, "a").termStream).toBe("web");
+    // per worktree: picking a tab in one leaves the other where it was
+    expect(localOf(onWeb, "b").termStream).toBe("shell");
+  });
+
+  test("opening a stream opens the pane, which is how the rail shows a crashed proc", () => {
+    const s = run([hello(wt("a"))]);
+    expect(s.termOpen).toBe(false);
+    expect(reducer(s, { a: "term-stream", id: "a", stream: "api" }).termOpen).toBe(true);
+  });
+});
+
 describe("streams and notices", () => {
   test("proc logs keep the last 401 lines per worktree", () => {
     const lines = Array.from({ length: 450 }, (_, i) =>
@@ -403,8 +420,8 @@ describe("streams and notices", () => {
     );
     const s = run([hello(wt("a")), ...lines]);
     expect(localOf(s, "a").log.length).toBe(401);
-    expect(localOf(s, "a").log[0]).toBe("[dev] l49");
-    expect(localOf(s, "a").log.at(-1)).toBe("[dev] l449");
+    expect(localOf(s, "a").log[0]).toEqual({ proc: "dev", line: "l49" });
+    expect(localOf(s, "a").log.at(-1)).toEqual({ proc: "dev", line: "l449" });
   });
   test("an error frame is a failure toast", () => {
     const s = run([server({ t: "error", message: "nope" })]);

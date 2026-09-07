@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
+import { type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
@@ -163,7 +163,7 @@ describe("RuntimeRegistry terminals", () => {
   test("openTerminal spawns once, in the worktree, with the sibling URLs", async () => {
     const { registry, terminals } = make();
     await registry.start(wt, repo);
-    const first = registry.openTerminal(wt.id, 80, 24);
+    const first = registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
     expect(first).toEqual({ snapshot: "", alive: true });
     const spawned = terminals.get(wt.id)!;
     expect(spawned.length).toBe(1);
@@ -172,17 +172,17 @@ describe("RuntimeRegistry terminals", () => {
     expect(spawned[0]!.opts.env.TERM).toBe("xterm-256color");
     expect(spawned[0]!.opts.env.TOYON_WORKTREE).toBe(wt.id);
     spawned[0]!.emit("$ ");
-    expect(registry.openTerminal(wt.id, 80, 24)).toEqual({ snapshot: "$ ", alive: true });
+    expect(registry.openTerminal(wt.id, SHELL_STREAM, 80, 24)).toEqual({ snapshot: "$ ", alive: true });
     expect(spawned.length).toBe(1);
   });
 
   test("a terminal opens before the procs are up, and a different size on reopen resizes", () => {
     const { registry, terminals } = make();
-    registry.openTerminal(wt.id, 80, 24);
+    registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
     const t = terminals.get(wt.id)![0]!;
     expect(t.opts.env.API_URL).toBeUndefined();
     expect(t.resizes).toEqual([]);
-    registry.openTerminal(wt.id, 120, 40);
+    registry.openTerminal(wt.id, SHELL_STREAM, 120, 40);
     expect(t.resizes).toEqual([[120, 40]]);
   });
 
@@ -190,47 +190,47 @@ describe("RuntimeRegistry terminals", () => {
     const { registry, terminals, hub } = make();
     const data: string[] = [];
     const exits: number[] = [];
-    hub.on("termData", (id, d) => data.push(`${id}:${d}`));
-    hub.on("termExit", (id, code) => exits.push(code));
-    registry.openTerminal(wt.id, 80, 24);
+    hub.on("termData", (id, stream, d) => data.push(`${id}/${stream}:${d}`));
+    hub.on("termExit", (_id, _stream, code) => exits.push(code));
+    registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
     const t = terminals.get(wt.id)![0]!;
-    registry.terminalInput(wt.id, "ls\n");
-    registry.terminalResize(wt.id, 90, 30);
+    registry.terminalInput(wt.id, SHELL_STREAM, "ls\n");
+    registry.terminalResize(wt.id, SHELL_STREAM, 90, 30);
     t.emit("ls\nfile\n");
     expect(t.writes).toEqual(["ls\n"]);
     expect(t.resizes).toEqual([[90, 30]]);
-    expect(data).toEqual(["w1:ls\nfile\n"]);
+    expect(data).toEqual(["w1/shell:ls\nfile\n"]);
     t.exit(1);
     expect(exits).toEqual([1]);
-    registry.terminalInput(wt.id, "echo\n");
+    registry.terminalInput(wt.id, SHELL_STREAM, "echo\n");
     expect(t.writes).toEqual(["ls\n"]);
-    expect(registry.openTerminal(wt.id, 80, 24)).toEqual({ snapshot: "", alive: true });
+    expect(registry.openTerminal(wt.id, SHELL_STREAM, 80, 24)).toEqual({ snapshot: "", alive: true });
     expect(terminals.get(wt.id)!.length).toBe(2);
   });
 
   test("killTerminal and stop() kill the shell; stopProcs() leaves it running", async () => {
     const { registry, terminals } = make();
     await registry.start(wt, repo);
-    registry.openTerminal(wt.id, 80, 24);
+    registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
     const t = terminals.get(wt.id)![0]!;
     await registry.stopProcs(wt.id);
     expect(t.kills).toBe(0);
     expect(t.alive).toBe(true);
-    registry.killTerminal(wt.id);
+    await registry.restartStream(wt.id, SHELL_STREAM);
     expect(t.kills).toBe(1);
-    registry.openTerminal(wt.id, 80, 24);
+    registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
     const t2 = terminals.get(wt.id)![1]!;
     await registry.stop(wt.id);
     expect(t2.kills).toBe(1);
     expect(t2.alive).toBe(false);
   });
 
-  test("input with no terminal is a no-op; a spare has no terminal", () => {
+  test("input with no terminal is a no-op; a spare has no terminal", async () => {
     const { registry } = make();
-    registry.terminalInput(wt.id, "x");
-    registry.terminalResize(wt.id, 1, 1);
-    registry.killTerminal(wt.id);
-    expect(() => registry.openTerminal(spare.id, 80, 24)).toThrow(UserError);
-    expect(() => registry.openTerminal("nope", 80, 24)).toThrow(UserError);
+    registry.terminalInput(wt.id, SHELL_STREAM, "x");
+    registry.terminalResize(wt.id, SHELL_STREAM, 1, 1);
+    await registry.restartStream(wt.id, SHELL_STREAM);
+    expect(() => registry.openTerminal(spare.id, SHELL_STREAM, 80, 24)).toThrow(UserError);
+    expect(() => registry.openTerminal("nope", SHELL_STREAM, 80, 24)).toThrow(UserError);
   });
 });

@@ -1,7 +1,7 @@
-// Lazy-loaded xterm.js terminal for one worktree (React.lazy, like MonacoDiff: the bundle only
-// downloads when a pane is first opened). Frames come straight off the socket via terminalBus.
+// Lazy-loaded xterm.js terminal for one of a worktree's streams (React.lazy, like MonacoDiff: the
+// bundle only downloads when a pane is first opened). Frames come straight off the socket via terminalBus.
 
-import { hex8, matchChord, type Theme } from "@toyon/shared";
+import { hex8, matchChord, streamKey, type Theme } from "@toyon/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -48,6 +48,7 @@ function monoFont(): string {
 
 export default function XTerm({
   worktreeId,
+  stream,
   theme,
   sock,
   connected,
@@ -55,6 +56,8 @@ export default function XTerm({
   onEscape,
 }: {
   worktreeId: string;
+  /** which of the worktree's streams this tab shows: SHELL_STREAM or a proc name */
+  stream: string;
   theme: Theme;
   sock: DaemonSocket | null;
   connected: boolean;
@@ -111,11 +114,11 @@ export default function XTerm({
     });
     const input = term.onData((d) => {
       for (let i = 0; i < d.length; i += INPUT_CHUNK) {
-        sock.send({ t: "term-input", worktreeId, data: d.slice(i, i + INPUT_CHUNK) });
+        sock.send({ t: "term-input", worktreeId, stream, data: d.slice(i, i + INPUT_CHUNK) });
       }
     });
-    const resized = term.onResize(({ cols, rows }) => sock.send({ t: "term-resize", worktreeId, cols, rows }));
-    const off = terminalBus.on(worktreeId, (m) => {
+    const resized = term.onResize(({ cols, rows }) => sock.send({ t: "term-resize", worktreeId, stream, cols, rows }));
+    const off = terminalBus.on(streamKey(worktreeId, stream), (m) => {
       if (m.t === "term-data") term.write(m.data);
       else if (m.t === "term-snapshot") {
         // the daemon replays raw output into a fresh terminal (a reopen, a reconnect, a respawn)
@@ -135,19 +138,19 @@ export default function XTerm({
       off();
       input.dispose();
       resized.dispose();
-      sock.send({ t: "term-close", worktreeId });
+      sock.send({ t: "term-close", worktreeId, stream });
       term.dispose();
       termRef.current = null;
     };
-  }, [worktreeId, sock]);
+  }, [worktreeId, stream, sock]);
 
   // (re)open on every connection: the first time this mounts, and after a reconnect, when the
   // daemon may have restarted (fresh shell) or only the socket dropped (same shell, replayed)
   useEffect(() => {
     const term = termRef.current;
     if (!connected || !sock || !term) return;
-    sock.send({ t: "term-open", worktreeId, cols: term.cols, rows: term.rows });
-  }, [connected, sock, worktreeId]);
+    sock.send({ t: "term-open", worktreeId, stream, cols: term.cols, rows: term.rows });
+  }, [connected, sock, worktreeId, stream]);
 
   useEffect(() => {
     if (termRef.current) termRef.current.options.theme = toXtermTheme(theme);

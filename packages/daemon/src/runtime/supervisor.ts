@@ -1,41 +1,59 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import type { ProcState } from "@toyon/shared";
-import { killProcessGroup } from "./kill.ts";
+import type { LogLine, ProcState } from "@toyon/shared";
+import { fireAndForget } from "../core/log.ts";
+import { LineSplitter } from "./lines.ts";
 import { allocatePort, releasePort } from "./ports.ts";
+import { PtyStream } from "./pty.ts";
 
+/** the merged line ring, per worktree rather than per proc, so the tail is chronological */
 const LOG_RING_SIZE = 500;
+/** a proc keeps a smaller replay ring than the shell: a worktree has several of them */
+const PROC_RING = 128 * 1024;
+/** what a proc's pty is sized to before any pane has opened its tab */
+const PROC_COLS = 120;
+const PROC_ROWS = 30;
 
 export interface ManagedProc {
   state: ProcState;
-  child?: ChildProcess;
-  logs: string[];
+  pty?: PtyStream;
+  lines: LineSplitter;
   env: Record<string, string>;
   restarts: number;
   lastStart: number;
+  /** set by the first keystroke since this spawn: a proc you drove is yours, so its exit means
+   * you stopped it rather than that it crashed */
+  handInput: boolean;
 }
 
 export type ProcListener = (proc: ProcState) => void;
 export type LogListener = (proc: string, line: string) => void;
+export type DataListener = (proc: string, data: string) => void;
+export type ExitListener = (proc: string, exitCode: number) => void;
 
-/** One process group per worktree: spawns procs, injects $PORT, kills children on stop. */
+/** One pty per proc in a worktree: spawns them, injects $PORT, kills the group on stop. Procs run
+ * on a pty rather than a pipe so they behave the way they do in a terminal (color, a URL banner,
+ * `r` to reload); the lines everything else reads are derived back out of those bytes. */
 export class WorktreeProcs {
   procs = new Map<string, ManagedProc>();
   private stopped = false;
+  private lines: LogLine[] = [];
 
   constructor(
     readonly worktreePath: string,
     private onProc: ProcListener,
     private onLog: LogListener,
+    private onData: DataListener = () => {},
+    private onStreamExit: ExitListener = () => {},
   ) {}
 
   async start(name: string, command: string, extraEnv: Record<string, string> = {}) {
     const port = await allocatePort();
     const mp: ManagedProc = {
       state: { name, command, port, status: "starting" },
-      logs: [],
+      lines: new LineSplitter(),
       env: extraEnv,
       restarts: 0,
       lastStart: 0,
+      handInput: false,
     };
     this.procs.set(name, mp);
     this.spawnProc(mp);
@@ -46,67 +64,82 @@ export class WorktreeProcs {
     if (this.stopped) return;
     const { name, command, port } = mp.state;
     mp.lastStart = Date.now();
-    // detached => own process group, so kill(-pid) reaps script children too
-    const child = spawn("sh", ["-c", command], {
-      cwd: this.worktreePath,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PORT: String(port), FORCE_COLOR: "0", ...mp.env },
-    });
-    mp.child = child;
-    mp.state.pid = child.pid;
+    mp.handInput = false;
     mp.state.status = "starting";
-    this.onProc({ ...mp.state });
-
-    const pushLines = (buf: Buffer) => {
-      for (const line of buf.toString("utf8").split("\n")) {
-        if (!line.trim()) continue;
-        mp.logs.push(line);
-        if (mp.logs.length > LOG_RING_SIZE) mp.logs.shift();
-        this.onLog(name, line);
-      }
-    };
-    child.stdout?.on("data", pushLines);
-    child.stderr?.on("data", pushLines);
-
-    // a spawn failure (cwd removed, sh missing) emits 'error' with no 'exit'; unhandled it kills the daemon
-    child.on("error", (e) => {
-      if (this.stopped || mp.state.status === "stopped" || mp.state.status === "crashed") return;
+    try {
+      // FORCE_COLOR is deliberately absent: isatty is true on a pty, so tools decide for
+      // themselves, and TERM has to be set for them to decide yes (bun-pty ignores its `name`
+      // option and the daemon may have been started with no TERM at all)
+      mp.pty = new PtyStream(
+        {
+          cwd: this.worktreePath,
+          env: {
+            ...envStrings(process.env),
+            TERM: "xterm-256color",
+            COLORTERM: "truecolor",
+            PORT: String(port),
+            ...mp.env,
+          },
+          // a restart keeps the size the pane last asked for, so output does not reflow
+          cols: mp.pty?.cols ?? PROC_COLS,
+          rows: mp.pty?.rows ?? PROC_ROWS,
+          file: "sh",
+          args: ["-c", command],
+          ring: PROC_RING,
+        },
+        (data) => {
+          this.onData(name, data);
+          for (const line of mp.lines.feed(data)) this.pushLine(name, line);
+        },
+        (code) => this.handleExit(mp, code),
+      );
+    } catch (e) {
+      // a spawn failure (cwd removed, the ffi lib missing) has no exit to wait for
       mp.state.status = "crashed";
       this.onProc({ ...mp.state });
-      this.onLog(name, `failed to start: ${e.message}`);
-    });
-
-    child.on("exit", (code) => {
-      mp.state.exitCode = code;
-      if (this.stopped || mp.state.status === "stopped") return;
-      mp.state.status = code === 0 ? "stopped" : "crashed";
-      this.onProc({ ...mp.state });
-      // crash auto-restart with backoff; a healthy minute resets the counter
-      if (mp.state.status === "crashed") {
-        if (Date.now() - mp.lastStart > 60_000) mp.restarts = 0;
-        if (mp.restarts < 5) {
-          mp.restarts += 1;
-          const delay = Math.min(30_000, 1000 * 2 ** (mp.restarts - 1));
-          this.onLog(name, `crashed (exit ${code}): restarting in ${delay / 1000}s (attempt ${mp.restarts}/5)`);
-          setTimeout(() => {
-            if (!this.stopped && mp.state.status === "crashed") this.spawnProc(mp);
-          }, delay);
-        } else {
-          this.onLog(name, `crashed (exit ${code}): giving up after 5 attempts; restart manually`);
-        }
-      }
-    });
-
+      this.pushLine(name, `failed to start: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    mp.state.pid = mp.pty.pid;
+    this.onProc({ ...mp.state });
     // "running" once the port accepts connections
     this.pollPort(mp);
+  }
+
+  private handleExit(mp: ManagedProc, code: number) {
+    const { name } = mp.state;
+    mp.state.exitCode = code;
+    // a tab watching this proc gets the exit even when the supervisor is about to restart it
+    this.onStreamExit(name, code);
+    if (this.stopped || mp.state.status === "stopped") return;
+    if (mp.handInput) {
+      // you typed in its tab, so this exit is yours: no crash, no backoff, no auto-restart
+      mp.state.status = "stopped";
+      this.onProc({ ...mp.state });
+      return;
+    }
+    mp.state.status = code === 0 ? "stopped" : "crashed";
+    this.onProc({ ...mp.state });
+    // crash auto-restart with backoff; a healthy minute resets the counter
+    if (mp.state.status !== "crashed") return;
+    if (Date.now() - mp.lastStart > 60_000) mp.restarts = 0;
+    if (mp.restarts < 5) {
+      mp.restarts += 1;
+      const delay = Math.min(30_000, 1000 * 2 ** (mp.restarts - 1));
+      this.pushLine(name, `crashed (exit ${code}): restarting in ${delay / 1000}s (attempt ${mp.restarts}/5)`);
+      setTimeout(() => {
+        if (!this.stopped && mp.state.status === "crashed") this.spawnProc(mp);
+      }, delay);
+    } else {
+      this.pushLine(name, `crashed (exit ${code}): giving up after 5 attempts; restart manually`);
+    }
   }
 
   private async pollPort(mp: ManagedProc) {
     const { port } = mp.state;
     for (let i = 0; i < 120; i++) {
       if (this.stopped || mp.state.status === "crashed" || mp.state.status === "stopped") return;
-      // dev servers bind whichever family "localhost" resolves to first — try both
+      // dev servers bind whichever family "localhost" resolves to first: try both
       for (const hostname of ["127.0.0.1", "::1"]) {
         try {
           const sock = await Bun.connect({
@@ -124,10 +157,29 @@ export class WorktreeProcs {
           mp.state.status = "running";
           this.onProc({ ...mp.state });
           return;
-        } catch {}
+        } catch {
+          // nothing listening yet; try the other family, then wait
+        }
       }
       await Bun.sleep(500);
     }
+  }
+
+  /** the proc's pty, for a pane attaching to its tab */
+  stream(name: string): PtyStream | undefined {
+    return this.procs.get(name)?.pty;
+  }
+
+  /** a keystroke from a tab. It also hands the proc over: see `handInput`. */
+  write(name: string, data: string) {
+    const mp = this.procs.get(name);
+    if (!mp?.pty?.alive) return;
+    mp.handInput = true;
+    mp.pty.write(data);
+  }
+
+  resize(name: string, cols: number, rows: number) {
+    this.procs.get(name)?.pty?.resize(cols, rows);
   }
 
   restart(name: string) {
@@ -136,16 +188,21 @@ export class WorktreeProcs {
     mp.restarts = 0;
     if (mp.state.status === "crashed") {
       this.spawnProc(mp);
-    } else {
-      // mark stopped first so the exit handler doesn't schedule a crash-restart
-      mp.state.status = "stopped";
-      this.killProc(mp);
-      setTimeout(() => this.spawnProc(mp), 300);
+      return;
     }
+    // mark stopped first so the exit handler doesn't schedule a crash-restart
+    mp.state.status = "stopped";
+    fireAndForget(
+      mp.state.name,
+      this.killProc(mp).then(() => {
+        if (!this.stopped) this.spawnProc(mp);
+      }),
+      "proc restart",
+    );
   }
 
-  private killProc(mp: ManagedProc): Promise<void> {
-    return killProcessGroup(mp.child);
+  private async killProc(mp: ManagedProc): Promise<void> {
+    await mp.pty?.kill();
   }
 
   /** Stop every proc; resolves when they have all exited (bounded by the SIGKILL grace). */
@@ -160,14 +217,25 @@ export class WorktreeProcs {
     await Promise.all(exits);
   }
 
-  /** the tail of every proc's log ring, oldest first, in the shell's `[proc] line` format */
-  recentLogs(limit = 200): string[] {
-    const out: string[] = [];
-    for (const mp of this.procs.values()) for (const line of mp.logs) out.push(`[${mp.state.name}] ${line}`);
-    return out.slice(-limit);
+  /** the tail of the worktree's output, oldest first; the shell formats it for display */
+  recentLogs(limit = 200): LogLine[] {
+    return this.lines.slice(-limit);
   }
 
   states(): ProcState[] {
     return [...this.procs.values()].map((p) => ({ ...p.state }));
   }
+
+  private pushLine(proc: string, line: string) {
+    this.lines.push({ proc, line });
+    if (this.lines.length > LOG_RING_SIZE) this.lines.shift();
+    this.onLog(proc, line);
+  }
+}
+
+/** bun-pty replaces the environment rather than merging, so a proc's env starts as the daemon's */
+function envStrings(base: Record<string, string | undefined>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(base)) if (typeof v === "string") env[k] = v;
+  return env;
 }

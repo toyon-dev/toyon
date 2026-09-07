@@ -43,9 +43,9 @@ export interface HandlerCtx {
   /** this socket wants a worktree's stream; false if it already had it */
   subscribe(worktreeId: string): boolean;
   unsubscribe(worktreeId: string): void;
-  /** this socket has the worktree's terminal pane open: it gets term-data / term-exit */
-  watchTerminal(worktreeId: string): void;
-  unwatchTerminal(worktreeId: string): void;
+  /** this socket has that stream's tab open: it gets its term-data / term-exit */
+  watchTerminal(worktreeId: string, stream: string): void;
+  unwatchTerminal(worktreeId: string, stream: string): void;
 }
 
 type Handler<K extends ClientMsg["t"]> = (
@@ -154,11 +154,6 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   async "remove-worktree"(msg, _ctx, s) {
     await s.worktrees.remove(msg.worktreeId);
-  },
-
-  "restart-proc"(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
-    s.runtime.restartProc(msg.worktreeId, msg.proc);
   },
 
   async "git-status"(msg, ctx, s) {
@@ -324,27 +319,28 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "term-open"(msg, ctx, s) {
     // open, watch and reply in one synchronous block: pty output only arrives on later ticks, so
-    // nothing the shell prints can fall between the snapshot and the watch
-    const { snapshot, alive } = s.runtime.openTerminal(msg.worktreeId, msg.cols, msg.rows);
-    ctx.watchTerminal(msg.worktreeId);
-    ctx.reply({ t: "term-snapshot", worktreeId: msg.worktreeId, data: snapshot, alive });
+    // nothing the stream prints can fall between the snapshot and the watch
+    const { snapshot, alive } = s.runtime.openTerminal(msg.worktreeId, msg.stream, msg.cols, msg.rows);
+    ctx.watchTerminal(msg.worktreeId, msg.stream);
+    ctx.reply({ t: "term-snapshot", worktreeId: msg.worktreeId, stream: msg.stream, data: snapshot, alive });
   },
 
   "term-input"(msg, _ctx, s) {
-    s.runtime.terminalInput(msg.worktreeId, msg.data);
+    s.runtime.terminalInput(msg.worktreeId, msg.stream, msg.data);
   },
 
   "term-resize"(msg, _ctx, s) {
-    s.runtime.terminalResize(msg.worktreeId, msg.cols, msg.rows);
+    s.runtime.terminalResize(msg.worktreeId, msg.stream, msg.cols, msg.rows);
   },
 
-  "term-kill"(msg, _ctx, s) {
+  "term-restart"(msg, _ctx, s) {
     s.state.requireWorktree(msg.worktreeId);
-    s.runtime.killTerminal(msg.worktreeId);
+    // the tab reopens on its own once the stream is gone; nothing waits on the restart
+    fireAndForget("term-restart", s.runtime.restartStream(msg.worktreeId, msg.stream));
   },
 
   "term-close"(msg, ctx) {
-    ctx.unwatchTerminal(msg.worktreeId);
+    ctx.unwatchTerminal(msg.worktreeId, msg.stream);
   },
 };
 

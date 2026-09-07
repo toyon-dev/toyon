@@ -21,6 +21,7 @@ import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts } from 
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
+import { runSetup } from "../runtime/setup.ts";
 import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 
@@ -392,8 +393,8 @@ export class WorktreeService {
     // `bun install` and friends can take a minute: async, so every preview and agent stream keeps
     // flowing while a new worktree warms up
     for (const cmd of repo.config.setup ?? []) {
-      const r = await run("sh", ["-c", cmd], wt.path);
-      if (!r.ok) this.d.hub.emit("log", wt.id, "setup", `setup failed: ${cmd}: ${r.err}`);
+      const code = await runSetup(cmd, wt.path, (line) => this.d.hub.emit("log", wt.id, "setup", line));
+      if (code !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed (exit ${code}): ${cmd}`);
     }
     await this.d.runtime.start(wt, repo);
   }

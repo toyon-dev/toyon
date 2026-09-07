@@ -15,6 +15,7 @@ export type ChordId =
   | "zen"
   | "new"
   | "terminal"
+  | "term-tab"
   | "worktree"
   | "project";
 
@@ -66,6 +67,8 @@ export const CHORDS: readonly Chord[] = [
   // toggle-comment in Monaco (and every editor), and the shell listens on window.
   { id: "keys", key: ",", label: "settings & shortcuts", section: "Panels" },
   { id: "terminal", key: "`", ctrl: true, label: "terminal", section: "Panels" },
+  // a focused xterm swallows nearly everything, so tab cycling needs a chord matchChord catches
+  { id: "term-tab", key: "`", ctrl: true, shift: true, label: "next terminal tab", section: "Panels" },
   { id: "pick", key: "e", label: "element picker", section: "Preview" },
   { id: "zen", key: ".", label: "full-bleed preview", section: "Preview" },
   {

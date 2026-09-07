@@ -446,7 +446,7 @@ body.resizing iframe {
   height: auto;
 }
 .term-pane {
-  min-height: 100px;
+  min-height: 140px;
   position: relative;
   border-top: 1px solid var(--bg2);
   background: var(--bg0);
@@ -457,16 +457,34 @@ body.resizing iframe {
 .term-pane .file-head {
   padding: 4px 12px;
 }
+/* the tab strip is the pane's header, so the buttons no longer float over the terminal */
+.term-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.term-tabs::-webkit-scrollbar {
+  display: none;
+}
+.term-tab {
+  font: var(--fs-xs) var(--font-mono);
+  flex-shrink: 0;
+}
+.term-tab.on {
+  color: var(--orange);
+  border-color: var(--orange);
+}
 .term-exit {
   color: var(--red);
   font: var(--fs-xs) var(--font-mono);
 }
-/* right padding clears the floating buttons: the fit addon sizes columns from the host width, so
-   the shell wraps before them instead of running underneath */
 .term-body {
   flex: 1;
   min-height: 0;
-  padding: 6px 64px 4px 8px;
+  padding: 2px 8px 4px 8px;
 }
 .term-host {
   height: 100%;

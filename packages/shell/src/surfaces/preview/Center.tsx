@@ -153,7 +153,7 @@ export function Center() {
   // terminal pane: below the editor pane, same drag, its own persisted height
   const [termH, setTermH] = usePersisted(STORAGE.termHeight, 240, (raw) => {
     const n = Number(raw);
-    return Number.isFinite(n) && n >= 100 ? n : undefined;
+    return Number.isFinite(n) && n >= 140 ? n : undefined;
   });
   const termPx = termOpen && activeId ? termH : 0;
   const startDiffDrag = useDragResize(
@@ -167,7 +167,7 @@ export function Center() {
   const startTermDrag = useDragResize(
     (ev) => {
       const rect = centerRef.current?.getBoundingClientRect();
-      return rect ? Math.min(Math.max(rect.bottom - ev.clientY, 100), rect.height - 80) : null;
+      return rect ? Math.min(Math.max(rect.bottom - ev.clientY, 140), rect.height - 80) : null;
     },
     (h) => setTermH(Math.round(h)),
   );
@@ -211,7 +211,10 @@ export function Center() {
                   : !active
                     ? `no worktrees yet: press ${chord("project")} to open a project, or run \`toyon\` inside a git repo`
                     : log.length > 0
-                      ? log.slice(-20).join("\n")
+                      ? log
+                          .slice(-20)
+                          .map((l) => `[${l.proc}] ${l.line}`)
+                          .join("\n")
                       : "starting dev servers…"}
             </div>
           )}

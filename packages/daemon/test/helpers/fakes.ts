@@ -1,14 +1,14 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentStatus, ImageInput, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
+import type { AgentEvent, AgentStatus, ImageInput, LogLine, PickMeta, ProcState, WorktreeInfo } from "@toyon/shared";
 import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
 import type { AgentAdapter } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
+import type { PtyHandle, PtyOpts } from "../../src/runtime/pty.ts";
 import type { RuntimeDeps } from "../../src/runtime/registry.ts";
 import type { WorktreeProcs } from "../../src/runtime/supervisor.ts";
-import type { TerminalHandle, TerminalOpts } from "../../src/runtime/terminal.ts";
 
 export class FakeAgent implements AgentAdapter {
   status: AgentStatus = "idle";
@@ -68,12 +68,40 @@ export class FakeProcs {
     this.stopped = true;
     for (const s of this.states_) s.status = "stopped";
   }
-  restart() {}
-  recentLogs(): string[] {
+  restarts: string[] = [];
+  restart(name: string) {
+    this.restarts.push(name);
+  }
+  recentLogs(): LogLine[] {
     return [];
   }
   states(): ProcState[] {
     return this.states_.map((s) => ({ ...s }));
+  }
+  /** the pty side of a proc, so a tab can attach to it in tests */
+  ptys = new Map<string, FakeTerminal>();
+  writes: Array<[string, string]> = [];
+  resizes: Array<[string, number, number]> = [];
+  stream(name: string): FakeTerminal | undefined {
+    return this.ptys.get(name);
+  }
+  write(name: string, data: string) {
+    this.writes.push([name, data]);
+    this.ptys.get(name)?.write(data);
+  }
+  resize(name: string, cols: number, rows: number) {
+    this.resizes.push([name, cols, rows]);
+    this.ptys.get(name)?.resize(cols, rows);
+  }
+  /** stand up a proc's pty; `emit` and `exit` on the returned handle play its side */
+  spawnFake(name: string): FakeTerminal {
+    const t = new FakeTerminal(
+      { cwd: "/", env: {}, cols: 120, rows: 30, file: "sh" },
+      () => {},
+      () => {},
+    );
+    this.ptys.set(name, t);
+    return t;
   }
 }
 
@@ -87,7 +115,7 @@ export class FakeProxy implements WorktreeProxy {
 }
 
 /** records writes/resizes/kills; `emit`/`exit` play the pty's side */
-export class FakeTerminal implements TerminalHandle {
+export class FakeTerminal implements PtyHandle {
   pid = 4242;
   alive = true;
   cols: number;
@@ -97,7 +125,7 @@ export class FakeTerminal implements TerminalHandle {
   kills = 0;
   private ring = "";
   constructor(
-    readonly opts: TerminalOpts,
+    readonly opts: PtyOpts,
     private onData: (data: string) => void,
     private onExit: (exitCode: number) => void,
   ) {
@@ -112,7 +140,7 @@ export class FakeTerminal implements TerminalHandle {
     this.cols = cols;
     this.rows = rows;
   }
-  kill() {
+  async kill() {
     this.kills++;
     this.exit(0);
   }

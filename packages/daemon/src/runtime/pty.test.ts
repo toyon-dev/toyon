@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import type { IPty } from "bun-pty";
-import { type PtySpawn, WorktreeTerminal } from "./terminal.ts";
+import { type PtySpawn, PtyStream } from "./pty.ts";
 
 function alive(pid: number): boolean {
   try {
@@ -25,8 +25,8 @@ function run(cmd: string, cwd = process.cwd()) {
   const exited = new Promise<number>((r) => {
     resolveExit = r;
   });
-  const term = new WorktreeTerminal(
-    { cwd, env: { ...ENV, TERM: "xterm-256color" }, cols: 80, rows: 24, shell: "sh", args: ["-c", cmd] },
+  const term = new PtyStream(
+    { cwd, env: { ...ENV, TERM: "xterm-256color" }, cols: 80, rows: 24, file: "sh", args: ["-c", cmd] },
     (d) => {
       out += d;
     },
@@ -68,7 +68,7 @@ function fakePty() {
   return { spawn, emit };
 }
 
-describe("WorktreeTerminal", () => {
+describe("PtyStream", () => {
   test("streams output and reports the exit code", async () => {
     const t = run("echo hi; exit 3");
     expect(await t.exited).toBe(3);
@@ -77,7 +77,7 @@ describe("WorktreeTerminal", () => {
     expect(t.exits()).toBe(1);
   });
 
-  test("runs in the worktree directory with a 256-color TERM", async () => {
+  test("runs in the given directory with a 256-color TERM", async () => {
     const cwd = realpathSync(tmpdir());
     const t = run("echo $TERM; pwd", cwd);
     await t.exited;
@@ -85,25 +85,33 @@ describe("WorktreeTerminal", () => {
     expect(t.out()).toContain(cwd);
   });
 
-  test("kill() ends the shell, fires onExit once, and later writes are no-ops", async () => {
+  test("kill() ends the process, fires onExit once, and later writes are no-ops", async () => {
     const t = run("sleep 30");
     const pid = t.term.pid;
     expect(alive(pid)).toBe(true);
-    t.term.kill();
+    await t.term.kill();
     expect(t.term.alive).toBe(false);
     expect(t.exits()).toBe(1);
-    t.term.kill();
+    expect(alive(pid)).toBe(false);
+    await t.term.kill();
     t.term.write("echo nope\n");
     expect(t.exits()).toBe(1);
-    // SIGHUP from the closed pty, else the group SIGKILL after the 3s grace
-    for (let i = 0; i < 90 && alive(pid); i++) await Bun.sleep(50);
-    expect(alive(pid)).toBe(false);
+  });
+
+  // the whole reason kill() signals the group instead of calling bun-pty's kill(), which always
+  // reports 0: a supervised proc has to be able to say why it died
+  test("kill() reports the code the process chose, not 0", async () => {
+    const t = run("trap 'exit 42' TERM; sleep 30");
+    // let the trap arm before signalling, else the shell dies of the default action
+    await Bun.sleep(300);
+    await t.term.kill();
+    expect(await t.exited).toBe(42);
   });
 
   test("the ring keeps the tail and a replay starts on a line boundary", () => {
     const f = fakePty();
-    const term = new WorktreeTerminal(
-      { cwd: "/", env: {}, cols: 80, rows: 24, shell: "sh" },
+    const term = new PtyStream(
+      { cwd: "/", env: {}, cols: 80, rows: 24, file: "sh" },
       () => {},
       () => {},
       f.spawn,
@@ -121,8 +129,8 @@ describe("WorktreeTerminal", () => {
 
   test("below the cap the snapshot is the whole output, partial first line included", () => {
     const f = fakePty();
-    const term = new WorktreeTerminal(
-      { cwd: "/", env: {}, cols: 80, rows: 24, shell: "sh" },
+    const term = new PtyStream(
+      { cwd: "/", env: {}, cols: 80, rows: 24, file: "sh" },
       () => {},
       () => {},
       f.spawn,
@@ -130,5 +138,17 @@ describe("WorktreeTerminal", () => {
     f.emit("$ ec");
     f.emit("ho hi\nhi\n$ ");
     expect(term.snapshot()).toBe("$ echo hi\nhi\n$ ");
+  });
+
+  test("a proc's smaller ring is honoured", () => {
+    const f = fakePty();
+    const term = new PtyStream(
+      { cwd: "/", env: {}, cols: 80, rows: 24, file: "sh", ring: 1024 },
+      () => {},
+      () => {},
+      f.spawn,
+    );
+    for (let i = 0; i < 500; i++) f.emit(`line ${i}\n`);
+    expect(term.snapshot().length).toBeLessThanOrEqual(1024);
   });
 });

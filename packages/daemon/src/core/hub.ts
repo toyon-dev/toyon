@@ -11,9 +11,9 @@ export interface HubEvents {
   agent: (worktreeId: string, seq: number, event: AgentEvent) => void;
   agentStatus: (worktreeId: string, status: AgentStatus) => void;
   queue: (worktreeId: string, items: string[]) => void;
-  /** raw output from the worktree's terminal, escape sequences included */
-  termData: (worktreeId: string, data: string) => void;
-  termExit: (worktreeId: string, exitCode: number) => void;
+  /** raw output from one of the worktree's streams (its shell or a proc), escapes included */
+  termData: (worktreeId: string, stream: string, data: string) => void;
+  termExit: (worktreeId: string, stream: string, exitCode: number) => void;
   /** the worktree list or any per-worktree status changed */
   worktreesChanged: () => void;
   /** the repo's default branch moved: badges + git-status need refreshing */

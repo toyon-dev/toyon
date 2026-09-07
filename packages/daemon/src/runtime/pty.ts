@@ -1,33 +1,34 @@
-// One PTY per worktree, spawned on the first open of the pane and kept until the worktree goes
-// away: a `claude` or `bun test --watch` started there survives hiding the pane or switching
-// worktrees. bun-pty (Rust portable-pty over bun:ffi) because node-pty cannot fork under Bun.
+// One pty per stream: the worktree shell, and every supervised proc. A dev server on a pipe is a
+// dev server told it is running in CI, so it drops color, its URL banner and every interactive
+// key. bun-pty (Rust portable-pty over bun:ffi) because node-pty cannot fork under Bun.
 
 import { type IPty, spawn as spawnPty } from "bun-pty";
+import { log } from "../core/log.ts";
+import { killGroup } from "./kill.ts";
 
 /** recent raw output kept for replay when a pane (re)opens; whole chunks are dropped from the head */
-const RING_CHARS = 256 * 1024;
-/** grace between closing the pty (SIGHUP to the foreground group) and SIGKILLing the group */
-const KILL_GRACE_MS = 3000;
+const DEFAULT_RING = 256 * 1024;
 
-export interface TerminalOpts {
+export interface PtyOpts {
   cwd: string;
   env: Record<string, string>;
   cols: number;
   rows: number;
-  shell: string;
+  file: string;
   args?: string[];
+  /** replay ring; procs keep a smaller one than the shell because a worktree has several */
+  ring?: number;
 }
 
-export interface TerminalHandle {
+export interface PtyHandle {
   readonly pid: number;
   readonly alive: boolean;
   readonly cols: number;
   readonly rows: number;
   write(data: string): void;
   resize(cols: number, rows: number): void;
-  /** closes the pty (the kernel SIGHUPs the shell, as closing a terminal window does), then
-   * SIGKILLs the process group after a grace; onExit fires exactly once */
-  kill(): void;
+  /** SIGTERMs the group, SIGKILLs after a grace, releases the pty; onExit fires exactly once */
+  kill(): Promise<void>;
   /** the recent output, starting at a line boundary once anything was evicted so a replay never
    * opens inside a torn escape sequence */
   snapshot(): string;
@@ -35,7 +36,7 @@ export interface TerminalHandle {
 
 export type PtySpawn = (file: string, args: string[], opts: Parameters<typeof spawnPty>[2]) => IPty;
 
-export class WorktreeTerminal implements TerminalHandle {
+export class PtyStream implements PtyHandle {
   readonly pid: number;
   alive = true;
   cols: number;
@@ -45,16 +46,19 @@ export class WorktreeTerminal implements TerminalHandle {
   private size = 0;
   private evicted = false;
   private exited = false;
+  private readonly ring: number;
+  private waiters: Array<() => void> = [];
 
   constructor(
-    opts: TerminalOpts,
+    opts: PtyOpts,
     private onData: (data: string) => void,
     private onExit: (exitCode: number) => void,
     spawn: PtySpawn = spawnPty,
   ) {
     this.cols = opts.cols;
     this.rows = opts.rows;
-    this.pty = spawn(opts.shell, opts.args ?? [], {
+    this.ring = opts.ring ?? DEFAULT_RING;
+    this.pty = spawn(opts.file, opts.args ?? [], {
       name: "xterm-256color",
       cols: opts.cols,
       rows: opts.rows,
@@ -81,22 +85,15 @@ export class WorktreeTerminal implements TerminalHandle {
     this.pty.resize(cols, rows);
   }
 
-  kill() {
+  /** We signal the group ourselves rather than calling bun-pty's kill(): it takes a signal and
+   * discards it, and always reports exit code 0, so a proc killed that way could never say why it
+   * died. Letting it die of the signal lets bun-pty's read loop report the real code. */
+  async kill(): Promise<void> {
     if (this.exited) return;
-    const pid = this.pid;
-    // bun-pty fires onExit synchronously from kill(), so finish() runs before we return
-    this.pty.kill();
+    // portable-pty setsid()s the child, so pid is also the group and script children go with it
+    await killGroup(this.pid, new Promise<void>((r) => this.waiters.push(r)));
+    // a process that outlived both signals still holds a pty; finish() is what releases it
     this.finish(0);
-    // portable-pty setsid()s the child, so pid is also the group; a shell that survived the
-    // SIGHUP (or a job it left in the foreground) gets the SIGKILL the supervisor's procs get
-    const timer = setTimeout(() => {
-      try {
-        process.kill(-pid, "SIGKILL");
-      } catch {
-        // group already gone
-      }
-    }, KILL_GRACE_MS);
-    timer.unref();
   }
 
   snapshot(): string {
@@ -109,13 +106,13 @@ export class WorktreeTerminal implements TerminalHandle {
   private push(d: string) {
     this.chunks.push(d);
     this.size += d.length;
-    while (this.size > RING_CHARS && this.chunks.length > 1) {
-      this.size -= this.chunks.shift()!.length;
+    while (this.size > this.ring && this.chunks.length > 1) {
+      this.size -= this.chunks.shift()?.length ?? 0;
       this.evicted = true;
     }
-    if (this.size > RING_CHARS) {
+    if (this.size > this.ring) {
       // a single chunk bigger than the ring: keep its tail
-      this.chunks[0] = this.chunks[0]!.slice(-RING_CHARS);
+      this.chunks[0] = (this.chunks[0] ?? "").slice(-this.ring);
       this.size = this.chunks[0].length;
       this.evicted = true;
     }
@@ -125,6 +122,15 @@ export class WorktreeTerminal implements TerminalHandle {
     if (this.exited) return;
     this.exited = true;
     this.alive = false;
+    // bun-pty's read loop breaks on CHILD_EXITED without closing the ffi handle; its kill() is what
+    // closes it, guards itself against running twice, and the exit it fires re-enters here and
+    // returns, since the real code is already latched
+    try {
+      this.pty.kill();
+    } catch (e) {
+      log.warn("pty", `releasing the pty for ${this.pid} failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    for (const w of this.waiters.splice(0)) w();
     this.onExit(exitCode);
   }
 }

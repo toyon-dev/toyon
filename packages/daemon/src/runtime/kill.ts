@@ -1,36 +1,45 @@
 import type { ChildProcess } from "node:child_process";
 
-/** SIGTERM the process group, SIGKILL after 3s. Resolves once the child has exited (or shortly
- * after the SIGKILL), so a daemon shutdown can wait for its children instead of orphaning them.
- * The child must have been spawned `detached` (its own group) for kill(-pid) to reach grandchildren. */
+/** grace between SIGTERM and SIGKILL */
+const KILL_GRACE_MS = 3000;
+/** a SIGKILLed process exits almost immediately; don't hang on a stuck one */
+const EXIT_GRACE_MS = 200;
+
+/** SIGTERM the process group, SIGKILL after 3s. Resolves once `exited` settles (or shortly after
+ * the SIGKILL), so a shutdown can wait for its children instead of orphaning them. The process
+ * must own its group: spawned `detached`, or setsid()'d by a pty. */
+export async function killGroup(pid: number, exited: Promise<void>): Promise<void> {
+  if (!signalGroup(pid, "SIGTERM")) return;
+  if (await within(exited, KILL_GRACE_MS)) return;
+  signalGroup(pid, "SIGKILL");
+  await within(exited, EXIT_GRACE_MS);
+}
+
+/** the same policy for a node child, which carries its own exit event and liveness */
 export function killProcessGroup(child: ChildProcess | undefined): Promise<void> {
   const pid = child?.pid;
   if (!child || !pid || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return new Promise((resolve) => {
-    let done = false;
-    let killTimer: ReturnType<typeof setTimeout> | undefined;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      clearTimeout(killTimer);
-      resolve();
-    };
-    child.once("exit", finish);
-    try {
-      process.kill(-pid, "SIGTERM");
-    } catch {
-      // group already gone: nothing to wait for
-      finish();
-      return;
-    }
-    killTimer = setTimeout(() => {
-      try {
-        process.kill(-pid, "SIGKILL");
-      } catch {
-        // group already gone
-      }
-      // the exit event follows the SIGKILL almost immediately; don't hang on a stuck one
-      setTimeout(finish, 200);
-    }, 3000);
+  return killGroup(pid, new Promise<void>((r) => child.once("exit", () => r())));
+}
+
+/** false when the group is already gone, so there is nothing to wait for */
+function signalGroup(pid: number, sig: NodeJS.Signals): boolean {
+  try {
+    process.kill(-pid, sig);
+    return true;
+  } catch {
+    // ESRCH: the group exited between the caller's check and this signal
+    return false;
+  }
+}
+
+/** true if `p` settled inside `ms` */
+async function within(p: Promise<void>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<boolean>((r) => {
+    timer = setTimeout(() => r(false), ms);
   });
+  const done = await Promise.race([p.then(() => true), timeout]);
+  clearTimeout(timer);
+  return done;
 }

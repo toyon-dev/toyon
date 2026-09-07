@@ -24,7 +24,7 @@ export async function commitWorktree(worktreePath: string, message: string): Pro
 /** Landing requires committed work — the tool never commits on the user's behalf. */
 async function requireClean(worktreePath: string): Promise<ShipResult | null> {
   if ((await statusFiles(worktreePath)).length > 0) {
-    return { ok: false, message: "uncommitted changes — commit them first (or ask the agent to finish up)" };
+    return { ok: false, message: "uncommitted changes: commit them first (or ask the agent to finish up)" };
   }
   return null;
 }
@@ -40,14 +40,14 @@ export async function mergeToMain(
   if (cErr) return cErr;
 
   const { ahead } = await aheadBehind(worktreePath, defaultBr);
-  if (ahead === 0) return { ok: false, message: `nothing to merge — no commits ahead of ${defaultBr}` };
+  if (ahead === 0) return { ok: false, message: `nothing to merge: no commits ahead of ${defaultBr}` };
 
   const current = await git(repoPath, "branch", "--show-current");
   if (current.out !== defaultBr) {
-    return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr} — switch it first` };
+    return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr}; switch it first` };
   }
   const m = await git(repoPath, "merge", "--no-edit", branch);
-  if (!m.ok) return mergeFailure(repoPath, m.err, `merge conflicts with ${defaultBr} — sync this worktree first`);
+  if (!m.ok) return mergeFailure(repoPath, m.err, `merge conflicts with ${defaultBr}: sync this worktree first`);
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };
 }
 
@@ -62,7 +62,7 @@ export async function syncFromMain(worktreePath: string, defaultBr: string): Pro
     return mergeFailure(
       worktreePath,
       m.err,
-      `sync conflicts with ${defaultBr} — ask the agent to merge ${defaultBr} and resolve them`,
+      `sync conflicts with ${defaultBr}: ask the agent to merge ${defaultBr} and resolve them`,
     );
   }
   return { ok: true, message: `synced ${behind} commit(s) from ${defaultBr}` };
@@ -84,11 +84,11 @@ export async function shipWorktree(worktreePath: string, branch: string, default
   const cErr = await requireClean(worktreePath);
   if (cErr) return cErr;
   const { ahead } = await aheadBehind(worktreePath, defaultBr);
-  if (ahead === 0) return { ok: false, message: `nothing to ship — no commits ahead of ${defaultBr}` };
+  if (ahead === 0) return { ok: false, message: `nothing to ship: no commits ahead of ${defaultBr}` };
 
   const remote = await git(worktreePath, "remote", "get-url", "origin");
   if (!remote.ok) {
-    return { ok: true, message: `committed locally on ${branch} — no 'origin' remote configured, nothing pushed` };
+    return { ok: true, message: `committed locally on ${branch}: no 'origin' remote configured, nothing pushed` };
   }
 
   const push = await git(worktreePath, "push", "-u", "origin", branch);
@@ -101,11 +101,11 @@ export async function shipWorktree(worktreePath: string, branch: string, default
     return { ok: true, url, message: `PR created: ${url}`, prCreated: true };
   }
   if (gh.err.includes("already exists")) {
-    return { ok: true, message: `pushed ${branch} — existing PR updated` };
+    return { ok: true, message: `pushed ${branch}: existing PR updated` };
   }
   const compare = compareUrl(remote.out, defaultBr, branch);
   return compare
-    ? { ok: true, url: compare, message: "pushed — opening PR page" }
+    ? { ok: true, url: compare, message: "pushed: opening PR page" }
     : { ok: true, message: `pushed ${branch} to origin` };
 }
 

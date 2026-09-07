@@ -133,10 +133,10 @@ function openAppWindow(): boolean {
       spawn("open", ["-na", app, "--args", flag], { stdio: "ignore" }).unref();
       if (!id) {
         console.log(
-          `tip: install Toyon as an app (⋮ menu → Install, or the install button in the top bar when opened in a tab)`,
+          `tip: install Toyon as an app (browser menu, then Install, or the install button in the top bar when opened in a tab)`,
         );
         console.log(
-          `     — installed, it gets a native-style title bar; \`toyon --app\` then launches the installed app`,
+          `     once installed, it gets a native-style title bar; \`toyon --app\` then launches the installed app`,
         );
       }
       return true;
@@ -275,7 +275,7 @@ int main(int argc, char **argv) {
   spawnSync("xattr", ["-cr", appDir], { stdio: "ignore" });
   const signed = spawnSync("codesign", ["--force", "--deep", "-s", "-", appDir], { stdio: "ignore" }).status === 0;
   if (!signed) console.warn("warning: could not codesign the app bundle; macOS may refuse to open it");
-  console.log(`installed ${appDir} — launch "Toyon" from Spotlight or drag it to the Dock`);
+  console.log(`installed ${appDir}; launch "Toyon" from Spotlight or drag it to the Dock`);
 }
 
 if (wantsInstallApp) {
@@ -285,7 +285,7 @@ if (wantsInstallApp) {
 } else if (wantsAppWindow) {
   console.log(`toyon → app window (${appUrl.split("#")[0]})`);
   if (!openAppWindow()) {
-    console.log("no Chromium browser found — opening in default browser");
+    console.log("no Chromium browser found; opening in default browser");
     spawn("open", [url], { stdio: "ignore" }).unref();
   }
 } else {

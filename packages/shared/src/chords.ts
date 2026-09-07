@@ -119,7 +119,7 @@ export function chordOf(id: ChordId): Chord {
 export function chordLabel(id: ChordId, env: ChordEnv = {}): string {
   const c = chordOf(id);
   const key = c.advertise && env[c.advertise.when] ? c.advertise.key : c.key;
-  const shown = key === "1-9" ? "1–9" : key.toUpperCase();
+  const shown = key === "1-9" ? "1-9" : key.toUpperCase();
   return `${c.ctrl ? "⌃" : "⌘"}${c.shift ? "⇧" : ""}${shown}`;
 }
 

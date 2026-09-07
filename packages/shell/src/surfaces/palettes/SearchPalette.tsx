@@ -43,7 +43,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       empty={(q) => (q.trim().length < MIN ? "type at least two characters" : isStale(q) ? "searching…" : "no matches")}
       footer={(q, rows) =>
         results?.truncated && !isStale(q) && rows.length > 0 ? (
-          <div className="dock-empty">showing the first {rows.length} — narrow the search</div>
+          <div className="dock-empty">showing the first {rows.length}; narrow the search</div>
         ) : null
       }
       row={(h) => (

@@ -108,7 +108,7 @@ const stopLagSampler = startLagSampler();
 if (cloud.enabled) {
   // decided, not implicit: preview proxies bind 0.0.0.0 with no auth of their own. The platform
   // (fly-replay / edge session check) must front them.
-  log.warn("daemon", "cloud mode: preview proxy ports are unauthenticated — the platform edge must gate them");
+  log.warn("daemon", "cloud mode: preview proxy ports are unauthenticated; the platform edge must gate them");
 }
 
 await repos.boot();

@@ -88,12 +88,12 @@ export class WorktreeProcs {
         if (mp.restarts < 5) {
           mp.restarts += 1;
           const delay = Math.min(30_000, 1000 * 2 ** (mp.restarts - 1));
-          this.onLog(name, `crashed (exit ${code}) — restarting in ${delay / 1000}s (attempt ${mp.restarts}/5)`);
+          this.onLog(name, `crashed (exit ${code}): restarting in ${delay / 1000}s (attempt ${mp.restarts}/5)`);
           setTimeout(() => {
             if (!this.stopped && mp.state.status === "crashed") this.spawnProc(mp);
           }, delay);
         } else {
-          this.onLog(name, `crashed (exit ${code}) — giving up after 5 attempts; restart manually`);
+          this.onLog(name, `crashed (exit ${code}): giving up after 5 attempts; restart manually`);
         }
       }
     });

@@ -50,8 +50,8 @@ export function PromptOverlay() {
     <Overlay onClose={() => dispatch({ a: "close" })}>
       <div className="title">
         {batch
-          ? "batch — an agent splits this into separate worktrees, one per task"
-          : "new worktree — describe the change; an agent starts on it immediately"}
+          ? "batch: an agent splits this into separate worktrees, one per task"
+          : "new worktree: describe the change; an agent starts on it immediately"}
       </div>
       <textarea
         className="field field-lg"
@@ -99,7 +99,7 @@ export function PromptOverlay() {
         </label>
         {!batch && (
           <span className="variants-right">
-            <span data-tip="Run the same prompt in N parallel worktrees — keep the best">variants</span>
+            <span data-tip="Run the same prompt in N parallel worktrees, keep the best">variants</span>
             {[1, 2, 3].map((n) => (
               <button
                 key={n}

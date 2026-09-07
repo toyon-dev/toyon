@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { parseName, parsePlan } from "./tasks.ts";
 
 describe("parseName", () => {
-  test("keeps 2–4 kebab words, cleans quotes and case, takes the last line", () => {
+  test("keeps 2-4 kebab words, cleans quotes and case, takes the last line", () => {
     expect(parseName("Sticky-Header")).toBe("sticky-header");
     expect(parseName("`dark-mode-toggle`\n")).toBe("dark-mode-toggle");
     expect(parseName("Sure! Here is a name:\nadd about page")).toBe("add-about-page");

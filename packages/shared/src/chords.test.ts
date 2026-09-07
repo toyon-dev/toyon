@@ -72,7 +72,7 @@ describe("labels", () => {
     expect(chordLabel("search")).toBe("⌘⇧F");
     expect(chordLabel("zen")).toBe("⌘.");
     expect(chordLabel("terminal")).toBe("⌃`");
-    expect(chordLabel("worktree")).toBe("⌘1–9");
+    expect(chordLabel("worktree")).toBe("⌘1-9");
   });
   test("worktreeChord / worktreeIndex agree: ⌘9 is always the last", () => {
     expect(worktreeChord(0, 3)).toBe("⌘1");

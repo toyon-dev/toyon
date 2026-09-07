@@ -51,7 +51,7 @@ export function buildCommands(
     add(`setup:${repo.id}`, `set up ${repo.name}… (install + start)`, () =>
       dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } }),
     );
-    add(`forget:${repo.id}`, `forget project — ${repo.name}…`, () => {
+    add(`forget:${repo.id}`, `forget project · ${repo.name}…`, () => {
       if (
         window.confirm(
           `Forget ${repo.name}?\n\nIts procs stop and it leaves the project list. The checkout is not touched; open it again any time.`,
@@ -141,12 +141,12 @@ export function buildCommands(
   if (wt && id) {
     const acts = worktreeActions(sock);
     const t = wt.worktree.title;
-    if (wt.agent === "working") add("stop", `stop agent — ${t}`, () => sock?.send({ t: "stop-agent", worktreeId: id }));
+    if (wt.agent === "working") add("stop", `stop agent · ${t}`, () => sock?.send({ t: "stop-agent", worktreeId: id }));
     for (const p of wt.procs)
       add(`restart:${p.name}`, `restart ${p.name} (${p.status})`, () =>
         sock?.send({ t: "restart-proc", worktreeId: id, proc: p.name }),
       );
-    add("reveal", `reveal in Finder — ${t}`, () => sock?.send({ t: "reveal", worktreeId: id }));
+    add("reveal", `reveal in Finder · ${t}`, () => sock?.send({ t: "reveal", worktreeId: id }));
     const repo = state.repos.find((r) => r.id === wt.worktree.repoId) ?? null;
     const current = profileOf(wt.worktree, repo);
     for (const name of profileNames(repo)) {
@@ -155,11 +155,11 @@ export function buildCommands(
     if ((wt.behind ?? 0) > 0)
       add("sync", `sync main into ${t} (${wt.behind} behind)`, () => sock?.send({ t: "sync-main", worktreeId: id }));
     if (wt.worktree.kind !== "main") {
-      add("rename", `rename worktree — ${t}…`, () => acts.rename(wt));
-      if (wt.worktree.variant) add("keep", `keep this variant — ${t}…`, () => acts.pickVariant(wt));
+      add("rename", `rename worktree · ${t}…`, () => acts.rename(wt));
+      if (wt.worktree.variant) add("keep", `keep this variant · ${t}…`, () => acts.pickVariant(wt));
       add("merge", `merge ${t} into main`, () => sock?.send({ t: "merge-main", worktreeId: id }));
-      add("ship", `push + PR — ${t}`, () => sock?.send({ t: "ship", worktreeId: id }));
-      add("remove", `remove worktree — ${t}…`, () => acts.remove(wt));
+      add("ship", `push + PR · ${t}`, () => sock?.send({ t: "ship", worktreeId: id }));
+      add("remove", `remove worktree · ${t}…`, () => acts.remove(wt));
     }
   }
   state.visible.forEach((w, i) => {
@@ -281,7 +281,9 @@ function commandScore(hay: string, needle: string): number {
   }
   return score + Math.max(0, 40 - hay.length / 4);
 }
-const commandWordStart = (hay: string, i: number) => i === 0 || /[\s:\-–—/.(]/.test(hay[i - 1]!);
+// prose-ignore: a character class of the separators a label may contain, including ones a
+// user types into a worktree title. Matched against, never shown.
+const commandWordStart = (hay: string, i: number) => i === 0 || /[\s:\-–—·/.(]/.test(hay[i - 1]!);
 
 /** positions each needle character lands on under the word-start rule (case-insensitive); null when no match */
 export function commandHits(label: string, needle: string): number[] | null {

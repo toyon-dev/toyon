@@ -27,7 +27,7 @@ export function cleanTitle(title: string): string {
 
 /** perspective-diverse variants: same goal, different emphasis per attempt */
 export const VARIANT_LENSES = [
-  "(You are attempt 1 of several parallel attempts at this task. Take the straightforward, balanced approach — the version most people would expect.)",
-  "(You are attempt 2 of several parallel attempts at this task. Take a bolder visual/design-led approach — prioritize form, polish, and delight.)",
-  "(You are attempt 3 of several parallel attempts at this task. Take a function-led approach — prioritize capability, detail, and edge cases over visual flair.)",
+  "(You are attempt 1 of several parallel attempts at this task. Take the straightforward, balanced approach: the version most people would expect.)",
+  "(You are attempt 2 of several parallel attempts at this task. Take a bolder visual/design-led approach: prioritize form, polish, and delight.)",
+  "(You are attempt 3 of several parallel attempts at this task. Take a function-led approach: prioritize capability, detail, and edge cases over visual flair.)",
 ];

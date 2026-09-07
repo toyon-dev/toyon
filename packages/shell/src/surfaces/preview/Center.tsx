@@ -203,13 +203,13 @@ export function Center() {
           {!activeReady && !setupRepo && (
             <div className="empty">
               {incompatible
-                ? "toyon was updated — reload this page"
+                ? "toyon was updated: reload this page"
                 : !connected
                   ? HAS_TOKEN
                     ? "connecting to daemon…"
-                    : "no access token for this address —\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
+                    : "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
                   : !active
-                    ? `no worktrees yet — press ${chord("project")} to open a project, or run \`toyon\` inside a git repo`
+                    ? `no worktrees yet: press ${chord("project")} to open a project, or run \`toyon\` inside a git repo`
                     : log.length > 0
                       ? log.slice(-20).join("\n")
                       : "starting dev servers…"}

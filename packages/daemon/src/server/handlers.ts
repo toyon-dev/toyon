@@ -193,7 +193,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       msg.worktreeId,
       result.ok
         ? toast(msg.worktreeId, true, result.message)
-        : toast(msg.worktreeId, false, `sync conflicts with ${defaultBranch} — prompt prefilled in chat`, {
+        : toast(msg.worktreeId, false, `sync conflicts with ${defaultBranch}: prompt prefilled in chat`, {
             suggestion: `Merge ${defaultBranch} into this branch and resolve the conflicts, then verify the app still works.`,
           }),
     );
@@ -207,7 +207,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async combine(msg, ctx, s) {
     const wt = await s.worktrees.combine(msg.worktreeIds);
     ctx.reply(
-      toast(wt.id, true, `grafted: ${wt.title} — local merge of ${msg.worktreeIds.length} branches, nothing pushed`),
+      toast(wt.id, true, `grafted: ${wt.title}; local merge of ${msg.worktreeIds.length} branches, nothing pushed`),
     );
   },
 

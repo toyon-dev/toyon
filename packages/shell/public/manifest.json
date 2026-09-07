@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Toyon",
   "short_name": "Toyon",
-  "description": "Browser-first workbench for parallel AI coding agents — one chat per git worktree, every worktree running live.",
+  "description": "Browser-first workbench for parallel AI coding agents: one chat per git worktree, every worktree running live.",
   "start_url": "/",
   "display": "standalone",
   "display_override": [

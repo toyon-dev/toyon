@@ -81,7 +81,7 @@ describe("parseClientMsg", () => {
     expect(parseClientMsg({ t: "unqueue", worktreeId: "a", index: 1.5 }).ok).toBe(false);
   });
 
-  test("terminal sizes are 1–500 integers and input is bounded", () => {
+  test("terminal sizes are 1-500 integers and input is bounded", () => {
     const open = (cols: number, rows: number) => parseClientMsg({ t: "term-open", worktreeId: "a", cols, rows });
     expect(open(0, 24).ok).toBe(false);
     expect(open(80, 501).ok).toBe(false);

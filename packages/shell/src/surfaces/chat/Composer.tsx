@@ -70,7 +70,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
       );
     }
     if (parts.length === 0) return undefined;
-    return `[Live preview context, attached automatically — this is what the user is looking at right now:\n${parts.join("\n")}]`;
+    return `[Live preview context, attached automatically. This is what the user is looking at right now:\n${parts.join("\n")}]`;
   };
 
   const send = () => {
@@ -169,7 +169,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           !active
             ? "no worktree selected"
             : spawnNew
-              ? "describe a change — starts an agent in a new worktree…"
+              ? "describe a change; starts an agent in a new worktree…"
               : `message agent on ${active.worktree.title}…`
         }
         disabled={!active}
@@ -185,7 +185,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           >
             <input type="checkbox" checked={spawnNew} onChange={(e) => setSpawnNew(e.target.checked)} />
             <span>
-              new worktree from <b>{active?.worktree.title ?? "—"}</b>
+              new worktree from <b>{active?.worktree.title ?? "untitled"}</b>
             </span>
           </label>
           {spawnNew && <ProfileChip repo={repo} value={profile} onChange={setProfile} />}

@@ -162,7 +162,7 @@ export class RepoRegistry {
       log.warn(repo.id, file.reason);
       if (announce) {
         const main = this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main");
-        if (main) this.d.hub.emit("log", main.id, "config", `${file.reason} — keeping the previous config`);
+        if (main) this.d.hub.emit("log", main.id, "config", `${file.reason}; keeping the previous config`);
       }
       return false;
     }

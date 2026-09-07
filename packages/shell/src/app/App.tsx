@@ -59,7 +59,7 @@ export function App() {
 
   // window/app title follows the active worktree
   useEffect(() => {
-    document.title = active ? `${active.worktree.title} — toyon` : "toyon";
+    document.title = active ? `${active.worktree.title} · toyon` : "toyon";
   }, [active?.worktree.title]);
 
   // paint the selected theme (or the picker's live preview); previews get the accent for their overlays

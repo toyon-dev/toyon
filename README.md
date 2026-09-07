@@ -1,6 +1,6 @@
 # Toyon
 
-Every worktree gets its own agent and a live preview. Run several at once, land the one you like — from the browser.
+Every worktree gets its own agent and a live preview. Run several at once, land the one you like, from the browser.
 
 Toyon is a browser-first workbench for parallel AI coding agents: `npx toyon` in any repo starts a local daemon that manages git worktrees (one chat per worktree), runs each worktree's dev servers, and shows them live in a Zed-minimal browser UI. Switch worktrees like tabs; each one is a running version of your app with its own agent.
 

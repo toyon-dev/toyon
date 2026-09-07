@@ -333,7 +333,7 @@ export class WorktreeService {
         await git(wtPath, "merge", "--abort");
         await git(repo.path, "worktree", "remove", "--force", wtPath);
         await git(repo.path, "branch", "-D", branch);
-        throw new UserError(`branches conflict — these worktrees can't be grafted cleanly (${m.err.slice(0, 200)})`);
+        throw new UserError(`branches conflict: these worktrees can't be grafted cleanly (${m.err.slice(0, 200)})`);
       }
     });
 

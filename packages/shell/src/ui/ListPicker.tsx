@@ -29,6 +29,7 @@ export function ListPicker<T>({
   placeholder,
   initialQuery = "",
   initialIndex,
+  anchored = false,
   empty = "no matches",
   footer,
   keys,
@@ -67,6 +68,9 @@ export function ListPicker<T>({
    * belong here rather than in `placeholder`, which can only hold a string. `side` and
    * `complete` are ignored unless `onSide` / `completionOf` are wired up. */
   keys?: { nav?: string; side?: string; complete?: string; pick?: string; back?: string };
+  /** draw as a dropdown under the trigger (the caller renders it inside the trigger's positioned
+   * wrapper) instead of a centered overlay over the preview */
+  anchored?: boolean;
 }) {
   const [q, setQ] = useState(initialQuery);
   const results = useMemo(() => filter(items, q), [items, q, filter]);
@@ -98,7 +102,7 @@ export function ListPicker<T>({
   if (keys?.pick) hints.push(["enter", keys.pick]);
   if (keys?.back) hints.push(["esc", keys.back]);
   return (
-    <Overlay onClose={onBack} boxClass="quick-open">
+    <Overlay onClose={onBack} boxClass="quick-open" anchored={anchored}>
       <div className="lp-input">
         <input
           className="field field-lg"

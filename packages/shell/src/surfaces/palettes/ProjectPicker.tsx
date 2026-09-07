@@ -14,8 +14,8 @@ type Row =
 /** a typed path is a filesystem query rather than a name filter */
 const looksLikePath = (q: string) => /^(~|\/|\.\.?\/)/.test(q.trim());
 
-/** ⌘⇧O / the top-left pill: switch the shell to another registered repo, or type a path to
- * register one. The daemon keeps every project's procs running; this only changes what is on
+/** ⌘⇧O / the top-left pill, which renders this as a dropdown under itself: switch the shell to
+ * another registered repo, or type a path to register one. The daemon keeps every project's procs running; this only changes what is on
  * screen. Typing a path completes against the filesystem: repos are openable, plain folders are
  * drilled into (enter or tab), so a nested checkout is reachable without typing it out. */
 export function ProjectPicker() {
@@ -55,6 +55,7 @@ export function ProjectPicker() {
 
   return (
     <ListPicker
+      anchored
       items={items}
       filter={(rows, q) => {
         if (!looksLikePath(q)) return rows.filter((r) => r.kind === "repo" && byName(q, r.repo.name, r.repo.path));

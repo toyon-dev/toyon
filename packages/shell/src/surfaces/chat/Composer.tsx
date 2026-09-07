@@ -32,7 +32,12 @@ const cmdRow = (c: AgentCommand): Row => ({ kind: "cmd", c });
 
 /** the two empty states worth telling apart: nothing matched, versus nothing to match yet */
 function emptyMenu(kind: Row["kind"] | "command" | "file", files: string[] | undefined, commandCount: number) {
-  if (kind === "command") return commandCount === 0 ? "the agent has not started yet" : "no matching command";
+  // the list only exists once the agent has run once here, so say what to do rather than what
+  // happened: this is the state a brand new worktree is in
+  if (kind === "command")
+    return commandCount === 0
+      ? "send a message first: the agent lists its commands when it starts"
+      : "no matching command";
   return files ? "no matches" : "listing files…";
 }
 
@@ -269,7 +274,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         <InlinePicker
           results={rows}
           keyOf={(r) => (r.kind === "cmd" ? `c:${r.c.name}` : r.kind === "changes" ? "changes" : `f:${r.path}`)}
-          rowClass={(r) => (r.kind === "file" ? "qo-file" : "cmd-item")}
+          rowClass={(r) => (r.kind === "file" ? "qo-file" : r.kind === "changes" ? "cmd-item" : "cmd-item ip-cmd")}
           nav={nav}
           listRef={listRef}
           hint={nav.active?.kind === "cmd" ? nav.active.c.hint : undefined}
@@ -279,11 +284,14 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             if (r.kind === "changes")
               return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
             const needle = trigger.query.trim();
+            // the name is what gets typed, so it is what holds its width; the description gives
+            // way and ellipsises. PaletteRow's hint slot never shrinks, which is right for a chord
+            // and wrong for a sentence.
             return (
-              <PaletteRow
-                label={markHits(r.c.name, needle ? commandHits(r.c.name, needle) : null, 0)}
-                hint={r.c.description}
-              />
+              <>
+                <span className="ip-name">/{markHits(r.c.name, needle ? commandHits(r.c.name, needle) : null, 0)}</span>
+                <span className="ip-desc">{r.c.description}</span>
+              </>
             );
           }}
         />

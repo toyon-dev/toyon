@@ -81,7 +81,15 @@ describe("filterCommands", () => {
   test("word starts rank above a scattered match", () => {
     expect(filterCommands(cmds, "rev")[0]!.name).toBe("review");
   });
-  test("the description is searched too, and a miss drops the row", () => {
+  test("a name match hides description matches: /plan should not list six things about planning", () => {
+    const noisy = [
+      { name: "plan", description: "make a plan" },
+      { name: "usage", description: "show cost and plan usage" },
+      { name: "ultracode", description: "research and plan a large change" },
+    ];
+    expect(filterCommands(noisy, "plan").map((c) => c.name)).toEqual(["plan"]);
+  });
+  test("the description is a fallback when no name matches, for an unguessable name", () => {
     expect(filterCommands(cmds, "delivery").map((c) => c.name)).toEqual(["receive"]);
     expect(filterCommands(cmds, "zzz")).toEqual([]);
   });

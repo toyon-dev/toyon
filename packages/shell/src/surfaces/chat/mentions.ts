@@ -42,13 +42,24 @@ export function insertAt(text: string, span: { from: number; to: number }, repla
   return { text: next, caret: span.from + replacement.length };
 }
 
-/** the `/` rows, ranked by the same word-start rule the ⌘⇧P palette uses */
+/**
+ * The `/` rows, ranked by the same word-start rule the ⌘⇧P palette uses.
+ *
+ * Names first, and descriptions only when no name matches at all. Searching both at once buries
+ * the command someone is typing: `/plan` matched "plan usage", "Research and plan a large-scale
+ * change" and four more before anything actually called plan. The description is still worth
+ * searching when the name is unguessable (`/chart` should find a skill named dataviz), so it stays
+ * as a fallback rather than a competitor.
+ */
 export function filterCommands(commands: AgentCommand[], q: string): AgentCommand[] {
   const needle = q.trim().toLowerCase();
   if (!needle) return commands;
-  return commands
-    .map((c) => ({ c, score: commandScore(`${c.name} ${c.description}`, needle) }))
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score || a.c.name.localeCompare(b.c.name))
-    .map((x) => x.c);
+  const ranked = (score: (c: AgentCommand) => number) =>
+    commands
+      .map((c) => ({ c, score: score(c) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score || a.c.name.localeCompare(b.c.name))
+      .map((x) => x.c);
+  const byName = ranked((c) => commandScore(c.name, needle));
+  return byName.length > 0 ? byName : ranked((c) => commandScore(c.description, needle));
 }

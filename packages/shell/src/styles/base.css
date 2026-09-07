@@ -168,6 +168,16 @@ button {
   color: var(--fg-dim);
   margin-bottom: 8px;
 }
+/* anchored variant: no scrim, hanging under whatever opened it (the caller's wrapper is the
+   offset parent). Sits above the rail panel and the toast, under the tooltip. */
+.prompt-box.anchored {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(420px, calc(100vw - 60px));
+  z-index: 40;
+  box-shadow: 0 6px 20px var(--shadow);
+}
 
 .dock-empty {
   padding: 4px 12px;

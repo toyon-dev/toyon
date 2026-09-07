@@ -1,14 +1,15 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 
 /** The overlays only scrim the preview column, so a click on a dock or the rail wouldn't reach a
- * backdrop — dismiss on any mousedown outside the box instead (the ? button is exempt: it toggles). */
+ * backdrop — dismiss on any mousedown outside the box instead. A button that toggles its own box
+ * is exempt: closing here would let its click reopen what it meant to close. */
 export function useDismissOutside(box: RefObject<HTMLElement | null>, onOutside: () => void) {
   const cb = useRef(onOutside);
   cb.current = onOutside;
   useEffect(() => {
     const h = (e: MouseEvent) => {
       const t = e.target as Element | null;
-      if (t?.closest?.(".keys-btn")) return;
+      if (t?.closest?.(".keys-btn, .project-pill")) return;
       if (box.current && !box.current.contains(t as Node)) cb.current();
     };
     document.addEventListener("mousedown", h);

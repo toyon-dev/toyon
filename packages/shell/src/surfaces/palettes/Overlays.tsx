@@ -4,12 +4,12 @@ import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
-import { ProjectPicker } from "./ProjectPicker.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import { SearchPalette } from "./SearchPalette.tsx";
 import { ThemePicker } from "./ThemePicker.tsx";
 
-/** whichever overlay is open (they are mutually exclusive) */
+/** whichever overlay is open (they are mutually exclusive). The project picker is not here: it
+ * hangs off its pill in the top bar, where the click that opens it already is. */
 export function Overlays() {
   const overlay = useOverlay();
   const activeId = useActiveId();
@@ -23,7 +23,6 @@ export function Overlays() {
       {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "commands" && <CommandPalette />}
       {overlay?.kind === "prompt" && <PromptOverlay />}
-      {overlay?.kind === "projects" && <ProjectPicker />}
     </>
   );
 }

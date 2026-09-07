@@ -5,6 +5,7 @@ import { useActive, useActiveRepo, useLocalField } from "../../state/selectors.t
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { ProjectPicker } from "../palettes/ProjectPicker.tsx";
 import { chord, isInstalledApp } from "../util.ts";
 
 /** the top bar: dock toggles, the route bar centered over the preview, tools (proc health badges the
@@ -73,8 +74,9 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   );
 }
 
-/** Zed-style, next to the changes toggle: the project the shell is scoped to; opens the switcher. A dot means an
- * agent is working in a project that is not on screen. */
+/** Zed-style, next to the changes toggle: the project the shell is scoped to; opens the switcher
+ * as a dropdown right under itself, so the list appears where the click already was. A dot means
+ * an agent is working in a project that is not on screen. */
 function ProjectPill() {
   const dispatch = useDispatch();
   const repo = useActiveRepo();
@@ -84,14 +86,17 @@ function ProjectPill() {
     s.worktrees.some((w) => w.agent === "working" && w.worktree.repoId !== s.activeRepoId),
   );
   return (
-    <button
-      className={`btn project-pill ${open ? "on" : ""}`}
-      {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
-      onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
-    >
-      <span className="pp-name">{repo?.name ?? "open project"}</span>
-      {busyElsewhere && <span className="pp-dot" {...tip("An agent is working in another project")} />}
-    </button>
+    <span className="pp-wrap">
+      <button
+        className={`btn project-pill ${open ? "on" : ""}`}
+        {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
+        onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
+      >
+        <span className="pp-name">{repo?.name ?? "open project"}</span>
+        {busyElsewhere && <span className="pp-dot" {...tip("An agent is working in another project")} />}
+      </button>
+      {open && <ProjectPicker />}
+    </span>
   );
 }
 

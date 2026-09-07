@@ -573,9 +573,15 @@ body.resizing .row-resize {
   background: var(--bg1);
   padding-top: 6px;
 }
-/* the rail's rows are stale while the socket is down; the bar says why */
-.wt-rail.offline .rail-list {
-  opacity: 0.45;
+/* the socket is down: every row is stale and nothing you click will answer. Fading them read as
+   "still loading", so they take the fault colour instead and hovering the rail says what happened.
+   The dots go with them: what they were reporting is exactly what we have stopped hearing. */
+.wt-rail.offline .wt-item {
+  color: var(--orange);
+}
+.wt-rail.offline .wt-item .dot {
+  background: var(--orange);
+  animation: none;
 }
 .nw-mini {
   display: none;
@@ -1170,26 +1176,6 @@ body.resizing .rb-center {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 160px;
-}
-/* the daemon is gone: sits beside the project it was serving, and only while that is true */
-.conn-chip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: none;
-  padding: 1px 8px;
-  font-size: var(--fs-xs);
-  line-height: 1.4;
-  white-space: nowrap;
-  color: var(--orange);
-  cursor: default;
-}
-.conn-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--orange);
-  flex: none;
 }
 /* an agent is working in a project that is not on screen: the only reason to look away from here */
 .pp-dot {

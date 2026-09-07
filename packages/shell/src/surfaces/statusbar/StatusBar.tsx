@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useStore } from "../../state/context.tsx";
-import { useActive, useActiveRepo, useLocalField, useOffline } from "../../state/selectors.ts";
+import { useActive, useActiveRepo, useLocalField } from "../../state/selectors.ts";
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, isInstalledApp } from "../util.ts";
 
-/** the top bar: dock toggles, the route bar centered over the preview, tools (proc health lives in the rail foot) */
+/** the top bar: dock toggles, the route bar centered over the preview, tools (proc health badges the
+ * composer's terminal button; a dead socket colours the worktree rail) */
 /** `leftPx`/`rightPx`: the dock columns' widths, so the nav cluster can sit over the preview column */
 export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number }) {
   // nav cluster stays centered over the preview column; only this surface re-renders on resize
@@ -32,7 +33,6 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
         <Icon name="branch" />
       </button>
       <ProjectPill />
-      <ConnChip />
       <RouteBar worktreeId={id} ready={ready} left={navCenter} />
       {installEvt && (
         <button
@@ -70,20 +70,6 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
         </button>
       </span>
     </div>
-  );
-}
-
-/** the daemon, next to the project it is serving: absent while the socket is up, since a light that
- * is always on tells you nothing. It sits in the bar rather than the worktree rail because the
- * socket is the whole app's, and while it is down nothing on screen is live. */
-function ConnChip() {
-  const offline = useOffline();
-  if (!offline) return null;
-  return (
-    <span className="conn-chip" role="status" {...tip("Lost the daemon; retrying")}>
-      <span className="conn-dot" />
-      reconnecting
-    </span>
   );
 }
 

@@ -98,7 +98,9 @@ export function WtRail() {
 
   return (
     <div className={`wt-rail ${graftMode || menu ? "hold" : ""} ${offline ? "offline" : ""}`}>
-      <div className="rail-panel">
+      {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
+          tip of its own, and the tooltip walks up to the nearest one */}
+      <div className="rail-panel" data-tip={offline ? "Lost the daemon; retrying" : undefined}>
         <div className="rail-list">
           {worktrees.map((w) => (
             <button

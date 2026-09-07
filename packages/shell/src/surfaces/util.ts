@@ -1,4 +1,4 @@
-import { type ChordId, chordLabel, type WorktreeInfo, type WorktreeStatus } from "@toyon/shared";
+import { type ChordId, chordLabel, type ProcState, type WorktreeInfo, type WorktreeStatus } from "@toyon/shared";
 
 /** Preview iframes hit the worktree's proxy port. Locally that is always loopback (the daemon
  * binds 127.0.0.1); in cloud mode the same port is a public TLS port on the host that served this
@@ -35,6 +35,25 @@ export function dotClass(w: WorktreeStatus): string {
   if (w.procs.some((p) => p.status === "running")) return "running";
   if (w.procs.some((p) => p.status === "starting")) return "starting";
   return "idle";
+}
+
+/** what the composer's terminal badge says. Only "crashed" counts as trouble: "stopped" is a
+ * clean exit or one you killed in the proc's own tab, and "starting" resolves on its own. */
+export interface ProcTrouble {
+  /** the crashed procs, in config order */
+  dead: ProcState[];
+  /** tooltip: what died and what a click does */
+  tip: string;
+  /** the tab a click should land on */
+  stream: string;
+}
+
+export function procTrouble(procs: ProcState[]): ProcTrouble | null {
+  const dead = procs.filter((p) => p.status === "crashed");
+  const first = dead[0];
+  if (!first) return null;
+  const what = dead.map((p) => `${p.name} crashed on :${p.port}`).join(", ");
+  return { dead, tip: `${what} · click to open its tab`, stream: first.name };
 }
 
 export function xyClass(xy: string): string {

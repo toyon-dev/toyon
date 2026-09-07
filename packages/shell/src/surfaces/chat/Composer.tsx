@@ -7,7 +7,7 @@ import { useLocalField } from "../../state/selectors.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
-import { chord, pickLabel, relFile } from "../util.ts";
+import { chord, pickLabel, procTrouble, relFile } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl, nextImageNumber } from "./images.ts";
 import { PickChip } from "./PickChip.tsx";
@@ -32,6 +32,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   const picking = useStore((s) => s.picking);
   const termOpen = useStore((s) => s.termOpen);
   const pick = useStore((s) => (s.pick && s.pick.worktreeId === id ? s.pick : null));
+  const trouble = procTrouble(active?.procs ?? []);
 
   // spawn-a-worktree default: on for main (protect the working copy), off on worktrees (continue
   // that conversation); user can override per tab
@@ -194,12 +195,18 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar */}
           <button
-            className={`btn-icon ${termOpen ? "on" : ""}`}
+            className={`btn-icon term-btn ${termOpen ? "on" : ""}`}
             disabled={!active}
-            {...tip("Terminal", chord("terminal"))}
-            onClick={() => dispatch({ a: "toggle-terminal" })}
+            {...tip(trouble ? trouble.tip : "Terminal", chord("terminal"))}
+            onClick={() => {
+              // opening onto the badge's own tab: the dot is the only thing that says a proc died,
+              // so following it should land on the crash, not on whichever tab you left open
+              if (trouble && !termOpen && id) dispatch({ a: "term-stream", id, stream: trouble.stream });
+              else dispatch({ a: "toggle-terminal" });
+            }}
           >
             <Icon name="terminal" />
+            {trouble && <span className="term-badge" />}
           </button>
           <button
             className={`btn-icon composer-pick ${picking ? "on" : ""}`}

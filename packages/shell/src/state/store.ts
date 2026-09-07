@@ -6,6 +6,8 @@ import type {
   AgentEvent,
   AgentInfo,
   GitFileStatus,
+  ImageInput,
+  ImageRef,
   PickedElement,
   PickMeta,
   RepoInfo,
@@ -20,7 +22,7 @@ import type {
 import { builtinThemes, defaultThemePrefs, gruvboxDarkSoft, isEditTool, resolveTheme } from "@toyon/shared";
 
 export type ChatItem =
-  | { kind: "user"; text: string; pick?: PickMeta }
+  | { kind: "user"; text: string; pick?: PickMeta; images?: ImageRef[] }
   | { kind: "assistant"; text: string }
   | { kind: "thinking"; text: string }
   | {
@@ -63,6 +65,14 @@ export interface WorktreeLocal {
   /** the composer's unsent text; survives switching worktrees, and is where the daemon's
    * conflict-resolution suggestion lands */
   draft: string;
+  /** images pasted or dropped on the composer, not yet sent; `key` is local (the daemon numbers
+   * them on send) */
+  images: PendingImage[];
+}
+
+export interface PendingImage extends ImageInput {
+  key: string;
+  bytes: number;
 }
 
 export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
@@ -74,6 +84,7 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   changedRanges: {},
   search: null,
   draft: "",
+  images: [],
 }) as WorktreeLocal;
 
 /** the modal overlays are mutually exclusive: exactly one (or none) is open */
@@ -200,6 +211,9 @@ export type Action =
   | { a: "close-diff" }
   | { a: "dismiss-toast" }
   | { a: "set-draft"; id: string; text: string }
+  | { a: "add-images"; id: string; images: PendingImage[] }
+  | { a: "remove-image"; id: string; key: string }
+  | { a: "clear-images"; id: string }
   | { a: "goto-line"; v: State["gotoLine"] }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
@@ -244,6 +258,12 @@ export function reducer(s: State, action: Action): State {
       return { ...s, toast: null };
     case "set-draft":
       return withLocal(s, action.id, (l) => ({ ...l, draft: action.text }));
+    case "add-images":
+      return withLocal(s, action.id, (l) => ({ ...l, images: [...l.images, ...action.images] }));
+    case "remove-image":
+      return withLocal(s, action.id, (l) => ({ ...l, images: l.images.filter((i) => i.key !== action.key) }));
+    case "clear-images":
+      return withLocal(s, action.id, (l) => (l.images.length ? { ...l, images: [] } : l));
     case "goto-line":
       return { ...s, gotoLine: action.v };
     case "hmr":
@@ -451,7 +471,10 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
   const last = items[items.length - 1];
   switch (event.type) {
     case "user-message":
-      return [...items, { kind: "user", text: event.text, pick: event.pick }];
+      return [
+        ...items,
+        { kind: "user", text: event.text, pick: event.pick, ...(event.images?.length ? { images: event.images } : {}) },
+      ];
     case "text-delta":
       if (last?.kind === "assistant") return [...items.slice(0, -1), { ...last, text: last.text + event.text }];
       return [...items, { kind: "assistant", text: event.text }];

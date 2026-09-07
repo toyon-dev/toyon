@@ -62,7 +62,7 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
     <div className="chat-wrap">
       <div className="chat-log" ref={logRef} onScroll={onScroll}>
         {items.map((item, i) => (
-          <ChatItemView key={i} item={item} onPickHover={onPickHover} />
+          <ChatItemView key={i} item={item} worktreeId={id} onPickHover={onPickHover} />
         ))}
         {active?.agent === "working" && (
           <div className="msg-thinking working-row">

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { AgentEvent } from "@toyon/shared";
 import { sh, tmpRepo } from "../../../test/helpers/tmp-repo.ts";
 import { GIT } from "../../git/exec.ts";
+import { AttachmentStore } from "../attachments.ts";
 import { AgentRegistry, BUILTIN_AGENTS } from "../registry.ts";
 import { SETTINGS_REL } from "../sandbox.ts";
 import { AcpSession } from "./session.ts";
@@ -38,6 +39,7 @@ function world() {
     spec: () => registry.require("claude"),
     connect: (app, spec) => spawnAcp(app, registry.launch(spec), wt, "it"),
     transcriptsDir: t.paths.transcriptsDir,
+    attachments: new AttachmentStore(t.paths.attachmentsDir),
     getSessionId: () => sessionId,
     setSessionId: (id) => {
       sessionId = id;
@@ -71,6 +73,30 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
       const settings = JSON.parse(readFileSync(join(wt, SETTINGS_REL), "utf8"));
       expect(settings.sandbox.enabled).toBe(true);
       expect(sh(wt, GIT, "status", "--porcelain")).toBe("?? hello.txt");
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 180_000);
+
+  test("an attached image reaches the model as an image block it can see", async () => {
+    const { t, events, session, settle, said } = world();
+    // a 64×64 solid red PNG
+    const red =
+      "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAS0lEQVR42u3PQQkAAAgAsetfWiP4FgYrsKZeS0BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEDgsqnc8OJg6Ln3AAAAAElFTkSuQmCC";
+    try {
+      session.send(
+        "Reply with exactly one word, the dominant color of image 1. Do not use any tools.",
+        undefined,
+        undefined,
+        [{ name: "swatch.png", mimeType: "image/png", data: red, width: 64, height: 64 }],
+      );
+      await settle();
+      expect(session.status).toBe("idle");
+      expect(events[0]).toMatchObject({ type: "user-message", images: [{ n: 1, file: "1.png" }] });
+      expect(events.some((e) => e.type === "agent-error")).toBe(false);
+      expect(said().toLowerCase(), `the agent said: ${said()}`).toContain("red");
+      expect(existsSync(join(t.paths.attachmentsDir, "it", "1.png"))).toBe(true);
     } finally {
       await session.close();
       t.cleanup();

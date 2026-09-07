@@ -94,6 +94,26 @@ const termSize = z.number().int().min(1).max(500);
 /** keystrokes, or a paste the shell chunks */
 const termInput = z.string().max(65_536);
 
+/** image formats the models accept; the shell re-encodes anything else (and anything too large) */
+export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+export type ImageMimeType = (typeof IMAGE_MIME_TYPES)[number];
+/** the models' long-edge ceiling; the shell downscales to it before sending */
+export const IMAGE_MAX_EDGE = 2576;
+export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+export const IMAGES_PER_MESSAGE = 6;
+
+/** an image as the shell sends it: already downscaled, base64 so it rides in the JSON frame */
+export const imageInputSchema = z.object({
+  name: z.string().max(200),
+  mimeType: z.enum(IMAGE_MIME_TYPES),
+  /** base64 (no data: prefix); 4/3 of the byte cap, rounded up to the next multiple of 4 */
+  data: z.string().max(Math.ceil((IMAGE_MAX_BYTES * 4) / 3 / 4) * 4),
+  width: z.number().int().min(1).max(IMAGE_MAX_EDGE),
+  height: z.number().int().min(1).max(IMAGE_MAX_EDGE),
+});
+export type ImageInput = z.infer<typeof imageInputSchema>;
+const images = z.array(imageInputSchema).max(IMAGES_PER_MESSAGE).optional();
+
 export const pickMetaSchema = z.object({
   component: z.string().nullable(),
   file: z.string().nullable(),
@@ -127,6 +147,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     text: prose,
     context: prose.optional(),
     pick: pickMetaSchema.optional(),
+    images,
   }),
   z.object({
     t: z.literal("create-worktree"),
@@ -138,6 +159,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     variant: variantSchema.optional(),
     context: prose.optional(),
     pick: pickMetaSchema.optional(),
+    images,
     /** registry id; the daemon's default when absent */
     agent: id.optional(),
   }),

@@ -1,9 +1,10 @@
 // HTTP side of the daemon: loopback/host guards, /ws auth + upgrade, /health, /register (CLI),
-// and the static shell. Business logic stays in the services it calls.
+// /attachments (images the shell attached to chat messages), and the static shell. Business logic stays in the services it calls.
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Server } from "bun";
+import type { AttachmentStore } from "../agent/attachments.ts";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
@@ -24,6 +25,7 @@ export interface HttpOpts {
   shellDist: string;
   version: string;
   repos: RepoRegistry;
+  attachments: AttachmentStore;
   /** whether the portless http://toyon.localhost listener came up (known after bind) */
   branded: () => boolean;
   /** event-loop lag + per-socket traffic, for /health */
@@ -77,6 +79,17 @@ export function createFetch(opts: HttpOpts) {
         log.error("http", "register failed", e);
         return new Response("register failed; see daemon log", { status: 500 });
       }
+    }
+
+    // images the shell attached to chat messages, back for the transcript's thumbnails. The token
+    // rides in the query like /ws does: an <img src> cannot carry a header. Files never change
+    // once written, so the browser may keep them.
+    if (url.pathname.startsWith("/attachments/")) {
+      if (url.searchParams.get("token") !== opts.token) return new Response("unauthorized", { status: 401 });
+      const [worktreeId, file, extra] = url.pathname.slice("/attachments/".length).split("/");
+      const path = worktreeId && file && !extra ? opts.attachments.fileFor(worktreeId, file) : null;
+      if (!path || !existsSync(path)) return new Response("not found", { status: 404 });
+      return new Response(Bun.file(path), { headers: { "cache-control": "private, max-age=31536000, immutable" } });
     }
 
     // static shell

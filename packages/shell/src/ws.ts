@@ -21,6 +21,12 @@ export function hasToken(): boolean {
   return getToken() !== "";
 }
 
+/** where the daemon serves an image attached to a chat message; the token rides in the query
+ * because an <img> cannot send a header */
+export function attachmentUrl(worktreeId: string, file: string): string {
+  return `/attachments/${worktreeId}/${file}?token=${getToken()}`;
+}
+
 /** reconnect delay: 1s doubling to 30s, with jitter so many tabs don't stampede a restarting daemon */
 const BACKOFF_MIN = 1000;
 const BACKOFF_MAX = 30_000;

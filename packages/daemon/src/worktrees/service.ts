@@ -4,7 +4,8 @@
 
 import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { GitFileStatus, PickMeta, RepoInfo, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
+import type { GitFileStatus, ImageInput, PickMeta, RepoInfo, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
+import { attachmentsDirFor } from "../agent/attachments.ts";
 import { quickName } from "../agent/llm.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
@@ -41,6 +42,7 @@ export interface CreateOpts {
   variant?: Variant;
   context?: string;
   pick?: PickMeta;
+  images?: ImageInput[];
 }
 
 export interface WorktreeServiceDeps {
@@ -73,7 +75,7 @@ export class WorktreeService {
   // ---- create / remove / rename ----
 
   async create(repoId: string, prompt: string, opts: CreateOpts = {}): Promise<WorktreeInfo> {
-    const { variant, context, pick } = opts;
+    const { variant, context, pick, images } = opts;
     const repo = this.d.state.requireRepo(repoId);
     // validated up front: an unknown or uninstalled agent is a toast now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
@@ -107,7 +109,7 @@ export class WorktreeService {
         this.refreshLink(claimed);
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
-        this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, undefined, pick);
+        this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, undefined, pick, images);
         this.scheduleNaming(claimed, prompt, repo, variant);
         return claimed;
       }
@@ -136,7 +138,7 @@ export class WorktreeService {
     // setup + procs warm in the background; the agent starts immediately
     // RuntimeRegistry.start emits worktreesChanged once the procs are up
     fireAndForget(wt.id, this.setupAndStart(wt, repo, base?.path ?? repo.path), "setup + start");
-    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, undefined, pick);
+    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, undefined, pick, images);
     this.scheduleNaming(wt, prompt, repo, variant);
     return wt;
   }
@@ -181,8 +183,9 @@ export class WorktreeService {
     this.d.state.removeWorktree(worktreeId);
     try {
       rmSync(transcriptPathFor(this.d.paths.transcriptsDir, worktreeId), { force: true });
+      rmSync(attachmentsDirFor(this.d.paths.attachmentsDir, worktreeId), { recursive: true, force: true });
     } catch (e) {
-      log.warn(worktreeId, "could not delete transcript", e);
+      log.warn(worktreeId, "could not delete transcript or attachments", e);
     }
     releasePort(wt.proxyPort);
     this.d.hub.emit("worktreesChanged");

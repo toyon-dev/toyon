@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
 import type { AgentEvent, AgentStatus } from "@toyon/shared";
+import { AttachmentStore } from "../attachments.ts";
 import { SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import type { Bounds } from "../sandbox.ts";
@@ -53,7 +54,10 @@ interface FakeAgent {
   failLoad: boolean;
 }
 
-function fakeAgent(script: PromptScript, opts: { loadSession?: boolean; withModes?: boolean } = {}): FakeAgent {
+function fakeAgent(
+  script: PromptScript,
+  opts: { loadSession?: boolean; withModes?: boolean; images?: boolean } = {},
+): FakeAgent {
   const f: FakeAgent = {
     newSessions: [],
     loads: [],
@@ -79,7 +83,7 @@ function fakeAgent(script: PromptScript, opts: { loadSession?: boolean; withMode
     .agent({ name: "fake" })
     .onRequest(acp.methods.agent.initialize, () => ({
       protocolVersion: acp.PROTOCOL_VERSION,
-      agentCapabilities: { loadSession: f.loadSession },
+      agentCapabilities: { loadSession: f.loadSession, promptCapabilities: { image: opts.images ?? false } },
     }))
     .onRequest(acp.methods.agent.session.new, (c) => {
       f.newSessions.push(c.params);
@@ -125,8 +129,7 @@ const say =
     return { stopReason: "end_turn" };
   };
 
-function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000) {
-  const id = `w${Math.random().toString(36).slice(2, 8)}`;
+function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000, id = `w${Math.random().toString(36).slice(2, 8)}`) {
   const events: AgentEvent[] = [];
   const statuses: AgentStatus[] = [];
   let sessionId: string | undefined;
@@ -151,6 +154,7 @@ function world(fake: FakeAgent, spec = claudeSpec, idleMs = 60_000) {
     spec: () => spec,
     connect,
     transcriptsDir: home,
+    attachments: new AttachmentStore(join(home, "attachments")),
     getSessionId: () => sessionId,
     setSessionId: (s) => {
       sessionId = s;
@@ -374,6 +378,56 @@ describe("AcpSession", () => {
       type: "agent-error",
       message: "agent process exited (signal SIGKILL): oom",
     });
+  });
+
+  const png = {
+    name: "shot.png",
+    mimeType: "image/png" as const,
+    data: Buffer.from("PNG").toString("base64"),
+    width: 8,
+    height: 4,
+  };
+
+  test("images: stored, numbered per session, captioned ahead of the text; numbering survives a restart", async () => {
+    const fake = fakeAgent(say("ok"), { images: true });
+    const w = world(fake);
+    w.session.send("what is this", "ctx", undefined, [png, { ...png, name: "two.png" }]);
+    await w.idle();
+    expect(w.events[0]).toMatchObject({
+      type: "user-message",
+      text: "what is this",
+      images: [
+        { n: 1, name: "shot.png", file: "1.png", bytes: 3, width: 8, height: 4 },
+        { n: 2, name: "two.png", file: "2.png" },
+      ],
+    });
+    expect(fake.prompts[0]!.prompt).toEqual([
+      { type: "text", text: "Image 1: shot.png (8×4)" },
+      { type: "image", mimeType: "image/png", data: "UE5H" },
+      { type: "text", text: "Image 2: two.png (8×4)" },
+      { type: "image", mimeType: "image/png", data: "UE5H" },
+      { type: "text", text: "what is this\n\nctx" },
+    ]);
+    expect(readFileSync(join(home, "attachments", w.id, "2.png"), "utf8")).toBe("PNG");
+    await w.session.close();
+    // a new AcpSession over the same transcript continues the count: "image 3" is unambiguous
+    const w2 = world(fake, claudeSpec, 60_000, w.id);
+    w2.session.send("and this", undefined, undefined, [png]);
+    await w2.idle();
+    expect(w2.events[0]).toMatchObject({ type: "user-message", images: [{ n: 3, file: "3.png" }] });
+    await w2.session.close();
+  });
+
+  test("an agent without image support gets the text only, and the person is told", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    w.session.send("look", undefined, undefined, [png]);
+    await w.idle();
+    expect(w.types()).toEqual(["user-message", "turn-start", "session-info", "agent-error", "text-delta", "turn-end"]);
+    expect(w.events[3]).toMatchObject({ message: "Claude does not accept images; the message went without it" });
+    expect(fake.prompts[0]!.prompt).toEqual([{ type: "text", text: "look" }]);
+    expect(w.statuses).toEqual(["working", "idle"]);
+    await w.session.close();
   });
 
   test("close() never stores a session id afterwards and drops later sends", async () => {

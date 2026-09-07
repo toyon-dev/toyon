@@ -314,6 +314,24 @@ describe("overlays", () => {
   });
 });
 
+describe("attachments", () => {
+  const img = { key: "k1", name: "a.png", mimeType: "image/png" as const, data: "UE5H", width: 2, height: 1, bytes: 3 };
+  test("pending images are kept per worktree, removable by key, cleared on send", () => {
+    let s = run([hello(wt("a"), wt("b")), { a: "add-images", id: "a", images: [img, { ...img, key: "k2" }] }]);
+    expect(s.local.a?.images.map((i) => i.key)).toEqual(["k1", "k2"]);
+    expect(localOf(s, "b").images).toEqual([]);
+    s = run([{ a: "remove-image", id: "a", key: "k1" }], s);
+    expect(s.local.a?.images.map((i) => i.key)).toEqual(["k2"]);
+    s = run([{ a: "clear-images", id: "a" }], s);
+    expect(s.local.a?.images).toEqual([]);
+  });
+  test("a sent message keeps its image refs for the bubble", () => {
+    const ref = { n: 1, name: "a.png", mimeType: "image/png", bytes: 3, width: 2, height: 1, file: "1.png" };
+    const s = run([hello(wt("a")), agent("a", { type: "user-message", text: "see", ts: 0, images: [ref] })]);
+    expect(s.local.a?.chat[0]).toEqual({ kind: "user", text: "see", pick: undefined, images: [ref] });
+  });
+});
+
 describe("drafts", () => {
   test("the composer draft is kept per worktree and survives switching", () => {
     const s = run([

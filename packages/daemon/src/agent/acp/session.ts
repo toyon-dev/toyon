@@ -5,9 +5,10 @@
 // resume.
 
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentEvent, AgentStatus, PickMeta } from "@toyon/shared";
+import type { AgentEvent, AgentStatus, ImageInput, PickMeta } from "@toyon/shared";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AgentAdapter } from "../adapter.ts";
+import type { AttachmentStore, StoredImage } from "../attachments.ts";
 import { decide, pickOption } from "../policy.ts";
 import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
@@ -27,6 +28,8 @@ export interface AcpSessionDeps {
   /** spawn (or, in tests, connect in-process) the agent for this client app */
   connect: (app: acp.ClientApp, spec: AgentSpec) => AcpLink;
   transcriptsDir: string;
+  /** where attached images are written before the prompt carries them */
+  attachments: AttachmentStore;
   getSessionId: () => string | undefined;
   setSessionId: (id: string) => void;
   onEvent: AgentEventListener;
@@ -54,12 +57,21 @@ interface Live {
   spec: AgentSpec;
   /** SYSTEM_APPEND still owed to the first prompt (agents without a system-prompt override) */
   prefixPending: boolean;
+  /** promptCapabilities.image from initialize: whether image blocks may go in a prompt */
+  acceptsImages: boolean;
   tools: ToolMemos;
+}
+
+interface QueueItem {
+  text: string;
+  context?: string;
+  pick?: PickMeta;
+  images?: ImageInput[];
 }
 
 export class AcpSession implements AgentAdapter {
   status: AgentStatus = "idle";
-  private queue: Array<{ text: string; context?: string; pick?: PickMeta }> = [];
+  private queue: QueueItem[] = [];
   private running = false;
   private interrupted = false;
   private stopped = false;
@@ -68,9 +80,17 @@ export class AcpSession implements AgentAdapter {
   private loading = false;
   private reaper: ReturnType<typeof setTimeout> | null = null;
   private log: Transcript;
+  /** last image number handed out in this worktree's session; continues across daemon restarts
+   * because the transcript remembers every image sent */
+  private imageSeq: number;
 
   constructor(private d: AcpSessionDeps) {
     this.log = new Transcript(transcriptPathFor(d.transcriptsDir, d.worktreeId), d.worktreeId);
+    this.imageSeq = 0;
+    for (const { event } of this.log.entries) {
+      if (event.type === "user-message")
+        for (const img of event.images ?? []) this.imageSeq = Math.max(this.imageSeq, img.n);
+    }
   }
 
   get queueLength() {
@@ -108,9 +128,9 @@ export class AcpSession implements AgentAdapter {
     this.d.onStatus(s);
   }
 
-  send(text: string, context?: string, pick?: PickMeta) {
+  send(text: string, context?: string, pick?: PickMeta, images?: ImageInput[]) {
     if (this.stopped) return log.warn(this.d.worktreeId, "send after close dropped");
-    this.queue.push({ text, context, pick });
+    this.queue.push({ text, context, pick, ...(images?.length ? { images } : {}) });
     this.queueChanged();
     if (!this.running) fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
   }
@@ -148,7 +168,7 @@ export class AcpSession implements AgentAdapter {
       while (this.queue.length > 0 && !this.interrupted) {
         const item = this.queue.shift()!;
         this.queueChanged();
-        await this.runTurn(item.text, item.context, item.pick);
+        await this.runTurn(item);
       }
       this.setStatus("idle");
     } catch (e) {
@@ -175,15 +195,35 @@ export class AcpSession implements AgentAdapter {
     return /connection closed/i.test(message) ? (this.live?.link.exitInfo() ?? message) : message;
   }
 
-  private async runTurn(text: string, context?: string, pick?: PickMeta) {
-    this.emit({ type: "user-message", text, ts: Date.now(), pick });
+  private async runTurn({ text, context, pick, images }: QueueItem) {
+    // numbered and written in send order before anything is shown, so the bubble and the prompt
+    // agree on "image N"
+    const stored: StoredImage[] = [];
+    for (const img of images ?? []) stored.push(await this.d.attachments.put(this.d.worktreeId, ++this.imageSeq, img));
+    this.emit({
+      type: "user-message",
+      text,
+      ts: Date.now(),
+      pick,
+      ...(stored.length ? { images: stored.map((s) => s.ref) } : {}),
+    });
     this.emit({ type: "turn-start", ts: Date.now() });
     const live = await this.ensureLive();
+    let carried = stored;
+    if (stored.length && !live.acceptsImages) {
+      // visible rather than silent: the text still goes, the person sees why the image did not
+      this.emit({
+        type: "agent-error",
+        message: `${live.spec.name} does not accept images; the message went without ${stored.length === 1 ? "it" : "them"}`,
+        ts: Date.now(),
+      });
+      carried = [];
+    }
     const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
     live.prefixPending = false;
     const res = await live.ctx.request(acp.methods.agent.session.prompt, {
       sessionId: live.sessionId,
-      prompt: buildPrompt(text, context, prefix),
+      prompt: buildPrompt(text, context, prefix, carried),
     });
     this.emit({ type: "turn-end", stopReason: mapStopReason(res.stopReason), ts: Date.now() });
   }
@@ -269,6 +309,7 @@ export class AcpSession implements AgentAdapter {
         bounds,
         spec,
         prefixPending: !resumed && spec.systemPrompt === "prompt-prefix",
+        acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
         tools,
       };
       return this.live;

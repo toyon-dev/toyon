@@ -3,6 +3,8 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { memo, useEffect, useRef, useState } from "react";
 import type { ChatItem } from "../../state/store.ts";
+import { attachmentUrl } from "../../ws.ts";
+import { SentImageChip } from "./ImageChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 
 const render = (text: string) => DOMPurify.sanitize(marked.parse(text, { async: false }) as string);
@@ -45,15 +47,24 @@ function toolHint(item: Extract<ChatItem, { kind: "tool" }>): string {
 /** one chat row; memoized so a streaming delta re-renders only the item it touches */
 export const ChatItemView = memo(function ChatItemView({
   item,
+  worktreeId,
   onPickHover,
 }: {
   item: ChatItem;
+  worktreeId?: string | null;
   onPickHover?: (p: PickMeta, entering: boolean) => void;
 }) {
   switch (item.kind) {
     case "user":
       return (
         <div className="msg-user">
+          {item.images && worktreeId && (
+            <div className="msg-images">
+              {item.images.map((img) => (
+                <SentImageChip key={img.n} img={img} src={attachmentUrl(worktreeId, img.file)} />
+              ))}
+            </div>
+          )}
           {item.text}
           {item.pick && (
             <PickChip

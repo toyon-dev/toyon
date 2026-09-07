@@ -21,7 +21,10 @@ export type ShellToBridgeMsg =
   | { type: "highlight-selector"; selector: string; label?: string }
   | { type: "highlight-clear" }
   /** overlay colors follow the shell theme */
-  | { type: "theme"; accent: string; accentFg: string };
+  | { type: "theme"; accent: string; accentFg: string }
+  /** zen hands the keyboard to the app under test: while on, the bridge takes only the chord
+   * that leaves zen and lets everything else (Escape included) reach the page */
+  | { type: "zen"; on: boolean };
 
 const range = z.tuple([z.number(), z.number()]);
 

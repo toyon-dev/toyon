@@ -81,7 +81,7 @@
   padding: 0 0 4px 2px;
 }
 
-/* zen: full-bleed preview, all chrome hidden (⌘., esc exits) */
+/* zen: full-bleed preview, all chrome hidden (⌘. exits; esc belongs to the page) */
 /* hiding the bar removes a grid child — collapse to one full-height row so
    .docks doesn't re-slot into the auto track (grid re-slotting, round two) */
 .app.zen {
@@ -1514,6 +1514,35 @@ body.resizing .rb-center {
 .prompt-box.quick-open input {
   width: 100%;
   font-family: var(--font-mono);
+}
+/* Anchored, the input sits at the foot of the box and borrows the composer's treatment: the
+   field's background carried by the whole strip and no inset box, so it reads as the place to
+   type rather than a control floating in a menu. -8px undoes .quick-open's padding. */
+.prompt-box.anchored .lp-input {
+  margin: 0 -8px -8px;
+  padding: 8px 10px;
+  background: var(--bg0);
+  border-top: 1px solid var(--bg2);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+}
+.prompt-box.anchored .lp-input input {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+/* the ghost tracks the caret, so it loses the same border and padding the input just did */
+.prompt-box.anchored .lp-ghost {
+  inset: 0;
+  padding: 8px 10px;
+}
+.prompt-box.anchored .qo-list {
+  margin-top: 0;
+}
+/* the rows are the top of the box now; the keys row separates them from the input below */
+.prompt-box.anchored .lp-keys {
+  border-top: none;
+  padding-bottom: 4px;
 }
 /* the keyboard row under a picker's rows: what enter and the arrows do here. Outside .qo-list so
    it stays put while the rows scroll. */

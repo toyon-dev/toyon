@@ -40,6 +40,9 @@ export function Center() {
   const theme = useTheme();
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const zen = useStore((s) => s.zen);
+  const zenRef = useRef(zen);
+  zenRef.current = zen;
   const log = useLocalField(activeId, "log");
   const incompatible = useStore((s) => s.incompatible);
   const needsSetup = useActiveRepoNeedingSetup();
@@ -87,6 +90,7 @@ export function Center() {
             break;
           case "loaded":
             previewBus.post(id, bridgeThemeMsg(themeRef.current));
+            previewBus.post(id, { type: "zen", on: zenRef.current });
             dispatch({ a: "hmr", id });
             dispatch({ a: "page", id, url: d.url, title: d.title, fresh: true });
             break;
@@ -129,6 +133,12 @@ export function Center() {
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, [dispatch, store]);
+
+  // in zen the page under test owns the keyboard: tell every bridge to stop taking chords
+  // (broadcast, not just the active frame, so a background preview isn't left holding them)
+  useEffect(() => {
+    previewBus.broadcast({ type: "zen", on: zen });
+  }, [zen]);
 
   // agent finished a turn whose changes HMR couldn't cover: reload that preview (small delay so
   // backend --watch/--reload restarts settle first)

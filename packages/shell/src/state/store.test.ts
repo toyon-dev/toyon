@@ -472,7 +472,7 @@ describe("streams and notices", () => {
   test("entering zen tells you how to leave; leaving keeps whatever toast was up", () => {
     const on = run([{ a: "toggle-zen" }]);
     expect(on.zen).toBe(true);
-    expect(on.toast?.message).toMatch(/esc/);
+    expect(on.toast?.message).toMatch(/⌘\./);
     const off = run([{ a: "dismiss-toast" }, { a: "toggle-zen" }], on);
     expect(off.zen).toBe(false);
     expect(off.toast).toBeNull();

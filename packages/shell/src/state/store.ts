@@ -435,7 +435,7 @@ function reduce(s: State, action: Action): State {
     case "toggle-right":
       return { ...s, rightOpen: !s.rightOpen };
     case "toggle-zen":
-      return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "esc or ⌘. to exit" } : s.toast };
+      return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
     case "toggle-terminal":
       return { ...s, termOpen: !s.termOpen };
     case "term-stream":

@@ -14,6 +14,10 @@ export function useChords() {
       const s = store.getState();
       const { dispatch } = store;
       const chord = matchChord(e);
+      // zen mirrors the bridge: the preview owns the keyboard and only the chord that leaves zen
+      // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
+      // picker holds shell focus, so those keep the full ladder or there is no way back out.
+      if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
       if (chord) {
         e.preventDefault();
         switch (chord.id) {
@@ -84,8 +88,9 @@ export function useChords() {
           // (while picking, the bridge cancels on its own Escape; this covers focus in the shell)
           if (s.activeId) previewBus.post(s.activeId, { type: "pick-cancel" });
           dispatch({ a: "set-picking", v: false });
-        } else if (s.zen) dispatch({ a: "toggle-zen" });
-        // bottom panes, terminal first (a full-screen program in it keeps Escape for itself)
+        }
+        // bottom panes, terminal first (a full-screen program in it keeps Escape for itself).
+        // Zen is not on this ladder: it only leaves on ⌘., so Escape stays the page's own key
         else if (s.termOpen) dispatch({ a: "toggle-terminal" });
         else if (s.diff) dispatch({ a: "close-diff" });
       }

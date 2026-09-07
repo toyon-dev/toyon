@@ -67,17 +67,24 @@ history.replaceState = (...args) => {
 window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);
 
+// zen: the shell is out of the way and the page owns the keyboard, so the table stands down
+let zen = false;
+
 // forward Toyon chords to the shell even when the preview has focus (plain ⌘F stays the
 // page's own find: it isn't in the table). Escape is forwarded too but not taken: the shell
 // closes whatever it has open, and the page still gets it for its own dialogs.
 window.addEventListener(
   "keydown",
   (e) => {
-    if (e.key === "Escape") {
+    const chord = matchChord(e);
+    // in zen only the chord that leaves zen is ours: a flow under test that uses Escape or ⌘E
+    // has to reach the page, and the shell has no visible chrome for the rest to act on anyway
+    if (zen) {
+      if (chord?.id !== "zen") return;
+    } else if (e.key === "Escape") {
       post({ type: "key", key: "Escape", meta: false });
       return;
-    }
-    if (!matchChord(e)) return;
+    } else if (!chord) return;
     e.preventDefault();
     e.stopPropagation();
     post({ type: "key", key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, shift: e.shiftKey });
@@ -394,6 +401,9 @@ window.addEventListener("message", (e) => {
     }
     case "highlight-clear":
       clearOverlay();
+      break;
+    case "zen":
+      zen = d.on;
       break;
     case "theme":
       // interpolated into cssText: hex colors only

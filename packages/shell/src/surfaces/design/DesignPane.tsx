@@ -110,26 +110,35 @@ function Gap({ children }: { children: React.ReactNode }) {
   return <p className="design-gap">{children}</p>;
 }
 
+/** Collapsed to its headline. A finding is one sentence about the project; the instances behind it
+ * are what you open when you want to go and look, and they were burying the rest of the pane. */
 function Findings({ findings, onOpen }: { findings: DesignFinding[]; onOpen: (path: string) => void }) {
   if (findings.length === 0) return null;
   return (
     <Section title="Noticed">
-      <ul className="design-findings">
-        {findings.map((f) => (
-          <li key={`${f.kind}:${f.title}`}>
-            <button
-              type="button"
-              className="design-finding"
-              disabled={!f.path}
-              onClick={() => f.path && onOpen(f.path)}
-            >
-              <span className="design-finding-title">{f.title}</span>
-              <span className="design-finding-detail">{f.detail}</span>
-              {f.path && <span className="design-path">{f.path}</span>}
-            </button>
-          </li>
-        ))}
-      </ul>
+      {findings.map((f) => (
+        <details key={f.kind} className="design-finding">
+          <summary>
+            {f.title}
+            <span className="design-count-tag">{f.items.length}</span>
+          </summary>
+          <ul className="design-rows">
+            {f.items.map((item) => (
+              <li key={item.label}>
+                <button
+                  type="button"
+                  className="design-row"
+                  disabled={!item.path}
+                  onClick={() => item.path && onOpen(item.path)}
+                >
+                  <span className="design-name">{item.label}</span>
+                  <span className="design-path">{item.path}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
     </Section>
   );
 }
@@ -163,7 +172,7 @@ function barWidth(value: string): string {
 
 function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
   return (
-    <Section title="Tokens" note={live ? undefined : "declared values; the preview was not running"}>
+    <Section title="Tokens" note={live ? undefined : "declared, not resolved"}>
       {tokens.length === 0 ? (
         <Gap>
           No custom properties found. A project on Sass or Less variables keeps its scale somewhere this scan does not
@@ -197,7 +206,7 @@ function Swatch({ token }: { token: DesignToken }) {
   // translucent colour still paints; it just has no ratio to print.
   const paintable = token.kind === "color" && parseHex(token.value) !== null;
   return (
-    <div className="design-cell">
+    <div className="design-cell" data-kind={token.kind}>
       <div className="design-sample">
         {paintable && <span className="design-fill" style={{ background: token.value }} />}
         {/* Every length as a measured bar. Drawing them as corners read better for a radius scale
@@ -236,10 +245,7 @@ function Components({
 }) {
   const { components, typed } = index;
   return (
-    <Section
-      title="Components"
-      note={components.length ? `${components.length}, by how many files reach for them` : undefined}
-    >
+    <Section title="Components" note={components.length ? String(components.length) : undefined}>
       {components.length === 0 ? (
         <Gap>
           Nothing that looks like an exported component. Vue and Svelte name a component by its file rather than by an

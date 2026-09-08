@@ -125,8 +125,16 @@ describe("appliedClasses", () => {
   });
 
   test("counts the attributes it saw, so an empty result can explain itself", () => {
-    expect(appliedClasses(`<b className={styles.btn} />`)).toEqual({ classes: new Map(), attrs: 1 });
+    const none = appliedClasses(`<b className={styles.btn} />`);
+    expect(none.classes.size).toBe(0);
+    expect(none.attrs).toBe(1);
     expect(appliedClasses(`const x = 1;`).attrs).toBe(0);
+  });
+
+  test("a class that never rides alone is a modifier, not a thing", () => {
+    // .btn stands on its own somewhere; .btn-outline and .on never do
+    const src = `<a className="btn" /><b className="btn btn-outline" /><i className="row on" />`;
+    expect([...appliedClasses(src).solo]).toEqual(["btn"]);
   });
 });
 

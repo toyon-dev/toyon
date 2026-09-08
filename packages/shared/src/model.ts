@@ -268,15 +268,29 @@ export interface DesignClass {
   uses: number;
   /** the stylesheet that defines it, when the scan could attribute it */
   path?: string;
+  /** seen as the only class on an element at least once. False means it only ever rides with
+   * another (`btn btn-outline`, `row on`), which makes it a modifier rather than a thing. */
+  solo: boolean;
 }
 
 export type DesignFindingKind = "unwrapped-class" | "lone-consumer" | "unused-variant" | "drift" | "unnamed-combo";
 
-/** something the scan noticed. These sit above the inventory: they are why you open the pane. */
+/**
+ * Something the scan noticed, with every instance of it. These sit above the inventory: they are
+ * why you open the pane.
+ *
+ * One finding per kind, not one per instance. Eight classes carrying a control with no component
+ * named for them is one observation about the project repeated eight times, and printing it eight
+ * times with the same sentence under each pushed everything else off the screen.
+ */
 export interface DesignFinding {
   kind: DesignFindingKind;
   title: string;
-  detail: string;
+  items: DesignFindingItem[];
+}
+
+export interface DesignFindingItem {
+  label: string;
   path?: string;
 }
 

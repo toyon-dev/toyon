@@ -135,8 +135,16 @@ export function importedNames(src: string): string[] {
  * The expression form (`className={...}`) holds its names in string literals, so those are pulled
  * out and split; the plain attribute form is a class list already.
  */
-export function appliedClasses(src: string): { classes: Map<string, number>; attrs: number } {
+export function appliedClasses(src: string): {
+  classes: Map<string, number>;
+  attrs: number;
+  /** classes seen as the only one on an element. A class that never appears alone is a modifier of
+   * whatever it rides with (`btn btn-outline`, `row on`), not a thing in its own right, and asking
+   * why no component is named for it is asking the wrong question. */
+  solo: Set<string>;
+} {
   const out = new Map<string, number>();
+  const solo = new Set<string>();
   let attrs = 0;
   for (const m of src.matchAll(ATTR)) {
     attrs++;
@@ -147,14 +155,17 @@ export function appliedClasses(src: string): { classes: Map<string, number>; att
     // in there is a variable. Splitting one on whitespace reports `isOn` as a class.
     const bound = m[1] !== undefined;
     const lists = jsx !== undefined || bound ? expressionClasses(jsx ?? quoted ?? "") : [stripHoles(quoted ?? "")];
+    const onThisElement: string[] = [];
     for (const list of lists) {
       for (const name of list.split(/\s+/)) {
         if (!/^-?[a-zA-Z][\w-]*$/.test(name)) continue;
         out.set(name, (out.get(name) ?? 0) + 1);
+        onThisElement.push(name);
       }
     }
+    if (onThisElement.length === 1) solo.add(onThisElement[0]!);
   }
-  return { classes: out, attrs };
+  return { classes: out, attrs, solo };
 }
 
 /** `class`, `className`, and the bound forms: `:class`, `v-bind:class`, `[class]`, `[ngClass]`. */

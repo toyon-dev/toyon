@@ -15,8 +15,6 @@ const MAX_SOURCE_FILES = 4_000;
 const MAX_CSS_FILES = 200;
 /** a minified bundle checked into source would otherwise dominate every count */
 const MAX_FILE_BYTES = 400_000;
-/** the pane shows findings first, so keep the list to what someone will actually read */
-const MAX_FINDINGS = 12;
 
 /** A component this alone in its directory is a one-off, not a piece of a kit. Used instead of a
  * list of blessed directory names ("ui", "components"): the shape of the tree is the project's own
@@ -159,15 +157,19 @@ function collectClasses(css: SourceFile[], src: SourceFile[]): { classes: Design
   // one pass over the source, not one per class: a stylesheet with a few hundred classes against a
   // few thousand files is a lot of scanning to do the other way round
   const applied = new Map<string, number>();
+  const solo = new Set<string>();
   let attrs = 0;
   for (const file of src) {
     const found = appliedClasses(file.text);
     attrs += found.attrs;
     for (const [name, n] of found.classes) applied.set(name, (applied.get(name) ?? 0) + n);
+    for (const name of found.solo) solo.add(name);
   }
 
   const out: DesignClass[] = [];
-  for (const [name, path] of defined) out.push({ name, uses: applied.get(name) ?? 0, path });
+  for (const [name, path] of defined) {
+    out.push({ name, uses: applied.get(name) ?? 0, path, solo: solo.has(name) });
+  }
   out.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
   return { classes: out, attrs };
 }
@@ -207,35 +209,45 @@ function findings(
   const siblings = new Map<string, number>();
   for (const c of components) siblings.set(dirOf(c.path), (siblings.get(dirOf(c.path)) ?? 0) + 1);
 
-  for (const cls of classes) {
+  const unwrapped = classes.filter(
     // at least as used as the typical one, not more: in a project with a single class that class
-    // is also the median, and a strict comparison would never report anything at all
-    if (cls.uses < busy || componentNames.has(normal(cls.name))) continue;
+    // is also the median, and a strict comparison would never report anything at all. `solo` drops
+    // the modifiers: `.btn-outline` and `.on` never appear without something to modify, so no
+    // component was ever going to be named for them.
+    (c) => c.uses >= busy && c.solo && !componentNames.has(normal(c.name)),
+  );
+  if (unwrapped.length > 0) {
     out.push({
       kind: "unwrapped-class",
-      title: `.${cls.name} is used ${cls.uses} times, with no component of its name`,
-      detail: "If this is a control, the class is its only definition. Every use restates the markup.",
-      path: cls.path,
+      title:
+        unwrapped.length === 1
+          ? `.${unwrapped[0]!.name} carries a control that no component is named for`
+          : `${unwrapped.length} classes carry a control that no component is named for`,
+      items: unwrapped.map((c) => ({ label: `.${c.name}  ${c.uses}`, path: c.path })),
     });
   }
 
-  for (const c of components) {
+  const lonely = components.filter((c) => {
     // Two conditions, and both matter. A kit holds several components, but so does the directory an
     // app's root lives in; what separates them is that a kit's components are reached for from
     // outside it. An app root imported only by the file beside it is not a design system finding.
-    if (c.imports !== 1) continue;
+    if (c.imports !== 1) return false;
     const dir = dirOf(c.path);
-    if ((siblings.get(dir) ?? 0) < KIT_SIBLINGS) continue;
-    if (![...(importers.get(c.name) ?? [])].some((p) => dirOf(p) !== dir)) continue;
+    if ((siblings.get(dir) ?? 0) < KIT_SIBLINGS) return false;
+    return [...(importers.get(c.name) ?? [])].some((p) => dirOf(p) !== dir);
+  });
+  if (lonely.length > 0) {
     out.push({
       kind: "lone-consumer",
-      title: `${c.name} has one consumer`,
-      detail: "It sits among components meant to be reused, but only one file reaches for it.",
-      path: c.path,
+      title:
+        lonely.length === 1
+          ? `${lonely[0]!.name} sits among shared components but has one consumer`
+          : `${lonely.length} shared components have one consumer`,
+      items: lonely.map((c) => ({ label: c.name, path: c.path })),
     });
   }
 
-  return out.slice(0, MAX_FINDINGS);
+  return out;
 }
 
 /**

@@ -62,7 +62,23 @@ describe("DesignService.scan", () => {
 
     const index = await w.design.scan("w1");
     const finding = index.findings.find((f) => f.kind === "unwrapped-class");
-    expect(finding?.title).toContain(".btn is used 9 times");
+    expect(finding?.title).toContain(".btn carries a control");
+    expect(finding?.items.map((i) => i.label)).toEqual([".btn  9"]);
+  });
+
+  test("a class that never rides alone is a modifier, and never a finding", async () => {
+    // `.btn-outline` only ever appears beside `.btn`: no component was going to be named for it
+    const paired = Array.from(
+      { length: 8 },
+      (_, i) => `export function P${i}() { return <b className="btn btn-outline" />; }`,
+    );
+    write("src/styles.css", `.btn { color: red }\n.btn-outline { color: blue }`);
+    // .btn stands alone once, so it is a thing; .btn-outline never does, so it is a modifier
+    write("src/pages.tsx", [...paired, `export function Plain() { return <b className="btn" />; }`].join("\n"));
+
+    const index = await w.design.scan("w1");
+    const finding = index.findings.find((f) => f.kind === "unwrapped-class");
+    expect(finding?.items.map((i) => i.label)).toEqual([".btn  9"]);
   });
 
   test("a component named for the class is not a finding", async () => {
@@ -88,9 +104,9 @@ describe("DesignService.scan", () => {
     write("src/main.tsx", `import { App } from "./App.tsx";\nexport const Root = App;`);
 
     const index = await w.design.scan("w1");
-    const lone = index.findings.filter((f) => f.kind === "lone-consumer").map((f) => f.title);
+    const lone = index.findings.find((f) => f.kind === "lone-consumer");
     // Busy has two consumers, Spare has none, App has one but no siblings
-    expect(lone).toEqual(["Lonely has one consumer"]);
+    expect(lone?.items.map((i) => i.label)).toEqual(["Lonely"]);
   });
 
   test("says what it recognised, so an empty section can explain itself", async () => {

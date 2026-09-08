@@ -2220,18 +2220,22 @@ body.resizing .rb-center {
    group of two cells came with a hairline stretching across the empty space beside them. Every
    line here is drawn by a cell, which is the only way one cannot outlive its cells. */
 /*
- * Fixed tracks, collapsed when empty, and the row centred.
+ * Fixed tracks, collapsed when empty. `auto-fill` with `1fr` tracks keeps every track it can fit
+ * and stretches the filled ones, which left a short group's cells against the left of a wide box
+ * with empty tracks beside them; `auto-fit` drops those.
  *
- * `auto-fill` with `1fr` tracks keeps every track it can fit and stretches the filled ones, so a
- * group of six in a wide wrapper laid its cells against the left and left five empty tracks to the
- * right of them. The group then read as centred on the pane's left half. `auto-fit` drops the
- * empty tracks and `justify-content` centres what is left, so a group of any size sits on the same
- * axis as the text above it and grows out of the column evenly on both sides.
+ * A group wide enough to leave the column centres and breaks out of it evenly on both sides. A
+ * group that fits inside the column starts at its left edge like any other element, under its own
+ * label. Centring that one too put a single cell out in the middle of the pane with its label
+ * stranded at the margin.
  */
 .design-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, 132px);
   justify-content: center;
+}
+.design-breakout.fits .design-grid {
+  justify-content: start;
 }
 /*
  * The width cap lives on this wrapper, never on the grid.
@@ -2245,6 +2249,10 @@ body.resizing .rb-center {
   max-width: 1500px;
   margin-inline: auto;
   min-width: 0;
+}
+/* held to the text measure, so it cannot drift away from the words that describe it */
+.design-breakout.fits {
+  max-width: 720px;
 }
 
 /* a scale has no sample, so its cells are two lines and pack tighter than a colour's */

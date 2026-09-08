@@ -168,7 +168,9 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
           return (
             <div key={kind} className="design-group">
               <span className="design-group-name">{label}</span>
-              <div className="design-breakout">
+              {/* only a group too wide for the text column breaks out of it; one that fits stays
+                  in the column, at the same left edge as its label */}
+              <div className={`design-breakout ${group.length <= (tight ? 6 : 5) ? "fits" : ""}`}>
                 <div className={`design-grid ${tight ? "tight" : ""}`}>
                   {group.map((t) => (
                     <Swatch key={t.name} token={t} ground={ground} largest={largestIn(group)} />

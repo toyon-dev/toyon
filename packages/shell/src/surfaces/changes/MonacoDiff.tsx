@@ -72,10 +72,13 @@ function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
       "editorLineNumber.activeForeground": c.text1,
       "editorGutter.background": c.surface0,
       "editorCursor.foreground": c[accentKey(t)],
-      // the chat's diffs tint a changed line and stop there; a word-level slab on top of that made
-      // the same change read as two different notations. Just enough lift to place the edit.
-      "diffEditor.insertedTextBackground": scaleAlpha(c.diffAdd, 1.3),
-      "diffEditor.removedTextBackground": scaleAlpha(c.diffDel, 1.3),
+      // monaco paints .line-insert and .char-insert as separate elements, and on a wholly new line
+      // the word-level range covers the whole line, so the two tints composite: diffAdd at 16% came
+      // out near 34%, which is why a block of added lines was the loudest thing in the window. The
+      // word tint goes *under* the line tint rather than over it, so it stays a lift that places an
+      // edit inside a changed line instead of a second wash on top of the first.
+      "diffEditor.insertedTextBackground": scaleAlpha(c.diffAdd, 0.55),
+      "diffEditor.removedTextBackground": scaleAlpha(c.diffDel, 0.55),
       "diffEditor.insertedLineBackground": c.diffAdd,
       "diffEditor.removedLineBackground": c.diffDel,
       // the "N hidden lines" band sits over the code it hides, so it has to be opaque

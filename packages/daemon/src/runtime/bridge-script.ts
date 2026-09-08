@@ -1,4 +1,9 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { cloud } from "../core/cloud.ts";
+
+/** how many framing origins one daemon will remember; a browser can only teach it the handful of
+ * ports its shells are served from, so anything past this is noise */
+const LEARNED_MAX = 8;
 
 /** Serves the built bridge bundle to preview proxies, with the shell's allowed origins prepended
  * so the bridge can refuse every other sender (see bridge.ts). */
@@ -6,12 +11,29 @@ export class BridgeScript {
   private cache: string | null = null;
   private stamp = "";
   private origins: string[] = [];
+  private learned = new Set<string>();
 
   constructor(private path: string) {}
 
   /** origins the shell can be served from (empty = unknown: bridge falls back to open) */
   setShellOrigins(origins: string[]) {
     this.origins = origins;
+    this.cache = null;
+  }
+
+  /** An origin a shell actually reached us from, taken off an authenticated /ws handshake. The
+   * daemon can work out the origins it serves itself, but not one it is framed at: a shell running
+   * as someone else's preview (toyon inside toyon) arrives through that proxy's port, and the
+   * bridge in its own previews has to accept it or picking from the inner shell goes nowhere. */
+  learnShellOrigin(origin: string | null | undefined) {
+    if (!origin || this.learned.has(origin) || this.origins.includes(origin)) return;
+    if (!servedLocally(origin)) return;
+    // oldest out: a long-lived daemon shouldn't accumulate ports from worktrees that are gone
+    if (this.learned.size >= LEARNED_MAX) {
+      const oldest = this.learned.values().next().value;
+      if (oldest) this.learned.delete(oldest);
+    }
+    this.learned.add(origin);
     this.cache = null;
   }
 
@@ -24,7 +46,24 @@ export class BridgeScript {
     const stamp = `${s.mtimeMs}:${s.size}`;
     if (this.cache && stamp === this.stamp) return this.cache;
     this.stamp = stamp;
-    this.cache = `window.__toyonShellOrigins=${JSON.stringify(this.origins)};\n` + readFileSync(this.path, "utf8");
+    const origins = [...this.origins, ...this.learned];
+    this.cache = `window.__toyonShellOrigins=${JSON.stringify(origins)};\n` + readFileSync(this.path, "utf8");
     return this.cache;
   }
+}
+
+/** Locally the daemon answers loopback only (see server/http.ts), so the origins it will report to
+ * are held to the same rule. Cloud mode sits behind the platform's edge and its host is remote by
+ * design, so there the handshake's own auth is the check. */
+function servedLocally(origin: string): boolean {
+  if (cloud.enabled) return true;
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  const h = url.hostname;
+  return h === "127.0.0.1" || h === "localhost" || h === "::1" || h === "[::1]" || h.endsWith(".localhost");
 }

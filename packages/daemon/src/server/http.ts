@@ -32,6 +32,8 @@ export interface HttpOpts {
   branded: () => boolean;
   /** event-loop lag + per-socket traffic, for /health */
   metrics: () => unknown;
+  /** the origin a shell just authenticated from, for the bridge's list of who may frame a preview */
+  noteShellOrigin: (origin: string | null) => void;
 }
 
 export function createFetch(opts: HttpOpts) {
@@ -57,6 +59,8 @@ export function createFetch(opts: HttpOpts) {
 
     if (url.pathname === "/ws") {
       if (url.searchParams.get("token") !== opts.token) return new Response("unauthorized", { status: 401 });
+      // after the token, never before: this is what teaches the daemon it is being framed
+      opts.noteShellOrigin(req.headers.get("origin"));
       const data: WsData = { authed: true, subs: new Set(), terms: new Set(), dropped: new Set(), sent: 0, bytes: 0 };
       if (srv.upgrade(req, { data })) return undefined;
       return new Response("upgrade failed", { status: 400 });

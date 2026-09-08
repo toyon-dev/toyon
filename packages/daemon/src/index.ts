@@ -71,6 +71,7 @@ const { branded, stop: stopServer } = startServer({
   token,
   shellDist: SHELL_DIST,
   version: pkg.version,
+  noteShellOrigin: (origin) => bridge.learnShellOrigin(origin),
   services: {
     state,
     hub,

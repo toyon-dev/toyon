@@ -12,8 +12,21 @@ export function useDismissOutside(box: RefObject<HTMLElement | null>, onOutside:
       if (t?.closest?.(".keys-btn, .project-pill")) return;
       if (box.current && !box.current.contains(t as Node)) cb.current();
     };
+    // a click in the preview iframe never reaches this document, but it does move focus into the
+    // frame; an app switch blurs the window too, and leaves focus where it was
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onBlur = () => {
+      timer = setTimeout(() => {
+        if (document.activeElement?.tagName === "IFRAME") cb.current();
+      });
+    };
     document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("mousedown", h);
+      window.removeEventListener("blur", onBlur);
+    };
   }, [box]);
 }
 

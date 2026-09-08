@@ -1168,7 +1168,10 @@ body.resizing .row-resize {
   padding: 4px 10px;
   font: var(--fs-xs) var(--font-mono);
   color: var(--fg-dim);
-  min-height: 32px;
+  /* 38, not the 32 this used to be: a 20px control in a 32px bar leaves 6px above it, and the
+     project panel that opens over the pill needs that space for its own top edge. The bar in the
+     installed app is already this tall (the OS title bar sets it), so the two now match. */
+  min-height: 38px;
 }
 /* installed PWA with window-controls-overlay: the browser drops its title bar and only the
    traffic lights float top-left, so the top bar becomes the title bar — draggable, inset past
@@ -1181,7 +1184,7 @@ body.resizing .row-resize {
     padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 10px);
     /* +1px: Chrome paints the control boxes over the full titlebar-area height, so a bar
        that ends exactly there has its bottom border hidden under the traffic lights */
-    min-height: calc(max(32px, env(titlebar-area-height, 32px)) + 1px);
+    min-height: calc(max(38px, env(titlebar-area-height, 38px)) + 1px);
   }
   .status-bar.top-bar button,
   .status-bar.top-bar input,
@@ -1246,6 +1249,15 @@ body.resizing .rb-center {
 }
 .project-pill {
   flex: none;
+}
+/* The panel opens over the pill rather than under it, the way an address bar expands in place.
+   -6px/-9px are the panel's border plus the field strip's padding, so the chip lands exactly on
+   the pill's box and the project name does not move at all; the 38px bar leaves 3px of itself
+   above the panel, which is what makes the top edge readable. The pill stays under it, holding
+   the bar's layout. */
+.pp-wrap .prompt-box.anchored {
+  top: -6px;
+  left: -9px;
 }
 /* half the viewport is a centred palette's budget; hanging off the bar, that would bury the app */
 .pp-wrap .prompt-box .qo-list {
@@ -1515,34 +1527,46 @@ body.resizing .rb-center {
   width: 100%;
   font-family: var(--font-mono);
 }
-/* Anchored, the input sits at the foot of the box and borrows the composer's treatment: the
-   field's background carried by the whole strip and no inset box, so it reads as the place to
-   type rather than a control floating in a menu. -8px undoes .quick-open's padding. */
+/* Anchored, the field is the top of the panel and borrows the composer's treatment: the field's
+   background carried by the whole strip and no inset box, so the panel reads as the bar it drops
+   out of rather than a control floating in a menu. -8px undoes .quick-open's padding. */
 .prompt-box.anchored .lp-input {
-  margin: 0 -8px -8px;
-  padding: 8px 10px;
+  margin: -8px -8px 0;
+  padding: 5px 8px;
   background: var(--bg0);
-  border-top: 1px solid var(--bg2);
-  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  border-bottom: 1px solid var(--bg2);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
 }
 .prompt-box.anchored .lp-input input {
   background: none;
   border: none;
   border-radius: 0;
   padding: 0;
+  /* the strip is a row of the bar, so it takes the bar's size rather than the palette's */
+  font: var(--fs-xs) / 1.4 var(--font-mono);
 }
 /* the ghost tracks the caret, so it loses the same border and padding the input just did */
 .prompt-box.anchored .lp-ghost {
   inset: 0;
-  padding: 8px 10px;
+  padding: 0;
+  font: var(--fs-xs) / 1.4 var(--font-mono);
 }
-.prompt-box.anchored .qo-list {
-  margin-top: 0;
-}
-/* the rows are the top of the box now; the keys row separates them from the input below */
-.prompt-box.anchored .lp-keys {
-  border-top: none;
-  padding-bottom: 4px;
+/* what the query is scoped to, in the pill's own box so the project name does not move when the
+   panel opens over it */
+.lp-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  max-width: 160px;
+  padding: 1px 8px;
+  background: var(--bg2);
+  border-radius: var(--r-sm);
+  color: var(--fg1);
+  font: var(--fs-xs) / 1.4 var(--font-mono);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 /* the keyboard row under a picker's rows: what enter and the arrows do here. Outside .qo-list so
    it stays put while the rows scroll. */
@@ -1564,7 +1588,19 @@ body.resizing .rb-center {
 /* ghost completion: the typed part is hidden but still laid out, so the suffix lands exactly
    where the caret is. Metrics must match .field/.field-lg or the tail drifts. */
 .lp-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lp-input .btn-icon {
+  flex: none;
+}
+/* the ghost is absolute over the input alone, not the row: a chip before the caret would shift it */
+.lp-caret {
   position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
 }
 .lp-ghost {
   position: absolute;

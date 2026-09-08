@@ -81,7 +81,8 @@ function ProjectPill() {
   const dispatch = useDispatch();
   const repo = useActiveRepo();
   const repos = useStore((s) => s.repos);
-  const open = useStore((s) => s.overlay?.kind === "projects");
+  // the dialog form draws over the preview instead; this is only the panel that drops out of here
+  const open = useStore((s) => s.overlay?.kind === "projects" && !s.overlay.dialog);
   const busyElsewhere = useStore((s) =>
     s.worktrees.some((w) => w.agent === "working" && w.worktree.repoId !== s.activeRepoId),
   );

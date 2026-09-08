@@ -143,8 +143,9 @@ export type Overlay =
   | { kind: "agent" }
   /** the setup pane for a repo that is already configured (install + start commands) */
   | { kind: "setup"; repoId: string }
-  /** the project switcher: pick a registered repo, or type a path to open another */
-  | { kind: "projects" };
+  /** the project switcher: pick a registered repo, or type a path to open another. It hangs off
+   * the pill in the bar; `dialog` is the roomier centered form its browse button opens. */
+  | { kind: "projects"; dialog?: boolean };
 
 export interface State {
   connected: boolean;

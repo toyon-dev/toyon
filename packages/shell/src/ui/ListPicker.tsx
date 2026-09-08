@@ -6,6 +6,9 @@ import { Overlay } from "./Overlay.tsx";
 
 export { step } from "./listNav.ts";
 
+/** the verb for each key the picker binds, as the person at the shell would say it */
+type KeyVerbs = { nav?: string; side?: string; complete?: string; pick?: string; back?: string };
+
 /**
  * The one list-picker: overlay + filter input + rows, ↑↓ wrap, enter picks, ←→ optional, hover
  * highlights, active row reported so a parent can live-preview. Every palette-shaped overlay
@@ -30,6 +33,8 @@ export function ListPicker<T>({
   initialQuery = "",
   initialIndex,
   anchored = false,
+  lead,
+  trailing,
   empty = "no matches",
   footer,
   keys,
@@ -65,12 +70,17 @@ export function ListPicker<T>({
   footer?: (q: string, results: T[]) => ReactNode;
   /** what this picker's keys do, as the verb for each one. The picker owns the keyboard, so it
    * draws the row and each palette says only what its keys mean. Arrow and modifier characters
-   * belong here rather than in `placeholder`, which can only hold a string. `side` and
-   * `complete` are ignored unless `onSide` / `completionOf` are wired up. */
-  keys?: { nav?: string; side?: string; complete?: string; pick?: string; back?: string };
+   * belong here rather than in `placeholder`, which can only hold a string. `side` is ignored
+   * unless `onSide` is wired up, and `complete` unless tab would actually complete something. A
+   * function sees the highlighted row, for a picker whose enter means different things per row. */
+  keys?: KeyVerbs | ((active: T | null, q: string) => KeyVerbs);
   /** draw as a dropdown under the trigger (the caller renders it inside the trigger's positioned
    * wrapper) instead of a centered overlay over the preview */
   anchored?: boolean;
+  /** before the caret: what the query is already scoped to, as a chip */
+  lead?: ReactNode;
+  /** at the right end of the input row: one escape hatch out of the picker */
+  trailing?: ReactNode;
 }) {
   const [q, setQ] = useState(initialQuery);
   const results = useMemo(() => filter(items, q), [items, q, filter]);
@@ -95,15 +105,19 @@ export function ListPicker<T>({
     initialIndex,
   });
   const { index: clamped, ghost } = nav;
+  const verbs = typeof keys === "function" ? keys(nav.active, q) : keys;
   const hints: Array<[string, string]> = [];
-  if (keys?.nav) hints.push(["↑↓", keys.nav]);
-  if (keys?.side && onSide) hints.push(["←→", keys.side]);
-  if (keys?.complete && completionOf) hints.push(["tab", keys.complete]);
-  if (keys?.pick) hints.push(["enter", keys.pick]);
-  if (keys?.back) hints.push(["esc", keys.back]);
-  return (
-    <Overlay onClose={onBack} boxClass="quick-open" anchored={anchored}>
-      <div className="lp-input">
+  if (verbs?.nav) hints.push(["↑↓", verbs.nav]);
+  if (verbs?.side && onSide) hints.push(["←→", verbs.side]);
+  // tab is only offered while there is a completion under it: a standing hint for a key that does
+  // nothing is worse than no hint
+  if (verbs?.complete && ghost) hints.push(["tab", verbs.complete]);
+  if (verbs?.pick) hints.push(["enter", verbs.pick]);
+  if (verbs?.back) hints.push(["esc", verbs.back]);
+  const inputEl = (
+    <div className="lp-input">
+      {lead}
+      <div className="lp-caret">
         <input
           className="field field-lg"
           ref={inputRef}
@@ -122,32 +136,42 @@ export function ListPicker<T>({
           </div>
         )}
       </div>
-      <div className="qo-list" ref={listRef}>
-        {results.map((t, i) => (
-          <button
-            key={keyOf(t)}
-            className={`qo-item ${rowClass?.(t) ?? ""} ${i === clamped ? "active" : ""}`}
-            title={rowTitle?.(t)}
-            // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
-            onMouseMove={() => i !== clamped && nav.setIndex(i)}
-            onClick={() => nav.pick(t)}
-          >
-            {row(t, i === clamped, q)}
-          </button>
-        ))}
-        {results.length === 0 && <div className="dock-empty">{typeof empty === "function" ? empty(q) : empty}</div>}
-        {footer?.(q, results)}
-      </div>
-      {hints.length > 0 && (
-        <div className="lp-keys">
-          {hints.map(([k, label]) => (
-            <span key={k} className="lp-key">
-              <Kbd k={k} />
-              {label}
-            </span>
-          ))}
-        </div>
-      )}
+      {trailing}
+    </div>
+  );
+  const listEl = (
+    <div className="qo-list" ref={listRef}>
+      {results.map((t, i) => (
+        <button
+          key={keyOf(t)}
+          className={`qo-item ${rowClass?.(t) ?? ""} ${i === clamped ? "active" : ""}`}
+          title={rowTitle?.(t)}
+          // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
+          onMouseMove={() => i !== clamped && nav.setIndex(i)}
+          onClick={() => nav.pick(t)}
+        >
+          {row(t, i === clamped, q)}
+        </button>
+      ))}
+      {results.length === 0 && <div className="dock-empty">{typeof empty === "function" ? empty(q) : empty}</div>}
+      {footer?.(q, results)}
+    </div>
+  );
+  const keysEl = hints.length > 0 && (
+    <div className="lp-keys">
+      {hints.map(([k, label]) => (
+        <span key={k} className="lp-key">
+          <Kbd k={k} />
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+  return (
+    <Overlay onClose={onBack} boxClass="quick-open" anchored={anchored}>
+      {inputEl}
+      {listEl}
+      {keysEl}
     </Overlay>
   );
 }

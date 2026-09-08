@@ -174,7 +174,7 @@ button {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  width: min(420px, calc(100vw - 60px));
+  width: min(460px, calc(100vw - 60px));
   z-index: 40;
   box-shadow: 0 6px 20px var(--shadow);
 }

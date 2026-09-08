@@ -35,4 +35,9 @@ describe("contrastRatio", () => {
     expect(contrastRatio("var(--x)", "#ffffff")).toBeNull();
     expect(contrastRatio("#ffffff", "notacolor")).toBeNull();
   });
+
+  test("no ratio for a translucent colour, whose backdrop is unknown", () => {
+    // 4.95:1 as though it were opaque is exactly the confident wrong number to avoid
+    expect(contrastRatio("#6fae5f29", "#32302D")).toBeNull();
+  });
 });

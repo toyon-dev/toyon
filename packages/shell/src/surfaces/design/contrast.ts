@@ -33,30 +33,21 @@ function luminance([r, g, b]: [number, number, number]): number {
 }
 
 /**
- * The token's contrast against the ground the pane is painted on, as "4.30:1".
+ * The token's contrast against a ground, as "4.30:1".
  *
- * The ground is read off the live page rather than passed in, so the number tracks the theme the
- * shell is actually wearing: the same token is a different ratio in the dark half and the light
- * half, and a figure from the wrong half would quietly mislead.
+ * The ground has to be the scanned project's, and it used to be the shell's: read off the running
+ * document, which is toyon's own theme. Previewing toyon that happens to be the same colour and
+ * the number looked right; for any other project it was a confident figure about a background the
+ * project never paints. The caller passes the project's own ground and the pane names which token
+ * it used, so a wrong guess is visible rather than silent.
  */
-export function contrastRatio(value: string, ground?: string): string | null {
+export function contrastRatio(value: string, ground: string): string | null {
   if (hasAlpha(value)) return null;
   const fg = parseHex(value);
   if (!fg) return null;
-  const bgRaw = ground ?? readGround();
-  const bg = bgRaw && parseHex(bgRaw);
+  const bg = parseHex(ground);
   if (!bg) return null;
   const [a, b] = [luminance(fg), luminance(bg)];
   const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
   return `${ratio.toFixed(2)}:1`;
-}
-
-function readGround(): string | null {
-  if (typeof document === "undefined") return null;
-  const v = getComputedStyle(document.documentElement).getPropertyValue("--surface0").trim();
-  if (v.startsWith("#")) return v;
-  // computed styles come back as rgb() in every browser that did not get a hex literal
-  const m = /^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(v);
-  if (!m) return null;
-  return `#${[m[1], m[2], m[3]].map((c) => Number(c).toString(16).padStart(2, "0")).join("")}`;
 }

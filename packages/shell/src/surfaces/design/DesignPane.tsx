@@ -130,9 +130,21 @@ const GROUPS: Array<{ kind: DesignToken["kind"]; label: string; tight?: boolean 
   { kind: "other", label: "computed", tight: true },
 ];
 
+/** The project's own ground to measure contrast against: the first colour its token file declares,
+ * which in every token file we have seen is the base surface, because that is the one you decide
+ * first. A guess, so the section says which token it used and you can see when it is the wrong one.
+ * The running page's actual body background is the real answer, and only the live half has it. */
+function groundOf(tokens: DesignToken[]): DesignToken | undefined {
+  return tokens.find((t) => t.kind === "color" && parseHex(t.resolved ?? t.value) !== null);
+}
+
 function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
+  const ground = groundOf(tokens);
   return (
-    <Section title="Tokens" note={live ? undefined : "declared, not resolved"}>
+    <Section
+      title="Tokens"
+      note={[live ? null : "declared", ground ? `contrast vs ${ground.name}` : null].filter(Boolean).join(" · ")}
+    >
       {tokens.length === 0 ? (
         <Gap>
           No custom properties found. A project on Sass or Less variables keeps its scale somewhere this scan does not
@@ -147,7 +159,7 @@ function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
               <span className="design-group-name">{label}</span>
               <div className={`design-grid ${tight ? "tight" : ""}`}>
                 {group.map((t) => (
-                  <Swatch key={t.name} token={t} />
+                  <Swatch key={t.name} token={t} ground={ground} largest={largestIn(group)} />
                 ))}
               </div>
             </div>
@@ -158,17 +170,21 @@ function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
   );
 }
 
-function Swatch({ token }: { token: DesignToken }) {
+/** the biggest length in a group, so the scale bars can be drawn relative to their own scale */
+function largestIn(group: DesignToken[]): number {
+  return group.reduce((max, t) => Math.max(max, Math.abs(Number.parseFloat(t.value)) || 0), 0);
+}
+
+function Swatch({ token, ground, largest }: { token: DesignToken; ground: DesignToken | undefined; largest: number }) {
   // what it resolves to is what to paint and measure; what it says is what to go and edit
   const actual = token.resolved ?? token.value;
-  const ratio = token.kind === "color" ? contrastRatio(actual) : null;
+  const groundValue = ground && (ground.resolved ?? ground.value);
+  const ratio = token.kind === "color" && groundValue ? contrastRatio(actual, groundValue) : null;
   // Painting a value nothing can resolve would paint it with the *shell's* token of that name.
   // A translucent colour still paints; it just has no ratio to print.
   const paintable = token.kind === "color" && parseHex(actual) !== null;
-  // A size has no sample worth drawing. Three pixels against four is a difference you cannot see,
-  // and the bar took the room the number needed, which is the only thing in the cell that tells
-  // you anything. Colour and type earn theirs: you cannot read a hex or a font stack.
   const sample = token.kind === "color" || token.kind === "font";
+  const size = token.kind === "length" ? Number.parseFloat(actual) : Number.NaN;
 
   return (
     <div className="design-cell" data-kind={token.kind}>
@@ -184,15 +200,25 @@ function Swatch({ token }: { token: DesignToken }) {
       )}
       <div className="design-plate">
         <span className="design-cell-name">{token.name}</span>
-        <span className="design-cell-value" title={token.value}>
-          {token.value}
+        <span className="design-cell-line">
+          <span className="design-cell-value" title={token.value}>
+            {token.value}
+          </span>
+          {ratio && <span className="design-cell-note">{ratio}</span>}
         </span>
         {token.resolved && (
-          <span className="design-cell-note" title={token.resolved}>
-            {token.resolved}
+          <span className="design-cell-line">
+            <span className="design-cell-value" title={token.resolved}>
+              {token.resolved}
+            </span>
           </span>
         )}
-        {ratio && <span className="design-cell-note">{ratio}</span>}
+        {/* A scale drawn against its own largest step. Absolute widths made every radius a
+            three-pixel speck no one could tell from a four-pixel one; against the group, the steps
+            are at least in proportion to each other, which is what a scale is for. */}
+        {Number.isFinite(size) && largest > 0 && (
+          <span className="design-scale" style={{ width: `${Math.max(2, (Math.abs(size) / largest) * 100)}%` }} />
+        )}
       </div>
     </div>
   );

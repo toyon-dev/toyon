@@ -2164,39 +2164,14 @@ body.resizing .rb-center {
   line-height: 1.5;
 }
 
-/* findings: one line each until you open one. The instances live inside, because a finding is a
-   sentence about the project and the list behind it is only interesting once you believe it. The
-   raised band is enough to mark it; an accent edge read as an alarm, and none of these are one. */
-.design-finding {
-  background: var(--surface1);
-  margin-top: 6px;
-}
-.design-finding > summary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
-  color: var(--text0);
-  list-style: none;
-}
-.design-finding > summary::-webkit-details-marker {
-  display: none;
-}
-.design-finding > summary:hover {
-  background: var(--element0);
-}
-/* beside the label, not pinned to the right edge. Full width strands it half a screen from the
-   words it counts, and it is part of the sentence, not a badge. */
-.design-count-tag {
+/* the mark on a row the scan has something to say about. A tag, not an alarm: it is an
+   observation about the class, and the row it sits on is the evidence. */
+.design-tag {
+  padding: 0 5px;
+  background: var(--sunken);
   color: var(--text2);
   font: var(--fs-xs) var(--font-mono);
-}
-.design-finding[open] > summary {
-  border-bottom: 1px solid var(--border0);
-}
-.design-finding .design-row {
-  padding-left: 10px;
+  margin-left: auto;
 }
 
 /* the long tail of a component list: real, uninteresting, and not a problem, so it sits at the
@@ -2282,6 +2257,20 @@ body.resizing .rb-center {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* value and ratio share a line: the value takes the room and gives way, the ratio never moves */
+.design-cell-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.design-cell-value {
+  flex: 1;
+  min-width: 0;
+}
+.design-cell-note {
+  flex-shrink: 0;
+}
 /* for a colour the swatch is the information and the hex is a footnote; for everything else the
    value is the whole point, so it is read at the tier you actually read */
 .design-cell[data-kind="color"] .design-cell-value,
@@ -2295,6 +2284,14 @@ body.resizing .rb-center {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* a size drawn against the largest in its own group: absolute widths made every small radius the
+   same invisible speck, and a scale is about the steps between its rungs */
+.design-scale {
+  display: block;
+  height: 3px;
+  margin-top: 5px;
+  background: var(--border1);
 }
 
 /* inventory rows: the shell's band idiom, a 2px accent edge on hover and a neutral seat */
@@ -2358,16 +2355,13 @@ body.resizing .rb-center {
   font: var(--fs-xs) var(--font-mono);
 }
 
-/* Text holds a measure; the swatch grids break out of it, since a colour wants every pixel it can
-   get and a grid has no line length to lose. The measure is left-aligned, not centred: centred put
-   the headings and the rows in the middle of a wide pane while the grid beside them started at the
-   edge, and nothing lined up with anything. Sharing the grid's left edge is what makes the two
-   read as one document. Placed last because the `margin` shorthands above reset the inline axis. */
+/* Text holds a centred measure and the grids break out of it to the full width of the pane, the
+   way a wide table sits outside the column in a document. Placed last because the `margin`
+   shorthands above reset the inline axis. */
 .design-h,
 .design-rows,
 .design-gap,
-.design-finding,
 .design-tail {
   max-width: 920px;
-  margin-inline: 0;
+  margin-inline: auto;
 }

@@ -2219,9 +2219,19 @@ body.resizing .rb-center {
 /* No border on the container. Its top and left edges ran the full width of the grid box, so a
    group of two cells came with a hairline stretching across the empty space beside them. Every
    line here is drawn by a cell, which is the only way one cannot outlive its cells. */
+/*
+ * Fixed tracks, collapsed when empty, and the row centred.
+ *
+ * `auto-fill` with `1fr` tracks keeps every track it can fit and stretches the filled ones, so a
+ * group of six in a wide wrapper laid its cells against the left and left five empty tracks to the
+ * right of them. The group then read as centred on the pane's left half. `auto-fit` drops the
+ * empty tracks and `justify-content` centres what is left, so a group of any size sits on the same
+ * axis as the text above it and grows out of the column evenly on both sides.
+ */
 .design-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fit, 132px);
+  justify-content: center;
 }
 /*
  * The width cap lives on this wrapper, never on the grid.
@@ -2232,28 +2242,14 @@ body.resizing .rb-center {
  * window. A plain block carries the cap, and the grid inside it fills whatever that block gets.
  */
 .design-breakout {
+  max-width: 1500px;
+  margin-inline: auto;
   min-width: 0;
 }
-/* A group with too few cells to want the extra width stays in the text measure, on the same centre
-   line as everything else. Its tracks are a fixed width and the row is centred, because `1fr`
-   tracks fill the wrapper and auto-fill leaves the empty ones at the end: the wrapper was centred
-   correctly and its two cells still sat against the left of it. */
-.design-breakout.narrow {
-  max-width: 720px;
-  margin-inline: auto;
-}
-.design-breakout.narrow .design-grid {
-  /* auto-fit, not auto-fill: auto-fill keeps the empty tracks, so centring the track list left the
-     two real cells sitting against the left of it. auto-fit collapses them and the cells centre. */
-  grid-template-columns: repeat(auto-fit, 132px);
-  justify-content: center;
-}
-.design-breakout.narrow .design-grid.tight {
-  grid-template-columns: repeat(auto-fit, 118px);
-}
+
 /* a scale has no sample, so its cells are two lines and pack tighter than a colour's */
 .design-grid.tight {
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  grid-template-columns: repeat(auto-fit, 118px);
 }
 /* Every cell carries all four edges and overlaps its neighbour by the width of one, so the shared
    lines land on the same pixel and read as 1px rather than 2. Drawing only the right and bottom

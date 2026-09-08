@@ -8,10 +8,11 @@ import { Icon } from "../../ui/Icon.tsx";
 import { attachmentUrl } from "../../ws.ts";
 import { sameTools, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
+import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
-import { AUTO_OPEN, callPath, diffLines, toolBlocks, toolLabel } from "./toolCall.ts";
+import { AUTO_OPEN, callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
 // so it is coloured by the same seven. marked hands the block over before it escapes it, and
@@ -64,73 +65,134 @@ function Markdown({ text }: { text: string }) {
   return <div className="msg-assistant md" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-/** one call inside the row: what it ran, then what the agent wrote under it. Its prose goes in as
- * prose, its fenced blocks as blocks, and a diff coloured by line rather than printed as backticks.
- * A call with neither draws nothing: output that is only whitespace, or only the description the
- * summary line already carries, parses to no blocks, and the panel they would have sat in was an
- * empty bar under the command. Memoized per call so a delta into the one in flight does not re-paint
- * the ones above it. */
-const ToolPart = memo(function ToolPart({ item, roots }: { item: ToolItem; roots?: string[] }) {
-  // splitting a diff into lines, its lines into words and its words into tokens is more work than a
-  // render should redo, and the output only changes while the call is in flight
-  const blocks = useMemo(() => {
-    const path = callPath(item);
-    return toolBlocks(item, item.output ?? "").map((b) => {
-      const language = languageOf(b.lang, b.diff ? path || pathInDiff(b.text) : "");
-      if (b.diff) {
-        const lines = diffLines(b.text);
-        return { ...b, lines, painted: paintDiff(lines, language) };
-      }
-      return { ...b, lines: [], painted: paintCode(b.text, language) };
-    });
-  }, [item]);
+/** how much of a diff the log prints before it hands off to the pane. A row is a receipt for what
+ * the agent did, and a file written whole is hundreds of lines of it: past this the rest is a line
+ * that opens the file's own diff, where reading it is what the surface is for. */
+const DIFF_LINES = 40;
+
+type PaintedBlock = ReturnType<typeof paintBlocks>[number];
+
+/** splitting a diff into lines, its lines into words and its words into tokens is more work than a
+ * render should redo, so every caller holds the result behind a memo */
+function paintBlocks(blocks: OutputBlock[], path: string) {
+  return blocks.map((b) => {
+    const language = languageOf(b.lang, b.diff ? path || pathInDiff(b.text) : "");
+    if (b.diff) {
+      const lines = diffLines(b.text);
+      return { ...b, lines, painted: paintDiff(lines, language) };
+    }
+    return { ...b, lines: [], painted: paintCode(b.text, language) };
+  });
+}
+
+/** the panel under a row: the agent's prose as prose, its fenced blocks as blocks, and a diff
+ * coloured by line rather than printed as backticks. */
+function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: string; worktreeId?: string | null }) {
+  const sock = useSock();
+  return (
+    <div className="tool-out">
+      {blocks.map((b, i) =>
+        b.diff ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional and never reordered
+          <pre key={i} className="tool-block diff">
+            {b.lines.slice(0, DIFF_LINES).map((line, j) =>
+              // a hunk header is a jump in the file, not a line of it: it draws as the rule between
+              // two stretches of code, with the line numbers left on hover
+              line.kind === "hunk" ? (
+                // biome-ignore lint/suspicious/noArrayIndexKey: same
+                <span key={j} className="dl hunk" title={line.text} />
+              ) : (
+                // biome-ignore lint/suspicious/noArrayIndexKey: same
+                <span key={j} className={`dl ${line.kind}`}>
+                  {b.painted[j]?.length ? <Painted pieces={b.painted[j]} /> : line.text || " "}
+                </span>
+              ),
+            )}
+            {b.lines.length > DIFF_LINES && (
+              <button
+                type="button"
+                className="dl more"
+                disabled={!path || !worktreeId}
+                data-tip={path && worktreeId ? "Open this file's diff" : undefined}
+                onClick={() => worktreeId && sock?.send({ t: "file-diff", worktreeId, path })}
+              >
+                {b.lines.length - DIFF_LINES} more lines
+              </button>
+            )}
+          </pre>
+        ) : b.code ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: same
+          <pre key={i} className="tool-block">
+            {b.painted.length
+              ? b.painted.map((line, j) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: same
+                  <Fragment key={j}>
+                    {j > 0 ? "\n" : null}
+                    <Painted pieces={line} />
+                  </Fragment>
+                ))
+              : b.text}
+          </pre>
+        ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: same
+          <p key={i} className="tool-note">
+            {b.text}
+          </p>
+        ),
+      )}
+    </div>
+  );
+}
+
+/** one call inside the row: what it ran, then what the agent wrote under it. A call with neither
+ * draws nothing: output that is only whitespace, or only the description the summary line already
+ * carries, parses to no blocks, and the panel they would have sat in was an empty bar under the
+ * command. Memoized per call so a delta into the one in flight does not re-paint the ones above
+ * it. */
+const ToolPart = memo(function ToolPart({
+  item,
+  roots,
+  worktreeId,
+}: {
+  item: ToolItem;
+  roots?: string[];
+  worktreeId?: string | null;
+}) {
+  const blocks = useMemo(() => paintBlocks(toolBlocks(item, item.output ?? ""), callPath(item)), [item]);
   const command = toolLabel(item, roots).command;
   if (!command && blocks.length === 0) return null;
   return (
     <div className="tool-part">
       {command && <pre className="tool-block cmd">{command}</pre>}
-      {blocks.length > 0 && (
-        <div className="tool-out">
-          {blocks.map((b, i) =>
-            b.diff ? (
-              // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional and never reordered
-              <pre key={i} className="tool-block diff">
-                {b.lines.map((line, j) =>
-                  // a hunk header is a jump in the file, not a line of it: it draws as the rule between
-                  // two stretches of code, with the line numbers left on hover
-                  line.kind === "hunk" ? (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: same
-                    <span key={j} className="dl hunk" title={line.text} />
-                  ) : (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: same
-                    <span key={j} className={`dl ${line.kind}`}>
-                      {b.painted[j]?.length ? <Painted pieces={b.painted[j]} /> : line.text || " "}
-                    </span>
-                  ),
-                )}
-              </pre>
-            ) : b.code ? (
-              // biome-ignore lint/suspicious/noArrayIndexKey: same
-              <pre key={i} className="tool-block">
-                {b.painted.length
-                  ? b.painted.map((line, j) => (
-                      // biome-ignore lint/suspicious/noArrayIndexKey: same
-                      <Fragment key={j}>
-                        {j > 0 ? "\n" : null}
-                        <Painted pieces={line} />
-                      </Fragment>
-                    ))
-                  : b.text}
-              </pre>
-            ) : (
-              // biome-ignore lint/suspicious/noArrayIndexKey: same
-              <p key={i} className="tool-note">
-                {b.text}
-              </p>
-            ),
-          )}
-        </div>
-      )}
+      {blocks.length > 0 && <ToolOut blocks={blocks} path={openable(item, roots)} worktreeId={worktreeId} />}
+    </div>
+  );
+});
+
+/** the file the call named, as the diff pane takes it. A call on something outside the worktree has
+ * nothing for the pane to open, and says so by having no path. */
+function openable(item: ToolItem, roots?: string[]): string {
+  const rel = relPath(callPath(item), roots ?? []);
+  return rel.startsWith("/") ? "" : rel;
+}
+
+/** a run of calls as the one change it came to */
+const NetPart = memo(function NetPart({
+  text,
+  item,
+  roots,
+  worktreeId,
+}: {
+  text: string;
+  item: ToolItem;
+  roots?: string[];
+  worktreeId?: string | null;
+}) {
+  const path = callPath(item);
+  const blocks = useMemo(() => paintBlocks([{ code: true, diff: true, lang: "diff", text }], path), [text, path]);
+  return (
+    <div className="tool-part">
+      <ToolOut blocks={blocks} path={openable(item, roots)} worktreeId={worktreeId} />
     </div>
   );
 });
@@ -159,11 +221,30 @@ function Painted({ pieces }: { pieces: Piece[] }) {
  * run the agent is on is open, so scrolling back over a long turn is a list of one-line rows; a
  * click pins the row either way from then on. */
 export const ToolRow = memo(
-  function ToolRow({ tools, live, roots }: { tools: ToolItem[]; live?: boolean; roots?: string[] }) {
+  function ToolRow({
+    tools,
+    live,
+    roots,
+    worktreeId,
+  }: {
+    tools: ToolItem[];
+    live?: boolean;
+    roots?: string[];
+    worktreeId?: string | null;
+  }) {
     const [pinned, setPinned] = useState<boolean | null>(null);
     const card = useRef<HTMLDetailsElement>(null);
     // every call in a run prints the same line, so the first one is the row
     const head = tools[0]!;
+    // While the agent is in the file the row is a feed: each call appends what it just did, and
+    // nothing above it moves. Once it has moved on the run is over and the row is the record of it,
+    // which is the change the run came to rather than one diff per call printing the same
+    // neighbourhood again (mergeDiffs.ts). The swap lands on the same render that closes the row,
+    // so it is only ever seen on a row somebody pinned open.
+    const net = useMemo(
+      () => (live ? null : netOfCalls(tools.map((t) => toolBlocks(t, t.output ?? "")))),
+      [tools, live],
+    );
     // the row the agent is on opens itself, but only where its output is worth watching arrive: a
     // read or a search is a file you asked for, and having each one throw a panel open walks the
     // message you were reading off the top of the log
@@ -202,13 +283,15 @@ export const ToolRow = memo(
           {hint && <span className="tool-hint">{hint}</span>}
           {tools.length > 1 && <span className="tool-count">×{tools.length}</span>}
         </summary>
-        {tools.map((t) => (
-          <ToolPart key={t.id} item={t} roots={roots} />
-        ))}
+        {net ? (
+          <NetPart text={net} item={head} roots={roots} worktreeId={worktreeId} />
+        ) : (
+          tools.map((t) => <ToolPart key={t.id} item={t} roots={roots} worktreeId={worktreeId} />)
+        )}
       </details>
     );
   },
-  (a, b) => a.live === b.live && a.roots === b.roots && sameTools(a.tools, b.tools),
+  (a, b) => a.live === b.live && a.roots === b.roots && a.worktreeId === b.worktreeId && sameTools(a.tools, b.tools),
 );
 
 /** the agent asked for credentials: one button per login method it offered. A terminal method runs

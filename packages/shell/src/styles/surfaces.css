@@ -1195,6 +1195,27 @@ body.resizing .row-resize {
 .tool-row .dl.meta {
   color: var(--text2);
 }
+/* where the log stops printing a diff and the pane takes over. It reads as the quiet last line of
+   the block rather than as a button on top of it: the block is what you are looking at, and this is
+   only where it ends. */
+.tool-row .dl.more {
+  border: 0;
+  border-top: 1px solid var(--border0);
+  margin-top: 4px;
+  padding: 5px 12px;
+  background: none;
+  color: var(--text2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tool-row .dl.more:disabled {
+  cursor: default;
+}
+.tool-row .dl.more:not(:disabled):hover {
+  color: var(--text0);
+  background: var(--surface2);
+}
 /* same width as the icon it stands in for, so the name does not step sideways when the call ends */
 .tool-row .spinner {
   flex: 0 0 auto;

@@ -73,7 +73,7 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
       <div className="chat-log" ref={logRef} onScroll={onScroll}>
         {entries.map((entry, i) =>
           "tools" in entry ? (
-            <ToolRow key={entry.at} tools={entry.tools} live={i === liveRow} roots={roots} />
+            <ToolRow key={entry.at} tools={entry.tools} live={i === liveRow} roots={roots} worktreeId={id} />
           ) : (
             <ChatItemView key={entry.at} item={entry.item} worktreeId={id} onPickHover={onPickHover} />
           ),

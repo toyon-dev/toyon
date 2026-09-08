@@ -65,7 +65,7 @@ describe("mapUpdate", () => {
         name: "Write /a",
         input: { file_path: "/a", content: "y" },
       },
-      { type: "tool-end", toolId: "c1", output: "--- /a\n-x\n+y\n+z", isError: false },
+      { type: "tool-end", toolId: "c1", output: "```diff\n@@ -1,1 +1,2 @@\n-x\n+y\n+z\n```", isError: false },
     ]);
   });
 

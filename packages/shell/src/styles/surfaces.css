@@ -835,15 +835,27 @@ body.resizing .row-resize {
   font-style: normal;
 }
 
+/* a collapsed row is a line of the transcript, not a card: no fill and no border, so twenty calls in
+   a turn read as text to skip over. It spans the log's full width and its box meets its neighbours'
+   (-5px against the log's 10px gap), so the whole band under the pointer is the row: there is no
+   dead strip between two calls where a hover does nothing. -12px is the log's own padding, put back
+   inside the row so the glyph still sits in its column. */
 .tool-row {
   font: var(--fs-sm) var(--font-mono);
   color: var(--fg-muted);
+  margin: -5px -12px;
+}
+/* open, the call is a band across the column: full width, square, and a rule under it. The top
+   margin is the summary's own padding, so the line under the pointer does not step when it opens. */
+.tool-row[open] {
+  margin: -5px -12px 0;
+  /* the composer's tone. The chat column is bg1, so the shell's own answer to "somewhere other than
+     the transcript" is already there: the recessed surface it gives the box you type in */
   background: var(--bg0);
-  border: 1px solid var(--bg2);
-  border-radius: var(--r-sm);
+  border-bottom: 1px solid var(--bg2);
 }
 .tool-row summary {
-  padding: 4px 8px;
+  padding: 5px 12px;
   cursor: pointer;
   list-style: none;
   display: flex;
@@ -854,17 +866,44 @@ body.resizing .row-resize {
 .tool-row summary::-webkit-details-marker {
   display: none;
 }
+/* the project pill's vocabulary, on a row instead of a button: a fill under the pointer, and the
+   same fill held while the row is open, since the header is the control you are still holding */
+.tool-row summary:hover,
+.tool-row[open] > summary {
+  background: var(--bg2);
+}
+.tool-row summary:hover .tool-hint,
+.tool-row[open] > summary .tool-hint {
+  color: var(--fg1);
+}
+.tool-row summary:hover .tool-icon,
+.tool-row[open] > summary .tool-icon {
+  color: var(--fg-muted);
+}
 /* a summary is one line: a command long enough to wrap would push the row into a paragraph of
-   monospace, and a transcript of those is unreadable. The name says what happened and is a word
-   long, so it never shrinks; flex would otherwise clip "run" down to "r…" beside a long command.
-   The cap is for an agent that sends a sentence as a tool name. */
+   monospace, and a transcript of those is unreadable. The name is only there when the agent sent
+   its own word for the tool, and it never shrinks; flex would otherwise clip "Bash" down to "B…"
+   beside a long command. The cap is for an agent that sends a sentence as a tool name. */
 .tool-row .tool-name {
-  color: var(--blue);
+  color: var(--fg-muted);
   flex: 0 0 auto;
   max-width: 40%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* the glyph takes the spinner's place once the call is done, so the name never shifts sideways
+   mid-run and a scrolled-back turn reads as a column of kinds */
+.tool-row .tool-icon {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  /* the glyph is the row's own text, not an accent: a collapsed row carries no other color, and a
+     blue column down the transcript read as a list of links */
+  color: var(--fg-dim);
+}
+.tool-row.error .tool-icon {
+  color: var(--red);
 }
 .tool-row .tool-hint,
 .blocked-row .tool-hint {
@@ -880,36 +919,55 @@ body.resizing .row-resize {
 .tool-row.error .tool-name {
   color: var(--red);
 }
+/* the card's body: prose and code alike, edge to edge inside it, under a rule that separates it from
+   the chip. It scrolls on its own past 320px, and `none` keeps the trackpad's bounce out of the
+   middle of a transcript; the cost is that a flick at either end stops there rather than carrying
+   on down the chat. Only these boxes have it: the log and every other pane in the shell scroll the
+   way the browser intends. */
 .tool-row .tool-out {
-  border-top: 1px solid var(--bg2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg1);
   max-height: 320px;
-  overflow-y: auto;
+  overflow: auto;
+  overscroll-behavior: none;
 }
 .tool-row .tool-note {
   margin: 0;
-  padding: 6px 8px;
   font-size: var(--fs-xs);
   color: var(--fg-muted);
   white-space: pre-wrap;
 }
 .tool-row .tool-block {
   margin: 0;
-  padding: 6px 8px;
   overflow-x: auto;
+  overscroll-behavior: none;
   font-size: var(--fs-xs);
   color: var(--fg-muted);
-  background: var(--bg1);
 }
-/* the command that produced the output, under the sentence that named it (the summary line) */
+/* the command that produced the output: the card's own tone across its full width, with the answer
+   in the lighter panel under it. The summary line above carries the sentence that named it. */
 .tool-row .tool-block.cmd {
-  border-top: 1px solid var(--bg2);
+  padding: 6px 12px;
+  /* the answer's panel is one step lighter, which this palette barely carries on its own: the rule
+     is what separates what ran from what it said */
+  border-bottom: 1px solid var(--bg2);
   color: var(--fg1);
   white-space: pre-wrap;
   word-break: break-word;
 }
-.tool-row .tool-note + .tool-block,
-.tool-row .tool-block + .tool-block {
-  border-top: 1px solid var(--bg2);
+/* a diff fills the band: its tints run to all four of the panel's edges rather than sitting inside
+   its padding, which read as a dark bar above the first changed line */
+.tool-row .tool-out .tool-block.diff {
+  margin: 0 -12px;
+}
+.tool-row .tool-out .tool-block.diff:first-child {
+  margin-top: -6px;
+}
+.tool-row .tool-out .tool-block.diff:last-child {
+  margin-bottom: -6px;
 }
 /* a diff prints one span per line so the marker can carry the color; the tint runs the full
    scroll width, hence the block display rather than inline spans */
@@ -927,14 +985,26 @@ body.resizing .row-resize {
   color: var(--red);
   background: var(--del-bg);
 }
+/* the jump between two stretches of a file, drawn as the rule it is; the numbers are on the title */
 .tool-row .dl.hunk {
-  color: var(--blue);
+  width: auto;
+  height: 1px;
+  margin: 6px 0;
+  background: var(--bg2);
+}
+/* a diff that opens on a hunk header has nothing above it to separate */
+.tool-row .dl.hunk:first-child {
+  display: none;
 }
 .tool-row .dl.meta {
   color: var(--fg-dim);
 }
+/* same width as the icon it stands in for, so the name does not step sideways when the call ends */
 .tool-row .spinner {
+  flex: 0 0 auto;
+  width: 13px;
   color: var(--yellow);
+  text-align: center;
 }
 .blocked-row {
   display: flex;

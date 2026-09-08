@@ -4,11 +4,12 @@ import { marked } from "marked";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { attachmentUrl } from "../../ws.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { diffLineKind, toolBlocks, toolLabel } from "./toolCall.ts";
+import { diffLines, toolBlocks, toolLabel } from "./toolCall.ts";
 
 const render = (text: string) => DOMPurify.sanitize(marked.parse(text, { async: false }) as string);
 
@@ -49,12 +50,19 @@ function ToolOutput({ item }: { item: Extract<ChatItem, { kind: "tool" }> }) {
         b.diff ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional and never reordered
           <pre key={i} className="tool-block diff">
-            {b.text.split("\n").map((line, j) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: same
-              <span key={j} className={`dl ${diffLineKind(line)}`}>
-                {line || " "}
-              </span>
-            ))}
+            {diffLines(b.text).map((line, j) =>
+              // a hunk header is a jump in the file, not a line of it: it draws as the rule between
+              // two stretches of code, with the line numbers left on hover
+              line.kind === "hunk" ? (
+                // biome-ignore lint/suspicious/noArrayIndexKey: same
+                <span key={j} className="dl hunk" title={line.text} />
+              ) : (
+                // biome-ignore lint/suspicious/noArrayIndexKey: same
+                <span key={j} className={`dl ${line.kind}`}>
+                  {line.text || " "}
+                </span>
+              ),
+            )}
           </pre>
         ) : b.code ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: same
@@ -85,18 +93,36 @@ function ToolRow({
 }) {
   const [pinned, setPinned] = useState<boolean | null>(null);
   const open = pinned ?? !!live;
-  const { name, hint, command } = toolLabel(item, roots);
+  const card = useRef<HTMLDetailsElement>(null);
+  const { label, name, icon, hint, command } = toolLabel(item, roots);
   return (
-    <details className={`tool-row ${item.isError ? "error" : ""}`} open={open}>
+    <details
+      ref={card}
+      className={`tool-row ${item.isError ? "error" : ""}`}
+      open={open}
+      // clicking the output selects text and leaves focus on the body, so the card takes it: that is
+      // what makes Escape close the row you are reading, not only the one whose chip you clicked
+      tabIndex={-1}
+      onPointerDown={() => card.current?.focus({ preventScroll: true })}
+      onKeyDown={(e) => {
+        // Escape belongs to the row that has focus. Anything less local (the overlay, picker,
+        // terminal and diff ladder in app/keys.ts) keeps the key otherwise, and a second press
+        // falls through to it.
+        if (e.key !== "Escape" || !open) return;
+        e.stopPropagation();
+        setPinned(false);
+      }}
+    >
       {/* controlled: let the click set `pinned` rather than the element toggling itself */}
       <summary
+        aria-label={hint ? `${label} ${hint}` : label}
         onClick={(e) => {
           e.preventDefault();
           setPinned(!open);
         }}
       >
-        {!item.done && <span className="spinner">●</span>}
-        <span className="tool-name">{name}</span>
+        {!item.done ? <span className="spinner">●</span> : <Icon name={icon} className="tool-icon" />}
+        {name && <span className="tool-name">{name}</span>}
         {hint && <span className="tool-hint">{hint}</span>}
       </summary>
       {command && <pre className="tool-block cmd">{command}</pre>}

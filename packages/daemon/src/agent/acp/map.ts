@@ -5,6 +5,7 @@
 import type { AvailableCommand, SessionUpdate, StopReason, ToolCallContent, ToolKind } from "@agentclientprotocol/sdk";
 import type { AgentCommand, AgentEvent } from "@toyon/shared";
 import { log } from "../../core/log.ts";
+import { unifiedDiff } from "./diff.ts";
 
 export interface ToolMemo {
   name: string;
@@ -126,8 +127,10 @@ export function summarizeToolOutput(content: ToolCallContent[], rawOutput: unkno
     if (c.type === "content") {
       if (c.content.type === "text") parts.push(c.content.text);
     } else if (c.type === "diff") {
-      const old = c.oldText ? c.oldText.split("\n").map((l) => `-${l}`) : [];
-      parts.push([`--- ${c.path}`, ...old, ...c.newText.split("\n").map((l) => `+${l}`)].join("\n"));
+      // fenced as a diff so the chat colors it without a `--- path` header to key on: the row above
+      // already names the file, and it named it with the worktree path spelled out in full
+      const body = unifiedDiff(c.oldText ?? "", c.newText);
+      if (body) parts.push(`\`\`\`diff\n${body}\n\`\`\``);
     }
     // terminal blocks refer to a client terminal, which we do not offer
   }

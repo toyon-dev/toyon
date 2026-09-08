@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { diffLineKind, parseToolOutput, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
+import type { ToolKind } from "@toyon/shared";
+import { diffLineKind, diffLines, parseToolOutput, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 
 describe("parseToolOutput", () => {
   test("splits prose from a fenced block and drops the fences", () => {
@@ -37,6 +38,25 @@ describe("parseToolOutput", () => {
   });
 });
 
+describe("diffLines", () => {
+  test("drops the marker column and the file headers, keeping the kinds", () => {
+    const block = ["--- a/src/x.ts", "@@ -1,3 +1,3 @@", " keep me", "-was", "+is"].join("\n");
+    expect(diffLines(block)).toEqual([
+      { kind: "hunk", text: "@@ -1,3 +1,3 @@" },
+      { kind: "", text: "keep me" },
+      { kind: "del", text: "was" },
+      { kind: "add", text: "is" },
+    ]);
+  });
+
+  test("keeps git's own per-file header, since a block can cover several", () => {
+    expect(diffLines("diff --git a/x b/x\nindex 1a2b3c4..5d6e7f8 100644\n+one")).toEqual([
+      { kind: "meta", text: "diff --git a/x b/x" },
+      { kind: "add", text: "one" },
+    ]);
+  });
+});
+
 describe("diffLineKind", () => {
   test("headers beat the +/- they start with", () => {
     expect(diffLineKind("+++ b/index.html")).toBe("meta");
@@ -65,7 +85,13 @@ describe("toolLabel", () => {
       toolKind: "search" as const,
       input: { command: "grep -rn dark ." },
     };
-    expect(toolLabel(call)).toEqual({ name: "search", hint: "grep -rn dark .", command: "" });
+    expect(toolLabel(call)).toEqual({
+      label: "search",
+      name: "",
+      icon: "search",
+      hint: "grep -rn dark .",
+      command: "",
+    });
   });
 
   test("the agent's description labels the row and the command moves into it", () => {
@@ -75,17 +101,25 @@ describe("toolLabel", () => {
       toolKind: "execute" as const,
       input: { command: "npm run build", description: "Build the project" },
     };
-    expect(toolLabel(call)).toEqual({ name: "run", hint: "Build the project", command: "npm run build" });
+    expect(toolLabel(call)).toEqual({
+      label: "run",
+      name: "",
+      icon: "run",
+      hint: "Build the project",
+      command: "npm run build",
+    });
   });
 
   test("an agent that names its tools keeps the name, and the command is not repeated inside", () => {
     const call = { name: "Bash", title: "ls -la", toolKind: "execute" as const, input: { command: "ls -la" } };
-    expect(toolLabel(call)).toEqual({ name: "Bash", hint: "ls -la", command: "" });
+    expect(toolLabel(call)).toEqual({ label: "run", name: "Bash", icon: "folder", hint: "ls -la", command: "" });
   });
 
   test("falls back to the title when there is no usable input", () => {
     expect(toolLabel({ name: "Task", title: "Explore the repo", input: null })).toEqual({
+      label: "tool",
       name: "Task",
+      icon: "dot",
       hint: "Explore the repo",
       command: "",
     });
@@ -93,15 +127,42 @@ describe("toolLabel", () => {
 
   test("a title that only repeats the name leaves the row one word", () => {
     expect(toolLabel({ name: "think", title: "think", input: null })).toEqual({
+      label: "tool",
       name: "think",
+      icon: "dot",
       hint: "",
       command: "",
     });
   });
 
+  test("a kind no longer in ACP (an old transcript line) falls back to the generic row", () => {
+    const call = {
+      name: "compile main.c",
+      title: "compile main.c",
+      toolKind: "compile" as unknown as ToolKind,
+      input: { command: "cc main.c" },
+    };
+    expect(toolLabel(call)).toEqual({ label: "tool", name: "", icon: "dot", hint: "cc main.c", command: "" });
+  });
+
+  test("the glyph follows the command's verb where the kind only says `run`", () => {
+    const call = {
+      name: "Bash",
+      title: "grep -rn dark .",
+      toolKind: "execute" as const,
+      input: { command: "grep -rn dark ." },
+    };
+    expect(toolLabel(call).icon).toBe("search");
+    expect(toolLabel({ ...call, input: { command: "/usr/bin/git commit -m x" } }).icon).toBe("branch");
+    expect(toolLabel({ ...call, input: { command: "rm -rf dist" } }).icon).toBe("trash");
+    // a verb with no entry, and a kind the agent named itself, both keep the kind's own glyph
+    expect(toolLabel({ ...call, input: { command: "bun run check" } }).icon).toBe("run");
+    expect(toolLabel({ ...call, toolKind: "read", input: { command: "cat x" } }).icon).toBe("book");
+  });
+
   test("a file path is shown relative to the worktree", () => {
     const call = { name: "edit", title: "edit", toolKind: "edit" as const, input: { file_path: `${wt}/PLAN.md` } };
-    expect(toolLabel(call, [wt])).toEqual({ name: "edit", hint: "PLAN.md", command: "" });
+    expect(toolLabel(call, [wt])).toEqual({ label: "edit", name: "", icon: "edit", hint: "PLAN.md", command: "" });
   });
 });
 

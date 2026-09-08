@@ -1,4 +1,5 @@
 import type { ToolKind } from "@toyon/shared";
+import type { IconName } from "../../ui/Icon.tsx";
 /** How a tool call reads in the transcript: the two halves of its summary line, and the blocks of
  * its output. */
 
@@ -31,6 +32,57 @@ const KIND_LABEL: Record<ToolKind, string> = {
   other: "tool",
 };
 
+/** the row's glyph. A name is a word the agent chose and varies per agent ("Bash", "run_command");
+ * the kind is the one thing every agent agrees on, so the icon column stays the same down the
+ * transcript whatever is driving it. `other` gets a bare marker rather than the agent's mark: the
+ * agent is the same on every row of the turn, so its logo would say nothing about the call, and
+ * `more` is the overflow menu everywhere else in the shell. */
+const KIND_ICON: Record<ToolKind, IconName> = {
+  read: "book",
+  edit: "edit",
+  delete: "trash",
+  move: "move",
+  search: "search",
+  execute: "run",
+  think: "spark",
+  fetch: "globe",
+  switch_mode: "swap",
+  other: "dot",
+};
+
+/** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
+ * commit, and the column reads better following the command than the kind. Conservative on purpose:
+ * a verb belongs here only when one glyph is right for every use of it, which is why `sed` (a read
+ * with -n, an edit with -i) and `cp` are not in it. */
+const VERB_ICON: Record<string, IconName> = {
+  grep: "search",
+  rg: "search",
+  ag: "search",
+  ack: "search",
+  find: "search",
+  fd: "search",
+  cat: "book",
+  head: "book",
+  tail: "book",
+  less: "book",
+  bat: "book",
+  ls: "folder",
+  tree: "folder",
+  mkdir: "folder",
+  rm: "trash",
+  rmdir: "trash",
+  mv: "move",
+  curl: "globe",
+  wget: "globe",
+  git: "branch",
+};
+
+function verbIcon(command: string): IconName | undefined {
+  const first = command.trim().split(/\s+/)[0] ?? "";
+  // an absolute path still names the verb: /usr/bin/grep is a grep
+  return VERB_ICON[first.slice(first.lastIndexOf("/") + 1)];
+}
+
 export interface ToolCall {
   name: string;
   title?: string;
@@ -45,8 +97,12 @@ function field(call: ToolCall, key: string): string {
 }
 
 export interface ToolRowText {
-  /** what happened: a word */
+  /** what happened, as a word: the row's accessible name, since the glyph carries it on screen */
+  label: string;
+  /** the agent's own word for the tool, printed only where it says more than the glyph does */
   name: string;
+  /** what happened, as a glyph, so the rows scan as a column */
+  icon: IconName;
   /** which thing it happened to: the agent's own description of the call where it wrote one,
    * else the path or command */
   hint: string;
@@ -61,9 +117,22 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // Claude's Bash tool sends a sentence of its own ("Build the project"); it beats the command as
   // the row's label, and the command still shows inside
   const detail = relPath(field(call, "description") || raw, roots);
-  const name = detail && call.name === call.title ? KIND_LABEL[call.toolKind ?? "other"] : call.name;
+  // the maps are exhaustive over ToolKind, so a kind added to ACP is a compile error rather than a
+  // blank glyph. A replayed transcript line is JSON.parse'd and cast, though, so a kind written by
+  // an older toyon can be a string neither map has: fall back rather than print "undefined".
+  const kind = call.toolKind && call.toolKind in KIND_ICON ? call.toolKind : "other";
+  const label = KIND_LABEL[kind];
+  // the agent's own word for the tool, where it sent one rather than the whole call as its name
+  const own = detail && call.name === call.title ? "" : call.name;
+  // the glyph already says the kind, so the row prints a word only where one adds to it: the tool's
+  // own name, or the kind itself on a row with no detail to stand on
+  const name = own && own.toLowerCase() !== label ? own : detail ? "" : label;
+  // the verb only ever refines a row the kind left generic; an agent that says "read" is read
+  const byVerb = (kind === "execute" || kind === "other") && command ? verbIcon(command) : undefined;
   return {
+    label,
     name,
+    icon: byVerb ?? KIND_ICON[kind],
     hint: detail === name ? "" : detail,
     command: command && command !== detail ? command : "",
   };
@@ -130,6 +199,26 @@ export type LineKind = "add" | "del" | "hunk" | "meta" | "";
 
 const META =
   /^(diff --git |index [0-9a-f]+\.\.|new file mode |deleted file mode |similarity index |rename (from|to) |Binary files )/;
+
+export interface DiffLine {
+  kind: LineKind;
+  text: string;
+}
+
+/** what a diff block shows: the tint says which side a line is on, so the marker column is noise
+ * (unified diffs indent context lines by one space, so dropping one character keeps code aligned).
+ * The file headers go too, since the row above already names the file; `diff --git` stays, being the
+ * only header that tells one file from the next when a block covers several. */
+export function diffLines(text: string): DiffLine[] {
+  const out: DiffLine[] = [];
+  for (const line of text.split("\n")) {
+    const kind = diffLineKind(line);
+    if (kind === "meta" && !line.startsWith("diff --git ")) continue;
+    const bare = kind === "add" || kind === "del" || line.startsWith(" ");
+    out.push({ kind, text: bare ? line.slice(1) : line });
+  }
+  return out;
+}
 
 export function diffLineKind(line: string): LineKind {
   if (line.startsWith("@@")) return "hunk";

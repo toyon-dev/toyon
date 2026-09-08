@@ -3,6 +3,206 @@
 
 import type { Theme, ThemeColorKey, ThemePrefs } from "./model.ts";
 
+// Toyon's own theme, and the one it boots into. Heteromeles arbutifolia: a brown hillside, sage
+// leaves, a scarlet berry. Three decisions in here were expensive and are worth not relitigating.
+//
+// The ground is brown, and brown specifically rather than any other warm cast. A ground carries
+// its hue only if it carries saturation, and saturation on the ground has to agree with the text
+// or the text never settles onto it: every dark theme worth copying paints its text within a few
+// degrees of its own ground (One Dark and Nord 1 apart, Gruvbox 23) and a green floor under a
+// bone foreground was 37, on the far side of the yellow axis, pulling against it. Brown is on the
+// text's own side, so it can be tinted four times harder than Gruvbox's near-neutral gray and
+// still sit 20 degrees away. That tint is the difference between a warm gray and dirt: red runs
+// 14 points over blue here where Gruvbox's runs 3.
+//
+// Its depth is Gruvbox Dark Soft's, deliberately. A ground three times darker carries the same
+// accents at 1.5x the contrast ratio: the pupil opens for the dark field and the bright text
+// blooms in it, which is the whole reason the "soft" variant exists and why a near-black ground
+// hurts to read against for hours.
+//
+// The bone is tinted hard, s50 rather than the s34 it started at. Tint is what stops a light
+// foreground being a lamp; Gruvbox's cream is half saturated, which is why it reads as a material
+// the light falls on rather than as the light itself. The berry is a coral rather than a scarlet
+// for the same class of reason: at this weight it reads as the plant, where a fire-engine red
+// reads as a fault whatever it is attached to. What it cannot be is quiet: pop is chroma standing
+// clear of the ground's, and a brown ground raises that floor from Gruvbox's 1.2 to 4.5, so the
+// berry has to climb to stay the loudest thing in a window. It sits at C71 against the ground's
+// C4.5, a 16x step where the coral it replaced managed 12x, and still lands lighter and less
+// blood-coloured than Gruvbox's own red.
+//
+// Which is why the palette is derived in that order: red, then ground, then text. sRGB will not
+// give you a light red (pure red is L*53, pure orange L*67), so the berry's lightness is a
+// ceiling rather than a choice, and everything else is fitted underneath it. The ground sits at
+// L*13 because that is what puts the berry 47 points above it, the same step Gruvbox's orange
+// gets. The text sits at L*80 because that is what holds 9.5:1 against an L*13 ground, and the
+// two have to move together: leaving the text at L*88 over a lifted-away ground is what makes a
+// dark theme bloom. The payoff is that peak screen luminance drops from 72% to 57% for identical
+// legibility. The levels themselves are Gruvbox Dark Soft's, matched tier for tier: ground L*20,
+// body L*88, label L*64, hint L*56. That was chosen by sitting in both, not by argument. Going a
+// further seven points down bought the berry a +47 step instead of +40 and cut the light the
+// chrome emits by a third, and it was still too dark to live in. So the ordering above still
+// holds, red first and the rest fitted under it, but the ground is pinned to a level that is
+// known to survive a twenty-hour day rather than to whatever the accent would prefer.
+//
+// The ground's chroma builds with its lightness, 2 at bg0 up to 6.5 at bg3, rather than sitting
+// flat. bg0 is the largest field on screen, and colour in it shifts the apparent hue of
+// everything on top by simultaneous contrast: the bone stops reading golden and neutrals pick up
+// a cool cast. Gruvbox spends almost nothing there (1.2) and saves its warmth for the surfaces
+// that catch light (6.6 at bg3), which is both why it reads clean and how a real surface behaves.
+// The brown is still present at every step, and still ahead of Gruvbox at every step; it is just
+// no longer loudest where there is most of it.
+//
+// The tiers take Gruvbox's top and VS Code 2026's spread underneath it. Gruvbox drops 24 L* from
+// body to label and only 8 more to hint; 2026 drops 19 then 22, so its quiet tier is genuinely
+// quiet and its loud tier stands alone. Body stays at Gruvbox's level, which is the one that
+// survives a long day, and everything under it falls away faster: 9.6 to 4.3 to 2.6 against
+// 2026's 9.9 to 5.5 to 2.5. A transcript is mostly log, and log should be skimmable at a glance
+// rather than legible word by word, and the two halves fall away by the same amount: 46 L* from
+// body to hint in each, so a light-mode transcript triages the same way a dark one does. It used
+// to be 40 in the dark and 34 in the light, which made the light half's log quietly harder to
+// skip. The tiers also warm as they dim, hue* 97 to 85 to 77, rather
+// than cooling: fg3 used to sit at 101, past pure yellow and into green, which made the faintest
+// text in the app also the only green thing in it. Gruvbox runs 92 to 81 to 73 for the same reason
+// a dim warm surface goes browner rather than greener.
+//
+// The status colours sit on their own hue rather than near it. Green, yellow and red are read as
+// names, not as shades: a status has to say "green" before it says anything else, and a green
+// sixteen degrees short of green is a lime, which reads as an off yellow and makes you look twice.
+// Red was already dead on canonical at hue* 39; yellow moved from 87 to 98 and green from 120 to
+// 132, both a few degrees short of pure so they stay in a warm palette rather than turning into
+// signal lamps. Gruvbox is off by 21 and 31 in the same direction, and its lime is a signature
+// rather than an accident; this is the one place worth not copying it. The yellow is the exception
+// and it is amber on purpose. A pure yellow costs chroma twice: the sRGB ceiling at L*80 falls from
+// C83 at hue* 82 to C77 at 98, and the eye reads a low-chroma yellow as dirty rather than as pale.
+// So the M keeps a hue near Gruvbox's and takes the saturation instead, which is what was actually
+// missing when it looked dull. Same for the green: hue 132 was the right call, because Gruvbox's
+// lime sits 22 degrees from its own yellow where ours sits 47, which at 12px is the difference
+// between a +25 and an M being two colours or two shades. But moving it cost chroma it did not
+// need to, and green's gamut is wide enough to have both.
+//
+// The seven accents are meant to read as one family, which means no member sitting at a weight the
+// others do not. The warm four run C74-88 and the cool three C35-42, a deliberate split so the cool
+// side recedes on a warm ground; what is not deliberate is one warm colour dropping out of its own
+// group. Orange sat at C62 between red at 88 and yellow at 77, nineteen degrees from the yellow,
+// which is the tightest gap on the wheel: a quiet colour squeezed between two loud ones in nearly
+// the same hue does not read as its own colour, it reads as a tired version of its neighbour.
+//
+// The berry is lifted to L*62 rather than sitting at its chroma peak. It is not only a 2px bar any
+// more: it also paints the matched characters in every picker, and at 12px a colour at L*56 and
+// 3.6:1 is a squint. Five points of chroma buys nine points of contrast here, which is the right
+// side of that trade for something you read rather than glance at.
+//
+// The berry is held between hue* 34 and 40 rather than taken to the gamut edge. The edge in this
+// band sits at hue* 45, which is only twenty degrees off the dry-grass orange at hue* 66, so the
+// loudest available red is also the one that stops being a red. At hue* 39 it keeps thirty
+// degrees of separation and still reaches C83, level with Gruvbox's own red, against a ground of
+// C2.2. That is the whole trick: the pop is a ratio, and most of it was bought by taking colour
+// out of the ground rather than by putting more into the accent.
+//
+// The berry is not the accent, though. Red already means removed and broken in this app, and a
+// colour cannot say "you are here" and "this failed" in the same window: a red bar down a row
+// reads as a fault whatever it is attached to. So selection goes to the ceanothus, which means
+// nothing else and sits 175 degrees from the ground, five off its exact complement, which is the
+// most opposition the palette can offer. One cool mark on a warm ground is also the clearest
+// signal available that a person chose it. The berry keeps its own job and stays the most
+// saturated thing here by a distance, C83 against the accent's C38; it is still the plant's
+// colour, it just is not the cursor. Accents are at editor weight, not document weight,
+// because an `M` in the changes list has to carry at 12px.
+//
+// The three text tiers are spaced on Gruvbox's spacing, not on legibility scores. A secondary tier
+// only a few L* below the primary one reads as more bright area rather than as a second rank, and
+// the eye has to sort what matters instead of being told. Gruvbox drops 24 L* from body to label
+// and 8 more to hint; ours had dropped 16 then 15, so file paths were competing with prose. The
+// dim tier is also near-neutral on purpose: chroma at low luminance does not feed the channel
+// that carries acuity, so a colored hint is harder to read than a gray one at the same weight.
+// Both tiers stay on the ground's side of the yellow axis, red over green, for the same reason the
+// ground is brown and not olive: at h60 red and green are equal, which against a brown ground
+// reads as green text however neutral the numbers say it is.
+export const toyonDark: Theme = {
+  id: "toyon-dark",
+  family: "Toyon",
+  name: "Toyon Dark",
+  kind: "dark",
+  source: "builtin",
+  pair: "toyon-light",
+  accent: "red",
+  colors: {
+    bg0: "#32302d",
+    bg1: "#3d3835",
+    bg2: "#504943",
+    bg3: "#675c55",
+    fg1: "#e6dcb6",
+    fg2: "#9e927e",
+    fg3: "#6a6055",
+    red: "#ff4929",
+    orange: "#fa891e",
+    yellow: "#fcbe03",
+    green: "#78c945",
+    aqua: "#4dc7a7",
+    blue: "#69a9e8",
+    purple: "#ca94ca",
+    // the washes are the only two colors here that are not in the palette above, and that is the
+    // point: an added line paints its strings in `green` and a removed line its keywords in
+    // `orange`, so a wash drawn from those same accents makes the text on a changed line disappear
+    // into the field behind it. These are hue-shifted a good 28 degrees clear of both and
+    // desaturated, with the alpha raised to keep the same weight on the page.
+    addBg: "#6fae5f29",
+    delBg: "#c07f6a29",
+  },
+  // syntax runs on the dry half of the palette (grass, seedhead, new growth) so a file of code
+  // stays one landscape; the berry stays out of it, since a keyword is not a fault.
+  syntax: {
+    comment: "#6a6055",
+    keyword: "#fa891e",
+    string: "#78c945",
+    number: "#ca94ca",
+    type: "#fcbe03",
+    function: "#4dc7a7",
+    variable: "#69a9e8",
+  },
+};
+
+// The same hillside at noon: bone paper instead of understory floor, and every accent taken down
+// to ink weight so it holds on paper the way the dark half's holds on soil. The hues do not move
+// between the two, only their lightness, which is what keeps a theme switch from feeling like a
+// different app.
+export const toyonLight: Theme = {
+  id: "toyon-light",
+  family: "Toyon",
+  name: "Toyon Light",
+  kind: "light",
+  source: "builtin",
+  pair: "toyon-dark",
+  accent: "red",
+  colors: {
+    bg0: "#f8f2e8",
+    bg1: "#efe8dc",
+    bg2: "#dfd7c9",
+    bg3: "#c7bdac",
+    fg1: "#463627",
+    fg2: "#6e5e51",
+    fg3: "#b4aa9f",
+    red: "#b02e15",
+    orange: "#b15b02",
+    yellow: "#ac7e02",
+    green: "#3c8c03",
+    aqua: "#01775c",
+    blue: "#12689e",
+    purple: "#865889",
+    addBg: "#4f7a3d2e",
+    delBg: "#9c5a452e",
+  },
+  syntax: {
+    comment: "#b4aa9f",
+    keyword: "#b15b02",
+    string: "#3c8c03",
+    number: "#865889",
+    type: "#ac7e02",
+    function: "#01775c",
+    variable: "#12689e",
+  },
+};
+
 export const gruvboxDarkSoft: Theme = {
   id: "gruvbox-dark-soft",
   family: "Gruvbox",
@@ -16,8 +216,8 @@ export const gruvboxDarkSoft: Theme = {
     bg2: "#504945",
     bg3: "#665c54",
     fg1: "#ebdbb2",
-    fgMuted: "#a89984",
-    fgDim: "#928374",
+    fg2: "#a89984",
+    fg3: "#928374",
     red: "#fb4934",
     orange: "#fe8019",
     yellow: "#fabd2f",
@@ -27,8 +227,6 @@ export const gruvboxDarkSoft: Theme = {
     purple: "#d3869b",
     addBg: "#b8bb261f",
     delBg: "#fb49341f",
-    scrim: "#282828b3",
-    shadow: "#00000066",
   },
   syntax: {
     comment: "#928374",
@@ -56,8 +254,8 @@ export const gruvboxLight: Theme = {
     bg2: "#dcd8d0",
     bg3: "#c3beb4",
     fg1: "#3c3836",
-    fgMuted: "#655f5a",
-    fgDim: "#837c74",
+    fg2: "#655f5a",
+    fg3: "#837c74",
     red: "#9d0006",
     orange: "#af3a03",
     yellow: "#b57614",
@@ -67,8 +265,6 @@ export const gruvboxLight: Theme = {
     purple: "#8f3f71",
     addBg: "#79740e26",
     delBg: "#9d000626",
-    scrim: "#f4f2eeb3",
-    shadow: "#0000002e",
   },
   syntax: {
     comment: "#837c74",
@@ -97,8 +293,8 @@ export const vscodeDarkModern: Theme = {
     bg2: "#2a2d2e",
     bg3: "#2b2b2b",
     fg1: "#cccccc",
-    fgMuted: "#9d9d9d",
-    fgDim: "#6e7681",
+    fg2: "#9d9d9d",
+    fg3: "#6e7681",
     red: "#f85149",
     orange: "#0078d4",
     yellow: "#f5f543",
@@ -108,8 +304,6 @@ export const vscodeDarkModern: Theme = {
     purple: "#d670d6",
     addBg: "#23d18b1f",
     delBg: "#f851491f",
-    scrim: "#1f1f1fb3",
-    shadow: "#00000066",
   },
   syntax: {
     comment: "#6a9955",
@@ -135,8 +329,8 @@ export const vscodeLightModern: Theme = {
     bg2: "#f2f2f2",
     bg3: "#e5e5e5",
     fg1: "#3b3b3b",
-    fgMuted: "#3b3b3b",
-    fgDim: "#6e7681",
+    fg2: "#3b3b3b",
+    fg3: "#6e7681",
     red: "#f85149",
     orange: "#005fb8",
     yellow: "#949800",
@@ -146,8 +340,6 @@ export const vscodeLightModern: Theme = {
     purple: "#bc05bc",
     addBg: "#00bc001f",
     delBg: "#f851491f",
-    scrim: "#ffffffb3",
-    shadow: "#0000002e",
   },
   syntax: {
     comment: "#008000",
@@ -173,8 +365,8 @@ export const vscodeDark2026: Theme = {
     bg2: "#2b2c2d",
     bg3: "#2a2b2c",
     fg1: "#bbbebf",
-    fgMuted: "#8c8c8c",
-    fgDim: "#555555",
+    fg2: "#8c8c8c",
+    fg3: "#555555",
     red: "#f48771",
     orange: "#2d6e8a",
     yellow: "#e5ba7d",
@@ -184,8 +376,6 @@ export const vscodeDark2026: Theme = {
     purple: "#d670d6",
     addBg: "#347d3926",
     delBg: "#c93c3726",
-    scrim: "#121314b3",
-    shadow: "#00000066",
   },
   syntax: {
     comment: "#8b949e",
@@ -211,8 +401,8 @@ export const vscodeLight2026: Theme = {
     bg2: "#e6e6e9",
     bg3: "#f0f1f2",
     fg1: "#202020",
-    fgMuted: "#606060",
-    fgDim: "#bbbbbb",
+    fg2: "#606060",
+    fg3: "#bbbbbb",
     red: "#ad0707",
     orange: "#0069cc",
     yellow: "#667309",
@@ -222,8 +412,6 @@ export const vscodeLight2026: Theme = {
     purple: "#bc05bc",
     addBg: "#587c0c26",
     delBg: "#ad070726",
-    scrim: "#ffffffb3",
-    shadow: "#0000002e",
   },
   syntax: {
     comment: "#6e7781",
@@ -252,8 +440,8 @@ export const tokyoNight: Theme = {
     bg2: "#13131a",
     bg3: "#101014",
     fg1: "#a9b1d6",
-    fgMuted: "#515670",
-    fgDim: "#545c7e",
+    fg2: "#515670",
+    fg3: "#545c7e",
     red: "#f7768e",
     orange: "#3d59a1",
     yellow: "#e0af68",
@@ -263,8 +451,6 @@ export const tokyoNight: Theme = {
     purple: "#bb9af7",
     addBg: "#41a6b520",
     delBg: "#db4b4b22",
-    scrim: "#1a1b26b3",
-    shadow: "#00000066",
   },
   syntax: {
     comment: "#51597d",
@@ -290,8 +476,8 @@ export const tokyoNightLight: Theme = {
     bg2: "#e1e2e8",
     bg3: "#c1c2c7",
     fg1: "#343b59",
-    fgMuted: "#707280",
-    fgDim: "#707280",
+    fg2: "#707280",
+    fg3: "#707280",
     red: "#8c4351",
     orange: "#2959aa",
     yellow: "#8f5e15",
@@ -301,8 +487,6 @@ export const tokyoNightLight: Theme = {
     purple: "#7b43ba",
     addBg: "#2d9c9120",
     delBg: "#e8686812",
-    scrim: "#e6e7edb3",
-    shadow: "#0000002e",
   },
   syntax: {
     comment: "#888b94",
@@ -328,8 +512,8 @@ export const rosePine: Theme = {
     bg2: "#221f2e",
     bg3: "#191724",
     fg1: "#e0def4",
-    fgMuted: "#908caa",
-    fgDim: "#908caa",
+    fg2: "#908caa",
+    fg3: "#908caa",
     red: "#eb6f92",
     orange: "#ebbcba",
     yellow: "#f6c177",
@@ -339,8 +523,6 @@ export const rosePine: Theme = {
     purple: "#c4a7e7",
     addBg: "#9ccfd826",
     delBg: "#eb6f9226",
-    scrim: "#191724b3",
-    shadow: "#00000066",
   },
   syntax: {
     comment: "#6e6a86",
@@ -366,8 +548,8 @@ export const rosePineDawn: Theme = {
     bg2: "#f3ede8",
     bg3: "#faf4ed",
     fg1: "#575279",
-    fgMuted: "#797593",
-    fgDim: "#797593",
+    fg2: "#797593",
+    fg3: "#797593",
     red: "#b4637a",
     orange: "#d7827e",
     yellow: "#ea9d34",
@@ -377,8 +559,6 @@ export const rosePineDawn: Theme = {
     purple: "#907aa9",
     addBg: "#56949f26",
     delBg: "#b4637a26",
-    scrim: "#faf4edb3",
-    shadow: "#0000002e",
   },
   syntax: {
     comment: "#9893a5",
@@ -404,8 +584,8 @@ export const oneDarkPro: Theme = {
     bg2: "#2c313a",
     bg3: "#3e4452",
     fg1: "#abb2bf",
-    fgMuted: "#abb2bf",
-    fgDim: "#495162",
+    fg2: "#abb2bf",
+    fg3: "#495162",
     red: "#e05561",
     orange: "#4d78cc",
     yellow: "#d18f52",
@@ -415,8 +595,6 @@ export const oneDarkPro: Theme = {
     purple: "#c162de",
     addBg: "#00809b33",
     delBg: "#e055611f",
-    scrim: "#282c34b3",
-    shadow: "#00000066",
   },
   syntax: {
     comment: "#7f848e",
@@ -442,8 +620,8 @@ export const oneLight: Theme = {
     bg2: "#e4e4e5",
     bg3: "#e5e5e6",
     fg1: "#383a42",
-    fgMuted: "#3b3b3b",
-    fgDim: "#9d9d9f",
+    fg2: "#3b3b3b",
+    fg3: "#9d9d9f",
     red: "#cd3131",
     orange: "#526fff",
     yellow: "#949800",
@@ -453,8 +631,6 @@ export const oneLight: Theme = {
     purple: "#bc05bc",
     addBg: "#00809b33",
     delBg: "#cd31311f",
-    scrim: "#fafafab3",
-    shadow: "#0000002e",
   },
   syntax: {
     comment: "#a0a1a7",
@@ -480,8 +656,8 @@ export const solarizedDark: Theme = {
     bg2: "#003846",
     bg3: "#2b2b4a",
     fg1: "#839496",
-    fgMuted: "#93a1a1",
-    fgDim: "#4a6166",
+    fg2: "#93a1a1",
+    fg3: "#4a6166",
     red: "#dc322f",
     orange: "#197271",
     yellow: "#b58900",
@@ -491,8 +667,6 @@ export const solarizedDark: Theme = {
     purple: "#d33682",
     addBg: "#8599001f",
     delBg: "#dc322f1f",
-    scrim: "#002b36b3",
-    shadow: "#00000066",
   },
   syntax: {
     comment: "#586e75",
@@ -518,8 +692,8 @@ export const solarizedLight: Theme = {
     bg2: "#eae0c0",
     bg3: "#ddd6c1",
     fg1: "#657b83",
-    fgMuted: "#586e75",
-    fgDim: "#a3aba5",
+    fg2: "#586e75",
+    fg3: "#a3aba5",
     red: "#dc322f",
     orange: "#b58900",
     yellow: "#b58900",
@@ -529,8 +703,6 @@ export const solarizedLight: Theme = {
     purple: "#d33682",
     addBg: "#8599001f",
     delBg: "#dc322f1f",
-    scrim: "#fdf6e3b3",
-    shadow: "#0000002e",
   },
   syntax: {
     comment: "#93a1a1",
@@ -555,8 +727,8 @@ export const nord: Theme = {
     bg2: "#3b4252",
     bg3: "#3b4252",
     fg1: "#d8dee9",
-    fgMuted: "#c7cdd8",
-    fgDim: "#4c566a",
+    fg2: "#c7cdd8",
+    fg3: "#4c566a",
     red: "#bf616a",
     orange: "#88c0d0",
     yellow: "#ebcb8b",
@@ -566,8 +738,6 @@ export const nord: Theme = {
     purple: "#b48ead",
     addBg: "#81a1c133",
     delBg: "#bf616a4d",
-    scrim: "#2e3440b3",
-    shadow: "#00000066",
   },
   syntax: {
     comment: "#616e88",
@@ -593,8 +763,8 @@ export const catppuccinMocha: Theme = {
     bg2: "#313244",
     bg3: "#45475a",
     fg1: "#cdd6f4",
-    fgMuted: "#a6adc8",
-    fgDim: "#7f849c",
+    fg2: "#a6adc8",
+    fg3: "#7f849c",
     red: "#f38ba8",
     orange: "#fab387",
     yellow: "#f9e2af",
@@ -604,8 +774,6 @@ export const catppuccinMocha: Theme = {
     purple: "#cba6f7",
     addBg: "#a6e3a11f",
     delBg: "#f38ba81f",
-    scrim: "#1e1e2eb3",
-    shadow: "#00000066",
   },
   syntax: {
     comment: "#9399b2",
@@ -631,8 +799,8 @@ export const catppuccinLatte: Theme = {
     bg2: "#ccd0da",
     bg3: "#bcc0cc",
     fg1: "#4c4f69",
-    fgMuted: "#6c6f85",
-    fgDim: "#8c8fa1",
+    fg2: "#6c6f85",
+    fg3: "#8c8fa1",
     red: "#d20f39",
     orange: "#fe640b",
     yellow: "#df8e1d",
@@ -642,8 +810,6 @@ export const catppuccinLatte: Theme = {
     purple: "#8839ef",
     addBg: "#40a02b1f",
     delBg: "#d20f391f",
-    scrim: "#eff1f5b3",
-    shadow: "#0000002e",
   },
   syntax: {
     comment: "#7c7f93",
@@ -671,6 +837,8 @@ const communityThemes: Theme[] = [
 ];
 
 export const builtinThemes: Theme[] = [
+  toyonDark,
+  toyonLight,
   gruvboxDarkSoft,
   gruvboxLight,
   vscodeDarkModern,
@@ -682,8 +850,8 @@ export const builtinThemes: Theme[] = [
 
 export const defaultThemePrefs: ThemePrefs = {
   mode: "dark",
-  light: gruvboxLight.id,
-  dark: gruvboxDarkSoft.id,
+  light: toyonLight.id,
+  dark: toyonDark.id,
 };
 
 export const themeColorKeys: ThemeColorKey[] = [
@@ -692,8 +860,8 @@ export const themeColorKeys: ThemeColorKey[] = [
   "bg2",
   "bg3",
   "fg1",
-  "fgMuted",
-  "fgDim",
+  "fg2",
+  "fg3",
   "red",
   "orange",
   "yellow",
@@ -703,11 +871,9 @@ export const themeColorKeys: ThemeColorKey[] = [
   "purple",
   "addBg",
   "delBg",
-  "scrim",
-  "shadow",
 ];
 
-/** bg0 → --bg0, fgMuted → --fg-muted, addBg → --add-bg */
+/** bg0 → --bg0, fg2 → --fg2, addBg → --add-bg */
 export function cssVarName(key: ThemeColorKey): string {
   return `--${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
 }
@@ -715,7 +881,15 @@ export function cssVarName(key: ThemeColorKey): string {
 export function themeToCssVars(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {};
   for (const k of themeColorKeys) out[cssVarName(k)] = theme.colors[k];
+  out["--accent"] = theme.colors[accentKey(theme)];
+  out["--scrim"] = hex8(theme.colors.bg0, 0.7);
+  out["--shadow"] = theme.kind === "dark" ? "#00000066" : "#0000002e";
   return out;
+}
+
+/** the palette color a theme selects in; orange unless the theme says otherwise */
+export function accentKey(theme: Theme): ThemeColorKey {
+  return theme.accent ?? "orange";
 }
 
 /** which slot the prefs paint right now */
@@ -726,7 +900,7 @@ export function effectiveKind(prefs: ThemePrefs, prefersDark: boolean): "dark" |
 /** the effective theme; an unknown id falls back to the built-in of that kind */
 export function resolveTheme(prefs: ThemePrefs, themes: Theme[], prefersDark: boolean): Theme {
   const kind = effectiveKind(prefs, prefersDark);
-  return themes.find((t) => t.id === prefs[kind]) ?? builtinThemes.find((t) => t.kind === kind) ?? gruvboxDarkSoft;
+  return themes.find((t) => t.id === prefs[kind]) ?? builtinThemes.find((t) => t.kind === kind) ?? toyonDark;
 }
 
 /** the opposite-kind sibling: explicit `pair`, else a same-source theme whose name differs only by dark↔light */

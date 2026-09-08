@@ -18,14 +18,14 @@ export interface VsCodeThemeJson {
   tokenColors?: Array<{ scope?: string | string[]; settings?: { foreground?: string } }> | string;
 }
 
-const workbenchKeys: Record<Exclude<ThemeColorKey, "scrim" | "shadow">, string[]> = {
+const workbenchKeys: Record<ThemeColorKey, string[]> = {
   bg0: ["editor.background"],
   bg1: ["sideBar.background", "activityBar.background", "editor.background"],
   bg2: ["list.hoverBackground", "list.activeSelectionBackground", "editor.selectionBackground"],
   bg3: ["panel.border", "sideBar.border", "editorWidget.border", "widget.border", "editorLineNumber.foreground"],
   fg1: ["editor.foreground", "foreground"],
-  fgMuted: ["descriptionForeground", "sideBar.foreground", "tab.inactiveForeground"],
-  fgDim: ["disabledForeground", "editorLineNumber.foreground", "editorWhitespace.foreground"],
+  fg2: ["descriptionForeground", "sideBar.foreground", "tab.inactiveForeground"],
+  fg3: ["disabledForeground", "editorLineNumber.foreground", "editorWhitespace.foreground"],
   red: ["terminal.ansiRed", "errorForeground", "gitDecoration.deletedResourceForeground"],
   green: ["terminal.ansiGreen", "gitDecoration.addedResourceForeground"],
   yellow: ["terminal.ansiYellow", "editorWarning.foreground", "gitDecoration.modifiedResourceForeground"],
@@ -126,8 +126,8 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
   const bg2 = opaque(lookup(workbenchKeys.bg2) ?? bg1, bg1);
   const bg3 = opaque(lookup(workbenchKeys.bg3) ?? bg2, bg1);
   const fg1 = lookup(workbenchKeys.fg1)!;
-  const fgMuted = opaque(lookup(workbenchKeys.fgMuted) ?? fg1, bg1);
-  const fgDim = opaque(lookup(workbenchKeys.fgDim) ?? fgMuted, bg1);
+  const fg2 = opaque(lookup(workbenchKeys.fg2) ?? fg1, bg1);
+  const fg3 = opaque(lookup(workbenchKeys.fg3) ?? fg2, bg1);
   const accent = (k: keyof typeof workbenchKeys) => opaque(lookup(workbenchKeys[k])!, bg0);
   const red = accent("red"),
     green = accent("green"),
@@ -153,8 +153,8 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
       bg2,
       bg3,
       fg1,
-      fgMuted,
-      fgDim,
+      fg2,
+      fg3,
       red,
       orange,
       yellow,
@@ -164,8 +164,6 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
       purple,
       addBg: lookup(workbenchKeys.addBg) ?? hex8(green, 0.12),
       delBg: lookup(workbenchKeys.delBg) ?? hex8(red, 0.12),
-      scrim: hex8(bg0, 0.7),
-      shadow: kind === "dark" ? "#00000066" : "#0000002e",
     },
   };
 

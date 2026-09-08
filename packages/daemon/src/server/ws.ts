@@ -189,7 +189,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   });
   const themesChanged = () => {
     const cur = s.themes.current();
-    setWaitingColors({ bg: cur.colors.bg0, fg: cur.colors.fgMuted });
+    setWaitingColors({ bg: cur.colors.bg0, fg: cur.colors.fg2 });
     broadcast({ t: "themes", themes: s.themes.themes, prefs: s.themes.prefs });
   };
   s.hub.on("themesChanged", themesChanged);

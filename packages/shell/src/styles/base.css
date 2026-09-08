@@ -21,38 +21,11 @@ body {
   overscroll-behavior: none;
 }
 
-/* color-scheme: dark only buys Chromium's own dark scrollbar, whose track is a fixed near-black
-   unrelated to the theme's backgrounds; with macOS set to always show scroll bars that track is
-   opaque and takes layout width, so it reads as a strip beside every scroller. Painting it here
-   once puts it on the tokens instead. The track stays transparent so it takes the colour of
-   whatever surface it sits on, and the thumb's transparent border (with background-clip) is what
-   insets it from the edge without a second element. */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track,
-::-webkit-scrollbar-corner {
-  background: transparent;
-}
-/* The gutter is reserved either way (macOS classic scrollbars take layout width and CSS cannot ask
-   for the overlay kind back), so the thumb only shows while the pointer is in the scroller: at
-   rest the strip is the surface's own background, and nothing reflows when it appears. Scrolling
-   by trackpad or wheel means the pointer is over the pane, so it is visible exactly when in use. */
-::-webkit-scrollbar-thumb {
-  background: transparent;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  border-radius: 5px;
-}
-:hover::-webkit-scrollbar-thumb {
-  background: var(--bg2);
-  background-clip: padding-box;
-}
-:hover::-webkit-scrollbar-thumb:hover {
-  background: var(--bg3);
-  background-clip: padding-box;
-}
+/* Scrollbars are the platform's; color-scheme: dark on :root is what makes them dark. Do not style
+   ::-webkit-scrollbar to theme them: matching any of those pseudo-elements swaps the platform
+   scrollbar for a custom one, and a custom scrollbar is never the overlay kind, so it reserves a
+   gutter for good and the macOS "show scroll bars" setting stops reaching the app. (.term-tabs
+   uses it to hide its scrollbar outright, which costs no gutter because there is no bar left.) */
 button {
   background: none;
   border: none;
@@ -71,7 +44,7 @@ button {
   gap: 4px;
   font-size: var(--fs-xs);
   line-height: 1.4;
-  color: var(--fg-muted);
+  color: var(--fg2);
   border-radius: var(--r-sm);
   padding: 1px 8px;
   white-space: nowrap;
@@ -81,12 +54,12 @@ button {
   background: var(--bg2);
 }
 .btn:disabled {
-  color: var(--bg3);
+  color: var(--fg3);
   cursor: default;
   background: none;
 }
 .btn-outline {
-  border: 1px solid var(--bg3);
+  border: 1px solid var(--border-strong);
 }
 .btn-outline:hover {
   background: none;
@@ -94,8 +67,8 @@ button {
   border-color: currentColor;
 }
 .btn-outline:disabled {
-  color: var(--fg-dim);
-  border-color: var(--bg2);
+  color: var(--fg3);
+  border-color: var(--border);
 }
 .btn-icon {
   width: 20px;
@@ -103,17 +76,35 @@ button {
   padding: 2px;
   display: grid;
   place-items: center;
-  color: var(--fg-dim);
+  /* the same rest tier as .btn: an idle control is an idle control, and these two disagreed by a
+     whole tier, 4.3:1 for a text button against 2.1:1 for an icon one. There is a reading where
+     chrome should be quieter than an action, but nothing wrote it down and .btn-outline was a
+     third case again, so they are one rule now. */
+  color: var(--fg2);
   border-radius: var(--r-sm);
   line-height: 1;
 }
-.btn-icon:hover,
-.btn-icon.on {
+.btn-icon:hover {
   color: var(--fg1);
   background: var(--bg2);
 }
+/* on is not hover, and it is not selection either. A toolbar toggle is a switch, so it says so
+   the way a switch does: the seat gets deeper, bg2 under the pointer and bg3 when it is on, and
+   the glyph never changes colour. The accent is for picking one row out of a list; spending it
+   here painted a branch icon red, which reads as a merge conflict rather than as an open panel,
+   and a 2px accent bar across the bottom of a 24px rounded square is a graphic fighting a shape.
+   Declared after :hover so a hovered toggle that is on still reads as on. */
+.btn-icon.on {
+  color: var(--fg1);
+  background: var(--bg3);
+}
+/* fg3, the same tier every other :disabled rule already used. This briefly had a fourth tier of
+   its own, because disabled used to be bg3 and bg3 sits 1.4 L* off fg3, so a dead toolbar icon and
+   a live one were the same colour. The real fault was that an icon button at rest was on fg3 at
+   all; once rest moved up to fg2 with every other control, 4.3:1 against 2.1:1 says disabled
+   perfectly well and the extra tier had nothing left to do. */
 .btn-icon:disabled {
-  color: var(--bg3);
+  color: var(--fg3);
   cursor: default;
   background: none;
 }
@@ -138,7 +129,7 @@ code {
   line-height: 1.35;
   padding: 1px 5px;
   border-radius: var(--r-xs);
-  background: var(--code-bg);
+  background: var(--code);
   /* a chip that wraps mid-sentence keeps its padding and corners on both halves */
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
@@ -153,7 +144,7 @@ a code {
 /* ---- fields ---- */
 .field {
   background: var(--bg0);
-  border: 1px solid var(--bg2);
+  border: 1px solid var(--border);
   border-radius: var(--r-sm);
   color: var(--fg1);
   font: var(--fs-sm) var(--font-mono);
@@ -161,7 +152,7 @@ a code {
   outline: none;
 }
 .field:focus {
-  border-color: var(--bg3);
+  border-color: var(--border-strong);
 }
 /* multi-line / palette inputs */
 .field-lg {
@@ -176,7 +167,7 @@ a code {
   z-index: 40;
   min-width: 160px;
   background: var(--bg1);
-  border: 1px solid var(--bg3);
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
   padding: 4px;
   box-shadow: 0 6px 20px var(--shadow);
@@ -197,7 +188,7 @@ a code {
   color: var(--red);
 }
 .menu button:disabled {
-  color: var(--fg-dim);
+  color: var(--fg3);
   cursor: default;
 }
 
@@ -216,13 +207,13 @@ a code {
 .prompt-box {
   width: min(560px, 90%);
   background: var(--bg1);
-  border: 1px solid var(--bg2);
+  border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 14px;
 }
 .prompt-box .title {
   font-size: var(--fs-sm);
-  color: var(--fg-dim);
+  color: var(--fg3);
   margin-bottom: 8px;
 }
 /* anchored variant: no scrim, hanging under whatever opened it (the caller's wrapper is the
@@ -239,7 +230,7 @@ a code {
 .dock-empty {
   padding: 4px 12px;
   font-size: var(--fs-sm);
-  color: var(--fg-dim);
+  color: var(--fg3);
 }
 
 /* ---- status dots ---- */
@@ -249,11 +240,15 @@ a code {
   border-radius: 50%;
   flex-shrink: 0;
 }
+/* full green, the same value the +N counts use. It was mixed toward the surface for a while on the
+   argument that running is the steady state and so shouldn't carry the second-most chroma in the
+   palette; in practice a status dot that is not plainly green is not doing its job, and the eight
+   pixels it occupies are not what makes a window loud. */
 .dot.running {
   background: var(--green);
 }
 .dot.starting {
-  background: var(--fg-dim);
+  background: var(--fg3);
 }
 .dot.working {
   background: var(--yellow);
@@ -292,7 +287,7 @@ a code {
   padding: 3px 6px;
   color: var(--fg1);
   background: var(--bg0);
-  border: 1px solid var(--bg2);
+  border: 1px solid var(--border);
   border-radius: var(--r-sm);
 }
 
@@ -308,7 +303,7 @@ a code {
   font: var(--fs-sm) / 1.4 var(--font-ui);
   color: var(--fg1);
   background: var(--bg0);
-  border: 1px solid var(--bg3);
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-sm);
   box-shadow: 0 4px 14px var(--shadow);
   white-space: pre-line;
@@ -320,7 +315,7 @@ a code {
 }
 .tooltip-key {
   margin-left: 12px;
-  color: var(--fg-muted);
+  color: var(--fg2);
 }
 @keyframes tooltip-in {
   from {
@@ -359,6 +354,6 @@ a code {
 .crash-body {
   max-width: 520px;
   font: var(--fs-sm) / 1.5 var(--font-mono);
-  color: var(--fg-dim);
+  color: var(--fg3);
   overflow-wrap: anywhere;
 }

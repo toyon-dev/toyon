@@ -175,14 +175,20 @@ export interface Theme {
   kind: "dark" | "light";
   /** where it came from — shown as a hint in the picker */
   source: "builtin" | "file" | "vscode";
+  /** The authored palette. Two kinds of thing live here and it is worth knowing which is which:
+   * bg0..bg3 and fg1..fg3 are positions on a ramp, the seven hues are an interchange format every
+   * colour scheme since ANSI has shipped, and addBg/delBg are the only jobs a theme has to name
+   * itself, because a real diffEditor colour cannot be computed from a syntax green (ten of the
+   * nineteen built-ins carry one that isn't). Everything else a theme needs is derived in
+   * themeToCssVars: the accent, the fourth text tier, the scrim and the shadow. */
   colors: {
     bg0: ThemeColor;
     bg1: ThemeColor;
     bg2: ThemeColor;
     bg3: ThemeColor;
     fg1: ThemeColor;
-    fgMuted: ThemeColor;
-    fgDim: ThemeColor;
+    fg2: ThemeColor;
+    fg3: ThemeColor;
     red: ThemeColor;
     orange: ThemeColor;
     yellow: ThemeColor;
@@ -193,12 +199,13 @@ export interface Theme {
     /** diff line tints (alpha hex) */
     addBg: ThemeColor;
     delBg: ThemeColor;
-    /** overlay backdrop and box-shadow color (alpha hex) */
-    scrim: ThemeColor;
-    shadow: ThemeColor;
   };
   /** editor token colors; missing entries inherit Monaco's base theme */
   syntax?: Partial<Record<ThemeSyntaxToken, ThemeColor>>;
+  /** which palette color carries "you are on this one": the active worktree, an `on` tab, a
+   * checked box. Gruvbox and the rest have always selected in orange; Toyon selects in its berry.
+   * Defaults to orange, so an imported VS Code theme behaves the way every theme did before. */
+  accent?: ThemeColorKey;
   /** id of this theme's opposite-kind sibling (Gruvbox Dark ↔ Gruvbox Light); guessed by name when absent */
   pair?: string;
   /** picker row label shared by a dark/light pair ("Gruvbox"); derived from the name when absent */

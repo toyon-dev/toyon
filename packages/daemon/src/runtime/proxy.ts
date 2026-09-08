@@ -170,7 +170,7 @@ function injectBridge(html: string): string {
 }
 
 // painted with the selected shell theme so the placeholder doesn't flash a foreign color
-let waitingColors = { bg: "#32302f", fg: "#a89984" };
+let waitingColors = { bg: "#32302d", fg: "#9e927e" };
 export function setWaitingColors(c: { bg: string; fg: string }) {
   waitingColors = c;
 }

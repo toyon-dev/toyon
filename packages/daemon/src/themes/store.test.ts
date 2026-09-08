@@ -44,7 +44,7 @@ describe("ThemeStore", () => {
     const { store } = makeStore();
     store.load();
     const ids = store.themes.map((t) => t.id);
-    expect(ids.slice(0, 2)).toEqual(["gruvbox-dark-soft", "gruvbox-light"]);
+    expect(ids.slice(0, 2)).toEqual(["toyon-dark", "toyon-light"]);
     expect(ids).toContain("file:my-light");
     expect(ids).toContain("file:raw");
     expect(ids).not.toContain("file:junk");
@@ -89,7 +89,7 @@ describe("ThemeStore", () => {
       themesDir,
     );
     store.load();
-    expect(store.prefs).toEqual({ mode: "light", light: "gruvbox-light", dark: "gruvbox-dark-soft" });
+    expect(store.prefs).toEqual({ mode: "light", light: "gruvbox-light", dark: "toyon-dark" });
   });
 
   test("import writes a converted file and refuses include", () => {

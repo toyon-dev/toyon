@@ -2,7 +2,7 @@
 // editor bundle only downloads when a diff is first opened.
 
 import type { Theme } from "@toyon/shared";
-import { gruvboxDarkSoft, hex8, scaleAlpha } from "@toyon/shared";
+import { hex8, scaleAlpha, toyonDark } from "@toyon/shared";
 import * as monaco from "monaco-editor";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
@@ -69,7 +69,7 @@ function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
 }
 
 const THEME = "toyon";
-monaco.editor.defineTheme(THEME, toMonacoTheme(gruvboxDarkSoft));
+monaco.editor.defineTheme(THEME, toMonacoTheme(toyonDark));
 
 export default function MonacoDiff({
   before,

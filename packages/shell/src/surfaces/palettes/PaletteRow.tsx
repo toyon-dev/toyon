@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 
-/** the standard palette row: label left, hint right, "●" on the current choice */
+/** the standard palette row: label left, hint right, and the current choice marked the way every
+ * other selected row in the app is marked, with a bar down its leading edge. It used to print a
+ * "●" into the label, which put a bare glyph in rendered markup and made the one list where you
+ * pick your theme the one list that marked its selection differently from the worktree rail. */
 export function PaletteRow({
   label,
   hint,
@@ -12,10 +15,8 @@ export function PaletteRow({
 }) {
   return (
     <>
-      <span className="cmd-label">
-        {current ? "● " : ""}
-        {label}
-      </span>
+      {current && <span className="row-current" aria-hidden="true" />}
+      <span className="cmd-label">{label}</span>
       {hint ? <span className="cmd-hint">{hint}</span> : null}
     </>
   );

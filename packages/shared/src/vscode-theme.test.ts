@@ -36,12 +36,12 @@ describe("vscodeToTheme", () => {
     // translucent hover flattened over bg1, never left with alpha
     expect(t.colors.bg2).toBe(composite("#ffffff14", "#0b0e11"));
     expect(t.colors.bg3).toBe("#2a3038");
-    expect(t.colors.fgMuted).toBe("#8a94a0");
-    expect(t.colors.fgDim).toBe("#5c6670");
+    expect(t.colors.fg2).toBe("#8a94a0");
+    expect(t.colors.fg3).toBe("#5c6670");
     expect(t.colors.orange).toBe("#ff9f43");
     expect(t.colors.purple).toBe("#d19bff");
     expect(t.colors.addBg).toBe("#8bd64920");
-    expect(t.colors.scrim).toBe(hex8("#101418", 0.7));
+    expect(themeToCssVars(t)["--scrim"]).toBe(hex8("#101418", 0.7)); // derived, not carried
     expect(t.syntax).toEqual({
       comment: "#5c6670",
       keyword: "#ff6b6b",
@@ -61,7 +61,7 @@ describe("vscodeToTheme", () => {
     expect(t.colors.red).toBe("#dc322f");
     expect(t.colors.blue).toBe("#0451a5"); // Light Modern default
     expect(t.colors.addBg).toBe(hex8("#859900", 0.12));
-    expect(t.colors.shadow).toBe("#0000002e");
+    expect(themeToCssVars(t)["--shadow"]).toBe("#0000002e"); // derived from kind
     expect(t.syntax).toBeUndefined();
   });
 
@@ -84,9 +84,10 @@ describe("color helpers", () => {
   });
   test("css var names", () => {
     const v = themeToCssVars(gruvboxDarkSoft);
-    expect(v["--fg-muted"]).toBe("#a89984");
+    expect(v["--fg2"]).toBe("#a89984");
     expect(v["--add-bg"]).toBe("#b8bb261f");
-    expect(Object.keys(v).length).toBe(themeColorKeys.length);
+    expect(v["--accent"]).toBe(gruvboxDarkSoft.colors.orange); // no accent key: orange, as every theme did
+    expect(Object.keys(v).length).toBe(themeColorKeys.length + 3); // + accent, scrim, shadow
   });
 });
 
@@ -133,7 +134,7 @@ describe("pairing", () => {
   test("resolveTheme by appearance", () => {
     const p = { mode: "system" as const, light: "vscode-2026-light", dark: "missing" };
     expect(resolveTheme(p, all, false).id).toBe("vscode-2026-light");
-    expect(resolveTheme(p, all, true).id).toBe("gruvbox-dark-soft"); // unknown → built-in of that kind
+    expect(resolveTheme(p, all, true).id).toBe("toyon-dark"); // unknown falls back to the built-in of that kind
     expect(resolveTheme({ ...p, mode: "light" }, all, true).id).toBe("vscode-2026-light");
   });
 });

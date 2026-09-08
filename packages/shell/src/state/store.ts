@@ -25,14 +25,7 @@ import type {
   ToolKind,
   WorktreeStatus,
 } from "@toyon/shared";
-import {
-  builtinThemes,
-  defaultThemePrefs,
-  gruvboxDarkSoft,
-  isEditTool,
-  resolveTheme,
-  SHELL_STREAM,
-} from "@toyon/shared";
+import { builtinThemes, defaultThemePrefs, isEditTool, resolveTheme, SHELL_STREAM, toyonDark } from "@toyon/shared";
 
 export type ChatItem =
   | { kind: "user"; text: string; pick?: PickMeta; images?: ImageRef[]; pastes?: PasteRef[] }
@@ -221,7 +214,7 @@ export interface InitialOpts {
 }
 
 export function initialState(opts: InitialOpts): State {
-  const cached = opts.cached ?? gruvboxDarkSoft;
+  const cached = opts.cached ?? toyonDark;
   return {
     connected: false,
     repos: [],

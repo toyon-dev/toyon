@@ -27,7 +27,11 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     tokenFile: join(home, "token"),
     transcriptsDir: join(home, "transcripts"),
     attachmentsDir: join(home, "attachments"),
-    worktreesDir: join(home, "worktrees"),
+    // `.noindex` keeps Spotlight out of the worktrees: each one carries a CoW clone of
+    // node_modules, which the indexer walks as fresh paths every time, so it never converges.
+    // The suffix is the only mechanism that works: `.metadata_never_index` is ignored on a
+    // subdirectory, and a symlinked node_modules gets replaced by `npm install`.
+    worktreesDir: join(home, "worktrees.noindex"),
     themesDir: join(home, "themes"),
     // the cloud image pre-installs the adapters into the image (a volume cannot be filled at build)
     agentsDir: process.env.TOYON_AGENTS_DIR ?? join(home, "agents"),

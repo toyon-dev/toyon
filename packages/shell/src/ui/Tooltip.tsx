@@ -105,11 +105,17 @@ export function Tooltips() {
       }
     };
     const onBlur = () => hide();
+    /** Typing or firing a shortcut should clear the tip; holding a modifier is neither. Hiding on
+     * every keydown meant reaching for ⌘ or ⇧ over a control closed the thing describing it, which
+     * is exactly when you are about to use it. */
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Shift" && e.key !== "Control" && e.key !== "Alt" && e.key !== "Meta") hide();
+    };
 
     document.addEventListener("mouseover", onOver);
     document.addEventListener("mouseout", onOut);
     document.addEventListener("mousedown", hide);
-    document.addEventListener("keydown", hide);
+    document.addEventListener("keydown", onKey);
     document.addEventListener("scroll", hide, true);
     document.addEventListener("focusin", onFocus);
     document.addEventListener("focusout", onBlur);
@@ -119,7 +125,7 @@ export function Tooltips() {
       document.removeEventListener("mouseover", onOver);
       document.removeEventListener("mouseout", onOut);
       document.removeEventListener("mousedown", hide);
-      document.removeEventListener("keydown", hide);
+      document.removeEventListener("keydown", onKey);
       document.removeEventListener("scroll", hide, true);
       document.removeEventListener("focusin", onFocus);
       document.removeEventListener("focusout", onBlur);

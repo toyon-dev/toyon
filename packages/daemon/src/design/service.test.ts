@@ -56,9 +56,15 @@ describe("DesignService.scan", () => {
   });
 
   test("finds a class carrying a control that no component is named for", async () => {
-    const uses = Array.from({ length: 9 }, (_, i) => `export function P${i}() { return <b className="btn" />; }`);
     write("src/styles.css", `.btn { color: red }`);
-    write("src/pages.tsx", uses.join("\n"));
+    // spread across files: the finding is about repetition, so it takes more than one place
+    for (const page of ["a", "b", "c"]) {
+      const uses = Array.from(
+        { length: 3 },
+        (_, i) => `export function P${page}${i}() { return <b className="btn" />; }`,
+      );
+      write(`src/page-${page}.tsx`, uses.join("\n"));
+    }
 
     const index = await w.design.scan("w1");
     const finding = index.findings.find((f) => f.kind === "unwrapped-class");
@@ -68,23 +74,60 @@ describe("DesignService.scan", () => {
 
   test("a class that never rides alone is a modifier, and never a finding", async () => {
     // `.btn-outline` only ever appears beside `.btn`: no component was going to be named for it
-    const paired = Array.from(
-      { length: 8 },
-      (_, i) => `export function P${i}() { return <b className="btn btn-outline" />; }`,
-    );
     write("src/styles.css", `.btn { color: red }\n.btn-outline { color: blue }`);
-    // .btn stands alone once, so it is a thing; .btn-outline never does, so it is a modifier
-    write("src/pages.tsx", [...paired, `export function Plain() { return <b className="btn" />; }`].join("\n"));
+    // .btn stands alone somewhere, so it is a thing; .btn-outline never does, so it is a modifier
+    for (const page of ["a", "b", "c"]) {
+      const paired = Array.from(
+        { length: 3 },
+        (_, i) => `export function P${page}${i}() { return <b className="btn btn-outline" />; }`,
+      );
+      write(
+        `src/page-${page}.tsx`,
+        [...paired, `export function Plain${page}() { return <b className="btn" />; }`].join("\n"),
+      );
+    }
 
     const index = await w.design.scan("w1");
     const finding = index.findings.find((f) => f.kind === "unwrapped-class");
-    expect(finding?.items.map((i) => i.label)).toEqual([".btn  9"]);
+    expect(finding?.items.map((i) => i.label)).toEqual([".btn  12"]);
+  });
+
+  test("a class confined to one file is that file's styling, not an unwrapped control", async () => {
+    // nine uses, nowhere else: there is no repetition across the project to complain about
+    const uses = Array.from({ length: 9 }, (_, i) => `export function P${i}() { return <b className="pane-row" />; }`);
+    write("src/styles.css", `.pane-row { color: red }`);
+    write("src/Pane.tsx", uses.join("\n"));
+
+    const index = await w.design.scan("w1");
+    expect(index.findings).toEqual([]);
+    expect(index.classes.find((c) => c.name === "pane-row")?.files).toBe(1);
+  });
+
+  test("a class applied only inside reusable components is already wrapped", async () => {
+    write("src/styles.css", `.chip { color: red }`);
+    write("src/ui/Chip.tsx", `export function Chip() { return <b className="chip" />; }`);
+    write("src/ui/Tag.tsx", `export function Tag() { return <b className="chip" />; }`);
+    // both are reached for by two other files, so both are shared vocabulary
+    for (const n of ["One", "Two"]) {
+      write(
+        `src/${n}.tsx`,
+        `import { Chip } from "./ui/Chip.tsx";\nimport { Tag } from "./ui/Tag.tsx";\nexport function ${n}() { return <Chip />; }`,
+      );
+    }
+
+    const index = await w.design.scan("w1");
+    expect(index.findings).toEqual([]);
   });
 
   test("a component named for the class is not a finding", async () => {
-    const uses = Array.from({ length: 9 }, (_, i) => `export function P${i}() { return <b className="btn" />; }`);
     write("src/styles.css", `.btn { color: red }`);
-    write("src/pages.tsx", uses.join("\n"));
+    for (const page of ["a", "b"]) {
+      const uses = Array.from(
+        { length: 4 },
+        (_, i) => `export function P${page}${i}() { return <b className="btn" />; }`,
+      );
+      write(`src/page-${page}.tsx`, uses.join("\n"));
+    }
     write("src/ui/Btn.tsx", `export function Btn() { return <b className="btn" />; }`);
 
     const index = await w.design.scan("w1");

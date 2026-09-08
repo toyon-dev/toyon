@@ -45,7 +45,7 @@ export class DesignService {
     const ts = await loadProjectTypescript(wt.path);
     const importers = collectImporters(srcFiles);
     const components = collectComponents(srcFiles, ts, importers);
-    const { classes, attrs } = collectClasses(cssFiles, srcFiles);
+    const { classes, attrs, appliedIn } = collectClasses(cssFiles, srcFiles);
 
     return {
       scannedAt: Date.now(),
@@ -54,7 +54,7 @@ export class DesignService {
       tokens,
       components,
       classes,
-      findings: findings(components, classes),
+      findings: findings(components, classes, appliedIn),
       coverage: {
         files: byExtension([...cssFiles, ...srcFiles]),
         stylesheets: cssFiles.length,
@@ -144,7 +144,10 @@ function safePropUnions(ts: any, path: string, text: string) {
   }
 }
 
-function collectClasses(css: SourceFile[], src: SourceFile[]): { classes: DesignClass[]; attrs: number } {
+function collectClasses(
+  css: SourceFile[],
+  src: SourceFile[],
+): { classes: DesignClass[]; attrs: number; appliedIn: Map<string, Set<string>> } {
   const defined = new Map<string, string>();
   for (const file of css) {
     for (const name of cssClasses(file.text)) if (!defined.has(name)) defined.set(name, file.path);
@@ -153,21 +156,33 @@ function collectClasses(css: SourceFile[], src: SourceFile[]): { classes: Design
   // one pass over the source, not one per class: a stylesheet with a few hundred classes against a
   // few thousand files is a lot of scanning to do the other way round
   const applied = new Map<string, number>();
+  const appliedIn = new Map<string, Set<string>>();
   const solo = new Set<string>();
   let attrs = 0;
   for (const file of src) {
     const found = appliedClasses(file.text);
     attrs += found.attrs;
-    for (const [name, n] of found.classes) applied.set(name, (applied.get(name) ?? 0) + n);
+    for (const [name, n] of found.classes) {
+      applied.set(name, (applied.get(name) ?? 0) + n);
+      const seen = appliedIn.get(name) ?? new Set<string>();
+      seen.add(file.path);
+      appliedIn.set(name, seen);
+    }
     for (const name of found.solo) solo.add(name);
   }
 
   const out: DesignClass[] = [];
   for (const [name, path] of defined) {
-    out.push({ name, uses: applied.get(name) ?? 0, path, solo: solo.has(name) });
+    out.push({
+      name,
+      uses: applied.get(name) ?? 0,
+      path,
+      solo: solo.has(name),
+      files: appliedIn.get(name)?.size ?? 0,
+    });
   }
   out.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
-  return { classes: out, attrs };
+  return { classes: out, attrs, appliedIn };
 }
 
 function byExtension(files: SourceFile[]): Record<string, number> {
@@ -192,18 +207,31 @@ function typicalUse(classes: DesignClass[]): number {
  * clever: `.btn` and `Button` stay different, which is the point of the finding. */
 const normal = (s: string) => s.replace(/[-_]/g, "").toLowerCase();
 
-function findings(components: DesignComponent[], classes: DesignClass[]): DesignFinding[] {
+function findings(
+  components: DesignComponent[],
+  classes: DesignClass[],
+  appliedIn: Map<string, Set<string>>,
+): DesignFinding[] {
   const out: DesignFinding[] = [];
   const componentNames = new Set(components.map((c) => normal(c.name)));
   const busy = typicalUse(classes);
 
-  const unwrapped = classes.filter(
-    // at least as used as the typical one, not more: in a project with a single class that class
-    // is also the median, and a strict comparison would never report anything at all. `solo` drops
-    // the modifiers: `.btn-outline` and `.on` never appear without something to modify, so no
-    // component was ever going to be named for them.
-    (c) => c.uses >= busy && c.solo && !componentNames.has(normal(c.name)),
-  );
+  // files that export a component the rest of the project reaches for. A class applied only inside
+  // one of those is already wrapped: the component is the abstraction, whatever the class is called.
+  const reusableFiles = new Set(components.filter((c) => c.imports >= 2).map((c) => c.path));
+
+  const unwrapped = classes.filter((c) => {
+    // at least as used as the typical one, not more: in a project with a single class that class is
+    // also the median, and a strict comparison would never report anything at all
+    if (c.uses < busy || !c.solo || componentNames.has(normal(c.name))) return false;
+    const where = appliedIn.get(c.name) ?? new Set<string>();
+    // The finding says every use restates the markup, so it needs uses in more than one place to
+    // restate. A class living in a single file is that file's own styling, not a control nobody
+    // named, and eight of this repo's twenty-two were exactly that.
+    if (where.size < 2) return false;
+    // and if every one of those places is a reusable component, the component already wraps it
+    return ![...where].every((p) => reusableFiles.has(p));
+  });
   if (unwrapped.length > 0) {
     out.push({
       kind: "unwrapped-class",

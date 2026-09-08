@@ -2363,3 +2363,17 @@ body.resizing .rb-center {
   color: var(--text2);
   font: var(--fs-xs) var(--font-mono);
 }
+
+/* Text holds a measure; the swatch grids break out of it, since a colour wants every pixel it can
+   get and a grid has no line length to lose. The measure is left-aligned, not centred: centred put
+   the headings and the rows in the middle of a wide pane while the grid beside them started at the
+   edge, and nothing lined up with anything. Sharing the grid's left edge is what makes the two
+   read as one document. Placed last because the `margin` shorthands above reset the inline axis. */
+.design-h,
+.design-rows,
+.design-gap,
+.design-finding,
+.design-tail {
+  max-width: 920px;
+  margin-inline: 0;
+}

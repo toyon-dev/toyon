@@ -271,6 +271,9 @@ export interface DesignClass {
   /** seen as the only class on an element at least once. False means it only ever rides with
    * another (`btn btn-outline`, `row on`), which makes it a modifier rather than a thing. */
   solo: boolean;
+  /** how many separate source files apply it. One means it is that file's own styling, however
+   * many times it appears there. */
+  files: number;
 }
 
 export type DesignFindingKind = "unwrapped-class" | "unused-variant" | "drift" | "unnamed-combo";

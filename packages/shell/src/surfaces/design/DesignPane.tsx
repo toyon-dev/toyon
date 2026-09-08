@@ -168,8 +168,8 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
           return (
             <div key={kind} className="design-group">
               <span className="design-group-name">{label}</span>
-              {/* only a group too wide for the text column breaks out of it; one that fits stays
-                  in the column, at the same left edge as its label */}
+              {/* a group that fits sits in the column; one that does not fills the section, with
+                  its lattice still anchored to the column's left edge (see the stylesheet) */}
               <div className={`design-breakout ${group.length <= (tight ? 6 : 5) ? "fits" : ""}`}>
                 <div className={`design-grid ${tight ? "tight" : ""}`}>
                   {group.map((t) => (

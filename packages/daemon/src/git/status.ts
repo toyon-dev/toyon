@@ -6,7 +6,10 @@ import type { GitFileStatus } from "@toyon/shared";
 import { git, gitRaw } from "./exec.ts";
 
 export async function statusFiles(worktreePath: string): Promise<GitFileStatus[]> {
-  const r = await gitRaw(worktreePath, "status", "--porcelain");
+  // -uall, because the default collapses a wholly-untracked directory into a single `dir/` entry:
+  // not a path the panel can diff, count lines for, or discard. .gitignore still applies, so the
+  // set of files this adds is the set a commit would have taken anyway.
+  const r = await gitRaw(worktreePath, "status", "--porcelain", "-uall");
   if (!r.ok) throw new Error(`git status failed: ${r.err}`);
   return parsePorcelain(r.out);
 }

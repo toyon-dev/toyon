@@ -138,7 +138,7 @@ describe("spare pool", () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
     const wt = await w.worktrees.create(repoId, "use the spare");
-    expect(wt.path.includes("spare-")).toBe(true);
+    expect(wt.path.includes("wt-")).toBe(true);
     const first = wt.linkPath!;
     expect(first).toBe(join(dirname(wt.path), wt.title));
     expect(readlinkSync(first)).toBe(wt.path);

@@ -177,6 +177,8 @@ export interface State {
   /** the daemon speaks another protocol version than this build: stop, ask for a reload */
   incompatible: boolean;
   leftOpen: boolean;
+  /** bumped to put the keyboard in the changes list; focus is the DOM's, so this only asks */
+  focusLeft: number;
   rightOpen: boolean;
   /** the worktree panel is kept open, instead of peeking on hover and collapsing to the strip */
   railOpen: boolean;
@@ -239,6 +241,7 @@ export function initialState(opts: InitialOpts): State {
     paletteReturn: null,
     incompatible: false,
     leftOpen: true,
+    focusLeft: 0,
     rightOpen: true,
     railOpen: opts.storedRailOpen ?? false,
     leftAuto: true,
@@ -329,6 +332,8 @@ export type Action =
   | { a: "toggle"; overlay: Overlay }
   | { a: "palette-return"; v: State["paletteReturn"] }
   | { a: "toggle-left" }
+  /** open the changes panel if it is shut, and ask it for the keyboard either way */
+  | { a: "focus-left" }
   | { a: "toggle-right" }
   | { a: "toggle-rail" }
   | { a: "toggle-zen" }
@@ -432,6 +437,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, paletteReturn: action.v };
     case "toggle-left":
       return { ...s, leftOpen: !s.leftOpen, leftAuto: false };
+    case "focus-left":
+      return { ...s, leftOpen: true, leftAuto: false, focusLeft: s.focusLeft + 1 };
     case "toggle-right":
       return { ...s, rightOpen: !s.rightOpen };
     case "toggle-rail":

@@ -1,12 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import type { ProcState } from "@toyon/shared";
-import { procTrouble } from "./util.ts";
+import { procTrouble, splitPath } from "./util.ts";
 
 const proc = (name: string, status: ProcState["status"], port = 3000): ProcState => ({
   name,
   command: `run ${name}`,
   port,
   status,
+});
+
+describe("splitPath", () => {
+  test("a file at the root is all name", () => {
+    expect(splitPath("README.md")).toEqual({ name: "README.md", dir: "" });
+  });
+  test("the name leads and the rest is the directory", () => {
+    expect(splitPath("packages/shell/vite.config.ts")).toEqual({ name: "vite.config.ts", dir: "packages/shell" });
+  });
+  test("a dotted directory keeps its dot on the front", () => {
+    expect(splitPath(".claude/settings.json")).toEqual({ name: "settings.json", dir: ".claude" });
+  });
 });
 
 describe("procTrouble", () => {

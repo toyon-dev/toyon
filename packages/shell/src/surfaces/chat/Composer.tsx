@@ -237,7 +237,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
   };
 
   return (
-    <div className="chat-input">
+    <div className="composer chat-input">
       {id &&
         images.map((img, i) => (
           <ImageChip

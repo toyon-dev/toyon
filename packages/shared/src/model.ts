@@ -52,7 +52,7 @@ export interface WorktreeInfo {
   repoId: string;
   path: string;
   /** a symlink named after the title, beside `path`, when the directory's own name is not the
-   * title (a claimed spare keeps its spare-xxxx directory): the terminal's cwd and editor links
+   * title (a claimed spare keeps its wt-xxxx directory): the terminal's cwd and editor links
    * show this one; git and the procs use `path` */
   linkPath?: string;
   branch: string;

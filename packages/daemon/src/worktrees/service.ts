@@ -269,7 +269,7 @@ export class WorktreeService {
   }
 
   /** `<repo>/<title>` → the directory, when its own name is not the title (a claimed spare keeps
-   * spare-xxxx). The terminal and editor links show the link; git and procs keep the real path.
+   * wt-xxxx). The terminal and editor links show the link; git and procs keep the real path.
    * Moving the directory for real would restart the procs and the agent session (its cwd). */
   private refreshLink(wt: WorktreeInfo) {
     // the branch tail rather than the title: titles may repeat (three tasks named alike), branches

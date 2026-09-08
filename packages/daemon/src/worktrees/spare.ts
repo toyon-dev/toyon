@@ -66,7 +66,8 @@ export class SparePool {
     const entry: SpareEntry = { worktreeId: "", lockHash: "", refreshing: null, ready: false };
     this.spares.set(repoId, entry);
     try {
-      const slug = `spare-${shortId().slice(0, 4)}`;
+      // the directory name outlives the spare: a claim keeps it, so it must not say "spare"
+      const slug = `wt-${shortId().slice(0, 4)}`;
       const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
       await withRepoLock(repo.path, () =>
         gitOrThrow(repo.path, "worktree", "add", "--detach", wtPath, repo.defaultBranch),

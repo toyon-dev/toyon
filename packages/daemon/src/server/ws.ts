@@ -28,6 +28,8 @@ export interface ServerOpts {
   shellDist: string;
   version: string;
   services: Services;
+  /** where a shell authenticated from, passed on to the bridge script (see BridgeScript) */
+  noteShellOrigin: (origin: string | null) => void;
 }
 
 export function startServer(opts: ServerOpts): { server: Server<WsData>; branded: boolean; stop: () => void } {
@@ -215,6 +217,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       attachments: s.attachments,
       branded: () => branded,
       metrics,
+      noteShellOrigin: opts.noteShellOrigin,
     }),
     websocket: {
       // a chat frame can carry IMAGES_PER_MESSAGE images of IMAGE_MAX_BYTES each, base64; Bun's

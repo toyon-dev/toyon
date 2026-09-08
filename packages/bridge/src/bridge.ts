@@ -76,6 +76,9 @@ let zen = false;
 window.addEventListener(
   "keydown",
   (e) => {
+    // a shell framed as a preview keeps its own keyboard: forwarding from here would leave the
+    // inner shell dead to every chord and act on keys meant for it
+    if (window.__toyonShell) return;
     const chord = matchChord(e);
     // in zen only the chord that leaves zen is ours: a flow under test that uses Escape or ⌘E
     // has to reach the page, and the shell has no visible chrome for the rest to act on anyway

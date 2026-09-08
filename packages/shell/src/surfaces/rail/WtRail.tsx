@@ -7,7 +7,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
-import { chord, dotClass } from "../util.ts";
+import { chord, dotClass, procTrouble } from "../util.ts";
 import { worktreeActions } from "./worktreeActions.ts";
 
 type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
@@ -206,7 +206,24 @@ export function WtRail() {
               >
                 <Icon name="more" className="icon-inline" />
               </span>
-              <span className={`dot ${dotClass(w)}`} />
+              {(() => {
+                // a red dot means a proc died, and the only thing anyone wants next is its log. The
+                // dot is the click target because in the collapsed strip it is the whole row you
+                // can see; offline the colour is the socket's, not the proc's, so it stays inert.
+                const trouble = graftMode || offline ? null : procTrouble(w.procs);
+                if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}`} />;
+                return (
+                  <span
+                    className="dot crashed clickable"
+                    {...tip(trouble.tip)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dispatch({ a: "activate", id: w.worktree.id });
+                      dispatch({ a: "term-stream", id: w.worktree.id, stream: trouble.stream });
+                    }}
+                  />
+                );
+              })()}
             </button>
           ))}
           {graftMode && (

@@ -859,12 +859,22 @@ body.resizing .row-resize {
   display: flex;
   gap: 6px;
   align-items: center;
+  min-width: 0;
 }
 .tool-row summary::-webkit-details-marker {
   display: none;
 }
+/* a summary is one line: a command long enough to wrap would push the row into a paragraph of
+   monospace, and a transcript of those is unreadable. The name says what happened and is a word
+   long, so it never shrinks; flex would otherwise clip "run" down to "r…" beside a long command.
+   The cap is for an agent that sends a sentence as a tool name. */
 .tool-row .tool-name {
   color: var(--blue);
+  flex: 0 0 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tool-row .tool-hint,
 .blocked-row .tool-hint {
@@ -873,16 +883,65 @@ body.resizing .row-resize {
   white-space: nowrap;
   color: var(--fg-dim);
 }
+.tool-row .tool-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .tool-row.error .tool-name {
   color: var(--red);
 }
-.tool-row pre {
-  padding: 6px 8px;
+.tool-row .tool-out {
   border-top: 1px solid var(--bg2);
-  overflow-x: auto;
-  max-height: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.tool-row .tool-note {
+  margin: 0;
+  padding: 6px 8px;
   font-size: var(--fs-xs);
   color: var(--fg-muted);
+  white-space: pre-wrap;
+}
+.tool-row .tool-block {
+  margin: 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  background: var(--bg1);
+}
+/* the command that produced the output, under the sentence that named it (the summary line) */
+.tool-row .tool-block.cmd {
+  border-top: 1px solid var(--bg2);
+  color: var(--fg1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tool-row .tool-note + .tool-block,
+.tool-row .tool-block + .tool-block {
+  border-top: 1px solid var(--bg2);
+}
+/* a diff prints one span per line so the marker can carry the color; the tint runs the full
+   scroll width, hence the block display rather than inline spans */
+.tool-row .tool-block.diff .dl {
+  display: block;
+  /* the tint has to reach the end of the longest line, not the edge of the scroll port */
+  min-width: 100%;
+  width: max-content;
+}
+.tool-row .dl.add {
+  color: var(--green);
+  background: var(--add-bg);
+}
+.tool-row .dl.del {
+  color: var(--red);
+  background: var(--del-bg);
+}
+.tool-row .dl.hunk {
+  color: var(--blue);
+}
+.tool-row .dl.meta {
+  color: var(--fg-dim);
 }
 .tool-row .spinner {
   color: var(--yellow);

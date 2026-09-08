@@ -1,13 +1,14 @@
 import type { PickMeta } from "@toyon/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { attachmentUrl } from "../../ws.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
+import { diffLineKind, toolBlocks, toolLabel } from "./toolCall.ts";
 
 const render = (text: string) => DOMPurify.sanitize(marked.parse(text, { async: false }) as string);
 
@@ -38,12 +39,70 @@ function Markdown({ text }: { text: string }) {
   return <div className="msg-assistant md" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-function toolHint(item: Extract<ChatItem, { kind: "tool" }>): string {
-  const input = item.input as Record<string, unknown> | null;
-  const v = input ? (input.file_path ?? input.command ?? input.path ?? input.pattern) : undefined;
-  if (typeof v === "string" && v) return v;
-  // ACP agents describe the call in the title ("Write src/a.ts"); avoid repeating the name
-  return item.title && item.title !== item.name ? item.title : "";
+/** what the agent wrote under the call: its prose as prose, its fenced blocks as blocks, and a
+ * diff colored by line rather than printed as backticks */
+function ToolOutput({ item }: { item: Extract<ChatItem, { kind: "tool" }> }) {
+  const blocks = useMemo(() => toolBlocks(item, item.output ?? ""), [item]);
+  return (
+    <div className="tool-out">
+      {blocks.map((b, i) =>
+        b.diff ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional and never reordered
+          <pre key={i} className="tool-block diff">
+            {b.text.split("\n").map((line, j) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: same
+              <span key={j} className={`dl ${diffLineKind(line)}`}>
+                {line || " "}
+              </span>
+            ))}
+          </pre>
+        ) : b.code ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: same
+          <pre key={i} className="tool-block">
+            {b.text}
+          </pre>
+        ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: same
+          <p key={i} className="tool-note">
+            {b.text}
+          </p>
+        ),
+      )}
+    </div>
+  );
+}
+
+/** one call in the transcript. Only the call in flight is open, so scrolling back over a long turn
+ * is a list of one-line rows; a click pins the row either way from then on. */
+function ToolRow({
+  item,
+  live,
+  roots,
+}: {
+  item: Extract<ChatItem, { kind: "tool" }>;
+  live?: boolean;
+  roots?: string[];
+}) {
+  const [pinned, setPinned] = useState<boolean | null>(null);
+  const open = pinned ?? !!live;
+  const { name, hint, command } = toolLabel(item, roots);
+  return (
+    <details className={`tool-row ${item.isError ? "error" : ""}`} open={open}>
+      {/* controlled: let the click set `pinned` rather than the element toggling itself */}
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          setPinned(!open);
+        }}
+      >
+        {!item.done && <span className="spinner">●</span>}
+        <span className="tool-name">{name}</span>
+        {hint && <span className="tool-hint">{hint}</span>}
+      </summary>
+      {command && <pre className="tool-block cmd">{command}</pre>}
+      {item.output ? <ToolOutput item={item} /> : null}
+    </details>
+  );
 }
 
 /** the agent asked for credentials: one button per login method it offered. A terminal method runs
@@ -139,10 +198,16 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
 export const ChatItemView = memo(function ChatItemView({
   item,
   worktreeId,
+  live,
+  roots,
   onPickHover,
 }: {
   item: ChatItem;
   worktreeId?: string | null;
+  /** this is the call the agent is on: it opens itself until the next one starts */
+  live?: boolean;
+  /** worktree paths to strip off a tool's file path (stable identity: memoized by the caller) */
+  roots?: string[];
   onPickHover?: (p: PickMeta, entering: boolean) => void;
 }) {
   switch (item.kind) {
@@ -199,18 +264,7 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="tool-hint">{item.path}</span>
         </div>
       );
-    case "tool": {
-      const hint = toolHint(item);
-      return (
-        <details className={`tool-row ${item.isError ? "error" : ""}`}>
-          <summary>
-            {!item.done && <span className="spinner">●</span>}
-            <span className="tool-name">{item.name}</span>
-            <span className="tool-hint">{hint}</span>
-          </summary>
-          {item.output ? <pre>{item.output}</pre> : null}
-        </details>
-      );
-    }
+    case "tool":
+      return <ToolRow item={item} live={live} roots={roots} />;
   }
 });

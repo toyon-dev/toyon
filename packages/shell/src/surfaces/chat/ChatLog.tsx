@@ -1,5 +1,5 @@
 import type { PickMeta, WorktreeStatus } from "@toyon/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
@@ -59,11 +59,24 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
     [id],
   );
 
+  // the newest call while the agent runs: that row shows its output, everything above it is a line
+  const liveTool = active?.agent === "working" ? items.findLastIndex((it) => it.kind === "tool") : -1;
+  const wt = active?.worktree;
+  // one array per worktree: a fresh one on every render would defeat the rows' memo
+  const roots = useMemo(() => [wt?.path, wt?.linkPath].filter((p): p is string => !!p), [wt?.path, wt?.linkPath]);
+
   return (
     <div className="chat-wrap">
       <div className="chat-log" ref={logRef} onScroll={onScroll}>
         {items.map((item, i) => (
-          <ChatItemView key={i} item={item} worktreeId={id} onPickHover={onPickHover} />
+          <ChatItemView
+            key={i}
+            item={item}
+            worktreeId={id}
+            live={i === liveTool}
+            roots={roots}
+            onPickHover={onPickHover}
+          />
         ))}
         {active?.agent === "working" && (
           <div className="msg-thinking working-row">

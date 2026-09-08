@@ -8,11 +8,17 @@ import type { ServerWebSocket } from "bun";
 import { cloud } from "../core/cloud.ts";
 
 interface BridgeData {
-  upstream?: WebSocket;
-  queue: (string | Uint8Array)[];
-  upstreamUrl: string;
-  protocol?: string;
+  upstream: WebSocket;
+  /** what the upstream said between its own open and the browser's: nothing can receive it yet */
+  pending: (string | Uint8Array)[];
 }
+
+/** long enough for any dev server that already answers on its port, short enough that a socket
+ * which accepts TCP and then says nothing fails the handshake instead of hanging the request */
+const DIAL_TIMEOUT_MS = 5_000;
+
+const frame = (ev: MessageEvent): string | Uint8Array =>
+  typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data as ArrayBuffer);
 
 export interface WorktreeProxy {
   port: number;
@@ -57,14 +63,21 @@ export function startProxy(opts: {
         });
       }
 
-      // WebSocket upgrade -> bridge to upstream
+      // WebSocket upgrade: dial the upstream first, and only then accept the browser's handshake.
+      // Accepting first turns a socket the app refuses (an auth check on connect, a path it does
+      // not serve) into an open that closes immediately. Every reconnecting client reads an open
+      // as success and resets its backoff, so it retries in a hot loop instead of standing off,
+      // and anything it sent in that window is dropped here with nothing to report it. A refusal
+      // has to reach the browser as a refusal.
       if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
         const proto = req.headers.get("sec-websocket-protocol") ?? undefined;
         const upstreamUrl = `ws://${hostPart(target)}:${target.port}${url.pathname}${url.search}`;
-        const ok = srv.upgrade(req, {
-          data: { queue: [], upstream: undefined, upstreamUrl, protocol: proto },
-        });
+        const pending: (string | Uint8Array)[] = [];
+        const upstream = await dial(upstreamUrl, proto, pending);
+        if (!upstream) return new Response("the preview's websocket upstream refused it", { status: 502 });
+        const ok = srv.upgrade(req, { data: { upstream, pending } });
         if (ok) return undefined as unknown as Response;
+        upstream.close();
         return new Response("upgrade failed", { status: 400 });
       }
 
@@ -112,17 +125,15 @@ export function startProxy(opts: {
     },
     websocket: {
       open(ws: ServerWebSocket<BridgeData>) {
-        const { upstreamUrl, protocol } = ws.data;
-        const upstream = new WebSocket(upstreamUrl, protocol ? [protocol] : []);
-        upstream.binaryType = "arraybuffer";
-        ws.data.upstream = upstream;
-        upstream.onopen = () => {
-          for (const m of ws.data.queue) upstream.send(m);
-          ws.data.queue = [];
-        };
-        upstream.onmessage = (ev) => {
-          ws.send(typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data as ArrayBuffer));
-        };
+        const { upstream, pending } = ws.data;
+        // it was open when we accepted the handshake; it can still have gone away since
+        if (upstream.readyState !== WebSocket.OPEN) {
+          ws.close(1011, "upstream closed");
+          return;
+        }
+        for (const m of pending) ws.send(m);
+        ws.data.pending = [];
+        upstream.onmessage = (ev) => ws.send(frame(ev));
         upstream.onclose = (ev) => {
           try {
             ws.close(ev.code, ev.reason);
@@ -139,16 +150,16 @@ export function startProxy(opts: {
         };
       },
       message(ws: ServerWebSocket<BridgeData>, message) {
+        // no queue: the upstream was open before this socket existed, so the only miss is a frame
+        // racing the upstream's close, and the close reaches the client right behind it
         const up = ws.data.upstream;
-        const payload: string | Uint8Array = typeof message === "string" ? message : message;
-        if (up && up.readyState === WebSocket.OPEN) up.send(payload);
-        else ws.data.queue.push(payload);
+        if (up.readyState === WebSocket.OPEN) up.send(message);
       },
       close(ws: ServerWebSocket<BridgeData>) {
         try {
-          ws.data.upstream?.close();
+          ws.data.upstream.close();
         } catch {
-          // upstream never opened
+          // already closed from the other side
         }
       },
     },
@@ -159,6 +170,36 @@ export function startProxy(opts: {
     stop: () => server.stop(true),
     setTarget: () => {},
   };
+}
+
+/** Open the upstream socket, buffering whatever it says before the browser is attached (Vite's
+ * HMR server greets on connect). Null when it refuses, closes, or never answers: the caller
+ * fails the browser's handshake rather than accepting one it cannot honour. */
+async function dial(
+  url: string,
+  protocol: string | undefined,
+  pending: (string | Uint8Array)[],
+): Promise<WebSocket | null> {
+  const up = new WebSocket(url, protocol ? [protocol] : []);
+  up.binaryType = "arraybuffer";
+  up.onmessage = (ev) => pending.push(frame(ev));
+  const opened = await new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(false), DIAL_TIMEOUT_MS);
+    const settle = (v: boolean) => {
+      clearTimeout(timer);
+      resolve(v);
+    };
+    up.onopen = () => settle(true);
+    up.onerror = () => settle(false);
+    up.onclose = () => settle(false);
+  });
+  if (opened) return up;
+  try {
+    up.close();
+  } catch {
+    // refused before there was anything to close
+  }
+  return null;
 }
 
 function injectBridge(html: string): string {

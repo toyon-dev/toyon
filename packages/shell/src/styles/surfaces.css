@@ -2261,9 +2261,6 @@ body.resizing .rb-center {
   padding-left: mod(calc((100% - 720px) / 2), 132px);
   min-width: 0;
 }
-.design-breakout:has(.design-grid.tight) {
-  padding-left: mod(calc((100% - 720px) / 2), 118px);
-}
 /* one that fits keeps the column's edge exactly, under its own label */
 .design-breakout.fits {
   max-width: 720px;
@@ -2271,10 +2268,6 @@ body.resizing .rb-center {
   padding-left: 0;
 }
 
-/* a scale has no sample, so its cells are two lines and pack tighter than a colour's */
-.design-grid.tight {
-  grid-template-columns: repeat(auto-fit, 118px);
-}
 /* Every cell carries all four edges and overlaps its neighbour by the width of one, so the shared
    lines land on the same pixel and read as 1px rather than 2. Drawing only the right and bottom
    left the first row and the first column open, which is what made a group look like its border

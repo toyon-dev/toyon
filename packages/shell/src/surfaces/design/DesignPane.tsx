@@ -134,12 +134,12 @@ function Gap({ children }: { children: React.ReactNode }) {
  * already made and the only one worth trusting: a token file writes the surface rungs together,
  * then the elements, then the text ladder, because that is the order they mean something in.
  */
-const GROUPS: Array<{ kind: DesignToken["kind"]; label: string; tight?: boolean }> = [
+const GROUPS: Array<{ kind: DesignToken["kind"]; label: string }> = [
   { kind: "color", label: "color" },
-  { kind: "length", label: "size & radius", tight: true },
+  { kind: "length", label: "size & radius" },
   { kind: "font", label: "type" },
   { kind: "shadow", label: "shadow" },
-  { kind: "other", label: "computed", tight: true },
+  { kind: "other", label: "computed" },
 ];
 
 /** The project's own ground to measure contrast against: the first colour its token file declares,
@@ -163,7 +163,7 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
           read yet.
         </Gap>
       ) : (
-        GROUPS.map(({ kind, label, tight }) => {
+        GROUPS.map(({ kind, label }) => {
           const group = tokens.filter((t) => t.kind === kind);
           if (group.length === 0) return null;
           return (
@@ -171,8 +171,8 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
               <span className="design-group-name">{label}</span>
               {/* a group that fits sits in the column; one that does not fills the section, with
                   its lattice still anchored to the column's left edge (see the stylesheet) */}
-              <div className={`design-breakout ${group.length <= (tight ? 6 : 5) ? "fits" : ""}`}>
-                <div className={`design-grid ${tight ? "tight" : ""}`}>
+              <div className={`design-breakout ${group.length <= 5 ? "fits" : ""}`}>
+                <div className="design-grid">
                   {group.map((t) => (
                     <Swatch key={t.name} token={t} ground={ground} largest={largestIn(group)} />
                   ))}

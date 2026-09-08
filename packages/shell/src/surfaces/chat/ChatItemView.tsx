@@ -11,7 +11,7 @@ import { SentImageChip } from "./ImageChip.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
-import { callPath, diffLines, toolBlocks, toolLabel } from "./toolCall.ts";
+import { AUTO_OPEN, callPath, diffLines, toolBlocks, toolLabel } from "./toolCall.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
 // so it is coloured by the same seven. marked hands the block over before it escapes it, and
@@ -64,9 +64,13 @@ function Markdown({ text }: { text: string }) {
   return <div className="msg-assistant md" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-/** what the agent wrote under the call: its prose as prose, its fenced blocks as blocks, and a
- * diff colored by line rather than printed as backticks */
-function ToolOutput({ item }: { item: ToolItem }) {
+/** one call inside the row: what it ran, then what the agent wrote under it. Its prose goes in as
+ * prose, its fenced blocks as blocks, and a diff coloured by line rather than printed as backticks.
+ * A call with neither draws nothing: output that is only whitespace, or only the description the
+ * summary line already carries, parses to no blocks, and the panel they would have sat in was an
+ * empty bar under the command. Memoized per call so a delta into the one in flight does not re-paint
+ * the ones above it. */
+const ToolPart = memo(function ToolPart({ item, roots }: { item: ToolItem; roots?: string[] }) {
   // splitting a diff into lines, its lines into words and its words into tokens is more work than a
   // render should redo, and the output only changes while the call is in flight
   const blocks = useMemo(() => {
@@ -80,49 +84,56 @@ function ToolOutput({ item }: { item: ToolItem }) {
       return { ...b, lines: [], painted: paintCode(b.text, language) };
     });
   }, [item]);
+  const command = toolLabel(item, roots).command;
+  if (!command && blocks.length === 0) return null;
   return (
-    <div className="tool-out">
-      {blocks.map((b, i) =>
-        b.diff ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional and never reordered
-          <pre key={i} className="tool-block diff">
-            {b.lines.map((line, j) =>
-              // a hunk header is a jump in the file, not a line of it: it draws as the rule between
-              // two stretches of code, with the line numbers left on hover
-              line.kind === "hunk" ? (
-                // biome-ignore lint/suspicious/noArrayIndexKey: same
-                <span key={j} className="dl hunk" title={line.text} />
-              ) : (
-                // biome-ignore lint/suspicious/noArrayIndexKey: same
-                <span key={j} className={`dl ${line.kind}`}>
-                  {b.painted[j]?.length ? <Painted pieces={b.painted[j]} /> : line.text || " "}
-                </span>
-              ),
-            )}
-          </pre>
-        ) : b.code ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: same
-          <pre key={i} className="tool-block">
-            {b.painted.length
-              ? b.painted.map((line, j) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: same
-                  <Fragment key={j}>
-                    {j > 0 ? "\n" : null}
-                    <Painted pieces={line} />
-                  </Fragment>
-                ))
-              : b.text}
-          </pre>
-        ) : (
-          // biome-ignore lint/suspicious/noArrayIndexKey: same
-          <p key={i} className="tool-note">
-            {b.text}
-          </p>
-        ),
+    <div className="tool-part">
+      {command && <pre className="tool-block cmd">{command}</pre>}
+      {blocks.length > 0 && (
+        <div className="tool-out">
+          {blocks.map((b, i) =>
+            b.diff ? (
+              // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional and never reordered
+              <pre key={i} className="tool-block diff">
+                {b.lines.map((line, j) =>
+                  // a hunk header is a jump in the file, not a line of it: it draws as the rule between
+                  // two stretches of code, with the line numbers left on hover
+                  line.kind === "hunk" ? (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: same
+                    <span key={j} className="dl hunk" title={line.text} />
+                  ) : (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: same
+                    <span key={j} className={`dl ${line.kind}`}>
+                      {b.painted[j]?.length ? <Painted pieces={b.painted[j]} /> : line.text || " "}
+                    </span>
+                  ),
+                )}
+              </pre>
+            ) : b.code ? (
+              // biome-ignore lint/suspicious/noArrayIndexKey: same
+              <pre key={i} className="tool-block">
+                {b.painted.length
+                  ? b.painted.map((line, j) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: same
+                      <Fragment key={j}>
+                        {j > 0 ? "\n" : null}
+                        <Painted pieces={line} />
+                      </Fragment>
+                    ))
+                  : b.text}
+              </pre>
+            ) : (
+              // biome-ignore lint/suspicious/noArrayIndexKey: same
+              <p key={i} className="tool-note">
+                {b.text}
+              </p>
+            ),
+          )}
+        </div>
       )}
     </div>
   );
-}
+});
 
 /** one line's worth of code: a span per run that carries a colour or a change, the rest as text.
  * A piece with neither is left bare rather than wrapped, which is most of a file. */
@@ -150,10 +161,13 @@ function Painted({ pieces }: { pieces: Piece[] }) {
 export const ToolRow = memo(
   function ToolRow({ tools, live, roots }: { tools: ToolItem[]; live?: boolean; roots?: string[] }) {
     const [pinned, setPinned] = useState<boolean | null>(null);
-    const open = pinned ?? !!live;
     const card = useRef<HTMLDetailsElement>(null);
     // every call in a run prints the same line, so the first one is the row
     const head = tools[0]!;
+    // the row the agent is on opens itself, but only where its output is worth watching arrive: a
+    // read or a search is a file you asked for, and having each one throw a panel open walks the
+    // message you were reading off the top of the log
+    const open = pinned ?? (!!live && AUTO_OPEN.has(head.toolKind ?? "other"));
     const { label, name, icon, hint } = toolLabel(head, roots);
     const running = !tools.at(-1)?.done;
     const what = [label, hint].filter(Boolean).join(" ");
@@ -188,16 +202,9 @@ export const ToolRow = memo(
           {hint && <span className="tool-hint">{hint}</span>}
           {tools.length > 1 && <span className="tool-count">×{tools.length}</span>}
         </summary>
-        {tools.map((t) => {
-          const command = toolLabel(t, roots).command;
-          if (!command && !t.output) return null;
-          return (
-            <div key={t.id} className="tool-part">
-              {command && <pre className="tool-block cmd">{command}</pre>}
-              {t.output ? <ToolOutput item={t} /> : null}
-            </div>
-          );
-        })}
+        {tools.map((t) => (
+          <ToolPart key={t.id} item={t} roots={roots} />
+        ))}
       </details>
     );
   },

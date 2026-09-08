@@ -52,6 +52,14 @@ const KIND_ICON: Record<ToolKind, IconName> = {
   other: "dot",
 };
 
+/** which kinds open themselves while the agent is on them. What it is running and what it is
+ * changing are worth watching go by; a read or a search is a file you already have, and a turn that
+ * opens every one of them reads itself out loud and pushes the message you were reading off the
+ * top. Those wait for a click. `other` is in here because an agent that sends no kind at all sends
+ * `other` for its whole turn, and a transcript where nothing ever opens is worse than one that
+ * opens too much. */
+export const AUTO_OPEN: ReadonlySet<ToolKind> = new Set<ToolKind>(["execute", "edit", "other"]);
+
 /** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
  * commit, and the column reads better following the command than the kind. Conservative on purpose:
  * a verb belongs here only when one glyph is right for every use of it, which is why `sed` (a read
@@ -174,8 +182,11 @@ export function parseToolOutput(out: string): OutputBlock[] {
   let lang = "";
   let fenced = false;
   const flush = () => {
+    // blank lines around a block go; the indentation inside it stays, being the shape of the code.
+    // A block that is nothing but whitespace is not a block: a command that printed one newline used
+    // to come through as a block holding a space, which drew as an empty bar under the row.
     const text = lines.join("\n").replace(/^\n+|\n+$/g, "");
-    if (text) blocks.push({ code: fenced, diff: isDiff(text, lang), lang: fenced ? lang : "", text });
+    if (text.trim()) blocks.push({ code: fenced, diff: isDiff(text, lang), lang: fenced ? lang : "", text });
     lines = [];
   };
   for (const line of out.split("\n")) {

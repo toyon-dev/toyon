@@ -2111,9 +2111,10 @@ body.resizing .rb-center {
 }
 
 /* ---- design pane ----
-   Read-forward, not a control panel: one column, generous leading, and every row is a band rather
-   than a card. The inventory is long and mostly scanned, so the count sits in a fixed gutter and
-   the names line up down the left edge. */
+   A document, not a control panel. Two shapes carry it: a swatch wall for the scales, where the
+   sample is the cell and the wording sits on a plate under it, and a plain band per row for the
+   inventories. Both are full bleed inside the column and share their edges, so the grid reads as
+   one object rather than a tray of cards. */
 .design-pane {
   height: 55%;
   min-height: 160px;
@@ -2136,22 +2137,22 @@ body.resizing .rb-center {
 }
 .design-body {
   overflow: auto;
-  padding: 20px 24px 48px;
-  width: min(760px, 100%);
+  padding: 24px 28px 64px;
+  width: min(900px, 100%);
   margin: 0 auto;
   color: var(--text0);
   font: var(--fs-sm) var(--font-ui);
 }
 .design-section {
-  margin-bottom: 28px;
+  margin-bottom: 40px;
 }
 .design-h {
   font: 600 var(--fs-md) var(--font-ui);
   color: var(--text0);
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 10px;
 }
 .design-note {
   font: var(--fs-xs) var(--font-ui);
@@ -2162,13 +2163,15 @@ body.resizing .rb-center {
    reads as a note about the tool rather than as a verdict on the project. */
 .design-gap {
   margin: 0;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: var(--r-sm);
   background: var(--sunken);
   color: var(--text2);
   font: var(--fs-xs) var(--font-ui);
-  line-height: 1.5;
+  line-height: 1.55;
 }
+
+/* findings */
 .design-findings {
   list-style: none;
   margin: 0;
@@ -2177,11 +2180,25 @@ body.resizing .rb-center {
 .design-finding {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: var(--r-sm);
+  align-items: stretch;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
   background: var(--surface1);
   margin-bottom: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+.design-finding:disabled {
+  cursor: default;
+  border-left-color: var(--border1);
+}
+.design-finding:hover:not(:disabled) {
+  background: var(--element0);
 }
 .design-finding-title {
   color: var(--text0);
@@ -2190,64 +2207,81 @@ body.resizing .rb-center {
 .design-finding-detail {
   color: var(--text2);
   font-size: var(--fs-xs);
-  line-height: 1.5;
+  line-height: 1.55;
 }
+
+/* swatch wall: cells butt together and the gap is the rule between them */
 .design-family {
-  display: flex;
-  gap: 12px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border0);
+  margin-bottom: 20px;
 }
 .design-family-name {
-  width: 84px;
-  flex-shrink: 0;
-  color: var(--text2);
   font: var(--fs-xs) var(--font-mono);
-  padding-top: 6px;
+  color: var(--text2);
+  margin: 0 0 6px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
-.design-swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.design-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 1px;
+  background: var(--border0);
+  border: 1px solid var(--border0);
+  border-radius: var(--r-sm);
+  overflow: hidden;
 }
-.design-swatch {
+.design-cell {
+  background: var(--surface0);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  width: 108px;
 }
-.design-chip {
-  height: 26px;
-  border-radius: var(--r-xs);
-  border: 1px solid var(--border1);
-}
-/* a radius token is shown as the corner it makes, so the scale is legible as a shape */
-.design-rule {
-  background: var(--element0);
-  border: 1px solid var(--border1);
-}
-.design-chip-text {
+.design-sample {
+  height: 76px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--sunken);
-  color: var(--text2);
-  font: var(--fs-xs) var(--font-mono);
-}
-.design-swatch-name {
-  font: var(--fs-xs) var(--font-mono);
+  font: 26px / 1 var(--font-ui);
   color: var(--text1);
+}
+.design-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* a radius token is shown as the corner it makes, so the scale reads as a shape not a number */
+.design-corner {
+  display: block;
+  width: 46px;
+  height: 46px;
+  background: var(--element1);
+}
+.design-plate {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px 10px;
+  background: var(--surface1);
+}
+.design-cell-name {
+  font: var(--fs-sm) var(--font-ui);
+  font-weight: 600;
+  color: var(--text0);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.design-swatch-value {
+.design-cell-value,
+.design-cell-note {
   font: var(--fs-xs) var(--font-mono);
   color: var(--text2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* inventory rows: a band, the selection idiom the rest of the shell uses */
 .design-rows {
   list-style: none;
   margin: 0;
@@ -2256,9 +2290,27 @@ body.resizing .rb-center {
 .design-row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 4px 0;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
   border-bottom: 1px solid var(--border0);
+}
+.design-row:disabled {
+  cursor: default;
+}
+/* hovering a row outlines the thing in the running app, so the row has to look armed */
+.design-row:hover:not(:disabled),
+.design-row:focus-visible {
+  background: var(--element0);
+  border-left-color: var(--accent);
+  outline: none;
 }
 /* fixed gutter: the counts are the column you scan, so they align regardless of width */
 .design-count {
@@ -2271,6 +2323,7 @@ body.resizing .rb-center {
 .design-name {
   color: var(--text0);
   font: var(--fs-sm) var(--font-mono);
+  flex-shrink: 0;
 }
 .design-path {
   color: var(--text2);
@@ -2284,6 +2337,7 @@ body.resizing .rb-center {
   flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
+  padding-left: 12px;
 }
 .design-variant {
   padding: 1px 6px;

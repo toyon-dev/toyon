@@ -3,13 +3,19 @@
 // Sections render from whatever the index has and say so when a half is missing. An empty section
 // is never shown as an answer: the scan's coverage record is what tells a project with no classes
 // apart from one whose classes this scan cannot read.
+//
+// Rows are live against the preview. Hovering one outlines what it is in the running app (a class
+// by selector, a component by the file its fibers came from), and clicking one opens its source.
+// That is the whole reason this sits beside the preview rather than in a docs tab.
 
-import type { DesignFinding, DesignIndex, DesignToken } from "@toyon/shared";
+import type { DesignClass, DesignComponent, DesignFinding, DesignIndex, DesignToken } from "@toyon/shared";
 import { useEffect } from "react";
+import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { localOf } from "../../state/store.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
+import { contrastRatio } from "./contrast.ts";
 
 export function DesignPane({
   worktreeId,
@@ -28,11 +34,20 @@ export function DesignPane({
   const sock = useSock();
   const index = useStore((s) => localOf(s, worktreeId).design);
 
-  // scan on open, and on demand from the header. The result is cached per worktree, so switching
-  // back to a pane that has already run shows its last answer rather than a blank while it reruns.
+  // scan on open. The result is cached per worktree, so coming back to a pane that has already run
+  // shows its last answer rather than a blank while it reruns.
   useEffect(() => {
     if (!index) sock?.send({ t: "design-scan", worktreeId });
   }, [index, worktreeId, sock]);
+
+  // a pane that closes while an outline is up would leave it painted over the app
+  useEffect(() => () => previewBus.post(worktreeId, { type: "highlight-clear" }), [worktreeId]);
+
+  const live = {
+    outline: (msg: Parameters<typeof previewBus.post>[1]) => previewBus.post(worktreeId, msg),
+    clear: () => previewBus.post(worktreeId, { type: "highlight-clear" }),
+    open: (path: string) => sock?.send({ t: "file-diff", worktreeId, path }),
+  };
 
   return (
     <Pane
@@ -61,21 +76,21 @@ export function DesignPane({
         </>
       }
     >
-      {index ? <DesignBody index={index} /> : <div className="empty">reading the design system…</div>}
+      {index ? (
+        <div className="design-body" onMouseLeave={live.clear}>
+          <Findings findings={index.findings} onOpen={live.open} />
+          <Tokens tokens={index.tokens} live={index.live} />
+          <Components index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
+          <Classes index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
+        </div>
+      ) : (
+        <div className="empty">reading the design system…</div>
+      )}
     </Pane>
   );
 }
 
-function DesignBody({ index }: { index: DesignIndex }) {
-  return (
-    <div className="design-body">
-      <Findings findings={index.findings} />
-      <Tokens tokens={index.tokens} live={index.live} />
-      <Components index={index} />
-      <Classes index={index} />
-    </div>
-  );
-}
+type Outline = (msg: Parameters<typeof previewBus.post>[1]) => void;
 
 function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
@@ -95,16 +110,23 @@ function Gap({ children }: { children: React.ReactNode }) {
   return <p className="design-gap">{children}</p>;
 }
 
-function Findings({ findings }: { findings: DesignFinding[] }) {
+function Findings({ findings, onOpen }: { findings: DesignFinding[]; onOpen: (path: string) => void }) {
   if (findings.length === 0) return null;
   return (
     <Section title="Noticed">
       <ul className="design-findings">
         {findings.map((f) => (
-          <li key={`${f.kind}:${f.title}`} className="design-finding">
-            <span className="design-finding-title">{f.title}</span>
-            <span className="design-finding-detail">{f.detail}</span>
-            {f.path && <span className="design-path">{f.path}</span>}
+          <li key={`${f.kind}:${f.title}`}>
+            <button
+              type="button"
+              className="design-finding"
+              disabled={!f.path}
+              onClick={() => f.path && onOpen(f.path)}
+            >
+              <span className="design-finding-title">{f.title}</span>
+              <span className="design-finding-detail">{f.detail}</span>
+              {f.path && <span className="design-path">{f.path}</span>}
+            </button>
           </li>
         ))}
       </ul>
@@ -112,6 +134,11 @@ function Findings({ findings }: { findings: DesignFinding[] }) {
   );
 }
 
+/**
+ * A wall of swatches, not a list of chips. Each cell is a full-bleed sample over a plate carrying
+ * the name, the value, and what the value means: for a color that is its contrast against the
+ * ground it sits on, which is the number you actually want when you are looking at a palette.
+ */
 function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
   const families = new Map<string, DesignToken[]>();
   for (const t of tokens) families.set(t.family, [...(families.get(t.family) ?? []), t]);
@@ -126,8 +153,8 @@ function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
       ) : (
         [...families].map(([family, group]) => (
           <div key={family} className="design-family">
-            <span className="design-family-name">{family}</span>
-            <div className="design-swatches">
+            <h3 className="design-family-name">{family}</h3>
+            <div className="design-grid">
               {group.map((t) => (
                 <Swatch key={t.name} token={t} />
               ))}
@@ -140,23 +167,37 @@ function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
 }
 
 function Swatch({ token }: { token: DesignToken }) {
-  const paint = token.kind === "color" ? token.value : undefined;
+  const ratio = token.kind === "color" ? contrastRatio(token.value) : null;
   return (
-    <div className="design-swatch" title={`${token.name}: ${token.value}`}>
-      {paint ? (
-        <span className="design-chip" style={{ background: paint }} />
-      ) : token.kind === "length" ? (
-        <span className="design-chip design-rule" style={{ borderRadius: token.value }} />
-      ) : (
-        <span className="design-chip design-chip-text">{token.kind}</span>
-      )}
-      <span className="design-swatch-name">{token.name}</span>
-      <span className="design-swatch-value">{token.value}</span>
+    <div className="design-cell">
+      <div className="design-sample" data-kind={token.kind}>
+        {token.kind === "color" && <span className="design-fill" style={{ background: token.value }} />}
+        {token.kind === "length" && <span className="design-corner" style={{ borderRadius: token.value }} />}
+        {token.kind === "font" && <span style={{ fontFamily: token.value }}>Ag</span>}
+        {(token.kind === "shadow" || token.kind === "other") && (
+          <span className="design-corner" style={{ boxShadow: token.kind === "shadow" ? token.value : undefined }} />
+        )}
+      </div>
+      <div className="design-plate">
+        <span className="design-cell-name">{token.name.replace(/^--/, "")}</span>
+        <span className="design-cell-value">{token.value}</span>
+        {ratio && <span className="design-cell-note">{ratio}</span>}
+      </div>
     </div>
   );
 }
 
-function Components({ index }: { index: DesignIndex }) {
+function Components({
+  index,
+  outline,
+  clear,
+  onOpen,
+}: {
+  index: DesignIndex;
+  outline: Outline;
+  clear: () => void;
+  onOpen: (path: string) => void;
+}) {
   const { components, typed } = index;
   return (
     <Section
@@ -173,10 +214,17 @@ function Components({ index }: { index: DesignIndex }) {
           {!typed && <Gap>No TypeScript in this project, so the values each prop allows are not listed.</Gap>}
           <ul className="design-rows">
             {components.map((c) => (
-              <li key={`${c.path}:${c.name}`} className="design-row">
-                <span className="design-count">{c.imports}</span>
-                <span className="design-name">{c.name}</span>
-                <span className="design-path">{c.path}</span>
+              <Row
+                key={`${c.path}:${c.name}`}
+                count={c.imports}
+                name={c.name}
+                path={c.path}
+                // fibers carry the file they were rendered from, so this outlines every instance
+                // of the component that is on the page right now
+                onEnter={() => outline({ type: "highlight-file", path: c.path, ranges: null })}
+                onLeave={clear}
+                onOpen={() => onOpen(c.path)}
+              >
                 {c.variants.length > 0 && (
                   <span className="design-variants">
                     {c.variants.map((v) => (
@@ -186,7 +234,7 @@ function Components({ index }: { index: DesignIndex }) {
                     ))}
                   </span>
                 )}
-              </li>
+              </Row>
             ))}
           </ul>
         </>
@@ -195,7 +243,17 @@ function Components({ index }: { index: DesignIndex }) {
   );
 }
 
-function Classes({ index }: { index: DesignIndex }) {
+function Classes({
+  index,
+  outline,
+  clear,
+  onOpen,
+}: {
+  index: DesignIndex;
+  outline: Outline;
+  clear: () => void;
+  onOpen: (path: string) => void;
+}) {
   const { classes, coverage } = index;
   const used = classes.filter((c) => c.uses > 0);
   return (
@@ -211,14 +269,73 @@ function Classes({ index }: { index: DesignIndex }) {
       ) : (
         <ul className="design-rows">
           {used.map((c) => (
-            <li key={c.name} className="design-row">
-              <span className="design-count">{c.uses}</span>
-              <span className="design-name">.{c.name}</span>
-              <span className="design-path">{c.path}</span>
-            </li>
+            <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
           ))}
         </ul>
       )}
     </Section>
+  );
+}
+
+function ClassRow({
+  cls,
+  outline,
+  clear,
+  onOpen,
+}: {
+  cls: DesignClass;
+  outline: Outline;
+  clear: () => void;
+  onOpen: (path: string) => void;
+}) {
+  return (
+    <Row
+      count={cls.uses}
+      name={`.${cls.name}`}
+      path={cls.path}
+      onEnter={() => outline({ type: "highlight-selector", selector: `.${cls.name}`, label: `.${cls.name}` })}
+      onLeave={clear}
+      onOpen={() => cls.path && onOpen(cls.path)}
+    />
+  );
+}
+
+/** one inventory row: count in a fixed gutter, name, source path, and whatever the section adds.
+ * The whole row is the hit target, because the thing you want to click is the thing you read. */
+function Row({
+  count,
+  name,
+  path,
+  onEnter,
+  onLeave,
+  onOpen,
+  children,
+}: {
+  count: number;
+  name: string;
+  path?: string;
+  onEnter: () => void;
+  onLeave: () => void;
+  onOpen: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        className="design-row"
+        onMouseEnter={onEnter}
+        onFocus={onEnter}
+        onMouseLeave={onLeave}
+        onBlur={onLeave}
+        onClick={onOpen}
+        disabled={!path}
+      >
+        <span className="design-count">{count}</span>
+        <span className="design-name">{name}</span>
+        <span className="design-path">{path}</span>
+        {children}
+      </button>
+    </li>
   );
 }

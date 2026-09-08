@@ -236,4 +236,11 @@ describe("toolBlocks", () => {
       { code: true, diff: false, lang: "console", text: "up to date" },
     ]);
   });
+
+  // a command that printed nothing, and one whose whole output was the description: the row has
+  // nothing to draw under it, and drawing the panel anyway was an empty bar under the command
+  test("a call with nothing left to show has no blocks", () => {
+    expect(toolBlocks(call, "\n \n")).toEqual([]);
+    expect(toolBlocks(call, "Build the project")).toEqual([]);
+  });
 });

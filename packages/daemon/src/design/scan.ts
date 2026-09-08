@@ -145,6 +145,7 @@ export function appliedClasses(src: string): {
 } {
   const out = new Map<string, number>();
   const solo = new Set<string>();
+  const modules = moduleImports(src);
   let attrs = 0;
   for (const m of src.matchAll(ATTR)) {
     attrs++;
@@ -154,7 +155,8 @@ export function appliedClasses(src: string): {
     // JSX's `{...}` all name their classes in string literals or object keys, and everything else
     // in there is a variable. Splitting one on whitespace reports `isOn` as a class.
     const bound = m[1] !== undefined;
-    const lists = jsx !== undefined || bound ? expressionClasses(jsx ?? quoted ?? "") : [stripHoles(quoted ?? "")];
+    const lists =
+      jsx !== undefined || bound ? expressionClasses(jsx ?? quoted ?? "", modules) : [stripHoles(quoted ?? "")];
     const onThisElement: string[] = [];
     for (const list of lists) {
       for (const name of list.split(/\s+/)) {
@@ -176,11 +178,41 @@ const ATTR =
  * class, and reporting `extra` invents a second out of a variable name. */
 const stripHoles = (s: string) => s.replace(/\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|<%[\s\S]*?%>|\$\{[\s\S]*?\}/g, " ");
 
-/** The class names inside an expression: string literals, plus object keys, which is how both
- * Vue's `:class="{ active: on }"` and clsx's `{ active: on }` name a conditional class. */
-function expressionClasses(expression: string): string[] {
+/**
+ * The class names inside an expression: string literals, object keys, and CSS Modules lookups.
+ *
+ * An object key has to be the start of an entry, so only one that follows `{` or `,` counts. Taking
+ * every identifier before a colon reads the colon of a ternary as an object key, and
+ * `{a ? styles.primary : styles.base}` then reports a class called `primary` that the element only
+ * wears half the time and that nothing in the file spells that way.
+ */
+function expressionClasses(expression: string, modules: Set<string>): string[] {
   const out = literals(expression);
-  for (const m of expression.matchAll(/([a-zA-Z][\w-]*)\s*:/g)) out.push(m[1]!);
+  for (const m of expression.matchAll(/[{,]\s*([a-zA-Z][\w-]*)\s*:/g)) out.push(m[1]!);
+  for (const local of modules) {
+    const esc = local.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Only the dot form. `styles["btn-wide"]` is already a quoted string, so the literals pass
+    // above has it, and matching the bracket form here as well counted it twice.
+    for (const m of expression.matchAll(new RegExp(`\\b${esc}\\.([A-Za-z_]\\w*)`, "g"))) out.push(m[1]!);
+  }
+  return out;
+}
+
+/**
+ * Local names bound to a CSS Modules stylesheet: `import styles from "./Button.module.css"`.
+ *
+ * Without this a CSS Modules project reports every class as unused, because the class never appears
+ * as text anywhere: the build rewrites `.btn` to `.Button_btn__x7Fq2` and the source only ever says
+ * `styles.btn`. Reading the import means the authored names are what get counted, which is what
+ * anyone actually wants to see; the hashes exist only in the built output and never reach here.
+ */
+export function moduleImports(src: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of src.matchAll(
+    /import\s+(\w+)\s*(?:,\s*\{[^}]*\})?\s+from\s*["'][^"']*\.module\.(?:css|scss|sass|less)["']/g,
+  )) {
+    out.add(m[1]!);
+  }
   return out;
 }
 

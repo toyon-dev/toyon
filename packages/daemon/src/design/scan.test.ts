@@ -5,6 +5,7 @@ import {
   cssTokens,
   exportedComponents,
   importedNames,
+  moduleImports,
   propUnions,
   resolveAliases,
   tokenFamily,
@@ -130,6 +131,33 @@ describe("appliedClasses", () => {
     expect(none.classes.size).toBe(0);
     expect(none.attrs).toBe(1);
     expect(appliedClasses(`const x = 1;`).attrs).toBe(0);
+  });
+
+  test("a ternary colon is not an object key", () => {
+    // `styles.btnPrimary : styles.btn` was reporting a class called btnPrimary off the ternary
+    const src = `<b className={on ? "a" : "b"} /><i className={x ? styles.p : styles.q} />`;
+    expect([...classes(src).keys()]).toEqual(["a", "b"]);
+  });
+
+  test("reads CSS Modules through the name the file imports them as", () => {
+    // the class never appears as text: the build rewrites .btn to .Button_btn__x7Fq2, and the
+    // source only ever says styles.btn
+    const src = [
+      `import styles from "./Button.module.css";`,
+      `const a = <b className={styles.btn} />;`,
+      `const c = <b className={styles["btn-wide"]} />;`,
+    ].join("\n");
+    const counts = classes(src);
+    expect(counts.get("btn")).toBe(1);
+    expect(counts.get("btn-wide")).toBe(1);
+  });
+
+  test("only a name bound to a module stylesheet counts as one", () => {
+    expect([...moduleImports(`import styles from "./a.module.css";`)]).toEqual(["styles"]);
+    expect([...moduleImports(`import s from "./a.module.scss";`)]).toEqual(["s"]);
+    // a plain stylesheet import binds nothing, and neither does an ordinary module
+    expect([...moduleImports(`import "./a.css";`)]).toEqual([]);
+    expect([...moduleImports(`import x from "./util.ts";`)]).toEqual([]);
   });
 
   test("a class that never rides alone is a modifier, not a thing", () => {

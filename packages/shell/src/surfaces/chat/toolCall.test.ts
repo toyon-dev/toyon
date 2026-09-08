@@ -44,15 +44,16 @@ describe("diffLines", () => {
     expect(diffLines(block)).toEqual([
       { kind: "hunk", text: "@@ -1,3 +1,3 @@" },
       { kind: "", text: "keep me" },
-      { kind: "del", text: "was", spans: [{ text: "was", changed: true }] },
-      { kind: "add", text: "is", spans: [{ text: "is", changed: true }] },
+      // two lines with nothing in common: the band is the whole of what each says
+      { kind: "del", text: "was", spans: [] },
+      { kind: "add", text: "is", spans: [] },
     ]);
   });
 
   test("keeps git's own per-file header, since a block can cover several", () => {
     expect(diffLines("diff --git a/x b/x\nindex 1a2b3c4..5d6e7f8 100644\n+one")).toEqual([
       { kind: "meta", text: "diff --git a/x b/x" },
-      { kind: "add", text: "one", spans: [{ text: "one", changed: true }] },
+      { kind: "add", text: "one", spans: [] },
     ]);
   });
 
@@ -72,9 +73,9 @@ describe("diffLines", () => {
     ]);
   });
 
-  test("two lines with nothing in common are two whole changes, not a rewrite", () => {
+  test("two lines with nothing in common are two whole changes, marked by the band alone", () => {
     const lines = diffLines(["-const port = 3000;", '+import { serve } from "bun";'].join("\n"));
-    expect(lines.map((l) => l.spans?.every((s) => s.changed))).toEqual([true, true]);
+    expect(lines.map((l) => l.spans)).toEqual([[], []]);
   });
 
   test("a rewrite that dropped a line lines the rest of itself back up", () => {
@@ -90,6 +91,11 @@ describe("diffLines", () => {
     const marked = diffLines(block).map((l) => l.spans?.some((s) => s.changed) ?? false);
     // only the line that went is the change; the three around it carried over
     expect(marked).toEqual([false, false, true, false, false, false, false]);
+  });
+
+  test("a file added whole is one band, not a mark on every line of it as well", () => {
+    const lines = diffLines(["+const a = 1;", "+const b = 2;", "+"].join("\n"));
+    expect(lines.map((l) => l.spans)).toEqual([[], [], []]);
   });
 
   test("a blank line that came or went is the band alone", () => {

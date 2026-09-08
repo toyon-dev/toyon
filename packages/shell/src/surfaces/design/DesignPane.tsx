@@ -81,7 +81,7 @@ export function DesignPane({
       }
     >
       {index ? (
-        <div className="design-body" onMouseLeave={live.clear}>
+        <div className="design-body" style={LAYOUT} onMouseLeave={live.clear}>
           <Tokens tokens={index.tokens} />
           <Components index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
           <Classes index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
@@ -95,10 +95,18 @@ export function DesignPane({
 
 type Outline = (msg: Parameters<typeof previewBus.post>[1]) => void;
 
-/** the text measure, the cell the grids lay out on, and how many of those the measure holds */
+/**
+ * The text measure and the cell the grids lay out on, defined once.
+ *
+ * They are handed to the stylesheet as custom properties on the body rather than written in both
+ * places: the lattice only works while the two agree, and a measure widened in the CSS with the
+ * cell left behind here would put every grid quietly out of step with the column again. Set inline
+ * rather than declared in the stylesheet so they do not turn up as tokens when the pane scans
+ * toyon itself.
+ */
 const COLUMN = 720;
 const CELL = 132;
-const FITS = Math.floor(COLUMN / CELL);
+const LAYOUT = { "--ds-col": `${COLUMN}px`, "--ds-cell": `${CELL}px` } as React.CSSProperties;
 
 /** what the scan actually opened, which is the one thing about this pane the body never says and
  * the first thing to doubt when a section comes back thinner than you expected */
@@ -201,9 +209,12 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
  * chips or thirty-three. round() does the same snapping with the row's own width in hand.
  */
 function breakout(count: number): React.CSSProperties {
-  const row = `min(round(down, 100%, ${CELL}px), ${count * CELL}px)`;
-  const over = `max(0px, calc((${row} - ${FITS * CELL}px) / 2))`;
-  return { width: row, marginLeft: `max(0px, calc((100% - ${COLUMN}px) / 2 - round(down, ${over}, ${CELL}px)))` };
+  const cell = "var(--ds-cell)";
+  const row = `min(round(down, 100%, ${cell}), calc(${count} * ${cell}))`;
+  // how far past the column the row runs, in whole cells: half of it goes to each side
+  const fits = `round(down, var(--ds-col), ${cell})`;
+  const over = `round(down, max(0px, calc((${row} - ${fits}) / 2)), ${cell})`;
+  return { width: row, marginLeft: `max(0px, calc((100% - var(--ds-col)) / 2 - ${over}))` };
 }
 
 /** the biggest length in a group, so the scale bars can be drawn relative to their own scale */

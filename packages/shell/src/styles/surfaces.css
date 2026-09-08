@@ -2252,7 +2252,7 @@ body.resizing .rb-center {
  */
 .design-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, 132px);
+  grid-template-columns: repeat(auto-fit, var(--ds-cell));
   justify-content: start;
 }
 
@@ -2434,6 +2434,6 @@ body.resizing .rb-center {
 .design-rows,
 .design-gap,
 .design-tail {
-  max-width: 720px;
+  max-width: var(--ds-col);
   margin-inline: auto;
 }

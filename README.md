@@ -27,4 +27,16 @@ bun run daemon          # start the daemon
 bun run shell:dev       # shell UI dev server
 ```
 
+### Toyon in toyon
+
+This repo carries a `toyon.json`, so you can open it as a project in toyon and get a working
+toyon in the preview. The `dev` profile runs the nested daemon on the port the supervisor hands
+it, with its own state under `~/.toyon-dev/<worktree>`, and previews the Vite shell against it.
+The `built` profile builds the shell and previews the daemon serving it, which is what a user
+gets. Pick one per worktree in the profile menu.
+
+The nested shell needs the nested daemon's token once per worktree. It is printed in the `daemon`
+proc's tab at startup; open the preview URL in its own tab with that `#token=` fragment on the
+end, and the browser keeps it for that origin from then on.
+
 MIT

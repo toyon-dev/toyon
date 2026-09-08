@@ -23,6 +23,7 @@ const repos = {
 } as unknown as RepoRegistry;
 const attachmentsDir = mkdtempSync(join(tmpdir(), "toyon-http-"));
 afterAll(() => rmSync(attachmentsDir, { recursive: true, force: true }));
+const learnedOrigins: (string | null)[] = [];
 const fetch = createFetch({
   token: "secret",
   shellDist: "/nonexistent",
@@ -31,6 +32,7 @@ const fetch = createFetch({
   attachments: new AttachmentStore(attachmentsDir),
   branded: () => false,
   metrics: () => ({ lag: 0 }),
+  noteShellOrigin: (o) => learnedOrigins.push(o),
 });
 const req = (path: string, init: RequestInit & { host?: string } = {}) =>
   new Request(`http://${init.host ?? "localhost"}${path}`, {
@@ -56,6 +58,14 @@ describe("guards", () => {
 describe("/ws", () => {
   test("wrong token is 401", async () => {
     expect((await fetch(req("/ws?token=nope"), srv()))?.status).toBe(401);
+  });
+  test("the framing origin is learned from an authenticated handshake, never a refused one", async () => {
+    learnedOrigins.length = 0;
+    await fetch(req("/ws?token=nope", { headers: { origin: "http://evil.example" } }), srv());
+    expect(learnedOrigins).toEqual([]);
+    const s = srv("127.0.0.1", (() => true) as never);
+    await fetch(req("/ws?token=secret", { headers: { origin: "http://w1.toyon.localhost:5173" } }), s);
+    expect(learnedOrigins).toEqual(["http://w1.toyon.localhost:5173"]);
   });
   test("right token upgrades (no response) with a fresh subscription set", async () => {
     let data: WsData | undefined;
@@ -126,6 +136,7 @@ describe("static shell", () => {
     repos,
     attachments: new AttachmentStore(attachmentsDir),
     branded: () => false,
+    noteShellOrigin: () => {},
     metrics: () => ({ lag: 0 }),
   });
 

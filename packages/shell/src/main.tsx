@@ -13,6 +13,10 @@ import "./styles/surfaces.css";
 import { applyTheme, cachedTheme, prefersDark } from "./theme.ts";
 import { DaemonSocket } from "./ws.ts";
 
+// tell an injected preview bridge that this document is a shell, so it leaves the chords to us
+// (toyon inside toyon: without this the outer shell takes every keystroke meant for this one)
+window.__toyonShell = true;
+
 migrateStorage();
 
 // paint the last-used theme before React mounts: the daemon's hello replaces it moments later

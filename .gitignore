@@ -5,3 +5,4 @@ dist/
 .env
 inspo/
 notes/
+.claude/worktrees/

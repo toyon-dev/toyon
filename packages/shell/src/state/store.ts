@@ -11,6 +11,7 @@ import type {
   AskOutcome,
   AskQuestion,
   AuthMethodInfo,
+  DesignIndex,
   GitFileStatus,
   ImageInput,
   ImageRef,
@@ -94,6 +95,8 @@ export interface WorktreeLocal {
   changedRanges: Record<string, { ranges: Array<[number, number]>; offset: number }>;
   /** ⌘⇧F results */
   search: { query: string; hits: SearchHit[]; truncated: boolean } | null;
+  /** the design pane's last scan; null until it has been opened once for this worktree */
+  design: DesignIndex | null;
   /** the composer's unsent text; survives switching worktrees, and is where the daemon's
    * conflict-resolution suggestion lands */
   draft: string;
@@ -131,6 +134,7 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   turn: { edits: false, hmr: false },
   changedRanges: {},
   search: null,
+  design: null,
   draft: "",
   images: [],
   pastes: [],
@@ -155,6 +159,32 @@ export type Overlay =
   /** the project switcher: pick a registered repo, or type a path to open another. It hangs off
    * the pill in the bar; `dialog` is the roomier centered form its browse button opens. */
   | { kind: "projects"; dialog?: boolean };
+
+/** which docks and panes a project is left with. The layout is remembered per project, so a reload
+ * comes back to it and switching projects carries each one's own back (zen is deliberately not in
+ * here: it is a mode you leave, not a layout). */
+export interface Panels {
+  left: boolean;
+  right: boolean;
+  term: boolean;
+  design: boolean;
+}
+
+/** what a project that has never been laid out gets: the docks open, the panes shut */
+export const defaultPanels: Panels = Object.freeze({ left: true, right: true, term: false, design: false });
+
+function panelsOf(s: State): Panels {
+  return { left: s.leftOpen, right: s.rightOpen, term: s.termOpen, design: s.designOpen };
+}
+
+function samePanels(a: Panels, b: Panels): boolean {
+  return a.left === b.left && a.right === b.right && a.term === b.term && a.design === b.design;
+}
+
+function applyPanels(s: State, p: Panels): State {
+  // a remembered layout is a decision, so the clean-main auto-close must not second-guess it
+  return { ...s, leftOpen: p.left, rightOpen: p.right, termOpen: p.term, designOpen: p.design, leftAuto: false };
+}
 
 export interface State {
   connected: boolean;
@@ -198,12 +228,17 @@ export interface State {
   rightOpen: boolean;
   /** the worktree panel is kept open, instead of peeking on hover and collapsing to the strip */
   railOpen: boolean;
-  /** one-shot: auto-close the changes panel if the session starts on a clean main */
+  /** the layout each project was last left in; the active one's is what the flags above hold */
+  panels: Record<string, Panels>;
+  /** one-shot: auto-close the changes panel if the session starts on a clean main, unless the
+   * project already has a remembered layout */
   leftAuto: boolean;
   /** full-bleed preview: all chrome hidden */
   zen: boolean;
   /** the terminal pane under the preview (one per worktree; the shells keep running when hidden) */
   termOpen: boolean;
+  /** the design pane: the worktree's own design system, beside the preview */
+  designOpen: boolean;
   /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
   themes: Theme[];
   themePrefs: ThemePrefs;
@@ -229,11 +264,13 @@ export interface InitialOpts {
   storedRepo?: string | null;
   /** the worktree panel was left open, so it starts open rather than peeking */
   storedRailOpen?: boolean;
+  /** every project's remembered panel layout; the stored project's is painted before hello */
+  storedPanels?: Record<string, Panels>;
 }
 
 export function initialState(opts: InitialOpts): State {
   const cached = opts.cached ?? toyonDark;
-  return {
+  const state: State = {
     connected: false,
     repos: [],
     worktrees: [],
@@ -260,9 +297,11 @@ export function initialState(opts: InitialOpts): State {
     focusLeft: 0,
     rightOpen: true,
     railOpen: opts.storedRailOpen ?? false,
+    panels: opts.storedPanels ?? {},
     leftAuto: true,
     zen: false,
     termOpen: false,
+    designOpen: false,
     themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
@@ -271,6 +310,10 @@ export function initialState(opts: InitialOpts): State {
     agents: [],
     defaultAgent: "claude",
   };
+  // paint the last project's layout before the daemon's hello names it, so a reload does not
+  // flash the docks open and then shut them
+  const stored = opts.storedRepo ? state.panels[opts.storedRepo] : undefined;
+  return stored ? applyPanels(state, stored) : state;
 }
 
 /** the theme to paint right now: picker preview beats prefs */
@@ -354,6 +397,7 @@ export type Action =
   | { a: "toggle-rail" }
   | { a: "toggle-zen" }
   | { a: "toggle-terminal" }
+  | { a: "toggle-design" }
   /** show this worktree's stream in the terminal pane, opening the pane if it was hidden */
   | { a: "term-stream"; id: string; stream: string }
   | { a: "preview-theme"; theme: Theme | null }
@@ -372,8 +416,29 @@ function paletteBack(s: State, back: boolean | undefined): Pick<State, "overlay"
   return { overlay: { kind: r.mode }, paletteReturn: r };
 }
 
+/** landing on a project paints the layout it was left in; one that has never been laid out adopts
+ * whatever is on screen, so the switch itself moves nothing */
+function enterRepo(s: State): State {
+  const id = s.activeRepoId;
+  if (!id) return s;
+  const p = s.panels[id];
+  return p ? applyPanels(s, p) : { ...s, panels: { ...s.panels, [id]: panelsOf(s) } };
+}
+
+/** the clean-main auto-close is the one thing that shuts a panel without anyone asking, so it is
+ * the one thing the layout must not learn from: it would outlive the clean main that prompted it */
+function guessed(action: Action): boolean {
+  return action.a === "server" && action.msg.t === "git-status";
+}
+
 export function reducer(s: State, action: Action): State {
-  const next = reduce(s, action);
+  let next = reduce(s, action);
+  // every open/close routes through here, so the layout is remembered in one place rather than in
+  // the dozen actions (a chord, a rail click, a dropped file) that move it
+  if (next.activeRepoId !== s.activeRepoId) next = enterRepo(next);
+  else if (next.activeRepoId && !guessed(action) && !samePanels(panelsOf(s), panelsOf(next))) {
+    next = { ...next, panels: { ...next.panels, [next.activeRepoId]: panelsOf(next) } };
+  }
   if (next.worktrees === s.worktrees && next.activeRepoId === s.activeRepoId) return next;
   return { ...next, visible: visibleOf(next.worktrees, next.activeRepoId) };
 }
@@ -463,6 +528,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
     case "toggle-terminal":
       return { ...s, termOpen: !s.termOpen };
+    case "toggle-design":
+      return { ...s, designOpen: !s.designOpen };
     case "term-stream":
       return withLocal({ ...s, termOpen: true }, action.id, (l) => ({ ...l, termStream: action.stream }));
     case "preview-theme":
@@ -634,6 +701,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ...l,
         search: { query: msg.query, hits: msg.hits, truncated: msg.truncated },
       }));
+    case "design-index":
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, design: msg.index }));
     case "queue":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, queue: msg.items }));
     case "agent-commands":

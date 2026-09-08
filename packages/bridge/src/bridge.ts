@@ -397,9 +397,16 @@ window.addEventListener("message", (e) => {
     case "highlight-selector": {
       clearOverlay();
       try {
-        const el = document.querySelector(d.selector);
-        if (el) drawBox(el.getBoundingClientRect(), d.label || undefined);
-      } catch {}
+        // every match, not the first: the design pane asks "where is this class" about a class used
+        // thirty times, and one box out of thirty answers a question nobody asked. Only the first
+        // carries the label, or a dense page turns into a wall of tags.
+        const all = document.querySelectorAll(d.selector);
+        for (let i = 0; i < all.length; i++) {
+          drawBox(all[i]!.getBoundingClientRect(), i === 0 ? d.label || undefined : undefined);
+        }
+      } catch {
+        // an invalid selector is the caller's bug, and throwing here would kill the message pump
+      }
       break;
     }
     case "highlight-clear":

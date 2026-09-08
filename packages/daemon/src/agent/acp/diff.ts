@@ -2,62 +2,12 @@
 // a deletion, every new one an addition) buried a two-line change in four hundred, so the chat cuts
 // it to the lines that changed plus a few around them, the way a diff is meant to read.
 
+import { diffSeq } from "@toyon/shared";
+
 export type DiffOp = { mark: " " | "-" | "+"; text: string };
 
-/** the middle, after the common ends are trimmed, is diffed properly; past this many cells the DP
- * table is not worth the memory and the middle prints as one replacement */
-const MAX_CELLS = 250_000;
-
 export function diffOps(a: string[], b: string[]): DiffOp[] {
-  let head = 0;
-  while (head < a.length && head < b.length && a[head] === b[head]) head++;
-  let tail = 0;
-  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
-
-  const midA = a.slice(head, a.length - tail);
-  const midB = b.slice(head, b.length - tail);
-  const ops: DiffOp[] = a.slice(0, head).map((text) => ({ mark: " " as const, text }));
-  ops.push(...middle(midA, midB));
-  ops.push(...a.slice(a.length - tail).map((text) => ({ mark: " " as const, text })));
-  return ops;
-}
-
-function middle(a: string[], b: string[]): DiffOp[] {
-  if (a.length === 0) return b.map((text) => ({ mark: "+", text }));
-  if (b.length === 0) return a.map((text) => ({ mark: "-", text }));
-  if ((a.length + 1) * (b.length + 1) > MAX_CELLS)
-    return [...a.map((text) => ({ mark: "-" as const, text })), ...b.map((text) => ({ mark: "+" as const, text }))];
-
-  // longest common subsequence over lines: table[i][j] is the LCS length of a[i:] and b[j:]
-  const w = b.length + 1;
-  const table = new Uint32Array((a.length + 1) * w);
-  for (let i = a.length - 1; i >= 0; i--) {
-    for (let j = b.length - 1; j >= 0; j--) {
-      table[i * w + j] =
-        a[i] === b[j]
-          ? (table[(i + 1) * w + j + 1] ?? 0) + 1
-          : Math.max(table[(i + 1) * w + j] ?? 0, table[i * w + j + 1] ?? 0);
-    }
-  }
-  const ops: DiffOp[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      ops.push({ mark: " ", text: a[i] as string });
-      i++;
-      j++;
-    } else if ((table[(i + 1) * w + j] ?? 0) >= (table[i * w + j + 1] ?? 0)) {
-      ops.push({ mark: "-", text: a[i] as string });
-      i++;
-    } else {
-      ops.push({ mark: "+", text: b[j] as string });
-      j++;
-    }
-  }
-  while (i < a.length) ops.push({ mark: "-", text: a[i++] as string });
-  while (j < b.length) ops.push({ mark: "+", text: b[j++] as string });
-  return ops;
+  return diffSeq(a, b).map((op) => ({ mark: op.mark, text: op.value }));
 }
 
 /** the changed lines with `context` unchanged ones around them, as unified hunks */

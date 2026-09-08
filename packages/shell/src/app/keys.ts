@@ -56,9 +56,9 @@ export function useChords() {
             dispatch({ a: "toggle-zen" });
             break;
           case "left":
-            // one key for the panel: it opens, then it takes the keyboard, then it shuts. Focus is
-            // the DOM's own state, so ask the document rather than mirroring it in the store.
-            if (s.leftOpen && document.activeElement?.closest(".left-dock")) dispatch({ a: "toggle-left" });
+            // a plain toggle: open it or shut it. Opening hands it the keyboard, but a second
+            // press closes it rather than stopping to focus a panel that is already on screen.
+            if (s.leftOpen) dispatch({ a: "toggle-left" });
             else dispatch({ a: "focus-left" });
             break;
           case "right":
@@ -72,6 +72,9 @@ export function useChords() {
             break;
           case "terminal":
             dispatch({ a: "toggle-terminal" });
+            break;
+          case "design":
+            dispatch({ a: "toggle-design" });
             break;
           case "term-tab": {
             const wt = s.worktrees.find((w) => w.worktree.id === s.activeId);
@@ -99,6 +102,7 @@ export function useChords() {
         // Zen is not on this ladder: it only leaves on ⌘., so Escape stays the page's own key
         else if (s.termOpen) dispatch({ a: "toggle-terminal" });
         else if (s.diff) dispatch({ a: "close-diff" });
+        else if (s.designOpen) dispatch({ a: "toggle-design" });
       }
     };
     window.addEventListener("keydown", onKey);

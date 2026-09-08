@@ -16,17 +16,51 @@ export function tip(text: string, key?: string) {
 }
 
 const SHOW_DELAY = 120;
+/** An anchor wider than this puts its own centre a long way from the pointer, so the tip follows
+ * the pointer instead. Below it the two are within a few pixels of each other and anchoring is
+ * steadier, which is what every icon button in the app wants. */
+const FOLLOW_MIN_W = 120;
 // after leaving a visible tooltip, the next one within this window shows
 // instantly (sweeping a toolbar shouldn't re-wait on every button)
 const WARM_MS = 600;
 const GAP = 6;
+/** clear of the pointer itself, which is taller than the gap a box needs from an edge */
+const CURSOR_GAP = 18;
+/** and off to its side, so the pointer sits near a corner of the box rather than over its text */
+const CURSOR_NUDGE = 12;
 const MARGIN = 8;
 
-type Anchor = { el: HTMLElement; text: string; key?: string };
+type Anchor = { el: HTMLElement; text: string; key?: string; follow: boolean };
+type Point = { x: number; y: number };
+
+/** Place the box under its anchor, or under the pointer for a wide one. Flips above when there is
+ * no room below and clamps to the viewport either way. */
+function place(box: HTMLDivElement, anchor: Anchor, pointer: Point) {
+  const r = anchor.el.getBoundingClientRect();
+  const w = box.offsetWidth;
+  const h = box.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const below = anchor.follow ? pointer.y + CURSOR_GAP : r.bottom + GAP;
+  const above = anchor.follow ? pointer.y - CURSOR_GAP - h : r.top - GAP - h;
+  const flip = below + h > vh - MARGIN && above >= MARGIN;
+
+  // A following tip hangs off the pointer's lower right, the way a cursor tip always has, and
+  // swaps to its left when the right runs out. Centring it on the pointer put the arrow over the
+  // middle of a box that can be three hundred pixels wide, with the text going both ways from it.
+  let left = anchor.follow ? pointer.x + CURSOR_NUDGE : r.left + r.width / 2 - w / 2;
+  if (anchor.follow && left + w > vw - MARGIN) left = pointer.x - CURSOR_NUDGE - w;
+
+  box.style.top = `${Math.round(flip ? above : below)}px`;
+  box.style.left = `${Math.round(Math.min(Math.max(MARGIN, left), vw - MARGIN - w))}px`;
+  box.dataset.side = flip ? "above" : "below";
+}
 
 export function Tooltips() {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const pointer = useRef<Point>({ x: 0, y: 0 });
 
   useEffect(() => {
     let timer = 0;
@@ -44,11 +78,11 @@ export function Tooltips() {
       clear();
       current = null;
     };
-    const show = (el: HTMLElement) => {
+    const show = (el: HTMLElement, follow: boolean) => {
       const text = el.dataset.tip;
       if (!text) return hide();
       visible = true;
-      setAnchor({ el, text, key: el.dataset.tipKey });
+      setAnchor({ el, text, key: el.dataset.tipKey, follow });
     };
     const target = (e: Event) => {
       const t = e.target;
@@ -56,13 +90,15 @@ export function Tooltips() {
     };
 
     const onOver = (e: MouseEvent) => {
+      pointer.current = { x: e.clientX, y: e.clientY };
       const el = target(e);
       if (el === current) return;
       clear();
       current = el;
       if (!el) return;
-      if (Date.now() - lastHidden < WARM_MS) return show(el);
-      timer = window.setTimeout(() => show(el), SHOW_DELAY);
+      const follow = el.getBoundingClientRect().width > FOLLOW_MIN_W;
+      if (Date.now() - lastHidden < WARM_MS) return show(el, follow);
+      timer = window.setTimeout(() => show(el, follow), SHOW_DELAY);
     };
     const onOut = (e: MouseEvent) => {
       // left the window entirely
@@ -73,15 +109,22 @@ export function Tooltips() {
       if (el?.matches(":focus-visible")) {
         window.clearTimeout(timer);
         current = el;
-        show(el);
+        // reached by keyboard: there is no pointer to sit near, so anchor it
+        show(el, false);
       }
     };
     const onBlur = () => hide();
+    /** Typing or firing a shortcut should clear the tip; holding a modifier is neither. Hiding on
+     * every keydown meant reaching for ⌘ or ⇧ over a control closed the thing describing it, which
+     * is exactly when you are about to use it. */
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Shift" && e.key !== "Control" && e.key !== "Alt" && e.key !== "Meta") hide();
+    };
 
     document.addEventListener("mouseover", onOver);
     document.addEventListener("mouseout", onOut);
     document.addEventListener("mousedown", hide);
-    document.addEventListener("keydown", hide);
+    document.addEventListener("keydown", onKey);
     document.addEventListener("scroll", hide, true);
     document.addEventListener("focusin", onFocus);
     document.addEventListener("focusout", onBlur);
@@ -91,7 +134,7 @@ export function Tooltips() {
       document.removeEventListener("mouseover", onOver);
       document.removeEventListener("mouseout", onOut);
       document.removeEventListener("mousedown", hide);
-      document.removeEventListener("keydown", hide);
+      document.removeEventListener("keydown", onKey);
       document.removeEventListener("scroll", hide, true);
       document.removeEventListener("focusin", onFocus);
       document.removeEventListener("focusout", onBlur);
@@ -99,23 +142,24 @@ export function Tooltips() {
     };
   }, []);
 
-  // position after render so we can measure our own size; flip above when
-  // there's no room below, clamp horizontally to the viewport
+  // position after render so we can measure our own size
   useLayoutEffect(() => {
     const b = box.current;
     if (!b || !anchor) return;
     if (!anchor.el.isConnected) return setAnchor(null);
-    const r = anchor.el.getBoundingClientRect();
-    const w = b.offsetWidth;
-    const h = b.offsetHeight;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const above = r.bottom + GAP + h > vh - MARGIN && r.top - GAP - h >= MARGIN;
-    const top = above ? r.top - GAP - h : r.bottom + GAP;
-    const left = Math.min(Math.max(MARGIN, r.left + r.width / 2 - w / 2), vw - MARGIN - w);
-    b.style.top = `${Math.round(top)}px`;
-    b.style.left = `${Math.round(left)}px`;
-    b.dataset.side = above ? "above" : "below";
+    place(b, anchor, pointer.current);
+  }, [anchor]);
+
+  // a following tip is repositioned straight on the node: going through state would re-render the
+  // whole tooltip on every mouse move
+  useEffect(() => {
+    if (!anchor?.follow) return;
+    const onMove = (e: MouseEvent) => {
+      pointer.current = { x: e.clientX, y: e.clientY };
+      if (box.current) place(box.current, anchor, pointer.current);
+    };
+    document.addEventListener("mousemove", onMove);
+    return () => document.removeEventListener("mousemove", onMove);
   }, [anchor]);
 
   if (!anchor) return null;

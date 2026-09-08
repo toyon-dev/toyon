@@ -2,7 +2,7 @@
 // editor bundle only downloads when a diff is first opened.
 
 import type { Theme } from "@toyon/shared";
-import { accentKey, hex8, scaleAlpha, toyonDark } from "@toyon/shared";
+import { accentKey, hex8, syntaxOf, toyonDark, wordTint } from "@toyon/shared";
 import * as monaco from "monaco-editor";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
@@ -56,9 +56,11 @@ function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
   const rules: monaco.editor.ITokenThemeRule[] = [
     { token: "", foreground: c.text0.slice(1), background: c.surface0.slice(1) },
   ];
-  for (const [token, color] of Object.entries(t.syntax ?? {})) {
-    if (color)
-      rules.push({ token, foreground: color.slice(1), ...(token === "comment" ? { fontStyle: "italic" } : {}) });
+  // syntaxOf, not t.syntax: a theme that named only half its tokens would otherwise leave the rest
+  // to Monaco's built-in scheme here and to the chat log's own fallback there, and the same file
+  // would come out in two colours depending on which surface you read it in
+  for (const [token, color] of Object.entries(syntaxOf(t))) {
+    rules.push({ token, foreground: color.slice(1), ...(token === "comment" ? { fontStyle: "italic" } : {}) });
   }
   return {
     base: t.kind === "light" ? "vs" : "vs-dark",
@@ -73,12 +75,11 @@ function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
       "editorGutter.background": c.surface0,
       "editorCursor.foreground": c[accentKey(t)],
       // monaco paints .line-insert and .char-insert as separate elements, and on a wholly new line
-      // the word-level range covers the whole line, so the two tints composite: diffAdd at 16% came
-      // out near 34%, which is why a block of added lines was the loudest thing in the window. The
-      // word tint goes *under* the line tint rather than over it, so it stays a lift that places an
-      // edit inside a changed line instead of a second wash on top of the first.
-      "diffEditor.insertedTextBackground": scaleAlpha(c.diffAdd, 0.55),
-      "diffEditor.removedTextBackground": scaleAlpha(c.diffDel, 0.55),
+      // the word-level range covers the whole line, so the two tints composite. wordTint is the
+      // fraction that keeps that composite where the chat log's own word blocks sit, and both read
+      // it from the same place, so the pane and the log cannot drift apart.
+      "diffEditor.insertedTextBackground": wordTint(c.diffAdd),
+      "diffEditor.removedTextBackground": wordTint(c.diffDel),
       "diffEditor.insertedLineBackground": c.diffAdd,
       "diffEditor.removedLineBackground": c.diffDel,
       // the "N hidden lines" band sits over the code it hides, so it has to be opaque

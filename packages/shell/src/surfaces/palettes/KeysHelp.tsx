@@ -1,4 +1,4 @@
-import { type AgentInfo, CHORD_SECTIONS, CHORDS, resolveTheme } from "@toyon/shared";
+import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveTheme } from "@toyon/shared";
 import { useCallback, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
@@ -11,7 +11,7 @@ import { appearanceLabel } from "./commands.ts";
 
 const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
   title,
-  rows: CHORDS.filter((c) => c.section === title).map((c): [string, string] => [chord(c.id), c.label]),
+  rows: chordsInSection(title).map((id): [string, string] => [chord(id), CHORD_LABELS[id].label]),
 }));
 
 /** gear / ⌘,: settings card stacked over the shortcut card — the one non-worktree surface, so global

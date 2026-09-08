@@ -5,7 +5,7 @@ import { App } from "./app/App.tsx";
 import { terminalBus } from "./app/terminalBus.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
-import { initialState } from "./state/store.ts";
+import { defaultPanels, initialState, type Panels } from "./state/store.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
@@ -30,6 +30,27 @@ function read(storage: Storage, key: string): string | null {
     return null;
   }
 }
+/** the panel layout each project was left in; a value written by an older build (or by hand) is
+ * read field by field, so a bad one costs a default rather than a blank dock */
+function storedPanels(): Record<string, Panels> {
+  const bool = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fallback);
+  const out: Record<string, Panels> = {};
+  try {
+    const raw: unknown = JSON.parse(read(localStorage, STORAGE.panels) ?? "{}");
+    if (!raw || typeof raw !== "object") return out;
+    for (const [id, p] of Object.entries(raw as Record<string, Partial<Panels>>)) {
+      if (!p || typeof p !== "object") continue;
+      out[id] = {
+        left: bool(p.left, defaultPanels.left),
+        right: bool(p.right, defaultPanels.right),
+        term: bool(p.term, defaultPanels.term),
+        design: bool(p.design, defaultPanels.design),
+      };
+    }
+  } catch {}
+  return out;
+}
+
 /** per-tab id: a worktree created from this tab steals focus here and nowhere else */
 function clientId(): string {
   const existing = read(sessionStorage, STORAGE.client);
@@ -48,6 +69,7 @@ const store = createStore(
     storedActive: read(localStorage, STORAGE.active),
     storedRepo: read(localStorage, STORAGE.repo),
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",
+    storedPanels: storedPanels(),
     clientId: clientId(),
   }),
 );

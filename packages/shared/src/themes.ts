@@ -1,7 +1,7 @@
 // Built-in themes + color helpers shared by the daemon (importing/serving) and
 // the shell (applying). Every color is #rrggbb or #rrggbbaa.
 
-import type { Theme, ThemeColorKey, ThemePrefs } from "./model.ts";
+import type { Theme, ThemeColorKey, ThemePrefs, ThemeSyntaxToken } from "./model.ts";
 
 // Toyon's own theme, and the one it boots into. Heteromeles arbutifolia: a brown hillside, sage
 // leaves, a scarlet berry. Three decisions in here were expensive and are worth not relitigating.
@@ -968,13 +968,46 @@ export function sunkenOf(theme: Theme): string {
   return stepL(theme.colors.surface1, -4);
 }
 
+/** The characters an edit touched, inside a line whose band already says it changed. Both surfaces
+ * that show a diff paint this over the line tint, so it is a fraction of that tint rather than a
+ * colour of its own: at full strength the two composite to nearly twice the wash and a block of
+ * added lines becomes the loudest thing in the window (see MonacoDiff, which draws its line and
+ * character ranges as separate elements). A theme moves the tint and both weights follow. */
+export function wordTint(lineTint: string): string {
+  return scaleAlpha(lineTint, 0.55);
+}
+
+/** Every syntax colour a theme has, filled in from its own palette where it named none. A theme is
+ * allowed to ship a partial `syntax` (an imported VS Code theme often does), and both surfaces that
+ * colour code have to draw the same thing anyway, so the completion belongs here rather than in
+ * either of them: the pane would otherwise fall back to Monaco's built-in scheme for a token the
+ * theme skipped, and the chat log to plain text, which is two different files in two colours.
+ * The defaults are the ones every built-in already uses: comments in the tier you skip, and the
+ * warm-to-cool run of the palette for the rest. */
+export function syntaxOf(theme: Theme): Record<ThemeSyntaxToken, string> {
+  const c = theme.colors;
+  const s = theme.syntax ?? {};
+  return {
+    comment: s.comment ?? c.text2,
+    keyword: s.keyword ?? c.orange,
+    string: s.string ?? c.green,
+    number: s.number ?? c.purple,
+    type: s.type ?? c.yellow,
+    function: s.function ?? c.aqua,
+    variable: s.variable ?? c.blue,
+  };
+}
+
 export function themeToCssVars(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {};
   for (const k of themeColorKeys) out[cssVarName(k)] = theme.colors[k];
+  for (const [token, color] of Object.entries(syntaxOf(theme))) out[`--syntax-${token}`] = color;
   out["--accent"] = theme.colors[accentKey(theme)];
   out["--sunken"] = sunkenOf(theme);
   out["--scrim"] = hex8(theme.colors.surface0, 0.7);
   out["--shadow"] = theme.kind === "dark" ? "#00000066" : "#0000002e";
+  out["--diff-add-word"] = wordTint(theme.colors.diffAdd);
+  out["--diff-del-word"] = wordTint(theme.colors.diffDel);
   return out;
 }
 

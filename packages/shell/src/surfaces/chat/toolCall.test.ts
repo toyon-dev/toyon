@@ -6,13 +6,13 @@ describe("parseToolOutput", () => {
   test("splits prose from a fenced block and drops the fences", () => {
     const blocks = parseToolOutput("Locate the usages\n```console\nsrc/a.ts:19: hit\n```");
     expect(blocks).toEqual([
-      { code: false, diff: false, text: "Locate the usages" },
-      { code: true, diff: false, text: "src/a.ts:19: hit" },
+      { code: false, diff: false, lang: "", text: "Locate the usages" },
+      { code: true, diff: false, lang: "console", text: "src/a.ts:19: hit" },
     ]);
   });
 
   test("plain output stays one block", () => {
-    expect(parseToolOutput("built in 99ms")).toEqual([{ code: false, diff: false, text: "built in 99ms" }]);
+    expect(parseToolOutput("built in 99ms")).toEqual([{ code: false, diff: false, lang: "", text: "built in 99ms" }]);
   });
 
   test("an unclosed fence still ends the block", () => {
@@ -44,16 +44,62 @@ describe("diffLines", () => {
     expect(diffLines(block)).toEqual([
       { kind: "hunk", text: "@@ -1,3 +1,3 @@" },
       { kind: "", text: "keep me" },
-      { kind: "del", text: "was" },
-      { kind: "add", text: "is" },
+      // two lines with nothing in common: the band is the whole of what each says
+      { kind: "del", text: "was", spans: [] },
+      { kind: "add", text: "is", spans: [] },
     ]);
   });
 
   test("keeps git's own per-file header, since a block can cover several", () => {
     expect(diffLines("diff --git a/x b/x\nindex 1a2b3c4..5d6e7f8 100644\n+one")).toEqual([
       { kind: "meta", text: "diff --git a/x b/x" },
-      { kind: "add", text: "one" },
+      { kind: "add", text: "one", spans: [] },
     ]);
+  });
+
+  test("a line rewritten in place marks the words that differ, not the line", () => {
+    const lines = diffLines(['-  assert metrics[0]["visibility"]', '+  assert metrics[1]["visibility"]'].join("\n"));
+    expect(lines.map((l) => l.spans)).toEqual([
+      [
+        { text: "  assert metrics[", changed: false },
+        { text: "0", changed: true },
+        { text: ']["visibility"]', changed: false },
+      ],
+      [
+        { text: "  assert metrics[", changed: false },
+        { text: "1", changed: true },
+        { text: ']["visibility"]', changed: false },
+      ],
+    ]);
+  });
+
+  test("two lines with nothing in common are two whole changes, marked by the band alone", () => {
+    const lines = diffLines(["-const port = 3000;", '+import { serve } from "bun";'].join("\n"));
+    expect(lines.map((l) => l.spans)).toEqual([[], []]);
+  });
+
+  test("a rewrite that dropped a line lines the rest of itself back up", () => {
+    const block = [
+      "-.image-header img {",
+      "-    height: 75px;",
+      "-    filter: brightness(var(--logo-brightness));",
+      "-}",
+      "+.image-header img {",
+      "+    height: 75px;",
+      "+}",
+    ].join("\n");
+    const marked = diffLines(block).map((l) => l.spans?.some((s) => s.changed) ?? false);
+    // only the line that went is the change; the three around it carried over
+    expect(marked).toEqual([false, false, true, false, false, false, false]);
+  });
+
+  test("a file added whole is one band, not a mark on every line of it as well", () => {
+    const lines = diffLines(["+const a = 1;", "+const b = 2;", "+"].join("\n"));
+    expect(lines.map((l) => l.spans)).toEqual([[], [], []]);
+  });
+
+  test("a blank line that came or went is the band alone", () => {
+    expect(diffLines("+").map((l) => l.spans)).toEqual([[]]);
   });
 });
 
@@ -180,14 +226,21 @@ describe("toolBlocks", () => {
 
   test("drops the description the adapter repeats as the output's first line", () => {
     expect(toolBlocks(call, "Build the project\n```console\nbuilt in 99ms\n```")).toEqual([
-      { code: true, diff: false, text: "built in 99ms" },
+      { code: true, diff: false, lang: "console", text: "built in 99ms" },
     ]);
   });
 
   test("keeps prose the agent actually wrote", () => {
     expect(toolBlocks(call, "Nothing to build\n```console\nup to date\n```")).toEqual([
-      { code: false, diff: false, text: "Nothing to build" },
-      { code: true, diff: false, text: "up to date" },
+      { code: false, diff: false, lang: "", text: "Nothing to build" },
+      { code: true, diff: false, lang: "console", text: "up to date" },
     ]);
+  });
+
+  // a command that printed nothing, and one whose whole output was the description: the row has
+  // nothing to draw under it, and drawing the panel anyway was an empty bar under the command
+  test("a call with nothing left to show has no blocks", () => {
+    expect(toolBlocks(call, "\n \n")).toEqual([]);
+    expect(toolBlocks(call, "Build the project")).toEqual([]);
   });
 });

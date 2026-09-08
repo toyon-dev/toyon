@@ -341,7 +341,8 @@ body.resizing iframe {
   background: var(--element1);
   color: var(--text0);
 }
-.git-file.active::before {
+.git-file.active::before,
+.git-file.sel::before {
   content: "";
   position: absolute;
   left: 0;
@@ -350,12 +351,9 @@ body.resizing iframe {
   width: 2px;
   background: var(--accent);
 }
-/* where the keyboard is, which is a different question from which file is open in the editor: a
-   ring rather than a band, so a row can answer both at once */
-.git-file.sel {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
-}
+/* where the keyboard is. Moving the cursor also opens the file, so the cursor and the open file
+   are the same row nearly always; it takes the same edge rather than a ring stacked on top of the
+   band, which hid the band and read as a second, unrelated kind of selection. */
 .git-file .xy {
   color: var(--yellow);
   width: 18px;
@@ -1089,20 +1087,29 @@ body.resizing .row-resize {
 .tool-row.error .tool-name {
   color: var(--red);
 }
+/* how many calls the row stands for, at the end of the line the way a count goes. It is the only
+   thing that tells this row from one that ran once, so it sits a tier above the hint it follows. */
+.tool-row .tool-count {
+  flex: 0 0 auto;
+  color: var(--text1);
+}
+/* one call's output inside a row that holds several: the rule is what says where the next hunk
+   starts, since the calls are otherwise the same edit to the same file twice over */
+.tool-row .tool-part + .tool-part {
+  border-top: 1px solid var(--border0);
+}
 /* the card's body: prose and code alike, edge to edge inside it, under a rule that separates it from
-   the chip. It scrolls on its own past 320px, and a flick that reaches the bottom carries on down
-   the chat: reading the transcript is what the wheel is usually for, and chaining is also what keeps
-   the bounce out of the middle of one, since the box only rubber-bands when nothing behind it can
-   still scroll. The swipe-back gesture is already held off at the document (base.css), so nothing
-   here needs to contain an axis. */
+   the chip. It takes whatever height its output needs and the chat log scrolls it: a box of its own
+   inside a scrolling column means the wheel does one of two things depending on where the pointer
+   happens to be, and a long output you wanted to read is 320px of it with the rest behind a second
+   scrollbar. The one axis kept is the block's own, since a line too long to wrap is not a reason to
+   widen the chat pane. */
 .tool-row .tool-out {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 6px 12px;
   background: var(--surface1);
-  max-height: 320px;
-  overflow: auto;
 }
 .tool-row .tool-note {
   margin: 0;
@@ -1162,6 +1169,15 @@ body.resizing .row-resize {
 .tool-row .dl.del {
   background: var(--diff-del);
 }
+/* the words the edit actually touched, placed inside the line the way the diff pane places them: the
+   band says the line took part, the block says which characters are it. The token is the pane's
+   char-level tint (themes.ts, wordTint), so one change reads the same in the log as in the editor. */
+.tool-row .dl.add .ch {
+  background: var(--diff-add-word);
+}
+.tool-row .dl.del .ch {
+  background: var(--diff-del-word);
+}
 /* the jump between two stretches of a file, drawn as the rule it is; the numbers are on the title */
 .tool-row .dl.hunk {
   width: auto;
@@ -1176,6 +1192,27 @@ body.resizing .row-resize {
 }
 .tool-row .dl.meta {
   color: var(--text2);
+}
+/* where the log stops printing a diff and the pane takes over. It reads as the quiet last line of
+   the block rather than as a button on top of it: the block is what you are looking at, and this is
+   only where it ends. */
+.tool-row .dl.more {
+  border: 0;
+  border-top: 1px solid var(--border0);
+  margin-top: 4px;
+  padding: 5px 12px;
+  background: none;
+  color: var(--text2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tool-row .dl.more:disabled {
+  cursor: default;
+}
+.tool-row .dl.more:not(:disabled):hover {
+  color: var(--text0);
+  background: var(--surface2);
 }
 /* same width as the icon it stands in for, so the name does not step sideways when the call ends */
 .tool-row .spinner {
@@ -2218,4 +2255,314 @@ body.resizing .rb-center {
 }
 .ask-answered .ask-header {
   margin-right: 6px;
+}
+/* ---- design pane ----
+   Flat and tight, like the file rows and the diff beside it. An earlier pass gave every group a
+   rounded card on a raised plate and it read as a different product bolted to the side of this
+   one; the shell's own idiom is hairlines, one surface step, and small type. The only shape here
+   is the swatch grid, and it earns it: a colour has to be shown at a size you can judge. */
+.design-pane {
+  height: 55%;
+  min-height: 160px;
+  position: relative;
+  border-top: 1px solid var(--border0);
+  background: var(--surface0);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+.design-pane {
+  min-width: 0;
+}
+.design-pane.full {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.design-pane .file-path {
+  flex: 1;
+  font: var(--fs-sm) var(--font-ui);
+  color: var(--text1);
+}
+/* min-width guards the flex column it sits in: a long path or a wide grid inside a pane should
+   scroll here, never push the docks beside it */
+.design-body {
+  min-width: 0;
+  overflow: auto;
+  padding: 28px 20px 80px;
+  color: var(--text0);
+  font: var(--fs-sm) var(--font-ui);
+}
+.design-section {
+  margin-bottom: 52px;
+}
+.design-h {
+  font: 600 var(--fs-sm) var(--font-ui);
+  color: var(--text0);
+  margin: 0 0 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.design-note {
+  font: var(--fs-xs) var(--font-ui);
+  color: var(--text2);
+  font-weight: 400;
+}
+.design-gap {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--sunken);
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-ui);
+  line-height: 1.5;
+}
+
+/* the mark on a row the scan has something to say about. A tag, not an alarm: it is an
+   observation about the class, and the row it sits on is the evidence. */
+.design-tag {
+  padding: 0 5px;
+  background: var(--sunken);
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-mono);
+  margin-left: auto;
+}
+
+/* the long tail of a component list: real, uninteresting, and not a problem, so it sits at the
+   end of the list it belongs to rather than being reported above as though something were wrong */
+/* the tail is the next row of the list it ends, not a footnote under it: same gutter, same
+   baseline, so the count lines up with the counts above it */
+.design-tail > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: calc(100% + 40px);
+  margin-left: -40px;
+  padding: 4px 10px 4px 0;
+  cursor: pointer;
+  color: var(--text2);
+  font: var(--fs-sm) var(--font-ui);
+  list-style: none;
+  border-left: 2px solid transparent;
+}
+.design-tail > summary:hover {
+  background: var(--element0);
+  color: var(--text1);
+}
+.design-tail > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* token grid: one per kind, cells sharing their edges so a scale reads as one object */
+.design-group {
+  margin-bottom: 30px;
+}
+.design-group-name {
+  display: block;
+  font: var(--fs-xs) var(--font-mono);
+  color: var(--text1);
+  margin-bottom: 9px;
+}
+/* The lattice is drawn by the cells, not by a coloured ground showing through 1px gaps. The ground
+   version filled the tail of a short last row with a slab of border colour, so a group of two
+   tokens came with a long grey bar beside it saying nothing. */
+/* No border on the container. Its top and left edges ran the full width of the grid box, so a
+   group of two cells came with a hairline stretching across the empty space beside them. Every
+   line here is drawn by a cell, which is the only way one cannot outlive its cells. */
+/*
+ * Fixed tracks, collapsed when empty. `auto-fill` with `1fr` tracks keeps every track it can fit
+ * and stretches the filled ones, which left a short group's cells against the left of a wide box
+ * with empty tracks beside them; `auto-fit` drops those.
+ *
+ * A group wide enough to leave the column centres and breaks out of it evenly on both sides. A
+ * group that fits inside the column starts at its left edge like any other element, under its own
+ * label. Centring that one too put a single cell out in the middle of the pane with its label
+ * stranded at the margin.
+ */
+.design-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, 132px);
+  justify-content: start;
+}
+
+/* Width and offset are set on the element, in whole cells: the row is as wide as its own chips and
+   its left edge is the column's, pulled back a cell for every two it has outgrown the column by.
+   See breakout() in DesignPane, which explains why that arithmetic cannot live here. */
+.design-breakout {
+  min-width: 0;
+}
+
+/* Every cell carries all four edges and overlaps its neighbour by the width of one, so the shared
+   lines land on the same pixel and read as 1px rather than 2. Drawing only the right and bottom
+   left the first row and the first column open, which is what made a group look like its border
+   had slipped; drawing them on the container instead made the line outlive the cells whenever a
+   row was short. */
+.design-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border0);
+  margin: 0 -1px -1px 0;
+}
+/* tall enough that a colour reads as a swatch rather than a bar; at the widths this grid lands
+   on, a cell is then about three to two */
+.design-sample {
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sunken);
+}
+.design-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.design-corner {
+  display: block;
+  width: 30px;
+  height: 24px;
+  background: var(--element1);
+}
+.design-specimen {
+  font: 20px / 1 var(--font-ui);
+  color: var(--text1);
+}
+.design-plate {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 7px 6px;
+}
+/* the token's own name, as you would type it: these are custom properties, so they read as code */
+.design-cell-name {
+  font: var(--fs-xs) var(--font-mono);
+  color: var(--text0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* value and ratio share a line: the value takes the room and gives way, the ratio never moves */
+.design-cell-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.design-cell-value {
+  flex: 1;
+  min-width: 0;
+}
+.design-cell-note {
+  flex-shrink: 0;
+}
+/* for a colour the swatch is the information and the hex is a footnote; for everything else the
+   value is the whole point, so it is read at the tier you actually read */
+.design-cell[data-kind="color"] .design-cell-value,
+.design-cell-note {
+  color: var(--text2);
+}
+.design-cell-value,
+.design-cell-note {
+  font: var(--fs-xs) var(--font-mono);
+  color: var(--text1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* a size drawn against the largest in its own group: absolute widths made every small radius the
+   same invisible speck, and a scale is about the steps between its rungs */
+.design-scale {
+  display: block;
+  height: 3px;
+  margin-top: 5px;
+  background: var(--border1);
+}
+
+/* inventory rows: the shell's band idiom, a 2px accent edge on hover and a neutral seat */
+.design-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* The name starts on the column's own left edge and the count hangs out into the gutter beside it,
+   rather than the count taking a slot inside the column and pushing every name in by forty pixels.
+   The row is pulled left by exactly that gutter, so the band under it still covers the count. */
+.design-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: calc(100% + 40px);
+  margin-left: -40px;
+  text-align: left;
+  padding: 4px 10px 4px 0;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.design-row:disabled {
+  cursor: default;
+}
+/* hovering a row outlines the thing in the running app, so the row has to look armed */
+.design-row:hover:not(:disabled),
+.design-row:focus-visible {
+  background: var(--element0);
+  border-left-color: var(--accent);
+  outline: none;
+}
+.design-count {
+  width: 28px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-mono);
+}
+.design-name {
+  color: var(--text0);
+  font: var(--fs-xs) var(--font-mono);
+  flex-shrink: 0;
+}
+.design-path {
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.design-variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.design-variant {
+  padding: 0 5px;
+  background: var(--sunken);
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-mono);
+}
+
+/* Text holds a centred measure and the grids break out of it to the full width of the pane, the
+   way a wide table sits outside the column in a document. Placed last because the `margin`
+   shorthands above reset the inline axis. */
+/*
+ * One centre line. Everything sits on it, and a grid too wide for the column grows out of the
+ * column symmetrically rather than sliding off to one side.
+ *
+ * Every element here is centred in the same 1500px section, so their midpoints coincide whatever
+ * their widths. Text and a grid small enough to fit are held to the 720 measure; a grid that wants
+ * more takes up to the full 1500 and the extra appears equally on both sides.
+ */
+.design-section {
+  max-width: 1500px;
+  margin-inline: auto;
+}
+.design-h,
+.design-group-name,
+.design-rows,
+.design-gap,
+.design-tail {
+  max-width: 720px;
+  margin-inline: auto;
 }

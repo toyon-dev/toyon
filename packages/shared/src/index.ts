@@ -2,7 +2,9 @@
 // let the bridge bundle import one table without pulling zod or the theme data in.
 
 export * from "./agent-tools.ts";
+export * from "./chord-labels.ts";
 export * from "./chords.ts";
+export * from "./diff.ts";
 export * from "./model.ts";
 export * from "./paste.ts";
 export * from "./ports.ts";

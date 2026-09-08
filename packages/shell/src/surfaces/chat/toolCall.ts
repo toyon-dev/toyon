@@ -1,4 +1,4 @@
-import type { ToolKind } from "@toyon/shared";
+import { type Span, splitSpanLines, type ToolKind, wordSpans } from "@toyon/shared";
 import type { IconName } from "../../ui/Icon.tsx";
 /** How a tool call reads in the transcript: the two halves of its summary line, and the blocks of
  * its output. */
@@ -13,6 +13,8 @@ export interface OutputBlock {
   code: boolean;
   /** +/- lines in here are additions and deletions, not text that happens to start with a dash */
   diff: boolean;
+  /** the word on the opening fence, where the agent wrote one: what the block is written in */
+  lang: string;
   text: string;
 }
 
@@ -49,6 +51,18 @@ const KIND_ICON: Record<ToolKind, IconName> = {
   switch_mode: "swap",
   other: "dot",
 };
+
+/** which kinds open themselves while the agent is on them. Only the one that changes the code: a
+ * diff is the thing you would have opened anyway, and it is the thing you want to have seen if it
+ * was wrong. Everything else waits for a click, a command it ran included, since a turn that throws
+ * a panel open per call reads itself out loud and walks the message you were reading off the top of
+ * the log. A set rather than a check so a kind can be added back on its own.
+ *
+ * `think` is here for consistency rather than for Claude: an agent that models its reasoning as a
+ * call gets it read the way one that streams it gets it read, which is open, since a thought is
+ * prose about the turn rather than output to go back to. Claude's adapter sends thoughts as
+ * `agent_thought_chunk`, which becomes a `thinking` item and never reaches a row (acp/map.ts). */
+export const AUTO_OPEN: ReadonlySet<ToolKind> = new Set<ToolKind>(["edit", "think"]);
 
 /** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
  * commit, and the column reads better following the command than the kind. Conservative on purpose:
@@ -148,6 +162,12 @@ export function toolBlocks(call: ToolCall, output: string): OutputBlock[] {
   return blocks;
 }
 
+/** the file the call names, where it names one. Unlike the row's hint this stays absolute and keeps
+ * its extension, which is what says the language a diff under it is written in. */
+export function callPath(call: ToolCall): string {
+  return field(call, "file_path") || field(call, "path");
+}
+
 /** the worktree path is the same forty characters on every row and the part that identifies the
  * file is the tail, which is what a narrow chat pane cuts off first */
 export function relPath(detail: string, roots: string[]): string {
@@ -166,8 +186,11 @@ export function parseToolOutput(out: string): OutputBlock[] {
   let lang = "";
   let fenced = false;
   const flush = () => {
+    // blank lines around a block go; the indentation inside it stays, being the shape of the code.
+    // A block that is nothing but whitespace is not a block: a command that printed one newline used
+    // to come through as a block holding a space, which drew as an empty bar under the row.
     const text = lines.join("\n").replace(/^\n+|\n+$/g, "");
-    if (text) blocks.push({ code: fenced, diff: isDiff(text, lang), text });
+    if (text.trim()) blocks.push({ code: fenced, diff: isDiff(text, lang), lang: fenced ? lang : "", text });
     lines = [];
   };
   for (const line of out.split("\n")) {
@@ -203,6 +226,10 @@ const META =
 export interface DiffLine {
   kind: LineKind;
   text: string;
+  /** on an added or deleted line, which of its words are the change: a rewritten line keeps the
+   * parts it kept, a line with no counterpart is one span of changed text. Empty on every other
+   * kind, and on a blank line, where the band alone says it. */
+  spans?: Span[];
 }
 
 /** what a diff block shows: the tint says which side a line is on, so the marker column is noise
@@ -217,7 +244,50 @@ export function diffLines(text: string): DiffLine[] {
     const bare = kind === "add" || kind === "del" || line.startsWith(" ");
     out.push({ kind, text: bare ? line.slice(1) : line });
   }
+  markWords(out);
   return out;
+}
+
+/** A run of deletions followed by a run of additions is one stretch of the file rewritten: diff the
+ * two runs against each other by word and mark only what actually differs, so text that carried over
+ * reads as carried over rather than as a whole line deleted and a near-identical one added. The run
+ * goes in whole rather than line against line, which is what lets a rewrite that dropped a line line
+ * the rest of itself back up. */
+function markWords(lines: DiffLine[]): void {
+  for (let i = 0; i < lines.length; ) {
+    if (lines[i]?.kind !== "del" && lines[i]?.kind !== "add") {
+      i++;
+      continue;
+    }
+    let mid = i;
+    while (lines[mid]?.kind === "del") mid++;
+    let end = mid;
+    while (lines[end]?.kind === "add") end++;
+    const dels = lines.slice(i, mid);
+    const adds = lines.slice(mid, end);
+    const pair =
+      dels.length > 0 && adds.length > 0
+        ? wordSpans(dels.map((l) => l.text).join("\n"), adds.map((l) => l.text).join("\n"))
+        : null;
+    if (pair) {
+      apply(dels, splitSpanLines(pair.before));
+      apply(adds, splitSpanLines(pair.after));
+    }
+    // A run with no counterpart, or one too unlike its counterpart to be the same lines edited, is a
+    // change entire and carries no marks: the band says that already, and marking every character
+    // as well is the same tint painted twice, which is what turns a newly added file into the
+    // loudest thing in the window. The diff pane draws its character ranges under its line tint for
+    // exactly this reason (see MonacoDiff). A mark is for placing an edit among lines that carried
+    // over, so a line wholly rewritten inside such a run does keep one.
+    for (const line of [...dels, ...adds]) line.spans ??= [];
+    i = end;
+  }
+}
+
+function apply(lines: DiffLine[], spans: Span[][]): void {
+  // the runs were joined with the newlines they had, so the split gives one list back per line
+  if (spans.length !== lines.length) return;
+  for (const [i, line] of lines.entries()) line.spans = spans[i];
 }
 
 export function diffLineKind(line: string): LineKind {

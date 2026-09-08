@@ -6,7 +6,8 @@ import { useLocalField } from "../../state/selectors.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { isBusy, pickLabel } from "../util.ts";
-import { ChatItemView } from "./ChatItemView.tsx";
+import { ChatItemView, ToolRow } from "./ChatItemView.tsx";
+import { groupTools } from "./group.ts";
 
 /** the transcript for the active worktree: items, working indicator, queued messages, jump-down pill */
 export function ChatLog({ active }: { active: WorktreeStatus | null }) {
@@ -59,26 +60,25 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
     [id],
   );
 
-  // the newest call while the agent runs: that row shows its output, everything above it is a line
-  const liveTool = active?.agent === "working" ? items.findLastIndex((it) => it.kind === "tool") : -1;
   const busy = !!active && isBusy(active);
   const wt = active?.worktree;
   // one array per worktree: a fresh one on every render would defeat the rows' memo
   const roots = useMemo(() => [wt?.path, wt?.linkPath].filter((p): p is string => !!p), [wt?.path, wt?.linkPath]);
+  // calls that did the same thing to the same file, back to back, are one row carrying a count
+  const entries = useMemo(() => groupTools(items, roots), [items, roots]);
+  // the newest call while the agent runs: that row shows its output, everything above it is a line
+  const liveRow = active?.agent === "working" ? entries.findLastIndex((e) => "tools" in e) : -1;
 
   return (
     <div className="chat-wrap">
       <div className="chat-log" ref={logRef} onScroll={onScroll}>
-        {items.map((item, i) => (
-          <ChatItemView
-            key={i}
-            item={item}
-            worktreeId={id}
-            live={i === liveTool}
-            roots={roots}
-            onPickHover={onPickHover}
-          />
-        ))}
+        {entries.map((entry, i) =>
+          "tools" in entry ? (
+            <ToolRow key={entry.at} tools={entry.tools} live={i === liveRow} roots={roots} worktreeId={id} />
+          ) : (
+            <ChatItemView key={entry.at} item={entry.item} worktreeId={id} onPickHover={onPickHover} />
+          ),
+        )}
         {busy && active && (
           <div className="msg-thinking working-row">
             {active.agent === "waiting" ? "waiting for your answer…" : "working…"}

@@ -141,6 +141,35 @@ a code {
   color: inherit;
 }
 
+/* ---- syntax ---- */
+/* The seven colours a theme names for code, as the classes the chat log paints with. The diff pane
+   builds the same seven into its Monaco theme (syntaxOf), so a file is the same file in both, and a
+   token the theme said nothing about is body text rather than a colour from somewhere else.
+   Comments are italic here for the same reason they are there: it is the one distinction the log
+   can carry that does not cost a hue. */
+.sy-comment {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+.sy-keyword {
+  color: var(--syntax-keyword);
+}
+.sy-string {
+  color: var(--syntax-string);
+}
+.sy-number {
+  color: var(--syntax-number);
+}
+.sy-type {
+  color: var(--syntax-type);
+}
+.sy-function {
+  color: var(--syntax-function);
+}
+.sy-variable {
+  color: var(--syntax-variable);
+}
+
 /* ---- fields ---- */
 .field {
   background: var(--sunken);

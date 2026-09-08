@@ -11,8 +11,8 @@ html,
 body,
 #root {
   height: 100%;
-  background: var(--bg0);
-  color: var(--fg1);
+  background: var(--surface0);
+  color: var(--text0);
   font: 14px / 1.5 var(--font-ui);
 }
 html,
@@ -44,22 +44,22 @@ button {
   gap: 4px;
   font-size: var(--fs-xs);
   line-height: 1.4;
-  color: var(--fg2);
+  color: var(--text1);
   border-radius: var(--r-sm);
   padding: 1px 8px;
   white-space: nowrap;
 }
 .btn:hover {
-  color: var(--fg1);
-  background: var(--bg2);
+  color: var(--text0);
+  background: var(--element0);
 }
 .btn:disabled {
-  color: var(--fg3);
+  color: var(--text2);
   cursor: default;
   background: none;
 }
 .btn-outline {
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border1);
 }
 .btn-outline:hover {
   background: none;
@@ -67,8 +67,8 @@ button {
   border-color: currentColor;
 }
 .btn-outline:disabled {
-  color: var(--fg3);
-  border-color: var(--border);
+  color: var(--text2);
+  border-color: var(--border0);
 }
 .btn-icon {
   width: 20px;
@@ -80,13 +80,13 @@ button {
      whole tier, 4.3:1 for a text button against 2.1:1 for an icon one. There is a reading where
      chrome should be quieter than an action, but nothing wrote it down and .btn-outline was a
      third case again, so they are one rule now. */
-  color: var(--fg2);
+  color: var(--text1);
   border-radius: var(--r-sm);
   line-height: 1;
 }
 .btn-icon:hover {
-  color: var(--fg1);
-  background: var(--bg2);
+  color: var(--text0);
+  background: var(--element0);
 }
 /* on is not hover, and it is not selection either. A toolbar toggle is a switch, so it says so
    the way a switch does: the seat gets deeper, bg2 under the pointer and bg3 when it is on, and
@@ -95,8 +95,8 @@ button {
    and a 2px accent bar across the bottom of a 24px rounded square is a graphic fighting a shape.
    Declared after :hover so a hovered toggle that is on still reads as on. */
 .btn-icon.on {
-  color: var(--fg1);
-  background: var(--bg3);
+  color: var(--text0);
+  background: var(--element1);
 }
 /* fg3, the same tier every other :disabled rule already used. This briefly had a fourth tier of
    its own, because disabled used to be bg3 and bg3 sits 1.4 L* off fg3, so a dead toolbar icon and
@@ -104,7 +104,7 @@ button {
    all; once rest moved up to fg2 with every other control, 4.3:1 against 2.1:1 says disabled
    perfectly well and the extra tier had nothing left to do. */
 .btn-icon:disabled {
-  color: var(--fg3);
+  color: var(--text2);
   cursor: default;
   background: none;
 }
@@ -143,16 +143,16 @@ a code {
 
 /* ---- fields ---- */
 .field {
-  background: var(--bg0);
-  border: 1px solid var(--border);
+  background: var(--sunken);
+  border: 1px solid var(--border0);
   border-radius: var(--r-sm);
-  color: var(--fg1);
+  color: var(--text0);
   font: var(--fs-sm) var(--font-mono);
   padding: 3px 8px;
   outline: none;
 }
 .field:focus {
-  border-color: var(--border-strong);
+  border-color: var(--border1);
 }
 /* multi-line / palette inputs */
 .field-lg {
@@ -166,8 +166,8 @@ a code {
   position: fixed;
   z-index: 40;
   min-width: 160px;
-  background: var(--bg1);
-  border: 1px solid var(--border-strong);
+  background: var(--surface1);
+  border: 1px solid var(--border1);
   border-radius: var(--r-md);
   padding: 4px;
   box-shadow: 0 6px 20px var(--shadow);
@@ -179,16 +179,16 @@ a code {
   padding: 5px 10px;
   font-size: var(--fs-md);
   border-radius: var(--r-sm);
-  color: var(--fg1);
+  color: var(--text0);
 }
 .menu button:hover {
-  background: var(--bg2);
+  background: var(--element0);
 }
 .menu button.danger {
   color: var(--red);
 }
 .menu button:disabled {
-  color: var(--fg3);
+  color: var(--text2);
   cursor: default;
 }
 
@@ -206,14 +206,14 @@ a code {
 }
 .prompt-box {
   width: min(560px, 90%);
-  background: var(--bg1);
-  border: 1px solid var(--border);
+  background: var(--surface1);
+  border: 1px solid var(--border0);
   border-radius: var(--r-lg);
   padding: 14px;
 }
 .prompt-box .title {
   font-size: var(--fs-sm);
-  color: var(--fg3);
+  color: var(--text2);
   margin-bottom: 8px;
 }
 /* anchored variant: no scrim, hanging under whatever opened it (the caller's wrapper is the
@@ -230,7 +230,7 @@ a code {
 .dock-empty {
   padding: 4px 12px;
   font-size: var(--fs-sm);
-  color: var(--fg3);
+  color: var(--text2);
 }
 
 /* ---- status dots ---- */
@@ -248,7 +248,7 @@ a code {
   background: var(--green);
 }
 .dot.starting {
-  background: var(--fg3);
+  background: var(--text2);
 }
 .dot.working {
   background: var(--yellow);
@@ -258,7 +258,7 @@ a code {
   background: var(--red);
 }
 .dot.idle {
-  background: var(--bg3);
+  background: var(--surface2);
 }
 .dot.landed {
   background: var(--aqua);
@@ -285,9 +285,9 @@ a code {
 .kbd-chip {
   justify-content: center;
   padding: 3px 6px;
-  color: var(--fg1);
-  background: var(--bg0);
-  border: 1px solid var(--border);
+  color: var(--text0);
+  background: var(--sunken);
+  border: 1px solid var(--border0);
   border-radius: var(--r-sm);
 }
 
@@ -301,9 +301,9 @@ a code {
   max-width: 320px;
   padding: 4px 8px;
   font: var(--fs-sm) / 1.4 var(--font-ui);
-  color: var(--fg1);
-  background: var(--bg0);
-  border: 1px solid var(--border-strong);
+  color: var(--text0);
+  background: var(--surface0);
+  border: 1px solid var(--border1);
   border-radius: var(--r-sm);
   box-shadow: 0 4px 14px var(--shadow);
   white-space: pre-line;
@@ -315,7 +315,7 @@ a code {
 }
 .tooltip-key {
   margin-left: 12px;
-  color: var(--fg2);
+  color: var(--text1);
 }
 @keyframes tooltip-in {
   from {
@@ -340,7 +340,7 @@ a code {
   gap: 10px;
   padding: 24px;
   text-align: center;
-  background: var(--bg0);
+  background: var(--surface0);
 }
 /* inside a Pane: clear of its title bar, matching the editor's own inset */
 .crash.in-pane {
@@ -349,11 +349,11 @@ a code {
 }
 .crash-title {
   font: var(--fs-md) var(--font-ui);
-  color: var(--fg1);
+  color: var(--text0);
 }
 .crash-body {
   max-width: 520px;
   font: var(--fs-sm) / 1.5 var(--font-mono);
-  color: var(--fg3);
+  color: var(--text2);
   overflow-wrap: anywhere;
 }

@@ -58,13 +58,13 @@ describe("ThemeStore", () => {
 
     const night = store.themes.find((t) => t.id === "vscode:acme.demo-themes:acme-night")!;
     expect(night.kind).toBe("dark");
-    expect(night.colors.bg0).toBe("#101418"); // from the include
+    expect(night.colors.surface0).toBe("#101418"); // from the include
     expect(night.colors.orange).toBe("#ff9f43"); // own key
     expect(night.syntax).toEqual({ comment: "#5c6670", keyword: "#ff6b6b" }); // parent + child tokenColors
 
     const day = store.themes.find((t) => t.id === "vscode:acme.demo-themes:acme-day")!;
     expect(day.kind).toBe("light"); // uiTheme "vs" wins over the dark base
-    expect(day.colors.bg0).toBe("#fdf6e3");
+    expect(day.colors.surface0).toBe("#fdf6e3");
   });
 
   test("prefs default and persist", () => {

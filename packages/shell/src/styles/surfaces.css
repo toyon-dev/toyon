@@ -12,13 +12,13 @@
 
 /* ---- keyboard shortcuts help ---- */
 .keys-card {
-  background: var(--bg1);
-  border: 1px solid var(--border-strong);
+  background: var(--surface1);
+  border: 1px solid var(--border1);
   border-radius: var(--r-lg);
   padding: 18px 24px 20px;
   box-shadow: 0 10px 36px var(--shadow);
   font: var(--fs-md) var(--font-ui);
-  color: var(--fg1);
+  color: var(--text0);
   /* two columns of sections: Find | Preview over Panels | Worktrees */
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -45,13 +45,13 @@
 }
 .set-v {
   font-family: var(--font-mono);
-  color: var(--fg1);
-  background: var(--bg0);
-  border-color: var(--border);
+  color: var(--text0);
+  background: var(--sunken);
+  border-color: var(--border0);
   padding: 2px 8px;
 }
 .set-v:hover {
-  background: var(--bg0);
+  background: var(--sunken);
   color: var(--accent);
   border-color: var(--accent);
 }
@@ -59,9 +59,9 @@
    button, so the hover state has to be overridden too */
 .set-v:disabled,
 .set-v:disabled:hover {
-  background: var(--bg0);
-  color: var(--fg3);
-  border-color: var(--border);
+  background: var(--sunken);
+  color: var(--text2);
+  border-color: var(--border0);
 }
 .keys-row {
   display: grid;
@@ -71,13 +71,13 @@
   padding: 3px 0;
 }
 .keys-d {
-  color: var(--fg2);
+  color: var(--text1);
 }
 .keys-h {
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--fg3);
+  color: var(--text2);
   padding: 0 0 4px 2px;
 }
 
@@ -104,8 +104,8 @@
 .left-dock {
   width: 220px;
   flex-shrink: 0;
-  background: var(--bg1);
-  border-right: 1px solid var(--border);
+  background: var(--surface1);
+  border-right: 1px solid var(--border0);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -141,7 +141,7 @@
 }
 .dock-resize:hover::after,
 .dock-resize.active::after {
-  background: var(--bg3);
+  background: var(--element1);
 }
 body.resizing {
   cursor: col-resize;
@@ -155,7 +155,7 @@ body.resizing iframe {
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--fg3);
+  color: var(--text2);
   padding: 10px 12px 4px;
 }
 
@@ -166,7 +166,7 @@ body.resizing iframe {
   width: 100%;
   padding: 6px 12px;
   text-align: left;
-  color: var(--fg2);
+  color: var(--text1);
   font-size: var(--fs-md);
   position: relative;
 }
@@ -192,11 +192,11 @@ body.resizing iframe {
   background: var(--aqua);
 }
 .wt-item:hover {
-  background: var(--bg2);
+  background: var(--element0);
 }
 .wt-item.active {
-  color: var(--fg1);
-  background: var(--bg2);
+  color: var(--text0);
+  background: var(--element1);
 }
 .wt-item .branch {
   flex: 1;
@@ -209,7 +209,7 @@ body.resizing iframe {
 /* these are <button>s that never picked up .btn, so each chose its own rest colour and all of them
    chose fg3. An idle control is an idle control: same tier as .btn and .btn-icon. */
 .new-wt {
-  color: var(--fg2);
+  color: var(--text1);
   padding: 6px 12px;
   font-size: var(--fs-md);
   text-align: left;
@@ -222,7 +222,7 @@ body.resizing iframe {
 }
 .new-wt .kbd-hint {
   margin-left: auto;
-  color: var(--fg3);
+  color: var(--text2);
   opacity: 0;
   transition: opacity 0.1s;
 }
@@ -234,15 +234,15 @@ body.resizing iframe {
 }
 .combine-btn:hover {
   color: var(--aqua);
-  background: var(--bg2);
+  background: var(--element0);
 }
 .combine-btn:disabled {
-  color: var(--fg3);
+  color: var(--text2);
   cursor: default;
 }
 .graft-row {
   display: flex;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border0);
   align-items: center;
   padding: 4px 6px;
   gap: 2px;
@@ -255,7 +255,7 @@ body.resizing iframe {
   color: var(--red);
 }
 .bulk-btn.danger:hover {
-  background: var(--bg2);
+  background: var(--element0);
   color: var(--red);
 }
 .graft-check {
@@ -265,7 +265,7 @@ body.resizing iframe {
 }
 
 .wt-item.sel {
-  background: var(--bg2);
+  background: var(--element1);
 }
 .wt-item .row-badge {
   font: 10px var(--font-mono);
@@ -276,7 +276,7 @@ body.resizing iframe {
   border-radius: var(--r-xs);
 }
 .wt-item .row-badge.clickable:hover {
-  background: var(--bg3);
+  background: var(--element0);
 }
 .wt-item .row-badge .act {
   display: none;
@@ -289,7 +289,7 @@ body.resizing iframe {
 }
 .wt-item .wt-more {
   visibility: hidden;
-  color: var(--fg3);
+  color: var(--text2);
   padding: 0 2px;
   border-radius: var(--r-xs);
   flex-shrink: 0;
@@ -298,16 +298,16 @@ body.resizing iframe {
   visibility: visible;
 }
 .wt-item.menu-open {
-  background: var(--bg2);
+  background: var(--element1);
 }
 .wt-item.menu-open .wt-more {
   visibility: visible;
-  color: var(--fg1);
-  background: var(--bg3);
+  color: var(--text0);
+  background: var(--element1);
 }
 .wt-item .wt-more:hover {
-  color: var(--fg1);
-  background: var(--bg3);
+  color: var(--text0);
+  background: var(--element0);
 }
 
 .git-file {
@@ -316,12 +316,12 @@ body.resizing iframe {
   width: 100%;
   padding: 3px 12px;
   font: var(--fs-sm) var(--font-mono);
-  color: var(--fg2);
+  color: var(--text1);
   text-align: left;
 }
 .git-file:hover {
-  background: var(--bg2);
-  color: var(--fg1);
+  background: var(--element0);
+  color: var(--text0);
 }
 .git-file .xy {
   color: var(--yellow);
@@ -364,7 +364,7 @@ body.resizing iframe {
   position: relative;
   flex: 1;
   min-width: 0;
-  background: var(--bg0);
+  background: var(--surface0);
   display: flex;
   flex-direction: column;
 }
@@ -387,21 +387,21 @@ body.resizing iframe {
 }
 
 .rb-btn {
-  color: var(--fg2);
+  color: var(--text1);
 }
 .rb-path {
   flex: 1;
   min-width: 0;
-  color: var(--fg2);
+  color: var(--text1);
   padding: 3px 10px;
 }
 .rb-path:focus {
-  color: var(--fg1);
+  color: var(--text0);
 }
 .pane {
   position: relative;
-  border-top: 1px solid var(--border);
-  background: var(--bg0);
+  border-top: 1px solid var(--border0);
+  background: var(--surface0);
   flex-shrink: 0;
 }
 .pane .file-head {
@@ -413,7 +413,7 @@ body.resizing iframe {
 .pane .file-path {
   flex: 1;
   font: var(--fs-sm) var(--font-mono);
-  color: var(--fg2);
+  color: var(--text1);
 }
 .diff-pane {
   height: 45%;
@@ -452,14 +452,14 @@ body.resizing iframe {
 .term-pane .file-path {
   flex: 1;
   font: var(--fs-sm) var(--font-mono);
-  color: var(--fg2);
+  color: var(--text1);
 }
 .diff-pane {
   height: 45%;
   min-height: 120px;
   position: relative;
-  border-top: 1px solid var(--border);
-  background: var(--bg0);
+  border-top: 1px solid var(--border0);
+  background: var(--surface0);
   flex-shrink: 0;
 }
 .diff-pane.full {
@@ -470,8 +470,8 @@ body.resizing iframe {
 .term-pane {
   min-height: 140px;
   position: relative;
-  border-top: 1px solid var(--border);
-  background: var(--bg0);
+  border-top: 1px solid var(--border0);
+  background: var(--surface0);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -524,16 +524,16 @@ body.resizing iframe {
   z-index: 5;
 }
 .row-resize:hover {
-  background: var(--bg3);
+  background: var(--element0);
 }
 body.resizing .row-resize {
-  background: var(--bg3);
+  background: var(--element0);
 }
 .center .empty {
   height: 100%;
   display: grid;
   place-items: center;
-  color: var(--fg3);
+  color: var(--text2);
   font: var(--fs-md) var(--font-mono);
   white-space: pre-wrap;
   padding: 24px;
@@ -543,8 +543,8 @@ body.resizing .row-resize {
 .right-dock {
   width: 380px;
   flex-shrink: 0;
-  background: var(--bg1);
-  border-left: 1px solid var(--border);
+  background: var(--surface1);
+  border-left: 1px solid var(--border0);
   display: flex;
   flex-direction: column;
   /* containing block for the drop wash */
@@ -578,8 +578,8 @@ body.resizing .row-resize {
   min-width: 40px;
   display: flex;
   flex-direction: column;
-  background: var(--bg1);
-  border-left: 1px solid var(--border);
+  background: var(--surface1);
+  border-left: 1px solid var(--border0);
   overflow: hidden;
   z-index: 25;
   /* the shadow only ever escapes to the left, never over the top bar. The clip has to hold while the
@@ -619,7 +619,7 @@ body.resizing .row-resize {
   bottom: 34px;
   width: var(--rail-inner);
   overflow-y: auto;
-  background: var(--bg1);
+  background: var(--surface1);
   padding-top: 6px;
 }
 /* the pin sits at the foot of the drawer, so a long list scrolls under it. It is the drawer's own
@@ -635,7 +635,7 @@ body.resizing .row-resize {
   justify-content: flex-end;
   /* the 16px glyph sits in a 20px box, so 10px in puts it on the dots' centre line */
   padding-right: 10px;
-  background: var(--bg1);
+  background: var(--surface1);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease 120ms;
@@ -727,12 +727,12 @@ body.resizing .row-resize {
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--bg2);
-  border: 1px solid var(--border-strong);
+  background: var(--element0);
+  border: 1px solid var(--border1);
   border-radius: var(--r-pill);
   padding: 3px 12px;
   font-size: var(--fs-sm);
-  color: var(--fg1);
+  color: var(--text0);
   box-shadow: 0 2px 10px var(--shadow);
 }
 .jump-down:hover {
@@ -741,7 +741,7 @@ body.resizing .row-resize {
 }
 
 .msg-user {
-  background: var(--bg2);
+  background: var(--surface2);
   border-radius: var(--r-md);
   padding: 8px 10px;
   font-size: var(--fs-md);
@@ -752,8 +752,8 @@ body.resizing .row-resize {
 
 .queued-msg {
   opacity: 0.65;
-  border: 1px dashed var(--border-strong);
-  background: var(--bg1);
+  border: 1px dashed var(--border1);
+  background: var(--surface1);
   display: flex;
   gap: 8px;
   align-items: baseline;
@@ -776,18 +776,18 @@ body.resizing .row-resize {
   flex-shrink: 0;
 }
 .queued-actions button {
-  color: var(--fg2);
+  color: var(--text1);
   padding: 0 3px;
   border-radius: var(--r-xs);
 }
 .queued-actions button:hover {
-  color: var(--fg1);
-  background: var(--bg3);
+  color: var(--text0);
+  background: var(--element0);
 }
 .msg-assistant {
   font-size: var(--fs-md);
   white-space: pre-wrap;
-  color: var(--fg1);
+  color: var(--text0);
   max-width: 100%;
   overflow-wrap: break-word;
 }
@@ -818,7 +818,7 @@ body.resizing .row-resize {
   font-size: var(--fs-md);
   font-weight: 700;
   margin: 10px 0 4px;
-  color: var(--fg1);
+  color: var(--text0);
 }
 .md pre {
   background: var(--code);
@@ -841,17 +841,17 @@ body.resizing .row-resize {
   color: var(--blue);
 }
 .md blockquote {
-  border-left: 3px solid var(--border-strong);
+  border-left: 3px solid var(--border1);
   margin: 0 0 8px;
   padding-left: 10px;
-  color: var(--fg2);
+  color: var(--text1);
 }
 .md strong {
-  color: var(--fg1);
+  color: var(--text0);
 }
 .md hr {
   border: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border0);
   margin: 10px 0;
 }
 .md table {
@@ -861,7 +861,7 @@ body.resizing .row-resize {
 }
 .md th,
 .md td {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border0);
   padding: 3px 8px;
 }
 .msg-error {
@@ -870,20 +870,20 @@ body.resizing .row-resize {
 .auth-card {
   margin: 6px 0;
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border0);
   border-radius: 8px;
-  background: var(--bg0);
+  background: var(--surface0);
 }
 .auth-card.done {
-  color: var(--fg3);
+  color: var(--text2);
 }
 .auth-title {
   font-size: var(--fs-sm);
-  color: var(--fg1);
+  color: var(--text0);
   margin-bottom: 8px;
 }
 .auth-card.done .auth-title {
-  color: var(--fg3);
+  color: var(--text2);
   margin-bottom: 0;
 }
 .auth-methods {
@@ -904,7 +904,7 @@ body.resizing .row-resize {
 }
 .msg-thinking {
   font-size: var(--fs-sm);
-  color: var(--fg3);
+  color: var(--text2);
   font-style: italic;
   white-space: pre-wrap;
 }
@@ -928,7 +928,7 @@ body.resizing .row-resize {
   /* the log tier, not the label tier: the comment above says twenty calls in a turn are text to
      skip over, but they were painted in fg2, the same colour as the file names in the dock
      that you actually read. Skippable and readable were the same weight. */
-  color: var(--fg3);
+  color: var(--text2);
   margin: -5px -12px;
 }
 /* open, the call is a band across the column: full width, square, and a rule under it. The top
@@ -937,8 +937,8 @@ body.resizing .row-resize {
   margin: -5px -12px 0;
   /* the composer's tone. The chat column is bg1, so the shell's own answer to "somewhere other than
      the transcript" is already there: the recessed surface it gives the box you type in */
-  background: var(--bg0);
-  border-bottom: 1px solid var(--border);
+  background: var(--sunken);
+  border-bottom: 1px solid var(--border0);
   position: relative;
 }
 /* a marker down the edge, the way an active picker row carries one, in the same accent: two tones
@@ -971,29 +971,29 @@ body.resizing .row-resize {
    same fill held while the row is open, since the header is the control you are still holding */
 .tool-row summary:hover,
 .tool-row[open] > summary {
-  background: var(--bg2);
+  background: var(--element1);
 }
 .tool-row summary:hover .tool-hint,
 .tool-row[open] > summary .tool-hint {
-  color: var(--fg1);
+  color: var(--text0);
 }
 .tool-row summary:hover .tool-icon,
 .tool-row[open] > summary .tool-icon {
-  color: var(--fg2);
+  color: var(--text1);
 }
 /* the name rides up with the rest of the row. A tier is measured against the surface under it, and
    fg3 on bg2 is 1.4:1, so text that stays put while its seat lifts does not stay legible: the hint
    and the icon were already lifted here and the name was the one child that was not. */
 .tool-row summary:hover .tool-name,
 .tool-row[open] > summary .tool-name {
-  color: var(--fg2);
+  color: var(--text1);
 }
 /* a summary is one line: a command long enough to wrap would push the row into a paragraph of
    monospace, and a transcript of those is unreadable. The name is only there when the agent sent
    its own word for the tool, and it never shrinks; flex would otherwise clip "Bash" down to "B…"
    beside a long command. The cap is for an agent that sends a sentence as a tool name. */
 .tool-row .tool-name {
-  color: var(--fg3);
+  color: var(--text2);
   flex: 0 0 auto;
   max-width: 40%;
   overflow: hidden;
@@ -1008,7 +1008,7 @@ body.resizing .row-resize {
   height: 13px;
   /* the glyph is the row's own text, not an accent: a collapsed row carries no other color, and a
      blue column down the transcript read as a list of links */
-  color: var(--fg3);
+  color: var(--text2);
 }
 .tool-row.error .tool-icon {
   color: var(--red);
@@ -1018,7 +1018,7 @@ body.resizing .row-resize {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg3);
+  color: var(--text2);
 }
 .tool-row .tool-hint {
   flex: 1 1 auto;
@@ -1038,21 +1038,21 @@ body.resizing .row-resize {
   flex-direction: column;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--bg1);
+  background: var(--surface1);
   max-height: 320px;
   overflow: auto;
 }
 .tool-row .tool-note {
   margin: 0;
   font-size: var(--fs-xs);
-  color: var(--fg2);
+  color: var(--text1);
   white-space: pre-wrap;
 }
 .tool-row .tool-block {
   margin: 0;
   overflow-x: auto;
   font-size: var(--fs-xs);
-  color: var(--fg2);
+  color: var(--text1);
 }
 /* the command that produced the output: the card's own tone across its full width, with the answer
    in the lighter panel under it. The summary line above carries the sentence that named it. */
@@ -1060,8 +1060,8 @@ body.resizing .row-resize {
    the chat; the answer sits on the lighter surface under it */
 .tool-row .tool-block.cmd {
   padding: 6px 12px;
-  background: var(--bg0);
-  color: var(--fg1);
+  background: var(--sunken);
+  color: var(--text0);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1092,13 +1092,13 @@ body.resizing .row-resize {
   /* the wash carries the change, the way the diff pane's does: painting the whole line green or
      red made the loudest object in the window the one with the least in it, and the leading +/-
      already says which side it is on */
-  color: var(--fg1);
+  color: var(--text0);
 }
 .tool-row .dl.add {
-  background: var(--add-bg);
+  background: var(--diff-add);
 }
 .tool-row .dl.del {
-  background: var(--del-bg);
+  background: var(--diff-del);
 }
 /* the jump between two stretches of a file, drawn as the rule it is; the numbers are on the title */
 .tool-row .dl.hunk {
@@ -1106,14 +1106,14 @@ body.resizing .row-resize {
   padding: 0;
   height: 1px;
   margin: 6px 0;
-  background: var(--bg2);
+  background: var(--surface2);
 }
 /* a diff that opens on a hunk header has nothing above it to separate */
 .tool-row .dl.hunk:first-child {
   display: none;
 }
 .tool-row .dl.meta {
-  color: var(--fg3);
+  color: var(--text2);
 }
 /* same width as the icon it stands in for, so the name does not step sideways when the call ends */
 .tool-row .spinner {
@@ -1128,8 +1128,8 @@ body.resizing .row-resize {
   gap: 8px;
   padding: 4px 8px;
   font: var(--fs-sm) var(--font-mono);
-  color: var(--fg2);
-  background: var(--bg0);
+  color: var(--text1);
+  background: var(--surface0);
   border-left: 2px solid var(--red);
 }
 .blocked-row .blocked-tag {
@@ -1139,7 +1139,7 @@ body.resizing .row-resize {
   letter-spacing: 0.04em;
 }
 .blocked-row .tool-name {
-  color: var(--fg2);
+  color: var(--text1);
 }
 
 /* the composer is one big editor, not a small box inside a panel: the whole region below the
@@ -1150,8 +1150,8 @@ body.resizing .row-resize {
   flex-direction: column;
   /* the field's own background, now carried by the whole region: level with the transcript it
      would read as a disabled box rather than somewhere to type */
-  background: var(--bg0);
-  border-top: 1px solid var(--border);
+  background: var(--sunken);
+  border-top: 1px solid var(--border0);
   padding: 10px;
   min-height: 160px;
   /* the offset parent for the @ and slash menu */
@@ -1167,8 +1167,8 @@ body.resizing .row-resize {
   bottom: 100%;
   margin-bottom: 4px;
   z-index: 5;
-  background: var(--bg1);
-  border: 1px solid var(--border-strong);
+  background: var(--surface1);
+  border: 1px solid var(--border1);
   border-radius: var(--r-sm);
   box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
   padding: 4px;
@@ -1182,7 +1182,7 @@ body.resizing .row-resize {
   margin-top: 0;
 }
 .inline-picker .lp-keys {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border0);
   margin-top: 4px;
   padding-top: 6px;
 }
@@ -1193,7 +1193,7 @@ body.resizing .row-resize {
 }
 .ip-name {
   flex: 0 0 auto;
-  color: var(--fg1);
+  color: var(--text0);
 }
 .ip-desc {
   flex: 1;
@@ -1201,10 +1201,10 @@ body.resizing .row-resize {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg3);
+  color: var(--text2);
 }
 .qo-item.active .ip-desc {
-  color: var(--fg2);
+  color: var(--text1);
 }
 /* the argument hint sits left of the key hints, where the eye lands after picking */
 /* the paste chip borrows the image chip's link row; its own line is the counts */
@@ -1226,14 +1226,14 @@ body.resizing .row-resize {
   position: absolute;
   inset: 0;
   font: var(--fs-md) / 1.5 var(--font-ui);
-  color: var(--fg3);
+  color: var(--text2);
   white-space: pre-wrap;
   overflow: hidden;
   pointer-events: none;
 }
 /* chips ride on that same tone, so they take the panel's to stay raised */
 .chat-input .pick-chip {
-  background: var(--bg1);
+  background: var(--surface1);
 }
 .chat-input textarea {
   flex: 1;
@@ -1247,7 +1247,7 @@ body.resizing .row-resize {
 }
 .chat-hint {
   font-size: var(--fs-xs);
-  color: var(--fg3);
+  color: var(--text2);
   margin-top: 4px;
 }
 .spawn-row {
@@ -1275,11 +1275,11 @@ body.resizing .row-resize {
   border-radius: 50%;
   background: var(--red);
   /* ringed in the surface behind it so the dot stays round against the icon's strokes */
-  box-shadow: 0 0 0 1.5px var(--bg0);
+  box-shadow: 0 0 0 1.5px var(--surface0);
 }
 .term-btn:hover .term-badge,
 .term-btn.on .term-badge {
-  box-shadow: 0 0 0 1.5px var(--border);
+  box-shadow: 0 0 0 1.5px var(--border0);
 }
 .spawn-row label {
   display: flex;
@@ -1308,7 +1308,7 @@ body.resizing .row-resize {
   accent-color: var(--accent);
 }
 .spawn-row b {
-  color: var(--fg2);
+  color: var(--text1);
   font-weight: 600;
 }
 
@@ -1328,14 +1328,14 @@ body.resizing .row-resize {
 
 .deep-link {
   font-family: var(--font-mono);
-  color: var(--fg3);
-  border-color: var(--border);
+  color: var(--text2);
+  border-color: var(--border0);
   padding: 1px 7px;
   align-self: center;
 }
 .deep-link:hover {
   color: var(--blue);
-  border-color: var(--border-strong);
+  border-color: var(--border1);
 }
 
 .toast {
@@ -1344,8 +1344,8 @@ body.resizing .row-resize {
   left: 50%;
   transform: translateX(-50%);
   max-width: 480px;
-  background: var(--bg1);
-  border: 1px solid var(--border-strong);
+  background: var(--surface1);
+  border: 1px solid var(--border1);
   border-left: 3px solid var(--aqua);
   border-radius: var(--r-md);
   padding: 10px 14px;
@@ -1401,11 +1401,11 @@ body.resizing .row-resize {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg1);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface1);
+  border-bottom: 1px solid var(--border0);
   padding: 4px 10px;
   font: var(--fs-xs) var(--font-mono);
-  color: var(--fg3);
+  color: var(--text2);
   /* 38, not the 32 this used to be: a 20px control in a 32px bar leaves 6px above it, and the
      project panel that opens over the pill needs that space for its own top edge. The bar in the
      installed app is already this tall (the OS title bar sets it), so the two now match. */
@@ -1451,7 +1451,7 @@ body.resizing .row-resize {
 /* only the window-controls-overlay zen strip shows this */
 .zen-title {
   display: none;
-  color: var(--fg3);
+  color: var(--text2);
 }
 /* Safari-style: nav+path anchored to the window center — never moves when
    docks collapse/resize (chrome that shifts underfoot reads as breakage) */
@@ -1473,10 +1473,10 @@ body.resizing .rb-center {
   min-height: 20px;
 }
 .status-bar .toggle:hover {
-  color: var(--fg1);
+  color: var(--text0);
 }
 .status-bar .toggle.on {
-  color: var(--fg1);
+  color: var(--text0);
 }
 
 /* top-left project pill: it names what the shell is scoped to, so at rest it is a label and
@@ -1504,8 +1504,8 @@ body.resizing .rb-center {
   max-height: min(340px, 50vh);
 }
 .project-pill.on {
-  color: var(--fg1);
-  background: var(--bg2);
+  color: var(--text0);
+  background: var(--element1);
 }
 .pp-name {
   overflow: hidden;
@@ -1527,12 +1527,12 @@ body.resizing .rb-center {
   gap: 8px;
   margin-bottom: 6px;
   padding: 4px 8px;
-  background: var(--bg0);
-  border: 1px solid var(--border-strong);
+  background: var(--sunken);
+  border: 1px solid var(--border1);
   border-left: 3px solid var(--accent);
   border-radius: var(--r-sm);
   font: 11.5px var(--font-mono);
-  color: var(--fg1);
+  color: var(--text0);
 }
 .pick-chip .pick-target {
   flex: 1;
@@ -1541,13 +1541,13 @@ body.resizing .rb-center {
   white-space: nowrap;
 }
 .pick-chip .pick-file {
-  color: var(--fg3);
+  color: var(--text2);
 }
 .pick-chip button {
-  color: var(--fg3);
+  color: var(--text2);
 }
 .pick-chip button:hover {
-  color: var(--fg1);
+  color: var(--text0);
 }
 .pick-chip.in-chat {
   margin: 6px 0 0;
@@ -1566,7 +1566,7 @@ body.resizing .rb-center {
   height: 40px;
   object-fit: cover;
   border-radius: var(--r-sm);
-  background: var(--bg2);
+  background: var(--surface2);
   flex: none;
 }
 .image-chip .image-link {
@@ -1636,7 +1636,7 @@ body.resizing .rb-center {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  color: var(--fg1);
+  color: var(--text0);
   font: var(--fs-md) var(--font-ui);
 }
 .setup-pane h2 {
@@ -1646,12 +1646,12 @@ body.resizing .rb-center {
 }
 .setup-lead {
   margin: 0 0 12px;
-  color: var(--fg2);
+  color: var(--text1);
   line-height: 1.5;
 }
 .setup-aside {
   margin-top: -6px;
-  color: var(--fg3);
+  color: var(--text2);
   font-size: var(--fs-sm);
 }
 .setup-row {
@@ -1664,7 +1664,7 @@ body.resizing .rb-center {
   flex-shrink: 0;
   padding-top: 5px;
   font-size: var(--fs-sm);
-  color: var(--fg2);
+  color: var(--text1);
 }
 .setup-control {
   flex: 1;
@@ -1698,7 +1698,7 @@ body.resizing .rb-center {
 }
 .setup-hint {
   font-size: var(--fs-xs);
-  color: var(--fg3);
+  color: var(--text2);
 }
 .setup-add {
   padding: 2px 0;
@@ -1720,7 +1720,7 @@ body.resizing .rb-center {
   gap: 6px;
   margin-top: 8px;
   font-size: var(--fs-xs);
-  color: var(--fg3);
+  color: var(--text2);
 }
 .variants-right {
   margin-left: auto;
@@ -1751,7 +1751,7 @@ body.resizing .rb-center {
   cursor: not-allowed;
 }
 .cmd-item.dim .cmd-label {
-  color: var(--fg2);
+  color: var(--text1);
 }
 /* A picker's rows are bands across the panel, not chips inside it: everywhere else in the app a
    list you run down with the keyboard (the worktree panel, the transcript's tool rows) is full
@@ -1778,8 +1778,8 @@ body.resizing .rb-center {
 .prompt-box.anchored .lp-input {
   margin: -8px -8px 0;
   padding: 5px 8px;
-  background: var(--bg0);
-  border-bottom: 1px solid var(--border);
+  background: var(--sunken);
+  border-bottom: 1px solid var(--border0);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
 }
 .prompt-box.anchored .lp-input input {
@@ -1805,9 +1805,9 @@ body.resizing .rb-center {
   min-height: 20px;
   max-width: 160px;
   padding: 1px 8px;
-  background: var(--bg2);
+  background: var(--surface2);
   border-radius: var(--r-sm);
-  color: var(--fg1);
+  color: var(--text0);
   font: var(--fs-xs) / 1.4 var(--font-mono);
   overflow: hidden;
   white-space: nowrap;
@@ -1821,9 +1821,9 @@ body.resizing .rb-center {
   gap: 4px 12px;
   margin-inline: var(--lp-bleed, 0);
   padding: 7px var(--lp-pad, 10px);
-  color: var(--fg3);
+  color: var(--text2);
   font: var(--fs-xs) / 1 var(--font-ui);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border0);
 }
 .lp-key {
   display: inline-flex;
@@ -1853,7 +1853,7 @@ body.resizing .rb-center {
   inset: 1px;
   padding: 8px 10px;
   font: var(--fs-md) / 1.5 var(--font-mono);
-  color: var(--fg3);
+  color: var(--text2);
   white-space: pre;
   overflow: hidden;
   pointer-events: none;
@@ -1879,7 +1879,7 @@ body.resizing .rb-center {
   width: 100%;
   text-align: left;
   font: var(--fs-sm) var(--font-mono);
-  color: var(--fg2);
+  color: var(--text1);
   padding: 4px var(--lp-pad, 10px);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1906,11 +1906,11 @@ body.resizing .rb-center {
   text-overflow: ellipsis;
 }
 .cmd-hint {
-  color: var(--fg3);
+  color: var(--text2);
   flex-shrink: 0;
 }
 .qo-item.active .cmd-hint {
-  color: var(--fg2);
+  color: var(--text1);
 }
 /* theme picker: dark / light chips; the one being previewed on the highlighted row lights up */
 .theme-kinds {
@@ -1937,7 +1937,7 @@ body.resizing .rb-center {
 .sr-loc {
   display: block;
   font-size: var(--fs-xs);
-  color: var(--fg3);
+  color: var(--text2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1947,14 +1947,14 @@ body.resizing .rb-center {
 }
 .sr-text {
   display: block;
-  color: var(--fg2);
+  color: var(--text1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .qo-item.active .sr-loc,
 .qo-item.active .sr-text {
-  color: var(--fg1);
+  color: var(--text0);
 }
 /* ⌘P file rows: marker | filename | dim directory | line counts */
 .qo-file {
@@ -1968,7 +1968,7 @@ body.resizing .rb-center {
   color: var(--yellow);
 }
 .qo-file .name {
-  color: var(--fg1);
+  color: var(--text0);
   flex-shrink: 0;
 }
 /* the matched characters take the accent, so they are the same colour as the bar marking the row
@@ -1987,7 +1987,7 @@ body.resizing .rb-center {
   color: var(--accent);
 }
 .qo-file .dir {
-  color: var(--fg3);
+  color: var(--text2);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1996,15 +1996,15 @@ body.resizing .rb-center {
   text-align: left;
 }
 .qo-item:hover {
-  background: var(--bg2);
+  background: var(--element0);
 }
 /* Where the keyboard is, and nothing more. The orange edge means "this is the one you are on"
    (the active worktree, the open tool call); on a picker row it read as a choice already made,
    when the row under the cursor is only the row the pointer or ↑↓ happens to be over. Hover sets
    the same index, so this is the one highlight either way. */
 .qo-item.active {
-  background: var(--bg2);
-  color: var(--fg1);
+  background: var(--element1);
+  color: var(--text0);
 }
 .prompt-box textarea {
   width: 100%;

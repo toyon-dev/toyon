@@ -31,16 +31,16 @@ describe("vscodeToTheme", () => {
     expect(t.name).toBe("Acme Night");
     expect(t.kind).toBe("dark");
     for (const k of themeColorKeys) expect(t.colors[k]).toMatch(HEX);
-    expect(t.colors.bg0).toBe("#101418");
-    expect(t.colors.bg1).toBe("#0b0e11");
-    // translucent hover flattened over bg1, never left with alpha
-    expect(t.colors.bg2).toBe(composite("#ffffff14", "#0b0e11"));
-    expect(t.colors.bg3).toBe("#2a3038");
-    expect(t.colors.fg2).toBe("#8a94a0");
-    expect(t.colors.fg3).toBe("#5c6670");
+    expect(t.colors.surface0).toBe("#101418");
+    expect(t.colors.surface1).toBe("#0b0e11");
+    // translucent hover flattened over surface1, never left with alpha
+    expect(t.colors.element0).toBe(composite("#ffffff14", "#0b0e11"));
+    expect(t.colors.border1).toBe("#2a3038");
+    expect(t.colors.text1).toBe("#8a94a0");
+    expect(t.colors.text2).toBe("#5c6670");
     expect(t.colors.orange).toBe("#ff9f43");
     expect(t.colors.purple).toBe("#d19bff");
-    expect(t.colors.addBg).toBe("#8bd64920");
+    expect(t.colors.diffAdd).toBe("#8bd64920");
     expect(themeToCssVars(t)["--scrim"]).toBe(hex8("#101418", 0.7)); // derived, not carried
     expect(t.syntax).toEqual({
       comment: "#5c6670",
@@ -57,10 +57,10 @@ describe("vscodeToTheme", () => {
     expect(t.kind).toBe("light");
     expect(t.name).toBe("Sparse");
     for (const k of themeColorKeys) expect(t.colors[k]).toMatch(HEX);
-    expect(t.colors.bg1).toBe("#fdf6e3"); // sideBar falls through to editor.background
+    expect(t.colors.surface1).toBe("#fdf6e3"); // sideBar falls through to editor.background
     expect(t.colors.red).toBe("#dc322f");
     expect(t.colors.blue).toBe("#0451a5"); // Light Modern default
-    expect(t.colors.addBg).toBe(hex8("#859900", 0.12));
+    expect(t.colors.diffAdd).toBe(hex8("#859900", 0.12));
     expect(themeToCssVars(t)["--shadow"]).toBe("#0000002e"); // derived from kind
     expect(t.syntax).toBeUndefined();
   });
@@ -84,10 +84,10 @@ describe("color helpers", () => {
   });
   test("css var names", () => {
     const v = themeToCssVars(gruvboxDarkSoft);
-    expect(v["--fg2"]).toBe("#a89984");
-    expect(v["--add-bg"]).toBe("#b8bb261f");
+    expect(v["--text1"]).toBe("#a89984");
+    expect(v["--diff-add"]).toBe("#b8bb261f");
     expect(v["--accent"]).toBe(gruvboxDarkSoft.colors.orange); // no accent key: orange, as every theme did
-    expect(Object.keys(v).length).toBe(themeColorKeys.length + 3); // + accent, scrim, shadow
+    expect(Object.keys(v).length).toBe(themeColorKeys.length + 4); // + accent, sunken, scrim, shadow
   });
 });
 

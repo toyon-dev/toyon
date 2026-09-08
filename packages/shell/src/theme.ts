@@ -11,7 +11,7 @@ export function cachedTheme(): Theme {
     const raw = localStorage.getItem(STORAGE.theme);
     if (raw) {
       const t = JSON.parse(raw) as Theme;
-      if (t?.colors && typeof t.colors.bg0 === "string") return t;
+      if (t?.colors && typeof t.colors.surface0 === "string") return t;
     }
   } catch {}
   return toyonDark;
@@ -23,7 +23,7 @@ export function applyTheme(theme: Theme, opts: { remember?: boolean } = {}) {
   root.style.colorScheme = theme.kind;
   root.dataset.theme = theme.kind;
   // installed PWA (window-controls-overlay): the caption area takes this color
-  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme.colors.bg1);
+  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme.colors.surface1);
   if (opts.remember === false) return;
   try {
     localStorage.setItem(STORAGE.theme, JSON.stringify(theme));

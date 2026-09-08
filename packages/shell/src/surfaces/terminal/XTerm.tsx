@@ -17,27 +17,27 @@ const INPUT_CHUNK = 16 * 1024;
 export function toXtermTheme(t: Theme): ITheme {
   const c = t.colors;
   return {
-    background: c.bg0,
-    foreground: c.fg1,
-    cursor: c.fg1,
-    cursorAccent: c.bg0,
-    selectionBackground: hex8(c.bg3, 0.6),
-    black: c.bg1,
+    background: c.surface0,
+    foreground: c.text0,
+    cursor: c.text0,
+    cursorAccent: c.surface0,
+    selectionBackground: hex8(c.border1, 0.6),
+    black: c.surface1,
     red: c.red,
     green: c.green,
     yellow: c.yellow,
     blue: c.blue,
     magenta: c.purple,
     cyan: c.aqua,
-    white: c.fg2,
-    brightBlack: c.fg3,
+    white: c.text1,
+    brightBlack: c.text2,
     brightRed: c.red,
     brightGreen: c.green,
     brightYellow: c.yellow,
     brightBlue: c.blue,
     brightMagenta: c.purple,
     brightCyan: c.aqua,
-    brightWhite: c.fg1,
+    brightWhite: c.text0,
   };
 }
 

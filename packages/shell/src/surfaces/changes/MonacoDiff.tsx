@@ -43,7 +43,7 @@ for (const d of [typescriptDefaults, javascriptDefaults]) {
 function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
   const c = t.colors;
   const rules: monaco.editor.ITokenThemeRule[] = [
-    { token: "", foreground: c.fg1.slice(1), background: c.bg0.slice(1) },
+    { token: "", foreground: c.text0.slice(1), background: c.surface0.slice(1) },
   ];
   for (const [token, color] of Object.entries(t.syntax ?? {})) {
     if (color)
@@ -54,16 +54,16 @@ function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
     inherit: true,
     rules,
     colors: {
-      "editor.background": c.bg0,
-      "editor.foreground": c.fg1,
-      "editor.lineHighlightBackground": hex8(c.bg1, 0),
-      "editorLineNumber.foreground": c.bg3,
-      "diffEditor.insertedTextBackground": scaleAlpha(c.addBg, 1.6),
-      "diffEditor.removedTextBackground": scaleAlpha(c.delBg, 1.6),
-      "diffEditor.insertedLineBackground": c.addBg,
-      "diffEditor.removedLineBackground": c.delBg,
-      "editorWidget.background": c.bg1,
-      "scrollbarSlider.background": hex8(c.bg2, 0.4),
+      "editor.background": c.surface0,
+      "editor.foreground": c.text0,
+      "editor.lineHighlightBackground": hex8(c.surface1, 0),
+      "editorLineNumber.foreground": c.border1,
+      "diffEditor.insertedTextBackground": scaleAlpha(c.diffAdd, 1.6),
+      "diffEditor.removedTextBackground": scaleAlpha(c.diffDel, 1.6),
+      "diffEditor.insertedLineBackground": c.diffAdd,
+      "diffEditor.removedLineBackground": c.diffDel,
+      "editorWidget.background": c.surface1,
+      "scrollbarSlider.background": hex8(c.surface2, 0.4),
     },
   };
 }

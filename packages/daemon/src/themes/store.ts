@@ -146,7 +146,7 @@ export function readVscodeTheme(file: string, depth = 0): Record<string, unknown
   return t;
 }
 
-/** ~/.toyon/themes: Toyon Theme JSON (has colors.bg0) or raw VS Code JSON */
+/** ~/.toyon/themes: Toyon Theme JSON (has colors.surface0) or raw VS Code JSON */
 function loadDir(dir: string): Theme[] {
   if (!existsSync(dir)) return [];
   const out: Theme[] = [];
@@ -156,7 +156,7 @@ function loadDir(dir: string): Theme[] {
     const id = `file:${slug(f.replace(/\.(json|jsonc)$/i, ""))}`;
     try {
       const json = readJsonc(file) as { colors?: Record<string, string>; name?: string; kind?: string };
-      if (json?.colors && typeof json.colors.bg0 === "string") {
+      if (json?.colors && typeof json.colors.surface0 === "string") {
         out.push({ ...(json as unknown as Theme), id, source: "file" });
       } else {
         out.push(vscodeToTheme(readVscodeTheme(file), { id, source: "file" }));

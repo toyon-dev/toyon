@@ -3,37 +3,31 @@
    themes.ts for the contract). Radii and sizes are the shell's own scale. */
 :root {
   color-scheme: dark;
-  /* Two kinds of token live below, and the difference is the only thing you need to hold.
+  /* Four families, numbered only within themselves. The numbering orders; the family says which
+   * question you are answering, and every bug this system has had was a rule answering the wrong
+   * one: borders living in the surface ramp, a surface value painting text, a hover tint and a
+   * chat bubble sharing a slot with no way to move either.
    *
-   * A RAMP is numbered because the question it answers is "how far from the base". Picking one is
-   * mechanical, so here is the map, and it is the whole answer to "which number do I use":
-   *   bg0  the canvas        panes, editor, terminal, preview
-   *   bg1  chrome            docks, status bar, menus, toasts, the picker panel
-   *   bg2  a seat            hover and selected rows and buttons
-   *   bg3  a stronger seat   a toggle that is on, which has to outrank hover
-   * bg2 and bg3 are also where --border and --border-strong point. Same values, different names,
-   * on purpose: a divider and a seat have no reason to move together, and naming them apart is
-   * what makes moving one possible.
-   *   fg1  what you read     body, code, prose
-   *   fg2  what you scan     labels, filenames, controls at rest
-   *   fg3  what you skip     hints, comments, the tool log, anything switched off
+   *   surface0..2   the canvas, the chrome on it, things raised above both
+   *   element0..1   under the pointer, and picked
+   *   border0..1    the everyday rule, and one that holds an edge alone
+   *   text0..2      what you read, what you scan, what you skip
    *
-   * A ROLE is named, and earns a name only when its correct value has to diverge from any single
-   * ramp position. Three ways that happens, and all three are represented:
-   *   across themes   --accent      each theme names which of its hues means selected
-   *   across modes    --sunken      a recessed surface is darker in both halves; a ramp cannot be
-   *   across intent   --border      a divider and a hover seat share a value today and have no
-   *                                 reason to keep sharing one tomorrow
-   * By that rule hover, subtle and bold do not get tokens: hover IS bg2, permanently, and a name
-   * for it would be a synonym rather than a knob. If you find yourself wanting one, the test is
-   * whether you could imagine changing it without wanting the ramp position to move too. */
-  --bg0: #32302d;
-  --bg1: #3d3835;
-  --bg2: #504943;
-  --bg3: #675c55;
-  --fg1: #e6dcb6;
-  --fg2: #9e927e;
-  --fg3: #6a6055;
+   * Several of these carry the same value today. That is fine and it is the point: they are the
+   * same colour for different reasons, and naming them apart is what makes moving one possible.
+   * A tier is measured against the surface under it, so when a seat lifts, the text on it lifts
+   * too (see .tool-row summary:hover). That idiom is why there is no "text1 on element0" token,
+   * which is the tax VS Code and Dropbox both pay and an editor this size does not need. */
+  --surface0: #32302d;
+  --surface1: #3d3835;
+  --surface2: #504943;
+  --element0: #504943;
+  --element1: #675c55;
+  --border0: #504943;
+  --border1: #675c55;
+  --text0: #e6dcb6;
+  --text1: #9e927e;
+  --text2: #6a6055;
   --green: #78c945;
   --red: #ff4929;
   --yellow: #fcbe03;
@@ -41,22 +35,15 @@
   --aqua: #4dc7a7;
   --orange: #fa891e;
   --purple: #ca94ca;
-  --add-bg: #6fae5f29;
-  --del-bg: #c07f6a29;
+  --diff-add: #6fae5f29;
+  --diff-del: #c07f6a29;
   /* The text ladder is fg1 > fg2 > fg3, each step quieter than the last, and the numbers are the
      whole point: "muted" and "dim" did not tell you which was which, and disabled kept landing on
      the tier above it because nobody could see the order. fg1 is what you read, fg2 is what you
      scan (labels, filenames, controls at rest), fg3 is what you skip (hints, comments, the tool
      log, and anything switched off). Three is enough: a fourth tier lived here for about an hour
      and turned out to be covering for a control that was resting on the wrong rung. */
-  /* Borders are their own idea, not a step on the surface ramp. They were bg2 and bg3, 36 rules
-     between them, which meant the ramp answered two different questions with one set of numbers:
-     "how far is this surface from the ground" and "how visible is this line". A pane divider and a
-     hover seat have no reason to move together, and the first time you nudge one for the other's
-     sake you have made both wrong. --border is the everyday 1px rule; --border-strong is for the
-     things that have to hold an edge on their own, outlines, focus rings, card edges. */
-  --border: var(--bg2);
-  --border-strong: var(--bg3);
+
   /* what "you are on this one" is painted in: the active worktree, the open tool call, an `on`
      tab, a checked box. One hue for all of them, so a theme changes the whole idea of selected by
      pointing this somewhere else. Toyon selects in its berry, a coral rather than a scarlet, which
@@ -65,6 +52,9 @@
      overwrites this, so every other theme keeps selecting in orange. */
   --accent: var(--red);
   /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
+  /* where you type: four L* under the chrome it sits in, darker in both halves. Not a ramp
+     position, because the surface ramp reverses direction between them and a recess does not. */
+  --sunken: #342f2d;
   --scrim: #32302db3;
   --shadow: #00000066;
   /* code sits on a wash of the text color instead of a background step: bg0 and bg1 are the same
@@ -76,7 +66,7 @@
      a colour at 35% of something is a colour that appears in no swatch and reads as a new hue
      rather than as the same one doing a different job. It was two tokens, code-bg for the inline
      chip and code-panel for the block, 6% and 4%: 1.3 L* apart, which is two names for one colour. */
-  --code: color-mix(in srgb, var(--fg1) 6%, transparent);
+  --code: color-mix(in srgb, var(--text0) 6%, transparent);
   /* radii: xs chips/badges, sm controls, md boxes, lg cards */
   --r-xs: 3px;
   --r-sm: 4px;

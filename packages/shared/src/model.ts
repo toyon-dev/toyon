@@ -175,20 +175,27 @@ export interface Theme {
   kind: "dark" | "light";
   /** where it came from — shown as a hint in the picker */
   source: "builtin" | "file" | "vscode";
-  /** The authored palette. Two kinds of thing live here and it is worth knowing which is which:
-   * bg0..bg3 and fg1..fg3 are positions on a ramp, the seven hues are an interchange format every
-   * colour scheme since ANSI has shipped, and addBg/delBg are the only jobs a theme has to name
-   * itself, because a real diffEditor colour cannot be computed from a syntax green (ten of the
-   * nineteen built-ins carry one that isn't). Everything else a theme needs is derived in
-   * themeToCssVars: the accent, the fourth text tier, the scrim and the shadow. */
+  /** The authored palette, in families rather than one ramp. Surfaces, interaction states, lines
+   * and text are four different questions, and the numbering only orders within a family: a hover
+   * tint and a pane divider had no business sharing a slot, and while they did, nobody could audit
+   * or move either. The seven hues are the interchange format every colour scheme since ANSI has
+   * shipped. Only the accent, the scrim and the shadow are derived, in themeToCssVars, because
+   * those are the three a theme was never really deciding. */
   colors: {
-    bg0: ThemeColor;
-    bg1: ThemeColor;
-    bg2: ThemeColor;
-    bg3: ThemeColor;
-    fg1: ThemeColor;
-    fg2: ThemeColor;
-    fg3: ThemeColor;
+    /** surfaces: the canvas, the chrome that sits on it, and things raised above both */
+    surface0: ThemeColor;
+    surface1: ThemeColor;
+    surface2: ThemeColor;
+    /** interaction states: under the pointer, and picked */
+    element0: ThemeColor;
+    element1: ThemeColor;
+    /** lines: the everyday rule, and one that has to hold an edge on its own */
+    border0: ThemeColor;
+    border1: ThemeColor;
+    /** text: what you read, what you scan, what you skip */
+    text0: ThemeColor;
+    text1: ThemeColor;
+    text2: ThemeColor;
     red: ThemeColor;
     orange: ThemeColor;
     yellow: ThemeColor;
@@ -196,9 +203,9 @@ export interface Theme {
     aqua: ThemeColor;
     blue: ThemeColor;
     purple: ThemeColor;
-    /** diff line tints (alpha hex) */
-    addBg: ThemeColor;
-    delBg: ThemeColor;
+    /** diff line tints (alpha hex); a real one cannot be computed from a syntax colour */
+    diffAdd: ThemeColor;
+    diffDel: ThemeColor;
   };
   /** editor token colors; missing entries inherit Monaco's base theme */
   syntax?: Partial<Record<ThemeSyntaxToken, ThemeColor>>;

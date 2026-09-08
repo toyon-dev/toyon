@@ -19,13 +19,22 @@ export interface VsCodeThemeJson {
 }
 
 const workbenchKeys: Record<ThemeColorKey, string[]> = {
-  bg0: ["editor.background"],
-  bg1: ["sideBar.background", "activityBar.background", "editor.background"],
-  bg2: ["list.hoverBackground", "list.activeSelectionBackground", "editor.selectionBackground"],
-  bg3: ["panel.border", "sideBar.border", "editorWidget.border", "widget.border", "editorLineNumber.foreground"],
-  fg1: ["editor.foreground", "foreground"],
-  fg2: ["descriptionForeground", "sideBar.foreground", "tab.inactiveForeground"],
-  fg3: ["disabledForeground", "editorLineNumber.foreground", "editorWhitespace.foreground"],
+  // VS Code names a colour per widget and has no ramp, so every key below lands in the family it
+  // belongs to rather than being flattened onto a ladder. That flattening is why Dark 2026 used to
+  // import with bg3 darker than bg2: one was a hover colour and the other a border, and they have
+  // no ordering relationship to assert.
+  surface0: ["editor.background"],
+  surface1: ["sideBar.background", "activityBar.background", "editor.background"],
+  surface2: ["menu.background", "editorWidget.background", "editorHoverWidget.background", "sideBar.background"],
+  element0: ["list.hoverBackground", "toolbar.hoverBackground", "editor.selectionBackground"],
+  element1: ["list.activeSelectionBackground", "list.inactiveSelectionBackground", "editor.selectionBackground"],
+  border0: ["panel.border", "sideBar.border", "editorGroup.border"],
+  // no focusBorder here: it carries the brand colour in most themes, so it belongs to the accent
+  // family, not this one. A strong rule falls back to the everyday rule rather than to a hue.
+  border1: ["editorWidget.border", "widget.border", "contrastBorder"],
+  text0: ["editor.foreground", "foreground"],
+  text1: ["descriptionForeground", "sideBar.foreground", "tab.inactiveForeground"],
+  text2: ["disabledForeground", "editorLineNumber.foreground", "editorWhitespace.foreground"],
   red: ["terminal.ansiRed", "errorForeground", "gitDecoration.deletedResourceForeground"],
   green: ["terminal.ansiGreen", "gitDecoration.addedResourceForeground"],
   yellow: ["terminal.ansiYellow", "editorWarning.foreground", "gitDecoration.modifiedResourceForeground"],
@@ -42,8 +51,8 @@ const workbenchKeys: Record<ThemeColorKey, string[]> = {
     "textLink.foreground",
     "terminal.ansiYellow",
   ],
-  addBg: ["diffEditor.insertedLineBackground", "diffEditor.insertedTextBackground"],
-  delBg: ["diffEditor.removedLineBackground", "diffEditor.removedTextBackground"],
+  diffAdd: ["diffEditor.insertedLineBackground", "diffEditor.insertedTextBackground"],
+  diffDel: ["diffEditor.removedLineBackground", "diffEditor.removedTextBackground"],
 };
 
 /** VS Code Dark Modern / Light Modern, only the keys we read */
@@ -120,15 +129,18 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
     return null;
   };
 
-  const bg0 = lookup(workbenchKeys.bg0)!;
-  const bg1 = lookup(workbenchKeys.bg1) ?? bg0;
-  // hover/selection colors are often translucent — flatten so panels stay opaque
-  const bg2 = opaque(lookup(workbenchKeys.bg2) ?? bg1, bg1);
-  const bg3 = opaque(lookup(workbenchKeys.bg3) ?? bg2, bg1);
-  const fg1 = lookup(workbenchKeys.fg1)!;
-  const fg2 = opaque(lookup(workbenchKeys.fg2) ?? fg1, bg1);
-  const fg3 = opaque(lookup(workbenchKeys.fg3) ?? fg2, bg1);
-  const accent = (k: keyof typeof workbenchKeys) => opaque(lookup(workbenchKeys[k])!, bg0);
+  const surface0 = lookup(workbenchKeys.surface0)!;
+  const surface1 = lookup(workbenchKeys.surface1) ?? surface0;
+  // hover/selection colors are often translucent: flatten so panels stay opaque
+  const surface2 = opaque(lookup(workbenchKeys.surface2) ?? surface1, surface1);
+  const element0 = opaque(lookup(workbenchKeys.element0) ?? surface2, surface1);
+  const element1 = opaque(lookup(workbenchKeys.element1) ?? element0, surface1);
+  const border0 = opaque(lookup(workbenchKeys.border0) ?? element0, surface1);
+  const border1 = opaque(lookup(workbenchKeys.border1) ?? border0, surface1);
+  const text0 = lookup(workbenchKeys.text0)!;
+  const text1 = opaque(lookup(workbenchKeys.text1) ?? text0, surface1);
+  const text2 = opaque(lookup(workbenchKeys.text2) ?? text1, surface1);
+  const accent = (k: keyof typeof workbenchKeys) => opaque(lookup(workbenchKeys[k])!, surface0);
   const red = accent("red"),
     green = accent("green"),
     yellow = accent("yellow");
@@ -139,8 +151,8 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
     workbenchKeys.orange
       .map((k) => (typeof colors[k] === "string" ? normalizeHex(colors[k]!) : null))
       .filter((c): c is string => !!c)
-      .map((c) => opaque(c, bg0))
-      .find((c) => contrastRatio(c, bg0) >= 2.5) ?? accent("yellow");
+      .map((c) => opaque(c, surface0))
+      .find((c) => contrastRatio(c, surface0) >= 2.5) ?? accent("yellow");
 
   const theme: Theme = {
     id: opts.id,
@@ -148,13 +160,16 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
     kind,
     source: opts.source ?? "vscode",
     colors: {
-      bg0,
-      bg1,
-      bg2,
-      bg3,
-      fg1,
-      fg2,
-      fg3,
+      surface0,
+      surface1,
+      surface2,
+      element0,
+      element1,
+      border0,
+      border1,
+      text0,
+      text1,
+      text2,
       red,
       orange,
       yellow,
@@ -162,8 +177,8 @@ export function vscodeToTheme(json: unknown, opts: { id: string; name?: string; 
       aqua,
       blue,
       purple,
-      addBg: lookup(workbenchKeys.addBg) ?? hex8(green, 0.12),
-      delBg: lookup(workbenchKeys.delBg) ?? hex8(red, 0.12),
+      diffAdd: lookup(workbenchKeys.diffAdd) ?? hex8(green, 0.12),
+      diffDel: lookup(workbenchKeys.diffDel) ?? hex8(red, 0.12),
     },
   };
 

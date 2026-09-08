@@ -1041,6 +1041,17 @@ body.resizing .row-resize {
 .tool-row.error .tool-name {
   color: var(--red);
 }
+/* how many calls the row stands for, at the end of the line the way a count goes. It is the only
+   thing that tells this row from one that ran once, so it sits a tier above the hint it follows. */
+.tool-row .tool-count {
+  flex: 0 0 auto;
+  color: var(--text1);
+}
+/* one call's output inside a row that holds several: the rule is what says where the next hunk
+   starts, since the calls are otherwise the same edit to the same file twice over */
+.tool-row .tool-part + .tool-part {
+  border-top: 1px solid var(--border0);
+}
 /* the card's body: prose and code alike, edge to edge inside it, under a rule that separates it from
    the chip. It scrolls on its own past 320px, and a flick that reaches the bottom carries on down
    the chat: reading the transcript is what the wheel is usually for, and chaining is also what keeps

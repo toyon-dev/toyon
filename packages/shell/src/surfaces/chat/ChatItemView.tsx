@@ -6,6 +6,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { attachmentUrl } from "../../ws.ts";
+import { sameTools, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -42,7 +43,7 @@ function Markdown({ text }: { text: string }) {
 
 /** what the agent wrote under the call: its prose as prose, its fenced blocks as blocks, and a
  * diff colored by line rather than printed as backticks */
-function ToolOutput({ item }: { item: Extract<ChatItem, { kind: "tool" }> }) {
+function ToolOutput({ item }: { item: ToolItem }) {
   const blocks = useMemo(() => toolBlocks(item, item.output ?? ""), [item]);
   return (
     <div className="tool-out">
@@ -80,56 +81,65 @@ function ToolOutput({ item }: { item: Extract<ChatItem, { kind: "tool" }> }) {
   );
 }
 
-/** one call in the transcript. Only the call in flight is open, so scrolling back over a long turn
- * is a list of one-line rows; a click pins the row either way from then on. */
-function ToolRow({
-  item,
-  live,
-  roots,
-}: {
-  item: Extract<ChatItem, { kind: "tool" }>;
-  live?: boolean;
-  roots?: string[];
-}) {
-  const [pinned, setPinned] = useState<boolean | null>(null);
-  const open = pinned ?? !!live;
-  const card = useRef<HTMLDetailsElement>(null);
-  const { label, name, icon, hint, command } = toolLabel(item, roots);
-  return (
-    <details
-      ref={card}
-      className={`tool-row ${item.isError ? "error" : ""}`}
-      open={open}
-      // clicking the output selects text and leaves focus on the body, so the card takes it: that is
-      // what makes Escape close the row you are reading, not only the one whose chip you clicked
-      tabIndex={-1}
-      onPointerDown={() => card.current?.focus({ preventScroll: true })}
-      onKeyDown={(e) => {
-        // Escape belongs to the row that has focus. Anything less local (the overlay, picker,
-        // terminal and diff ladder in app/keys.ts) keeps the key otherwise, and a second press
-        // falls through to it.
-        if (e.key !== "Escape" || !open) return;
-        e.stopPropagation();
-        setPinned(false);
-      }}
-    >
-      {/* controlled: let the click set `pinned` rather than the element toggling itself */}
-      <summary
-        aria-label={hint ? `${label} ${hint}` : label}
-        onClick={(e) => {
-          e.preventDefault();
-          setPinned(!open);
+/** a call in the transcript, or a run of calls that did the same thing to the same file. Only the
+ * run the agent is on is open, so scrolling back over a long turn is a list of one-line rows; a
+ * click pins the row either way from then on. */
+export const ToolRow = memo(
+  function ToolRow({ tools, live, roots }: { tools: ToolItem[]; live?: boolean; roots?: string[] }) {
+    const [pinned, setPinned] = useState<boolean | null>(null);
+    const open = pinned ?? !!live;
+    const card = useRef<HTMLDetailsElement>(null);
+    // every call in a run prints the same line, so the first one is the row
+    const head = tools[0]!;
+    const { label, name, icon, hint } = toolLabel(head, roots);
+    const running = !tools.at(-1)?.done;
+    const what = [label, hint].filter(Boolean).join(" ");
+    return (
+      <details
+        ref={card}
+        className={`tool-row ${tools.some((t) => t.isError) ? "error" : ""}`}
+        open={open}
+        // clicking the output selects text and leaves focus on the body, so the card takes it: that is
+        // what makes Escape close the row you are reading, not only the one whose chip you clicked
+        tabIndex={-1}
+        onPointerDown={() => card.current?.focus({ preventScroll: true })}
+        onKeyDown={(e) => {
+          // Escape belongs to the row that has focus. Anything less local (the overlay, picker,
+          // terminal and diff ladder in app/keys.ts) keeps the key otherwise, and a second press
+          // falls through to it.
+          if (e.key !== "Escape" || !open) return;
+          e.stopPropagation();
+          setPinned(false);
         }}
       >
-        {!item.done ? <span className="spinner">●</span> : <Icon name={icon} className="tool-icon" />}
-        {name && <span className="tool-name">{name}</span>}
-        {hint && <span className="tool-hint">{hint}</span>}
-      </summary>
-      {command && <pre className="tool-block cmd">{command}</pre>}
-      {item.output ? <ToolOutput item={item} /> : null}
-    </details>
-  );
-}
+        {/* controlled: let the click set `pinned` rather than the element toggling itself */}
+        <summary
+          aria-label={tools.length > 1 ? `${what}, ${tools.length} calls` : what}
+          onClick={(e) => {
+            e.preventDefault();
+            setPinned(!open);
+          }}
+        >
+          {running ? <span className="spinner">●</span> : <Icon name={icon} className="tool-icon" />}
+          {name && <span className="tool-name">{name}</span>}
+          {hint && <span className="tool-hint">{hint}</span>}
+          {tools.length > 1 && <span className="tool-count">×{tools.length}</span>}
+        </summary>
+        {tools.map((t) => {
+          const command = toolLabel(t, roots).command;
+          if (!command && !t.output) return null;
+          return (
+            <div key={t.id} className="tool-part">
+              {command && <pre className="tool-block cmd">{command}</pre>}
+              {t.output ? <ToolOutput item={t} /> : null}
+            </div>
+          );
+        })}
+      </details>
+    );
+  },
+  (a, b) => a.live === b.live && a.roots === b.roots && sameTools(a.tools, b.tools),
+);
 
 /** the agent asked for credentials: one button per login method it offered. A terminal method runs
  * in the worktree's terminal pane (the daemon types the command once the pane is open); an agent
@@ -220,20 +230,16 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
   );
 }
 
-/** one chat row; memoized so a streaming delta re-renders only the item it touches */
+/** one message in the transcript; memoized so a streaming delta re-renders only the item it
+ * touches. Tool calls are `ToolRow`, which the log routes to directly: several of them can be one
+ * row, which is a decision about the transcript rather than about any one item. */
 export const ChatItemView = memo(function ChatItemView({
   item,
   worktreeId,
-  live,
-  roots,
   onPickHover,
 }: {
-  item: ChatItem;
+  item: Exclude<ChatItem, { kind: "tool" }>;
   worktreeId?: string | null;
-  /** this is the call the agent is on: it opens itself until the next one starts */
-  live?: boolean;
-  /** worktree paths to strip off a tool's file path (stable identity: memoized by the caller) */
-  roots?: string[];
   onPickHover?: (p: PickMeta, entering: boolean) => void;
 }) {
   switch (item.kind) {
@@ -290,7 +296,5 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="tool-hint">{item.path}</span>
         </div>
       );
-    case "tool":
-      return <ToolRow item={item} live={live} roots={roots} />;
   }
 });

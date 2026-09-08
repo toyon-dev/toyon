@@ -2258,35 +2258,11 @@ body.resizing .rb-center {
   justify-content: start;
 }
 
-/*
- * The width cap lives on this wrapper, never on the grid.
- *
- * `max-width` on an auto-fill grid is not a cap, it is an instruction: the track count resolves
- * against the cap rather than against the room actually available, so the grid asked for eleven
- * 132px columns, refused to shrink below them, and shoved the chat panel off the side of the
- * window. A plain block carries the cap, and the grid inside it fills whatever that block gets.
- */
-/*
- * A group too wide for the column fills the section, but its cell lattice stays anchored to the
- * column's own left edge: the padding is whatever is left over after fitting whole cells into the
- * gap beside the column, so every cell boundary falls where one would have fallen inside it.
- *
- * Centring instead put the grid half a cell out of step with the text above it, and snapping in
- * JavaScript needed a width the layout had not decided yet. `mod()` does it in the stylesheet and
- * stays responsive; where it is unsupported the padding drops to nothing and the grid simply
- * starts at the section's edge.
- */
+/* Width and offset are set on the element, in whole cells: the row is as wide as its own chips and
+   its left edge is the column's, pulled back a cell for every two it has outgrown the column by.
+   See breakout() in DesignPane, which explains why that arithmetic cannot live here. */
 .design-breakout {
-  /* the cell width is written out rather than held in a custom property: this stylesheet is itself
-     scanned by the pane, and a layout constant of the pane's own would show up in its token list */
-  padding-left: mod(calc((100% - 720px) / 2), 132px);
   min-width: 0;
-}
-/* one that fits keeps the column's edge exactly, under its own label */
-.design-breakout.fits {
-  max-width: 720px;
-  margin-inline: auto;
-  padding-left: 0;
 }
 
 /* Every cell carries all four edges and overlaps its neighbour by the width of one, so the shared

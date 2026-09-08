@@ -95,6 +95,11 @@ export function DesignPane({
 
 type Outline = (msg: Parameters<typeof previewBus.post>[1]) => void;
 
+/** the text measure, the cell the grids lay out on, and how many of those the measure holds */
+const COLUMN = 720;
+const CELL = 132;
+const FITS = Math.floor(COLUMN / CELL);
+
 /** what the scan actually opened, which is the one thing about this pane the body never says and
  * the first thing to doubt when a section comes back thinner than you expected */
 function reach(index: DesignIndex): string {
@@ -121,8 +126,6 @@ function Gap({ children }: { children: React.ReactNode }) {
   return <p className="design-gap">{children}</p>;
 }
 
-/** Collapsed to its headline. A finding is one sentence about the project; the instances behind it
- * are what you open when you want to go and look, and they were burying the rest of the pane. */
 /**
  * Grouped by what a token *is*, not by what it is called.
  *
@@ -169,9 +172,7 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
           return (
             <div key={kind} className="design-group">
               <span className="design-group-name">{label}</span>
-              {/* a group that fits sits in the column; one that does not fills the section, with
-                  its lattice still anchored to the column's left edge (see the stylesheet) */}
-              <div className={`design-breakout ${group.length <= 5 ? "fits" : ""}`}>
+              <div className="design-breakout" style={breakout(group.length)}>
                 <div className="design-grid">
                   {group.map((t) => (
                     <Swatch key={t.name} token={t} ground={ground} largest={largestIn(group)} />
@@ -184,6 +185,25 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
       )}
     </Section>
   );
+}
+
+/**
+ * Where a group's row sits, in whole cells.
+ *
+ * The row is as wide as its own cells, or as many as the section holds, whichever is fewer. Its
+ * left edge is the text column's, pulled back one cell for every two the row has outgrown the
+ * column by: the first cell that will not fit hangs off the right, the second moves the row a cell
+ * to the left, and so on.
+ *
+ * Written as CSS rather than numbers because the count of cells in a row depends on a width only
+ * the layout knows. A previous attempt used mod() on the section width alone, which aligned the
+ * lattice but ignored the group: every row was pushed left the same two cells whether it held six
+ * chips or thirty-three. round() does the same snapping with the row's own width in hand.
+ */
+function breakout(count: number): React.CSSProperties {
+  const row = `min(round(down, 100%, ${CELL}px), ${count * CELL}px)`;
+  const over = `max(0px, calc((${row} - ${FITS * CELL}px) / 2))`;
+  return { width: row, marginLeft: `max(0px, calc((100% - ${COLUMN}px) / 2 - round(down, ${over}, ${CELL}px)))` };
 }
 
 /** the biggest length in a group, so the scale bars can be drawn relative to their own scale */

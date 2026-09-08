@@ -2,7 +2,7 @@
 // editor bundle only downloads when a diff is first opened.
 
 import type { Theme } from "@toyon/shared";
-import { hex8, scaleAlpha, toyonDark } from "@toyon/shared";
+import { accentKey, hex8, scaleAlpha, toyonDark } from "@toyon/shared";
 import * as monaco from "monaco-editor";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
@@ -39,6 +39,17 @@ for (const d of [typescriptDefaults, javascriptDefaults]) {
   d.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false, noSuggestionDiagnostics: true });
 }
 
+/** The shell's own mono ramp, read off the root element rather than restated here, so the editor
+ * is the same face at the same size as the inline diffs in the chat log. Monaco otherwise picks
+ * its own stack (Menlo on mac), which reads as a second app inside the pane. */
+function shellType() {
+  const s = getComputedStyle(document.documentElement);
+  return {
+    fontFamily: s.getPropertyValue("--font-mono").trim() || "ui-monospace, monospace",
+    fontSize: Number.parseFloat(s.getPropertyValue("--fs-xs")) || 11,
+  };
+}
+
 /** Monaco theme derived from the shell's Theme so the diff pane never drifts from the chrome */
 function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
   const c = t.colors;
@@ -58,10 +69,19 @@ function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
       "editor.foreground": c.text0,
       "editor.lineHighlightBackground": hex8(c.surface1, 0),
       "editorLineNumber.foreground": c.border1,
-      "diffEditor.insertedTextBackground": scaleAlpha(c.diffAdd, 1.6),
-      "diffEditor.removedTextBackground": scaleAlpha(c.diffDel, 1.6),
+      "editorLineNumber.activeForeground": c.text1,
+      "editorGutter.background": c.surface0,
+      "editorCursor.foreground": c[accentKey(t)],
+      // the chat's diffs tint a changed line and stop there; a word-level slab on top of that made
+      // the same change read as two different notations. Just enough lift to place the edit.
+      "diffEditor.insertedTextBackground": scaleAlpha(c.diffAdd, 1.3),
+      "diffEditor.removedTextBackground": scaleAlpha(c.diffDel, 1.3),
       "diffEditor.insertedLineBackground": c.diffAdd,
       "diffEditor.removedLineBackground": c.diffDel,
+      // the "N hidden lines" band sits over the code it hides, so it has to be opaque
+      "diffEditor.unchangedRegionBackground": c.surface1,
+      "diffEditor.unchangedRegionForeground": c.text2,
+      "diffEditor.unchangedCodeBackground": hex8(c.surface0, 0),
       "editorWidget.background": c.surface1,
       "scrollbarSlider.background": hex8(c.surface2, 0.4),
     },
@@ -116,8 +136,18 @@ export default function MonacoDiff({
       theme: THEME,
       scrollBeyondLastLine: false,
       minimap: { enabled: false },
-      fontSize: 12,
+      ...shellType(),
+      lineHeight: 1.5,
       renderOverviewRuler: false,
+      // monaco stacks a glyph margin (a full line-height wide), a folding column and the diff
+      // gutter menu (a flat 35px) ahead of the line numbers, which in a pane this short left the
+      // gutter wider than the indent of the code it labels. None of the three has a job here:
+      // nothing sets breakpoints, folding a diff hides the thing you opened, and reverting a hunk
+      // is what the changes list's menu is for. The decorations strip stays: it carries the +/-.
+      glyphMargin: false,
+      folding: false,
+      renderGutterMenu: false,
+      renderMarginRevertIcon: false,
       // collapsing an entirely-unchanged file hides everything — plain view instead
       hideUnchangedRegions: { enabled: !keepAll },
     });

@@ -15,18 +15,21 @@ export function LineCounts({ f }: { f: GitFileStatus }) {
 /** one row of the changes list: status letter, path, +/- counts */
 export const GitFileRow = memo(function GitFileRow({
   f,
+  active,
   onOpen,
   onContext,
   onHover,
 }: {
   f: GitFileStatus;
+  /** this file's diff is the one open in the editor */
+  active: boolean;
   onOpen: (path: string) => void;
   onContext: (e: React.MouseEvent, path: string) => void;
   onHover: (path: string, entering: boolean) => void;
 }) {
   return (
     <button
-      className="git-file"
+      className={`git-file ${active ? "active" : ""}`}
       onClick={() => onOpen(f.path)}
       onContextMenu={(e) => onContext(e, f.path)}
       onMouseEnter={() => onHover(f.path, true)}

@@ -318,10 +318,27 @@ body.resizing iframe {
   font: var(--fs-sm) var(--font-mono);
   color: var(--text1);
   text-align: left;
+  position: relative;
 }
 .git-file:hover {
   background: var(--element0);
   color: var(--text0);
+}
+/* the file open in the editor: picked, so element1 and the accent edge, the same pair the active
+   worktree and the open tool call carry. The edge is a pseudo-element rather than a border so the
+   path stays on the column the rows around it sit on. */
+.git-file.active {
+  background: var(--element1);
+  color: var(--text0);
+}
+.git-file.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
 }
 .git-file .xy {
   color: var(--yellow);
@@ -415,20 +432,6 @@ body.resizing iframe {
   font: var(--fs-sm) var(--font-mono);
   color: var(--text1);
 }
-.diff-pane {
-  height: 45%;
-  min-height: 120px;
-}
-.diff-pane.full {
-  flex: 1;
-  min-height: 0;
-  height: auto;
-}
-.term-pane {
-  min-height: 100px;
-  display: flex;
-  flex-direction: column;
-}
 /* the terminal has no title row: its actions sit over the top-right corner, faint until hovered, so
    the first line of output starts at the top */
 .pane .file-head.floating {
@@ -466,6 +469,11 @@ body.resizing iframe {
   flex: 1;
   min-height: 0;
   height: auto;
+}
+/* monaco sets the collapsed-region band in its own 13px; the pane's chrome is the shell's, so the
+   "N hidden lines" line matches the file path above it rather than the editor it came with */
+.diff-pane .monaco-editor .diff-hidden-lines .center {
+  font: var(--fs-xs) / 1 var(--font-ui);
 }
 .term-pane {
   min-height: 140px;

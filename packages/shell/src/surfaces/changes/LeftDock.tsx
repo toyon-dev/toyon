@@ -14,6 +14,8 @@ export function LeftDock({ width }: { width: number }) {
   const active = useActive();
   const leftOpen = useStore((s) => s.leftOpen);
   const gitInfo = useLocalField(activeId, "git");
+  // the row whose diff is open in the editor; a plain string so the selector stays identity-stable
+  const openPath = useStore((s) => (s.diff && s.diff.worktreeId === activeId ? s.diff.path : null));
   const files = gitInfo?.files ?? [];
   const committed = gitInfo?.committed ?? [];
   const ahead = gitInfo?.ahead ?? 0;
@@ -143,7 +145,14 @@ export function LeftDock({ width }: { width: number }) {
         <>
           <div className="dock-section-title">uncommitted · {files.length}</div>
           {files.map((f) => (
-            <GitFileRow key={f.path} f={f} onOpen={open} onContext={ctxUncommitted} onHover={hoverFile} />
+            <GitFileRow
+              key={f.path}
+              f={f}
+              active={f.path === openPath}
+              onOpen={open}
+              onContext={ctxUncommitted}
+              onHover={hoverFile}
+            />
           ))}
           <div className="commit-box">
             <input
@@ -170,7 +179,14 @@ export function LeftDock({ width }: { width: number }) {
             committed · {committed.length}
           </div>
           {committed.map((f) => (
-            <GitFileRow key={`c-${f.path}`} f={f} onOpen={open} onContext={ctxCommitted} onHover={hoverFile} />
+            <GitFileRow
+              key={`c-${f.path}`}
+              f={f}
+              active={f.path === openPath}
+              onOpen={open}
+              onContext={ctxCommitted}
+              onHover={hoverFile}
+            />
           ))}
         </>
       )}

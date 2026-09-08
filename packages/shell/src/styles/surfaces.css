@@ -2176,21 +2176,25 @@ body.resizing .rb-center {
 
 /* the long tail of a component list: real, uninteresting, and not a problem, so it sits at the
    end of the list it belongs to rather than being reported above as though something were wrong */
+/* the tail is the next row of the list it ends, not a footnote under it: same gutter, same
+   baseline, so the count lines up with the counts above it */
 .design-tail > summary {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 5px 10px;
+  gap: 10px;
+  padding: 4px 10px;
   cursor: pointer;
   color: var(--text2);
-  font: var(--fs-xs) var(--font-ui);
+  font: var(--fs-sm) var(--font-ui);
   list-style: none;
+  border-left: 2px solid transparent;
+}
+.design-tail > summary:hover {
+  background: var(--element0);
+  color: var(--text1);
 }
 .design-tail > summary::-webkit-details-marker {
   display: none;
-}
-.design-tail > summary:hover {
-  color: var(--text1);
 }
 
 /* token grid: one per kind, cells sharing their edges so a scale reads as one object */
@@ -2200,24 +2204,27 @@ body.resizing .rb-center {
 .design-group-name {
   display: block;
   font: var(--fs-xs) var(--font-mono);
-  color: var(--text2);
+  color: var(--text1);
   margin-bottom: 5px;
 }
+/* The lattice is drawn by the cells, not by a coloured ground showing through 1px gaps. The ground
+   version filled the tail of a short last row with a slab of border colour, so a group of two
+   tokens came with a long grey bar beside it saying nothing. */
 .design-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
-  gap: 1px;
-  background: var(--border0);
-  border: 1px solid var(--border0);
+  border-top: 1px solid var(--border0);
+  border-left: 1px solid var(--border0);
 }
 /* a scale has no sample, so its cells are two lines and pack tighter than a colour's */
 .design-grid.tight {
   grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
 }
 .design-cell {
-  background: var(--surface0);
   display: flex;
   flex-direction: column;
+  border-right: 1px solid var(--border0);
+  border-bottom: 1px solid var(--border0);
 }
 .design-sample {
   height: 44px;

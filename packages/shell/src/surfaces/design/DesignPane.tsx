@@ -283,8 +283,8 @@ function Components({
           {rest.length > 0 && (
             <details className="design-tail">
               <summary>
+                <span className="design-count">{rest.length}</span>
                 used once or never
-                <span className="design-count-tag">{rest.length}</span>
               </summary>
               <ul className="design-rows">{rest.map(row)}</ul>
             </details>

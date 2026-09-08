@@ -91,8 +91,7 @@ describe("DesignService.scan", () => {
     expect(index.findings.filter((f) => f.kind === "unwrapped-class")).toEqual([]);
   });
 
-  test("reports a lone consumer among a kit, and leaves a one-off component alone", async () => {
-    // a directory holding several components is a kit; App sits by itself and is not one
+  test("counts how many files reach for each component, so the pane can split on it", async () => {
     write("src/ui/Lonely.tsx", `export function Lonely() { return null; }`);
     write("src/ui/Busy.tsx", `export function Busy() { return null; }`);
     write("src/ui/Spare.tsx", `export function Spare() { return null; }`);
@@ -104,9 +103,13 @@ describe("DesignService.scan", () => {
     write("src/main.tsx", `import { App } from "./App.tsx";\nexport const Root = App;`);
 
     const index = await w.design.scan("w1");
-    const lone = index.findings.find((f) => f.kind === "lone-consumer");
-    // Busy has two consumers, Spare has none, App has one but no siblings
-    expect(lone?.items.map((i) => i.label)).toEqual(["Lonely"]);
+    const by = (n: string) => index.components.find((c) => c.name === n)?.imports;
+    expect(by("Busy")).toBe(2);
+    expect(by("Lonely")).toBe(1);
+    expect(by("Spare")).toBe(0);
+    // Lonely and Spare are reached for once and never; neither is a problem, and an app root has
+    // one caller by design, so nothing here raises a finding
+    expect(index.findings).toEqual([]);
   });
 
   test("says what it recognised, so an empty section can explain itself", async () => {

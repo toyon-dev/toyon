@@ -16,10 +16,6 @@ const MAX_CSS_FILES = 200;
 /** a minified bundle checked into source would otherwise dominate every count */
 const MAX_FILE_BYTES = 400_000;
 
-/** A component this alone in its directory is a one-off, not a piece of a kit. Used instead of a
- * list of blessed directory names ("ui", "components"): the shape of the tree is the project's own
- * evidence, where the names are a guess at its conventions. */
-const KIT_SIBLINGS = 3;
 /** a class has to beat the typical used class before "nothing is named for it" is worth saying */
 const UNWRAPPED_FLOOR = 3;
 
@@ -58,7 +54,7 @@ export class DesignService {
       tokens,
       components,
       classes,
-      findings: findings(components, classes, importers),
+      findings: findings(components, classes),
       coverage: {
         files: byExtension([...cssFiles, ...srcFiles]),
         stylesheets: cssFiles.length,
@@ -196,18 +192,10 @@ function typicalUse(classes: DesignClass[]): number {
  * clever: `.btn` and `Button` stay different, which is the point of the finding. */
 const normal = (s: string) => s.replace(/[-_]/g, "").toLowerCase();
 
-function findings(
-  components: DesignComponent[],
-  classes: DesignClass[],
-  importers: Map<string, Set<string>>,
-): DesignFinding[] {
+function findings(components: DesignComponent[], classes: DesignClass[]): DesignFinding[] {
   const out: DesignFinding[] = [];
   const componentNames = new Set(components.map((c) => normal(c.name)));
   const busy = typicalUse(classes);
-
-  // how many components share each directory: a kit has several, a one-off sits by itself
-  const siblings = new Map<string, number>();
-  for (const c of components) siblings.set(dirOf(c.path), (siblings.get(dirOf(c.path)) ?? 0) + 1);
 
   const unwrapped = classes.filter(
     // at least as used as the typical one, not more: in a project with a single class that class
@@ -227,26 +215,9 @@ function findings(
     });
   }
 
-  const lonely = components.filter((c) => {
-    // Two conditions, and both matter. A kit holds several components, but so does the directory an
-    // app's root lives in; what separates them is that a kit's components are reached for from
-    // outside it. An app root imported only by the file beside it is not a design system finding.
-    if (c.imports !== 1) return false;
-    const dir = dirOf(c.path);
-    if ((siblings.get(dir) ?? 0) < KIT_SIBLINGS) return false;
-    return [...(importers.get(c.name) ?? [])].some((p) => dirOf(p) !== dir);
-  });
-  if (lonely.length > 0) {
-    out.push({
-      kind: "lone-consumer",
-      title:
-        lonely.length === 1
-          ? `${lonely[0]!.name} sits among shared components but has one consumer`
-          : `${lonely.length} shared components have one consumer`,
-      items: lonely.map((c) => ({ label: c.name, path: c.path })),
-    });
-  }
-
+  // A component with one consumer used to be reported here and is not a finding: an app root has
+  // exactly one caller by design, and nothing is wrong with it. How much of the project reaches for
+  // a component is a property of the component list, so the pane splits the list on it instead.
   return out;
 }
 

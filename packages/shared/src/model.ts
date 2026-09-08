@@ -273,7 +273,7 @@ export interface DesignClass {
   solo: boolean;
 }
 
-export type DesignFindingKind = "unwrapped-class" | "lone-consumer" | "unused-variant" | "drift" | "unnamed-combo";
+export type DesignFindingKind = "unwrapped-class" | "unused-variant" | "drift" | "unnamed-combo";
 
 /**
  * Something the scan noticed, with every instance of it. These sit above the inventory: they are

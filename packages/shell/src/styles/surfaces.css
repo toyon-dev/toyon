@@ -2200,6 +2200,25 @@ body.resizing .rb-center {
   padding-left: 10px;
 }
 
+/* the long tail of a component list: real, uninteresting, and not a problem, so it sits at the
+   end of the list it belongs to rather than being reported above as though something were wrong */
+.design-tail > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-ui);
+  list-style: none;
+}
+.design-tail > summary::-webkit-details-marker {
+  display: none;
+}
+.design-tail > summary:hover {
+  color: var(--text1);
+}
+
 /* token grid: one per kind, cells sharing their edges so a scale reads as one object */
 .design-group {
   margin-bottom: 14px;

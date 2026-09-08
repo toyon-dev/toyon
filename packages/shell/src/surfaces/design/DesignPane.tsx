@@ -244,8 +244,41 @@ function Components({
   onOpen: (path: string) => void;
 }) {
   const { components, typed } = index;
+  // The split that matters: a component two or more files reach for is shared vocabulary, and the
+  // rest is a page, a root, or a one-off. That tail is long in every project and is not a problem,
+  // so it collapses here rather than being reported as one above.
+  const shared = components.filter((c) => c.imports >= 2);
+  const rest = components.filter((c) => c.imports < 2);
+
+  const row = (c: DesignComponent) => (
+    <Row
+      key={`${c.path}:${c.name}`}
+      count={c.imports}
+      name={c.name}
+      path={c.path}
+      // fibers carry the file they were rendered from, so this outlines every instance of the
+      // component that is on the page right now
+      onEnter={() => outline({ type: "highlight-file", path: c.path, ranges: null })}
+      onLeave={clear}
+      onOpen={() => onOpen(c.path)}
+    >
+      {c.variants.length > 0 && (
+        <span className="design-variants">
+          {c.variants.map((v) => (
+            <span key={v.prop} className="design-variant">
+              {v.prop}: {v.values.join(" \u00b7 ")}
+            </span>
+          ))}
+        </span>
+      )}
+    </Row>
+  );
+
   return (
-    <Section title="Components" note={components.length ? String(components.length) : undefined}>
+    <Section
+      title="Components"
+      note={components.length ? `${shared.length} reused of ${components.length}` : undefined}
+    >
       {components.length === 0 ? (
         <Gap>
           Nothing that looks like an exported component. Vue and Svelte name a component by its file rather than by an
@@ -254,31 +287,16 @@ function Components({
       ) : (
         <>
           {!typed && <Gap>No TypeScript in this project, so the values each prop allows are not listed.</Gap>}
-          <ul className="design-rows">
-            {components.map((c) => (
-              <Row
-                key={`${c.path}:${c.name}`}
-                count={c.imports}
-                name={c.name}
-                path={c.path}
-                // fibers carry the file they were rendered from, so this outlines every instance
-                // of the component that is on the page right now
-                onEnter={() => outline({ type: "highlight-file", path: c.path, ranges: null })}
-                onLeave={clear}
-                onOpen={() => onOpen(c.path)}
-              >
-                {c.variants.length > 0 && (
-                  <span className="design-variants">
-                    {c.variants.map((v) => (
-                      <span key={v.prop} className="design-variant">
-                        {v.prop}: {v.values.join(" · ")}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </Row>
-            ))}
-          </ul>
+          <ul className="design-rows">{shared.map(row)}</ul>
+          {rest.length > 0 && (
+            <details className="design-tail">
+              <summary>
+                used once or never
+                <span className="design-count-tag">{rest.length}</span>
+              </summary>
+              <ul className="design-rows">{rest.map(row)}</ul>
+            </details>
+          )}
         </>
       )}
     </Section>

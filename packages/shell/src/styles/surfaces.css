@@ -2123,6 +2123,9 @@ body.resizing .rb-center {
   display: flex;
   flex-direction: column;
 }
+.design-pane {
+  min-width: 0;
+}
 .design-pane.full {
   flex: 1;
   min-height: 0;
@@ -2133,7 +2136,10 @@ body.resizing .rb-center {
   font: var(--fs-sm) var(--font-ui);
   color: var(--text1);
 }
+/* min-width guards the flex column it sits in: a long path or a wide grid inside a pane should
+   scroll here, never push the docks beside it */
 .design-body {
+  min-width: 0;
   overflow: auto;
   padding: 16px 20px 56px;
   color: var(--text0);
@@ -2210,15 +2216,21 @@ body.resizing .rb-center {
 /* The lattice is drawn by the cells, not by a coloured ground showing through 1px gaps. The ground
    version filled the tail of a short last row with a slab of border colour, so a group of two
    tokens came with a long grey bar beside it saying nothing. */
+/* No border on the container. Its top and left edges ran the full width of the grid box, so a
+   group of two cells came with a hairline stretching across the empty space beside them. Every
+   line here is drawn by a cell, which is the only way one cannot outlive its cells. */
 .design-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  border-top: 1px solid var(--border0);
-  border-left: 1px solid var(--border0);
   /* the grid breaks out of the text measure, but not forever: past this it is just a very long
      row of swatches, and the eye has to travel the whole pane to compare two of them */
   max-width: 1500px;
   margin-inline: auto;
+}
+/* A group with too few cells to want the extra width stays in the text measure, so it lines up
+   with the label above it instead of floating off to the left of everything. */
+.design-grid.narrow {
+  max-width: 720px;
 }
 /* a scale has no sample, so its cells are two lines and pack tighter than a colour's */
 .design-grid.tight {
@@ -2227,6 +2239,7 @@ body.resizing .rb-center {
 .design-cell {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   border-right: 1px solid var(--border0);
   border-bottom: 1px solid var(--border0);
 }

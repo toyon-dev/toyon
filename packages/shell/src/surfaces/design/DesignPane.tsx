@@ -157,7 +157,9 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
           return (
             <div key={kind} className="design-group">
               <span className="design-group-name">{label}</span>
-              <div className={`design-grid ${tight ? "tight" : ""}`}>
+              {/* the measure fits about five cells; a group smaller than that has nothing to
+                  gain from breaking out of it, and floats away from its own label if it does */}
+              <div className={`design-grid ${tight ? "tight" : ""} ${group.length > 5 ? "" : "narrow"}`}>
                 {group.map((t) => (
                   <Swatch key={t.name} token={t} ground={ground} largest={largestIn(group)} />
                 ))}

@@ -940,6 +940,21 @@ body.resizing .row-resize {
      the transcript" is already there: the recessed surface it gives the box you type in */
   background: var(--bg0);
   border-bottom: 1px solid var(--bg2);
+  position: relative;
+}
+/* a marker down the edge, the way an active picker row carries one, in the same accent: two tones
+   apart is a surface, but the marker is what says this band belongs to the row above it. It is a
+   positioned pseudo-element rather than an inset shadow or a border: a shadow paints under the
+   header and panel backgrounds, which cover the band edge to edge, and a border would push every
+   one of them 2px right of the column the collapsed rows sit on. */
+.tool-row[open]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--orange);
 }
 .tool-row summary {
   padding: 5px 12px;
@@ -1036,11 +1051,11 @@ body.resizing .row-resize {
 }
 /* the command that produced the output: the card's own tone across its full width, with the answer
    in the lighter panel under it. The summary line above carries the sentence that named it. */
+/* what ran is the darkest strip in the band, the way the box you type in is the darkest thing in
+   the chat; the answer sits on the lighter surface under it */
 .tool-row .tool-block.cmd {
   padding: 6px 12px;
-  /* the answer's panel is one step lighter, which this palette barely carries on its own: the rule
-     is what separates what ran from what it said */
-  border-bottom: 1px solid var(--bg2);
+  background: var(--bg0);
   color: var(--fg1);
   white-space: pre-wrap;
   word-break: break-word;
@@ -1060,6 +1075,9 @@ body.resizing .row-resize {
    scroll width, hence the block display rather than inline spans */
 .tool-row .tool-block.diff .dl {
   display: block;
+  /* the padding indents the code onto the column everything else in the log sits on, while the tint,
+     being the line's own background, still runs the full width of the band */
+  padding-left: 12px;
   /* the tint has to reach the end of the longest line, not the edge of the scroll port */
   min-width: 100%;
   width: max-content;
@@ -1075,6 +1093,7 @@ body.resizing .row-resize {
 /* the jump between two stretches of a file, drawn as the rule it is; the numbers are on the title */
 .tool-row .dl.hunk {
   width: auto;
+  padding: 0;
   height: 1px;
   margin: 6px 0;
   background: var(--bg2);

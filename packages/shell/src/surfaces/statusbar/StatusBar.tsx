@@ -20,6 +20,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
+  const designOpen = useStore((s) => s.designOpen);
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
   const id = active?.worktree.id ?? null;
@@ -55,6 +56,13 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
         >
           <Icon name="settings" />
+        </button>
+        <button
+          className={`btn-icon toggle ${designOpen ? "on" : ""}`}
+          onClick={() => dispatch({ a: "toggle-design" })}
+          {...tip("Design system", chord("design"))}
+        >
+          <Icon name="palette" />
         </button>
         <button
           className={`btn-icon toggle ${rightOpen ? "on" : ""}`}

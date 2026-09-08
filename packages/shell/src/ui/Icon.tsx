@@ -35,6 +35,7 @@ export type IconName =
   | "spark"
   | "globe"
   | "swap"
+  | "palette"
   | "worktrees"
   | "dot";
 
@@ -98,6 +99,8 @@ const ICON_PATHS: Record<IconName, string> = {
   worktrees:
     "M3.8 2.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 4h5.4 M3.8 6.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 8h5.4 M3.8 10.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 12h5.4",
   // two arrows passing: swapping one mode for another
+  // three swatches on a shared baseline: the design system's own row of samples
+  palette: "M2.6 3.4h3.2v9.2H2.6z M6.4 5.8h3.2v6.8H6.4z M10.2 2.2h3.2v10.4h-3.2z",
   swap: "M3 6.2h9.2 M9.7 3.7 12.2 6.2 9.7 8.7 M13 10.2H3.8 M6.3 7.7 3.8 10.2l2.5 2.5",
   // a step that happened under a name we cannot read: a marker, deliberately without a meaning
   dot: "M8 4.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 1 0 0-6.8z",

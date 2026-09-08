@@ -12,6 +12,8 @@ export const STORAGE = {
   rightWidth: "toyon-rw",
   diffHeight: "toyon-dh",
   diffFull: "toyon-dfull",
+  designHeight: "toyon-dsh",
+  designFull: "toyon-dsfull",
   termHeight: "toyon-th",
   /** the worktree panel is kept open instead of peeking on hover */
   rail: "toyon-rail",

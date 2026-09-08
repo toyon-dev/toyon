@@ -98,6 +98,12 @@ export function buildCommands(
     () => dispatch({ a: "toggle-terminal" }),
     chord("terminal"),
   );
+  add(
+    "design",
+    `${state.designOpen ? "hide" : "show"} design system`,
+    () => dispatch({ a: "toggle-design" }),
+    chord("design"),
+  );
   add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), chord("zen"));
   add("keys", "settings & shortcuts", () => dispatch({ a: "open", overlay: { kind: "keys" } }), chord("keys"));
 
@@ -194,6 +200,7 @@ export type CommandState = Pick<
   | "rightOpen"
   | "railOpen"
   | "termOpen"
+  | "designOpen"
   | "themePrefs"
   | "themes"
   | "systemDark"
@@ -214,6 +221,7 @@ export function useCommands(): Command[] {
   const rightOpen = useStore((s) => s.rightOpen);
   const railOpen = useStore((s) => s.railOpen);
   const termOpen = useStore((s) => s.termOpen);
+  const designOpen = useStore((s) => s.designOpen);
   const themePrefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
@@ -231,6 +239,7 @@ export function useCommands(): Command[] {
       rightOpen,
       railOpen,
       termOpen,
+      designOpen,
       themePrefs,
       themes,
       systemDark,
@@ -249,6 +258,7 @@ export function useCommands(): Command[] {
     rightOpen,
     railOpen,
     termOpen,
+    designOpen,
     themePrefs,
     themes,
     systemDark,

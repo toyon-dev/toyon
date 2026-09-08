@@ -190,6 +190,8 @@ export interface State {
   zen: boolean;
   /** the terminal pane under the preview (one per worktree; the shells keep running when hidden) */
   termOpen: boolean;
+  /** the design pane: the worktree's own design system, beside the preview */
+  designOpen: boolean;
   /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
   themes: Theme[];
   themePrefs: ThemePrefs;
@@ -248,6 +250,7 @@ export function initialState(opts: InitialOpts): State {
     leftAuto: true,
     zen: false,
     termOpen: false,
+    designOpen: false,
     themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
@@ -337,6 +340,7 @@ export type Action =
   | { a: "toggle-rail" }
   | { a: "toggle-zen" }
   | { a: "toggle-terminal" }
+  | { a: "toggle-design" }
   /** show this worktree's stream in the terminal pane, opening the pane if it was hidden */
   | { a: "term-stream"; id: string; stream: string }
   | { a: "preview-theme"; theme: Theme | null }
@@ -444,6 +448,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
     case "toggle-terminal":
       return { ...s, termOpen: !s.termOpen };
+    case "toggle-design":
+      return { ...s, designOpen: !s.designOpen };
     case "term-stream":
       return withLocal({ ...s, termOpen: true }, action.id, (l) => ({ ...l, termStream: action.stream }));
     case "preview-theme":

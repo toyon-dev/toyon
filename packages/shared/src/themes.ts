@@ -968,6 +968,15 @@ export function sunkenOf(theme: Theme): string {
   return stepL(theme.colors.surface1, -4);
 }
 
+/** The characters an edit touched, inside a line whose band already says it changed. Both surfaces
+ * that show a diff paint this over the line tint, so it is a fraction of that tint rather than a
+ * colour of its own: at full strength the two composite to nearly twice the wash and a block of
+ * added lines becomes the loudest thing in the window (see MonacoDiff, which draws its line and
+ * character ranges as separate elements). A theme moves the tint and both weights follow. */
+export function wordTint(lineTint: string): string {
+  return scaleAlpha(lineTint, 0.55);
+}
+
 export function themeToCssVars(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {};
   for (const k of themeColorKeys) out[cssVarName(k)] = theme.colors[k];
@@ -975,6 +984,8 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
   out["--sunken"] = sunkenOf(theme);
   out["--scrim"] = hex8(theme.colors.surface0, 0.7);
   out["--shadow"] = theme.kind === "dark" ? "#00000066" : "#0000002e";
+  out["--diff-add-word"] = wordTint(theme.colors.diffAdd);
+  out["--diff-del-word"] = wordTint(theme.colors.diffDel);
   return out;
 }
 

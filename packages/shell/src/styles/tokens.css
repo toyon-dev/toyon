@@ -37,6 +37,11 @@
   --purple: #ca94ca;
   --diff-add: #6fae5f29;
   --diff-del: #c07f6a29;
+  /* the same tints at the weight a changed word carries inside a changed line. Derived rather than
+     authored (themes.ts, wordTint): a theme names the line tint and both weights follow, and the
+     chat log and the diff pane read the one value. */
+  --diff-add-word: #6fae5f17;
+  --diff-del-word: #c07f6a17;
   /* The text ladder is fg1 > fg2 > fg3, each step quieter than the last, and the numbers are the
      whole point: "muted" and "dim" did not tell you which was which, and disabled kept landing on
      the tier above it because nobody could see the order. fg1 is what you read, fg2 is what you

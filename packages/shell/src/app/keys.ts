@@ -56,9 +56,9 @@ export function useChords() {
             dispatch({ a: "toggle-zen" });
             break;
           case "left":
-            // one key for the panel: it opens, then it takes the keyboard, then it shuts. Focus is
-            // the DOM's own state, so ask the document rather than mirroring it in the store.
-            if (s.leftOpen && document.activeElement?.closest(".left-dock")) dispatch({ a: "toggle-left" });
+            // a plain toggle: open it or shut it. Opening hands it the keyboard, but a second
+            // press closes it rather than stopping to focus a panel that is already on screen.
+            if (s.leftOpen) dispatch({ a: "toggle-left" });
             else dispatch({ a: "focus-left" });
             break;
           case "right":

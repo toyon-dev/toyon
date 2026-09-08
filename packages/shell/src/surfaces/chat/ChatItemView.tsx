@@ -44,14 +44,19 @@ function Markdown({ text }: { text: string }) {
 /** what the agent wrote under the call: its prose as prose, its fenced blocks as blocks, and a
  * diff colored by line rather than printed as backticks */
 function ToolOutput({ item }: { item: ToolItem }) {
-  const blocks = useMemo(() => toolBlocks(item, item.output ?? ""), [item]);
+  // splitting a diff into lines and its lines into words is more work than a render should redo, and
+  // the output only changes while the call is in flight
+  const blocks = useMemo(
+    () => toolBlocks(item, item.output ?? "").map((b) => ({ ...b, lines: b.diff ? diffLines(b.text) : [] })),
+    [item],
+  );
   return (
     <div className="tool-out">
       {blocks.map((b, i) =>
         b.diff ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional and never reordered
           <pre key={i} className="tool-block diff">
-            {diffLines(b.text).map((line, j) =>
+            {b.lines.map((line, j) =>
               // a hunk header is a jump in the file, not a line of it: it draws as the rule between
               // two stretches of code, with the line numbers left on hover
               line.kind === "hunk" ? (
@@ -60,7 +65,18 @@ function ToolOutput({ item }: { item: ToolItem }) {
               ) : (
                 // biome-ignore lint/suspicious/noArrayIndexKey: same
                 <span key={j} className={`dl ${line.kind}`}>
-                  {line.text || " "}
+                  {line.spans?.length
+                    ? line.spans.map((s, k) =>
+                        s.changed ? (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: same
+                          <span key={k} className="ch">
+                            {s.text}
+                          </span>
+                        ) : (
+                          s.text
+                        ),
+                      )
+                    : line.text || " "}
                 </span>
               ),
             )}

@@ -1173,6 +1173,16 @@ body.resizing .row-resize {
 .tool-row .dl.del {
   background: var(--diff-del);
 }
+/* the words the edit actually touched, placed inside the line the way the diff pane places them: the
+   band says the line took part, the block says which characters are it. Same tint at 0.55 as the
+   pane's char-level range (see MonacoDiff), so the two composite over the band to the same weight
+   and one change reads the same in the log as it does in the editor. */
+.tool-row .dl.add .ch {
+  background: color-mix(in srgb, var(--diff-add) 55%, transparent);
+}
+.tool-row .dl.del .ch {
+  background: color-mix(in srgb, var(--diff-del) 55%, transparent);
+}
 /* the jump between two stretches of a file, drawn as the rule it is; the numbers are on the title */
 .tool-row .dl.hunk {
   width: auto;

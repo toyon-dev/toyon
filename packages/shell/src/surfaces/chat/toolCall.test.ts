@@ -44,16 +44,56 @@ describe("diffLines", () => {
     expect(diffLines(block)).toEqual([
       { kind: "hunk", text: "@@ -1,3 +1,3 @@" },
       { kind: "", text: "keep me" },
-      { kind: "del", text: "was" },
-      { kind: "add", text: "is" },
+      { kind: "del", text: "was", spans: [{ text: "was", changed: true }] },
+      { kind: "add", text: "is", spans: [{ text: "is", changed: true }] },
     ]);
   });
 
   test("keeps git's own per-file header, since a block can cover several", () => {
     expect(diffLines("diff --git a/x b/x\nindex 1a2b3c4..5d6e7f8 100644\n+one")).toEqual([
       { kind: "meta", text: "diff --git a/x b/x" },
-      { kind: "add", text: "one" },
+      { kind: "add", text: "one", spans: [{ text: "one", changed: true }] },
     ]);
+  });
+
+  test("a line rewritten in place marks the words that differ, not the line", () => {
+    const lines = diffLines(['-  assert metrics[0]["visibility"]', '+  assert metrics[1]["visibility"]'].join("\n"));
+    expect(lines.map((l) => l.spans)).toEqual([
+      [
+        { text: "  assert metrics[", changed: false },
+        { text: "0", changed: true },
+        { text: ']["visibility"]', changed: false },
+      ],
+      [
+        { text: "  assert metrics[", changed: false },
+        { text: "1", changed: true },
+        { text: ']["visibility"]', changed: false },
+      ],
+    ]);
+  });
+
+  test("two lines with nothing in common are two whole changes, not a rewrite", () => {
+    const lines = diffLines(["-const port = 3000;", '+import { serve } from "bun";'].join("\n"));
+    expect(lines.map((l) => l.spans?.every((s) => s.changed))).toEqual([true, true]);
+  });
+
+  test("a rewrite that dropped a line lines the rest of itself back up", () => {
+    const block = [
+      "-.image-header img {",
+      "-    height: 75px;",
+      "-    filter: brightness(var(--logo-brightness));",
+      "-}",
+      "+.image-header img {",
+      "+    height: 75px;",
+      "+}",
+    ].join("\n");
+    const marked = diffLines(block).map((l) => l.spans?.some((s) => s.changed) ?? false);
+    // only the line that went is the change; the three around it carried over
+    expect(marked).toEqual([false, false, true, false, false, false, false]);
+  });
+
+  test("a blank line that came or went is the band alone", () => {
+    expect(diffLines("+").map((l) => l.spans)).toEqual([[]]);
   });
 });
 

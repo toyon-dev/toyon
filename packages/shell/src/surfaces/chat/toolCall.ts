@@ -1,4 +1,4 @@
-import type { ToolKind } from "@toyon/shared";
+import { type Span, splitSpanLines, type ToolKind, wordSpans } from "@toyon/shared";
 import type { IconName } from "../../ui/Icon.tsx";
 /** How a tool call reads in the transcript: the two halves of its summary line, and the blocks of
  * its output. */
@@ -203,6 +203,10 @@ const META =
 export interface DiffLine {
   kind: LineKind;
   text: string;
+  /** on an added or deleted line, which of its words are the change: a rewritten line keeps the
+   * parts it kept, a line with no counterpart is one span of changed text. Empty on every other
+   * kind, and on a blank line, where the band alone says it. */
+  spans?: Span[];
 }
 
 /** what a diff block shows: the tint says which side a line is on, so the marker column is noise
@@ -217,7 +221,47 @@ export function diffLines(text: string): DiffLine[] {
     const bare = kind === "add" || kind === "del" || line.startsWith(" ");
     out.push({ kind, text: bare ? line.slice(1) : line });
   }
+  markWords(out);
   return out;
+}
+
+/** A run of deletions followed by a run of additions is one stretch of the file rewritten: diff the
+ * two runs against each other by word and mark only what actually differs, so text that carried over
+ * reads as carried over rather than as a whole line deleted and a near-identical one added. The run
+ * goes in whole rather than line against line, which is what lets a rewrite that dropped a line line
+ * the rest of itself back up. */
+function markWords(lines: DiffLine[]): void {
+  for (let i = 0; i < lines.length; ) {
+    if (lines[i]?.kind !== "del" && lines[i]?.kind !== "add") {
+      i++;
+      continue;
+    }
+    let mid = i;
+    while (lines[mid]?.kind === "del") mid++;
+    let end = mid;
+    while (lines[end]?.kind === "add") end++;
+    const dels = lines.slice(i, mid);
+    const adds = lines.slice(mid, end);
+    const pair =
+      dels.length > 0 && adds.length > 0
+        ? wordSpans(dels.map((l) => l.text).join("\n"), adds.map((l) => l.text).join("\n"))
+        : null;
+    if (pair) {
+      apply(dels, splitSpanLines(pair.before));
+      apply(adds, splitSpanLines(pair.after));
+    }
+    // a run with no counterpart, or one that shares too little with it to be the same lines edited:
+    // the whole of each line is the change
+    for (const line of [...dels, ...adds])
+      if (!line.spans) line.spans = line.text ? [{ text: line.text, changed: true }] : [];
+    i = end;
+  }
+}
+
+function apply(lines: DiffLine[], spans: Span[][]): void {
+  // the runs were joined with the newlines they had, so the split gives one list back per line
+  if (spans.length !== lines.length) return;
+  for (const [i, line] of lines.entries()) line.spans = spans[i];
 }
 
 export function diffLineKind(line: string): LineKind {

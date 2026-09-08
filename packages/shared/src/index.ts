@@ -3,6 +3,7 @@
 
 export * from "./agent-tools.ts";
 export * from "./chords.ts";
+export * from "./diff.ts";
 export * from "./model.ts";
 export * from "./paste.ts";
 export * from "./ports.ts";

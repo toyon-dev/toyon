@@ -585,3 +585,65 @@ describe("projects", () => {
     expect(s.activeRepoId).toBe("r1");
   });
 });
+
+describe("panel layout", () => {
+  const two = () =>
+    helloIn([repo("r1"), repo("r2")], wt("m1", "main", undefined, "r1"), wt("m2", "main", undefined, "r2"));
+
+  test("opening a panel remembers it under the active project", () => {
+    const s = run([two(), { a: "toggle-design" }, { a: "toggle-left" }]);
+    expect(s.panels.r1).toEqual({ left: false, right: true, term: false, design: true });
+  });
+
+  test("switching projects paints that project's layout, and switching back restores this one", () => {
+    let s = run([two(), { a: "toggle-design" }]);
+    // r2 has never been laid out: it adopts what is on screen rather than jumping
+    s = reducer(s, { a: "activate-repo", id: "r2" });
+    expect(s.designOpen).toBe(true);
+    s = run([{ a: "toggle-design" }, { a: "toggle-terminal" }], s);
+    s = reducer(s, { a: "activate-repo", id: "r1" });
+    expect(s.designOpen).toBe(true);
+    expect(s.termOpen).toBe(false);
+    const back = reducer(s, { a: "activate-repo", id: "r2" });
+    expect(back.designOpen).toBe(false);
+    expect(back.termOpen).toBe(true);
+  });
+
+  test("selecting a worktree in another project carries that project's layout with it", () => {
+    let s = run([two(), { a: "toggle-terminal" }, { a: "activate-repo", id: "r2" }, { a: "toggle-terminal" }]);
+    expect(s.termOpen).toBe(false);
+    s = reducer(s, { a: "activate", id: "m1" });
+    expect(s.termOpen).toBe(true);
+  });
+
+  test("a reload paints the stored project's layout before hello, and hello keeps it", () => {
+    const from = initialState({
+      clientId: ME,
+      storedRepo: "r2",
+      storedPanels: { r2: { left: false, right: true, term: false, design: true } },
+    });
+    expect(from.leftOpen).toBe(false);
+    expect(from.designOpen).toBe(true);
+    const s = run([two()], from);
+    expect(s.activeRepoId).toBe("r2");
+    expect(s.leftOpen).toBe(false);
+    expect(s.designOpen).toBe(true);
+  });
+
+  test("the clean-main auto-close is not learned as the project's layout", () => {
+    const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [] })]);
+    expect(s.leftOpen).toBe(false);
+    // it closed for this session only: a reload with changes waiting opens the panel again
+    expect(s.panels.r1?.left).toBe(true);
+  });
+
+  test("a remembered layout outranks the clean-main auto-close", () => {
+    const from = initialState({
+      clientId: ME,
+      storedRepo: "r1",
+      storedPanels: { r1: { left: true, right: true, term: false, design: false } },
+    });
+    const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [] })], from);
+    expect(s.leftOpen).toBe(true);
+  });
+});

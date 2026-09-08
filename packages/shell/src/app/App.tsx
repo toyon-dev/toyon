@@ -34,6 +34,7 @@ export function App() {
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
   const railOpen = useStore((s) => s.railOpen);
+  const panels = useStore((s) => s.panels);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
   const toast = useStore((s) => s.toast);
@@ -93,6 +94,12 @@ export function App() {
       localStorage.setItem(STORAGE.rail, railOpen ? "1" : "0");
     } catch {}
   }, [railOpen]);
+  // the panel layout is per project: a reload comes back to the one this project was left in
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.panels, JSON.stringify(panels));
+    } catch {}
+  }, [panels]);
 
   useChords();
   // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the

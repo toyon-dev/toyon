@@ -678,6 +678,21 @@ body.resizing .row-resize {
 .wt-rail .rail-glyph {
   margin-left: 12px;
 }
+/* the crashed dot is the one dot you can press, so it needs a target bigger than its eight pixels;
+   the ring grows outside the layout box and the ::after hit area does the same, so nothing in the
+   row shifts when a proc dies. */
+.wt-item .dot.clickable {
+  position: relative;
+  cursor: pointer;
+}
+.wt-item .dot.clickable::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.wt-item .dot.clickable:hover {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 35%, transparent);
+}
 .wt-rail .new-wt {
   height: 33px;
   padding: 0 12px;

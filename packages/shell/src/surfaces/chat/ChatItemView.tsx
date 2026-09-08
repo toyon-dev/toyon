@@ -1,7 +1,7 @@
 import type { PickMeta } from "@toyon/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -10,7 +10,30 @@ import { sameTools, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { diffLines, toolBlocks, toolLabel } from "./toolCall.ts";
+import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
+import { callPath, diffLines, toolBlocks, toolLabel } from "./toolCall.ts";
+
+// a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
+// so it is coloured by the same seven. marked hands the block over before it escapes it, and
+// returning false hands one back in a language we have no grammar for.
+marked.use({
+  renderer: {
+    code({ text, lang }) {
+      const language = languageOf((lang ?? "").trim().toLowerCase().split(/\s+/)[0] ?? "", "");
+      if (!language) return false;
+      const body = paintCode(text, language)
+        .map((line) =>
+          line
+            .map((p) => (p.scope ? `<span class="sy-${p.scope}">${escapeHtml(p.text)}</span>` : escapeHtml(p.text)))
+            .join(""),
+        )
+        .join("\n");
+      return `<pre><code>${body}</code></pre>\n`;
+    },
+  },
+});
+
+const escapeHtml = (s: string) => s.replace(/[&<>]/g, (ch) => (ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : "&gt;"));
 
 const render = (text: string) => DOMPurify.sanitize(marked.parse(text, { async: false }) as string);
 
@@ -44,12 +67,19 @@ function Markdown({ text }: { text: string }) {
 /** what the agent wrote under the call: its prose as prose, its fenced blocks as blocks, and a
  * diff colored by line rather than printed as backticks */
 function ToolOutput({ item }: { item: ToolItem }) {
-  // splitting a diff into lines and its lines into words is more work than a render should redo, and
-  // the output only changes while the call is in flight
-  const blocks = useMemo(
-    () => toolBlocks(item, item.output ?? "").map((b) => ({ ...b, lines: b.diff ? diffLines(b.text) : [] })),
-    [item],
-  );
+  // splitting a diff into lines, its lines into words and its words into tokens is more work than a
+  // render should redo, and the output only changes while the call is in flight
+  const blocks = useMemo(() => {
+    const path = callPath(item);
+    return toolBlocks(item, item.output ?? "").map((b) => {
+      const language = languageOf(b.lang, b.diff ? path || pathInDiff(b.text) : "");
+      if (b.diff) {
+        const lines = diffLines(b.text);
+        return { ...b, lines, painted: paintDiff(lines, language) };
+      }
+      return { ...b, lines: [], painted: paintCode(b.text, language) };
+    });
+  }, [item]);
   return (
     <div className="tool-out">
       {blocks.map((b, i) =>
@@ -65,18 +95,7 @@ function ToolOutput({ item }: { item: ToolItem }) {
               ) : (
                 // biome-ignore lint/suspicious/noArrayIndexKey: same
                 <span key={j} className={`dl ${line.kind}`}>
-                  {line.spans?.length
-                    ? line.spans.map((s, k) =>
-                        s.changed ? (
-                          // biome-ignore lint/suspicious/noArrayIndexKey: same
-                          <span key={k} className="ch">
-                            {s.text}
-                          </span>
-                        ) : (
-                          s.text
-                        ),
-                      )
-                    : line.text || " "}
+                  {b.painted[j]?.length ? <Painted pieces={b.painted[j]} /> : line.text || " "}
                 </span>
               ),
             )}
@@ -84,7 +103,15 @@ function ToolOutput({ item }: { item: ToolItem }) {
         ) : b.code ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: same
           <pre key={i} className="tool-block">
-            {b.text}
+            {b.painted.length
+              ? b.painted.map((line, j) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: same
+                  <Fragment key={j}>
+                    {j > 0 ? "\n" : null}
+                    <Painted pieces={line} />
+                  </Fragment>
+                ))
+              : b.text}
           </pre>
         ) : (
           // biome-ignore lint/suspicious/noArrayIndexKey: same
@@ -94,6 +121,26 @@ function ToolOutput({ item }: { item: ToolItem }) {
         ),
       )}
     </div>
+  );
+}
+
+/** one line's worth of code: a span per run that carries a colour or a change, the rest as text.
+ * A piece with neither is left bare rather than wrapped, which is most of a file. */
+function Painted({ pieces }: { pieces: Piece[] }) {
+  return (
+    <>
+      {pieces.map((p, i) => {
+        const cls = `${p.changed ? "ch " : ""}${p.scope ? `sy-${p.scope}` : ""}`.trim();
+        // biome-ignore lint/suspicious/noArrayIndexKey: pieces are positional and never reordered
+        if (!cls) return <Fragment key={i}>{p.text}</Fragment>;
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: same
+          <span key={i} className={cls}>
+            {p.text}
+          </span>
+        );
+      })}
+    </>
   );
 }
 

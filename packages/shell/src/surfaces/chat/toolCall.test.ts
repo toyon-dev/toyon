@@ -6,13 +6,13 @@ describe("parseToolOutput", () => {
   test("splits prose from a fenced block and drops the fences", () => {
     const blocks = parseToolOutput("Locate the usages\n```console\nsrc/a.ts:19: hit\n```");
     expect(blocks).toEqual([
-      { code: false, diff: false, text: "Locate the usages" },
-      { code: true, diff: false, text: "src/a.ts:19: hit" },
+      { code: false, diff: false, lang: "", text: "Locate the usages" },
+      { code: true, diff: false, lang: "console", text: "src/a.ts:19: hit" },
     ]);
   });
 
   test("plain output stays one block", () => {
-    expect(parseToolOutput("built in 99ms")).toEqual([{ code: false, diff: false, text: "built in 99ms" }]);
+    expect(parseToolOutput("built in 99ms")).toEqual([{ code: false, diff: false, lang: "", text: "built in 99ms" }]);
   });
 
   test("an unclosed fence still ends the block", () => {
@@ -220,14 +220,14 @@ describe("toolBlocks", () => {
 
   test("drops the description the adapter repeats as the output's first line", () => {
     expect(toolBlocks(call, "Build the project\n```console\nbuilt in 99ms\n```")).toEqual([
-      { code: true, diff: false, text: "built in 99ms" },
+      { code: true, diff: false, lang: "console", text: "built in 99ms" },
     ]);
   });
 
   test("keeps prose the agent actually wrote", () => {
     expect(toolBlocks(call, "Nothing to build\n```console\nup to date\n```")).toEqual([
-      { code: false, diff: false, text: "Nothing to build" },
-      { code: true, diff: false, text: "up to date" },
+      { code: false, diff: false, lang: "", text: "Nothing to build" },
+      { code: true, diff: false, lang: "console", text: "up to date" },
     ]);
   });
 });

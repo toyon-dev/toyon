@@ -89,8 +89,8 @@ describe("color helpers", () => {
     // the word weight is the line tint's own alpha scaled, so a theme names one and gets both
     expect(v["--diff-add-word"]).toBe("#b8bb2611");
     expect(v["--accent"]).toBe(gruvboxDarkSoft.colors.orange); // no accent key: orange, as every theme did
-    // + accent, sunken, scrim, shadow, and a word weight per diff tint
-    expect(Object.keys(v).length).toBe(themeColorKeys.length + 6);
+    // + accent, sunken, scrim, shadow, a word weight per diff tint, and the seven syntax colours
+    expect(Object.keys(v).length).toBe(themeColorKeys.length + 13);
   });
 });
 

@@ -13,6 +13,8 @@ export interface OutputBlock {
   code: boolean;
   /** +/- lines in here are additions and deletions, not text that happens to start with a dash */
   diff: boolean;
+  /** the word on the opening fence, where the agent wrote one: what the block is written in */
+  lang: string;
   text: string;
 }
 
@@ -148,6 +150,12 @@ export function toolBlocks(call: ToolCall, output: string): OutputBlock[] {
   return blocks;
 }
 
+/** the file the call names, where it names one. Unlike the row's hint this stays absolute and keeps
+ * its extension, which is what says the language a diff under it is written in. */
+export function callPath(call: ToolCall): string {
+  return field(call, "file_path") || field(call, "path");
+}
+
 /** the worktree path is the same forty characters on every row and the part that identifies the
  * file is the tail, which is what a narrow chat pane cuts off first */
 export function relPath(detail: string, roots: string[]): string {
@@ -167,7 +175,7 @@ export function parseToolOutput(out: string): OutputBlock[] {
   let fenced = false;
   const flush = () => {
     const text = lines.join("\n").replace(/^\n+|\n+$/g, "");
-    if (text) blocks.push({ code: fenced, diff: isDiff(text, lang), text });
+    if (text) blocks.push({ code: fenced, diff: isDiff(text, lang), lang: fenced ? lang : "", text });
     lines = [];
   };
   for (const line of out.split("\n")) {

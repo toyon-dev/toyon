@@ -2,7 +2,7 @@
 // editor bundle only downloads when a diff is first opened.
 
 import type { Theme } from "@toyon/shared";
-import { accentKey, hex8, toyonDark, wordTint } from "@toyon/shared";
+import { accentKey, hex8, syntaxOf, toyonDark, wordTint } from "@toyon/shared";
 import * as monaco from "monaco-editor";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
@@ -56,9 +56,11 @@ function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
   const rules: monaco.editor.ITokenThemeRule[] = [
     { token: "", foreground: c.text0.slice(1), background: c.surface0.slice(1) },
   ];
-  for (const [token, color] of Object.entries(t.syntax ?? {})) {
-    if (color)
-      rules.push({ token, foreground: color.slice(1), ...(token === "comment" ? { fontStyle: "italic" } : {}) });
+  // syntaxOf, not t.syntax: a theme that named only half its tokens would otherwise leave the rest
+  // to Monaco's built-in scheme here and to the chat log's own fallback there, and the same file
+  // would come out in two colours depending on which surface you read it in
+  for (const [token, color] of Object.entries(syntaxOf(t))) {
+    rules.push({ token, foreground: color.slice(1), ...(token === "comment" ? { fontStyle: "italic" } : {}) });
   }
   return {
     base: t.kind === "light" ? "vs" : "vs-dark",

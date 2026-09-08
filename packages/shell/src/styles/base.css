@@ -20,6 +20,39 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
 }
+
+/* color-scheme: dark only buys Chromium's own dark scrollbar, whose track is a fixed near-black
+   unrelated to the theme's backgrounds; with macOS set to always show scroll bars that track is
+   opaque and takes layout width, so it reads as a strip beside every scroller. Painting it here
+   once puts it on the tokens instead. The track stays transparent so it takes the colour of
+   whatever surface it sits on, and the thumb's transparent border (with background-clip) is what
+   insets it from the edge without a second element. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* The gutter is reserved either way (macOS classic scrollbars take layout width and CSS cannot ask
+   for the overlay kind back), so the thumb only shows while the pointer is in the scroller: at
+   rest the strip is the surface's own background, and nothing reflows when it appears. Scrolling
+   by trackpad or wheel means the pointer is over the pane, so it is visible exactly when in use. */
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 5px;
+}
+:hover::-webkit-scrollbar-thumb {
+  background: var(--bg2);
+  background-clip: padding-box;
+}
+:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--bg3);
+  background-clip: padding-box;
+}
 button {
   background: none;
   border: none;

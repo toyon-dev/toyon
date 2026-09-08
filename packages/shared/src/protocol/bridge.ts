@@ -9,6 +9,15 @@ import { z } from "zod";
 import type { PickMeta } from "./events.ts";
 import { pickMetaSchema } from "./ws.ts";
 
+declare global {
+  interface Window {
+    /** the shell marks its own document. A shell framed as a preview (toyon inside toyon) has the
+     * same chord table as the one framing it, so the injected bridge leaves the keyboard alone
+     * instead of forwarding every chord out to the outer shell. */
+    __toyonShell?: boolean;
+  }
+}
+
 export type ShellToBridgeMsg =
   | { type: "reload" }
   | { type: "navigate"; path: string }

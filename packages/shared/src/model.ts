@@ -107,7 +107,8 @@ export interface LogLine {
   line: string;
 }
 
-export type AgentStatus = "idle" | "working" | "error";
+/** "waiting" means blocked on a person (an open ask card), not on the model */
+export type AgentStatus = "idle" | "working" | "waiting" | "error";
 
 /** Who an agent says it is paying as. Both builtin adapters push this over ACP's `_auth/status_update`
  * extension, so it is what the agent itself reports, not what toyon guesses from its files. */

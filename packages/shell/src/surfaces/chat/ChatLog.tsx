@@ -5,7 +5,7 @@ import { useDispatch, useSock } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
-import { pickLabel } from "../util.ts";
+import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView } from "./ChatItemView.tsx";
 
 /** the transcript for the active worktree: items, working indicator, queued messages, jump-down pill */
@@ -61,6 +61,7 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
 
   // the newest call while the agent runs: that row shows its output, everything above it is a line
   const liveTool = active?.agent === "working" ? items.findLastIndex((it) => it.kind === "tool") : -1;
+  const busy = !!active && isBusy(active);
   const wt = active?.worktree;
   // one array per worktree: a fresh one on every render would defeat the rows' memo
   const roots = useMemo(() => [wt?.path, wt?.linkPath].filter((p): p is string => !!p), [wt?.path, wt?.linkPath]);
@@ -78,9 +79,9 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
             onPickHover={onPickHover}
           />
         ))}
-        {active?.agent === "working" && (
+        {busy && active && (
           <div className="msg-thinking working-row">
-            working…
+            {active.agent === "waiting" ? "waiting for your answer…" : "working…"}
             <button
               className="btn btn-outline stop-btn"
               data-tip="Stop the agent (context up to here is kept; queued messages dropped)"

@@ -2089,3 +2089,133 @@ body.resizing .rb-center {
   min-height: 80px;
   resize: none;
 }
+
+/* The agent asked something and is waiting: the accent edge marks the one row in a long transcript
+   that is holding a turn open. Same box as .auth-card, which is the other card that asks for a
+   person rather than reporting to one. */
+/* a fieldset, because that is what a group of controls with its own keyboard is; the browser's
+   own chrome for one is not wanted */
+.ask-card {
+  min-width: 0;
+  margin: 6px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border0);
+  border-left: 2px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface0);
+  outline: none;
+}
+.ask-card.done {
+  border-left-color: var(--border0);
+  color: var(--text2);
+}
+.ask-card:focus-visible {
+  border-color: var(--border1);
+}
+.ask-lead {
+  font-size: var(--fs-sm);
+  color: var(--text0);
+  margin-bottom: 8px;
+}
+.ask-card.done .ask-lead {
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+.ask-block + .ask-block {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border0);
+}
+.ask-header {
+  font-size: var(--fs-xs);
+  color: var(--text2);
+  margin-bottom: 2px;
+}
+.ask-text {
+  font-size: var(--fs-sm);
+  color: var(--text1);
+  margin-bottom: 6px;
+}
+.ask-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* the option is one target however it is reached: the number is a label on the button, not a
+   separate hint parked somewhere the mouse cannot use */
+.ask-opt {
+  align-items: baseline;
+  text-align: left;
+  padding: 4px 8px;
+}
+.ask-opt.on {
+  color: var(--accent);
+  border-color: currentColor;
+}
+.ask-opt.active {
+  border-color: var(--text1);
+}
+.ask-desc {
+  color: var(--text2);
+  margin-left: 6px;
+}
+.ask-opt.ask-no.on,
+.ask-opt.ask-no:hover {
+  color: var(--red);
+}
+.ask-preview {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  background: var(--sunken);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  color: var(--text1);
+  overflow-x: auto;
+  white-space: pre;
+}
+.ask-note-btn {
+  margin-top: 6px;
+  color: var(--text2);
+}
+.ask-note {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  resize: vertical;
+  font: var(--fs-sm) / 1.5 var(--font-ui);
+}
+.ask-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ask-send.on,
+.ask-send:hover:not(:disabled) {
+  color: var(--accent);
+}
+.ask-skip {
+  color: var(--text2);
+}
+.ask-keys {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--text2);
+}
+/* a plan is prose a person reads, and can be long: it scrolls in the card rather than the page */
+.ask-detail {
+  max-height: 40vh;
+  overflow-y: auto;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: var(--sunken);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+}
+.ask-answered {
+  font-size: var(--fs-sm);
+  color: var(--text2);
+}
+.ask-answered .ask-header {
+  margin-right: 6px;
+}

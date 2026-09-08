@@ -1,7 +1,7 @@
 // What the rest of the daemon needs from an agent session. AcpSession (agent/acp/session.ts) is
 // the implementation; tests use a fake.
 
-import type { AgentCommand, AgentEvent, AgentStatus, ImageInput, PasteInput, PickMeta } from "@toyon/shared";
+import type { AgentCommand, AgentEvent, AgentStatus, AskAnswer, ImageInput, PasteInput, PickMeta } from "@toyon/shared";
 
 /** what a login attempt needs from the caller next */
 export type AuthOutcome =
@@ -9,6 +9,10 @@ export type AuthOutcome =
   | { kind: "terminal"; line: string }
   /** the adapter did it; the refused message has been sent again */
   | { kind: "done" };
+
+/** how a person answered an ask card. `answers` absent means they skipped the questions, which
+ * the agent is told about rather than being cut off mid-turn. */
+export type AskReply = { kind: "answers"; answers?: AskAnswer[] } | { kind: "choice"; choiceId: string };
 
 /** everything a message carries besides its text */
 export interface SendOpts {
@@ -43,6 +47,9 @@ export interface AgentAdapter {
   authenticate(methodId: string, apiKey?: string): Promise<AuthOutcome>;
   /** send the message that was refused for want of credentials again */
   retry(): void;
+  /** answer (or skip) an open ask card. An id that already settled is a no-op: two shells can
+   * be watching the same worktree, and the other one may have answered first. */
+  answer(askId: string, reply: AskReply): void;
   /** the worktree (or the daemon) is going away: stop the turn and kill the agent's process */
   close(): Promise<void>;
 }

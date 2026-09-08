@@ -167,6 +167,30 @@ describe("handlers", () => {
     expect(agent.retries).toBe(1);
   });
 
+  test("ask answers route to the worktree's agent, skip included", async () => {
+    const { services, ctx, agents, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    const agent = agents.get(main.id)!;
+    const answers = [{ selected: ["a"], note: "but only for now" }];
+    await dispatch({ t: "agent-answer", worktreeId: main.id, askId: "k1", answers }, ctx, services);
+    await dispatch({ t: "agent-answer", worktreeId: main.id, askId: "k2" }, ctx, services);
+    await dispatch({ t: "agent-decide", worktreeId: main.id, askId: "k3", choiceId: "cancel" }, ctx, services);
+    expect(agent.answered).toEqual([
+      ["k1", { kind: "answers", answers }],
+      // no answers is the skip button, and the daemon must be able to tell it from an empty pick
+      ["k2", { kind: "answers", answers: undefined }],
+      ["k3", { kind: "choice", choiceId: "cancel" }],
+    ]);
+  });
+
+  test("an ask answer for a worktree that is gone is a toast, not a crash", async () => {
+    const { services, ctx } = make();
+    await expect(
+      dispatch({ t: "agent-answer", worktreeId: "nope", askId: "k1" }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
+  });
+
   test("agent-logout: an unknown agent reaches the person as a toast", async () => {
     const { services, ctx } = make();
     // signing out is AgentAccounts' own test; what belongs here is that the message routes to it

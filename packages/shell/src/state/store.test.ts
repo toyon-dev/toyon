@@ -206,6 +206,55 @@ describe("chat folding", () => {
     expect(s.local.a?.chat[0]).toMatchObject({ kind: "auth", done: true });
   });
 
+  const questions = [{ id: "question_0", text: "", options: [{ value: "a", label: "A" }] }];
+
+  test("a question replaces the tool row it came from, and closes when the answer lands", () => {
+    let s = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "t1", name: "AskUserQuestion", input: {} }),
+      agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, toolId: "t1", ts: 0 }),
+    ]);
+    // one call, one row: the card says everything the tool row would have
+    expect(s.local.a?.chat).toEqual([
+      { kind: "ask", id: "k1", ask: { kind: "question", message: "Which?", questions } },
+    ]);
+    const answers = [{ selected: ["a"], note: "with a caveat" }];
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", answers, ts: 1 }));
+    expect(s.local.a?.chat[0]).toMatchObject({ kind: "ask", outcome: "answered", answers });
+  });
+
+  test("a permission card carries the plan and the agent's own options", () => {
+    const choices = [{ id: "ok", name: "Yes", kind: "allow_once" as const }];
+    let s = run([
+      hello(wt("a")),
+      agent("a", { type: "agent-permission", id: "k1", title: "Approve Plan", detail: "# plan", choices, ts: 0 }),
+    ]);
+    expect(s.local.a?.chat[0]).toEqual({
+      kind: "ask",
+      id: "k1",
+      ask: { kind: "permission", title: "Approve Plan", detail: "# plan", choices },
+    });
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", choiceId: "ok", ts: 1 }));
+    expect(s.local.a?.chat[0]).toMatchObject({ outcome: "answered", choiceId: "ok" });
+  });
+
+  test("a card the daemon lost comes back closed, and a stray end event changes nothing", () => {
+    // the daemon's own restart sweep writes the expired end, so backfill replays the pair
+    let s = run([
+      hello(wt("a")),
+      agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 }),
+      agent("a", { type: "agent-ask-end", id: "k1", outcome: "expired", ts: 1 }),
+    ]);
+    expect(s.local.a?.chat).toHaveLength(1);
+    expect(s.local.a?.chat[0]).toMatchObject({ kind: "ask", outcome: "expired" });
+    // an end for a card that scrolled out of the backfill window has nothing to close
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "gone", outcome: "answered", ts: 2 }));
+    expect(s.local.a?.chat).toHaveLength(1);
+    // and the card only closes once
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", ts: 3 }));
+    expect(s.local.a?.chat[0]).toMatchObject({ outcome: "expired" });
+  });
+
   test("hello and agents carry the registry and the default", () => {
     const list = [{ id: "claude", name: "Claude", available: true, sandboxed: true }];
     let s = run([hello(wt("a"))]);

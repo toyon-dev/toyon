@@ -18,7 +18,7 @@ import type {
   WorktreeStatus,
 } from "../model.ts";
 import { SHELL_STREAM } from "../model.ts";
-import type { AgentCommand, AgentEvent, PickMeta } from "./events.ts";
+import type { AgentCommand, AgentEvent, AskAnswer, PickMeta } from "./events.ts";
 
 /**
  * Bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello and
@@ -29,7 +29,7 @@ import type { AgentCommand, AgentEvent, PickMeta } from "./events.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -147,6 +147,12 @@ export const pasteInputSchema = z.object({
 });
 export type PasteInput = z.infer<typeof pasteInputSchema>;
 const pastes = z.array(pasteInputSchema).max(PASTES_PER_MESSAGE).optional();
+
+/** one question's answer on an ask card: the option values chosen, and the note typed beside them */
+const askAnswerSchema = z.object({
+  selected: z.array(z.string().max(2_000)).max(32),
+  note: z.string().max(10_000).optional(),
+});
 
 export const pickMetaSchema = z.object({
   component: z.string().nullable(),
@@ -278,6 +284,16 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   }),
   /** send the message that was refused for want of credentials again */
   z.object({ t: z.literal("agent-retry"), worktreeId: id }),
+  /** answer an open question card. `answers` is positional, one per question the card asked;
+   * leaving it out is the skip button, which the agent hears as "the person passed" */
+  z.object({
+    t: z.literal("agent-answer"),
+    worktreeId: id,
+    askId: z.string().max(64),
+    answers: z.array(askAnswerSchema).max(8).optional(),
+  }),
+  /** click one of the options on a permission card */
+  z.object({ t: z.literal("agent-decide"), worktreeId: id, askId: z.string().max(64), choiceId: z.string().max(200) }),
   /** drop this agent's stored credential (ACP logout), whatever worktree it was logged in from */
   z.object({ t: z.literal("agent-logout"), agent: id }),
   /** raw VS Code theme JSON/JSONC text picked in the browser */
@@ -312,6 +328,7 @@ const _pickMeta: Same<z.infer<typeof pickMetaSchema>, PickMeta> = true;
 const _config: Same<z.infer<typeof toyonConfigSchema>, ToyonConfig> = true;
 const _prefs: Same<z.infer<typeof themePrefsSchema>, ThemePrefs> = true;
 const _variant: Same<z.infer<typeof variantSchema>, NonNullable<WorktreeInfo["variant"]>> = true;
+const _askAnswer: Same<z.infer<typeof askAnswerSchema>, AskAnswer> = true;
 void _pickMeta;
 void _config;
 void _prefs;

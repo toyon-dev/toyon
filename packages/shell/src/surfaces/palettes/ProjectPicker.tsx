@@ -4,6 +4,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { isBusy } from "../util.ts";
 import { byName } from "./commands.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 
@@ -53,7 +54,7 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
 
   const hintFor = (r: RepoInfo) => {
     const mine = worktrees.filter((w) => w.worktree.repoId === r.id && w.worktree.kind !== "spare");
-    const working = mine.filter((w) => w.agent === "working").length;
+    const working = mine.filter(isBusy).length;
     const n = mine.length - 1; // main is not a task
     const parts = [n > 0 ? `${n} worktree${n === 1 ? "" : "s"}` : null, working > 0 ? `${working} working` : null];
     return parts.filter(Boolean).join(" · ") || undefined;

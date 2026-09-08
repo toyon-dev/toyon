@@ -309,6 +309,18 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.runtime.agentFor(msg.worktreeId)?.retry();
   },
 
+  // No UserError when the ask has already closed: two shells can watch one worktree, and the
+  // loser of that race would get a toast about a card that is about to disappear anyway.
+  "agent-answer"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
+    s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "answers", answers: msg.answers });
+  },
+
+  "agent-decide"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
+    s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "choice", choiceId: msg.choiceId });
+  },
+
   async "agent-logout"(msg, _ctx, s) {
     await s.accounts.logout(msg.agent);
     s.hub.emit("agentsChanged");

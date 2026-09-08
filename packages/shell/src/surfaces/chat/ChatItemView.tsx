@@ -6,6 +6,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { attachmentUrl } from "../../ws.ts";
+import { AskCard } from "./AskCard.tsx";
 import { SentImageChip } from "./ImageChip.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -282,6 +283,8 @@ export const ChatItemView = memo(function ChatItemView({
       return <div className="msg-assistant msg-error">{item.text}</div>;
     case "auth":
       return <AuthCard item={item} />;
+    case "ask":
+      return <AskCard item={item} />;
     case "blocked":
       return (
         <div className="blocked-row" data-tip={item.reason}>

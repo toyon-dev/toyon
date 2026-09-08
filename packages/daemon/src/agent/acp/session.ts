@@ -5,11 +5,15 @@
 // resume. Two layers on purpose: a Conn (process + initialize) that logging in and side questions
 // need, and a Live session on top of it that the chat turns use.
 
+import { randomUUID } from "node:crypto";
 import * as acp from "@agentclientprotocol/sdk";
 import type {
   AgentCommand,
   AgentEvent,
   AgentStatus,
+  AskAnswer,
+  AskChoice,
+  AskOutcome,
   AuthMethodInfo,
   ImageInput,
   PasteInput,
@@ -18,7 +22,7 @@ import type {
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AuthObservation } from "../accounts.ts";
-import type { AgentAdapter, AuthOutcome, SendOpts } from "../adapter.ts";
+import type { AgentAdapter, AskReply, AuthOutcome, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, StoredImage, StoredPaste } from "../attachments.ts";
 import { decide, pickOption } from "../policy.ts";
 import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
@@ -27,6 +31,7 @@ import { type Bounds, worktreeBounds, writeClaudeLocalSettings } from "../sandbo
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
 import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
+import { parseForm, toContent } from "./elicit.ts";
 import { mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
 import type { AcpLink } from "./transport.ts";
 
@@ -106,6 +111,18 @@ interface QueueItem {
   pastes?: PasteInput[];
 }
 
+/** what the end event keeps of the answer, so a reload can read the card back */
+function recorded(reply?: AskReply): { answers?: AskAnswer[]; choiceId?: string } {
+  if (reply?.kind === "choice") return { choiceId: reply.choiceId };
+  return reply?.kind === "answers" && reply.answers ? { answers: reply.answers } : {};
+}
+
+/** one open ask card. `settle` is the only way out: it answers the agent's request, appends the
+ * end event and forgets the card, and it is safe to call twice (the loser of a race does nothing). */
+interface PendingAsk {
+  settle: (outcome: AskOutcome, reply?: AskReply) => void;
+}
+
 export class AcpSession implements AgentAdapter {
   status: AgentStatus = "idle";
   private queue: QueueItem[] = [];
@@ -123,6 +140,9 @@ export class AcpSession implements AgentAdapter {
   private reaper: ReturnType<typeof setTimeout> | null = null;
   /** questions in flight on side sessions; the reaper waits for them */
   private asking = 0;
+  /** ask cards waiting on a person, by ask id. The agent's request stays open on the wire until
+   * one of these settles, and that is what blocks its turn. */
+  private asks = new Map<string, PendingAsk>();
   private log: Transcript;
   /** last image number handed out in this worktree's session; continues across daemon restarts
    * because the transcript remembers every image sent */
@@ -141,11 +161,18 @@ export class AcpSession implements AgentAdapter {
     this.log = new Transcript(transcriptPathFor(d.transcriptsDir, d.worktreeId), d.worktreeId);
     this.imageSeq = 0;
     this.pasteSeq = 0;
+    // a card the daemon died under: the adapter process went with it, so nothing is listening for
+    // an answer. Close it here rather than let the next backfill draw a live-looking question that
+    // can never be answered. Idempotent, since these end events close the set on the next boot.
+    const open = new Set<string>();
     for (const { event } of this.log.entries) {
+      if (event.type === "agent-question" || event.type === "agent-permission") open.add(event.id);
+      else if (event.type === "agent-ask-end") open.delete(event.id);
       if (event.type !== "user-message") continue;
       for (const img of event.images ?? []) this.imageSeq = Math.max(this.imageSeq, img.n);
       for (const p of event.pastes ?? []) this.pasteSeq = Math.max(this.pasteSeq, p.n);
     }
+    for (const id of open) this.emit({ type: "agent-ask-end", id, outcome: "expired", ts: Date.now() });
   }
 
   get commands(): AgentCommand[] {
@@ -237,6 +264,9 @@ export class AcpSession implements AgentAdapter {
   stop() {
     this.queue = [];
     this.queueChanged();
+    // before the running guard and before session/cancel: an open card is the thing holding the
+    // turn open, so the agent unblocks on our answer whether or not its own cancel reaches it
+    this.cancelAsks();
     if (!this.running) return;
     this.interrupted = true;
     const live = this.live;
@@ -427,6 +457,7 @@ export class AcpSession implements AgentAdapter {
     const app = acp
       .client({ name: "toyon" })
       .onRequest(acp.methods.client.session.requestPermission, (c) => this.onPermission(c.params, bounds))
+      .onRequest(acp.methods.client.elicitation.create, (c) => this.onElicit(c.params, c.signal))
       .onNotification(acp.methods.client.session.update, (c) => this.onUpdate(c.params, side, commands))
       // the agent pushes its identity unasked, here and whenever it changes; settings shows the last one
       .onNotification(AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, (c) => {
@@ -440,13 +471,20 @@ export class AcpSession implements AgentAdapter {
         log.warn(this.d.worktreeId, "agent process exited while idle");
         this.conn = null;
         this.live = null;
+        this.cancelAsks();
       }
     });
     try {
       const init = await ctx.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,
-        // no client fs: the agent edits with its own tools, which the sandbox + policy confine
-        clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
+        clientCapabilities: {
+          // no client fs: the agent edits with its own tools, which the sandbox + policy confine
+          fs: { readTextFile: false, writeTextFile: false },
+          // form elicitation is how an adapter bridges its ask-the-user tool; the Claude adapter
+          // drops AskUserQuestion from the model's tool list entirely without it. `url` stays
+          // unadvertised: it is for sending someone to a browser mid-turn, which toyon cannot do.
+          elicitation: { form: {} },
+        },
         clientInfo: { name: "toyon", version: "0" },
       });
       this.conn = {
@@ -564,8 +602,12 @@ export class AcpSession implements AgentAdapter {
     }
   }
 
-  private onPermission(params: acp.RequestPermissionRequest, bounds: Bounds): acp.RequestPermissionResponse {
+  private onPermission(
+    params: acp.RequestPermissionRequest,
+    bounds: Bounds,
+  ): acp.RequestPermissionResponse | Promise<acp.RequestPermissionResponse> {
     const verdict = decide(params, bounds, this.d.cwd);
+    if (verdict.kind === "prompt") return this.askPermission(params);
     if (verdict.kind === "reject") {
       this.emit({
         type: "agent-blocked",
@@ -578,15 +620,131 @@ export class AcpSession implements AgentAdapter {
     return pickOption(params.options, verdict);
   }
 
+  /** a decision toyon will not make for the person: draw the agent's own options as a card and
+   * hold its request open until one is clicked */
+  private askPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
+    const choices: AskChoice[] = params.options.map((o) => ({ id: o.optionId, name: o.name, kind: o.kind }));
+    // the two agents put the plan in different places: Claude's ExitPlanMode renders it as a text
+    // content block, Codex's plan review sends only rawInput.plan. Without the fallback the card
+    // would show Codex a title and no plan to decide on.
+    const fromContent = params.toolCall.content
+      ?.map((c) => (c.type === "content" && c.content.type === "text" ? c.content.text : ""))
+      .filter(Boolean)
+      .join("\n\n");
+    const raw = (params.toolCall.rawInput as { plan?: unknown } | undefined)?.plan;
+    const detail = fromContent || (typeof raw === "string" ? raw : "");
+    return this.openAsk<acp.RequestPermissionResponse>(
+      (id) => ({
+        type: "agent-permission",
+        id,
+        title: params.toolCall.title ?? params.toolCall.name ?? "the agent needs a decision",
+        ...(detail ? { detail } : {}),
+        choices,
+        ...(params.toolCall.toolCallId ? { toolId: params.toolCall.toolCallId } : {}),
+        ts: Date.now(),
+      }),
+      (_outcome, reply) => {
+        const picked = reply?.kind === "choice" ? reply.choiceId : undefined;
+        return picked && choices.some((c) => c.id === picked)
+          ? { outcome: { outcome: "selected", optionId: picked } }
+          : { outcome: { outcome: "cancelled" } };
+      },
+    );
+  }
+
+  private onElicit(
+    params: acp.CreateElicitationRequest,
+    signal: AbortSignal,
+  ): acp.CreateElicitationResponse | Promise<acp.CreateElicitationResponse> {
+    const live = this.live;
+    // a side session (naming, batch planning) shares this connection and has no chat to draw a
+    // card in; neither does a request-scoped elicitation, which names a request and not a session
+    if (!live || !("sessionId" in params) || params.sessionId !== live.sessionId) {
+      log.warn(this.d.worktreeId, "elicitation with no chat behind it; declined");
+      return { action: "decline" };
+    }
+    const form = parseForm(params);
+    if (!form) {
+      // an MCP server's own form: free text, a number, a date. Declining is the protocol's "the
+      // person passed", which both bridges carry on from; an agent-error row would read as a
+      // toyon bug in the middle of a turn that is going fine.
+      log.warn(this.d.worktreeId, `elicitation toyon cannot draw as choices; declined: ${params.message}`);
+      return { action: "decline" };
+    }
+    // the union's custom-mode arm is an open record, so this is `unknown` until it is checked
+    const toolId = typeof params.toolCallId === "string" ? params.toolCallId : undefined;
+    return this.openAsk<acp.CreateElicitationResponse>(
+      (id) => ({
+        type: "agent-question",
+        id,
+        message: params.message,
+        questions: form.questions,
+        ...(toolId ? { toolId } : {}),
+        ts: Date.now(),
+      }),
+      (outcome, reply) => {
+        const answers = reply?.kind === "answers" ? reply.answers : undefined;
+        if (outcome === "answered" && answers) return { action: "accept", content: toContent(form, answers) };
+        // decline is "skipped" to the agent (it hears the person passed and carries on); cancel
+        // aborts the tool call, which is what a stopped turn means
+        return outcome === "skipped" ? { action: "decline" } : { action: "cancel" };
+      },
+      signal,
+    );
+  }
+
+  /** the shared half of both ask kinds: emit the card, park the resolver, and make sure every way
+   * out settles the agent's request exactly once */
+  private openAsk<R>(
+    card: (id: string) => AgentEvent,
+    respond: (outcome: AskOutcome, reply?: AskReply) => R,
+    signal?: AbortSignal,
+  ): Promise<R> {
+    const id = randomUUID();
+    return new Promise<R>((resolve) => {
+      const settle = (outcome: AskOutcome, reply?: AskReply) => {
+        if (!this.asks.delete(id)) return;
+        signal?.removeEventListener("abort", onAbort);
+        this.emit({ type: "agent-ask-end", id, outcome, ...recorded(reply), ts: Date.now() });
+        this.syncStatus();
+        resolve(respond(outcome, reply));
+      };
+      const onAbort = () => settle("cancelled");
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.asks.set(id, { settle });
+      this.emit(card(id));
+      this.syncStatus();
+    });
+  }
+
+  answer(askId: string, reply: AskReply) {
+    const ask = this.asks.get(askId);
+    // two shells can watch one worktree; the other one answering first is normal, not an error
+    if (!ask) return log.debug(this.d.worktreeId, `answer for an ask that already closed (${askId})`);
+    ask.settle(reply.kind === "answers" && !reply.answers ? "skipped" : "answered", reply);
+  }
+
+  /** every open card goes away with the turn or the process it belonged to */
+  private cancelAsks() {
+    for (const ask of [...this.asks.values()]) ask.settle("cancelled");
+  }
+
+  /** a card is opened inside a running turn, so the turn's own status would say "working" while
+   * the agent is in fact blocked on a person */
+  private syncStatus() {
+    if (this.status === "error") return;
+    this.setStatus(this.asks.size > 0 ? "waiting" : this.running ? "working" : "idle");
+  }
+
   private maybeArmReaper() {
-    if (!this.running && !this.asking && this.conn && !this.stopped) this.armReaper();
+    if (!this.running && !this.asking && this.asks.size === 0 && this.conn && !this.stopped) this.armReaper();
   }
 
   private armReaper() {
     this.clearReaper();
     const t = setTimeout(() => {
       this.reaper = null;
-      if (this.running || this.asking || !this.conn) return;
+      if (this.running || this.asking || this.asks.size > 0 || !this.conn) return;
       log.debug(this.d.worktreeId, "agent idle; stopping its process");
       fireAndForget(this.d.worktreeId, this.dropConn(), "reap agent");
     }, this.d.idleMs ?? DEFAULT_IDLE_MS);
@@ -601,6 +759,9 @@ export class AcpSession implements AgentAdapter {
   }
 
   private async dropConn() {
+    // closing the connection aborts outbound requests only, so a card the agent is blocked on
+    // would otherwise sit here forever with no process left to answer
+    this.cancelAsks();
     const conn = this.conn;
     this.conn = null;
     this.live = null;

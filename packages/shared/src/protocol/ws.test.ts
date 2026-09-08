@@ -19,6 +19,10 @@ describe("parseClientMsg", () => {
       { t: "install-agent", agent: "codex" },
       { t: "agent-auth", worktreeId: "a", methodId: "api-key", apiKey: "sk-x" },
       { t: "agent-retry", worktreeId: "a" },
+      { t: "agent-answer", worktreeId: "a", askId: "k1", answers: [{ selected: ["yes"], note: "with a caveat" }] },
+      // no answers at all is the skip button
+      { t: "agent-answer", worktreeId: "a", askId: "k1" },
+      { t: "agent-decide", worktreeId: "a", askId: "k1", choiceId: "allow_once" },
       { t: "agent-logout", agent: "codex" },
       { t: "combine", worktreeIds: ["a", "b"] },
       { t: "confirm-config", repoId: "r", config: { procs: { web: "bun dev" } } },
@@ -62,6 +66,19 @@ describe("parseClientMsg", () => {
     if (!r.ok) expect(r.reason).toMatch(/config\.procs/);
     const w = parseClientMsg({ t: "write-file", worktreeId: "a", path: "", content: "" });
     if (!w.ok) expect(w.reason).toMatch(/^path/);
+    const a = parseClientMsg({ t: "agent-answer", worktreeId: "a", askId: "k", answers: [{ selected: "one" }] });
+    expect(a.ok).toBe(false);
+    if (!a.ok) expect(a.reason).toMatch(/answers/);
+  });
+
+  test("an ask answer is bounded: a browser sends it, and a card can be old", () => {
+    const answer = (answers: unknown) => parseClientMsg({ t: "agent-answer", worktreeId: "a", askId: "k", answers });
+    expect(answer([{ selected: Array.from({ length: 33 }, () => "x") }]).ok).toBe(false);
+    expect(answer(Array.from({ length: 9 }, () => ({ selected: [] }))).ok).toBe(false);
+    expect(answer([{ selected: ["x"], note: "n".repeat(10_001) }]).ok).toBe(false);
+    expect(answer([{ selected: ["x"], note: "n".repeat(10_000) }]).ok).toBe(true);
+    // a decision needs the option it is deciding for
+    expect(parseClientMsg({ t: "agent-decide", worktreeId: "a", askId: "k" }).ok).toBe(false);
   });
 
   test("profiles must name real procs, a default, and a preview inside the profile", () => {

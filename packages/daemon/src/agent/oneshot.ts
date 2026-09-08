@@ -21,10 +21,21 @@ export async function askFreshAgent(
   const listeners = new Map<string, (text: string) => void>();
   const app = acp
     .client({ name: "toyon" })
-    // read-only mode should mean none arrive; if one does, the worktree rules still apply
-    .onRequest(acp.methods.client.session.requestPermission, (c) =>
-      pickOption(c.params.options, decide(c.params, bounds, cwd)),
-    )
+    // read-only mode should mean none arrive; if one does, the worktree rules still apply.
+    // Nothing here can ask a person: this runs before a worktree exists, so there is no chat to
+    // draw a card in and a `prompt` verdict becomes a refusal. For the same reason the client
+    // capabilities below stay as they are: without `elicitation.form` the Claude adapter drops
+    // AskUserQuestion from the tool list, so the namer and the batch planner cannot ask either.
+    .onRequest(acp.methods.client.session.requestPermission, (c) => {
+      const verdict = decide(c.params, bounds, cwd);
+      if (verdict.kind !== "prompt") return pickOption(c.params.options, verdict);
+      return pickOption(c.params.options, {
+        kind: "reject",
+        tool: c.params.toolCall.name ?? "tool",
+        path: "",
+        reason: "nobody is watching this session",
+      });
+    })
     .onNotification(acp.methods.client.session.update, (c) => {
       const u = c.params.update;
       if (u.sessionUpdate === "agent_message_chunk" && u.content.type === "text") {

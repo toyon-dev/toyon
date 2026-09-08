@@ -254,6 +254,11 @@ a code {
   background: var(--yellow);
   animation: pulse 1.2s ease-in-out infinite;
 }
+/* blocked on you, not on the model. Steady rather than pulsing: working's motion means "leave it
+   alone", and this one means the opposite. */
+.dot.waiting {
+  background: var(--accent);
+}
 .dot.crashed {
   background: var(--red);
 }

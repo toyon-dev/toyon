@@ -46,6 +46,7 @@ type PromptScript = (params: acp.PromptRequest, client: acp.AgentContext) => Pro
 
 interface FakeAgent {
   app: acp.AgentApp;
+  inits: acp.InitializeRequest[];
   newSessions: acp.NewSessionRequest[];
   loads: acp.LoadSessionRequest[];
   prompts: acp.PromptRequest[];
@@ -71,6 +72,7 @@ function fakeAgent(
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
+    inits: [],
     newSessions: [],
     loads: [],
     prompts: [],
@@ -94,6 +96,7 @@ function fakeAgent(
   f.app = acp
     .agent({ name: "fake" })
     .onRequest(acp.methods.agent.initialize, async (c) => {
+      f.inits.push(c.params);
       // the identity push goes out before the response, as both real adapters send it
       if (opts.authStatus) await c.client.notify(AUTH_STATUS_UPDATE_METHOD, { authStatus: opts.authStatus });
       return {
@@ -728,5 +731,305 @@ describe("AcpSession", () => {
     await Bun.sleep(30);
     expect(fake.newSessions).toHaveLength(0);
     expect(w.sessionId()).toBeUndefined();
+  });
+});
+
+// A form shaped the way @agentclientprotocol/claude-agent-acp bridges AskUserQuestion.
+const askForm = (opts: { note?: boolean; multi?: boolean } = {}) => ({
+  mode: "form" as const,
+  message: "Which auth approach?",
+  toolCallId: "t1",
+  requestedSchema: {
+    type: "object" as const,
+    properties: {
+      question_0: opts.multi
+        ? {
+            type: "array" as const,
+            title: "Auth",
+            items: {
+              anyOf: [
+                { const: "a", title: "A" },
+                { const: "b", title: "B" },
+              ],
+            },
+          }
+        : {
+            type: "string" as const,
+            title: "Auth",
+            oneOf: [
+              { const: "a", title: "A" },
+              { const: "b", title: "B" },
+            ],
+          },
+      ...(opts.note
+        ? {
+            question_0_custom: {
+              type: "string" as const,
+              title: "Other",
+              _meta: { _askUserQuestionCustomAnswer: { questionId: "question_0", isCustomAnswer: true } },
+            },
+          }
+        : {}),
+    },
+  },
+});
+
+/** a turn that asks one question and then reports whatever came back */
+const asks =
+  (form: unknown = askForm({ note: true })): PromptScript =>
+  async (p, client) => {
+    const answer = await client.request(acp.methods.client.elicitation.create, {
+      sessionId: p.sessionId,
+      ...(form as object),
+    } as acp.CreateElicitationRequest);
+    await client.notify(acp.methods.client.session.update, {
+      sessionId: p.sessionId,
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify(answer) } },
+    });
+    return { stopReason: "end_turn" };
+  };
+
+/** the id of the card the session most recently opened */
+const openAsk = (events: AgentEvent[]) =>
+  (events.findLast((e) => e.type === "agent-question" || e.type === "agent-permission") as { id: string } | undefined)
+    ?.id;
+
+const waitFor = async (fn: () => boolean) => {
+  for (let i = 0; i < 400 && !fn(); i++) await Bun.sleep(5);
+};
+
+const saidBack = (events: AgentEvent[]) =>
+  JSON.parse((events.find((e) => e.type === "text-delta") as { text: string }).text);
+
+describe("AcpSession ask cards", () => {
+  test("initialize advertises form elicitation, which is what un-hides the agent's ask tool", async () => {
+    const fake = fakeAgent(say("hi"));
+    const w = world(fake);
+    w.session.send("go");
+    await w.idle();
+    expect(fake.inits[0]!.clientCapabilities?.elicitation).toEqual({ form: {} });
+    await w.session.close();
+  });
+
+  test("a question blocks the turn, and the answer goes back in the agent's own field names", async () => {
+    const fake = fakeAgent(asks());
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-question" }>;
+    expect(card).toMatchObject({ type: "agent-question", message: "Which auth approach?", toolId: "t1" });
+    expect(card.questions).toEqual([
+      {
+        id: "question_0",
+        text: "",
+        header: "Auth",
+        options: [
+          { value: "a", label: "A" },
+          { value: "b", label: "B" },
+        ],
+        note: { label: "Other" },
+      },
+    ]);
+    // nothing has ended the turn, and the worktree reads as waiting on a person rather than busy
+    expect(w.types()).not.toContain("turn-end");
+    expect(w.session.status).toBe("waiting");
+
+    w.session.answer(card.id, {
+      kind: "answers",
+      answers: [{ selected: ["a"], note: "only if it stays server-side" }],
+    });
+    await w.idle();
+    expect(w.types()).toContain("turn-end");
+    expect(w.events.find((e) => e.type === "agent-ask-end")).toMatchObject({ id: card.id, outcome: "answered" });
+    // the note rides with the pick, so the agent reads the choice and the caveat together
+    expect(saidBack(w.events)).toEqual({
+      action: "accept",
+      content: { question_0: "a", question_0_custom: "A: only if it stays server-side" },
+    });
+    expect(w.statuses).toEqual(["working", "waiting", "working", "idle"]);
+    await w.session.close();
+  });
+
+  test("skipping declines, which the agent hears as the person passing rather than as a failure", async () => {
+    const fake = fakeAgent(asks());
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(openAsk(w.events)!, { kind: "answers" });
+    await w.idle();
+    expect(w.events.find((e) => e.type === "agent-ask-end")).toMatchObject({ outcome: "skipped" });
+    expect(saidBack(w.events)).toEqual({ action: "decline" });
+    await w.session.close();
+  });
+
+  test("stopping the turn cancels the card instead of leaving the agent blocked on it", async () => {
+    const fake = fakeAgent(asks());
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.stop();
+    await w.idle();
+    expect(w.events.find((e) => e.type === "agent-ask-end")).toMatchObject({ outcome: "cancelled" });
+    expect(w.types()).toContain("turn-end");
+    await w.session.close();
+  });
+
+  test("answering an ask that already closed is a no-op, not a throw", async () => {
+    const fake = fakeAgent(asks());
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    const id = openAsk(w.events)!;
+    w.session.answer(id, { kind: "answers", answers: [{ selected: ["a"] }] });
+    await w.idle();
+    const ends = w.events.filter((e) => e.type === "agent-ask-end").length;
+    // the second shell's click lands after the first one settled the card
+    w.session.answer(id, { kind: "answers", answers: [{ selected: ["b"] }] });
+    expect(w.events.filter((e) => e.type === "agent-ask-end")).toHaveLength(ends);
+    await w.session.close();
+  });
+
+  test("a multi-select answer goes back as an array", async () => {
+    const fake = fakeAgent(asks(askForm({ multi: true })));
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(openAsk(w.events)!, { kind: "answers", answers: [{ selected: ["a", "b"] }] });
+    await w.idle();
+    expect(saidBack(w.events)).toEqual({ action: "accept", content: { question_0: ["a", "b"] } });
+    await w.session.close();
+  });
+
+  test("a form toyon cannot draw as choices is declined without painting a card", async () => {
+    const fake = fakeAgent(
+      asks({
+        mode: "form",
+        message: "What is the port?",
+        requestedSchema: { type: "object", properties: { port: { type: "number" } } },
+      }),
+    );
+    const w = world(fake);
+    w.session.send("go");
+    await w.idle();
+    expect(w.types()).not.toContain("agent-question");
+    expect(saidBack(w.events)).toEqual({ action: "decline" });
+    await w.session.close();
+  });
+
+  test("an elicitation on a side session is declined and never touches the worktree transcript", async () => {
+    // the namer and the batch planner run on this same connection; a card there would appear in a
+    // chat nobody was looking at, answering a question nobody asked for
+    // the chat turn runs on s1; anything else here is a side session
+    const fake = fakeAgent(async (p, client) => {
+      if (p.sessionId === "s1") return say("hi")(p, client);
+      const answer = await client.request(acp.methods.client.elicitation.create, {
+        sessionId: p.sessionId,
+        ...askForm(),
+      } as acp.CreateElicitationRequest);
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: p.sessionId,
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify(answer) } },
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake);
+    w.session.send("go");
+    await w.idle();
+    const before = w.events.length;
+    const reply = await w.session.ask("sys", "name this");
+    expect(JSON.parse(reply!)).toEqual({ action: "decline" });
+    // and the worktree's own chat never heard about the question
+    expect(w.events).toHaveLength(before);
+    expect(w.types()).not.toContain("agent-question");
+    await w.session.close();
+  });
+
+  test("a plan approval reaches a person instead of being allowed silently", async () => {
+    const fake = fakeAgent(async (p, client) => {
+      const outcome = await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId: "t9",
+          title: "Approve Plan",
+          kind: "switch_mode",
+          content: [{ type: "content", content: { type: "text", text: "# the plan\n\nstep one" } }],
+        },
+        options: [
+          { optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" },
+          { optionId: "cancel", name: "No, keep planning", kind: "reject_once" },
+        ],
+      });
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: p.sessionId,
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify(outcome) } },
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake);
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    expect(card).toMatchObject({ type: "agent-permission", title: "Approve Plan", toolId: "t9" });
+    expect(card.detail).toBe("# the plan\n\nstep one");
+    expect(card.choices.map((c) => c.id)).toEqual(["exit_plan_default", "cancel"]);
+
+    w.session.answer(card.id, { kind: "choice", choiceId: "cancel" });
+    await w.idle();
+    expect(saidBack(w.events)).toEqual({ outcome: { outcome: "selected", optionId: "cancel" } });
+    await w.session.close();
+  });
+
+  test("Codex sends its plan as rawInput rather than content, and the card still has it", async () => {
+    const fake = fakeAgent(async (p, client) => {
+      const outcome = await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId: "plan-1",
+          title: "Implement this plan?",
+          kind: "switch_mode",
+          rawInput: { plan: "1. read\n2. write" },
+        },
+        options: [
+          { optionId: "implement_plan", name: "Yes, implement this plan", kind: "allow_once" },
+          { optionId: "revise_plan", name: "No, and tell Codex what to do differently", kind: "reject_once" },
+        ],
+      });
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: p.sessionId,
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify(outcome) } },
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, codexSpec);
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    expect(card.detail).toBe("1. read\n2. write");
+    w.session.answer(card.id, { kind: "choice", choiceId: "implement_plan" });
+    await w.idle();
+    expect(saidBack(w.events)).toEqual({ outcome: { outcome: "selected", optionId: "implement_plan" } });
+    await w.session.close();
+  });
+
+  test("a card the daemon died under is closed when the transcript is read back", async () => {
+    const fake = fakeAgent(asks());
+    const w = world(fake);
+    w.session.send("go");
+    await waitFor(() => !!openAsk(w.events));
+    const id = openAsk(w.events)!;
+    // deliberately not close(), which is a clean shutdown and cancels its own cards. Leaving the
+    // card open puts a question with no end on disk, which is what a killed daemon leaves behind.
+    await waitFor(() => readFileSync(join(home, `${w.id}.jsonl`), "utf8").includes(id));
+
+    const revived = world(fakeAgent(say("hi")), claudeSpec, 60_000, w.id);
+    expect(revived.events).toHaveLength(1);
+    expect(revived.events[0]).toMatchObject({ type: "agent-ask-end", id, outcome: "expired" });
+    // a second read adds nothing: that end event closed the card for good
+    await waitFor(() => readFileSync(join(home, `${w.id}.jsonl`), "utf8").includes("expired"));
+    const again = world(fakeAgent(say("hi")), claudeSpec, 60_000, w.id);
+    expect(again.events).toHaveLength(0);
+    await revived.session.close();
+    await again.session.close();
+    await w.session.close();
   });
 });

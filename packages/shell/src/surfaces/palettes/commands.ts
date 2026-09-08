@@ -10,7 +10,7 @@ import { profileNames, profileOf } from "../../state/profiles.ts";
 import { type Action, repoById, type State, worktreeById } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { worktreeActions } from "../rail/worktreeActions.ts";
-import { chord } from "../util.ts";
+import { chord, isBusy } from "../util.ts";
 
 export type Command = {
   id: string;
@@ -147,7 +147,9 @@ export function buildCommands(
   if (wt && id) {
     const acts = worktreeActions(sock);
     const t = wt.worktree.title;
-    if (wt.agent === "working") add("stop", `stop agent · ${t}`, () => sock?.send({ t: "stop-agent", worktreeId: id }));
+    // stop stays offered while an ask card is open: that is the way out of a question you do
+    // not want to answer
+    if (isBusy(wt)) add("stop", `stop agent · ${t}`, () => sock?.send({ t: "stop-agent", worktreeId: id }));
     for (const p of wt.procs)
       add(`restart:${p.name}`, `restart ${p.name} (${p.status})`, () =>
         sock?.send({ t: "term-restart", worktreeId: id, stream: p.name }),

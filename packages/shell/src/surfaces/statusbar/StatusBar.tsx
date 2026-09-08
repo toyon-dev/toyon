@@ -6,7 +6,7 @@ import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../palettes/ProjectPicker.tsx";
-import { chord, isInstalledApp } from "../util.ts";
+import { chord, isBusy, isInstalledApp } from "../util.ts";
 
 /** the top bar: dock toggles, the route bar centered over the preview, tools (proc health badges the
  * composer's terminal button; a dead socket colours the worktree rail) */
@@ -84,9 +84,7 @@ function ProjectPill() {
   const repos = useStore((s) => s.repos);
   // the dialog form draws over the preview instead; this is only the panel that drops out of here
   const open = useStore((s) => s.overlay?.kind === "projects" && !s.overlay.dialog);
-  const busyElsewhere = useStore((s) =>
-    s.worktrees.some((w) => w.agent === "working" && w.worktree.repoId !== s.activeRepoId),
-  );
+  const busyElsewhere = useStore((s) => s.worktrees.some((w) => isBusy(w) && w.worktree.repoId !== s.activeRepoId));
   return (
     <span className="pp-wrap">
       <button

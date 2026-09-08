@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentCommand, AgentEvent, AgentStatus, LogLine, ProcState, WorktreeInfo } from "@toyon/shared";
 import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
-import type { AgentAdapter, SendOpts } from "../../src/agent/adapter.ts";
+import type { AgentAdapter, AskReply, SendOpts } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
 import type { PtyHandle, PtyOpts } from "../../src/runtime/pty.ts";
@@ -39,10 +39,14 @@ export class FakeAgent implements AgentAdapter {
     this.closes++;
   }
   asked: Array<[string, string]> = [];
-  answer: string | null = null;
+  askReply: string | null = null;
   async ask(system: string, prompt: string) {
     this.asked.push([system, prompt]);
-    return this.answer;
+    return this.askReply;
+  }
+  answered: Array<[string, AskReply]> = [];
+  answer(askId: string, reply: AskReply) {
+    this.answered.push([askId, reply]);
   }
   auths: Array<[string, string | undefined]> = [];
   async authenticate(methodId: string, apiKey?: string) {

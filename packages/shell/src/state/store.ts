@@ -6,6 +6,10 @@ import type {
   AgentCommand,
   AgentEvent,
   AgentInfo,
+  AskAnswer,
+  AskChoice,
+  AskOutcome,
+  AskQuestion,
   AuthMethodInfo,
   GitFileStatus,
   ImageInput,
@@ -53,6 +57,18 @@ export type ChatItem =
       methods: AuthMethodInfo[];
       rejected?: boolean;
       done: boolean;
+    }
+  /** the agent asked something and is blocked until this is answered; `outcome` is what closed it,
+   * and its absence is what "still open" means, including after a reload */
+  | {
+      kind: "ask";
+      id: string;
+      ask:
+        | { kind: "question"; message: string; questions: AskQuestion[] }
+        | { kind: "permission"; title: string; detail?: string; choices: AskChoice[] };
+      outcome?: AskOutcome;
+      answers?: AskAnswer[];
+      choiceId?: string;
     };
 
 export interface GitInfo {
@@ -720,7 +736,44 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
       next[idx] = { ...(next[idx] as Extract<ChatItem, { kind: "auth" }>), done: true };
       return next;
     }
+    case "agent-question":
+      return addAsk(items, event.toolId, {
+        kind: "ask",
+        id: event.id,
+        ask: { kind: "question", message: event.message, questions: event.questions },
+      });
+    case "agent-permission":
+      return addAsk(items, event.toolId, {
+        kind: "ask",
+        id: event.id,
+        ask: {
+          kind: "permission",
+          title: event.title,
+          ...(event.detail ? { detail: event.detail } : {}),
+          choices: event.choices,
+        },
+      });
+    case "agent-ask-end": {
+      const idx = items.findLastIndex((i) => i.kind === "ask" && i.id === event.id && !i.outcome);
+      if (idx === -1) return items;
+      const next = items.slice();
+      next[idx] = {
+        ...(next[idx] as Extract<ChatItem, { kind: "ask" }>),
+        outcome: event.outcome,
+        ...(event.answers ? { answers: event.answers } : {}),
+        ...(event.choiceId ? { choiceId: event.choiceId } : {}),
+      };
+      return next;
+    }
     default:
       return items;
   }
+}
+
+/** A card and the tool row it came from are one call, so the card takes the row's place: a
+ * one-line "AskUserQuestion" above a card that already asks the question is noise. A later
+ * tool-end for that id then finds nothing, which is already a no-op. */
+function addAsk(items: ChatItem[], toolId: string | undefined, card: ChatItem): ChatItem[] {
+  const at = toolId ? items.findLastIndex((i) => i.kind === "tool" && i.id === toolId) : -1;
+  return at === -1 ? [...items, card] : [...items.slice(0, at), ...items.slice(at + 1), card];
 }

@@ -40,7 +40,16 @@ export function clampW(n: number, fallback: number): number {
 }
 
 /** the rail dot: what the worktree is doing right now */
+/** the agent is doing something, or waiting for you to let it carry on. Several places mean this
+ * rather than "working" specifically, and a blocked worktree that reads as idle is the worst of
+ * the two mistakes: it is the one that needs you. */
+export function isBusy(w: WorktreeStatus): boolean {
+  return w.agent === "working" || w.agent === "waiting";
+}
+
 export function dotClass(w: WorktreeStatus): string {
+  // a worktree that needs you outranks one that is merely busy
+  if (w.agent === "waiting") return "waiting";
   if (w.agent === "working") return "working";
   if (w.worktree.landed) return "landed";
   if (w.procs.some((p) => p.status === "crashed")) return "crashed";

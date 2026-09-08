@@ -1,7 +1,7 @@
-// Answers an agent's session/request_permission without a person in the loop: file writes are
-// allowed inside the worktree's bounds and rejected outside them (the agent is told why), and
-// everything else is allowed because the OS sandbox already confines it. The `prompt` verdict is
-// reserved for the allow/deny UI; nothing returns it yet.
+// Answers an agent's session/request_permission: file writes are allowed inside the worktree's
+// bounds and rejected outside them (the agent is told why), and everything else is allowed
+// because the OS sandbox already confines it. One request goes to a person instead, `switch_mode`
+// (Claude's ExitPlanMode), because approving a plan nobody read is not a decision toyon can make.
 
 import { isAbsolute, resolve } from "node:path";
 import type { PermissionOption, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
@@ -14,7 +14,7 @@ export type Verdict =
   | { kind: "prompt" };
 
 /** tool kinds that never write through the file tools; their side effects are the sandbox's job */
-const NON_WRITE_KINDS = new Set(["execute", "read", "search", "fetch", "think", "switch_mode"]);
+const NON_WRITE_KINDS = new Set(["execute", "read", "search", "fetch", "think"]);
 
 /** every path the request names: ACP locations first, then the raw tool input's usual keys */
 export function requestedPaths(req: RequestPermissionRequest, cwd: string): string[] {
@@ -33,6 +33,10 @@ export function decide(req: RequestPermissionRequest, bounds: Bounds, cwd: strin
   const tool = req.toolCall.name ?? req.toolCall.title ?? "tool";
   const paths = requestedPaths(req, cwd);
   const kind = req.toolCall.kind;
+  // Claude's ExitPlanMode arrives here: a plan to read and a set of "yes, and…" options. Allowing
+  // it would approve the plan and start the edits without anyone having seen it, so it is the one
+  // request a person answers.
+  if (kind === "switch_mode") return { kind: "prompt" };
   if (paths.length === 0) {
     if (kind && NON_WRITE_KINDS.has(kind)) return { kind: "allow" };
     if (kind === "edit" || kind === "delete" || kind === "move") {
@@ -69,8 +73,15 @@ export function decide(req: RequestPermissionRequest, bounds: Bounds, cwd: strin
 
 /** the option that carries the verdict: allow_once (never allow_always, which would persist a
  * rule and widen the agent's own permissions), or a reject that does not cancel the turn when the
- * agent offers one */
-export function pickOption(options: PermissionOption[], verdict: Verdict): RequestPermissionResponse {
+ * agent offers one.
+ *
+ * `prompt` is excluded on purpose. It has no option to pick, and the `else` below would answer it
+ * as a reject, so a caller that forgets to hold it open gets a type error instead of an agent
+ * that is silently denied. */
+export function pickOption(
+  options: PermissionOption[],
+  verdict: Exclude<Verdict, { kind: "prompt" }>,
+): RequestPermissionResponse {
   const byKind = (k: PermissionOption["kind"]) => options.filter((o) => o.kind === k);
   let chosen: PermissionOption | undefined;
   if (verdict.kind === "allow") {

@@ -74,6 +74,49 @@ export interface AuthMethodInfo {
   needsKey?: boolean;
 }
 
+/** one choice in a question the agent asked */
+export interface AskOption {
+  /** what goes back to the agent. The agent's own enum names it, so it is not always the label */
+  value: string;
+  label: string;
+  description?: string;
+  /** a longer sample the agent attached to this option (a mockup, a snippet) */
+  preview?: string;
+}
+
+/** one question inside an ask card. A single AskUserQuestion call carries up to four of them and
+ * they are answered together, because the wire is one request with one response. */
+export interface AskQuestion {
+  /** unique within the card; an answer's position refers to it */
+  id: string;
+  /** empty when the card's own message is already the question */
+  text: string;
+  /** the short label the agent gave it ("Approach"), when it gave one */
+  header?: string;
+  options: AskOption[];
+  multi?: boolean;
+  /** the agent will take typed text for this question; `label` is what it called that field */
+  note?: { label: string };
+  required?: boolean;
+}
+
+/** what a person answered one question with */
+export interface AskAnswer {
+  /** option values, never labels */
+  selected: string[];
+  note?: string;
+}
+
+/** one button on a permission ask. Mirrors ACP's PermissionOption, redeclared because `shared`
+ * runs in the browser and must not pull in the ACP SDK. */
+export interface AskChoice {
+  id: string;
+  name: string;
+  kind: "allow_once" | "allow_always" | "reject_once" | "reject_always";
+}
+
+export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
+
 export type AgentEvent =
   | { type: "user-message"; text: string; ts: number; pick?: PickMeta; images?: ImageRef[]; pastes?: PasteRef[] }
   | { type: "turn-start"; ts: number }
@@ -98,4 +141,28 @@ export type AgentEvent =
       ts: number;
     }
   | { type: "agent-auth-ok"; ts: number }
-  | { type: "agent-blocked"; tool: string; path: string; reason: string; ts: number };
+  | { type: "agent-blocked"; tool: string; path: string; reason: string; ts: number }
+  /** the agent asked something and its turn is blocked until the answer goes back. `toolId` ties
+   * the card to the tool row the agent emitted just before it, which the card then replaces.
+   * Always followed by an agent-ask-end. */
+  | { type: "agent-question"; id: string; message: string; questions: AskQuestion[]; toolId?: string; ts: number }
+  /** the agent wants a decision it will not make for itself; `detail` is markdown (the plan) */
+  | {
+      type: "agent-permission";
+      id: string;
+      title: string;
+      detail?: string;
+      choices: AskChoice[];
+      toolId?: string;
+      ts: number;
+    }
+  /** the card closed. "cancelled": the turn was stopped, or the agent's process went away.
+   * "expired": the daemon restarted under an open card, so nothing is listening for an answer */
+  | {
+      type: "agent-ask-end";
+      id: string;
+      outcome: AskOutcome;
+      answers?: AskAnswer[];
+      choiceId?: string;
+      ts: number;
+    };

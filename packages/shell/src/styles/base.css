@@ -93,6 +93,30 @@ button {
   vertical-align: -2px;
 }
 
+/* ---- inline code ---- */
+/* a backticked word is marked text, not a control: the mono face and a wash of the ink set it
+   apart, so a sentence naming six paths reads as a sentence and not as a row of boxes. The size is
+   relative because mono runs small beside the UI face at the same pixel size, and because the same
+   word has to hold its proportion inside a heading or a table cell. The padding is optically
+   square: 5px of side bearing against the ~5px the line-height leaves above the caps. */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  line-height: 1.35;
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  background: var(--code-bg);
+  /* a chip that wraps mid-sentence keeps its padding and corners on both halves */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  /* a path longer than the column breaks instead of pushing the panel sideways */
+  overflow-wrap: anywhere;
+}
+/* code inside a link is part of the link, and takes its color */
+a code {
+  color: inherit;
+}
+
 /* ---- fields ---- */
 .field {
   background: var(--bg0);

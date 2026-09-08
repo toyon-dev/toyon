@@ -22,6 +22,11 @@
   /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
   --scrim: #282828b3;
   --shadow: #00000066;
+  /* code sits on a wash of the text color instead of a background step: bg0 and bg1 are the same
+     color in several themes (Rose Pine, Nord), so a chip painted in one of them would disappear
+     into the column it sits on. Mixed at use time, so it follows the theme like everything else. */
+  --code-bg: color-mix(in srgb, var(--fg1) 6%, transparent);
+  --code-panel: color-mix(in srgb, var(--fg1) 4%, transparent);
   /* radii: xs chips/badges, sm controls, md boxes, lg cards */
   --r-xs: 3px;
   --r-sm: 4px;

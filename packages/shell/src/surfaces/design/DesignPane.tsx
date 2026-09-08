@@ -123,7 +123,7 @@ function Gap({ children }: { children: React.ReactNode }) {
  * then the elements, then the text ladder, because that is the order they mean something in.
  */
 const GROUPS: Array<{ kind: DesignToken["kind"]; label: string; tight?: boolean }> = [
-  { kind: "color", label: "colour" },
+  { kind: "color", label: "color" },
   { kind: "length", label: "size & radius", tight: true },
   { kind: "font", label: "type" },
   { kind: "shadow", label: "shadow" },
@@ -312,11 +312,16 @@ function Classes({
 }) {
   const { classes, coverage } = index;
   const used = classes.filter((c) => c.uses > 0);
-  const unwrapped = used.filter((c) => c.unwrapped).length;
+  // The same split the components get: a class two or more places reach for is shared vocabulary,
+  // and the long tail of one-offs and dead selectors is real but not what you came to read.
+  const shared = classes.filter((c) => c.uses >= 2);
+  const rest = classes.filter((c) => c.uses < 2);
+  const unwrapped = shared.filter((c) => c.unwrapped).length;
   // said once, in the header, and marked on the rows it is about. Listing them again underneath
   // was the same names twice on one screen.
   const note = classes.length
-    ? `${used.length} of ${classes.length} used` + (unwrapped ? `, ${unwrapped} with no component of their name` : "")
+    ? `${shared.length} reused of ${classes.length}` +
+      (unwrapped ? `, ${unwrapped} with no component of their name` : "")
     : undefined;
   return (
     <Section title="Classes" note={note}>
@@ -329,11 +334,26 @@ function Classes({
             : "No class attribute anywhere in the source that was read. The markup may live in a file type this scan does not open."}
         </Gap>
       ) : (
-        <ul className="design-rows">
-          {used.map((c) => (
-            <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
-          ))}
-        </ul>
+        <>
+          <ul className="design-rows">
+            {shared.map((c) => (
+              <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
+            ))}
+          </ul>
+          {rest.length > 0 && (
+            <details className="design-tail">
+              <summary>
+                <span className="design-count">{rest.length}</span>
+                used once or never
+              </summary>
+              <ul className="design-rows">
+                {rest.map((c) => (
+                  <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
       )}
     </Section>
   );

@@ -99,10 +99,12 @@ const ICON_PATHS: Record<IconName, string> = {
   worktrees:
     "M3.8 2.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 4h5.4 M3.8 6.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 8h5.4 M3.8 10.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 12h5.4",
   // two arrows passing: swapping one mode for another
-  // a painter's palette: the blob with its thumb notch, and three wells of paint
-  palette:
-    "M2.4 8.6C2.4 4.9 5 2.3 8.4 2.3c3.3 0 5.4 2.1 5.4 4.7 0 2-1.5 2.8-2.8 3-.8.15-1.2.6-1 1.3.2.8-.4 2.1-2 2.1-3 0-5.6-1.8-5.6-4.8z M5.6 5.3a.75.75 0 1 0 0 1.5.75.75 0 1 0 0-1.5z M8.3 4.5a.75.75 0 1 0 0 1.5.75.75 0 1 0 0-1.5z M10.9 5.8a.75.75 0 1 0 0 1.5.75.75 0 1 0 0-1.5z",
   swap: "M3 6.2h9.2 M9.7 3.7 12.2 6.2 9.7 8.7 M13 10.2H3.8 M6.3 7.7 3.8 10.2l2.5 2.5",
+  // A painter's palette: the blob with its thumb notch, and three wells. The wells are small and
+  // spread on purpose; at r .75 they were wider than the gap between them and merged into one
+  // smear at 16px, which is the only size this is ever drawn at.
+  palette:
+    "M2.3 8.4C2.3 4.7 5 2.2 8.5 2.2c3.4 0 5.2 2.2 5.2 4.6 0 1.9-1.4 2.6-2.7 2.8-.9.15-1.3.7-1.1 1.4.2.9-.5 2.2-2.1 2.2-3.2 0-5.5-2-5.5-4.8z M5 6.2a.5.5 0 1 0 0 1 .5.5 0 1 0 0-1z M7.8 4.9a.5.5 0 1 0 0 1 .5.5 0 1 0 0-1z M11 5.8a.5.5 0 1 0 0 1 .5.5 0 1 0 0-1z",
   // a step that happened under a name we cannot read: a marker, deliberately without a meaning
   dot: "M8 4.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 1 0 0-6.8z",
 };

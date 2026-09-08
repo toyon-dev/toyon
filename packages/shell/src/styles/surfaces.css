@@ -2232,12 +2232,10 @@ body.resizing .rb-center {
  * window. A plain block carries the cap, and the grid inside it fills whatever that block gets.
  */
 .design-breakout {
-  max-width: 1500px;
-  margin-inline: auto;
   min-width: 0;
 }
-/* A group with too few cells to want the extra width stays in the text measure, so it lines up
-   with the label above it instead of floating off to the left of everything. */
+/* A group with too few cells to want the extra width stays inside the text measure, and starts at
+   the same edge as everything else rather than centring on its own. */
 .design-breakout.narrow {
   max-width: 720px;
 }
@@ -2245,12 +2243,17 @@ body.resizing .rb-center {
 .design-grid.tight {
   grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
 }
+/* Every cell carries all four edges and overlaps its neighbour by the width of one, so the shared
+   lines land on the same pixel and read as 1px rather than 2. Drawing only the right and bottom
+   left the first row and the first column open, which is what made a group look like its border
+   had slipped; drawing them on the container instead made the line outlive the cells whenever a
+   row was short. */
 .design-cell {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-right: 1px solid var(--border0);
-  border-bottom: 1px solid var(--border0);
+  border: 1px solid var(--border0);
+  margin: 0 -1px -1px 0;
 }
 /* tall enough that a colour reads as a swatch rather than a bar; at the widths this grid lands
    on, a cell is then about three to two */
@@ -2390,11 +2393,22 @@ body.resizing .rb-center {
 /* Text holds a centred measure and the grids break out of it to the full width of the pane, the
    way a wide table sits outside the column in a document. Placed last because the `margin`
    shorthands above reset the inline axis. */
+/*
+ * One centred block, and everything inside it shares its left edge.
+ *
+ * Centring the text at 720 and each grid at its own width put them on different left edges: a
+ * one-cell group sat half a screen away from a six-cell one, and neither lined up with the heading
+ * above it. The section is the thing that centres; text and small grids are held to the measure
+ * from that same edge, and a wide grid runs on to the end of the block.
+ */
+.design-section {
+  max-width: 1500px;
+  margin-inline: auto;
+}
 .design-h,
 .design-group-name,
 .design-rows,
 .design-gap,
 .design-tail {
   max-width: 720px;
-  margin-inline: auto;
 }

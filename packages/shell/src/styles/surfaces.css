@@ -2141,17 +2141,17 @@ body.resizing .rb-center {
 .design-body {
   min-width: 0;
   overflow: auto;
-  padding: 16px 20px 56px;
+  padding: 28px 20px 80px;
   color: var(--text0);
   font: var(--fs-sm) var(--font-ui);
 }
 .design-section {
-  margin-bottom: 28px;
+  margin-bottom: 52px;
 }
 .design-h {
   font: 600 var(--fs-sm) var(--font-ui);
   color: var(--text0);
-  margin: 0 0 8px;
+  margin: 0 0 16px;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -2188,7 +2188,9 @@ body.resizing .rb-center {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 4px 10px;
+  width: calc(100% + 40px);
+  margin-left: -40px;
+  padding: 4px 10px 4px 0;
   cursor: pointer;
   color: var(--text2);
   font: var(--fs-sm) var(--font-ui);
@@ -2205,13 +2207,13 @@ body.resizing .rb-center {
 
 /* token grid: one per kind, cells sharing their edges so a scale reads as one object */
 .design-group {
-  margin-bottom: 14px;
+  margin-bottom: 30px;
 }
 .design-group-name {
   display: block;
   font: var(--fs-xs) var(--font-mono);
   color: var(--text1);
-  margin-bottom: 5px;
+  margin-bottom: 9px;
 }
 /* The lattice is drawn by the cells, not by a coloured ground showing through 1px gaps. The ground
    version filled the tail of a short last row with a slab of border colour, so a group of two
@@ -2365,13 +2367,17 @@ body.resizing .rb-center {
   margin: 0;
   padding: 0;
 }
+/* The name starts on the column's own left edge and the count hangs out into the gutter beside it,
+   rather than the count taking a slot inside the column and pushing every name in by forty pixels.
+   The row is pulled left by exactly that gutter, so the band under it still covers the count. */
 .design-row {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  width: 100%;
+  width: calc(100% + 40px);
+  margin-left: -40px;
   text-align: left;
-  padding: 4px 10px;
+  padding: 4px 10px 4px 0;
   border: 0;
   border-left: 2px solid transparent;
   background: none;

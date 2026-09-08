@@ -15,6 +15,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { localOf } from "../../state/store.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
 import { contrastRatio, parseHex } from "./contrast.ts";
 
 export function DesignPane({
@@ -202,7 +203,7 @@ function Swatch({ token, ground, largest }: { token: DesignToken; ground: Design
   const size = token.kind === "length" ? Number.parseFloat(actual) : Number.NaN;
 
   return (
-    <div className="design-cell" data-kind={token.kind}>
+    <div className="design-cell" data-kind={token.kind} {...tip(describe(token, ratio, ground))}>
       {sample && (
         <div className="design-sample">
           {paintable && <span className="design-fill" style={{ background: actual }} />}
@@ -216,31 +217,29 @@ function Swatch({ token, ground, largest }: { token: DesignToken; ground: Design
       <div className="design-plate">
         <span className="design-cell-name">{token.name}</span>
         <span className="design-cell-line">
-          <span className="design-cell-value" title={token.value}>
-            {token.value}
-          </span>
-          {ratio && (
-            <span className="design-cell-note" title={`contrast against ${ground?.name}`}>
-              {ratio}
-            </span>
-          )}
+          <span className="design-cell-value">{token.value}</span>
+          {ratio && <span className="design-cell-note">{ratio}</span>}
         </span>
         {token.resolved && (
           <span className="design-cell-line">
-            <span className="design-cell-value" title={token.resolved}>
-              {token.resolved}
-            </span>
+            <span className="design-cell-value">{token.resolved}</span>
           </span>
         )}
-        {/* A scale drawn against its own largest step. Absolute widths made every radius a
-            three-pixel speck no one could tell from a four-pixel one; against the group, the steps
-            are at least in proportion to each other, which is what a scale is for. */}
         {Number.isFinite(size) && largest > 0 && (
           <span className="design-scale" style={{ width: `${Math.max(2, (Math.abs(size) / largest) * 100)}%` }} />
         )}
       </div>
     </div>
   );
+}
+
+/** The whole chip in a sentence. Every line in a cell used to carry its own `title`, so a value and
+ * the ratio beside it were two separate hovers of two separate fragments; the cell is one thing. */
+function describe(token: DesignToken, ratio: string | null, ground: DesignToken | undefined): string {
+  const parts = [`${token.name} is ${token.value}`];
+  if (token.resolved) parts.push(`which resolves to ${token.resolved}`);
+  const sentence = parts.join(", ");
+  return ratio && ground ? `${sentence}. ${ratio} against ${ground.name}` : sentence;
 }
 
 function Components({

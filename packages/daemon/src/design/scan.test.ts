@@ -6,6 +6,7 @@ import {
   exportedComponents,
   importedNames,
   propUnions,
+  resolveAliases,
   tokenFamily,
   tokenKind,
 } from "./scan.ts";
@@ -153,5 +154,30 @@ describe("propUnions", () => {
   test("ignores a union that is not all string literals", () => {
     const src = `interface Props { n: 1 | 2; s: string | null }`;
     expect(propUnions(ts, "a.tsx", src)).toEqual([]);
+  });
+});
+
+describe("resolveAliases", () => {
+  const tok = (name: string, value: string) => ({ name, value, family: tokenFamily(name), kind: tokenKind(value) });
+
+  test("follows a bare reference to the value it names, and re-reads its kind", () => {
+    const [accent, red] = resolveAliases([tok("--accent", "var(--red)"), tok("--red", "#ff4929")]);
+    expect(accent?.resolved).toBe("#ff4929");
+    expect(accent?.kind).toBe("color");
+    // the authored value is kept: it is what you would go and edit
+    expect(accent?.value).toBe("var(--red)");
+    expect(red?.resolved).toBeUndefined();
+  });
+
+  test("follows a chain, and survives one that eats itself", () => {
+    const chain = resolveAliases([tok("--a", "var(--b)"), tok("--b", "var(--c)"), tok("--c", "12px")]);
+    expect(chain[0]?.resolved).toBe("12px");
+    const cycle = resolveAliases([tok("--x", "var(--y)"), tok("--y", "var(--x)")]);
+    expect(cycle[0]?.resolved).toBe("var(--x)");
+  });
+
+  test("leaves anything the cascade has to work out alone", () => {
+    const [calc] = resolveAliases([tok("--w", "calc(var(--rail) - 1px)"), tok("--rail", "232px")]);
+    expect(calc?.resolved).toBeUndefined();
   });
 });

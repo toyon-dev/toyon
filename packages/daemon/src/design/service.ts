@@ -5,10 +5,18 @@
 // a harvest off the running preview and merges in on top; `live: false` says it has not.
 
 import { join } from "node:path";
-import type { DesignClass, DesignComponent, DesignFinding, DesignIndex, DesignToken } from "@toyon/shared";
+import type { DesignClass, DesignComponent, DesignIndex, DesignToken } from "@toyon/shared";
 import type { StateStore } from "../core/state.ts";
 import { git } from "../git/exec.ts";
-import { appliedClasses, cssClasses, cssTokens, exportedComponents, importedNames, propUnions } from "./scan.ts";
+import {
+  appliedClasses,
+  cssClasses,
+  cssTokens,
+  exportedComponents,
+  importedNames,
+  propUnions,
+  resolveAliases,
+} from "./scan.ts";
 
 /** Enough for a large app, small enough that a scan of a repo with a vendored tree stays quick. */
 const MAX_SOURCE_FILES = 4_000;
@@ -45,7 +53,7 @@ export class DesignService {
     const ts = await loadProjectTypescript(wt.path);
     const importers = collectImporters(srcFiles);
     const components = collectComponents(srcFiles, ts, importers);
-    const { classes, attrs, appliedIn } = collectClasses(cssFiles, srcFiles);
+    const { classes, attrs } = collectClasses(cssFiles, srcFiles, components);
 
     return {
       scannedAt: Date.now(),
@@ -54,7 +62,6 @@ export class DesignService {
       tokens,
       components,
       classes,
-      findings: findings(components, classes, appliedIn),
       coverage: {
         files: byExtension([...cssFiles, ...srcFiles]),
         stylesheets: cssFiles.length,
@@ -100,10 +107,8 @@ function collectTokens(css: SourceFile[]): DesignToken[] {
   for (const file of byDensity) {
     for (const token of cssTokens(file.text)) if (!out.has(token.name)) out.set(token.name, token);
   }
-  return [...out.values()];
+  return resolveAliases([...out.values()]);
 }
-
-const dirOf = (path: string) => path.replace(/\/?[^/]*$/, "");
 
 /** Which files import each name. The set of *files* is what ranks a component; where those files
  * sit is what separates a kit from a directory that merely holds several things. */
@@ -147,7 +152,8 @@ function safePropUnions(ts: any, path: string, text: string) {
 function collectClasses(
   css: SourceFile[],
   src: SourceFile[],
-): { classes: DesignClass[]; attrs: number; appliedIn: Map<string, Set<string>> } {
+  components: DesignComponent[],
+): { classes: DesignClass[]; attrs: number } {
   const defined = new Map<string, string>();
   for (const file of css) {
     for (const name of cssClasses(file.text)) if (!defined.has(name)) defined.set(name, file.path);
@@ -179,10 +185,20 @@ function collectClasses(
       path,
       solo: solo.has(name),
       files: appliedIn.get(name)?.size ?? 0,
+      unwrapped: false,
     });
   }
   out.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
-  return { classes: out, attrs, appliedIn };
+
+  const named = new Set(components.map((c) => normal(c.name)));
+  const busy = typicalUse(out);
+  for (const c of out) {
+    // At least as used as the typical class, standing on its own somewhere (a class that only ever
+    // rides with another modifies it), applied in more than one file (one file's nine uses are that
+    // file's own styling, with nothing to extract), and named for by no component.
+    c.unwrapped = c.uses >= busy && c.solo && c.files > 1 && !named.has(normal(c.name));
+  }
+  return { classes: out, attrs };
 }
 
 function byExtension(files: SourceFile[]): Record<string, number> {
@@ -204,50 +220,8 @@ function typicalUse(classes: DesignClass[]): number {
 }
 
 /** Normalised so a `.button` class and a `Button` component read as the same thing. Nothing
- * clever: `.btn` and `Button` stay different, which is the point of the finding. */
+ * clever: `.btn` and `Button` stay different, which is the point. */
 const normal = (s: string) => s.replace(/[-_]/g, "").toLowerCase();
-
-function findings(
-  components: DesignComponent[],
-  classes: DesignClass[],
-  appliedIn: Map<string, Set<string>>,
-): DesignFinding[] {
-  const out: DesignFinding[] = [];
-  const componentNames = new Set(components.map((c) => normal(c.name)));
-  const busy = typicalUse(classes);
-
-  // files that export a component the rest of the project reaches for. A class applied only inside
-  // one of those is already wrapped: the component is the abstraction, whatever the class is called.
-  const reusableFiles = new Set(components.filter((c) => c.imports >= 2).map((c) => c.path));
-
-  const unwrapped = classes.filter((c) => {
-    // at least as used as the typical one, not more: in a project with a single class that class is
-    // also the median, and a strict comparison would never report anything at all
-    if (c.uses < busy || !c.solo || componentNames.has(normal(c.name))) return false;
-    const where = appliedIn.get(c.name) ?? new Set<string>();
-    // The finding says every use restates the markup, so it needs uses in more than one place to
-    // restate. A class living in a single file is that file's own styling, not a control nobody
-    // named, and eight of this repo's twenty-two were exactly that.
-    if (where.size < 2) return false;
-    // and if every one of those places is a reusable component, the component already wraps it
-    return ![...where].every((p) => reusableFiles.has(p));
-  });
-  if (unwrapped.length > 0) {
-    out.push({
-      kind: "unwrapped-class",
-      title:
-        unwrapped.length === 1
-          ? `.${unwrapped[0]!.name} carries a control that no component is named for`
-          : `${unwrapped.length} classes carry a control that no component is named for`,
-      items: unwrapped.map((c) => ({ label: `.${c.name}  ${c.uses}`, path: c.path })),
-    });
-  }
-
-  // A component with one consumer used to be reported here and is not a finding: an app root has
-  // exactly one caller by design, and nothing is wrong with it. How much of the project reaches for
-  // a component is a property of the component list, so the pane splits the list on it instead.
-  return out;
-}
 
 /**
  * TypeScript from the *target* repo, used only as a parser. Bundling a compiler to read prop

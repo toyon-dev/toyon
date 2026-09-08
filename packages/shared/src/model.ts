@@ -238,7 +238,11 @@ export type DesignTokenKind = "color" | "length" | "font" | "shadow" | "other";
  * up, and what the stylesheet declared when it was not. */
 export interface DesignToken {
   name: string;
+  /** as the stylesheet writes it, which is what you would go and edit */
   value: string;
+  /** what a `var()` reference points at, followed through the project's own declarations. Absent
+   * when the value is already literal, or when only the cascade could work it out. */
+  resolved?: string;
   /** the name's first segment (`surface` for `--surface0`); what groups the swatch rows */
   family: string;
   kind: DesignTokenKind;
@@ -274,27 +278,9 @@ export interface DesignClass {
   /** how many separate source files apply it. One means it is that file's own styling, however
    * many times it appears there. */
   files: number;
-}
-
-export type DesignFindingKind = "unwrapped-class" | "unused-variant" | "drift" | "unnamed-combo";
-
-/**
- * Something the scan noticed, with every instance of it. These sit above the inventory: they are
- * why you open the pane.
- *
- * One finding per kind, not one per instance. Eight classes carrying a control with no component
- * named for them is one observation about the project repeated eight times, and printing it eight
- * times with the same sentence under each pushed everything else off the screen.
- */
-export interface DesignFinding {
-  kind: DesignFindingKind;
-  title: string;
-  items: DesignFindingItem[];
-}
-
-export interface DesignFindingItem {
-  label: string;
-  path?: string;
+  /** used across several files, standing on its own, and no component is named for it. Whatever
+   * this class styles, the markup around it is restated at every call site. */
+  unwrapped: boolean;
 }
 
 /**
@@ -326,6 +312,5 @@ export interface DesignIndex {
   tokens: DesignToken[];
   components: DesignComponent[];
   classes: DesignClass[];
-  findings: DesignFinding[];
   coverage: DesignCoverage;
 }

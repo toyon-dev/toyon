@@ -236,3 +236,32 @@ function unionLiterals(ts: any, type: any): string[] {
   }
   return values;
 }
+
+/**
+ * Follow `--accent: var(--red)` to the value it actually names.
+ *
+ * Only a bare reference is followed, never a `calc()` or a `color-mix()`: those need the cascade,
+ * and the point of resolving here is that the answer comes out of the project's own declarations
+ * rather than being guessed. The shell cannot do this itself, because a `var(--red)` evaluated in
+ * the shell's document resolves against the *shell's* red and paints a confident lie.
+ */
+export function resolveAliases(tokens: DesignToken[]): DesignToken[] {
+  const byName = new Map(tokens.map((t) => [t.name, t]));
+  const alias = (value: string) => /^var\(\s*(--[\w-]+)/.exec(value)?.[1];
+
+  return tokens.map((t) => {
+    const seen = new Set<string>([t.name]);
+    let value = t.value;
+    for (let hop = 0; hop < 8; hop++) {
+      const next = alias(value);
+      // a cycle would otherwise spin here; a token that points at itself has no value to find
+      if (!next || seen.has(next)) break;
+      seen.add(next);
+      const target = byName.get(next);
+      if (!target) break;
+      value = target.value;
+    }
+    if (value === t.value) return t;
+    return { ...t, resolved: value, kind: tokenKind(value) };
+  });
+}

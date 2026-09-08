@@ -8,14 +8,7 @@
 // by selector, a component by the file its fibers came from), and clicking one opens its source.
 // That is the whole reason this sits beside the preview rather than in a docs tab.
 
-import type {
-  DesignClass,
-  DesignComponent,
-  DesignFinding,
-  DesignFindingKind,
-  DesignIndex,
-  DesignToken,
-} from "@toyon/shared";
+import type { DesignClass, DesignComponent, DesignIndex, DesignToken } from "@toyon/shared";
 import { useEffect } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
@@ -85,7 +78,7 @@ export function DesignPane({
     >
       {index ? (
         <div className="design-body" onMouseLeave={live.clear}>
-          <Tokens tokens={index.tokens} live={index.live} onOpen={live.open} findings={index.findings} />
+          <Tokens tokens={index.tokens} live={index.live} />
           <Components index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
           <Classes index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
         </div>
@@ -119,59 +112,6 @@ function Gap({ children }: { children: React.ReactNode }) {
 /** Collapsed to its headline. A finding is one sentence about the project; the instances behind it
  * are what you open when you want to go and look, and they were burying the rest of the pane. */
 /**
- * A finding sits in the section it is about, at the end of the list it concerns, not in an alerts
- * area of its own. "This class carries a control nobody named" is a remark about the classes, and
- * reading it beside them is how you check it; hoisting it to the top made it an error report about
- * a project that has nothing wrong with it.
- */
-const FINDING_SECTION: Record<DesignFindingKind, "tokens" | "components" | "classes"> = {
-  "unwrapped-class": "classes",
-  "unnamed-combo": "classes",
-  drift: "tokens",
-  "unused-variant": "components",
-};
-
-function Findings({
-  findings,
-  section,
-  onOpen,
-}: {
-  findings: DesignFinding[];
-  section: "tokens" | "components" | "classes";
-  onOpen: (path: string) => void;
-}) {
-  const mine = findings.filter((f) => FINDING_SECTION[f.kind] === section);
-  if (mine.length === 0) return null;
-  return (
-    <>
-      {mine.map((f) => (
-        <details key={f.kind} className="design-finding">
-          <summary>
-            {f.title}
-            <span className="design-count-tag">{f.items.length}</span>
-          </summary>
-          <ul className="design-rows">
-            {f.items.map((item) => (
-              <li key={item.label}>
-                <button
-                  type="button"
-                  className="design-row"
-                  disabled={!item.path}
-                  onClick={() => item.path && onOpen(item.path)}
-                >
-                  <span className="design-name">{item.label}</span>
-                  <span className="design-path">{item.path}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ))}
-    </>
-  );
-}
-
-/**
  * Grouped by what a token *is*, not by what it is called.
  *
  * Name prefixes looked like the obvious grouping and are not: `--accent`, `--aqua` and `--blue`
@@ -190,25 +130,7 @@ const GROUPS: Array<{ kind: DesignToken["kind"]; label: string; tight?: boolean 
   { kind: "other", label: "computed", tight: true },
 ];
 
-/** The bar for a length, capped so a 999px pill radius does not run the width of the pane and
- * flatten every real step in the scale into the same full-width stripe. */
-function barWidth(value: string): string {
-  const n = Number.parseFloat(value);
-  if (!Number.isFinite(n)) return "6px";
-  return `${Math.max(3, Math.min(Math.abs(n), 72))}px`;
-}
-
-function Tokens({
-  tokens,
-  live,
-  findings,
-  onOpen,
-}: {
-  tokens: DesignToken[];
-  live: boolean;
-  findings: DesignFinding[];
-  onOpen: (path: string) => void;
-}) {
+function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
   return (
     <Section title="Tokens" note={live ? undefined : "declared, not resolved"}>
       {tokens.length === 0 ? (
@@ -232,39 +154,44 @@ function Tokens({
           );
         })
       )}
-      <Findings findings={findings} section="tokens" onOpen={onOpen} />
     </Section>
   );
 }
 
 function Swatch({ token }: { token: DesignToken }) {
-  const ratio = token.kind === "color" ? contrastRatio(token.value) : null;
-  // Painting a value the shell cannot resolve would paint it with the *shell's* token of that
-  // name: `--accent: var(--red)` would show toyon's red while claiming to show the project's. The
-  // absence of paint is the honest answer, and the value underneath already says why. A
-  // translucent colour still paints; it just has no ratio to print.
-  const paintable = token.kind === "color" && parseHex(token.value) !== null;
+  // what it resolves to is what to paint and measure; what it says is what to go and edit
+  const actual = token.resolved ?? token.value;
+  const ratio = token.kind === "color" ? contrastRatio(actual) : null;
+  // Painting a value nothing can resolve would paint it with the *shell's* token of that name.
+  // A translucent colour still paints; it just has no ratio to print.
+  const paintable = token.kind === "color" && parseHex(actual) !== null;
+  // A size has no sample worth drawing. Three pixels against four is a difference you cannot see,
+  // and the bar took the room the number needed, which is the only thing in the cell that tells
+  // you anything. Colour and type earn theirs: you cannot read a hex or a font stack.
+  const sample = token.kind === "color" || token.kind === "font";
+
   return (
     <div className="design-cell" data-kind={token.kind}>
-      <div className="design-sample">
-        {paintable && <span className="design-fill" style={{ background: token.value }} />}
-        {/* Every length as a measured bar. Drawing them as corners read better for a radius scale
-            and lied about the rest: nothing in `13px` says whether it is a radius, a font size or
-            a rail width, so a font size arrived wearing rounded corners. Which property a token is
-            spent on is a question only the running page can answer. */}
-        {token.kind === "length" && <span className="design-bar" style={{ width: barWidth(token.value) }} />}
-        {token.kind === "font" && (
-          <span className="design-specimen" style={{ fontFamily: token.value }}>
-            Ag
-          </span>
-        )}
-        {token.kind === "shadow" && <span className="design-corner" style={{ boxShadow: token.value }} />}
-      </div>
+      {sample && (
+        <div className="design-sample">
+          {paintable && <span className="design-fill" style={{ background: actual }} />}
+          {token.kind === "font" && (
+            <span className="design-specimen" style={{ fontFamily: actual }}>
+              Ag
+            </span>
+          )}
+        </div>
+      )}
       <div className="design-plate">
-        <span className="design-cell-name">{token.name.replace(/^--/, "")}</span>
+        <span className="design-cell-name">{token.name}</span>
         <span className="design-cell-value" title={token.value}>
           {token.value}
         </span>
+        {token.resolved && (
+          <span className="design-cell-note" title={token.resolved}>
+            {token.resolved}
+          </span>
+        )}
         {ratio && <span className="design-cell-note">{ratio}</span>}
       </div>
     </div>
@@ -336,7 +263,6 @@ function Components({
               <ul className="design-rows">{rest.map(row)}</ul>
             </details>
           )}
-          <Findings findings={index.findings} section="components" onOpen={onOpen} />
         </>
       )}
     </Section>
@@ -356,8 +282,14 @@ function Classes({
 }) {
   const { classes, coverage } = index;
   const used = classes.filter((c) => c.uses > 0);
+  const unwrapped = used.filter((c) => c.unwrapped).length;
+  // said once, in the header, and marked on the rows it is about. Listing them again underneath
+  // was the same names twice on one screen.
+  const note = classes.length
+    ? `${used.length} of ${classes.length} used` + (unwrapped ? `, ${unwrapped} with no component of their name` : "")
+    : undefined;
   return (
-    <Section title="Classes" note={classes.length ? `${used.length} of ${classes.length} used` : undefined}>
+    <Section title="Classes" note={note}>
       {classes.length === 0 ? (
         <Gap>No stylesheet in this project defines a class. Utility-first CSS generates its own.</Gap>
       ) : used.length === 0 ? (
@@ -367,14 +299,11 @@ function Classes({
             : "No class attribute anywhere in the source that was read. The markup may live in a file type this scan does not open."}
         </Gap>
       ) : (
-        <>
-          <ul className="design-rows">
-            {used.map((c) => (
-              <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
-            ))}
-          </ul>
-          <Findings findings={index.findings} section="classes" onOpen={onOpen} />
-        </>
+        <ul className="design-rows">
+          {used.map((c) => (
+            <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
+          ))}
+        </ul>
       )}
     </Section>
   );
@@ -399,7 +328,9 @@ function ClassRow({
       onEnter={() => outline({ type: "highlight-selector", selector: `.${cls.name}`, label: `.${cls.name}` })}
       onLeave={clear}
       onOpen={() => cls.path && onOpen(cls.path)}
-    />
+    >
+      {cls.unwrapped && <span className="design-tag">no component</span>}
+    </Row>
   );
 }
 

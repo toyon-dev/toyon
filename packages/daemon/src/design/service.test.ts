@@ -39,6 +39,9 @@ function write(rel: string, text: string) {
   writeFileSync(full, text);
 }
 
+const flagged = (i: Awaited<ReturnType<DesignService["scan"]>>) =>
+  i.classes.filter((c) => c.unwrapped).map((c) => c.name);
+
 describe("DesignService.scan", () => {
   test("reads tokens, components and classes off the worktree", async () => {
     write("src/styles.css", `:root { --accent: #6fae5f; --r-sm: 4px }\n.btn { color: red }`);
@@ -55,7 +58,7 @@ describe("DesignService.scan", () => {
     expect(index.live).toBe(false);
   });
 
-  test("finds a class carrying a control that no component is named for", async () => {
+  test("marks a class carrying a control that no component is named for", async () => {
     write("src/styles.css", `.btn { color: red }`);
     // spread across files: the finding is about repetition, so it takes more than one place
     for (const page of ["a", "b", "c"]) {
@@ -67,12 +70,10 @@ describe("DesignService.scan", () => {
     }
 
     const index = await w.design.scan("w1");
-    const finding = index.findings.find((f) => f.kind === "unwrapped-class");
-    expect(finding?.title).toContain(".btn carries a control");
-    expect(finding?.items.map((i) => i.label)).toEqual([".btn  9"]);
+    expect(flagged(index)).toEqual(["btn"]);
   });
 
-  test("a class that never rides alone is a modifier, and never a finding", async () => {
+  test("a class that never rides alone is a modifier, and is never marked", async () => {
     // `.btn-outline` only ever appears beside `.btn`: no component was going to be named for it
     write("src/styles.css", `.btn { color: red }\n.btn-outline { color: blue }`);
     // .btn stands alone somewhere, so it is a thing; .btn-outline never does, so it is a modifier
@@ -88,8 +89,7 @@ describe("DesignService.scan", () => {
     }
 
     const index = await w.design.scan("w1");
-    const finding = index.findings.find((f) => f.kind === "unwrapped-class");
-    expect(finding?.items.map((i) => i.label)).toEqual([".btn  12"]);
+    expect(flagged(index)).toEqual(["btn"]);
   });
 
   test("a class confined to one file is that file's styling, not an unwrapped control", async () => {
@@ -99,27 +99,11 @@ describe("DesignService.scan", () => {
     write("src/Pane.tsx", uses.join("\n"));
 
     const index = await w.design.scan("w1");
-    expect(index.findings).toEqual([]);
+    expect(flagged(index)).toEqual([]);
     expect(index.classes.find((c) => c.name === "pane-row")?.files).toBe(1);
   });
 
-  test("a class applied only inside reusable components is already wrapped", async () => {
-    write("src/styles.css", `.chip { color: red }`);
-    write("src/ui/Chip.tsx", `export function Chip() { return <b className="chip" />; }`);
-    write("src/ui/Tag.tsx", `export function Tag() { return <b className="chip" />; }`);
-    // both are reached for by two other files, so both are shared vocabulary
-    for (const n of ["One", "Two"]) {
-      write(
-        `src/${n}.tsx`,
-        `import { Chip } from "./ui/Chip.tsx";\nimport { Tag } from "./ui/Tag.tsx";\nexport function ${n}() { return <Chip />; }`,
-      );
-    }
-
-    const index = await w.design.scan("w1");
-    expect(index.findings).toEqual([]);
-  });
-
-  test("a component named for the class is not a finding", async () => {
+  test("a class a component is named for is not marked", async () => {
     write("src/styles.css", `.btn { color: red }`);
     for (const page of ["a", "b"]) {
       const uses = Array.from(
@@ -131,7 +115,7 @@ describe("DesignService.scan", () => {
     write("src/ui/Btn.tsx", `export function Btn() { return <b className="btn" />; }`);
 
     const index = await w.design.scan("w1");
-    expect(index.findings.filter((f) => f.kind === "unwrapped-class")).toEqual([]);
+    expect(flagged(index)).toEqual([]);
   });
 
   test("counts how many files reach for each component, so the pane can split on it", async () => {
@@ -151,8 +135,8 @@ describe("DesignService.scan", () => {
     expect(by("Lonely")).toBe(1);
     expect(by("Spare")).toBe(0);
     // Lonely and Spare are reached for once and never; neither is a problem, and an app root has
-    // one caller by design, so nothing here raises a finding
-    expect(index.findings).toEqual([]);
+    // one caller by design, so nothing here is marked
+    expect(flagged(index)).toEqual([]);
   });
 
   test("says what it recognised, so an empty section can explain itself", async () => {

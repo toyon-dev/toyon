@@ -20,6 +20,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
+  const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
   const id = active?.worktree.id ?? null;
   const ready = !!active && active.procs.some((p) => p.status === "running" || p.status === "starting");
@@ -49,7 +50,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           the terminal toggle lives in the composer: one shell per worktree, not app chrome. */}
       <span className="bar-tools">
         <button
-          className="btn-icon toggle keys-btn"
+          className={`btn-icon toggle keys-btn ${keysOpen ? "on" : ""}`}
           {...tip("Settings & shortcuts", chord("keys"))}
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
         >

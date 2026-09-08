@@ -2212,9 +2212,13 @@ body.resizing .rb-center {
    tokens came with a long grey bar beside it saying nothing. */
 .design-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   border-top: 1px solid var(--border0);
   border-left: 1px solid var(--border0);
+  /* the grid breaks out of the text measure, but not forever: past this it is just a very long
+     row of swatches, and the eye has to travel the whole pane to compare two of them */
+  max-width: 1500px;
+  margin-inline: auto;
 }
 /* a scale has no sample, so its cells are two lines and pack tighter than a colour's */
 .design-grid.tight {
@@ -2226,15 +2230,14 @@ body.resizing .rb-center {
   border-right: 1px solid var(--border0);
   border-bottom: 1px solid var(--border0);
 }
+/* tall enough that a colour reads as a swatch rather than a bar; at the widths this grid lands
+   on, a cell is then about three to two */
 .design-sample {
-  height: 44px;
+  height: 96px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--sunken);
-}
-.design-grid.tight .design-sample {
-  height: 34px;
 }
 .design-fill {
   display: block;
@@ -2366,9 +2369,10 @@ body.resizing .rb-center {
    way a wide table sits outside the column in a document. Placed last because the `margin`
    shorthands above reset the inline axis. */
 .design-h,
+.design-group-name,
 .design-rows,
 .design-gap,
 .design-tail {
-  max-width: 920px;
+  max-width: 720px;
   margin-inline: auto;
 }

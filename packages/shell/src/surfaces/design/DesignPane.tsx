@@ -78,7 +78,7 @@ export function DesignPane({
     >
       {index ? (
         <div className="design-body" onMouseLeave={live.clear}>
-          <Tokens tokens={index.tokens} live={index.live} />
+          <Tokens tokens={index.tokens} />
           <Components index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
           <Classes index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
         </div>
@@ -138,13 +138,13 @@ function groundOf(tokens: DesignToken[]): DesignToken | undefined {
   return tokens.find((t) => t.kind === "color" && parseHex(t.resolved ?? t.value) !== null);
 }
 
-function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
+// `index.live` is not read here on purpose. It said "declared, not resolved" in the header, which
+// is true of every scan so far and so told a reader nothing; when the live half lands and the two
+// actually differ, the difference is worth a word and this is where it goes.
+function Tokens({ tokens }: { tokens: DesignToken[] }) {
   const ground = groundOf(tokens);
   return (
-    <Section
-      title="Tokens"
-      note={[live ? null : "declared", ground ? `contrast vs ${ground.name}` : null].filter(Boolean).join(" · ")}
-    >
+    <Section title="Tokens">
       {tokens.length === 0 ? (
         <Gap>
           No custom properties found. A project on Sass or Less variables keeps its scale somewhere this scan does not
@@ -204,7 +204,11 @@ function Swatch({ token, ground, largest }: { token: DesignToken; ground: Design
           <span className="design-cell-value" title={token.value}>
             {token.value}
           </span>
-          {ratio && <span className="design-cell-note">{ratio}</span>}
+          {ratio && (
+            <span className="design-cell-note" title={`contrast against ${ground?.name}`}>
+              {ratio}
+            </span>
+          )}
         </span>
         {token.resolved && (
           <span className="design-cell-line">

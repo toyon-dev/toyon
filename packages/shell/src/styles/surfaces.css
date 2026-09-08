@@ -2234,10 +2234,22 @@ body.resizing .rb-center {
 .design-breakout {
   min-width: 0;
 }
-/* A group with too few cells to want the extra width stays inside the text measure, and starts at
-   the same edge as everything else rather than centring on its own. */
+/* A group with too few cells to want the extra width stays in the text measure, on the same centre
+   line as everything else. Its tracks are a fixed width and the row is centred, because `1fr`
+   tracks fill the wrapper and auto-fill leaves the empty ones at the end: the wrapper was centred
+   correctly and its two cells still sat against the left of it. */
 .design-breakout.narrow {
   max-width: 720px;
+  margin-inline: auto;
+}
+.design-breakout.narrow .design-grid {
+  /* auto-fit, not auto-fill: auto-fill keeps the empty tracks, so centring the track list left the
+     two real cells sitting against the left of it. auto-fit collapses them and the cells centre. */
+  grid-template-columns: repeat(auto-fit, 132px);
+  justify-content: center;
+}
+.design-breakout.narrow .design-grid.tight {
+  grid-template-columns: repeat(auto-fit, 118px);
 }
 /* a scale has no sample, so its cells are two lines and pack tighter than a colour's */
 .design-grid.tight {
@@ -2394,12 +2406,12 @@ body.resizing .rb-center {
    way a wide table sits outside the column in a document. Placed last because the `margin`
    shorthands above reset the inline axis. */
 /*
- * One centred block, and everything inside it shares its left edge.
+ * One centre line. Everything sits on it, and a grid too wide for the column grows out of the
+ * column symmetrically rather than sliding off to one side.
  *
- * Centring the text at 720 and each grid at its own width put them on different left edges: a
- * one-cell group sat half a screen away from a six-cell one, and neither lined up with the heading
- * above it. The section is the thing that centres; text and small grids are held to the measure
- * from that same edge, and a wide grid runs on to the end of the block.
+ * Every element here is centred in the same 1500px section, so their midpoints coincide whatever
+ * their widths. Text and a grid small enough to fit are held to the 720 measure; a grid that wants
+ * more takes up to the full 1500 and the extra appears equally on both sides.
  */
 .design-section {
   max-width: 1500px;
@@ -2411,4 +2423,5 @@ body.resizing .rb-center {
 .design-gap,
 .design-tail {
   max-width: 720px;
+  margin-inline: auto;
 }

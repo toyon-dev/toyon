@@ -8,6 +8,7 @@ import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
+import { DesignService } from "../design/service.ts";
 import { FileService } from "../files/service.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
@@ -46,6 +47,7 @@ function make() {
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
   const files = new FileService(state, runtime);
+  const design = new DesignService(state);
   const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, t.paths.themesDir);
   const planned: string[][] = [];
   const services: Services = {
@@ -54,6 +56,7 @@ function make() {
     repos,
     worktrees,
     files,
+    design,
     runtime,
     themes,
     agents,
@@ -95,6 +98,19 @@ describe("handlers", () => {
     await expect(
       dispatch({ t: "write-file", worktreeId: "nope", path: "a", content: "" }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("design-scan replies with an index of the worktree's own design system", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await Bun.write(`${main.path}/src/styles.css`, ":root { --accent: #6fae5f }\n.btn { color: red }");
+    await dispatch({ t: "design-scan", worktreeId: main.id }, ctx, services);
+    const reply = replies.at(-1);
+    expect(reply?.t).toBe("design-index");
+    if (reply?.t !== "design-index") throw new Error("expected a design-index reply");
+    expect(reply.index.tokens.map((t) => t.name)).toEqual(["--accent"]);
+    expect(reply.index.classes.map((c) => c.name)).toEqual(["btn"]);
   });
 
   test("subscribe registers the socket and replies backfill + queue + commands + git-status to the caller only", async () => {

@@ -16,6 +16,7 @@ import { fireAndForget, log } from "./core/log.ts";
 import { startLagSampler } from "./core/metrics.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
 import { loadOrCreateToken, StateStore } from "./core/state.ts";
+import { DesignService } from "./design/service.ts";
 import { FileService } from "./files/service.ts";
 import { RepoRegistry } from "./repos/registry.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
@@ -62,6 +63,7 @@ const runtime = new RuntimeRegistry({
 });
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
 const files = new FileService(state, runtime);
+const design = new DesignService(state);
 const repos = new RepoRegistry({ state, hub, runtime, worktrees });
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);
 themes.load();
@@ -78,6 +80,7 @@ const { branded, stop: stopServer } = startServer({
     repos,
     worktrees,
     files,
+    design,
     runtime,
     themes,
     agents,

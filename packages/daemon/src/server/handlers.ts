@@ -11,6 +11,7 @@ import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
+import type { DesignService } from "../design/service.ts";
 import type { FileService } from "../files/service.ts";
 import { browsePath } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
@@ -24,6 +25,8 @@ export interface Services {
   repos: RepoRegistry;
   worktrees: WorktreeService;
   files: FileService;
+  /** the worktree's own design system, scanned from its source */
+  design: DesignService;
   runtime: RuntimeRegistry;
   themes: ThemeStore;
   agents: AgentRegistry;
@@ -225,6 +228,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async search(msg, ctx, s) {
     const { hits, truncated } = await s.files.search(msg.worktreeId, msg.query);
     ctx.reply({ t: "search-results", worktreeId: msg.worktreeId, query: msg.query, hits, truncated });
+  },
+
+  async "design-scan"(msg, ctx, s) {
+    const index = await s.design.scan(msg.worktreeId);
+    ctx.reply({ t: "design-index", worktreeId: msg.worktreeId, index });
   },
 
   "stop-agent"(msg, _ctx, s) {

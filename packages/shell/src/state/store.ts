@@ -7,6 +7,7 @@ import type {
   AgentEvent,
   AgentInfo,
   AuthMethodInfo,
+  DesignIndex,
   GitFileStatus,
   ImageInput,
   ImageRef,
@@ -78,6 +79,8 @@ export interface WorktreeLocal {
   changedRanges: Record<string, { ranges: Array<[number, number]>; offset: number }>;
   /** ⌘⇧F results */
   search: { query: string; hits: SearchHit[]; truncated: boolean } | null;
+  /** the design pane's last scan; null until it has been opened once for this worktree */
+  design: DesignIndex | null;
   /** the composer's unsent text; survives switching worktrees, and is where the daemon's
    * conflict-resolution suggestion lands */
   draft: string;
@@ -115,6 +118,7 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   turn: { edits: false, hmr: false },
   changedRanges: {},
   search: null,
+  design: null,
   draft: "",
   images: [],
   pastes: [],
@@ -611,6 +615,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ...l,
         search: { query: msg.query, hits: msg.hits, truncated: msg.truncated },
       }));
+    case "design-index":
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, design: msg.index }));
     case "queue":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, queue: msg.items }));
     case "agent-commands":

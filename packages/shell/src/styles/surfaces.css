@@ -108,7 +108,17 @@
   border-right: 1px solid var(--border0);
   display: flex;
   flex-direction: column;
+  /* the list scrolls, not the panel: the commit box stays put at the foot however long the
+     list gets, the way the chat composer does */
+  overflow: hidden;
+}
+.changes-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  /* the list holds focus for the whole panel, and the selected row is what says so; a ring
+     around the column as well would be two answers to one question */
+  outline: none;
 }
 .left-dock.collapsed,
 .right-dock.collapsed {
@@ -340,6 +350,12 @@ body.resizing iframe {
   width: 2px;
   background: var(--accent);
 }
+/* where the keyboard is, which is a different question from which file is open in the editor: a
+   ring rather than a band, so a row can answer both at once */
+.git-file.sel {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
 .git-file .xy {
   color: var(--yellow);
   width: 18px;
@@ -351,13 +367,30 @@ body.resizing iframe {
 .xy.deleted {
   color: var(--red);
 }
+/* name first, then the directory it sits in. The name is what the eye is looking for, and it
+   leaves the part that can be cut at the end, where cutting it is free. (This column used to be
+   the whole path under `direction: rtl` to ellipsize from the left; bidi reorders the neutral
+   characters at each end of the run, which is how `.claude/` came out as `/claude.`) */
 .git-file .path {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.git-file .name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;
-  flex: 1;
-  min-width: 0;
+}
+.git-file .dir {
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* both can shrink, but the directory gives way first: a truncated folder still reads, a
+     truncated filename does not */
+  flex-shrink: 999;
 }
 .counts {
   margin-left: auto;
@@ -1159,7 +1192,8 @@ body.resizing .row-resize {
 /* the composer is one big editor, not a small box inside a panel: the whole region below the
    transcript is the typing surface, so the textarea drops the field's border and fills it, and the
    knobs row sits at the bottom edge */
-.chat-input {
+/* the frame both composers share: the chat's, and the commit box at the foot of the changes panel */
+.composer {
   display: flex;
   flex-direction: column;
   /* the field's own background, now carried by the whole region: level with the transcript it
@@ -1167,9 +1201,21 @@ body.resizing .row-resize {
   background: var(--sunken);
   border-top: 1px solid var(--border0);
   padding: 10px;
-  min-height: 160px;
   /* the offset parent for the @ and slash menu */
   position: relative;
+}
+.composer textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+.chat-input {
+  min-height: 160px;
 }
 /* The @ / slash menu, anchored to the composer and opening upward over the transcript so the rows
    never cover what is being typed. No portal and no measurement: the dock sets no overflow, and
@@ -1249,16 +1295,6 @@ body.resizing .row-resize {
 .chat-input .pick-chip {
   background: var(--surface1);
 }
-.chat-input textarea {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  resize: none;
-  background: none;
-  border: none;
-  border-radius: 0;
-  padding: 0;
-}
 .chat-hint {
   font-size: var(--fs-xs);
   color: var(--text2);
@@ -1326,13 +1362,7 @@ body.resizing .row-resize {
   font-weight: 600;
 }
 
-/* ---- changes header / land buttons / toast ---- */
-.changes-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-right: 8px;
-}
+/* ---- commit box / land buttons / toast ---- */
 .ship-btn {
   color: var(--accent);
 }
@@ -1394,19 +1424,38 @@ body.resizing .row-resize {
 .profile-badge {
   color: var(--blue);
 }
-.land-btns {
-  display: flex;
-  gap: 6px;
-}
-
+/* the message box only appears when there is something to commit, so on a clean tree this is the
+   knobs row alone: where you are, and the one move that is left */
 .commit-box {
-  display: flex;
-  gap: 6px;
-  padding: 4px 12px 8px;
+  flex-shrink: 0;
 }
-.commit-box input {
-  flex: 1;
+.commit-box textarea {
+  min-height: 56px;
+}
+.commit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.commit-where {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
+}
+.branch-name {
+  color: var(--text1);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.commit-acts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* ---- status bar ---- */

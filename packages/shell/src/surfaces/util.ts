@@ -68,6 +68,14 @@ export function procTrouble(procs: ProcState[]): ProcTrouble | null {
   return { dead, tip: `${what} · click to open its tab`, stream: first.name };
 }
 
+/** a changed file split for display: the name leads, the directory trails it dimmed. The name is
+ * what you scan a list of changes for, and putting it first also means the part that overflows a
+ * narrow dock is the part you can afford to lose. */
+export function splitPath(path: string): { name: string; dir: string } {
+  const i = path.lastIndexOf("/");
+  return i < 0 ? { name: path, dir: "" } : { name: path.slice(i + 1), dir: path.slice(0, i) };
+}
+
 export function xyClass(xy: string): string {
   if (xy.includes("A") || xy === "??") return "added";
   if (xy.includes("D")) return "deleted";

@@ -423,6 +423,16 @@ describe("git status", () => {
     ]);
     expect(s.leftOpen).toBe(true);
   });
+  test("focus-left opens a shut panel and asks for the keyboard every time", () => {
+    const shut = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
+    expect(shut.leftOpen).toBe(false);
+    const once = reducer(shut, { a: "focus-left" });
+    expect(once.leftOpen).toBe(true);
+    expect(once.focusLeft).toBe(shut.focusLeft + 1);
+    // already open and already asked: the request still has to be new, or the panel would only
+    // take focus the first time
+    expect(reducer(once, { a: "focus-left" }).focusLeft).toBe(once.focusLeft + 1);
+  });
 });
 
 describe("terminal tabs", () => {

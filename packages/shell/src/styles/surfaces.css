@@ -729,6 +729,12 @@ body.resizing .row-resize {
   flex-direction: column;
   gap: 10px;
 }
+/* a short transcript sits on the composer instead of the top of the pane; once the
+   content overflows there is no free space left and the margin collapses to nothing.
+   justify-content: flex-end would do the same but makes the overflowing top unreachable. */
+.chat-log > *:first-child {
+  margin-top: auto;
+}
 
 .jump-down {
   position: absolute;

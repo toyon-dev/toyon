@@ -6,6 +6,7 @@ import { terminalBus } from "./app/terminalBus.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
 import { initialState } from "./state/store.ts";
+import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/surfaces.css";
@@ -65,11 +66,19 @@ const sock = new DaemonSocket(
   (v) => store.dispatch({ a: "connected", v }),
 );
 
+// a rebuilt shell rotates every hashed chunk name, so a tab open across a rebuild imports a URL the
+// daemon no longer has. Vite fires this before the rejection reaches render: flag it and let it
+// throw, so the boundary can say a reload is the fix. preventDefault here would resolve the import
+// to undefined and crash inside React.lazy anyway.
+window.addEventListener("vite:preloadError", markStaleBuild);
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <StoreProvider store={store} sock={sock}>
-      <App />
-    </StoreProvider>
+    <ErrorBoundary>
+      <StoreProvider store={store} sock={sock}>
+        <App />
+      </StoreProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 );
 

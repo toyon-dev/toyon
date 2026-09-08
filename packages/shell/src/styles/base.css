@@ -277,3 +277,31 @@ button {
     transform: translateY(2px);
   }
 }
+
+/* ---- crash screen (see ui/ErrorBoundary.tsx) ---- */
+.crash {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg0);
+}
+/* inside a Pane: clear of its title bar, matching the editor's own inset */
+.crash.in-pane {
+  position: absolute;
+  inset: 33px 0 0 0;
+}
+.crash-title {
+  font: var(--fs-md) var(--font-ui);
+  color: var(--fg1);
+}
+.crash-body {
+  max-width: 520px;
+  font: var(--fs-sm) / 1.5 var(--font-mono);
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}

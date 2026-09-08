@@ -2,6 +2,7 @@ import { SHELL_STREAM } from "@toyon/shared";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive, useLocalField, useTheme } from "../../state/selectors.ts";
+import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -62,18 +63,20 @@ export function TerminalPane({
       }
     >
       <div className="term-body">
-        <Suspense fallback={<div className="empty">loading terminal…</div>}>
-          <XTerm
-            key={stream}
-            worktreeId={worktreeId}
-            stream={stream}
-            theme={theme}
-            sock={sock}
-            connected={connected}
-            onAlive={(alive, code) => setExit(alive ? null : (code ?? 0))}
-            onEscape={() => dispatch({ a: "toggle-terminal" })}
-          />
-        </Suspense>
+        <ErrorBoundary pane>
+          <Suspense fallback={<div className="empty">loading terminal…</div>}>
+            <XTerm
+              key={stream}
+              worktreeId={worktreeId}
+              stream={stream}
+              theme={theme}
+              sock={sock}
+              connected={connected}
+              onAlive={(alive, code) => setExit(alive ? null : (code ?? 0))}
+              onEscape={() => dispatch({ a: "toggle-terminal" })}
+            />
+          </Suspense>
+        </ErrorBoundary>
       </div>
     </Pane>
   );

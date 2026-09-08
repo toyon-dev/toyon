@@ -99,6 +99,10 @@ export function createFetch(opts: HttpOpts) {
     const rel = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = join(opts.shellDist, rel.replaceAll("..", ""));
     if (existsSync(file) && Bun.file(file).size > 0) return new Response(Bun.file(file));
+    // a hashed asset that is gone means the shell was rebuilt under an open tab. Falling through to
+    // index.html would answer a module request with HTML, so the import fails on MIME rather than
+    // status and the tab can't tell why; 404 lets vite raise preloadError instead.
+    if (rel.startsWith("/assets/")) return new Response("not found", { status: 404 });
     const index = join(opts.shellDist, "index.html");
     if (existsSync(index)) return new Response(Bun.file(index));
     return new Response("toyon daemon running; shell not built (run: bun run build)", { status: 200 });

@@ -3,6 +3,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { localOf, type State, worktreeById } from "../../state/store.ts";
+import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { wtDir } from "../util.ts";
@@ -64,25 +65,27 @@ export function DiffView({
         </>
       }
     >
-      <Suspense fallback={<div className="empty">loading diff…</div>}>
-        <MonacoDiff
-          before={diff.before}
-          after={diff.after}
-          path={diff.path}
-          line={diff.line}
-          theme={theme}
-          onSave={(content) => sock?.send({ t: "write-file", worktreeId: diff.worktreeId, path: diff.path, content })}
-          onLineHover={(line) => {
-            if (line == null) previewBus.post(diff.worktreeId, { type: "highlight-clear" });
-            else
-              previewBus.post(diff.worktreeId, {
-                type: "highlight-file",
-                path: diff.path,
-                ranges: [[line + lineOff, line + lineOff]],
-              });
-          }}
-        />
-      </Suspense>
+      <ErrorBoundary pane>
+        <Suspense fallback={<div className="empty">loading diff…</div>}>
+          <MonacoDiff
+            before={diff.before}
+            after={diff.after}
+            path={diff.path}
+            line={diff.line}
+            theme={theme}
+            onSave={(content) => sock?.send({ t: "write-file", worktreeId: diff.worktreeId, path: diff.path, content })}
+            onLineHover={(line) => {
+              if (line == null) previewBus.post(diff.worktreeId, { type: "highlight-clear" });
+              else
+                previewBus.post(diff.worktreeId, {
+                  type: "highlight-file",
+                  path: diff.path,
+                  ranges: [[line + lineOff, line + lineOff]],
+                });
+            }}
+          />
+        </Suspense>
+      </ErrorBoundary>
     </Pane>
   );
 }

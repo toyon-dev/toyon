@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "bun";
@@ -112,5 +112,33 @@ describe("/attachments", () => {
     expect((await fetch(req("/attachments/wt1/9.png?token=secret"), srv()))?.status).toBe(404);
     expect((await fetch(req("/attachments/..%2F..%2Fetc/passwd?token=secret"), srv()))?.status).toBe(404);
     expect((await fetch(req("/attachments/wt1/1.png/x?token=secret"), srv()))?.status).toBe(404);
+  });
+});
+
+describe("static shell", () => {
+  const dist = mkdtempSync(join(tmpdir(), "toyon-dist-"));
+  afterAll(() => rmSync(dist, { recursive: true, force: true }));
+  writeFileSync(join(dist, "index.html"), "<!doctype html><title>toyon</title>");
+  const serve = createFetch({
+    token: "secret",
+    shellDist: dist,
+    version: "0",
+    repos,
+    attachments: new AttachmentStore(attachmentsDir),
+    branded: () => false,
+    metrics: () => ({ lag: 0 }),
+  });
+
+  test("a route falls back to index.html so the SPA can handle it", async () => {
+    const r = await serve(req("/some/deep/route"), srv());
+    expect(r?.status).toBe(200);
+    expect(await r?.text()).toContain("<!doctype html>");
+  });
+  test("a hashed asset that is gone is 404, never index.html", async () => {
+    // a rebuilt shell rotates every hashed name; HTML here would fail the open tab's module
+    // import on MIME instead of status, and it could not tell a reload is the fix
+    const r = await serve(req("/assets/MonacoDiff-old.js"), srv());
+    expect(r?.status).toBe(404);
+    expect(await r?.text()).not.toContain("doctype");
   });
 });

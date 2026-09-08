@@ -233,13 +233,22 @@ function Swatch({ token, ground, largest }: { token: DesignToken; ground: Design
   );
 }
 
-/** The whole chip in a sentence. Every line in a cell used to carry its own `title`, so a value and
- * the ratio beside it were two separate hovers of two separate fragments; the cell is one thing. */
+/**
+ * The whole chip, a line at a time.
+ *
+ * One sentence ran to nearly the tooltip's full width and read as a paragraph about a swatch; these
+ * are three separate facts and belong on three lines. The value is worth repeating even though the
+ * cell shows it, because the cell truncates and this is where you come to read it in full.
+ */
 function describe(token: DesignToken, ratio: string | null, ground: DesignToken | undefined): string {
-  const parts = [`${token.name} is ${token.value}`];
-  if (token.resolved) parts.push(`which resolves to ${token.resolved}`);
-  const sentence = parts.join(", ");
-  return ratio && ground ? `${sentence}. ${ratio} against ${ground.name}` : sentence;
+  const lines = [token.name, token.resolved ? `${token.value} resolves to ${token.resolved}` : token.value];
+  if (ratio && ground) {
+    // a token measured against itself is the ground, and "1.00:1 against --surface0" written on
+    // --surface0 explains nothing
+    const self = token.name === ground.name;
+    lines.push(self ? "the ground these ratios are measured against" : `${ratio} against ${ground.name}`);
+  }
+  return lines.join("\n");
 }
 
 function Components({

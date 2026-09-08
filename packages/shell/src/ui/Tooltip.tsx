@@ -26,6 +26,8 @@ const WARM_MS = 600;
 const GAP = 6;
 /** clear of the pointer itself, which is taller than the gap a box needs from an edge */
 const CURSOR_GAP = 18;
+/** and off to its side, so the pointer sits near a corner of the box rather than over its text */
+const CURSOR_NUDGE = 12;
 const MARGIN = 8;
 
 type Anchor = { el: HTMLElement; text: string; key?: string; follow: boolean };
@@ -39,12 +41,19 @@ function place(box: HTMLDivElement, anchor: Anchor, pointer: Point) {
   const h = box.offsetHeight;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const [x, below, above] = anchor.follow
-    ? [pointer.x, pointer.y + CURSOR_GAP, pointer.y - CURSOR_GAP - h]
-    : [r.left + r.width / 2, r.bottom + GAP, r.top - GAP - h];
+
+  const below = anchor.follow ? pointer.y + CURSOR_GAP : r.bottom + GAP;
+  const above = anchor.follow ? pointer.y - CURSOR_GAP - h : r.top - GAP - h;
   const flip = below + h > vh - MARGIN && above >= MARGIN;
+
+  // A following tip hangs off the pointer's lower right, the way a cursor tip always has, and
+  // swaps to its left when the right runs out. Centring it on the pointer put the arrow over the
+  // middle of a box that can be three hundred pixels wide, with the text going both ways from it.
+  let left = anchor.follow ? pointer.x + CURSOR_NUDGE : r.left + r.width / 2 - w / 2;
+  if (anchor.follow && left + w > vw - MARGIN) left = pointer.x - CURSOR_NUDGE - w;
+
   box.style.top = `${Math.round(flip ? above : below)}px`;
-  box.style.left = `${Math.round(Math.min(Math.max(MARGIN, x - w / 2), vw - MARGIN - w))}px`;
+  box.style.left = `${Math.round(Math.min(Math.max(MARGIN, left), vw - MARGIN - w))}px`;
   box.dataset.side = flip ? "above" : "below";
 }
 

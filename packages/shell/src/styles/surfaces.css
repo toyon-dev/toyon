@@ -1157,6 +1157,9 @@ body.resizing .row-resize {
   border-radius: var(--r-sm);
   box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
   padding: 4px;
+  overflow: hidden;
+  --lp-bleed: -4px;
+  --lp-pad: 8px;
 }
 /* .qo-list is half the viewport for a centred palette; anchored here that would bury the chat */
 .inline-picker .qo-list {
@@ -1733,8 +1736,17 @@ body.resizing .rb-center {
 .cmd-item.dim .cmd-label {
   color: var(--fg-muted);
 }
+/* A picker's rows are bands across the panel, not chips inside it: everywhere else in the app a
+   list you run down with the keyboard (the worktree panel, the transcript's tool rows) is full
+   bleed, and a rounded pill inset in a padded box reads as a control you press. --lp-bleed undoes
+   the box's padding for the list and the key row; --lp-pad puts it back inside the row, so the
+   row's text still sits under the caret while its fill reaches both edges. */
 .prompt-box.quick-open {
   padding: 8px;
+  --lp-bleed: -8px;
+  --lp-pad: 18px;
+  /* the rows reach the box's edge, so the box has to be the thing that keeps its corners round */
+  overflow: hidden;
 }
 .prompt-box.quick-open input {
   width: 100%;
@@ -1743,6 +1755,9 @@ body.resizing .rb-center {
 /* Anchored, the field is the top of the panel and borrows the composer's treatment: the field's
    background carried by the whole strip and no inset box, so the panel reads as the bar it drops
    out of rather than a control floating in a menu. -8px undoes .quick-open's padding. */
+.prompt-box.anchored {
+  --lp-pad: 8px;
+}
 .prompt-box.anchored .lp-input {
   margin: -8px -8px 0;
   padding: 5px 8px;
@@ -1787,7 +1802,8 @@ body.resizing .rb-center {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 12px;
-  padding: 7px 10px;
+  margin-inline: var(--lp-bleed, 0);
+  padding: 7px var(--lp-pad, 10px);
   color: var(--fg-dim);
   font: var(--fs-xs) / 1 var(--font-ui);
   border-top: 1px solid var(--bg2);
@@ -1831,7 +1847,11 @@ body.resizing .rb-center {
 .qo-list {
   max-height: 50vh;
   overflow-y: auto;
-  margin-top: 6px;
+  margin: 6px var(--lp-bleed, 0) 0;
+}
+/* the empty line and the footer are rows of the same list, so they sit on the rows' text column */
+.qo-list .dock-empty {
+  padding-inline: var(--lp-pad, 10px);
 }
 .qo-item {
   display: block;
@@ -1839,8 +1859,7 @@ body.resizing .rb-center {
   text-align: left;
   font: var(--fs-sm) var(--font-mono);
   color: var(--fg-muted);
-  padding: 4px 10px;
-  border-radius: var(--r-sm);
+  padding: 4px var(--lp-pad, 10px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1885,7 +1904,7 @@ body.resizing .rb-center {
 /* search hits: location on top, matched line beneath */
 .sr-item {
   white-space: normal;
-  padding: 5px 10px;
+  padding: 5px var(--lp-pad, 10px);
 }
 .sr-loc {
   display: block;
@@ -1940,10 +1959,13 @@ body.resizing .rb-center {
 .qo-item:hover {
   background: var(--bg2);
 }
+/* Where the keyboard is, and nothing more. The orange edge means "this is the one you are on"
+   (the active worktree, the open tool call); on a picker row it read as a choice already made,
+   when the row under the cursor is only the row the pointer or ↑↓ happens to be over. Hover sets
+   the same index, so this is the one highlight either way. */
 .qo-item.active {
   background: var(--bg2);
   color: var(--fg1);
-  box-shadow: inset 2px 0 0 var(--orange);
 }
 .prompt-box textarea {
   width: 100%;

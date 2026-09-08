@@ -2222,14 +2222,23 @@ body.resizing .rb-center {
 .design-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  /* the grid breaks out of the text measure, but not forever: past this it is just a very long
-     row of swatches, and the eye has to travel the whole pane to compare two of them */
+}
+/*
+ * The width cap lives on this wrapper, never on the grid.
+ *
+ * `max-width` on an auto-fill grid is not a cap, it is an instruction: the track count resolves
+ * against the cap rather than against the room actually available, so the grid asked for eleven
+ * 132px columns, refused to shrink below them, and shoved the chat panel off the side of the
+ * window. A plain block carries the cap, and the grid inside it fills whatever that block gets.
+ */
+.design-breakout {
   max-width: 1500px;
   margin-inline: auto;
+  min-width: 0;
 }
 /* A group with too few cells to want the extra width stays in the text measure, so it lines up
    with the label above it instead of floating off to the left of everything. */
-.design-grid.narrow {
+.design-breakout.narrow {
   max-width: 720px;
 }
 /* a scale has no sample, so its cells are two lines and pack tighter than a colour's */

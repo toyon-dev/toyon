@@ -15,7 +15,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { localOf } from "../../state/store.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
-import { contrastRatio } from "./contrast.ts";
+import { contrastRatio, parseHex } from "./contrast.ts";
 
 export function DesignPane({
   worktreeId,
@@ -135,14 +135,33 @@ function Findings({ findings, onOpen }: { findings: DesignFinding[]; onOpen: (pa
 }
 
 /**
- * A wall of swatches, not a list of chips. Each cell is a full-bleed sample over a plate carrying
- * the name, the value, and what the value means: for a color that is its contrast against the
- * ground it sits on, which is the number you actually want when you are looking at a palette.
+ * Grouped by what a token *is*, not by what it is called.
+ *
+ * Name prefixes looked like the obvious grouping and are not: `--accent`, `--aqua` and `--blue`
+ * are each their own prefix, so every colour became a section of one, and a page of colours turned
+ * into forty headed bands with one swatch apiece. Kind gives four groups for any project.
+ *
+ * Order inside a group is the order the stylesheet declares them, which is the grouping the author
+ * already made and the only one worth trusting: a token file writes the surface rungs together,
+ * then the elements, then the text ladder, because that is the order they mean something in.
  */
-function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
-  const families = new Map<string, DesignToken[]>();
-  for (const t of tokens) families.set(t.family, [...(families.get(t.family) ?? []), t]);
+const GROUPS: Array<{ kind: DesignToken["kind"]; label: string; tight?: boolean }> = [
+  { kind: "color", label: "colour" },
+  { kind: "length", label: "size & radius", tight: true },
+  { kind: "font", label: "type" },
+  { kind: "shadow", label: "shadow" },
+  { kind: "other", label: "computed", tight: true },
+];
 
+/** The bar for a length, capped so a 999px pill radius does not run the width of the pane and
+ * flatten every real step in the scale into the same full-width stripe. */
+function barWidth(value: string): string {
+  const n = Number.parseFloat(value);
+  if (!Number.isFinite(n)) return "6px";
+  return `${Math.max(3, Math.min(Math.abs(n), 72))}px`;
+}
+
+function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
   return (
     <Section title="Tokens" note={live ? undefined : "declared values; the preview was not running"}>
       {tokens.length === 0 ? (
@@ -151,16 +170,20 @@ function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
           read yet.
         </Gap>
       ) : (
-        [...families].map(([family, group]) => (
-          <div key={family} className="design-family">
-            <h3 className="design-family-name">{family}</h3>
-            <div className="design-grid">
-              {group.map((t) => (
-                <Swatch key={t.name} token={t} />
-              ))}
+        GROUPS.map(({ kind, label, tight }) => {
+          const group = tokens.filter((t) => t.kind === kind);
+          if (group.length === 0) return null;
+          return (
+            <div key={kind} className="design-group">
+              <span className="design-group-name">{label}</span>
+              <div className={`design-grid ${tight ? "tight" : ""}`}>
+                {group.map((t) => (
+                  <Swatch key={t.name} token={t} />
+                ))}
+              </div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
     </Section>
   );
@@ -168,19 +191,32 @@ function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
 
 function Swatch({ token }: { token: DesignToken }) {
   const ratio = token.kind === "color" ? contrastRatio(token.value) : null;
+  // Painting a value the shell cannot resolve would paint it with the *shell's* token of that
+  // name: `--accent: var(--red)` would show toyon's red while claiming to show the project's. The
+  // absence of paint is the honest answer, and the value underneath already says why. A
+  // translucent colour still paints; it just has no ratio to print.
+  const paintable = token.kind === "color" && parseHex(token.value) !== null;
   return (
     <div className="design-cell">
-      <div className="design-sample" data-kind={token.kind}>
-        {token.kind === "color" && <span className="design-fill" style={{ background: token.value }} />}
-        {token.kind === "length" && <span className="design-corner" style={{ borderRadius: token.value }} />}
-        {token.kind === "font" && <span style={{ fontFamily: token.value }}>Ag</span>}
-        {(token.kind === "shadow" || token.kind === "other") && (
-          <span className="design-corner" style={{ boxShadow: token.kind === "shadow" ? token.value : undefined }} />
+      <div className="design-sample">
+        {paintable && <span className="design-fill" style={{ background: token.value }} />}
+        {/* Every length as a measured bar. Drawing them as corners read better for a radius scale
+            and lied about the rest: nothing in `13px` says whether it is a radius, a font size or
+            a rail width, so a font size arrived wearing rounded corners. Which property a token is
+            spent on is a question only the running page can answer. */}
+        {token.kind === "length" && <span className="design-bar" style={{ width: barWidth(token.value) }} />}
+        {token.kind === "font" && (
+          <span className="design-specimen" style={{ fontFamily: token.value }}>
+            Ag
+          </span>
         )}
+        {token.kind === "shadow" && <span className="design-corner" style={{ boxShadow: token.value }} />}
       </div>
       <div className="design-plate">
         <span className="design-cell-name">{token.name.replace(/^--/, "")}</span>
-        <span className="design-cell-value">{token.value}</span>
+        <span className="design-cell-value" title={token.value}>
+          {token.value}
+        </span>
         {ratio && <span className="design-cell-note">{ratio}</span>}
       </div>
     </div>

@@ -92,14 +92,21 @@ async function readAll(root: string, paths: string[]): Promise<SourceFile[]> {
   return out;
 }
 
-/** The first declaration of a name wins. Stylesheets redeclare tokens per theme, and the pane
- * wants one row per token, not one per theme. */
+/**
+ * The first declaration of a name wins, and declaration order is kept.
+ *
+ * Sorting by name looked tidier and threw away the only grouping anyone had actually made: a token
+ * file puts `surface0..2`, then `element0..1`, then `border`, then `text`, because that is the
+ * order they mean something in. Alphabetical scatters those four families through the hues. The
+ * file with the most custom properties leads, since that is the one that exists to hold them.
+ */
 function collectTokens(css: SourceFile[]): DesignToken[] {
+  const byDensity = [...css].sort((a, b) => cssTokens(b.text).length - cssTokens(a.text).length);
   const out = new Map<string, DesignToken>();
-  for (const file of css) {
+  for (const file of byDensity) {
     for (const token of cssTokens(file.text)) if (!out.has(token.name)) out.set(token.name, token);
   }
-  return [...out.values()].sort((a, b) => a.family.localeCompare(b.family) || a.name.localeCompare(b.name));
+  return [...out.values()];
 }
 
 const dirOf = (path: string) => path.replace(/\/?[^/]*$/, "");

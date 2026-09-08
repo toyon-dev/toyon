@@ -4,7 +4,9 @@
 
 import type { DesignToken, DesignTokenKind, DesignVariant } from "@toyon/shared";
 
-const COLOR = /^(#|rgba?\(|hsla?\(|oklch\(|color\()/i;
+// color-mix and light-dark before the comma rule below, or a `color-mix(in srgb, …)` is filed as a
+// font stack on the strength of its commas and shown as a type specimen
+const COLOR = /^(#|rgba?\(|hsla?\(|oklch\(|oklab\(|lab\(|lch\(|color\(|color-mix\(|light-dark\()/i;
 const FONT_STACK = /(sans-serif|serif|monospace|system-ui|ui-monospace|cursive)/i;
 const UNIT = /px|rem|em|%|ch|vh|vw|vmin|vmax|deg/;
 const LENGTH = new RegExp(`^-?[\\d.]+(${UNIT.source}|s|ms)?$`);

@@ -15,6 +15,14 @@ export function parseHex(value: string): [number, number, number] | null {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+/** #rrggbbaa or #rgba. A ratio for one of these would be a lie: what it contrasts against depends
+ * on whatever it is laid over, and a diff tint reading 4.95:1 as though it were opaque is exactly
+ * the sort of confident wrong number this pane must not print. */
+export function hasAlpha(value: string): boolean {
+  const m = /^#([0-9a-f]{3,8})$/i.exec(value.trim());
+  return m ? m[1]!.length === 4 || m[1]!.length === 8 : false;
+}
+
 /** relative luminance, per WCAG 2 */
 function luminance([r, g, b]: [number, number, number]): number {
   const f = (c: number) => {
@@ -32,6 +40,7 @@ function luminance([r, g, b]: [number, number, number]): number {
  * half, and a figure from the wrong half would quietly mislead.
  */
 export function contrastRatio(value: string, ground?: string): string | null {
+  if (hasAlpha(value)) return null;
   const fg = parseHex(value);
   if (!fg) return null;
   const bgRaw = ground ?? readGround();

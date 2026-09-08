@@ -1101,19 +1101,17 @@ body.resizing .row-resize {
   border-top: 1px solid var(--border0);
 }
 /* the card's body: prose and code alike, edge to edge inside it, under a rule that separates it from
-   the chip. It scrolls on its own past 320px, and a flick that reaches the bottom carries on down
-   the chat: reading the transcript is what the wheel is usually for, and chaining is also what keeps
-   the bounce out of the middle of one, since the box only rubber-bands when nothing behind it can
-   still scroll. The swipe-back gesture is already held off at the document (base.css), so nothing
-   here needs to contain an axis. */
+   the chip. It takes whatever height its output needs and the chat log scrolls it: a box of its own
+   inside a scrolling column means the wheel does one of two things depending on where the pointer
+   happens to be, and a long output you wanted to read is 320px of it with the rest behind a second
+   scrollbar. The one axis kept is the block's own, since a line too long to wrap is not a reason to
+   widen the chat pane. */
 .tool-row .tool-out {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 6px 12px;
   background: var(--surface1);
-  max-height: 320px;
-  overflow: auto;
 }
 .tool-row .tool-note {
   margin: 0;
@@ -2111,10 +2109,10 @@ body.resizing .rb-center {
 }
 
 /* ---- design pane ----
-   A document, not a control panel. Two shapes carry it: a swatch wall for the scales, where the
-   sample is the cell and the wording sits on a plate under it, and a plain band per row for the
-   inventories. Both are full bleed inside the column and share their edges, so the grid reads as
-   one object rather than a tray of cards. */
+   Flat and tight, like the file rows and the diff beside it. An earlier pass gave every group a
+   rounded card on a raised plate and it read as a different product bolted to the side of this
+   one; the shell's own idiom is hairlines, one surface step, and small type. The only shape here
+   is the swatch grid, and it earns it: a colour has to be shown at a size you can judge. */
 .design-pane {
   height: 55%;
   min-height: 160px;
@@ -2137,38 +2135,35 @@ body.resizing .rb-center {
 }
 .design-body {
   overflow: auto;
-  padding: 24px 28px 64px;
-  width: min(900px, 100%);
+  padding: 16px 20px 56px;
+  width: min(880px, 100%);
   margin: 0 auto;
   color: var(--text0);
   font: var(--fs-sm) var(--font-ui);
 }
 .design-section {
-  margin-bottom: 40px;
+  margin-bottom: 28px;
 }
 .design-h {
-  font: 600 var(--fs-md) var(--font-ui);
+  font: 600 var(--fs-sm) var(--font-ui);
   color: var(--text0);
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
 }
 .design-note {
   font: var(--fs-xs) var(--font-ui);
   color: var(--text2);
   font-weight: 400;
 }
-/* what the scan could not read. Sits inside the section it explains, in the quiet tier, so it
-   reads as a note about the tool rather than as a verdict on the project. */
 .design-gap {
   margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--r-sm);
+  padding: 8px 10px;
   background: var(--sunken);
   color: var(--text2);
   font: var(--fs-xs) var(--font-ui);
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 /* findings */
@@ -2181,15 +2176,14 @@ body.resizing .rb-center {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 3px;
+  gap: 2px;
   width: 100%;
   text-align: left;
-  padding: 10px 12px;
+  padding: 7px 10px;
   border: 0;
   border-left: 2px solid var(--accent);
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
   background: var(--surface1);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   cursor: pointer;
   font: inherit;
 }
@@ -2207,29 +2201,29 @@ body.resizing .rb-center {
 .design-finding-detail {
   color: var(--text2);
   font-size: var(--fs-xs);
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
-/* swatch wall: cells butt together and the gap is the rule between them */
-.design-family {
-  margin-bottom: 20px;
+/* token grid: one per kind, cells sharing their edges so a scale reads as one object */
+.design-group {
+  margin-bottom: 14px;
 }
-.design-family-name {
+.design-group-name {
+  display: block;
   font: var(--fs-xs) var(--font-mono);
   color: var(--text2);
-  margin: 0 0 6px;
-  font-weight: 400;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  margin-bottom: 5px;
 }
 .design-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
   gap: 1px;
   background: var(--border0);
   border: 1px solid var(--border0);
-  border-radius: var(--r-sm);
-  overflow: hidden;
+}
+/* the scales are read as a sequence, so their cells pack tighter than a colour's */
+.design-grid.tight {
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
 }
 .design-cell {
   background: var(--surface0);
@@ -2237,35 +2231,42 @@ body.resizing .rb-center {
   flex-direction: column;
 }
 .design-sample {
-  height: 76px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--sunken);
-  font: 26px / 1 var(--font-ui);
-  color: var(--text1);
+}
+.design-grid.tight .design-sample {
+  height: 34px;
 }
 .design-fill {
   display: block;
   width: 100%;
   height: 100%;
 }
-/* a radius token is shown as the corner it makes, so the scale reads as a shape not a number */
+.design-bar {
+  display: block;
+  height: 6px;
+  background: var(--text2);
+}
 .design-corner {
   display: block;
-  width: 46px;
-  height: 46px;
+  width: 30px;
+  height: 24px;
   background: var(--element1);
+}
+.design-specimen {
+  font: 20px / 1 var(--font-ui);
+  color: var(--text1);
 }
 .design-plate {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 8px 10px 10px;
-  background: var(--surface1);
+  padding: 5px 7px 6px;
 }
 .design-cell-name {
-  font: var(--fs-sm) var(--font-ui);
+  font: var(--fs-xs) var(--font-ui);
   font-weight: 600;
   color: var(--text0);
   overflow: hidden;
@@ -2281,7 +2282,7 @@ body.resizing .rb-center {
   white-space: nowrap;
 }
 
-/* inventory rows: a band, the selection idiom the rest of the shell uses */
+/* inventory rows: the shell's band idiom, a 2px accent edge on hover and a neutral seat */
 .design-rows {
   list-style: none;
   margin: 0;
@@ -2290,17 +2291,16 @@ body.resizing .rb-center {
 .design-row {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   text-align: left;
-  padding: 6px 10px;
+  padding: 4px 10px;
   border: 0;
   border-left: 2px solid transparent;
   background: none;
   color: inherit;
   font: inherit;
   cursor: pointer;
-  border-bottom: 1px solid var(--border0);
 }
 .design-row:disabled {
   cursor: default;
@@ -2312,9 +2312,8 @@ body.resizing .rb-center {
   border-left-color: var(--accent);
   outline: none;
 }
-/* fixed gutter: the counts are the column you scan, so they align regardless of width */
 .design-count {
-  width: 34px;
+  width: 28px;
   flex-shrink: 0;
   text-align: right;
   color: var(--text2);
@@ -2322,7 +2321,7 @@ body.resizing .rb-center {
 }
 .design-name {
   color: var(--text0);
-  font: var(--fs-sm) var(--font-mono);
+  font: var(--fs-xs) var(--font-mono);
   flex-shrink: 0;
 }
 .design-path {
@@ -2335,13 +2334,12 @@ body.resizing .rb-center {
 .design-variants {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   margin-left: auto;
-  padding-left: 12px;
+  padding-left: 10px;
 }
 .design-variant {
-  padding: 1px 6px;
-  border-radius: var(--r-xs);
+  padding: 0 5px;
   background: var(--sunken);
   color: var(--text2);
   font: var(--fs-xs) var(--font-mono);

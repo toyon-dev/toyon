@@ -24,6 +24,13 @@ describe("tokenKind", () => {
     expect(tokenKind("calc(var(--rail-w) - 1px)")).toBe("length");
     expect(tokenKind("var(--surface0)")).toBe("other");
   });
+
+  test("a colour function is a colour, however many commas it has", () => {
+    // this one was filed as a font stack on the strength of its commas, and shown as a specimen
+    expect(tokenKind("color-mix(in srgb, var(--text0) 8%, transparent)")).toBe("color");
+    expect(tokenKind("light-dark(#fff, #000)")).toBe("color");
+    expect(tokenKind("oklch(0.7 0.1 200)")).toBe("color");
+  });
 });
 
 describe("tokenFamily", () => {

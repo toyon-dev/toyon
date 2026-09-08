@@ -52,13 +52,17 @@ const KIND_ICON: Record<ToolKind, IconName> = {
   other: "dot",
 };
 
-/** which kinds open themselves while the agent is on them. What it is running and what it is
- * changing are worth watching go by; a read or a search is a file you already have, and a turn that
- * opens every one of them reads itself out loud and pushes the message you were reading off the
- * top. Those wait for a click. `other` is in here because an agent that sends no kind at all sends
- * `other` for its whole turn, and a transcript where nothing ever opens is worse than one that
- * opens too much. */
-export const AUTO_OPEN: ReadonlySet<ToolKind> = new Set<ToolKind>(["execute", "edit", "other"]);
+/** which kinds open themselves while the agent is on them. Only the one that changes the code: a
+ * diff is the thing you would have opened anyway, and it is the thing you want to have seen if it
+ * was wrong. Everything else waits for a click, a command it ran included, since a turn that throws
+ * a panel open per call reads itself out loud and walks the message you were reading off the top of
+ * the log. A set rather than a check so a kind can be added back on its own.
+ *
+ * `think` is here for consistency rather than for Claude: an agent that models its reasoning as a
+ * call gets it read the way one that streams it gets it read, which is open, since a thought is
+ * prose about the turn rather than output to go back to. Claude's adapter sends thoughts as
+ * `agent_thought_chunk`, which becomes a `thinking` item and never reaches a row (acp/map.ts). */
+export const AUTO_OPEN: ReadonlySet<ToolKind> = new Set<ToolKind>(["edit", "think"]);
 
 /** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
  * commit, and the column reads better following the command than the kind. Conservative on purpose:

@@ -55,7 +55,10 @@ export function DesignPane({
       height={full ? undefined : height}
       resizable={!full}
       onDragStart={onDragStart}
-      title="Design system"
+      // The other panes put what you are looking at here: the diff its file path, the terminal its
+      // tabs. Naming this one "Design system" was the only header in the app that said what the
+      // thing already obviously is. What it cannot say for itself is how far the scan reached.
+      title={index ? <span>{reach(index)}</span> : undefined}
       onClose={() => dispatch({ a: "toggle-design" })}
       actions={
         <>
@@ -90,6 +93,14 @@ export function DesignPane({
 }
 
 type Outline = (msg: Parameters<typeof previewBus.post>[1]) => void;
+
+/** what the scan actually opened, which is the one thing about this pane the body never says and
+ * the first thing to doubt when a section comes back thinner than you expected */
+function reach(index: DesignIndex): string {
+  const files = Object.values(index.coverage.files).reduce((a, b) => a + b, 0);
+  const sheets = index.coverage.stylesheets;
+  return `${files} file${files === 1 ? "" : "s"} read, ${sheets} stylesheet${sheets === 1 ? "" : "s"}`;
+}
 
 function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
@@ -244,6 +255,9 @@ function Components({
   onOpen: (path: string) => void;
 }) {
   const { components, typed } = index;
+  // A section with nothing under it is a heading, not an answer. What the scan reached is in the
+  // pane's own header, so a project it found no components in says so there rather than here.
+  if (components.length === 0) return null;
   // The split that matters: a component two or more files reach for is shared vocabulary, and the
   // rest is a page, a root, or a one-off. That tail is long in every project and is not a problem,
   // so it collapses here rather than being reported as one above.
@@ -275,29 +289,17 @@ function Components({
   );
 
   return (
-    <Section
-      title="Components"
-      note={components.length ? `${shared.length} reused of ${components.length}` : undefined}
-    >
-      {components.length === 0 ? (
-        <Gap>
-          Nothing that looks like an exported component. Vue and Svelte name a component by its file rather than by an
-          export, which this scan does not read yet.
-        </Gap>
-      ) : (
-        <>
-          {!typed && <Gap>No TypeScript in this project, so the values each prop allows are not listed.</Gap>}
-          <ul className="design-rows">{shared.map(row)}</ul>
-          {rest.length > 0 && (
-            <details className="design-tail">
-              <summary>
-                <span className="design-count">{rest.length}</span>
-                used once or never
-              </summary>
-              <ul className="design-rows">{rest.map(row)}</ul>
-            </details>
-          )}
-        </>
+    <Section title="Components" note={`${shared.length} reused of ${components.length}`}>
+      {!typed && <Gap>No TypeScript in this project, so the values each prop allows are not listed.</Gap>}
+      <ul className="design-rows">{shared.map(row)}</ul>
+      {rest.length > 0 && (
+        <details className="design-tail">
+          <summary>
+            <span className="design-count">{rest.length}</span>
+            used once or never
+          </summary>
+          <ul className="design-rows">{rest.map(row)}</ul>
+        </details>
       )}
     </Section>
   );

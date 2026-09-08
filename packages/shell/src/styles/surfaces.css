@@ -341,7 +341,8 @@ body.resizing iframe {
   background: var(--element1);
   color: var(--text0);
 }
-.git-file.active::before {
+.git-file.active::before,
+.git-file.sel::before {
   content: "";
   position: absolute;
   left: 0;
@@ -350,12 +351,9 @@ body.resizing iframe {
   width: 2px;
   background: var(--accent);
 }
-/* where the keyboard is, which is a different question from which file is open in the editor: a
-   ring rather than a band, so a row can answer both at once */
-.git-file.sel {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
-}
+/* where the keyboard is. Moving the cursor also opens the file, so the cursor and the open file
+   are the same row nearly always; it takes the same edge rather than a ring stacked on top of the
+   band, which hid the band and read as a second, unrelated kind of selection. */
 .git-file .xy {
   color: var(--yellow);
   width: 18px;

@@ -15,7 +15,10 @@ import { Tooltips } from "../ui/Tooltip.tsx";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
 
+/** the worktree rail: the strip it keeps when it peeks, and the column it takes when kept open
+ *  (both also in surfaces.css, as the rail's width and --rail-w) */
 const RAIL_PX = 40;
+const RAIL_OPEN_PX = 232;
 const MRU_SUBSCRIPTIONS = 3;
 
 /** layout + app-wide effects; every surface reads its own state through selectors */
@@ -30,6 +33,7 @@ export function App() {
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
+  const railOpen = useStore((s) => s.railOpen);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
   const toast = useStore((s) => s.toast);
@@ -84,6 +88,11 @@ export function App() {
       localStorage.setItem(STORAGE.repo, activeRepoId);
     } catch {}
   }, [activeRepoId]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.rail, railOpen ? "1" : "0");
+    } catch {}
+  }, [railOpen]);
 
   useChords();
   // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the
@@ -132,13 +141,15 @@ export function App() {
     raw ? clampW(Number(raw), 380) : undefined,
   );
   const dragLeft = useDragResize((ev) => clampW(ev.clientX, 220), setLeftW);
-  // the worktree rail sits between the chat dock and the window edge
-  const dragRight = useDragResize((ev) => clampW(window.innerWidth - RAIL_PX - ev.clientX, 380), setRightW);
+  // keeping the rail open takes its width out of the row, so the docks have to know about it: the
+  // chat's drag and the status bar both measure back from the window edge
+  const railPx = railOpen ? RAIL_OPEN_PX : RAIL_PX;
+  const dragRight = useDragResize((ev) => clampW(window.innerWidth - railPx - ev.clientX, 380), setRightW);
 
   return (
     <div className={`app ${zen ? "zen" : ""}`}>
       <Tooltips />
-      <StatusBar leftPx={leftOpen ? leftW : 0} rightPx={(rightOpen ? rightW : 0) + RAIL_PX} />
+      <StatusBar leftPx={leftOpen ? leftW : 0} rightPx={(rightOpen ? rightW : 0) + railPx} />
       <div className="docks">
         <LeftDock width={leftW} />
         {leftOpen && <div className="dock-resize left" onPointerDown={dragLeft} />}

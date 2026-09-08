@@ -61,6 +61,9 @@ export function useChords() {
           case "right":
             dispatch({ a: "toggle-right" });
             break;
+          case "rail":
+            dispatch({ a: "toggle-rail" });
+            break;
           case "keys":
             dispatch({ a: "toggle", overlay: { kind: "keys" } });
             break;

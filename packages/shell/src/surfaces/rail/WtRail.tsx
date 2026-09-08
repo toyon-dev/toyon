@@ -22,6 +22,7 @@ export function WtRail() {
   // the list only dims: what the socket is doing is the bar's to say, not the rail's
   const offline = useOffline();
   const leftOpen = useStore((s) => s.leftOpen);
+  const railOpen = useStore((s) => s.railOpen);
   const termOpen = useStore((s) => s.termOpen);
   const repos = useStore((s) => s.repos);
   const repoOf = (w: WorktreeStatus) => repos.find((r) => r.id === w.worktree.repoId) ?? null;
@@ -97,7 +98,7 @@ export function WtRail() {
   };
 
   return (
-    <div className={`wt-rail ${graftMode || menu ? "hold" : ""} ${offline ? "offline" : ""}`}>
+    <div className={`wt-rail ${graftMode || menu ? "hold" : ""} ${railOpen ? "open" : ""} ${offline ? "offline" : ""}`}>
       {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
           tip of its own, and the tooltip walks up to the nearest one */}
       <div className="rail-panel" data-tip={offline ? "Lost the daemon; retrying" : undefined}>
@@ -264,13 +265,25 @@ export function WtRail() {
               data-tip-key={chord("new")}
               onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
             >
-              <span className="nw-full">new worktree</span>
-              <Kbd k={chord("new")} className="kbd-hint nw-full" />
-              <span className="nw-plus">
+              <Icon name="plus" className="icon-inline nw-plus" />
+              <span className="rail-label">new worktree</span>
+              <Kbd k={chord("new")} className="kbd-hint" />
+              {/* the strip has no left edge to show a plus on, so a second one waits in the dot
+                  column and hands off to the one above as the panel opens */}
+              <span className="rail-glyph nw-strip">
                 <Icon name="plus" />
               </span>
             </button>
           )}
+        </div>
+        <div className="rail-foot">
+          <button
+            className={`btn-icon ${railOpen ? "on" : ""}`}
+            {...tip("Worktree panel", chord("rail"))}
+            onClick={() => dispatch({ a: "toggle-rail" })}
+          >
+            <Icon name="worktrees" />
+          </button>
         </div>
         {menu && menuWt && <Menu at={menu.at} onClose={closeMenu} items={menuItems(menuWt, menu.land)} />}
       </div>

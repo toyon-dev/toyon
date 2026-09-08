@@ -168,6 +168,28 @@ body.resizing iframe {
   text-align: left;
   color: var(--fg-muted);
   font-size: var(--fs-md);
+  position: relative;
+}
+/* the active/graft marker rides the panel's left edge rather than the row's, because the row's own
+   left edge is off screen while the rail is collapsed. It travels on the same curve and the same
+   delay as the panel width, so the two move as one. */
+.wt-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--rail-edge, 0px);
+  width: 2px;
+  transition: left 0.12s ease 120ms;
+}
+.wt-rail:hover .wt-item::before {
+  transition: left 0.12s ease 50ms;
+}
+.wt-item.active::before {
+  background: var(--orange);
+}
+.wt-item.sel::before {
+  background: var(--aqua);
 }
 .wt-item:hover {
   background: var(--bg2);
@@ -175,8 +197,6 @@ body.resizing iframe {
 .wt-item.active {
   color: var(--fg1);
   background: var(--bg2);
-  /* on the right edge, next to the dot: the left edge is off-screen while the rail is collapsed */
-  box-shadow: inset -2px 0 0 var(--orange);
 }
 .wt-item .branch {
   flex: 1;
@@ -244,7 +264,6 @@ body.resizing iframe {
 
 .wt-item.sel {
   background: var(--bg2);
-  box-shadow: inset -2px 0 0 var(--aqua);
 }
 .wt-item .row-badge {
   font: 10px var(--font-mono);
@@ -535,10 +554,19 @@ body.resizing .row-resize {
    as an overlay (no reflow), pin (« ») keeps it wide ---- */
 .wt-rail {
   --rail-w: 232px;
+  /* the list sits inside the panel's 1px left border, so both states line up on the same pixel */
+  --rail-inner: calc(var(--rail-w) - 1px);
+  /* x of the panel's left edge within a row: the strip's edge collapsed, the row's own edge open */
+  --rail-edge: calc(var(--rail-w) - 40px);
   width: 40px;
   flex-shrink: 0;
   position: relative;
   overflow: visible;
+}
+.wt-rail:hover,
+.wt-rail.hold,
+.wt-rail.open {
+  --rail-edge: 0px;
 }
 .rail-panel {
   position: absolute;
@@ -553,21 +581,32 @@ body.resizing .row-resize {
   border-left: 1px solid var(--bg2);
   overflow: hidden;
   z-index: 25;
+  /* the shadow only ever escapes to the left, never over the top bar. The clip has to hold while the
+     panel collapses too, or the blur pops out on all four sides on the way back in. */
+  clip-path: inset(0 0 0 -32px);
+  /* leaving is forgiving: a flick off the rail on the way somewhere else does not shut it */
   transition:
-    width 0.12s ease,
-    box-shadow 0.12s ease;
+    width 0.12s ease 120ms,
+    box-shadow 0.12s ease 120ms;
 }
 .wt-rail:hover .rail-panel,
 .wt-rail.hold .rail-panel {
   width: var(--rail-w);
-  /* a step above the page, not a floating dialog: tight blur, low alpha */
-  box-shadow: -6px 0 18px var(--shadow);
-  /* let the shadow escape left only — never over the top bar */
-  clip-path: inset(0 0 0 -32px);
-  /* hover intent: brief pause before expanding; collapse stays instant */
+  /* a step above the page, not a floating dialog: the negative spread keeps the dark out of the
+     seam itself, so what shows is the tail of the blur */
+  box-shadow: -10px 0 20px -10px var(--shadow);
+  /* hover intent: brief pause before expanding */
   transition:
     width 0.12s ease 50ms,
     box-shadow 0.12s ease 50ms;
+}
+/* kept open: the rail is a column of its own, so it takes the width out of the layout and drops the
+   shadow with it. Nothing overlaps, nothing to lift off the page. */
+.wt-rail.open {
+  width: var(--rail-w);
+}
+.wt-rail.open .rail-panel {
+  box-shadow: none;
 }
 /* the list is always the full width and pinned to the right edge; the peek only widens the window
    onto it (the panel clips the rest). Laying the rows out twice — once for 40px, once for 232 —
@@ -576,11 +615,36 @@ body.resizing .row-resize {
   position: absolute;
   top: 0;
   right: 0;
-  bottom: 0;
-  width: var(--rail-w);
+  bottom: 34px;
+  width: var(--rail-inner);
   overflow-y: auto;
   background: var(--bg1);
   padding-top: 6px;
+}
+/* the pin sits at the foot of the drawer, so a long list scrolls under it. It is the drawer's own
+   control, so it only exists while the drawer is open: in the strip there is nothing to pin yet. */
+.rail-foot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--rail-inner);
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  /* the 16px glyph sits in a 20px box, so 10px in puts it on the dots' centre line */
+  padding-right: 10px;
+  background: var(--bg1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease 120ms;
+}
+.wt-rail:hover .rail-foot,
+.wt-rail.hold .rail-foot,
+.wt-rail.open .rail-foot {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.12s ease 50ms;
 }
 /* the socket is down: every row is stale and nothing you click will answer. Fading them read as
    "still loading", so they take the fault colour instead and hovering the rail says what happened.
@@ -602,13 +666,36 @@ body.resizing .row-resize {
   align-items: center;
 }
 .wt-rail .wt-item .dot,
-.wt-rail .nw-plus {
+.wt-rail .rail-glyph {
   margin-left: 12px;
 }
 .wt-rail .new-wt {
   height: 33px;
   padding: 0 12px;
+  display: flex;
   align-items: center;
+}
+/* the label takes the slack, so the hint and the glyph sit against the right edge */
+.rail-label {
+  flex: 1;
+  text-align: left;
+}
+.new-wt .nw-plus {
+  margin-right: 8px;
+}
+/* 4px in from the row's own padding, which lands the hint on the dots' right edge */
+.wt-rail .new-wt .kbd-hint {
+  margin-right: 4px;
+}
+/* the strip's plus fades out as the one beside the label comes into view */
+.nw-strip {
+  transition: opacity 0.12s ease 120ms;
+}
+.wt-rail:hover .nw-strip,
+.wt-rail.hold .nw-strip,
+.wt-rail.open .nw-strip {
+  opacity: 0;
+  transition: opacity 0.12s ease 50ms;
 }
 
 .wt-rail .wt-item .branch {

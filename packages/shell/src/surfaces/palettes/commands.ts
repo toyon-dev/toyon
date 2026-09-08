@@ -87,6 +87,12 @@ export function buildCommands(
     chord("right"),
   );
   add(
+    "rail",
+    `${state.railOpen ? "hide" : "show"} worktree panel`,
+    () => dispatch({ a: "toggle-rail" }),
+    chord("rail"),
+  );
+  add(
     "terminal",
     `${state.termOpen ? "hide" : "show"} terminal`,
     () => dispatch({ a: "toggle-terminal" }),
@@ -186,6 +192,7 @@ export type CommandState = Pick<
   | "picking"
   | "leftOpen"
   | "rightOpen"
+  | "railOpen"
   | "termOpen"
   | "themePrefs"
   | "themes"
@@ -205,6 +212,7 @@ export function useCommands(): Command[] {
   const picking = useStore((s) => s.picking);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
+  const railOpen = useStore((s) => s.railOpen);
   const termOpen = useStore((s) => s.termOpen);
   const themePrefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
@@ -221,6 +229,7 @@ export function useCommands(): Command[] {
       picking,
       leftOpen,
       rightOpen,
+      railOpen,
       termOpen,
       themePrefs,
       themes,
@@ -238,6 +247,7 @@ export function useCommands(): Command[] {
     picking,
     leftOpen,
     rightOpen,
+    railOpen,
     termOpen,
     themePrefs,
     themes,

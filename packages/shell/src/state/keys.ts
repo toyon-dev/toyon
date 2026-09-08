@@ -13,6 +13,8 @@ export const STORAGE = {
   diffHeight: "toyon-dh",
   diffFull: "toyon-dfull",
   termHeight: "toyon-th",
+  /** the worktree panel is kept open instead of peeking on hover */
+  rail: "toyon-rail",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */
   client: "toyon-client",
   /** + repo id: the profile the composer last started a worktree with, for that repo */

@@ -10,6 +10,7 @@ export type ChordId =
   | "search"
   | "left"
   | "right"
+  | "rail"
   | "keys"
   | "pick"
   | "zen"
@@ -62,6 +63,17 @@ export const CHORDS: readonly Chord[] = [
   { id: "search", key: "f", shift: true, label: "search in files", section: "Find" },
   { id: "left", key: "b", label: "changes", section: "Panels" },
   { id: "right", key: "j", label: "chat", section: "Panels" },
+  // ⌘⇧K next to ⌘K: one makes a worktree, the other shows the panel of them. Firefox takes ⌘⇧K
+  // for the web console before the page sees it, so ⌘⇧L is the alias it advertises there
+  {
+    id: "rail",
+    key: "k",
+    shift: true,
+    aliases: ["l"],
+    advertise: { key: "l", when: "firefox" },
+    label: "worktrees",
+    section: "Panels",
+  },
   // ⌘, is the macOS preferences key, and unlike ⌘N/⌘T/⌘W a page may preempt it in a tab as
   // well as in an installed app, so it is ours everywhere. ⌘/ is deliberately not bound: it is
   // toggle-comment in Monaco (and every editor), and the shell listens on window.

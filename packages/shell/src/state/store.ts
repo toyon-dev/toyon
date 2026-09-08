@@ -185,6 +185,8 @@ export interface State {
   incompatible: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
+  /** the worktree panel is kept open, instead of peeking on hover and collapsing to the strip */
+  railOpen: boolean;
   /** one-shot: auto-close the changes panel if the session starts on a clean main */
   leftAuto: boolean;
   /** full-bleed preview: all chrome hidden */
@@ -214,6 +216,8 @@ export interface InitialOpts {
   storedActive?: string | null;
   /** project selected before the last reload, restored on hello */
   storedRepo?: string | null;
+  /** the worktree panel was left open, so it starts open rather than peeking */
+  storedRailOpen?: boolean;
 }
 
 export function initialState(opts: InitialOpts): State {
@@ -243,6 +247,7 @@ export function initialState(opts: InitialOpts): State {
     incompatible: false,
     leftOpen: true,
     rightOpen: true,
+    railOpen: opts.storedRailOpen ?? false,
     leftAuto: true,
     zen: false,
     termOpen: false,
@@ -332,6 +337,7 @@ export type Action =
   | { a: "palette-return"; v: State["paletteReturn"] }
   | { a: "toggle-left" }
   | { a: "toggle-right" }
+  | { a: "toggle-rail" }
   | { a: "toggle-zen" }
   | { a: "toggle-terminal" }
   /** show this worktree's stream in the terminal pane, opening the pane if it was hidden */
@@ -435,6 +441,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, leftOpen: !s.leftOpen, leftAuto: false };
     case "toggle-right":
       return { ...s, rightOpen: !s.rightOpen };
+    case "toggle-rail":
+      return { ...s, railOpen: !s.railOpen };
     case "toggle-zen":
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
     case "toggle-terminal":

@@ -42,6 +42,7 @@ const store = createStore(
     systemDark: prefersDark(),
     storedActive: read(localStorage, STORAGE.active),
     storedRepo: read(localStorage, STORAGE.repo),
+    storedRailOpen: read(localStorage, STORAGE.rail) === "1",
     clientId: clientId(),
   }),
 );

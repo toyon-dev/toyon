@@ -35,6 +35,7 @@ export type IconName =
   | "spark"
   | "globe"
   | "swap"
+  | "worktrees"
   | "dot";
 
 const ICON_PATHS: Record<IconName, string> = {
@@ -92,6 +93,10 @@ const ICON_PATHS: Record<IconName, string> = {
   spark: "M8 2.6c0 2.6 1.4 4.6 4.6 5.4-3.2.8-4.6 2.8-4.6 5.4 0-2.6-1.4-4.6-4.6-5.4 3.2-.8 4.6-2.8 4.6-5.4z",
   // one equator and one meridian: a second latitude line filled the circle in at 13px
   globe: "M8 2.2a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 1 0 0-11.6z M2.2 8h11.6 M8 2.2c-3 3.4-3 8.2 0 11.6 3-3.4 3-8.2 0-11.6z",
+  // the rail's own rows: a status dot and a name, three deep. The panel toggles name what is in
+  // the panel (branch for changes, chat for chat), never the shape of the panel itself
+  worktrees:
+    "M3.8 2.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 4h5.4 M3.8 6.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 8h5.4 M3.8 10.95a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1z M7.4 12h5.4",
   // two arrows passing: swapping one mode for another
   swap: "M3 6.2h9.2 M9.7 3.7 12.2 6.2 9.7 8.7 M13 10.2H3.8 M6.3 7.7 3.8 10.2l2.5 2.5",
   // a step that happened under a name we cannot read: a marker, deliberately without a meaning

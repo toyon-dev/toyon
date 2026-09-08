@@ -2109,3 +2109,186 @@ body.resizing .rb-center {
   min-height: 80px;
   resize: none;
 }
+
+/* ---- design pane ----
+   Read-forward, not a control panel: one column, generous leading, and every row is a band rather
+   than a card. The inventory is long and mostly scanned, so the count sits in a fixed gutter and
+   the names line up down the left edge. */
+.design-pane {
+  height: 55%;
+  min-height: 160px;
+  position: relative;
+  border-top: 1px solid var(--border0);
+  background: var(--surface0);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+.design-pane.full {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.design-pane .file-path {
+  flex: 1;
+  font: var(--fs-sm) var(--font-ui);
+  color: var(--text1);
+}
+.design-body {
+  overflow: auto;
+  padding: 20px 24px 48px;
+  width: min(760px, 100%);
+  margin: 0 auto;
+  color: var(--text0);
+  font: var(--fs-sm) var(--font-ui);
+}
+.design-section {
+  margin-bottom: 28px;
+}
+.design-h {
+  font: 600 var(--fs-md) var(--font-ui);
+  color: var(--text0);
+  margin: 0 0 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.design-note {
+  font: var(--fs-xs) var(--font-ui);
+  color: var(--text2);
+  font-weight: 400;
+}
+/* what the scan could not read. Sits inside the section it explains, in the quiet tier, so it
+   reads as a note about the tool rather than as a verdict on the project. */
+.design-gap {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--sunken);
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-ui);
+  line-height: 1.5;
+}
+.design-findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.design-finding {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--surface1);
+  margin-bottom: 6px;
+}
+.design-finding-title {
+  color: var(--text0);
+  font-weight: 600;
+}
+.design-finding-detail {
+  color: var(--text2);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+.design-family {
+  display: flex;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border0);
+}
+.design-family-name {
+  width: 84px;
+  flex-shrink: 0;
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-mono);
+  padding-top: 6px;
+}
+.design-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.design-swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 108px;
+}
+.design-chip {
+  height: 26px;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border1);
+}
+/* a radius token is shown as the corner it makes, so the scale is legible as a shape */
+.design-rule {
+  background: var(--element0);
+  border: 1px solid var(--border1);
+}
+.design-chip-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sunken);
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-mono);
+}
+.design-swatch-name {
+  font: var(--fs-xs) var(--font-mono);
+  color: var(--text1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.design-swatch-value {
+  font: var(--fs-xs) var(--font-mono);
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.design-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.design-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border0);
+}
+/* fixed gutter: the counts are the column you scan, so they align regardless of width */
+.design-count {
+  width: 34px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-mono);
+}
+.design-name {
+  color: var(--text0);
+  font: var(--fs-sm) var(--font-mono);
+}
+.design-path {
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.design-variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+.design-variant {
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--sunken);
+  color: var(--text2);
+  font: var(--fs-xs) var(--font-mono);
+}

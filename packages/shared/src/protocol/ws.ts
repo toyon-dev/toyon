@@ -7,6 +7,7 @@
 import { z } from "zod";
 import type {
   AgentInfo,
+  DesignIndex,
   GitFileStatus,
   LogLine,
   PathEntry,
@@ -29,7 +30,7 @@ import type { AgentCommand, AgentEvent, PickMeta } from "./events.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -79,6 +80,7 @@ export type ServerMsg =
     }
   | { t: "files"; worktreeId: string; paths: string[] }
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
+  | { t: "design-index"; worktreeId: string; index: DesignIndex }
   | { t: "queue"; worktreeId: string; items: string[] }
   /** the slash commands this worktree's agent session advertises. Ephemeral, never a transcript
    * event (the backfill trims to the last 1000), so it is replayed on subscribe like `queue`. */
@@ -251,6 +253,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * commands it has. Answered by an `agent-commands` push, or by nothing if it will not start. */
   z.object({ t: z.literal("list-commands"), worktreeId: id }),
   z.object({ t: z.literal("search"), worktreeId: id, query: z.string().max(500) }),
+  z.object({ t: z.literal("design-scan"), worktreeId: id }),
   z.object({ t: z.literal("discard-file"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),

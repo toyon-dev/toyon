@@ -20,6 +20,7 @@ const HAS_TOKEN = hasToken();
 
 import { DiffView } from "../changes/DiffView.tsx";
 import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
+import { DesignPane } from "../design/DesignPane.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, previewUrl, relFile } from "../util.ts";
@@ -36,6 +37,7 @@ export function Center() {
   const connected = useStore((s) => s.connected);
   const diff = useStore((s) => s.diff);
   const termOpen = useStore((s) => s.termOpen);
+  const designOpen = useStore((s) => s.designOpen);
   const reloadReq = useStore((s) => s.reloadReq);
   const theme = useTheme();
   const themeRef = useRef(theme);
@@ -169,6 +171,13 @@ export function Center() {
     const n = Number(raw);
     return Number.isFinite(n) && n >= 120 ? n : 0; // 0 = default 45%
   });
+  const [designH, setDesignH] = usePersisted(STORAGE.designHeight, 0, (raw) => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  });
+  const [designFull, setDesignFull] = usePersisted(STORAGE.designFull, false, (raw) =>
+    raw === null ? undefined : raw === "1",
+  );
   const [diffFull, setDiffFull] = usePersisted(STORAGE.diffFull, false, (raw) =>
     raw === null ? undefined : raw === "1",
   );
@@ -186,6 +195,13 @@ export function Center() {
     },
     (h) => setDiffH(Math.round(h)),
   );
+  const startDesignDrag = useDragResize(
+    (ev) => {
+      const rect = centerRef.current?.getBoundingClientRect();
+      return rect ? Math.min(Math.max(rect.bottom - termPx - ev.clientY, 160), rect.height - termPx - 80) : null;
+    },
+    (h) => setDesignH(Math.round(h)),
+  );
   const startTermDrag = useDragResize(
     (ev) => {
       const rect = centerRef.current?.getBoundingClientRect();
@@ -196,7 +212,10 @@ export function Center() {
 
   return (
     <div className="center" ref={centerRef}>
-      <div className="preview-area" style={{ display: diff && diffFull ? "none" : undefined }}>
+      <div
+        className="preview-area"
+        style={{ display: (diff && diffFull) || (designOpen && designFull) ? "none" : undefined }}
+      >
         <div className="frames-wrap">
           {frames.map((w) => (
             <iframe
@@ -252,6 +271,16 @@ export function Center() {
           full={diffFull}
           onToggleFull={() => setDiffFull(!diffFull)}
           onDragStart={startDiffDrag}
+        />
+      )}
+      {designOpen && activeId && (
+        <DesignPane
+          key={activeId}
+          worktreeId={activeId}
+          height={designFull ? "100%" : designH > 0 ? designH : "55%"}
+          full={designFull}
+          onToggleFull={() => setDesignFull(!designFull)}
+          onDragStart={startDesignDrag}
         />
       )}
       {termOpen && activeId && (

@@ -227,3 +227,88 @@ export interface ThemePrefs {
   light: string;
   dark: string;
 }
+
+// ---- Design system ----
+
+/** What a token's value is for, decided from the value itself rather than its name: a project can
+ * call a color anything, but `#6fae5f` is only ever a color. */
+export type DesignTokenKind = "color" | "length" | "font" | "shadow" | "other";
+
+/** one CSS custom property. `value` is what the running page resolved it to when the preview was
+ * up, and what the stylesheet declared when it was not. */
+export interface DesignToken {
+  name: string;
+  value: string;
+  /** the name's first segment (`surface` for `--surface0`); what groups the swatch rows */
+  family: string;
+  kind: DesignTokenKind;
+}
+
+/** a string-literal union prop: the values a component says it allows */
+export interface DesignVariant {
+  prop: string;
+  values: string[];
+  /** values never seen rendering. Empty until a live harvest has run. */
+  unused: string[];
+}
+
+/** a component found in source, with how much of the project actually reaches for it */
+export interface DesignComponent {
+  name: string;
+  /** worktree-relative */
+  path: string;
+  /** how many other files import it */
+  imports: number;
+  variants: DesignVariant[];
+}
+
+/** a class the project's own stylesheets define, with how often source names it */
+export interface DesignClass {
+  name: string;
+  uses: number;
+  /** the stylesheet that defines it, when the scan could attribute it */
+  path?: string;
+}
+
+export type DesignFindingKind = "unwrapped-class" | "lone-consumer" | "unused-variant" | "drift" | "unnamed-combo";
+
+/** something the scan noticed. These sit above the inventory: they are why you open the pane. */
+export interface DesignFinding {
+  kind: DesignFindingKind;
+  title: string;
+  detail: string;
+  path?: string;
+}
+
+/**
+ * What the scan actually recognised. An empty section has two very different causes: the project
+ * does not have that thing, or the scan does not read that dialect (CSS Modules, Sass variables, a
+ * template language it never opened). Without this the pane cannot tell them apart, and reports
+ * "no classes" about a project full of them.
+ */
+export interface DesignCoverage {
+  /** how many files were read, by extension */
+  files: Record<string, number>;
+  stylesheets: number;
+  customProps: number;
+  /** class attributes seen across every source file; zero alongside a full tree means the markup
+   * is somewhere this scan does not look */
+  classAttrs: number;
+}
+
+/** Everything the design pane renders, and (later) what the agent queries before it invents a
+ * color. Merged from a static repo scan and a harvest off the running page; the flags and the
+ * coverage record say which halves are present, so the pane can name what is missing rather than
+ * render a gap as an answer. */
+export interface DesignIndex {
+  scannedAt: number;
+  /** the preview was running and answered the harvest: tokens are resolved, drift is real */
+  live: boolean;
+  /** the project shipped a typescript the daemon could parse prop unions with */
+  typed: boolean;
+  tokens: DesignToken[];
+  components: DesignComponent[];
+  classes: DesignClass[];
+  findings: DesignFinding[];
+  coverage: DesignCoverage;
+}

@@ -16,11 +16,10 @@ export type ChordId =
   | "zen"
   | "new"
   | "terminal"
+  | "design"
   | "term-tab"
   | "worktree"
   | "project";
-
-export type ChordSection = "Find" | "Panels" | "Preview" | "Worktrees";
 
 /** what the shell knows about the browser it runs in; each flag can swap an advertised key */
 export interface ChordEnv {
@@ -41,28 +40,19 @@ export interface Chord {
    * new-worktree because it is the muscle-memory key, though only an installed PWA lets the page
    * see it (Chrome tabs, Safari and Firefox all take ⌘N as new window before the page). */
   aliases?: string[];
-  /** which alias the labels show instead of `key`, and in which environment: on Firefox because
-   * the primary never reaches the page there, in an installed Chromium PWA because that is the one
-   * place the browser gives the alias up */
-  advertise?: { key: string; when: keyof ChordEnv };
-  label: string;
-  section: ChordSection;
 }
 
 export const CHORDS: readonly Chord[] = [
-  { id: "quick-open", key: "p", label: "jump to file", section: "Find" },
+  { id: "quick-open", key: "p" },
   {
     id: "commands",
     key: "p",
     shift: true,
     aliases: ["e"],
-    advertise: { key: "e", when: "firefox" },
-    label: "command palette",
-    section: "Find",
   },
-  { id: "search", key: "f", shift: true, label: "search in files", section: "Find" },
-  { id: "left", key: "b", label: "changes", section: "Panels" },
-  { id: "right", key: "j", label: "chat", section: "Panels" },
+  { id: "search", key: "f", shift: true },
+  { id: "left", key: "b" },
+  { id: "right", key: "j" },
   // ⌘⇧K next to ⌘K: one makes a worktree, the other shows the panel of them. Firefox takes ⌘⇧K
   // for the web console before the page sees it, so ⌘⇧L is the alias it advertises there
   {
@@ -70,34 +60,27 @@ export const CHORDS: readonly Chord[] = [
     key: "k",
     shift: true,
     aliases: ["l"],
-    advertise: { key: "l", when: "firefox" },
-    label: "worktrees",
-    section: "Panels",
   },
   // ⌘, is the macOS preferences key, and unlike ⌘N/⌘T/⌘W a page may preempt it in a tab as
   // well as in an installed app, so it is ours everywhere. ⌘/ is deliberately not bound: it is
   // toggle-comment in Monaco (and every editor), and the shell listens on window.
-  { id: "keys", key: ",", label: "settings & shortcuts", section: "Panels" },
-  { id: "terminal", key: "`", ctrl: true, label: "terminal", section: "Panels" },
+  { id: "keys", key: "," },
+  { id: "terminal", key: "`", ctrl: true },
+  { id: "design", key: "d" },
   // a focused xterm swallows nearly everything, so tab cycling needs a chord matchChord catches
-  { id: "term-tab", key: "`", ctrl: true, shift: true, label: "next terminal tab", section: "Panels" },
-  { id: "pick", key: "e", label: "element picker", section: "Preview" },
-  { id: "zen", key: ".", label: "full-bleed preview", section: "Preview" },
+  { id: "term-tab", key: "`", ctrl: true, shift: true },
+  { id: "pick", key: "e" },
+  { id: "zen", key: "." },
   {
     id: "new",
     key: "k",
     aliases: ["n"],
-    advertise: { key: "n", when: "pwa" },
-    label: "new worktree",
-    section: "Worktrees",
   },
-  { id: "worktree", key: "1-9", label: "switch worktree", section: "Worktrees" },
+  { id: "worktree", key: "1-9" },
   // ⌘⇧O: Zed's recent-projects key is ⌘⌥O, but ⌥ is how macOS types symbols and matchChord
   // refuses it; ⇧O is free in every browser we run in
-  { id: "project", key: "o", shift: true, label: "switch project", section: "Worktrees" },
+  { id: "project", key: "o", shift: true },
 ];
-
-export const CHORD_SECTIONS: readonly ChordSection[] = ["Find", "Panels", "Preview", "Worktrees"];
 
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };
 
@@ -127,15 +110,6 @@ export function chordOf(id: ChordId): Chord {
   const c = CHORDS.find((x) => x.id === id);
   if (!c) throw new Error(`unknown chord ${id}`);
   return c;
-}
-
-/** "⌘⇧P" style label, showing the chord's advertised alias when the environment calls for it
- * (⌘⇧E on Firefox, ⌘N in an installed PWA). Other aliases stay unadvertised. */
-export function chordLabel(id: ChordId, env: ChordEnv = {}): string {
-  const c = chordOf(id);
-  const key = c.advertise && env[c.advertise.when] ? c.advertise.key : c.key;
-  const shown = key === "1-9" ? "1-9" : key.toUpperCase();
-  return `${c.ctrl ? "⌃" : "⌘"}${c.shift ? "⇧" : ""}${shown}`;
 }
 
 /** the ⌘N chord that reaches worktree i of count, if any: ⌘1–8 by position, ⌘9 always the last one */

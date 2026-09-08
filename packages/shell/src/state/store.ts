@@ -7,6 +7,7 @@ import type {
   AgentEvent,
   AgentInfo,
   AuthMethodInfo,
+  DesignIndex,
   GitFileStatus,
   ImageInput,
   ImageRef,
@@ -78,6 +79,8 @@ export interface WorktreeLocal {
   changedRanges: Record<string, { ranges: Array<[number, number]>; offset: number }>;
   /** ⌘⇧F results */
   search: { query: string; hits: SearchHit[]; truncated: boolean } | null;
+  /** the design pane's last scan; null until it has been opened once for this worktree */
+  design: DesignIndex | null;
   /** the composer's unsent text; survives switching worktrees, and is where the daemon's
    * conflict-resolution suggestion lands */
   draft: string;
@@ -115,6 +118,7 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   turn: { edits: false, hmr: false },
   changedRanges: {},
   search: null,
+  design: null,
   draft: "",
   images: [],
   pastes: [],
@@ -188,6 +192,8 @@ export interface State {
   zen: boolean;
   /** the terminal pane under the preview (one per worktree; the shells keep running when hidden) */
   termOpen: boolean;
+  /** the design pane: the worktree's own design system, beside the preview */
+  designOpen: boolean;
   /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
   themes: Theme[];
   themePrefs: ThemePrefs;
@@ -247,6 +253,7 @@ export function initialState(opts: InitialOpts): State {
     leftAuto: true,
     zen: false,
     termOpen: false,
+    designOpen: false,
     themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
@@ -338,6 +345,7 @@ export type Action =
   | { a: "toggle-rail" }
   | { a: "toggle-zen" }
   | { a: "toggle-terminal" }
+  | { a: "toggle-design" }
   /** show this worktree's stream in the terminal pane, opening the pane if it was hidden */
   | { a: "term-stream"; id: string; stream: string }
   | { a: "preview-theme"; theme: Theme | null }
@@ -447,6 +455,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
     case "toggle-terminal":
       return { ...s, termOpen: !s.termOpen };
+    case "toggle-design":
+      return { ...s, designOpen: !s.designOpen };
     case "term-stream":
       return withLocal({ ...s, termOpen: true }, action.id, (l) => ({ ...l, termStream: action.stream }));
     case "preview-theme":
@@ -618,6 +628,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ...l,
         search: { query: msg.query, hits: msg.hits, truncated: msg.truncated },
       }));
+    case "design-index":
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, design: msg.index }));
     case "queue":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, queue: msg.items }));
     case "agent-commands":

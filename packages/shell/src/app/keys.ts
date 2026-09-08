@@ -73,6 +73,9 @@ export function useChords() {
           case "terminal":
             dispatch({ a: "toggle-terminal" });
             break;
+          case "design":
+            dispatch({ a: "toggle-design" });
+            break;
           case "term-tab": {
             const wt = s.worktrees.find((w) => w.worktree.id === s.activeId);
             if (!wt) break;
@@ -99,6 +102,7 @@ export function useChords() {
         // Zen is not on this ladder: it only leaves on ⌘., so Escape stays the page's own key
         else if (s.termOpen) dispatch({ a: "toggle-terminal" });
         else if (s.diff) dispatch({ a: "close-diff" });
+        else if (s.designOpen) dispatch({ a: "toggle-design" });
       }
     };
     window.addEventListener("keydown", onKey);

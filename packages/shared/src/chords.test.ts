@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { CHORDS, chordLabel, matchChord, worktreeChord, worktreeIndex } from "./chords.ts";
+import { CHORD_LABELS, chordLabel } from "./chord-labels.ts";
+import { CHORDS, chordOf, matchChord, worktreeChord, worktreeIndex } from "./chords.ts";
 
 const ev = (key: string, o: Partial<{ meta: boolean; shift: boolean; ctrl: boolean; alt: boolean }> = {}) => ({
   key,
@@ -52,7 +53,13 @@ describe("matchChord", () => {
     expect(matchChord(ev("w"))).toBeNull();
   });
   test("an advertised key is always one of the chord's aliases", () => {
-    for (const c of CHORDS) if (c.advertise) expect(c.aliases).toContain(c.advertise.key);
+    for (const [id, shown] of Object.entries(CHORD_LABELS)) {
+      if (shown.advertise) expect(chordOf(id as keyof typeof CHORD_LABELS).aliases).toContain(shown.advertise.key);
+    }
+  });
+  // the table says what exists and the label map says how it reads; neither may drift from the other
+  test("every chord has wording", () => {
+    expect(Object.keys(CHORD_LABELS).sort()).toEqual(CHORDS.map((c) => c.id).sort());
   });
   test("every table entry round-trips through the matcher", () => {
     for (const c of CHORDS) {

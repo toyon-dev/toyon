@@ -5,6 +5,7 @@ describe("parseClientMsg", () => {
   test("accepts every well-formed kind it is given", () => {
     for (const msg of [
       { t: "subscribe", worktreeId: "a" },
+      { t: "design-scan", worktreeId: "a" },
       { t: "chat", worktreeId: "a", text: "hi" },
       {
         t: "chat",

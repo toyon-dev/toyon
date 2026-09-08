@@ -280,9 +280,26 @@ export interface DesignFinding {
   path?: string;
 }
 
+/**
+ * What the scan actually recognised. An empty section has two very different causes: the project
+ * does not have that thing, or the scan does not read that dialect (CSS Modules, Sass variables, a
+ * template language it never opened). Without this the pane cannot tell them apart, and reports
+ * "no classes" about a project full of them.
+ */
+export interface DesignCoverage {
+  /** how many files were read, by extension */
+  files: Record<string, number>;
+  stylesheets: number;
+  customProps: number;
+  /** class attributes seen across every source file; zero alongside a full tree means the markup
+   * is somewhere this scan does not look */
+  classAttrs: number;
+}
+
 /** Everything the design pane renders, and (later) what the agent queries before it invents a
- * color. Merged from a static repo scan and a harvest off the running page; the two flags say
- * which halves are present, so the pane can name what is missing instead of showing a lie. */
+ * color. Merged from a static repo scan and a harvest off the running page; the flags and the
+ * coverage record say which halves are present, so the pane can name what is missing rather than
+ * render a gap as an answer. */
 export interface DesignIndex {
   scannedAt: number;
   /** the preview was running and answered the harvest: tokens are resolved, drift is real */
@@ -293,4 +310,5 @@ export interface DesignIndex {
   components: DesignComponent[];
   classes: DesignClass[];
   findings: DesignFinding[];
+  coverage: DesignCoverage;
 }

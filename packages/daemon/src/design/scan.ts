@@ -69,12 +69,31 @@ export function cssClasses(css: string): string[] {
  * separates a real component from one. */
 export function exportedComponents(src: string): string[] {
   const out = new Set<string>();
-  for (const m of src.matchAll(/export\s+(?:default\s+)?(?:async\s+)?(?:function|const|class)\s+([A-Z]\w*)/g)) {
-    const name = m[1]!;
+  const add = (name: string | undefined) => {
     // SCREAMING_CASE is the other thing a capital letter means: a constant, not a component
-    if (/^[A-Z0-9_]+$/.test(name)) continue;
-    out.add(name);
+    if (name && /^[A-Z]\w*$/.test(name) && !/^[A-Z0-9_]+$/.test(name)) out.add(name);
+  };
+
+  for (const m of src.matchAll(/export\s+(?:default\s+)?(?:async\s+)?(?:function|const|class)\s+(\w+)/g)) {
+    add(m[1]);
   }
+  // `export { Button, Menu as M }`. A trailing `from` makes it a re-export: the names belong to
+  // the file it points at, and counting a barrel as their definition would move every component
+  // in a project to its index file.
+  for (const m of src.matchAll(/export\s*\{([^}]*)\}\s*(from)?/g)) {
+    if (m[2]) continue;
+    for (const part of m[1]!.split(","))
+      add(
+        part
+          .trim()
+          .split(/\s+as\s+/)
+          .pop()
+          ?.trim(),
+      );
+  }
+  // `export default Foo`, where Foo was declared above
+  for (const m of src.matchAll(/export\s+default\s+(\w+)\s*;/g)) add(m[1]);
+
   return [...out];
 }
 
@@ -114,18 +133,41 @@ export function importedNames(src: string): string[] {
  * The expression form (`className={...}`) holds its names in string literals, so those are pulled
  * out and split; the plain attribute form is a class list already.
  */
-export function appliedClasses(src: string): Map<string, number> {
+export function appliedClasses(src: string): { classes: Map<string, number>; attrs: number } {
   const out = new Map<string, number>();
-  const attr = /\bclass(?:Name)?\s*=\s*(?:"([^"]*)"|'([^']*)'|\{((?:[^{}]|\{[^{}]*\})*)\})/g;
-  for (const m of src.matchAll(attr)) {
-    const expression = m[3];
-    for (const list of expression === undefined ? [m[1] ?? m[2] ?? ""] : literals(expression)) {
+  let attrs = 0;
+  for (const m of src.matchAll(ATTR)) {
+    attrs++;
+    const jsx = m[4];
+    const quoted = m[2] ?? m[3];
+    // A bound attribute holds code, not a class list: Vue's `:class`, Angular's `[ngClass]` and
+    // JSX's `{...}` all name their classes in string literals or object keys, and everything else
+    // in there is a variable. Splitting one on whitespace reports `isOn` as a class.
+    const bound = m[1] !== undefined;
+    const lists = jsx !== undefined || bound ? expressionClasses(jsx ?? quoted ?? "") : [stripHoles(quoted ?? "")];
+    for (const list of lists) {
       for (const name of list.split(/\s+/)) {
         if (!/^-?[a-zA-Z][\w-]*$/.test(name)) continue;
         out.set(name, (out.get(name) ?? 0) + 1);
       }
     }
   }
+  return { classes: out, attrs };
+}
+
+/** `class`, `className`, and the bound forms: `:class`, `v-bind:class`, `[class]`, `[ngClass]`. */
+const ATTR =
+  /(:|v-bind:|\[)?\b(?:ngClass|class(?:Name)?)\]?\s*=\s*(?:"([^"]*)"|'([^']*)'|\{((?:[^{}]|\{[^{}]*\})*)\})/g;
+
+/** A template hole is the host language's, not a class: `class="card {{ extra }}"` applies one
+ * class, and reporting `extra` invents a second out of a variable name. */
+const stripHoles = (s: string) => s.replace(/\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|<%[\s\S]*?%>|\$\{[\s\S]*?\}/g, " ");
+
+/** The class names inside an expression: string literals, plus object keys, which is how both
+ * Vue's `:class="{ active: on }"` and clsx's `{ active: on }` name a conditional class. */
+function expressionClasses(expression: string): string[] {
+  const out = literals(expression);
+  for (const m of expression.matchAll(/([a-zA-Z][\w-]*)\s*:/g)) out.push(m[1]!);
   return out;
 }
 

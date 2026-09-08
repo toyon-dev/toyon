@@ -75,14 +75,35 @@ describe("DesignService.scan", () => {
     expect(index.findings.filter((f) => f.kind === "unwrapped-class")).toEqual([]);
   });
 
-  test("reports a shared component with one consumer, and leaves app roots alone", async () => {
+  test("reports a lone consumer among a kit, and leaves a one-off component alone", async () => {
+    // a directory holding several components is a kit; App sits by itself and is not one
     write("src/ui/Lonely.tsx", `export function Lonely() { return null; }`);
-    write("src/App.tsx", `import { Lonely } from "./ui/Lonely.tsx";\nexport function App() { return <Lonely />; }`);
+    write("src/ui/Busy.tsx", `export function Busy() { return null; }`);
+    write("src/ui/Spare.tsx", `export function Spare() { return null; }`);
+    write(
+      "src/App.tsx",
+      `import { Lonely } from "./ui/Lonely.tsx";\nimport { Busy } from "./ui/Busy.tsx";\nexport function App() { return <Lonely />; }`,
+    );
+    write("src/Page.tsx", `import { Busy } from "./ui/Busy.tsx";\nexport function Page() { return <Busy />; }`);
     write("src/main.tsx", `import { App } from "./App.tsx";\nexport const Root = App;`);
 
     const index = await w.design.scan("w1");
     const lone = index.findings.filter((f) => f.kind === "lone-consumer").map((f) => f.title);
+    // Busy has two consumers, Spare has none, App has one but no siblings
     expect(lone).toEqual(["Lonely has one consumer"]);
+  });
+
+  test("says what it recognised, so an empty section can explain itself", async () => {
+    write("src/styles.css", `.btn { color: red }`);
+    write("src/Card.tsx", `export function Card() { return <b className={styles.btn} />; }`);
+
+    const index = await w.design.scan("w1");
+    expect(index.coverage.stylesheets).toBe(1);
+    expect(index.coverage.files).toEqual({ css: 1, tsx: 1 });
+    // the attribute was seen, it just names no class this scan can read: that is a CSS Modules
+    // project, not a project with no classes
+    expect(index.coverage.classAttrs).toBe(1);
+    expect(index.classes.find((c) => c.name === "btn")?.uses).toBe(0);
   });
 
   test("without TypeScript in the project, prop unions are skipped rather than fatal", async () => {

@@ -62,6 +62,16 @@ describe("exportedComponents", () => {
     const src = `export function Button() {}\nexport const Menu = () => {};\nexport const SIZE = 4;\nfunction Inner() {}`;
     expect(exportedComponents(src)).toEqual(["Button", "Menu"]);
   });
+
+  test("takes the export-list and default-of-a-name forms", () => {
+    expect(exportedComponents(`const Button = () => {};\nexport { Button };`)).toEqual(["Button"]);
+    expect(exportedComponents(`export { Menu as Dropdown };`)).toEqual(["Dropdown"]);
+    expect(exportedComponents(`const Foo = () => {};\nexport default Foo;`)).toEqual(["Foo"]);
+  });
+
+  test("a re-export belongs to the file it points at, not to the barrel", () => {
+    expect(exportedComponents(`export { Button } from "./Button.tsx";`)).toEqual([]);
+  });
 });
 
 describe("importedNames", () => {
@@ -76,17 +86,40 @@ describe("importedNames", () => {
 });
 
 describe("appliedClasses", () => {
+  const classes = (src: string) => appliedClasses(src).classes;
+
   test("counts class attributes, not every mention of the word", () => {
     const src = `const name = row.name;\nconst el = <div className="name" />;\nlabel(name);`;
-    expect(appliedClasses(src).get("name")).toBe(1);
+    expect(classes(src).get("name")).toBe(1);
   });
 
   test("pulls names out of an expression form", () => {
     const src = "<b className={`btn ${on ? \"on\" : \"\"}`} /><i className={cx('btn', 'btn-icon')} />";
-    const counts = appliedClasses(src);
+    const counts = classes(src);
     expect(counts.get("btn")).toBe(2);
     expect(counts.get("on")).toBe(1);
     expect(counts.get("btn-icon")).toBe(1);
+  });
+
+  test("reads a plain attribute, wherever the markup came from", () => {
+    expect([...classes(`<button class="btn btn-outline">x</button>`).keys()]).toEqual(["btn", "btn-outline"]);
+  });
+
+  test("a template hole is the host language's, not a class", () => {
+    // reporting `extra` would invent a class out of a variable name
+    expect([...classes(`<div class="card {{ extra }}">`).keys()]).toEqual(["card"]);
+    expect([...classes(`<div class="card <%= extra %>">`).keys()]).toEqual(["card"]);
+  });
+
+  test("a bound attribute names its classes in keys, not in its variables", () => {
+    expect([...classes(`<div :class="{ active: isOn }">`).keys()]).toEqual(["active"]);
+    expect([...classes(`<div [ngClass]="{ active: isOn }">`).keys()]).toEqual(["active"]);
+    expect([...classes(`<b className={clsx({ on: x })} />`).keys()]).toEqual(["on"]);
+  });
+
+  test("counts the attributes it saw, so an empty result can explain itself", () => {
+    expect(appliedClasses(`<b className={styles.btn} />`)).toEqual({ classes: new Map(), attrs: 1 });
+    expect(appliedClasses(`const x = 1;`).attrs).toBe(0);
   });
 });
 

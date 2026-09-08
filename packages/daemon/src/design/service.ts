@@ -15,17 +15,23 @@ const MAX_SOURCE_FILES = 4_000;
 const MAX_CSS_FILES = 200;
 /** a minified bundle checked into source would otherwise dominate every count */
 const MAX_FILE_BYTES = 400_000;
-/** a class used at least this often is load-bearing enough to be worth a finding */
-const UNWRAPPED_MIN = 8;
 /** the pane shows findings first, so keep the list to what someone will actually read */
 const MAX_FINDINGS = 12;
 
-/** where a project keeps things meant to be used more than once, by every convention we have seen */
-const REUSABLE_DIR = /(^|\/)(ui|components|shared|common|design-system|primitives)\//;
+/** A component this alone in its directory is a one-off, not a piece of a kit. Used instead of a
+ * list of blessed directory names ("ui", "components"): the shape of the tree is the project's own
+ * evidence, where the names are a guess at its conventions. */
+const KIT_SIBLINGS = 3;
+/** a class has to beat the typical used class before "nothing is named for it" is worth saying */
+const UNWRAPPED_FLOOR = 3;
 
-const SOURCE_EXT = /\.(tsx|jsx|ts|js|vue|svelte|astro)$/;
-const COMPONENT_EXT = /\.(tsx|jsx|vue|svelte|astro)$/;
-const CSS_EXT = /\.(css|scss|sass|less)$/;
+/** Anything that can carry a `class` attribute. Server-rendered templates parse with the same
+ * recogniser as JSX does; leaving them out of this list was the whole reason a Rails or Django
+ * project reported no classes at all. */
+const SOURCE_EXT =
+  /\.(tsx|jsx|ts|js|mjs|cjs|mts|cts|vue|svelte|astro|html?|erb|ejs|hbs|handlebars|pug|jade|php|py|rb|templ|heex|eex|twig|liquid|cshtml|razor|blade)$/;
+const COMPONENT_EXT = /\.(tsx|jsx|mjs|cjs|mts|vue|svelte|astro)$/;
+const CSS_EXT = /\.(css|scss|sass|less|styl)$/;
 
 export class DesignService {
   constructor(private state: StateStore) {}
@@ -43,8 +49,9 @@ export class DesignService {
 
     const tokens = collectTokens(cssFiles);
     const ts = await loadProjectTypescript(wt.path);
-    const components = collectComponents(srcFiles, ts);
-    const classes = collectClasses(cssFiles, srcFiles);
+    const importers = collectImporters(srcFiles);
+    const components = collectComponents(srcFiles, ts, importers);
+    const { classes, attrs } = collectClasses(cssFiles, srcFiles);
 
     return {
       scannedAt: Date.now(),
@@ -53,7 +60,13 @@ export class DesignService {
       tokens,
       components,
       classes,
-      findings: findings(components, classes),
+      findings: findings(components, classes, importers),
+      coverage: {
+        files: byExtension([...cssFiles, ...srcFiles]),
+        stylesheets: cssFiles.length,
+        customProps: tokens.length,
+        classAttrs: attrs,
+      },
     };
   }
 }
@@ -89,20 +102,31 @@ function collectTokens(css: SourceFile[]): DesignToken[] {
   return [...out.values()].sort((a, b) => a.family.localeCompare(b.family) || a.name.localeCompare(b.name));
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: the compiler module comes from the target repo at runtime
-function collectComponents(src: SourceFile[], ts: any): DesignComponent[] {
-  const imports = new Map<string, number>();
+const dirOf = (path: string) => path.replace(/\/?[^/]*$/, "");
+
+/** Which files import each name. The set of *files* is what ranks a component; where those files
+ * sit is what separates a kit from a directory that merely holds several things. */
+function collectImporters(src: SourceFile[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
   for (const file of src) {
     // one file importing a name twice still only means one file reaches for it
-    for (const name of new Set(importedNames(file.text))) imports.set(name, (imports.get(name) ?? 0) + 1);
+    for (const name of new Set(importedNames(file.text))) {
+      const seen = out.get(name) ?? new Set<string>();
+      seen.add(file.path);
+      out.set(name, seen);
+    }
   }
+  return out;
+}
 
+// biome-ignore lint/suspicious/noExplicitAny: the compiler module comes from the target repo at runtime
+function collectComponents(src: SourceFile[], ts: any, importers: Map<string, Set<string>>): DesignComponent[] {
   const out: DesignComponent[] = [];
   for (const file of src) {
     if (!COMPONENT_EXT.test(file.path)) continue;
     const variants = ts ? safePropUnions(ts, file.path, file.text) : [];
     for (const name of exportedComponents(file.text)) {
-      out.push({ name, path: file.path, imports: imports.get(name) ?? 0, variants });
+      out.push({ name, path: file.path, imports: importers.get(name)?.size ?? 0, variants });
     }
   }
   return out.sort((a, b) => b.imports - a.imports || a.name.localeCompare(b.name));
@@ -119,7 +143,7 @@ function safePropUnions(ts: any, path: string, text: string) {
   }
 }
 
-function collectClasses(css: SourceFile[], src: SourceFile[]): DesignClass[] {
+function collectClasses(css: SourceFile[], src: SourceFile[]): { classes: DesignClass[]; attrs: number } {
   const defined = new Map<string, string>();
   for (const file of css) {
     for (const name of cssClasses(file.text)) if (!defined.has(name)) defined.set(name, file.path);
@@ -128,25 +152,58 @@ function collectClasses(css: SourceFile[], src: SourceFile[]): DesignClass[] {
   // one pass over the source, not one per class: a stylesheet with a few hundred classes against a
   // few thousand files is a lot of scanning to do the other way round
   const applied = new Map<string, number>();
+  let attrs = 0;
   for (const file of src) {
-    for (const [name, n] of appliedClasses(file.text)) applied.set(name, (applied.get(name) ?? 0) + n);
+    const found = appliedClasses(file.text);
+    attrs += found.attrs;
+    for (const [name, n] of found.classes) applied.set(name, (applied.get(name) ?? 0) + n);
   }
 
   const out: DesignClass[] = [];
   for (const [name, path] of defined) out.push({ name, uses: applied.get(name) ?? 0, path });
-  return out.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
+  out.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
+  return { classes: out, attrs };
+}
+
+function byExtension(files: SourceFile[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const file of files) {
+    const ext = /\.([^./]+)$/.exec(file.path)?.[1]?.toLowerCase();
+    if (ext) out[ext] = (out[ext] ?? 0) + 1;
+  }
+  return out;
+}
+
+/** The middle of the used classes, so "a lot" scales with the project instead of being a number
+ * picked here. A design system with nine classes and one with nine hundred both have a typical
+ * class, and in neither is it the same count. */
+function typicalUse(classes: DesignClass[]): number {
+  const used = classes.filter((c) => c.uses > 0).map((c) => c.uses);
+  if (used.length === 0) return UNWRAPPED_FLOOR;
+  return Math.max(UNWRAPPED_FLOOR, used[Math.floor(used.length / 2)] ?? UNWRAPPED_FLOOR);
 }
 
 /** Normalised so a `.button` class and a `Button` component read as the same thing. Nothing
  * clever: `.btn` and `Button` stay different, which is the point of the finding. */
 const normal = (s: string) => s.replace(/[-_]/g, "").toLowerCase();
 
-function findings(components: DesignComponent[], classes: DesignClass[]): DesignFinding[] {
+function findings(
+  components: DesignComponent[],
+  classes: DesignClass[],
+  importers: Map<string, Set<string>>,
+): DesignFinding[] {
   const out: DesignFinding[] = [];
   const componentNames = new Set(components.map((c) => normal(c.name)));
+  const busy = typicalUse(classes);
+
+  // how many components share each directory: a kit has several, a one-off sits by itself
+  const siblings = new Map<string, number>();
+  for (const c of components) siblings.set(dirOf(c.path), (siblings.get(dirOf(c.path)) ?? 0) + 1);
 
   for (const cls of classes) {
-    if (cls.uses < UNWRAPPED_MIN || componentNames.has(normal(cls.name))) continue;
+    // at least as used as the typical one, not more: in a project with a single class that class
+    // is also the median, and a strict comparison would never report anything at all
+    if (cls.uses < busy || componentNames.has(normal(cls.name))) continue;
     out.push({
       kind: "unwrapped-class",
       title: `.${cls.name} is used ${cls.uses} times, with no component of its name`,
@@ -156,13 +213,17 @@ function findings(components: DesignComponent[], classes: DesignClass[]): Design
   }
 
   for (const c of components) {
-    // Only where components are kept to be reused. Every app has a root and a dock with exactly
-    // one caller by design, and reporting those buries the one finding worth reading.
-    if (c.imports !== 1 || !REUSABLE_DIR.test(c.path)) continue;
+    // Two conditions, and both matter. A kit holds several components, but so does the directory an
+    // app's root lives in; what separates them is that a kit's components are reached for from
+    // outside it. An app root imported only by the file beside it is not a design system finding.
+    if (c.imports !== 1) continue;
+    const dir = dirOf(c.path);
+    if ((siblings.get(dir) ?? 0) < KIT_SIBLINGS) continue;
+    if (![...(importers.get(c.name) ?? [])].some((p) => dirOf(p) !== dir)) continue;
     out.push({
       kind: "lone-consumer",
       title: `${c.name} has one consumer`,
-      detail: "It sits where shared components live, but only one file reaches for it.",
+      detail: "It sits among components meant to be reused, but only one file reaches for it.",
       path: c.path,
     });
   }

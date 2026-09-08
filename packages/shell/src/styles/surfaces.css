@@ -175,7 +175,8 @@ body.resizing iframe {
 .wt-item.active {
   color: var(--fg1);
   background: var(--bg2);
-  box-shadow: inset 2px 0 0 var(--orange);
+  /* on the right edge, next to the dot: the left edge is off-screen while the rail is collapsed */
+  box-shadow: inset -2px 0 0 var(--orange);
 }
 .wt-item .branch {
   flex: 1;
@@ -243,7 +244,7 @@ body.resizing iframe {
 
 .wt-item.sel {
   background: var(--bg2);
-  box-shadow: inset 2px 0 0 var(--aqua);
+  box-shadow: inset -2px 0 0 var(--aqua);
 }
 .wt-item .row-badge {
   font: 10px var(--font-mono);
@@ -533,6 +534,7 @@ body.resizing .row-resize {
 /* ---- far-right worktree rail: 40px dot strip, hover peeks the full panel
    as an overlay (no reflow), pin (« ») keeps it wide ---- */
 .wt-rail {
+  --rail-w: 232px;
   width: 40px;
   flex-shrink: 0;
   position: relative;
@@ -557,7 +559,7 @@ body.resizing .row-resize {
 }
 .wt-rail:hover .rail-panel,
 .wt-rail.hold .rail-panel {
-  width: 232px;
+  width: var(--rail-w);
   /* a step above the page, not a floating dialog: tight blur, low alpha */
   box-shadow: -6px 0 18px var(--shadow);
   /* let the shadow escape left only — never over the top bar */
@@ -567,8 +569,15 @@ body.resizing .row-resize {
     width 0.12s ease 50ms,
     box-shadow 0.12s ease 50ms;
 }
+/* the list is always the full width and pinned to the right edge; the peek only widens the window
+   onto it (the panel clips the rest). Laying the rows out twice — once for 40px, once for 232 —
+   is what made the dots swing and the labels wrap halfway through the animation. */
 .rail-list {
-  flex: 1;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--rail-w);
   overflow-y: auto;
   background: var(--bg1);
   padding-top: 6px;
@@ -583,15 +592,18 @@ body.resizing .row-resize {
   background: var(--orange);
   animation: none;
 }
-.nw-mini {
-  display: none;
-}
-
-/* identical row heights in both modes so dots never shift during the peek */
+/* identical row heights in both modes, and the dot keeps its x too: 20px from the right edge, the
+   centre of the collapsed strip. The peek then unfurls leftward from under the pointer that opened
+   it, so the pointer is still resting on the row and not on the "…" that used to slide under it.
+   Everything clickable stays left of the strip: 12px of margin plus the row's 8px gap. */
 .wt-rail .wt-item {
   height: 33px;
-  padding: 0 12px;
+  padding: 0 16px 0 12px;
   align-items: center;
+}
+.wt-rail .wt-item .dot,
+.wt-rail .nw-plus {
+  margin-left: 12px;
 }
 .wt-rail .new-wt {
   height: 33px;
@@ -599,28 +611,6 @@ body.resizing .row-resize {
   align-items: center;
 }
 
-/* compact (not hovered, nothing held open): dots only */
-.wt-rail:not(:hover):not(.hold) .wt-item .branch,
-.wt-rail:not(:hover):not(.hold) .wt-item .row-badge,
-.wt-rail:not(:hover):not(.hold) .wt-item .wt-more,
-.wt-rail:not(:hover):not(.hold) .graft-check,
-.wt-rail:not(:hover):not(.hold) .nw-full {
-  display: none;
-}
-.wt-rail:not(:hover):not(.hold) .wt-item {
-  justify-content: center;
-  padding: 0;
-}
-.wt-rail:not(:hover):not(.hold) .new-wt {
-  padding: 0;
-}
-.wt-rail:not(:hover):not(.hold) .nw-mini {
-  display: block;
-  width: 100%;
-  text-align: center;
-  font-size: 15px;
-  line-height: 1;
-}
 .wt-rail .wt-item .branch {
   white-space: nowrap;
 }

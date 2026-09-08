@@ -124,7 +124,6 @@ export function WtRail() {
                   tabIndex={-1}
                 />
               )}
-              <span className={`dot ${dotClass(w)}`} />
               <span className="branch">
                 {w.worktree.kind === "combined" && <Icon name="layers" className="icon-inline" />}
                 {w.worktree.title}
@@ -206,6 +205,7 @@ export function WtRail() {
               >
                 <Icon name="more" className="icon-inline" />
               </span>
+              <span className={`dot ${dotClass(w)}`} />
             </button>
           ))}
           {graftMode && (
@@ -264,13 +264,11 @@ export function WtRail() {
               data-tip-key={chord("new")}
               onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
             >
-              <span className="nw-full">
-                <Icon name="plus" className="icon-inline" /> new worktree
-              </span>
-              <span className="nw-mini">
+              <span className="nw-full">new worktree</span>
+              <Kbd k={chord("new")} className="kbd-hint nw-full" />
+              <span className="nw-plus">
                 <Icon name="plus" />
               </span>
-              <Kbd k={chord("new")} className="kbd-hint nw-full" />
             </button>
           )}
         </div>

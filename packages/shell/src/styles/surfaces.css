@@ -2136,8 +2136,6 @@ body.resizing .rb-center {
 .design-body {
   overflow: auto;
   padding: 16px 20px 56px;
-  width: min(880px, 100%);
-  margin: 0 auto;
   color: var(--text0);
   font: var(--fs-sm) var(--font-ui);
 }
@@ -2167,11 +2165,11 @@ body.resizing .rb-center {
 }
 
 /* findings: one line each until you open one. The instances live inside, because a finding is a
-   sentence about the project and the list behind it is only interesting once you believe it. */
+   sentence about the project and the list behind it is only interesting once you believe it. The
+   raised band is enough to mark it; an accent edge read as an alarm, and none of these are one. */
 .design-finding {
-  border-left: 2px solid var(--accent);
   background: var(--surface1);
-  margin-bottom: 3px;
+  margin-top: 6px;
 }
 .design-finding > summary {
   display: flex;
@@ -2188,8 +2186,9 @@ body.resizing .rb-center {
 .design-finding > summary:hover {
   background: var(--element0);
 }
+/* beside the label, not pinned to the right edge. Full width strands it half a screen from the
+   words it counts, and it is part of the sentence, not a badge. */
 .design-count-tag {
-  margin-left: auto;
   color: var(--text2);
   font: var(--fs-xs) var(--font-mono);
 }

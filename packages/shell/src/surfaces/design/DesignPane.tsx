@@ -8,7 +8,14 @@
 // by selector, a component by the file its fibers came from), and clicking one opens its source.
 // That is the whole reason this sits beside the preview rather than in a docs tab.
 
-import type { DesignClass, DesignComponent, DesignFinding, DesignIndex, DesignToken } from "@toyon/shared";
+import type {
+  DesignClass,
+  DesignComponent,
+  DesignFinding,
+  DesignFindingKind,
+  DesignIndex,
+  DesignToken,
+} from "@toyon/shared";
 import { useEffect } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
@@ -78,8 +85,7 @@ export function DesignPane({
     >
       {index ? (
         <div className="design-body" onMouseLeave={live.clear}>
-          <Findings findings={index.findings} onOpen={live.open} />
-          <Tokens tokens={index.tokens} live={index.live} />
+          <Tokens tokens={index.tokens} live={index.live} onOpen={live.open} findings={index.findings} />
           <Components index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
           <Classes index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
         </div>
@@ -112,11 +118,33 @@ function Gap({ children }: { children: React.ReactNode }) {
 
 /** Collapsed to its headline. A finding is one sentence about the project; the instances behind it
  * are what you open when you want to go and look, and they were burying the rest of the pane. */
-function Findings({ findings, onOpen }: { findings: DesignFinding[]; onOpen: (path: string) => void }) {
-  if (findings.length === 0) return null;
+/**
+ * A finding sits in the section it is about, at the end of the list it concerns, not in an alerts
+ * area of its own. "This class carries a control nobody named" is a remark about the classes, and
+ * reading it beside them is how you check it; hoisting it to the top made it an error report about
+ * a project that has nothing wrong with it.
+ */
+const FINDING_SECTION: Record<DesignFindingKind, "tokens" | "components" | "classes"> = {
+  "unwrapped-class": "classes",
+  "unnamed-combo": "classes",
+  drift: "tokens",
+  "unused-variant": "components",
+};
+
+function Findings({
+  findings,
+  section,
+  onOpen,
+}: {
+  findings: DesignFinding[];
+  section: "tokens" | "components" | "classes";
+  onOpen: (path: string) => void;
+}) {
+  const mine = findings.filter((f) => FINDING_SECTION[f.kind] === section);
+  if (mine.length === 0) return null;
   return (
-    <Section title="Noticed">
-      {findings.map((f) => (
+    <>
+      {mine.map((f) => (
         <details key={f.kind} className="design-finding">
           <summary>
             {f.title}
@@ -139,7 +167,7 @@ function Findings({ findings, onOpen }: { findings: DesignFinding[]; onOpen: (pa
           </ul>
         </details>
       ))}
-    </Section>
+    </>
   );
 }
 
@@ -170,7 +198,17 @@ function barWidth(value: string): string {
   return `${Math.max(3, Math.min(Math.abs(n), 72))}px`;
 }
 
-function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
+function Tokens({
+  tokens,
+  live,
+  findings,
+  onOpen,
+}: {
+  tokens: DesignToken[];
+  live: boolean;
+  findings: DesignFinding[];
+  onOpen: (path: string) => void;
+}) {
   return (
     <Section title="Tokens" note={live ? undefined : "declared, not resolved"}>
       {tokens.length === 0 ? (
@@ -194,6 +232,7 @@ function Tokens({ tokens, live }: { tokens: DesignToken[]; live: boolean }) {
           );
         })
       )}
+      <Findings findings={findings} section="tokens" onOpen={onOpen} />
     </Section>
   );
 }
@@ -297,6 +336,7 @@ function Components({
               <ul className="design-rows">{rest.map(row)}</ul>
             </details>
           )}
+          <Findings findings={index.findings} section="components" onOpen={onOpen} />
         </>
       )}
     </Section>
@@ -327,11 +367,14 @@ function Classes({
             : "No class attribute anywhere in the source that was read. The markup may live in a file type this scan does not open."}
         </Gap>
       ) : (
-        <ul className="design-rows">
-          {used.map((c) => (
-            <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
-          ))}
-        </ul>
+        <>
+          <ul className="design-rows">
+            {used.map((c) => (
+              <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
+            ))}
+          </ul>
+          <Findings findings={index.findings} section="classes" onOpen={onOpen} />
+        </>
       )}
     </Section>
   );

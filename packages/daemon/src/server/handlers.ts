@@ -282,8 +282,32 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply(toast("", true, `opened ${repo.name}`));
   },
 
+  async "create-repo"(msg, ctx, s) {
+    // A clone is network bound and can run for minutes, so awaiting it would stall this socket's
+    // message loop. It reports twice instead, the way batch-worktrees does. fireAndForget would
+    // turn a failure into a log line nobody sees, leaving the shell saying "cloning" forever, so
+    // the rejection is caught and toasted here rather than left to the UserError path.
+    if (msg.mode === "clone") {
+      ctx.reply(toast("", true, `cloning ${msg.name}…`));
+      fireAndForget(
+        msg.name,
+        s.repos
+          .create(msg)
+          .then((repo) => ctx.reply(toast("", true, `cloned ${repo.name}`)))
+          .catch((e: unknown) => {
+            ctx.reply(toast("", false, e instanceof Error ? e.message : String(e)));
+            throw e; // rethrown so a non-UserError still reaches the daemon log as a bug
+          }),
+        "clone",
+      );
+      return;
+    }
+    const repo = await s.repos.create(msg);
+    ctx.reply(toast("", true, `created ${repo.name}`));
+  },
+
   async "browse-path"(msg, ctx, _s) {
-    ctx.reply({ t: "path-entries", query: msg.path, entries: await browsePath(msg.path) });
+    ctx.reply({ t: "path-entries", query: msg.path, ...(await browsePath(msg.path)) });
   },
 
   async "forget-repo"(msg, ctx, s) {

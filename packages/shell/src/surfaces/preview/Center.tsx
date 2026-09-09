@@ -253,7 +253,7 @@ export function Center() {
                     ? "connecting to daemon…"
                     : "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
                   : !active
-                    ? `no worktrees yet: press ${chord("project")} to open a project, or run \`toyon\` inside a git repo`
+                    ? `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
                     : log.length > 0
                       ? log
                           .slice(-20)

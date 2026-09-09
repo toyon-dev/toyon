@@ -51,6 +51,24 @@ function resolveGit(): string {
   return "git";
 }
 
+/**
+ * Env for a git command that talks to a remote, so it fails instead of waiting for a human.
+ * `stdin: "ignore"` is not enough on its own: git opens `/dev/tty` directly for a credential
+ * prompt and ssh blocks on a passphrase the same way, so a clone of a URL the machine has no
+ * credential for would hang a daemon process nobody can see, with the shell still saying "cloning".
+ *
+ * Host keys are deliberately not auto-accepted. `StrictHostKeyChecking=accept-new` would make a
+ * first-ever ssh clone work, at the cost of the daemon silently trusting a key on the person's
+ * behalf. Failing with ssh's own "host key verification failed" is the honest outcome: they can
+ * clone once in a terminal, or use https.
+ */
+export const NO_PROMPT: Record<string, string> = {
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_ASKPASS: "",
+  SSH_ASKPASS: "",
+  GIT_SSH_COMMAND: "ssh -o BatchMode=yes",
+};
+
 export interface GitResult {
   ok: boolean;
   out: string;
@@ -60,11 +78,25 @@ export interface GitResult {
 }
 
 /** run a command to completion without blocking the event loop (a proxy request or agent stream
- * keeps flowing while git works). A spawn failure (cwd gone, binary missing) is a result, not a throw. */
-export async function run(cmd: string, args: string[], cwd: string): Promise<GitResult & { rawOut: string }> {
+ * keeps flowing while git works). A spawn failure (cwd gone, binary missing) is a result, not a throw.
+ * `env` is merged over the daemon's own, for the few commands that must be told not to ask. */
+export async function run(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<GitResult & { rawOut: string }> {
   const started = Date.now();
   try {
-    const p = Bun.spawn([cmd, ...args], { cwd, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+    // env is always passed explicitly rather than left to Bun's default: that default is a snapshot
+    // taken at startup, so a variable set later in the process lifetime would not reach git
+    const p = Bun.spawn([cmd, ...args], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      env: { ...process.env, ...env },
+    });
     const [rawOut, err, status] = await Promise.all([
       new Response(p.stdout).text(),
       new Response(p.stderr).text(),

@@ -1,6 +1,7 @@
 // WebSocket side of the daemon: socket registry, hello, inbound validation + dispatch, and the
 // table of what gets pushed when a hub event fires. Phase 6 scopes the pushes per subscription.
 
+import { homedir } from "node:os";
 import { PROTOCOL_VERSION, parseClientMsg, type ServerMsg, streamKey, ThemeImportError } from "@toyon/shared";
 import type { Server, ServerWebSocket } from "bun";
 import { cloud } from "../core/cloud.ts";
@@ -235,6 +236,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           themePrefs: s.themes.prefs,
           agents: agentInfos(),
           defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
+          home: homedir(),
         });
       },
       close(ws: ServerWebSocket<WsData>) {

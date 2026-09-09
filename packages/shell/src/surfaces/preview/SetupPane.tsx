@@ -1,6 +1,7 @@
 import type { RepoInfo } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
+import { FormRow } from "../../ui/FormRow.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
@@ -59,24 +60,20 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
           : "You can already edit, chat and commit here; this only powers the live preview."}
       </p>
 
-      <label className="setup-row">
-        <span className="setup-label">install</span>
-        <div className="setup-control">
-          <textarea
-            className="field"
-            rows={Math.max(1, install.split("\n").length)}
-            value={install}
-            placeholder="bun install"
-            onChange={(e) => setInstall(e.target.value)}
-          />
-          <span className="setup-hint">runs once in each new worktree; one command per line</span>
-        </div>
-      </label>
+      <FormRow label="install" hint="runs once in each new worktree; one command per line">
+        <textarea
+          className="field"
+          rows={Math.max(1, install.split("\n").length)}
+          value={install}
+          placeholder="bun install"
+          onChange={(e) => setInstall(e.target.value)}
+        />
+      </FormRow>
 
       {procs.map((p, i) => (
-        <div className="setup-row" key={i}>
-          <span className="setup-label">{i === 0 ? "start" : ""}</span>
-          <div className="setup-control">
+        <div className="form-row" key={i}>
+          <span className="form-label">{i === 0 ? "start" : ""}</span>
+          <div className="form-control">
             <div className="setup-proc">
               {multi && (
                 <input
@@ -104,7 +101,7 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
               )}
             </div>
             {i === 0 && (
-              <span className="setup-hint">
+              <span className="form-hint">
                 the server must listen on <code>$PORT</code>; toyon sets it differently for each worktree
               </span>
             )}
@@ -112,8 +109,8 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
         </div>
       ))}
 
-      <div className="setup-row">
-        <span className="setup-label" />
+      <div className="form-row">
+        <span className="form-label" />
         <button className="btn setup-add" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
           + another process (an api, a worker…)
         </button>

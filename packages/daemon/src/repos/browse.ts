@@ -2,11 +2,11 @@
 // Read-only and directory-only — the daemon already registers repos and runs their commands, so
 // this adds no reach, but it stays a listing and never opens a file.
 
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { PathEntry } from "@toyon/shared";
+import type { PathEntry, PathTarget } from "@toyon/shared";
 
 /** a long directory (node_modules, /usr/bin) would flood the picker; the prefix narrows it anyway */
 const MAX_ENTRIES = 40;
@@ -22,22 +22,46 @@ function collapseTilde(abs: string): string {
   return abs === home || abs.startsWith(`${home}/`) ? `~${abs.slice(home.length)}` : abs;
 }
 
-/** Directories that could complete `raw`, repos first. A trailing slash lists the directory
- * itself; anything else treats the last segment as a prefix to match. */
-export async function browsePath(raw: string): Promise<PathEntry[]> {
+const NOWHERE: PathTarget = { exists: false, isDir: false, isRepo: false, parentExists: false };
+
+/** what the typed path itself is. The entries answer "what is inside here"; this answers "is there
+ * a here", which is what decides whether the picker may offer to make a project at it. */
+function describe(typed: string, parent: string): PathTarget {
+  let isDir = false;
+  try {
+    isDir = statSync(typed).isDirectory();
+  } catch {
+    // no such path: that is an answer, and the common one while someone is still typing
+  }
+  // .git is a directory in a checkout and a file in a linked worktree; both are openable
+  return {
+    exists: existsSync(typed),
+    isDir,
+    isRepo: isDir && existsSync(join(typed, ".git")),
+    parentExists: existsSync(parent),
+  };
+}
+
+/** Directories that could complete `raw`, repos first, plus what `raw` itself is. A trailing slash
+ * lists the directory itself; anything else treats the last segment as a prefix to match. */
+export async function browsePath(raw: string): Promise<{ entries: PathEntry[]; target: PathTarget }> {
   const typed = expandTilde(raw.trim());
-  if (!typed.startsWith("/")) return [];
+  if (!typed.startsWith("/")) return { entries: [], target: NOWHERE };
   // "…/foo" means "entries of … starting with foo"; "…/" means "everything in …"
   const listing = typed.endsWith("/");
   const dir = listing ? typed : dirname(typed);
   const prefix = listing ? "" : typed.slice(dir.length).replace(/^\//, "").toLowerCase();
+  // a trailing slash names the directory itself, so it is its own parent for this purpose
+  const target = describe(listing ? typed.replace(/\/+$/, "") : typed, dir);
 
   let names: string[];
   try {
     const found = await readdir(dir, { withFileTypes: true });
     names = found.filter((e) => e.isDirectory() || e.isSymbolicLink()).map((e) => e.name);
   } catch {
-    return []; // missing, unreadable or not a directory: nothing to offer, and no error worth a toast
+    // missing, unreadable or not a directory: nothing to offer, and no error worth a toast. The
+    // target still says which of those it was, which is the whole reason it is reported separately
+    return { entries: [], target };
   }
 
   const entries: PathEntry[] = [];
@@ -50,5 +74,5 @@ export async function browsePath(raw: string): Promise<PathEntry[]> {
     entries.push({ path: collapseTilde(abs), name, isRepo: existsSync(join(abs, ".git")) });
   }
   entries.sort((a, b) => (a.isRepo !== b.isRepo ? (a.isRepo ? -1 : 1) : a.name.localeCompare(b.name)));
-  return entries.slice(0, MAX_ENTRIES);
+  return { entries: entries.slice(0, MAX_ENTRIES), target };
 }

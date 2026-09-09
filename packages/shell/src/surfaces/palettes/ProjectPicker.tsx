@@ -1,26 +1,18 @@
-import type { PathEntry, RepoInfo } from "@toyon/shared";
+import type { RepoInfo } from "@toyon/shared";
 import { useCallback } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { isBusy } from "../util.ts";
-import { byName } from "./commands.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
+import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker.ts";
 
-type Row =
-  | { kind: "repo"; repo: RepoInfo }
-  | { kind: "dir"; entry: PathEntry }
-  /** the literal text typed, offered when nothing on disk matched it */
-  | { kind: "open"; path: string };
-
-/** a typed path is a filesystem query rather than a name filter */
-const looksLikePath = (q: string) => /^(~|\/|\.\.?\/)/.test(q.trim());
-
-/** ⌘⇧O / the top-left pill: switch the shell to another registered repo, or type a path to
- * register one. The daemon keeps every project's procs running; this only changes what is on
- * screen. Typing a path completes against the filesystem: repos are openable, plain folders are
- * drilled into (enter or tab), so a nested checkout is reachable without typing it out.
+/** ⌘⇧O / the top-left pill: switch the shell to another registered repo, type a path to open one,
+ * or make one that is not there yet. The daemon keeps every project's procs running; switching only
+ * changes what is on screen. Typing a path completes against the filesystem: repos are openable,
+ * plain folders are drilled into (enter or tab), so a nested checkout is reachable without typing
+ * it out, and a name or a git URL matching nothing becomes an offer to create or clone.
  *
  * Two forms, one component. Normally it drops out of the pill and takes the bar over the way a
  * browser's address bar does: the open project becomes a chip in the field, the caret sits after
@@ -34,6 +26,7 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
   const current = useStore((s) => s.activeRepoId);
   const worktrees = useStore((s) => s.worktrees);
   const paths = useStore((s) => s.paths);
+  const home = useStore((s) => s.home);
 
   // debounced by the picker; only path-shaped queries reach the daemon
   const onQuery = useCallback(
@@ -43,14 +36,21 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
     [sock],
   );
 
-  // the open project is the chip in the field, so listing it again would only be a row that
-  // changes nothing. Directories come back alphabetical; the ones that are repos are the ones you
-  // came here to open, so they lead and the rest keep their order under them.
-  const dirs = [...paths.entries].sort((a, b) => Number(b.isRepo) - Number(a.isRepo));
-  const items: Row[] = [
-    ...repos.filter((repo) => repo.id !== current).map((repo): Row => ({ kind: "repo", repo })),
-    ...dirs.map((entry): Row => ({ kind: "dir", entry })),
-  ];
+  // every row is derived from the query, so the item list is empty and this builds it
+  const filter = useCallback(
+    (_items: Row[], q: string) =>
+      rowsFor({
+        query: q,
+        repos,
+        activeRepoId: current,
+        // the daemon already matched these against the path; re-filtering here would only fight the
+        // debounce and blank the list between keystrokes. Repos lead: they are what you came for.
+        entries: [...paths.entries].sort((a, b) => Number(b.isRepo) - Number(a.isRepo)),
+        target: paths.target,
+        answered: paths.query,
+      }),
+    [repos, current, paths],
+  );
 
   const hintFor = (r: RepoInfo) => {
     const mine = worktrees.filter((w) => w.worktree.repoId === r.id && w.worktree.kind !== "spare");
@@ -63,11 +63,30 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
   const open = (path: string) => {
     dispatch({ a: "open-repo" });
     sock?.send({ t: "register-repo", path });
-    dispatch({ a: "close" });
   };
 
+  /** a typed path already named its destination, so there is nothing left to ask about */
+  const createAt = (parent: string, name: string) => {
+    dispatch({ a: "open-repo" });
+    sock?.send({ t: "create-repo", mode: "create", parent, name });
+  };
+
+  /** the form, for the rows where something would otherwise be guessed */
+  const ask = (mode: "create" | "clone", name: string, url?: string) =>
+    dispatch({
+      a: "open",
+      overlay: {
+        kind: "new-project",
+        mode,
+        name,
+        // a bare name says nothing about location: offer wherever the other projects already live
+        parent: defaultParent(repos, current, home),
+        ...(url ? { url } : {}),
+      },
+    });
+
   return (
-    <ListPicker
+    <ListPicker<Row>
       anchored={!dialog}
       initialQuery={dialog ? "~/" : ""}
       // the chip says what you are switching away from, which is only true of the bar panel: the
@@ -89,18 +108,19 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
           </button>
         )
       }
-      items={items}
-      filter={(rows, q) => {
-        if (!looksLikePath(q)) return rows.filter((r) => r.kind === "repo" && byName(q, r.repo.name, r.repo.path));
-        // the daemon already matched these against the path; re-filtering here would only fight
-        // the debounce and blank the list between keystrokes
-        const dirs = rows.filter((r) => r.kind === "dir");
-        const typed = q.trim();
-        if (dirs.length > 0) return dirs;
-        const literal: Row = { kind: "open", path: typed };
-        return [literal];
-      }}
-      keyOf={(r) => (r.kind === "repo" ? r.repo.id : r.kind === "dir" ? `d:${r.entry.path}` : `open:${r.path}`)}
+      items={[]}
+      filter={filter}
+      keyOf={(r) =>
+        r.kind === "repo"
+          ? r.repo.id
+          : r.kind === "dir"
+            ? `d:${r.entry.path}`
+            : r.kind === "open"
+              ? `open:${r.path}`
+              : r.kind === "clone"
+                ? `clone:${r.url}`
+                : `new:${r.parent ?? ""}/${r.name}`
+      }
       rowClass={() => "cmd-item"}
       onQuery={onQuery}
       // a folder completes to itself with a trailing slash, so tab keeps walking down the tree
@@ -108,29 +128,54 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
       // a plain folder is a step on the way, not a project: descend and keep the picker up
       narrowTo={(r) => (r.kind === "dir" && !r.entry.isRepo ? `${r.entry.path}/` : null)}
       onPick={(r) => {
+        // `ask` opens the form, which *replaces* this overlay: closing after it would close the
+        // form too, so those branches return rather than falling through to the close below
+        if (r.kind === "clone") return ask("clone", r.name, r.url);
+        if (r.kind === "create" && !r.parent) return ask("create", r.name);
+
         if (r.kind === "repo") dispatch({ a: "activate-repo", id: r.repo.id });
         else if (r.kind === "open") open(r.path);
-        else open(r.entry.path);
+        else if (r.kind === "dir")
+          open(r.entry.path); // only repo folders get here; narrowTo takes the rest
+        else if (r.parent) createAt(r.parent, r.name);
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close", back: true })}
-      placeholder={repos.length > 1 ? "switch project, or type a path" : "type a path to open a project"}
+      placeholder={repos.length > 1 ? "switch project, or type a name or path" : "type a name or a path to start"}
       keys={(active) => ({
         complete: "completes the path",
-        // a plain folder is a step on the way: enter walks into it rather than opening anything
-        pick: active?.kind === "dir" && !active.entry.isRepo ? "descends" : "opens",
+        pick:
+          active?.kind === "dir" && !active.entry.isRepo
+            ? "descends"
+            : active?.kind === "create"
+              ? active.parent
+                ? "creates it"
+                : "names it"
+              : active?.kind === "clone"
+                ? "clones it"
+                : "opens",
         back: "closes",
       })}
-      empty={(q) => (q ? "nothing here; keep typing a path (~/… or /…)" : "no other projects; type a path to open one")}
+      empty={(q) => (q ? "nothing here; keep typing a path (~/… or /…)" : "no other projects; type a name to make one")}
       row={(r) =>
         r.kind === "repo" ? (
           <PaletteRow label={r.repo.name} hint={hintFor(r.repo)} />
         ) : r.kind === "dir" ? (
           <PaletteRow label={r.entry.name} hint={r.entry.isRepo ? "git repo" : undefined} />
-        ) : (
+        ) : r.kind === "open" ? (
           <PaletteRow label={`open ${r.path}`} hint="register with this daemon" />
+        ) : r.kind === "clone" ? (
+          <PaletteRow label={`clone ${r.name}`} hint={hostOf(r.url)} />
+        ) : (
+          <PaletteRow label={`create ${r.name}`} hint={r.parent ? `in ${r.parent}` : "new project"} />
         )
       }
     />
   );
+}
+
+/** "github.com" out of a URL, for the hint on a clone row. Best effort: a hint is not worth a throw */
+function hostOf(url: string): string {
+  const m = url.match(/^[a-z+]+:\/\/(?:[^@/]*@)?([^/:]+)/i) ?? url.match(/^[^@]+@([^:]+):/);
+  return m?.[1] ?? "git remote";
 }

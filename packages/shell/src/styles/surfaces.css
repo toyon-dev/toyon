@@ -1748,34 +1748,6 @@ body.resizing .rb-center {
   margin-top: -6px;
   color: var(--text2);
 }
-.setup-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.setup-label {
-  width: 56px;
-  flex-shrink: 0;
-  padding-top: 5px;
-  color: var(--text1);
-}
-.setup-control {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.setup-control .field {
-  padding: 5px 8px;
-  line-height: 1.6;
-}
-.setup-control > .field {
-  width: 100%;
-}
-.setup-control textarea.field {
-  resize: none;
-}
 .setup-proc {
   display: flex;
   gap: 6px;
@@ -1789,12 +1761,36 @@ body.resizing .rb-center {
   flex: 1;
   min-width: 0;
 }
-.setup-hint {
-  color: var(--text2);
-}
 .setup-add {
   padding: 2px 0;
 }
+/* the new-project form: the destination sits opposite the buttons, so what is about to be made on
+   disk is readable in the same glance as the button that makes it */
+.np-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.np-dest {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--type-mono);
+  color: var(--text2);
+}
+.np-create {
+  padding: 4px 16px;
+}
+.np-url {
+  font: var(--type-mono);
+  color: var(--text1);
+  overflow-wrap: anywhere;
+  padding-top: 5px;
+}
+
 .setup-actions {
   display: flex;
   justify-content: flex-end;

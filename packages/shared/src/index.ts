@@ -8,6 +8,7 @@ export * from "./diff.ts";
 export * from "./model.ts";
 export * from "./paste.ts";
 export * from "./ports.ts";
+export * from "./project.ts";
 export * from "./protocol/bridge.ts";
 export * from "./protocol/events.ts";
 export * from "./protocol/ws.ts";

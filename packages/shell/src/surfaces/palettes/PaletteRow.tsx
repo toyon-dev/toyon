@@ -17,7 +17,7 @@ export function PaletteRow({
     <>
       {current && <span className="row-current" aria-hidden="true" />}
       <span className="cmd-label">{label}</span>
-      {hint ? <span className="cmd-hint">{hint}</span> : null}
+      {hint ? <span className="cmd-hint row-dim">{hint}</span> : null}
     </>
   );
 }

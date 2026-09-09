@@ -301,7 +301,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             return (
               <>
                 <span className="ip-name">/{markHits(r.c.name, needle ? commandHits(r.c.name, needle) : null, 0)}</span>
-                <span className="ip-desc">{r.c.description}</span>
+                <span className="ip-desc row-dim">{r.c.description}</span>
               </>
             );
           }}

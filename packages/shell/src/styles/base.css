@@ -330,19 +330,25 @@ a code {
   background: var(--element0);
   color: var(--text0);
 }
-.row .row-dim {
-  color: var(--text2);
+/* A child that sits one rung below the row it is in. It reads its tier off a variable rather than
+   being selected through the row, the way --row-edge-color and --dot-gap already work here, so a
+   row type that is not .row (the picker's, which stays display:block for its ellipsis) opts in with
+   one declaration instead of a copy of the rule below per child. Those copies are exactly what went
+   wrong: the pickers had four and the file row's directory was the fifth nobody wrote, so it went
+   invisible the moment the row was picked. */
+.row-dim {
+  color: var(--row-dim-color, var(--text2));
 }
 /* a lifted seat lifts its dim child too, and picked lifts further than hover: text2 on element1 is
    1.06:1, which is not a quiet tier but an invisible one. text1 rather than text0, because at text0
    a filename and its directory read as one string instead of a name with a location after it. The
    picked states are still each surface's own class until they are one name; .sel is deliberately
    not here, since on a file or a commit it is the keyboard cursor and moves no background. */
-.row:hover .row-dim,
-.row.active .row-dim,
-.row.open .row-dim,
-.row.menu-open .row-dim {
-  color: var(--text1);
+.row:hover,
+.row.active,
+.row.open,
+.row.menu-open {
+  --row-dim-color: var(--text1);
 }
 .row-quiet {
   color: var(--text2);

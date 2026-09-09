@@ -70,7 +70,7 @@ export function fileRow(path: string, status: GitFileStatus | undefined, q: stri
     <>
       <span className={`xy ${status ? xyClass(status.xy) : ""}`}>{status ? xyLetter(status.xy) : ""}</span>
       <span className="name">{markHits(name, hits, dir.length)}</span>
-      <span className="dir">
+      <span className="dir row-dim">
         {dir && (
           <>
             {"\u200e"}

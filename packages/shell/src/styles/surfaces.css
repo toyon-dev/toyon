@@ -1387,10 +1387,6 @@ body.resizing .row-resize {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text2);
-}
-.qo-item.active .ip-desc {
-  color: var(--text1);
 }
 /* the argument hint sits left of the key hints, where the eye lands after picking */
 /* the paste chip borrows the image chip's link row; its own line is the counts */
@@ -2110,11 +2106,7 @@ body.resizing .rb-center {
   text-overflow: ellipsis;
 }
 .cmd-hint {
-  color: var(--text2);
   flex-shrink: 0;
-}
-.qo-item.active .cmd-hint {
-  color: var(--text1);
 }
 /* theme picker: dark / light chips; the one being previewed on the highlighted row lights up */
 .theme-kinds {
@@ -2190,7 +2182,6 @@ body.resizing .rb-center {
   color: var(--accent);
 }
 .qo-file .dir {
-  color: var(--text2);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -2200,6 +2191,7 @@ body.resizing .rb-center {
 }
 .qo-item:hover {
   background: var(--element0);
+  --row-dim-color: var(--text1);
 }
 /* Where the keyboard is, and nothing more. The orange edge means "this is the one you are on"
    (the active worktree, the open tool call); on a picker row it read as a choice already made,
@@ -2208,6 +2200,7 @@ body.resizing .rb-center {
 .qo-item.active {
   background: var(--element1);
   color: var(--text0);
+  --row-dim-color: var(--text1);
 }
 .prompt-box textarea {
   width: 100%;

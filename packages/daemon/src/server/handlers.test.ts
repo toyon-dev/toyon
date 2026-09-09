@@ -55,7 +55,7 @@ function make() {
   });
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
-  const files = new FileService(state, runtime);
+  const files = new FileService(state, runtime, (id) => worktrees.readable(id));
   const design = new DesignService(state);
   const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, t.paths.themesDir);
   const planned: string[][] = [];

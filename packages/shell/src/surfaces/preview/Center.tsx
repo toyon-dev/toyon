@@ -6,6 +6,7 @@ import { STORAGE } from "../../state/keys.ts";
 import { openSource } from "../../state/openSource.ts";
 import {
   useActive,
+  useActiveDiscovered,
   useActiveId,
   useActiveRepoNeedingSetup,
   useLocalField,
@@ -26,6 +27,7 @@ import { DesignPane } from "../design/DesignPane.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, previewUrl, relFile, wtDir } from "../util.ts";
+import { DiscoveredPane } from "./DiscoveredPane.tsx";
 import { ImportPane } from "./ImportPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 
@@ -171,6 +173,8 @@ export function Center() {
     );
   }, [reloadReq?.n]);
 
+  // a worktree toyon did not make: its own pane, and a shell in the terminal below it
+  const activeDiscovered = useActiveDiscovered();
   const activeReady = !!active && active.procs.length > 0 && active.procs.some((p) => p.status !== "stopped");
   useEffect(() => {
     if (activeId && activeReady && !mounted.includes(activeId)) setMounted((m) => [...m, activeId]);
@@ -257,7 +261,8 @@ export function Center() {
               onClose={needsSetup ? undefined : () => dispatch({ a: "close" })}
             />
           )}
-          {!activeReady && !setupRepo && !watching && (
+          {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
+          {!activeReady && !activeDiscovered && !setupRepo && !watching && (
             <div className="empty">
               {incompatible
                 ? "toyon was updated: reload this page"

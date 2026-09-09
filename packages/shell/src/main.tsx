@@ -65,6 +65,20 @@ function storedLastActive(): Record<string, string> {
   return out;
 }
 
+/** which projects had the discovered section open. Anything that is not a boolean is dropped: the
+ * cost of a bad value is a section that starts collapsed, which is the default anyway. */
+function storedDiscoveredOpen(): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  try {
+    const raw: unknown = JSON.parse(read(localStorage, STORAGE.discoveredOpen) ?? "{}");
+    if (!raw || typeof raw !== "object") return out;
+    for (const [repoId, open] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof open === "boolean") out[repoId] = open;
+    }
+  } catch {}
+  return out;
+}
+
 /** per-tab id: a worktree created from this tab steals focus here and nowhere else */
 function clientId(): string {
   const existing = read(sessionStorage, STORAGE.client);
@@ -85,6 +99,7 @@ const store = createStore(
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",
     storedPanels: storedPanels(),
     storedLastActive: storedLastActive(),
+    storedDiscoveredOpen: storedDiscoveredOpen(),
     clientId: clientId(),
   }),
 );

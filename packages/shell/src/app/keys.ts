@@ -112,4 +112,21 @@ export function useChords() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [store, sock]);
+
+  // The picker's second verb rides the modifier, and the chord that armed the picker left focus in
+  // the shell: the frame sees no key at all until something is clicked inside it. Mirror the key
+  // in for the same reason Escape is mirrored above, keyup included, or the fill outlives the hold.
+  useEffect(() => {
+    const onAlt = (e: KeyboardEvent) => {
+      if (e.key !== "Alt") return;
+      const s = store.getState();
+      if (s.picking && s.activeId) previewBus.post(s.activeId, { type: "pick-alt", on: e.type === "keydown" });
+    };
+    window.addEventListener("keydown", onAlt);
+    window.addEventListener("keyup", onAlt);
+    return () => {
+      window.removeEventListener("keydown", onAlt);
+      window.removeEventListener("keyup", onAlt);
+    };
+  }, [store]);
 }

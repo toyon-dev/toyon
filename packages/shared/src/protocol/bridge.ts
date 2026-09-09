@@ -25,6 +25,9 @@ export type ShellToBridgeMsg =
   | { type: "forward" }
   | { type: "pick-start" }
   | { type: "pick-cancel" }
+  /** the modifier that swaps the picker's click verb. Forwarded because the chord that arms the
+   * picker leaves focus in the shell, where a keydown never reaches the frame at all. */
+  | { type: "pick-alt"; on: boolean }
   /** ranges: changed line spans (post-offset numbering); null/absent = whole file */
   | { type: "highlight-file"; path: string; ranges?: Array<[number, number]> | null }
   | { type: "highlight-selector"; selector: string; label?: string }

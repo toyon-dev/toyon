@@ -16,7 +16,7 @@ import type { WorktreeService } from "../worktrees/service.ts";
 import { expandTilde } from "./browse.ts";
 import { detectConfig, readConfigFile } from "./config.ts";
 import { type CreateOpts, cloneInto, createRepoDir, isInside, type Plan, planProject } from "./create.ts";
-import { watchConfigFile, watchDefaultBranch } from "./watcher.ts";
+import { watchConfigFile, watchDefaultBranch, watchWorktreeDir } from "./watcher.ts";
 
 export interface RepoRegistryDeps {
   state: StateStore;
@@ -281,9 +281,16 @@ export class RepoRegistry {
       fireAndForget(repo.id, this.d.worktrees.spare.refresh(repo.id), "spare refresh");
     });
     const stopCfg = watchConfigFile(repo.path, () => this.reloadConfig(repo.id));
+    // someone added or removed a worktree outside toyon: what git knows and what we last read
+    // have diverged, and the rail's discovered section is what goes stale
+    const stopWt = watchWorktreeDir(repo.path, () => {
+      this.d.worktrees.invalidateDiscovered();
+      this.d.hub.emit("worktreesChanged");
+    });
     this.watchers.set(repo.id, () => {
       stopRef();
       stopCfg();
+      stopWt();
     });
   }
 

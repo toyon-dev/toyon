@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import type {
   AgentStatus,
   CommitEntry,
+  DiscoveredWorktree,
   GitFileStatus,
   ImageInput,
   PasteInput,
@@ -16,6 +17,7 @@ import type {
   WorktreeStatus,
 } from "@toyon/shared";
 import { attachmentsDirFor } from "../agent/attachments.ts";
+import { canonical } from "../agent/bounds.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer } from "../agent/tasks.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
@@ -29,10 +31,12 @@ import { commitWorktree, mergeToMain, type ShipResult, shipWorktree, syncFromMai
 import { withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
 import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts } from "../git/status.ts";
+import { isInside } from "../repos/create.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
+import { discoverIn } from "./discover.ts";
 import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 
@@ -42,6 +46,22 @@ import { SparePool } from "./spare.ts";
 const LOCAL_CONFIG_FILES = [".env", ".env.local", ".env.development", ".env.development.local", ".dev.vars"];
 
 export type Variant = { group: string; index: number; of: number };
+
+/** Where a worktree id points, for work that only reads.
+ *
+ * Reading a worktree needs a directory and a branch to compare against, and nothing else:
+ * `requireWorktree` was only ever how those two were fetched. That is why a worktree toyon did not
+ * create could not be looked at, even though it has a path and a branch like any other. `wt` is
+ * present only when there is a record, and it is what the handful of record-only behaviours key
+ * off: clearing `landed`, and skipping ahead/behind on main, where HEAD is the default branch and
+ * the counts are zero by definition. */
+export interface ReadableWorktree {
+  id: string;
+  path: string;
+  defaultBranch: string;
+  /** absent for a discovered worktree: there is nothing to mutate and nothing that owns it */
+  wt?: WorktreeInfo;
+}
 
 /** what `git status` + ahead/behind say about one worktree */
 export interface GitInfo {
@@ -81,6 +101,8 @@ export interface WorktreeServiceDeps {
 export class WorktreeService {
   readonly spare: SparePool;
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
+  /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
+  private discoverCache = new Map<string, { rows: DiscoveredWorktree[]; at: number }>();
   /** the agent status each worktree last reported, so a turn's end is an edge and not a level */
   private lastAgentStatus = new Map<string, AgentStatus>();
 
@@ -190,6 +212,71 @@ export class WorktreeService {
     return wt;
   }
 
+  /** Promote a worktree git knows about into one toyon runs.
+   *
+   * The directory already exists and someone else made it, so this allocates a port, records it and
+   * starts the procs. It deliberately does not run `toyon.json`'s setup commands (see
+   * `setupAndStart`) and does not start an agent: take-over is not a task, and the agent comes up
+   * on the first message like it does anywhere else. */
+  /** The discovered row at this path as it stands right now, or a toast.
+   *
+   * Never trust a path the client sends: a discovered worktree has no id, so the path is the whole
+   * address, and it must still be on the list the daemon would push. Re-derived rather than read
+   * from the cache because the frame the person clicked can be seconds old, and a lock is the only
+   * thing standing between us and another agent's working directory. */
+  private async requireDiscovered(repoId: string, repoPath: string, target: string): Promise<DiscoveredWorktree> {
+    const rows = await discoverIn(repoId, repoPath, this.d.state.worktrees);
+    const found = rows.find((r) => canonical(r.path) === target);
+    if (!found) throw new UserError("that worktree is gone, or toyon already has it");
+    return found;
+  }
+
+  /** the absolute path of a discovered worktree, once it is established it is still one */
+  async discoveredPath(repoId: string, path: string): Promise<string> {
+    const repo = this.d.state.requireRepo(repoId);
+    return (await this.requireDiscovered(repoId, repo.path, canonical(path))).path;
+  }
+
+  async adopt(repoId: string, path: string, createdBy?: string): Promise<WorktreeInfo> {
+    const repo = this.d.state.requireRepo(repoId);
+    const target = canonical(path);
+    // the whole verify-then-record step holds the lock: outside it this races `worktree remove`
+    // and leaves a record pointing at a directory that is already gone
+    const wt = await withRepoLock(repo.path, async () => {
+      const found = await this.requireDiscovered(repoId, repo.path, target);
+      if (found.locked) {
+        throw new UserError(`${found.name} is held by another tool${found.lockReason ? `: ${found.lockReason}` : ""}`);
+      }
+      // land, ship, merge and rename all address a branch; a detached worktree has none to name
+      if (!found.branch) throw new UserError(`${found.name} is detached: check out a branch in it first`);
+      // procs and a dep clone inside the main checkout would land in its working tree, where the
+      // agent's file tools and git status would both start seeing them
+      const enclosing = [...this.d.state.repos, ...this.d.state.worktrees].find((r) =>
+        isInside(target, canonical(r.path)),
+      );
+      if (enclosing) throw new UserError(`${found.name} sits inside ${enclosing.path}, which toyon already manages`);
+      const rec: WorktreeInfo = {
+        id: shortId(),
+        repoId,
+        path: found.path,
+        branch: found.branch,
+        kind: "worktree",
+        proxyPort: await allocateProxyPort(),
+        title: found.name,
+        createdAt: Date.now(),
+        agent: this.d.agents.require(this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id,
+        ...(createdBy ? { createdBy } : {}),
+      };
+      this.d.state.addWorktree(rec);
+      return rec;
+    });
+    this.invalidateDiscovered();
+    this.d.hub.emit("worktreesChanged");
+    // slow, and nothing above depends on it: outside the lock, like create()'s own setup
+    fireAndForget(wt.id, this.setupAndStart(wt, repo, repo.path, { setupCommands: false }), "adopt setup");
+    return wt;
+  }
+
   /** a profile name the repo actually has, or undefined for "the default"; a typo is a toast */
   private checkProfile(repo: RepoInfo, name: string | undefined): string | undefined {
     if (name === undefined) return undefined;
@@ -294,6 +381,11 @@ export class WorktreeService {
    * wt-xxxx). The terminal and editor links show the link; git and procs keep the real path.
    * Moving the directory for real would restart the procs and the agent session (its cwd). */
   private refreshLink(wt: WorktreeInfo) {
+    // Only toyon's own branches get a link. An adopted worktree sits in a directory the person
+    // chose, and `desired` would put a symlink next to it under a name they never asked for
+    // (adopting ~/Projects/app-editor-pane on branch `editor-pane` would create
+    // ~/Projects/editor-pane, and again on every boot).
+    if (!wt.branch.startsWith("toyon/")) return;
     // the branch tail rather than the title: titles may repeat (three tasks named alike), branches
     // never do (rename suffixes them)
     const name = wt.branch.replace(/^toyon\//, "");
@@ -391,8 +483,18 @@ export class WorktreeService {
 
   // ---- setup ----
 
-  /** Clone deps from the base checkout, run the repo's setup commands, then start the runtime. */
-  async setupAndStart(wt: WorktreeInfo, repo: RepoInfo, depsSource = repo.path): Promise<void> {
+  /** Clone deps from the base checkout, run the repo's setup commands, then start the runtime.
+   *
+   * `setupCommands: false` keeps the two copies (both no-ops when the destination already has the
+   * files) and skips `toyon.json`'s `setup` list, which has no such guard. Adoption uses it: those
+   * commands are `bun install`, migrations, `docker compose up`, and a directory someone has been
+   * working in is the last place to re-run them behind their back. */
+  async setupAndStart(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    depsSource = repo.path,
+    { setupCommands = true }: { setupCommands?: boolean } = {},
+  ): Promise<void> {
     // Copy-on-write where the fs allows it: `cp -c` (APFS clonefile), then GNU `--reflink=auto`
     // (btrfs/XFS), then a plain recursive copy (ext4). The log line records which
     // path ran and how long the fallback copy takes per worktree.
@@ -422,7 +524,7 @@ export class WorktreeService {
     }
     // `bun install` and friends can take a minute: async, so every preview and agent stream keeps
     // flowing while a new worktree warms up
-    for (const cmd of repo.config.setup ?? []) {
+    for (const cmd of setupCommands ? (repo.config.setup ?? []) : []) {
       const code = await runSetup(cmd, wt.path, (line) => this.d.hub.emit("log", wt.id, "setup", line));
       if (code !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed (exit ${code}): ${cmd}`);
     }
@@ -501,6 +603,53 @@ export class WorktreeService {
     this.countsCache.clear();
   }
 
+  /** something under `.git/worktrees` changed: git's list is no longer what we last read */
+  invalidateDiscovered() {
+    this.discoverCache.clear();
+  }
+
+  /** A discovered row by id, from the last derivation only: no git, no await.
+   *
+   * The terminal opens inside one synchronous block on purpose (see the `term-open` handler), so
+   * this cannot shell out. Reading the cache is honest here because the person can only click a
+   * row that was pushed to them, and every push fills this cache: the watcher invalidates and then
+   * emits, and the emit re-derives before the frame goes out. */
+  discoveredById(id: string): DiscoveredWorktree | null {
+    for (const { rows } of this.discoverCache.values()) {
+      const found = rows.find((r) => r.id === id);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  /** Worktrees git knows about that toyon does not, across every registered repo.
+   *
+   * Cached per repo on the same 10s floor as `counts()`: this runs on every `worktreesChanged`,
+   * which fires on every proc event, and a dev-server log line should not shell out to git. The
+   * watcher clears the cache when a worktree actually appears or goes, so the TTL bounds how often
+   * we ask when nothing has happened, not how long a real change stays invisible. */
+  async discovered(): Promise<DiscoveredWorktree[]> {
+    const perRepo = await Promise.all(
+      this.d.state.repos.map(async (repo) => {
+        const cached = this.discoverCache.get(repo.id);
+        if (cached && Date.now() - cached.at < 10_000) return cached.rows;
+        try {
+          const rows = await discoverIn(repo.id, repo.path, this.d.state.worktrees);
+          this.discoverCache.set(repo.id, { rows, at: Date.now() });
+          return rows;
+        } catch (e) {
+          log.warn(repo.id, "could not list this repo's worktrees", e);
+          return cached?.rows ?? [];
+        }
+      }),
+    );
+    const rows = perRepo.flat();
+    // a shell at a directory that is no longer a discovered worktree has nothing to belong to: it
+    // was taken over (its worktree runs a real shell now), removed, or its repo was forgotten
+    this.d.runtime.pruneLooseShells(new Set(rows.map((r) => r.id)));
+    return rows;
+  }
+
   private async counts(wt: WorktreeInfo): Promise<{ ahead?: number; behind?: number; dirty?: number }> {
     const cached = this.countsCache.get(wt.id);
     if (cached && Date.now() - cached.at < 10_000) return cached;
@@ -517,19 +666,35 @@ export class WorktreeService {
 
   /** the working-tree state the changes panel shows (subscribe, edits, ref ticks). Also the one
    * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
+  /** Resolve an id for reading: a worktree toyon runs, or one it merely knows about. Null for a
+   * spare (nobody looks at those) and for an id that is neither. */
+  readable(id: string): ReadableWorktree | null {
+    const wt = this.d.state.worktree(id);
+    if (wt) {
+      if (wt.kind === "spare") return null;
+      return { id, path: wt.path, defaultBranch: this.d.state.requireRepo(wt.repoId).defaultBranch, wt };
+    }
+    const disc = this.discoveredById(id);
+    const repo = disc && this.d.state.repo(disc.repoId);
+    if (!disc || !repo) return null;
+    return { id, path: disc.path, defaultBranch: repo.defaultBranch };
+  }
+
   async gitStatus(worktreeId: string): Promise<GitInfo | null> {
-    const wt = this.d.state.worktree(worktreeId);
-    if (!wt || wt.kind === "spare") return null;
+    const r = this.readable(worktreeId);
+    if (!r) return null;
     try {
-      const defaultBr = this.d.state.requireRepo(wt.repoId).defaultBranch;
+      // only main is its own baseline; every other worktree, discovered ones included, has a
+      // branch worth counting against the default one
+      const isMain = r.wt?.kind === "main";
       const [files, counts, head] = await Promise.all([
-        statusFilesWithCounts(wt.path),
-        wt.kind === "main" ? Promise.resolve({}) : aheadBehind(wt.path, defaultBr),
-        git(wt.path, "rev-parse", "HEAD"),
+        statusFilesWithCounts(r.path),
+        isMain ? Promise.resolve({}) : aheadBehind(r.path, r.defaultBranch),
+        git(r.path, "rev-parse", "HEAD"),
       ]);
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
-      const committed = wt.kind !== "main" && ahead > 0 ? await committedFiles(wt.path, defaultBr) : undefined;
-      if (wt.landed && (files.length > 0 || ahead > 0)) this.setLanded(wt.id, false);
+      const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.defaultBranch) : undefined;
+      if (r.wt?.landed && (files.length > 0 || ahead > 0)) this.setLanded(r.wt.id, false);
       return { files, committed, head: head.ok ? head.out : undefined, ...counts };
     } catch (e) {
       log.warn(worktreeId, "git status failed", e);
@@ -541,17 +706,14 @@ export class WorktreeService {
    * requests it when the tab is opened and after a commit, so a worktree nobody is reviewing
    * never pays for it. */
   async gitLog(worktreeId: string): Promise<CommitEntry[]> {
-    const wt = this.d.state.worktree(worktreeId);
-    if (!wt || wt.kind === "spare") return [];
-    const defaultBr = this.d.state.requireRepo(wt.repoId).defaultBranch;
-    return logCommits(wt.path, defaultBr);
+    const r = this.readable(worktreeId);
+    return r ? logCommits(r.path, r.defaultBranch) : [];
   }
 
   /** the files one commit touched, on expanding it in the history tab */
   async commitFiles(worktreeId: string, sha: string): Promise<GitFileStatus[]> {
-    const wt = this.d.state.worktree(worktreeId);
-    if (!wt || wt.kind === "spare") return [];
-    return readCommitFiles(wt.path, sha);
+    const r = this.readable(worktreeId);
+    return r ? readCommitFiles(r.path, sha) : [];
   }
 
   /** someone is looking at this worktree right now: clear its unseen ring */

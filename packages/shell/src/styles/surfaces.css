@@ -265,7 +265,8 @@ body.resizing iframe {
 .wt-item.sel {
   --row-edge-color: var(--aqua);
 }
-.wt-item .branch {
+.wt-item .branch,
+.disc-item .branch {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -737,16 +738,94 @@ body.resizing .row-resize {
   pointer-events: auto;
   transition: opacity 0.12s ease 50ms;
 }
+/* ---- discovered: worktrees git knows about that toyon did not create ---- */
+/* The section belongs to the open panel and nothing of it reaches the strip: no header, no rows,
+   no rule. The strip is toyon's own worktrees, and a section you cannot read the label of is not
+   worth the pixels it would take. This is the one place the rail lays out differently in the two
+   states, and it is safe where the rail-list comment above is not: everything here sits below
+   "new worktree", so nothing anyone aims at moves when it appears.
+   Marked by type and colour alone, like .dock-section-title: a rule across the rail read as a
+   divider between two peers, and these rows are not main's peers. */
+.disc-head,
+.disc-item {
+  display: none;
+}
+.wt-rail:hover .disc-head,
+.wt-rail.hold .disc-head,
+.wt-rail.open .disc-head {
+  height: 28px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 0 12px;
+  margin-top: 6px;
+  font: var(--type-ui-sm);
+  color: var(--text2);
+  text-align: left;
+}
+.disc-head:hover {
+  color: var(--text1);
+}
+/* the caret points down when open and right when shut, the way every disclosure does */
+.disc-caret {
+  transition: transform 0.12s ease;
+}
+.disc-caret.shut {
+  transform: rotate(-90deg);
+}
+.wt-rail:hover .disc-item,
+.wt-rail.hold .disc-item,
+.wt-rail.open .disc-item {
+  height: 33px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* the same width, padding and edge-marker anchoring as .wt-item: these rows sit in the same
+     column and their dots have to land on the same centre line */
+  width: 100%;
+  padding: 0 16px 0 12px;
+  position: relative;
+  --row-edge-x: var(--rail-edge, 0px);
+  color: var(--text2);
+  text-align: left;
+}
+.disc-item:hover {
+  background: var(--element0);
+}
+/* selected the same way a worktree row is: it is the same selection, and the pane beside it is
+   showing this row */
+.disc-item.active {
+  --row-edge-color: var(--accent);
+  color: var(--text0);
+  background: var(--element1);
+}
+.disc-item.menu-open {
+  background: var(--element0);
+}
+.wt-rail .disc-item .dot {
+  margin-left: 12px;
+}
+.disc-lock {
+  display: flex;
+  color: var(--text2);
+}
 /* the socket is down: every row is stale and nothing you click will answer. Fading them read as
    "still loading", so they take the fault colour instead and hovering the rail says what happened.
    The dots go with them: what they were reporting is exactly what we have stopped hearing. */
-.wt-rail.offline .wt-item {
+.wt-rail.offline .wt-item,
+.wt-rail.offline .disc-item {
   color: var(--orange);
 }
 .wt-rail.offline .wt-item .dot {
   background: var(--orange);
   animation: none;
   box-shadow: none;
+}
+/* the hollow dot keeps its shape offline; it is a ring, so blanking box-shadow would erase it */
+.wt-rail.offline .disc-item .dot.discovered {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--orange);
 }
 /* identical row heights in both modes, and the dot keeps its x too: 20px from the right edge, the
    centre of the collapsed strip. The peek then unfurls leftward from under the pointer that opened

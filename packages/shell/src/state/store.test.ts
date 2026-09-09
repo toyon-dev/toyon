@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
+import {
+  type AgentEvent,
+  type DiscoveredWorktree,
+  PROTOCOL_VERSION,
+  type RepoInfo,
+  type WorktreeStatus,
+} from "@toyon/shared";
 import { type Action, EMPTY_LOCAL, initialState, localOf, reducer, type State, type StoreServerMsg } from "./store.ts";
 
 // The reducer's rules the UI depends on and nothing else documents: which worktree becomes active,
@@ -48,6 +54,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     protocol: PROTOCOL_VERSION,
     repos,
     worktrees: w,
+    discovered: [],
     themes: initial.themes,
     themePrefs: initial.themePrefs,
     agents: [],
@@ -56,7 +63,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     pending: [],
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
-const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w });
+const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w, discovered: [] });
 const repos = (...r: RepoInfo[]): Action => server({ t: "repos", repos: r });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });
 
@@ -752,5 +759,62 @@ describe("panel layout", () => {
     });
     const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [] })], from);
     expect(s.leftOpen).toBe(true);
+  });
+});
+
+describe("discovered worktrees", () => {
+  // "r" is what the wt() fixture defaults its repoId to
+  const found = (path: string, repoId = "r"): DiscoveredWorktree => ({
+    id: `disc-${path}`,
+    repoId,
+    path,
+    name: path.split("/").pop()!,
+  });
+  const withFound = (...d: DiscoveredWorktree[]): Action =>
+    server({ t: "worktrees", worktrees: [wt("main", "main")], discovered: d });
+  // the remembered-section map is keyed by repo, so these need the repo to actually exist
+  const helloR = (...w: WorktreeStatus[]): Action => helloIn([repo("r")], ...w);
+
+  test("they stay out of the list ⌘1-9 and the palette number over", () => {
+    const s = run([helloR(wt("main", "main"), wt("a")), withFound(found("/w/stray"), found("/w/other"))]);
+    // the whole reason for a second array: these two indexes must not move
+    expect(s.visible.map((w) => w.worktree.id)).toEqual(["main"]);
+    expect(s.discovered).toHaveLength(2);
+  });
+
+  test("a discovered row is never landed on", () => {
+    const s = run([helloR(wt("main", "main")), withFound(found("/w/stray"))]);
+    expect(s.activeId).toBe("main");
+  });
+
+  test("they are narrowed to the active project, like worktrees are", () => {
+    const m1 = wt("m1", "main", undefined, "r1");
+    const m2 = wt("m2", "main", undefined, "r2");
+    const s = run([
+      helloIn([repo("r1"), repo("r2")], m1, m2),
+      { a: "activate", id: "m2" },
+      server({ t: "worktrees", worktrees: [m1, m2], discovered: [found("/w/one", "r1"), found("/w/two", "r2")] }),
+    ]);
+    expect(s.discovered).toHaveLength(2);
+    expect(s.visibleDiscovered.map((d) => d.path)).toEqual(["/w/two"]);
+  });
+
+  test("the section starts collapsed and the toggle round-trips per project", () => {
+    const shut = run([helloR(wt("main", "main")), withFound(found("/w/stray"))]);
+    expect(shut.discoveredOpen.r).toBeUndefined();
+    const open = run([{ a: "toggle-discovered" }], shut);
+    expect(open.discoveredOpen.r).toBe(true);
+    expect(run([{ a: "toggle-discovered" }], open).discoveredOpen.r).toBe(false);
+  });
+
+  test("a remembered section survives a reload", () => {
+    const from = initialState({ clientId: ME, storedDiscoveredOpen: { r: true } });
+    expect(run([helloR(wt("main", "main")), withFound(found("/w/stray"))], from).discoveredOpen.r).toBe(true);
+  });
+
+  test("forgetting a project drops its remembered section", () => {
+    const from = initialState({ clientId: ME, storedDiscoveredOpen: { r: true, gone: true } });
+    const s = run([helloR(wt("m1", "main"))], from);
+    expect(s.discoveredOpen).toEqual({ r: true });
   });
 });

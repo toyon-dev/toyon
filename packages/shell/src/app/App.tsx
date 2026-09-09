@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
-import { useActive, useActiveId, useTheme, useWorktrees } from "../state/selectors.ts";
+import { useActive, useActiveDiscovered, useActiveId, useTheme, useWorktrees } from "../state/selectors.ts";
 import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
 import { RightDock } from "../surfaces/chat/RightDock.tsx";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
@@ -29,6 +29,7 @@ export function App() {
   const activeId = useActiveId();
   const activeRepoId = useStore((s) => s.activeRepoId);
   const active = useActive();
+  const activeDiscovered = useActiveDiscovered();
   const connected = useStore((s) => s.connected);
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
@@ -36,6 +37,7 @@ export function App() {
   const railOpen = useStore((s) => s.railOpen);
   const panels = useStore((s) => s.panels);
   const lastActive = useStore((s) => s.lastActive);
+  const discoveredOpen = useStore((s) => s.discoveredOpen);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
   const toast = useStore((s) => s.toast);
@@ -46,13 +48,15 @@ export function App() {
   // the oldest beyond that. A reconnect re-subscribes the whole set.
   const subsRef = useRef<string[]>([]);
   useEffect(() => {
-    if (!sock || !connected || !activeId) return;
+    // a discovered worktree has nothing to stream: no agent transcript, no procs, no logs, and the
+    // daemon's subscribe requires a record it does not have
+    if (!sock || !connected || !activeId || activeDiscovered) return;
     const mru = [activeId, ...subsRef.current.filter((id) => id !== activeId)];
     for (const gone of mru.splice(MRU_SUBSCRIPTIONS)) sock.send({ t: "unsubscribe", worktreeId: gone });
     // only the newcomer needs a subscribe (and its backfill); the others have been streaming all along
     if (!subsRef.current.includes(activeId)) sock.send({ t: "subscribe", worktreeId: activeId });
     subsRef.current = mru;
-  }, [activeId, connected, sock]);
+  }, [activeId, activeDiscovered, connected, sock]);
   // a reconnect is a new socket: it knows nothing, so re-assert the whole set
   useEffect(() => {
     if (!sock || !connected) return;
@@ -66,7 +70,11 @@ export function App() {
 
   // window/app title follows the active worktree
   useEffect(() => {
-    document.title = active ? `${active.worktree.title} · toyon` : "toyon";
+    document.title = active
+      ? `${active.worktree.title} · toyon`
+      : activeDiscovered
+        ? `${activeDiscovered.name} · toyon`
+        : "toyon";
   }, [active?.worktree.title]);
 
   // Selecting a worktree clears the rail's unseen ring: whichever way you got here (a rail click,
@@ -123,6 +131,13 @@ export function App() {
       localStorage.setItem(STORAGE.lastActive, JSON.stringify(lastActive));
     } catch {}
   }, [lastActive]);
+  // so is an opened discovered section: it is collapsed by default, and re-collapsing it on every
+  // reload would make the one repo where you are watching stray worktrees the most annoying one
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.discoveredOpen, JSON.stringify(discoveredOpen));
+    } catch {}
+  }, [discoveredOpen]);
 
   useChords();
   // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the

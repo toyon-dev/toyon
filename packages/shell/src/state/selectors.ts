@@ -1,7 +1,7 @@
 // Selector hooks. Each returns a field or a stable constant so a component re-renders only when
 // what it reads changes (useSyncExternalStore compares by identity: never build a fresh object here).
 
-import type { RepoInfo, WorktreeStatus } from "@toyon/shared";
+import type { DiscoveredWorktree, RepoInfo, WorktreeStatus } from "@toyon/shared";
 import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
 import { currentTheme, localOf, repoById, type WorktreeLocal, worktreeById } from "./store.ts";
@@ -19,6 +19,19 @@ export const useWorktrees = () => useStore((s) => s.worktrees);
 
 /** the active project's worktrees: what the rail lists and ⌘1–9 count over */
 export const useVisibleWorktrees = () => useStore((s) => s.visible);
+
+/** the active project's worktrees that toyon did not create. A separate list from `visible` on
+ * purpose: ⌘1-9 and the palette number that one positionally. */
+export const useVisibleDiscovered = () => useStore((s) => s.visibleDiscovered);
+
+/** the discovered worktree that is selected, when the selection is one of those rather than a
+ * worktree toyon runs. Exactly one of this and `useActive()` is ever set. */
+export const useActiveDiscovered = (): DiscoveredWorktree | null =>
+  useStore((s) => (s.activeId ? (s.discovered.find((d) => d.id === s.activeId) ?? null) : null));
+
+/** has the discovered section been opened in this project (collapsed by default) */
+export const useDiscoveredOpen = (): boolean =>
+  useStore((s) => (s.activeRepoId ? (s.discoveredOpen[s.activeRepoId] ?? false) : false));
 
 /** the project the shell is scoped to (an element of the repos array, so its identity is stable) */
 export const useActiveRepo = (): RepoInfo | null => useStore((s) => repoById(s, s.activeRepoId));

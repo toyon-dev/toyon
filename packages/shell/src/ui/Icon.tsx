@@ -37,6 +37,7 @@ export type IconName =
   | "swap"
   | "palette"
   | "worktrees"
+  | "lock"
   | "dot";
 
 const ICON_PATHS: Record<IconName, string> = {
@@ -105,6 +106,9 @@ const ICON_PATHS: Record<IconName, string> = {
   // smear at 16px, which is the only size this is ever drawn at.
   palette:
     "M2.3 8.4C2.3 4.7 5 2.2 8.5 2.2c3.4 0 5.2 2.2 5.2 4.6 0 1.9-1.4 2.6-2.7 2.8-.9.15-1.3.7-1.1 1.4.2.9-.5 2.2-2.1 2.2-3.2 0-5.5-2-5.5-4.8z M5 6.2a.5.5 0 1 0 0 1 .5.5 0 1 0 0-1z M7.8 4.9a.5.5 0 1 0 0 1 .5.5 0 1 0 0-1z M11 5.8a.5.5 0 1 0 0 1 .5.5 0 1 0 0-1z",
+  // another tool holds this worktree. The shackle is drawn closed: a lock that reads as open says
+  // the opposite of what the row means.
+  lock: "M4.4 7.3h7.2v6.1H4.4z M6.2 7.3V5.5a1.8 1.8 0 0 1 3.6 0v1.8",
   // a step that happened under a name we cannot read: a marker, deliberately without a meaning
   dot: "M8 4.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 1 0 0-6.8z",
 };

@@ -62,7 +62,12 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
     source: z.string().optional(),
     line: z.number().optional(),
   }),
-  pickedElementSchema.extend({ type: z.literal("picked") }),
+  /** `verb` is where the click sends it: the chat, or the source it was rendered from. Defaulted
+   * rather than required, so a page still holding a bridge from before this field keeps working. */
+  pickedElementSchema.extend({
+    type: z.literal("picked"),
+    verb: z.enum(["chat", "code"]).default("chat"),
+  }),
   z.object({ type: z.literal("pick-cancel") }),
   z.object({
     type: z.literal("highlight-miss"),

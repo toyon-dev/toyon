@@ -1,8 +1,9 @@
 import { parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { useDispatch, useStore, useStoreInstance } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
+import { openSource } from "../../state/openSource.ts";
 import {
   useActive,
   useActiveId,
@@ -11,6 +12,7 @@ import {
   useTheme,
   useWorktrees,
 } from "../../state/selectors.ts";
+import { worktreeById } from "../../state/store.ts";
 import { bridgeThemeMsg } from "../../theme.ts";
 import { useDragResize, usePersisted } from "../../ui/hooks.ts";
 import { hasToken } from "../../ws.ts";
@@ -23,7 +25,7 @@ import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
-import { chord, previewUrl, relFile } from "../util.ts";
+import { chord, previewUrl, relFile, wtDir } from "../util.ts";
 import { ImportPane } from "./ImportPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 
@@ -32,6 +34,7 @@ import { SetupPane } from "./SetupPane.tsx";
 export function Center() {
   const dispatch = useDispatch();
   const store = useStoreInstance();
+  const sock = useSock();
   const worktrees = useWorktrees();
   const activeId = useActiveId();
   const active = useActive();
@@ -109,8 +112,13 @@ export function Center() {
             break;
           }
           case "picked": {
-            const { type: _t, ...pick } = d;
-            dispatch({ a: "picked", pick: { worktreeId: id, ...pick } });
+            const { type: _t, verb, ...pick } = d;
+            // the source verb is navigation and nothing else: no chip, no chat, and the picker is
+            // still armed in the frame, so the next element is one click away
+            if (verb === "code" && pick.file) {
+              const wt = worktreeById(store.getState(), id)?.worktree;
+              openSource(store, sock, id, relFile(pick.file, wt && wtDir(wt)), pick.line ?? 1);
+            } else dispatch({ a: "picked", pick: { worktreeId: id, ...pick } });
             break;
           }
           case "pick-cancel":
@@ -138,7 +146,7 @@ export function Center() {
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [dispatch, store]);
+  }, [dispatch, store, sock]);
 
   // in zen the page under test owns the keyboard: tell every bridge to stop taking chords
   // (broadcast, not just the active frame, so a background preview isn't left holding them)

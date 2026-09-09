@@ -2,7 +2,8 @@ import type { AgentCommand, GitFileStatus, WorktreeStatus } from "@toyon/shared"
 import { pickMetaOf } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { openSource } from "../../state/openSource.ts";
 import { useLocalField } from "../../state/selectors.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
@@ -51,6 +52,7 @@ function insertionFor(r: Row): string {
 export function Composer({ active }: { active: WorktreeStatus | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
+  const store = useStoreInstance();
   const id = active?.worktree.id ?? null;
   const text = useLocalField(id, "draft");
   const page = useLocalField(id, "page");
@@ -276,6 +278,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
                 : { type: "highlight-clear" },
             )
           }
+          onOpen={(path, line) => openSource(store, sock, id, path, line)}
           onRemove={() => dispatch({ a: "clear-pick" })}
         />
       )}

@@ -75,6 +75,11 @@ export interface WorktreeInfo {
   agent?: string;
   /** which of the repo's profiles this worktree runs (the repo's defaultProfile when absent) */
   profile?: string;
+  /** when the agent last finished a turn here. Absent until one has run. */
+  lastTurnAt?: number;
+  /** when someone last looked at this worktree in a shell. Absent until it has been looked at
+   * since the feature landed, which reads as "seen" so old rows do not all light up at once. */
+  seenAt?: number;
 }
 
 export type ProcStatus = "starting" | "running" | "crashed" | "stopped";
@@ -151,6 +156,9 @@ export interface WorktreeStatus {
   dirty?: number;
   /** chat messages waiting behind the current turn */
   queued?: number;
+  /** a turn finished here since the last time anyone looked at it. The rail rings the dot: green
+   * alone cannot separate "just finished" from "untouched for a week". */
+  unseen?: boolean;
 }
 
 export interface GitFileStatus {

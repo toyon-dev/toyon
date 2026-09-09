@@ -5,6 +5,7 @@
 import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
+  AgentStatus,
   GitFileStatus,
   ImageInput,
   PasteInput,
@@ -76,6 +77,8 @@ export interface WorktreeServiceDeps {
 export class WorktreeService {
   readonly spare: SparePool;
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
+  /** the agent status each worktree last reported, so a turn's end is an edge and not a level */
+  private lastAgentStatus = new Map<string, AgentStatus>();
 
   constructor(private d: WorktreeServiceDeps) {
     this.spare = new SparePool({
@@ -88,6 +91,21 @@ export class WorktreeService {
     });
     // worktrees claimed before links existed get theirs at boot
     for (const wt of d.state.worktrees) this.refreshLink(wt);
+    // The rail rings a worktree whose turn ended while nobody was looking, so the edge into idle
+    // is the moment worth recording. Only a busy → idle edge counts: a session reports idle at
+    // birth too, and stamping that would ring every worktree the daemon has ever started.
+    // Subscribed here rather than in the ws layer because this listener has to run before the one
+    // that broadcasts statuses, and services are constructed before the server.
+    d.hub.on("agentStatus", (worktreeId, status) => {
+      const prev = this.lastAgentStatus.get(worktreeId) ?? "idle";
+      this.lastAgentStatus.set(worktreeId, status);
+      if (status !== "idle" || (prev !== "working" && prev !== "waiting")) return;
+      const wt = d.state.worktree(worktreeId);
+      // gone already if the worktree was removed mid-turn; nothing to stamp
+      if (!wt) return;
+      wt.lastTurnAt = Date.now();
+      d.state.save();
+    });
   }
 
   // ---- create / remove / rename ----
@@ -514,6 +532,15 @@ export class WorktreeService {
     }
   }
 
+  /** someone is looking at this worktree right now: clear its unseen ring */
+  markSeen(worktreeId: string) {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    if (wt.seenAt != null && wt.lastTurnAt != null && wt.seenAt >= wt.lastTurnAt) return;
+    wt.seenAt = Date.now();
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+  }
+
   async statuses(): Promise<WorktreeStatus[]> {
     return Promise.all(
       this.d.state.worktrees
@@ -529,8 +556,15 @@ export class WorktreeService {
             behind,
             dirty,
             queued: rt?.agent.queueLength || undefined,
+            unseen: isUnseen(wt) || undefined,
           };
         }),
     );
   }
+}
+
+/** a turn finished here since anyone last looked. A worktree with no `lastTurnAt` reads as seen,
+ * so worktrees that predate the field do not all light up the first time the daemon restarts. */
+function isUnseen(wt: WorktreeInfo): boolean {
+  return wt.lastTurnAt != null && (wt.seenAt == null || wt.seenAt < wt.lastTurnAt);
 }

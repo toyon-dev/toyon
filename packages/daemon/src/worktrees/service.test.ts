@@ -424,3 +424,54 @@ describe("boot", () => {
     repos2.stopWatchers();
   });
 });
+
+// The rail rings a worktree whose turn ended while nobody was looking. Green alone cannot separate
+// "just finished" from "untouched for a week", and the ring is what closes that gap.
+describe("unseen", () => {
+  const unseenOf = async (id: string) => (await w.worktrees.statuses()).find((x) => x.worktree.id === id)?.unseen;
+
+  test("a worktree nothing has run in is not unseen", async () => {
+    await registered();
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    expect(await unseenOf(main.id)).toBeUndefined();
+  });
+
+  test("a turn ending marks it unseen, and marking it seen clears it", async () => {
+    await registered();
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    w.hub.emit("agentStatus", main.id, "working");
+    w.hub.emit("agentStatus", main.id, "idle");
+    expect(await unseenOf(main.id)).toBe(true);
+    w.worktrees.markSeen(main.id);
+    expect(await unseenOf(main.id)).toBeUndefined();
+  });
+
+  test("a turn that ends after you looked rings it again", async () => {
+    await registered();
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    w.hub.emit("agentStatus", main.id, "working");
+    w.hub.emit("agentStatus", main.id, "idle");
+    w.worktrees.markSeen(main.id);
+    // the clock is coarse enough that a second turn inside the same millisecond would look seen
+    w.state.worktree(main.id)!.seenAt = Date.now() - 1_000;
+    w.hub.emit("agentStatus", main.id, "working");
+    w.hub.emit("agentStatus", main.id, "idle");
+    expect(await unseenOf(main.id)).toBe(true);
+  });
+
+  test("blocked on a person also counts as a turn ending", async () => {
+    await registered();
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    w.hub.emit("agentStatus", main.id, "waiting");
+    w.hub.emit("agentStatus", main.id, "idle");
+    expect(await unseenOf(main.id)).toBe(true);
+  });
+
+  // a session reports idle when it is born; that is not a finished turn
+  test("idle without a turn before it does not ring", async () => {
+    await registered();
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    w.hub.emit("agentStatus", main.id, "idle");
+    expect(await unseenOf(main.id)).toBeUndefined();
+  });
+});

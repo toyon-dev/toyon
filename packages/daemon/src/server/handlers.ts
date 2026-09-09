@@ -98,6 +98,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.unsubscribe(msg.worktreeId);
   },
 
+  seen(msg, _ctx, s) {
+    s.worktrees.markSeen(msg.worktreeId);
+  },
+
   chat(msg, _ctx, s) {
     s.state.requireWorktree(msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);

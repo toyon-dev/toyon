@@ -263,6 +263,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("discard-file"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
+  /** the person is looking at this worktree right now: clears the rail's unseen ring */
+  z.object({ t: z.literal("seen"), worktreeId: id }),
   z.object({ t: z.literal("pick-variant"), worktreeId: id }),
   z.object({ t: z.literal("unqueue"), worktreeId: id, index: z.number().int().min(0) }),
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),

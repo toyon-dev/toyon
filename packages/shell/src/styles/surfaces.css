@@ -190,13 +190,17 @@ body.resizing iframe {
 .wt-rail:hover .wt-item::before {
   transition: left 0.12s ease 50ms;
 }
+/* --dot-gap follows the row's own background so the unseen ring keeps a clean gap instead of a
+   grey band once the row is hovered or selected */
 .wt-item:hover {
   background: var(--element0);
+  --dot-gap: var(--element0);
 }
 .wt-item.active {
   --row-edge-color: var(--accent);
   color: var(--text0);
   background: var(--element1);
+  --dot-gap: var(--element1);
 }
 /* after .active on purpose: while a graft is being picked, a row that is both shows the graft */
 .wt-item.sel {
@@ -303,6 +307,7 @@ body.resizing iframe {
 }
 .wt-item.menu-open {
   background: var(--element1);
+  --dot-gap: var(--element1);
 }
 .wt-item.menu-open .wt-more {
   visibility: visible;
@@ -682,6 +687,7 @@ body.resizing .row-resize {
 .wt-rail.offline .wt-item .dot {
   background: var(--orange);
   animation: none;
+  box-shadow: none;
 }
 /* identical row heights in both modes, and the dot keeps its x too: 20px from the right edge, the
    centre of the collapsed strip. The peek then unfurls leftward from under the pointer that opened

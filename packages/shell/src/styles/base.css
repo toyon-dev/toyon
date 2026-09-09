@@ -323,6 +323,15 @@ a code {
 .dot.landed {
   background: var(--aqua);
 }
+/* a turn finished here and nobody has looked yet. A modifier rather than a colour of its own: the
+   dot underneath still says what the worktree is, and the ring says you have not seen it. Drawn as
+   box-shadow so it grows outside the layout box and a finishing worktree never nudges its row.
+   The gap is painted in whatever surface the row sits on, so a selected row keeps a clean ring. */
+.dot.unseen {
+  box-shadow:
+    0 0 0 1px var(--dot-gap, var(--surface1)),
+    0 0 0 2.5px var(--text2);
+}
 @keyframes pulse {
   50% {
     opacity: 0.3;

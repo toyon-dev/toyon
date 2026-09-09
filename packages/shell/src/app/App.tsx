@@ -68,6 +68,21 @@ export function App() {
     document.title = active ? `${active.worktree.title} · toyon` : "toyon";
   }, [active?.worktree.title]);
 
+  // Selecting a worktree clears the rail's unseen ring: whichever way you got here (a rail click,
+  // ⌘1-9, the palette), you are looking at it now. Focus is the one condition kept, and it is what
+  // makes the ring worth having: a turn ending while the tab sits in the background must still be
+  // there when you come back, even on the worktree you happened to leave selected.
+  const unseen = !!active?.unseen;
+  useEffect(() => {
+    if (!sock || !activeId || !unseen) return;
+    const seen = () => {
+      if (document.visibilityState === "visible" && document.hasFocus()) sock.send({ t: "seen", worktreeId: activeId });
+    };
+    seen();
+    window.addEventListener("focus", seen);
+    return () => window.removeEventListener("focus", seen);
+  }, [sock, activeId, unseen]);
+
   // paint the selected theme (or the picker's live preview); previews get the accent for their overlays
   useEffect(() => {
     // a picker preview paints but is not remembered: a crash mid-browse must not adopt it

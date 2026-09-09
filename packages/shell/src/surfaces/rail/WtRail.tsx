@@ -211,10 +211,12 @@ export function WtRail() {
                 // dot is the click target because in the collapsed strip it is the whole row you
                 // can see; offline the colour is the socket's, not the proc's, so it stays inert.
                 const trouble = graftMode || offline ? null : procTrouble(w.procs);
-                if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}`} />;
+                // the ring is a modifier, not a state: it rides on whatever the dot already says
+                const unseen = w.unseen ? " unseen" : "";
+                if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}${unseen}`} />;
                 return (
                   <span
-                    className="dot crashed clickable"
+                    className={`dot crashed clickable${unseen}`}
                     {...tip(trouble.tip)}
                     onClick={(e) => {
                       e.stopPropagation();

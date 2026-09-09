@@ -20,6 +20,14 @@ export const useWorktrees = () => useStore((s) => s.worktrees);
 /** the active project's worktrees: what the rail lists and ⌘1–9 count over */
 export const useVisibleWorktrees = () => useStore((s) => s.visible);
 
+/** the active project's worktrees that toyon did not create. A separate list from `visible` on
+ * purpose: ⌘1-9 and the palette number that one positionally. */
+export const useVisibleDiscovered = () => useStore((s) => s.visibleDiscovered);
+
+/** has the discovered section been opened in this project (collapsed by default) */
+export const useDiscoveredOpen = (): boolean =>
+  useStore((s) => (s.activeRepoId ? (s.discoveredOpen[s.activeRepoId] ?? false) : false));
+
 /** the project the shell is scoped to (an element of the repos array, so its identity is stable) */
 export const useActiveRepo = (): RepoInfo | null => useStore((s) => repoById(s, s.activeRepoId));
 

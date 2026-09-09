@@ -190,6 +190,23 @@ export interface WorktreeStatus {
   unseen?: boolean;
 }
 
+/** A worktree git knows about that toyon did not create: made in a terminal, by another agent, or
+ * by an editor. Derived on every push and never persisted, so it has no id, no proxy port and no
+ * record: toyon can show it and take it over, and has no way to delete it. It becomes an ordinary
+ * `WorktreeInfo` only when someone adopts it. */
+export interface DiscoveredWorktree {
+  repoId: string;
+  path: string;
+  /** what the row is called: its branch, or the directory's own name when detached */
+  name: string;
+  /** absent when the worktree is detached */
+  branch?: string;
+  /** another tool holds this worktree (a live agent session, usually); take-over is refused */
+  locked?: boolean;
+  /** git's reason for the lock, when it gave one */
+  lockReason?: string;
+}
+
 export interface GitFileStatus {
   path: string;
   /** two-char porcelain XY code, e.g. "M ", " M", "A ", "??" */

@@ -475,3 +475,139 @@ describe("unseen", () => {
     expect(await unseenOf(main.id)).toBeUndefined();
   });
 });
+
+// a worktree someone made in a terminal, which is the whole reason discovery exists
+function foreignWorktree(name: string, branch: string): string {
+  const dir = join(dirname(w.repo), name);
+  sh(w.repo, "git", "worktree", "add", "-q", "-b", branch, dir, "main");
+  w.worktrees.invalidateDiscovered();
+  return dir;
+}
+
+describe("discovery", () => {
+  test("a worktree made behind toyon's back is discovered", async () => {
+    const repoId = await registered();
+    await settle(); // the spare warms in the background and must not read as a stray
+    const dir = foreignWorktree("outside", "made-elsewhere");
+
+    const rows = await w.worktrees.discovered();
+    expect(rows.map((r) => r.name)).toEqual(["made-elsewhere"]);
+    expect(rows[0]?.repoId).toBe(repoId);
+    expect(rows[0]?.branch).toBe("made-elsewhere");
+    expect(existsSync(dir)).toBe(true);
+  });
+
+  test("toyon's own worktrees never appear, spare included", async () => {
+    const repoId = await registered();
+    await w.worktrees.create(repoId, "some task");
+    await settle();
+    w.worktrees.invalidateDiscovered();
+    expect(await w.worktrees.discovered()).toEqual([]);
+  });
+
+  test("the list is cached until something invalidates it", async () => {
+    await registered();
+    await settle();
+    expect(await w.worktrees.discovered()).toEqual([]);
+    const dir = join(dirname(w.repo), "cached");
+    sh(w.repo, "git", "worktree", "add", "-q", "-b", "cached-branch", dir, "main");
+    // no invalidation: statuses() runs on every proc event and must not re-shell for each one
+    expect(await w.worktrees.discovered()).toEqual([]);
+    w.worktrees.invalidateDiscovered();
+    expect((await w.worktrees.discovered()).map((r) => r.name)).toEqual(["cached-branch"]);
+  });
+});
+
+describe("adopt", () => {
+  test("take-over records it, starts its procs, and drops it from discovered", async () => {
+    const repoId = await registered();
+    await settle();
+    const dir = foreignWorktree("takeover", "take-me");
+
+    const wt = await w.worktrees.adopt(repoId, dir);
+    expect(wt.kind).toBe("worktree");
+    expect(wt.branch).toBe("take-me");
+    expect(wt.title).toBe("take-me");
+    expect(wt.proxyPort).toBeGreaterThan(0);
+    await settle();
+
+    expect((await w.worktrees.statuses()).some((s) => s.worktree.id === wt.id)).toBe(true);
+    expect(await w.worktrees.discovered()).toEqual([]);
+    expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
+    // take-over is not a task: no prompt goes anywhere
+    expect(w.agents.get(wt.id)?.sent ?? []).toEqual([]);
+  });
+
+  test("it does not run the repo's setup commands in a directory someone is using", async () => {
+    const repoId = await registered();
+    const repo = w.state.requireRepo(repoId);
+    repo.config = { ...repo.config, setup: ["touch SETUP_RAN"] };
+    w.state.save();
+    await settle();
+    const dir = foreignWorktree("nosetup", "no-setup");
+
+    const wt = await w.worktrees.adopt(repoId, dir);
+    await settle();
+    expect(existsSync(join(wt.path, "SETUP_RAN"))).toBe(false);
+  });
+
+  test("no stray symlink is planted beside it, on adopt or on the next boot", async () => {
+    const repoId = await registered();
+    await settle();
+    const dir = foreignWorktree("linkless", "editor-pane");
+
+    const wt = await w.worktrees.adopt(repoId, dir);
+    await settle();
+    expect(wt.linkPath).toBeUndefined();
+    // the name refreshLink would otherwise have chosen: <parent>/<branch>
+    expect(existsSync(join(dirname(dir), "editor-pane"))).toBe(false);
+
+    // the constructor re-links every worktree at boot, so this has to survive a restart
+    new WorktreeService({
+      state: w.state,
+      hub: w.hub,
+      runtime: w.runtime,
+      paths: w.paths,
+      agents: w.registry,
+      namer: async () => null,
+    });
+    expect(existsSync(join(dirname(dir), "editor-pane"))).toBe(false);
+  });
+
+  test("a locked worktree belongs to whoever locked it", async () => {
+    const repoId = await registered();
+    await settle();
+    const dir = foreignWorktree("locked", "held");
+    sh(w.repo, "git", "worktree", "lock", "--reason", "claude session dsys (pid 900)", dir);
+    w.worktrees.invalidateDiscovered();
+
+    expect(w.worktrees.adopt(repoId, dir)).rejects.toThrow(UserError);
+    expect(w.state.worktrees.some((x) => x.branch === "held")).toBe(false);
+  });
+
+  test("a worktree nested inside the repo would run its procs in the main checkout", async () => {
+    const repoId = await registered();
+    await settle();
+    const inside = join(w.repo, "nested");
+    sh(w.repo, "git", "worktree", "add", "-q", "-b", "nested-branch", inside, "main");
+    w.worktrees.invalidateDiscovered();
+
+    expect(w.worktrees.adopt(repoId, inside)).rejects.toThrow(UserError);
+  });
+
+  test("a detached worktree has no branch to land or ship", async () => {
+    const repoId = await registered();
+    await settle();
+    const dir = join(dirname(w.repo), "loose");
+    sh(w.repo, "git", "worktree", "add", "-q", "--detach", dir, "main");
+    w.worktrees.invalidateDiscovered();
+
+    expect(w.worktrees.adopt(repoId, dir)).rejects.toThrow(UserError);
+  });
+
+  test("a path toyon was never offered is refused", async () => {
+    const repoId = await registered();
+    await settle();
+    expect(w.worktrees.adopt(repoId, join(dirname(w.repo), "never-existed"))).rejects.toThrow(UserError);
+  });
+});

@@ -13,6 +13,7 @@ import type {
   AuthMethodInfo,
   CommitEntry,
   DesignIndex,
+  DiscoveredWorktree,
   GitFileStatus,
   ImageInput,
   ImageRef,
@@ -208,6 +209,16 @@ export interface State {
   activeRepoId: string | null;
   /** `worktrees` narrowed to the active repo (kept in step by the reducer so selectors stay stable) */
   visible: WorktreeStatus[];
+  /** worktrees git knows about that toyon did not create. Deliberately not folded into
+   * `worktrees`: ⌘1-9 indexes `visible` positionally, the palette numbers its "switch to" rows
+   * from the same list, and the project pill counts tasks as `length - 1`. A new kind of row in
+   * that array breaks all three silently. */
+  discovered: DiscoveredWorktree[];
+  /** `discovered` narrowed to the active repo, materialised here for the same reason as `visible` */
+  visibleDiscovered: DiscoveredWorktree[];
+  /** per repo: has the discovered section been opened. Collapsed is the default, so the common
+   * case (a repo with nothing stray) costs nothing and never surprises anyone. */
+  discoveredOpen: Record<string, boolean>;
   /** the worktree last selected in each repo: switching back to a project lands where you left it.
    * Persisted (App.tsx), so it survives a reload the same way the panel layout does. */
   lastActive: Record<string, string>;
@@ -295,6 +306,8 @@ export interface InitialOpts {
   /** the worktree each project was left on, so switching projects after a reload lands where you
    * left off rather than on main */
   storedLastActive?: Record<string, string>;
+  /** which projects had the discovered section open, so it does not re-collapse on every reload */
+  storedDiscoveredOpen?: Record<string, boolean>;
 }
 
 export function initialState(opts: InitialOpts): State {
@@ -305,6 +318,9 @@ export function initialState(opts: InitialOpts): State {
     worktrees: [],
     activeRepoId: null,
     visible: [],
+    discovered: [],
+    visibleDiscovered: [],
+    discoveredOpen: opts.storedDiscoveredOpen ?? {},
     lastActive: opts.storedLastActive ?? {},
     pendingOpen: false,
     activeId: null,
@@ -370,6 +386,11 @@ function visibleOf(worktrees: WorktreeStatus[], repoId: string | null): Worktree
   return repoId ? worktrees.filter((w) => w.worktree.repoId === repoId) : worktrees;
 }
 
+/** the same narrowing for the discovered list */
+function visibleDiscoveredOf(discovered: DiscoveredWorktree[], repoId: string | null): DiscoveredWorktree[] {
+  return repoId ? discovered.filter((d) => d.repoId === repoId) : discovered;
+}
+
 /** the worktree to land on in a repo: the one last selected there, else its first row (main) */
 function landingIn(s: State, repoId: string | null, worktrees = s.worktrees): string | null {
   if (!repoId) return worktrees[0]?.worktree.id ?? null;
@@ -429,6 +450,8 @@ export type Action =
   | { a: "focus-left" }
   | { a: "toggle-right" }
   | { a: "toggle-rail" }
+  /** open or close the active project's discovered section */
+  | { a: "toggle-discovered" }
   | { a: "toggle-zen" }
   | { a: "toggle-terminal" }
   | { a: "toggle-design" }
@@ -473,8 +496,14 @@ export function reducer(s: State, action: Action): State {
   else if (next.activeRepoId && !guessed(action) && !samePanels(panelsOf(s), panelsOf(next))) {
     next = { ...next, panels: { ...next.panels, [next.activeRepoId]: panelsOf(next) } };
   }
-  if (next.worktrees === s.worktrees && next.activeRepoId === s.activeRepoId) return next;
-  return { ...next, visible: visibleOf(next.worktrees, next.activeRepoId) };
+  if (next.worktrees === s.worktrees && next.discovered === s.discovered && next.activeRepoId === s.activeRepoId) {
+    return next;
+  }
+  return {
+    ...next,
+    visible: visibleOf(next.worktrees, next.activeRepoId),
+    visibleDiscovered: visibleDiscoveredOf(next.discovered, next.activeRepoId),
+  };
 }
 
 function reduce(s: State, action: Action): State {
@@ -562,6 +591,11 @@ function reduce(s: State, action: Action): State {
       return { ...s, rightOpen: !s.rightOpen };
     case "toggle-rail":
       return { ...s, railOpen: !s.railOpen };
+    case "toggle-discovered": {
+      const repoId = s.activeRepoId;
+      if (!repoId) return s;
+      return { ...s, discoveredOpen: { ...s.discoveredOpen, [repoId]: !s.discoveredOpen[repoId] } };
+    }
     case "toggle-zen":
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
     case "toggle-terminal":
@@ -598,6 +632,14 @@ function pruneLastActive(lastActive: Record<string, string>, worktrees: Worktree
   return Object.fromEntries(Object.entries(lastActive).filter(([, id]) => keep.has(id)));
 }
 
+/** drop remembered flags for projects the daemon no longer has, so forgetting a project does not
+ * leave its key in storage forever */
+function pruneByRepo(flags: Record<string, boolean>, repos: RepoInfo[]): Record<string, boolean> {
+  const keep = new Set(repos.map((r) => r.id));
+  if (Object.keys(flags).every((id) => keep.has(id))) return flags;
+  return Object.fromEntries(Object.entries(flags).filter(([id]) => keep.has(id)));
+}
+
 function onServer(s: State, msg: StoreServerMsg): State {
   switch (msg.t) {
     case "hello": {
@@ -617,10 +659,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ...s,
         repos: msg.repos,
         worktrees: msg.worktrees,
+        discovered: msg.discovered,
         activeId,
         activeRepoId: wt?.worktree.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
         local: pruneLocal(s.local, msg.worktrees),
         lastActive: pruneLastActive(s.lastActive, msg.worktrees),
+        discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         themes: msg.themes ?? s.themes,
         themePrefs: msg.themePrefs ?? s.themePrefs,
         agents: msg.agents,
@@ -684,7 +728,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         (w) => !known.has(w.worktree.id) && w.worktree.kind === "worktree" && w.worktree.createdBy === s.clientId,
       );
       if (fresh && s.worktrees.length > 0) activeId = fresh.worktree.id;
-      return activate({ ...s, worktrees: msg.worktrees, local: pruneLocal(s.local, msg.worktrees) }, activeId);
+      return activate(
+        { ...s, worktrees: msg.worktrees, discovered: msg.discovered, local: pruneLocal(s.local, msg.worktrees) },
+        activeId,
+      );
     }
     case "proc": {
       const worktrees = s.worktrees.map((w) =>

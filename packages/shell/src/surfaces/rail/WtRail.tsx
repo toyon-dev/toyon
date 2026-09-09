@@ -2,7 +2,13 @@ import type { WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
-import { useActiveId, useOffline, useVisibleWorktrees } from "../../state/selectors.ts";
+import {
+  useActiveId,
+  useDiscoveredOpen,
+  useOffline,
+  useVisibleDiscovered,
+  useVisibleWorktrees,
+} from "../../state/selectors.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
@@ -18,6 +24,9 @@ export function WtRail() {
   const dispatch = useDispatch();
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
+  const discovered = useVisibleDiscovered();
+  const discOpen = useDiscoveredOpen();
+  const clientId = useStore((s) => s.clientId);
   const activeId = useActiveId();
   // the list only dims: what the socket is doing is the bar's to say, not the rail's
   const offline = useOffline();
@@ -293,6 +302,44 @@ export function WtRail() {
                 <Icon name="plus" />
               </span>
             </button>
+          )}
+          {/* Below "new worktree", not above it: expanding the section then pushes nothing anyone
+              is aiming at. The header is full width like every row, so in the 40px strip its
+              border is all that shows, which is the divider the collapsed state wants. */}
+          {!graftMode && discovered.length > 0 && (
+            <>
+              <button
+                className={`disc-head ${discOpen ? "open" : ""}`}
+                data-tip="Worktrees in this repo that toyon did not create"
+                onClick={() => dispatch({ a: "toggle-discovered" })}
+              >
+                <Icon name="caret" className={`icon-inline disc-caret ${discOpen ? "" : "shut"}`} />
+                <span className="rail-label">discovered · {discovered.length}</span>
+              </button>
+              {discOpen &&
+                discovered.map((d) => (
+                  <div key={d.path} className="disc-item" title={d.path}>
+                    <span className="branch">{d.name}</span>
+                    {d.locked ? (
+                      <span
+                        className="disc-lock"
+                        data-tip={d.lockReason ? `Held by ${d.lockReason}` : "Held by another tool"}
+                      >
+                        <Icon name="lock" className="icon-inline" />
+                      </span>
+                    ) : (
+                      <button
+                        className="disc-take"
+                        data-tip="Run this worktree in toyon"
+                        onClick={() => sock?.send({ t: "adopt-worktree", repoId: d.repoId, path: d.path, clientId })}
+                      >
+                        take over
+                      </button>
+                    )}
+                    <span className="dot discovered" />
+                  </div>
+                ))}
+            </>
           )}
         </div>
         <div className="rail-foot">

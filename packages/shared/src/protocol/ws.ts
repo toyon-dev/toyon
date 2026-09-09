@@ -9,6 +9,7 @@ import type {
   AgentInfo,
   CommitEntry,
   DesignIndex,
+  DiscoveredWorktree,
   GitFileStatus,
   LogLine,
   PathEntry,
@@ -33,7 +34,7 @@ import type { AgentCommand, AgentEvent, AskAnswer, PickMeta } from "./events.ts"
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 14;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -45,6 +46,8 @@ export type ServerMsg =
       protocol: number;
       repos: RepoInfo[];
       worktrees: WorktreeStatus[];
+      /** worktrees git knows about that toyon did not create; see the `worktrees` frame */
+      discovered: DiscoveredWorktree[];
       themes: Theme[];
       themePrefs: ThemePrefs;
       /** the daemon's agent registry and which entry new worktrees get by default */
@@ -65,7 +68,9 @@ export type ServerMsg =
    * itself is: an empty `entries` means "nothing matches here" and "there is no here" alike, and
    * only `target` separates the two */
   | { t: "path-entries"; query: string; entries: PathEntry[]; target: PathTarget }
-  | { t: "worktrees"; worktrees: WorktreeStatus[] }
+  /** Both lists travel together on purpose: take-over moves a row from `discovered` to
+   * `worktrees`, and split across two frames the rail would show it twice or not at all. */
+  | { t: "worktrees"; worktrees: WorktreeStatus[]; discovered: DiscoveredWorktree[] }
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
   | { t: "log"; worktreeId: string; proc: string; line: string }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
@@ -268,6 +273,16 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
+  /** take over a worktree git knows about but toyon did not create. Addressed by path because a
+   * discovered worktree has no record and so no id; the daemon re-derives the list and refuses
+   * anything that is not still on it. */
+  z.object({
+    t: z.literal("adopt-worktree"),
+    /** as on create-worktree: only the tab that asked focuses the promoted row */
+    clientId: z.string().max(64).optional(),
+    repoId: id,
+    path: z.string().min(1).max(4_000),
+  }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
   /** `ref` reads the file as of that commit instead of the working tree */
   z.object({ t: z.literal("file-diff"), worktreeId: id, path: relPath, ref: sha.optional() }),

@@ -164,6 +164,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     await s.worktrees.remove(msg.worktreeId);
   },
 
+  async "adopt-worktree"(msg, _ctx, s) {
+    await s.worktrees.adopt(msg.repoId, msg.path, msg.clientId);
+  },
+
   async "git-status"(msg, ctx, s) {
     await gitStatus(s, ctx, msg.worktreeId);
   },

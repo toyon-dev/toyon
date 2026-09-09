@@ -352,6 +352,16 @@ a code {
 .dot.landed {
   background: var(--aqua);
 }
+/* git knows about this worktree, toyon did not make it and does not run it. Hollow rather than a
+   colour of its own: the palette's dots all say what a worktree is *doing*, and this one is not
+   doing anything. It cannot borrow `unseen`'s ring either, because that ring sits outside a filled
+   dot and means "a turn finished here"; this is the absence of a fill, not a ring around one. */
+.dot.discovered {
+  background: none;
+  /* 1.5px, not 1: at eight pixels across, a hairline ring on a dark surface reads as a smudge
+     rather than as a dot with nothing in it, which is the whole message */
+  box-shadow: inset 0 0 0 1.5px var(--text2);
+}
 /* a turn finished here and nobody has looked yet. A modifier rather than a colour of its own: the
    dot underneath still says what the worktree is, and the ring says you have not seen it. Drawn as
    box-shadow so it grows outside the layout box and a finishing worktree never nudges its row.

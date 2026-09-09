@@ -22,6 +22,8 @@ export interface HubEvents {
   repoTick: (repoId: string) => void;
   /** a repo's config or setup state changed (confirmed, or toyon.json edited) */
   reposChanged: () => void;
+  /** a clone started, moved, finished or failed */
+  pendingChanged: () => void;
   themesChanged: () => void;
   /** the default agent (or the registry) changed */
   agentsChanged: () => void;

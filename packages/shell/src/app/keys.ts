@@ -98,6 +98,10 @@ export function useChords() {
           if (s.activeId) previewBus.post(s.activeId, { type: "pick-cancel" });
           dispatch({ a: "set-picking", v: false });
         }
+        // an import pane: stop watching it. Escape deliberately does NOT abort the clone, which
+        // keeps running and stays in the switcher: it is a key people hit reflexively, and losing
+        // a five-minute download to one is not a trade worth making. Stopping it is the button.
+        else if (s.activeImportId) dispatch({ a: "watch-import", id: null });
         // bottom panes, terminal first (a full-screen program in it keeps Escape for itself).
         // Zen is not on this ladder: it only leaves on ⌘., so Escape stays the page's own key
         else if (s.termOpen) dispatch({ a: "toggle-terminal" });

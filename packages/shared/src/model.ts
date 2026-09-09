@@ -57,6 +57,23 @@ export interface PathTarget {
   parentExists: boolean;
 }
 
+/** A project being cloned: it has no RepoInfo yet (no path, no branch, no config), but it is a real
+ * thing the person started and should be able to watch and stop. Held by the daemon rather than the
+ * tab that asked, so every tab sees it and a reload does not lose it. */
+export interface PendingRepo {
+  id: string;
+  name: string;
+  /** where it is being cloned into */
+  parent: string;
+  url: string;
+  startedAt: number;
+  /** git's own progress output, most recent last and capped: enough to see it moving */
+  lines: string[];
+  /** set when it failed. The record stays so the reason is still there to read, since a toast
+   * would be gone before someone who walked away from a long clone came back to it. */
+  error?: string;
+}
+
 export type WorktreeKind = "main" | "worktree" | "spare" | "combined";
 
 export interface WorktreeInfo {

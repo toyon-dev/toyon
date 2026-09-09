@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { projectNameError } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
-import { GIT, git, NO_PROMPT, run } from "../git/exec.ts";
+import { GIT, git, NO_PROMPT, runLive } from "../git/exec.ts";
 import { expandTilde } from "./browse.ts";
 
 export type CreateMode = "create" | "clone";
@@ -26,6 +26,9 @@ export interface CreateOpts {
   url?: string;
 }
 
+/** where a project is going: both modes need one new leaf under a parent that is already there */
+export type Plan = { parent: string; dir: string };
+
 /** `dir` is `parent` or sits under it. Compared on segment boundaries, so `/a/bc` is not inside
  * `/a/b`, which a plain `startsWith` would get wrong. */
 export function isInside(dir: string, parent: string): boolean {
@@ -35,7 +38,7 @@ export function isInside(dir: string, parent: string): boolean {
 
 /** Where a new project would go, once its name and location are known to be usable. Split out from
  * the making so the rules can be tested without touching a filesystem more than they must. */
-export function planProject(opts: CreateOpts): { parent: string; dir: string } {
+export function planProject(opts: { parent: string; name: string }): Plan {
   const nameError = projectNameError(opts.name);
   if (nameError) throw new UserError(nameError);
   const typed = expandTilde(opts.parent.trim());
@@ -61,10 +64,8 @@ export function planProject(opts: CreateOpts): { parent: string; dir: string } {
  * the directory empty, which is the only state scaffolders like create-vite will run in, so the
  * first thing the person does here is not blocked by a README we left them.
  */
-export async function createRepoDir(opts: CreateOpts): Promise<string> {
+export async function createRepoDir(opts: { parent: string; name: string }): Promise<string> {
   const { parent, dir } = planProject(opts);
-  if (opts.mode === "clone") return cloneInto(parent, dir, opts.name.trim(), opts.url ?? "");
-
   // checked before anything is made, so the commonest failure has nothing to roll back
   await requireGitIdentity(parent);
   await mkdir(dir); // NOT recursive: this call is the one-new-leaf rule
@@ -81,19 +82,36 @@ export async function createRepoDir(opts: CreateOpts): Promise<string> {
   return dir;
 }
 
-/** git makes the leaf itself here, so it enforces the same "must not exist" rule mkdir would */
-async function cloneInto(parent: string, dir: string, name: string, url: string): Promise<string> {
+/**
+ * Clone into the planned leaf. git makes the directory itself, so it enforces the same "must not
+ * exist" rule mkdir does for a create.
+ *
+ * Unlike a create this can run for minutes, so it streams git's progress and takes a signal: the
+ * person watching it is entitled to stop it. An aborted or failed clone takes its half-made
+ * directory with it, which is safe here for the same reason it is safe in create mode: we made it.
+ */
+export async function cloneInto(
+  plan: Plan,
+  name: string,
+  url: string,
+  opts: { onLine?: (line: string) => void; signal?: AbortSignal } = {},
+): Promise<void> {
   if (!url) throw new UserError("a clone needs a url");
   // No --depth: a shallow clone cannot be branched from usefully, and land, sync and graft all
   // assume real history. NO_PROMPT is what stops a credential-less URL hanging forever.
-  const r = await run(GIT, ["clone", "--", url, name], parent, NO_PROMPT);
+  // --progress because git only draws it when stderr is a terminal, and here it never is.
+  const r = await runLive(GIT, ["clone", "--progress", "--", url, name], plan.parent, {
+    env: NO_PROMPT,
+    onLine: opts.onLine,
+    signal: opts.signal,
+  });
   if (!r.ok) {
-    await undoCreate(dir);
+    await undoCreate(plan.dir);
+    if (opts.signal?.aborted) return; // stopped on purpose: not an error to report
     // git's own words: "repository not found" and "permission denied" are what the person needs to
     // read, and anything we invented in their place would say less
     throw new UserError(cloneError(r.err) || `could not clone ${url}`);
   }
-  return dir;
 }
 
 /** git writes progress to stderr too, so a failed clone starts with "Cloning into 'x'..." and the

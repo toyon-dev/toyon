@@ -335,28 +335,39 @@ describe("handlers", () => {
     ).rejects.toBeInstanceOf(UserError);
   });
 
-  test("a clone toasts twice: it runs too long to report only at the end", async () => {
-    const { services, ctx, replies, repo } = make();
+  test("a clone becomes a pending project the daemon holds, then a real one", async () => {
+    const { services, ctx, repo } = make();
     // a local path is a valid clone source, so this exercises the real path with no network
     await dispatch({ t: "create-repo", mode: "clone", parent: dirname(repo), name: "copy", url: repo }, ctx, services);
-    expect(lastToast(replies)).toBe("cloning copy…");
-    await until(() => replies.length > 1);
-    expect(lastToast(replies)).toBe("cloned copy");
-    expect(services.state.repos.some((x) => x.name === "copy")).toBe(true);
+    // it is watchable immediately: the handler does not wait for git
+    expect(services.repos.pending.map((p) => p.name)).toEqual(["copy"]);
+    await until(() => services.state.repos.some((x) => x.name === "copy"));
+    expect(services.repos.pending).toEqual([]);
   });
 
-  test("a clone that fails still says so, rather than leaving the shell on 'cloning'", async () => {
-    const { services, ctx, replies, repo } = make();
+  test("a failed clone keeps its record, carrying the reason", async () => {
+    const { services, ctx, repo } = make();
     await dispatch(
       { t: "create-repo", mode: "clone", parent: dirname(repo), name: "copy", url: "/definitely/not/a/repo" },
       ctx,
       services,
     );
-    await until(() => replies.length > 1);
-    const last = replies.at(-1);
-    // fireAndForget alone would put the reason in the daemon log and nowhere the person can see
-    expect(last?.t === "shipped" && last.ok).toBe(false);
+    // a toast would be gone before someone who walked away from a long clone came back to it
+    await until(() => !!services.repos.pending[0]?.error);
+    expect(services.repos.pending[0]?.error).toMatch(/does not exist/);
     expect(services.state.repos.some((x) => x.name === "copy")).toBe(false);
+    // and dismissing it is the same message that stops a running one
+    await dispatch({ t: "cancel-import", id: services.repos.pending[0]!.id }, ctx, services);
+    expect(services.repos.pending).toEqual([]);
+  });
+
+  test("a clone is refused up front for the same reasons a create is", async () => {
+    const { services, ctx, repo } = make();
+    await expect(
+      dispatch({ t: "create-repo", mode: "clone", parent: dirname(repo), name: "../x", url: repo }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
+    // validated before anything is announced, so there is no pending row that fails a moment later
+    expect(services.repos.pending).toEqual([]);
   });
 
   test("write-file then file-diff round-trips and replies git-status", async () => {

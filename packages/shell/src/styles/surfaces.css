@@ -1853,6 +1853,25 @@ body.resizing .rb-center {
   padding-top: 5px;
 }
 
+/* the import pane borrows the setup pane's frame: same slot, same shape of waiting */
+.import-pane .import-log {
+  margin-top: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--sunken);
+  border: 1px solid var(--border0);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  font: var(--type-mono-sm);
+  color: var(--text1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.import-idle,
+.import-error {
+  color: var(--text2);
+}
+
 .setup-actions {
   display: flex;
   justify-content: flex-end;

@@ -53,6 +53,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     agents: [],
     defaultAgent: "claude",
     home: "/home/t",
+    pending: [],
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w });

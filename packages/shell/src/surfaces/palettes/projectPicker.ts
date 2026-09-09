@@ -2,11 +2,20 @@
 // decide whether a row promises something the daemon will actually do are testable on their own:
 // the old picker offered "open <path>" for a path that did not exist, and the daemon refused it.
 
-import { gitUrl, type PathEntry, type PathTarget, projectNameError, type RepoInfo } from "@toyon/shared";
+import {
+  gitUrl,
+  type PathEntry,
+  type PathTarget,
+  type PendingRepo,
+  projectNameError,
+  type RepoInfo,
+} from "@toyon/shared";
 import { byName } from "./commands.ts";
 
 export type Row =
   | { kind: "repo"; repo: RepoInfo }
+  /** a clone still running: pickable, so it can be watched or stopped */
+  | { kind: "pending"; pending: PendingRepo }
   | { kind: "dir"; entry: PathEntry }
   /** an existing repo on disk that this daemon has not registered yet */
   | { kind: "open"; path: string }
@@ -65,6 +74,7 @@ export function rowsFor(input: {
   query: string;
   repos: RepoInfo[];
   activeRepoId: string | null;
+  pending: PendingRepo[];
   entries: PathEntry[];
   target: PathTarget | null;
   /** the query the daemon's entries and target actually describe (`paths.query`) */
@@ -77,7 +87,12 @@ export function rowsFor(input: {
     const repos = input.repos
       .filter((r) => r.id !== input.activeRepoId && byName(q, r.name, r.path))
       .map((repo): Row => ({ kind: "repo", repo }));
-    if (repos.length > 0 || !q) return repos;
+    // an import is a project you are getting, so it belongs in the list of projects rather than
+    // somewhere separate; it sorts after the real ones because you cannot open it yet
+    const pending = input.pending
+      .filter((p) => byName(q, p.name, p.url))
+      .map((p): Row => ({ kind: "pending", pending: p }));
+    if (repos.length > 0 || pending.length > 0 || !q) return [...repos, ...pending];
     // a URL is not a name and not a path: it is the third thing someone pastes in here
     const url = gitUrl(q);
     if (url) return [{ kind: "clone", url: url.url, name: url.name }];

@@ -25,6 +25,7 @@ function rows(query: string, over: Partial<Parameters<typeof rowsFor>[0]> = {}) 
     query,
     repos: [],
     activeRepoId: null,
+    pending: [],
     entries: [],
     target: target({}),
     answered: query,
@@ -112,6 +113,33 @@ describe("rowsFor: a name", () => {
       { kind: "clone", url: "https://github.com/x/y.git", name: "y" },
     ]);
     expect(rows("git@github.com:x/y.git")[0]?.kind).toBe("clone");
+  });
+});
+
+describe("rowsFor: an import in flight", () => {
+  const importing = {
+    id: "i1",
+    name: "my-app",
+    parent: "~/Projects",
+    url: "https://github.com/x/my-app",
+    startedAt: 0,
+    lines: [],
+  };
+
+  test("a clone in flight is listed with the projects, after the ones you can open", () => {
+    const repos = [repo("cookbook", "/Users/k/Projects/cookbook")];
+    const out = rows("", { repos, pending: [importing] });
+    expect(out.map((r) => r.kind)).toEqual(["repo", "pending"]);
+  });
+
+  test("it is findable by name and by url, since half of one is what you would type", () => {
+    expect(rows("my-app", { pending: [importing] }).map((r) => r.kind)).toEqual(["pending"]);
+    expect(rows("github", { pending: [importing] }).map((r) => r.kind)).toEqual(["pending"]);
+  });
+
+  test("a name that matches an import is not also an offer to create that name", () => {
+    // otherwise the same word would offer both "watch this" and "make another one here"
+    expect(rows("my-app", { pending: [importing] }).some((r) => r.kind === "create")).toBe(false);
   });
 });
 

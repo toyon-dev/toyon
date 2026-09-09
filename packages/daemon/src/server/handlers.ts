@@ -293,27 +293,19 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "create-repo"(msg, ctx, s) {
-    // A clone is network bound and can run for minutes, so awaiting it would stall this socket's
-    // message loop. It reports twice instead, the way batch-worktrees does. fireAndForget would
-    // turn a failure into a log line nobody sees, leaving the shell saying "cloning" forever, so
-    // the rejection is caught and toasted here rather than left to the UserError path.
+    // A clone runs long enough that it becomes a thing the daemon holds and the shell watches,
+    // rather than a promise this socket waits on: startImport validates and returns at once, and
+    // the import pane is the feedback from there. A create is fast, so it stays a plain await.
     if (msg.mode === "clone") {
-      ctx.reply(toast("", true, `cloning ${msg.name}…`));
-      fireAndForget(
-        msg.name,
-        s.repos
-          .create(msg)
-          .then((repo) => ctx.reply(toast("", true, `cloned ${repo.name}`)))
-          .catch((e: unknown) => {
-            ctx.reply(toast("", false, e instanceof Error ? e.message : String(e)));
-            throw e; // rethrown so a non-UserError still reaches the daemon log as a bug
-          }),
-        "clone",
-      );
+      s.repos.startImport({ parent: msg.parent, name: msg.name, url: msg.url ?? "" });
       return;
     }
     const repo = await s.repos.create(msg);
     ctx.reply(toast("", true, `created ${repo.name}`));
+  },
+
+  "cancel-import"(msg, _ctx, s) {
+    s.repos.cancelImport(msg.id);
   },
 
   async "browse-path"(msg, ctx, _s) {

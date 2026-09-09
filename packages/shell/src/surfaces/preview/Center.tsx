@@ -24,6 +24,7 @@ import { DesignPane } from "../design/DesignPane.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, previewUrl, relFile } from "../util.ts";
+import { ImportPane } from "./ImportPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 
 /** the preview column: one persistent iframe per visited worktree (switching is a display toggle,
@@ -55,6 +56,9 @@ export function Center() {
       : null,
   );
   const setupRepo = needsSetup ?? reopened;
+  // a clone being watched takes the preview slot too: same reason as the setup pane, in that the
+  // project it belongs to cannot show one yet
+  const watching = useStore((s) => s.pending.find((p) => p.id === s.activeImportId) ?? null);
 
   const [mounted, setMounted] = useState<string[]>([]);
   const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
@@ -234,17 +238,18 @@ export function Center() {
               }}
               src={previewUrl(w.worktree.id, w.worktree.proxyPort)}
               title={w.worktree.title}
-              style={{ display: w.worktree.id === activeId && !setupRepo ? "block" : "none" }}
+              style={{ display: w.worktree.id === activeId && !setupRepo && !watching ? "block" : "none" }}
             />
           ))}
-          {setupRepo && (
+          {watching && <ImportPane key={watching.id} pending={watching} />}
+          {setupRepo && !watching && (
             <SetupPane
               key={setupRepo.id}
               repo={setupRepo}
               onClose={needsSetup ? undefined : () => dispatch({ a: "close" })}
             />
           )}
-          {!activeReady && !setupRepo && (
+          {!activeReady && !setupRepo && !watching && (
             <div className="empty">
               {incompatible
                 ? "toyon was updated: reload this page"

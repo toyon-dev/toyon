@@ -116,6 +116,72 @@ export async function run(
   }
 }
 
+/**
+ * Like `run`, but for a command worth watching: stderr is reported line by line as it arrives, and
+ * an abort signal kills the process. `run` buffers both pipes to completion and never exposes the
+ * child, which is right for the hundreds of sub-second git calls and useless for a clone that can
+ * run for minutes and that someone may want to stop.
+ *
+ * Progress is split on `\r` as well as `\n`: git redraws a counter in place, so a whole clone's
+ * progress is one `\n`-terminated line and reading by newline alone reports nothing until the end.
+ */
+export async function runLive(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  opts: { env?: Record<string, string>; onLine?: (line: string) => void; signal?: AbortSignal } = {},
+): Promise<GitResult> {
+  const started = Date.now();
+  try {
+    const p = Bun.spawn([cmd, ...args], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      env: { ...process.env, ...opts.env },
+    });
+    const stop = () => p.kill();
+    opts.signal?.addEventListener("abort", stop, { once: true });
+    const err: string[] = [];
+    const pump = async () => {
+      const dec = new TextDecoder();
+      const reader = (p.stderr as ReadableStream<Uint8Array>).getReader();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split(/[\r\n]/);
+        buf = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line) continue;
+          err.push(line);
+          opts.onLine?.(line);
+        }
+      }
+      const last = buf.trim();
+      if (last) {
+        err.push(last);
+        opts.onLine?.(last);
+      }
+    };
+    const [out, , status] = await Promise.all([new Response(p.stdout).text(), pump(), p.exited]);
+    opts.signal?.removeEventListener("abort", stop);
+    const exit = p.signalCode ?? status;
+    return { ok: status === 0 && !opts.signal?.aborted, out: out.trim(), err: err.join("\n"), exit };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, out: "", err: msg, exit: msg };
+  } finally {
+    if (cmd === GIT) {
+      lastGit.cmd = `git ${args.slice(0, 3).join(" ")}`;
+      lastGit.ms = Date.now() - started;
+      lastGit.at = Date.now();
+    }
+  }
+}
+
 export async function git(cwd: string, ...args: string[]): Promise<GitResult> {
   const { rawOut: _raw, ...r } = await run(GIT, args, cwd);
   return r;

@@ -3,7 +3,7 @@
 
 import { existsSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { RepoInfo, ToyonConfig, WorktreeInfo } from "@toyon/shared";
+import type { PendingRepo, RepoInfo, ToyonConfig, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -15,7 +15,7 @@ import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
 import { expandTilde } from "./browse.ts";
 import { detectConfig, readConfigFile } from "./config.ts";
-import { type CreateOpts, createRepoDir, isInside, planProject } from "./create.ts";
+import { type CreateOpts, cloneInto, createRepoDir, isInside, type Plan, planProject } from "./create.ts";
 import { watchConfigFile, watchDefaultBranch } from "./watcher.ts";
 
 export interface RepoRegistryDeps {
@@ -25,8 +25,14 @@ export interface RepoRegistryDeps {
   worktrees: WorktreeService;
 }
 
+/** git's progress redraws many times a second; the pane only has to look alive */
+const IMPORT_TICK_MS = 250;
+/** enough scrollback to see what git is doing, not a transcript */
+const IMPORT_LINES = 40;
+
 export class RepoRegistry {
   private watchers = new Map<string, () => void>();
+  private imports = new Map<string, { pending: PendingRepo; abort: AbortController }>();
 
   constructor(private d: RepoRegistryDeps) {}
 
@@ -54,9 +60,89 @@ export class RepoRegistry {
    * worktree toyon already manages, and only these records can answer that. */
   async create(opts: CreateOpts): Promise<RepoInfo> {
     const { dir } = planProject(opts);
+    this.refuseIfManaged(dir);
+    return this.register(await createRepoDir(opts));
+  }
+
+  /** a project nested inside a repo or worktree toyon already manages is the thing to prevent. A
+   * blanket `isGitRepo(parent)` would be wrong: a home directory that is itself a dotfiles repo is
+   * an ordinary setup, and making a project under it is fine. */
+  private refuseIfManaged(dir: string): void {
     const managed = [...this.d.state.repos, ...this.d.state.worktrees].some((r) => isInside(dir, r.path));
     if (managed) throw new UserError(`${dir} is inside a project toyon already manages`);
-    return this.register(await createRepoDir(opts));
+  }
+
+  /** clones in flight, oldest first */
+  get pending(): PendingRepo[] {
+    return [...this.imports.values()].map((i) => i.pending).sort((a, b) => a.startedAt - b.startedAt);
+  }
+
+  /**
+   * Start a clone and hand back the record for it. Unlike every other way a project arrives, this
+   * one takes long enough that the person needs to see it happening, so it becomes a thing the
+   * daemon holds rather than a promise the calling socket waits on: every tab sees it, a reload
+   * does not lose it, and it can be stopped.
+   */
+  startImport(opts: { parent: string; name: string; url: string }): PendingRepo {
+    // validated before anything is announced, so a bad name or a typo'd parent is still a plain
+    // error on the socket that asked rather than a pending row that fails a moment later
+    const plan = planProject(opts);
+    this.refuseIfManaged(plan.dir);
+    if (this.pending.some((p) => p.name === opts.name && p.parent === plan.parent)) {
+      throw new UserError(`${opts.name} is already being cloned`);
+    }
+    const pending: PendingRepo = {
+      id: shortId(),
+      name: opts.name.trim(),
+      parent: plan.parent,
+      url: opts.url,
+      startedAt: Date.now(),
+      lines: [],
+    };
+    const abort = new AbortController();
+    this.imports.set(pending.id, { pending, abort });
+    this.d.hub.emit("pendingChanged");
+    fireAndForget(pending.id, this.runImport(pending, plan, abort.signal), "clone");
+    return pending;
+  }
+
+  /** stop a clone that is still running, or dismiss one that failed */
+  cancelImport(id: string): void {
+    const entry = this.imports.get(id);
+    if (!entry) throw new UserError("that import is already finished");
+    entry.abort.abort(); // kills git; cloneInto then removes the half-made directory
+    this.imports.delete(id);
+    this.d.hub.emit("pendingChanged");
+  }
+
+  private async runImport(pending: PendingRepo, plan: Plan, signal: AbortSignal): Promise<void> {
+    // git redraws its counter many times a second; the pane only needs to look alive
+    let last = 0;
+    const tick = (force: boolean) => {
+      if (!force && Date.now() - last < IMPORT_TICK_MS) return;
+      last = Date.now();
+      this.d.hub.emit("pendingChanged");
+    };
+    try {
+      await cloneInto(plan, pending.name, pending.url, {
+        signal,
+        onLine: (line) => {
+          pending.lines.push(line);
+          if (pending.lines.length > IMPORT_LINES) pending.lines.shift();
+          tick(false);
+        },
+      });
+      if (signal.aborted) return; // cancelImport already dropped it and cloneInto cleaned up
+      this.imports.delete(pending.id);
+      this.d.hub.emit("pendingChanged");
+      await this.register(plan.dir);
+    } catch (e) {
+      if (signal.aborted) return;
+      // the record stays, carrying the reason: a toast would be gone before someone who walked away
+      // from a long clone came back to it. `cancel-import` is how they dismiss it.
+      pending.error = e instanceof Error ? e.message : String(e);
+      tick(true);
+    }
   }
 
   async register(rawPath: string): Promise<RepoInfo> {

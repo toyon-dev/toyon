@@ -21,6 +21,7 @@ import type {
   PasteRef,
   PathEntry,
   PathTarget,
+  PendingRepo,
   PickedElement,
   PickMeta,
   RepoInfo,
@@ -266,6 +267,11 @@ export interface State {
   paths: { query: string; entries: PathEntry[]; target: PathTarget | null };
   /** the daemon's home directory, for writing `~` paths the way a person would type them */
   home: string;
+  /** clones in flight, held by the daemon so every tab sees them and a reload does not lose them */
+  pending: PendingRepo[];
+  /** the import being watched in the preview area, if any. Separate from `activeRepoId` because a
+   * pending project has no repo record yet, and mixing the two id spaces would be a bug waiting. */
+  activeImportId: string | null;
   /** the daemon's agent registry and the default for new worktrees */
   agents: AgentInfo[];
   defaultAgent: string;
@@ -329,6 +335,8 @@ export function initialState(opts: InitialOpts): State {
     systemDark: opts.systemDark ?? true,
     paths: { query: "", entries: [], target: null },
     home: "",
+    pending: [],
+    activeImportId: null,
     agents: [],
     defaultAgent: "claude",
   };
@@ -390,6 +398,8 @@ export type Action =
   | { a: "activate-repo"; id: string }
   /** an "open project" request went to the daemon: adopt the repo it adds */
   | { a: "open-repo" }
+  /** show a clone's progress in the preview area (null stops watching) */
+  | { a: "watch-import"; id: string | null }
   | { a: "close-diff" }
   | { a: "dismiss-toast" }
   | { a: "set-draft"; id: string; text: string }
@@ -480,6 +490,8 @@ function reduce(s: State, action: Action): State {
     }
     case "open-repo":
       return { ...s, pendingOpen: true };
+    case "watch-import":
+      return { ...s, activeImportId: action.id };
     case "close-diff":
       return { ...s, diff: null };
     case "dismiss-toast":
@@ -612,12 +624,34 @@ function onServer(s: State, msg: StoreServerMsg): State {
         agents: msg.agents,
         defaultAgent: msg.defaultAgent,
         home: msg.home,
+        pending: msg.pending,
+        // an import this tab was watching may have finished while it was away
+        activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
       };
     }
     case "themes":
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "agents":
       return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent };
+    case "pending-repos": {
+      const known = new Set(s.pending.map((x) => x.id));
+      const started = msg.pending.find((x) => !known.has(x.id));
+      // pendingOpen already means "this tab asked for a project to arrive", which is exactly who
+      // should be shown the clone: the tabs that did not ask carry on with what they were doing
+      const watch = started && s.pendingOpen ? started.id : s.activeImportId;
+      // when the watched one finishes, stop watching: the repo it became arrives in the same
+      // breath and pendingOpen is what lands on it
+      const stillThere = msg.pending.some((x) => x.id === watch);
+      // a failed import never becomes a repo, so the flag would otherwise sit armed and make some
+      // unrelated project that arrives later steal this tab
+      const failed = msg.pending.some((x) => x.id === watch && x.error);
+      return {
+        ...s,
+        pending: msg.pending,
+        activeImportId: stillThere ? watch : null,
+        pendingOpen: failed ? false : s.pendingOpen,
+      };
+    }
     case "path-entries":
       return { ...s, paths: { query: msg.query, entries: msg.entries, target: msg.target } };
     case "repos": {

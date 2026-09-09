@@ -13,6 +13,7 @@ import type {
   LogLine,
   PathEntry,
   PathTarget,
+  PendingRepo,
   RepoInfo,
   Theme,
   ThemePrefs,
@@ -32,7 +33,7 @@ import type { AgentCommand, AgentEvent, AskAnswer, PickMeta } from "./events.ts"
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -49,6 +50,8 @@ export type ServerMsg =
       /** the daemon's agent registry and which entry new worktrees get by default */
       agents: AgentInfo[];
       defaultAgent: string;
+      /** clones already in flight, so a tab that connects mid-import sees it straight away */
+      pending: PendingRepo[];
       /** the daemon's home directory. RepoInfo.path is absolute while PathEntry.path is
        * tilde-collapsed daemon side, so without this the shell cannot write a `~` path of its own */
       home: string;
@@ -56,6 +59,8 @@ export type ServerMsg =
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
   | { t: "repos"; repos: RepoInfo[] }
+  /** clones in flight: shown in the switcher and watched in the import pane */
+  | { t: "pending-repos"; pending: PendingRepo[] }
   /** directories matching what the project picker has typed so far, plus what the typed path
    * itself is: an empty `entries` means "nothing matches here" and "there is no here" alike, and
    * only `target` separates the two */
@@ -312,6 +317,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
       if (m.mode !== "clone" && m.url)
         ctx.addIssue({ code: "custom", path: ["url"], message: "only a clone takes a url" });
     }),
+  /** stop a clone that is still running and forget it; the half-made folder goes with it */
+  z.object({ t: z.literal("cancel-import"), id }),
   /** what directories could complete this partial path (project picker autocomplete) */
   z.object({ t: z.literal("browse-path"), path: z.string().max(4_000) }),
   /** drop a repo from the daemon; refused while it still has task worktrees */

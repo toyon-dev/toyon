@@ -27,6 +27,7 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
   const worktrees = useStore((s) => s.worktrees);
   const paths = useStore((s) => s.paths);
   const home = useStore((s) => s.home);
+  const pending = useStore((s) => s.pending);
 
   // debounced by the picker; only path-shaped queries reach the daemon
   const onQuery = useCallback(
@@ -43,13 +44,14 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
         query: q,
         repos,
         activeRepoId: current,
+        pending,
         // the daemon already matched these against the path; re-filtering here would only fight the
         // debounce and blank the list between keystrokes. Repos lead: they are what you came for.
         entries: [...paths.entries].sort((a, b) => Number(b.isRepo) - Number(a.isRepo)),
         target: paths.target,
         answered: paths.query,
       }),
-    [repos, current, paths],
+    [repos, current, paths, pending],
   );
 
   const hintFor = (r: RepoInfo) => {
@@ -117,9 +119,11 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
             ? `d:${r.entry.path}`
             : r.kind === "open"
               ? `open:${r.path}`
-              : r.kind === "clone"
-                ? `clone:${r.url}`
-                : `new:${r.parent ?? ""}/${r.name}`
+              : r.kind === "pending"
+                ? `p:${r.pending.id}`
+                : r.kind === "clone"
+                  ? `clone:${r.url}`
+                  : `new:${r.parent ?? ""}/${r.name}`
       }
       rowClass={() => "cmd-item"}
       onQuery={onQuery}
@@ -133,7 +137,8 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
         if (r.kind === "clone") return ask("clone", r.name, r.url);
         if (r.kind === "create" && !r.parent) return ask("create", r.name);
 
-        if (r.kind === "repo") dispatch({ a: "activate-repo", id: r.repo.id });
+        if (r.kind === "pending") dispatch({ a: "watch-import", id: r.pending.id });
+        else if (r.kind === "repo") dispatch({ a: "activate-repo", id: r.repo.id });
         else if (r.kind === "open") open(r.path);
         else if (r.kind === "dir")
           open(r.entry.path); // only repo folders get here; narrowTo takes the rest
@@ -147,19 +152,23 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
         pick:
           active?.kind === "dir" && !active.entry.isRepo
             ? "descends"
-            : active?.kind === "create"
-              ? active.parent
-                ? "creates it"
-                : "names it"
-              : active?.kind === "clone"
-                ? "clones it"
-                : "opens",
+            : active?.kind === "pending"
+              ? "watches it"
+              : active?.kind === "create"
+                ? active.parent
+                  ? "creates it"
+                  : "names it"
+                : active?.kind === "clone"
+                  ? "clones it"
+                  : "opens",
         back: "closes",
       })}
       empty={(q) => (q ? "nothing here; keep typing a path (~/… or /…)" : "no other projects; type a name to make one")}
       row={(r) =>
         r.kind === "repo" ? (
           <PaletteRow label={r.repo.name} hint={hintFor(r.repo)} />
+        ) : r.kind === "pending" ? (
+          <PaletteRow label={r.pending.name} hint={r.pending.error ? "import failed" : "importing…"} />
         ) : r.kind === "dir" ? (
           <PaletteRow label={r.entry.name} hint={r.entry.isRepo ? "git repo" : undefined} />
         ) : r.kind === "open" ? (

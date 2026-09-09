@@ -150,6 +150,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("worktreesChanged", worktreesChanged);
   s.hub.on("agentStatus", worktreesChanged);
   s.hub.on("reposChanged", () => broadcast({ t: "repos", repos: s.state.repos }));
+  s.hub.on("pendingChanged", () => broadcast({ t: "pending-repos", pending: s.repos.pending }));
   s.hub.on("proc", (worktreeId, proc) => broadcast({ t: "proc", worktreeId, proc }));
   s.hub.on("log", (worktreeId, proc, line) => sendTo(worktreeId, { t: "log", worktreeId, proc, line }));
   s.hub.on("queue", (worktreeId, items) => sendTo(worktreeId, { t: "queue", worktreeId, items }));
@@ -237,6 +238,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           agents: agentInfos(),
           defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
           home: homedir(),
+          pending: s.repos.pending,
         });
       },
       close(ws: ServerWebSocket<WsData>) {

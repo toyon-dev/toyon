@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
 import { GIT } from "../git/exec.ts";
-import { createRepoDir, isInside, planProject } from "./create.ts";
+import { cloneInto, createRepoDir, isInside, planProject } from "./create.ts";
 
 // Identity comes from global git config, which the daemon reads and must not invent. Point git at
 // a config of our own so these tests neither depend on the developer's nor write to it.
@@ -37,14 +37,14 @@ describe("planProject", () => {
   test("refuses anything that is not one new leaf under a parent that is there", () => {
     const { parent, cleanup } = parentDir();
     mkdirSync(join(parent, "taken"));
-    expect(() => planProject({ parent, name: "taken", mode: "create" })).toThrow(UserError);
-    expect(() => planProject({ parent: join(parent, "typo"), name: "x", mode: "create" })).toThrow(UserError);
-    expect(() => planProject({ parent, name: "a/b", mode: "create" })).toThrow(UserError);
-    expect(() => planProject({ parent, name: "..", mode: "create" })).toThrow(UserError);
-    expect(() => planProject({ parent, name: "", mode: "create" })).toThrow(UserError);
+    expect(() => planProject({ parent, name: "taken" })).toThrow(UserError);
+    expect(() => planProject({ parent: join(parent, "typo"), name: "x" })).toThrow(UserError);
+    expect(() => planProject({ parent, name: "a/b" })).toThrow(UserError);
+    expect(() => planProject({ parent, name: ".." })).toThrow(UserError);
+    expect(() => planProject({ parent, name: "" })).toThrow(UserError);
     // a file is not a location
     writeFileSync(join(parent, "afile"), "x");
-    expect(() => planProject({ parent: join(parent, "afile"), name: "x", mode: "create" })).toThrow(UserError);
+    expect(() => planProject({ parent: join(parent, "afile"), name: "x" })).toThrow(UserError);
     cleanup();
   });
 });
@@ -62,7 +62,7 @@ describe("isInside", () => {
 describe("createRepoDir: create", () => {
   test("makes a repo with one empty commit, in a directory a scaffolder could still use", async () => {
     const { parent, cleanup } = parentDir();
-    const dir = await createRepoDir({ parent, name: "fresh", mode: "create" });
+    const dir = await createRepoDir({ parent, name: "fresh" });
     expect(dir).toBe(join(parent, "fresh"));
     expect(sh(dir, GIT, "rev-list", "--count", "HEAD")).toBe("1");
     // nothing committed and nothing on disk: create-vite and friends refuse a non-empty folder, and
@@ -77,7 +77,7 @@ describe("createRepoDir: create", () => {
     // both run `git worktree add <path> <branch>`, which needs a commit to branch from, so without
     // one the repo registers happily and then fails to make any worktree.
     const { parent, cleanup } = parentDir();
-    const dir = await createRepoDir({ parent, name: "fresh", mode: "create" });
+    const dir = await createRepoDir({ parent, name: "fresh" });
     const branch = sh(dir, GIT, "branch", "--show-current");
     sh(dir, GIT, "worktree", "add", "--detach", join(parent, "wt"), branch);
     expect(existsSync(join(parent, "wt"))).toBe(true);
@@ -89,7 +89,7 @@ describe("createRepoDir: create", () => {
     const file = join(configHome, "gitconfig");
     const before = Bun.file(file);
     writeFileSync(file, `${await before.text()}[init]\n\tdefaultBranch = trunk\n`);
-    const dir = await createRepoDir({ parent, name: "fresh", mode: "create" });
+    const dir = await createRepoDir({ parent, name: "fresh" });
     expect(sh(dir, GIT, "branch", "--show-current")).toBe("trunk");
     writeFileSync(file, "[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n");
     cleanup();
@@ -99,7 +99,7 @@ describe("createRepoDir: create", () => {
     const { parent, cleanup } = parentDir();
     mkdirSync(join(parent, "taken"));
     writeFileSync(join(parent, "taken", "mine.txt"), "keep me");
-    await expect(createRepoDir({ parent, name: "taken", mode: "create" })).rejects.toBeInstanceOf(UserError);
+    await expect(createRepoDir({ parent, name: "taken" })).rejects.toBeInstanceOf(UserError);
     expect(existsSync(join(parent, "taken", "mine.txt"))).toBe(true);
     cleanup();
   });
@@ -108,7 +108,7 @@ describe("createRepoDir: create", () => {
     const { parent, cleanup } = parentDir();
     const file = join(configHome, "gitconfig");
     writeFileSync(file, "[commit]\n\tgpgsign = false\n"); // no user.name or user.email
-    await expect(createRepoDir({ parent, name: "fresh", mode: "create" })).rejects.toBeInstanceOf(UserError);
+    await expect(createRepoDir({ parent, name: "fresh" })).rejects.toBeInstanceOf(UserError);
     // checked before mkdir, so there is nothing half-made to find
     expect(existsSync(join(parent, "fresh"))).toBe(false);
     writeFileSync(file, "[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n");
@@ -121,7 +121,9 @@ describe("createRepoDir: clone", () => {
     const { repo, cleanup: cleanRepo } = tmpRepo();
     const { parent, cleanup } = parentDir();
     // a local path is a valid clone source, so this exercises the real path without a network
-    const dir = await createRepoDir({ parent, name: "copy", mode: "clone", url: repo });
+    const plan = planProject({ parent, name: "copy" });
+    await cloneInto(plan, "copy", repo);
+    const dir = plan.dir;
     expect(sh(dir, GIT, "rev-list", "--count", "HEAD")).toBe("1");
     expect(sh(dir, GIT, "ls-files")).toBe("README.md");
     expect(sh(dir, GIT, "remote", "get-url", "origin")).toBe(repo);
@@ -134,7 +136,8 @@ describe("createRepoDir: clone", () => {
     // NO_PROMPT is what makes this a failure rather than a wait: without it a URL needing a
     // credential opens /dev/tty and hangs a daemon process nobody can see. A hang here is a failure
     // of that guard, and this test would time out rather than pass.
-    const failed = createRepoDir({ parent, name: "copy", mode: "clone", url: "/definitely/not/a/repo" });
+    const plan = planProject({ parent, name: "copy" });
+    const failed = cloneInto(plan, "copy", "/definitely/not/a/repo");
     await expect(failed).rejects.toBeInstanceOf(UserError);
     // a toast shows one line, and it should be the reason. git writes progress to stderr too, so
     // without trimming it the message would open with "Cloning into 'copy'..." and bury the fatal.
@@ -147,9 +150,7 @@ describe("createRepoDir: clone", () => {
   test("refuses a leaf that already exists before it reaches the network", async () => {
     const { parent, cleanup } = parentDir();
     mkdirSync(join(parent, "copy"));
-    await expect(
-      createRepoDir({ parent, name: "copy", mode: "clone", url: "https://example.invalid/x/y.git" }),
-    ).rejects.toBeInstanceOf(UserError);
+    expect(() => planProject({ parent, name: "copy" })).toThrow(UserError);
     cleanup();
   });
 });

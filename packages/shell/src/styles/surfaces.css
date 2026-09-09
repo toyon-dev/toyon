@@ -179,34 +179,28 @@ body.resizing iframe {
   color: var(--text1);
   font-size: var(--fs-md);
   position: relative;
+  /* the active/graft marker rides the panel's left edge rather than the row's, because the row's
+     own left edge is off screen while the rail is collapsed */
+  --row-edge-x: var(--rail-edge, 0px);
 }
-/* the active/graft marker rides the panel's left edge rather than the row's, because the row's own
-   left edge is off screen while the rail is collapsed. It travels on the same curve and the same
-   delay as the panel width, so the two move as one. */
+/* it travels on the same curve and the same delay as the panel width, so the two move as one */
 .wt-item::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: var(--rail-edge, 0px);
-  width: 2px;
   transition: left 0.12s ease 120ms;
 }
 .wt-rail:hover .wt-item::before {
   transition: left 0.12s ease 50ms;
 }
-.wt-item.active::before {
-  background: var(--accent);
-}
-.wt-item.sel::before {
-  background: var(--aqua);
-}
 .wt-item:hover {
   background: var(--element0);
 }
 .wt-item.active {
+  --row-edge-color: var(--accent);
   color: var(--text0);
   background: var(--element1);
+}
+/* after .active on purpose: while a graft is being picked, a row that is both shows the graft */
+.wt-item.sel {
+  --row-edge-color: var(--aqua);
 }
 .wt-item .branch {
   flex: 1;
@@ -335,25 +329,18 @@ body.resizing iframe {
   color: var(--text0);
 }
 /* the file open in the editor: picked, so element1 and the accent edge, the same pair the active
-   worktree and the open tool call carry. The edge is a pseudo-element rather than a border so the
-   path stays on the column the rows around it sit on. */
+   worktree and the open tool call carry. */
 .git-file.active {
   background: var(--element1);
   color: var(--text0);
 }
-.git-file.active::before,
-.git-file.sel::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--accent);
-}
 /* where the keyboard is. Moving the cursor also opens the file, so the cursor and the open file
    are the same row nearly always; it takes the same edge rather than a ring stacked on top of the
    band, which hid the band and read as a second, unrelated kind of selection. */
+.git-file.active,
+.git-file.sel {
+  --row-edge-color: var(--accent);
+}
 .git-file .xy {
   color: var(--yellow);
   width: 18px;
@@ -2002,12 +1989,7 @@ body.resizing .rb-center {
 }
 /* command palette rows: label left, chord hint right */
 .row-current {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--accent);
+  --row-edge-color: var(--accent);
 }
 .cmd-item {
   display: flex;

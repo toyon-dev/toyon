@@ -2,12 +2,13 @@
 // editor bundle only downloads when a diff is first opened.
 
 import type { Theme } from "@toyon/shared";
-import { accentKey, hex8, syntaxOf, toyonDark, wordTint } from "@toyon/shared";
+import { toyonDark } from "@toyon/shared";
 import * as monaco from "monaco-editor";
 // monaco 0.56 exports map: "./*.js" -> "./esm/vs/*.js"
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import { useEffect, useRef } from "react";
+import { toMonacoTheme } from "./monacoTheme.ts";
 
 // monaco 0.56 moved the TS language API off `monaco.languages.typescript` (now a deprecated stub)
 // to a top-level `typescript` export
@@ -47,48 +48,6 @@ function shellType() {
   return {
     fontFamily: s.getPropertyValue("--font-mono").trim() || "ui-monospace, monospace",
     fontSize: Number.parseFloat(s.getPropertyValue("--fs-xs")) || 11,
-  };
-}
-
-/** Monaco theme derived from the shell's Theme so the diff pane never drifts from the chrome */
-function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
-  const c = t.colors;
-  const rules: monaco.editor.ITokenThemeRule[] = [
-    { token: "", foreground: c.text0.slice(1), background: c.surface0.slice(1) },
-  ];
-  // syntaxOf, not t.syntax: a theme that named only half its tokens would otherwise leave the rest
-  // to Monaco's built-in scheme here and to the chat log's own fallback there, and the same file
-  // would come out in two colours depending on which surface you read it in
-  for (const [token, color] of Object.entries(syntaxOf(t))) {
-    rules.push({ token, foreground: color.slice(1), ...(token === "comment" ? { fontStyle: "italic" } : {}) });
-  }
-  return {
-    base: t.kind === "light" ? "vs" : "vs-dark",
-    inherit: true,
-    rules,
-    colors: {
-      "editor.background": c.surface0,
-      "editor.foreground": c.text0,
-      "editor.lineHighlightBackground": hex8(c.surface1, 0),
-      "editorLineNumber.foreground": c.border1,
-      "editorLineNumber.activeForeground": c.text1,
-      "editorGutter.background": c.surface0,
-      "editorCursor.foreground": c[accentKey(t)],
-      // monaco paints .line-insert and .char-insert as separate elements, and on a wholly new line
-      // the word-level range covers the whole line, so the two tints composite. wordTint is the
-      // fraction that keeps that composite where the chat log's own word blocks sit, and both read
-      // it from the same place, so the pane and the log cannot drift apart.
-      "diffEditor.insertedTextBackground": wordTint(c.diffAdd),
-      "diffEditor.removedTextBackground": wordTint(c.diffDel),
-      "diffEditor.insertedLineBackground": c.diffAdd,
-      "diffEditor.removedLineBackground": c.diffDel,
-      // the "N hidden lines" band sits over the code it hides, so it has to be opaque
-      "diffEditor.unchangedRegionBackground": c.surface1,
-      "diffEditor.unchangedRegionForeground": c.text2,
-      "diffEditor.unchangedCodeBackground": hex8(c.surface0, 0),
-      "editorWidget.background": c.surface1,
-      "scrollbarSlider.background": hex8(c.surface2, 0.4),
-    },
   };
 }
 
@@ -150,6 +109,10 @@ export default function MonacoDiff({
       // is what the changes list's menu is for. The decorations strip stays: it carries the +/-.
       glyphMargin: false,
       folding: false,
+      // rainbow brackets are Dark+ gold/orchid/blue and a theme cannot name them without
+      // shipping six more colours; with them off a bracket is punctuation, which is what the
+      // chat log's own diffs already draw, so a file reads the same on both surfaces
+      bracketPairColorization: { enabled: false },
       renderGutterMenu: false,
       renderMarginRevertIcon: false,
       // collapsing an entirely-unchanged file hides everything — plain view instead

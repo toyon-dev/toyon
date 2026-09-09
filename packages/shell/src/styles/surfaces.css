@@ -265,7 +265,8 @@ body.resizing iframe {
 .wt-item.sel {
   --row-edge-color: var(--aqua);
 }
-.wt-item .branch {
+.wt-item .branch,
+.disc-item .branch {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -737,16 +738,76 @@ body.resizing .row-resize {
   pointer-events: auto;
   transition: opacity 0.12s ease 50ms;
 }
+/* ---- discovered: worktrees git knows about that toyon did not create ---- */
+/* Full width like every other row, so the 40px strip shows only its right end. That end is the
+   border, which is exactly what a collapsed section should be out there: a rule and nothing else.
+   No second layout for the narrow state, which is what the rail-list comment above warns against. */
+.disc-head {
+  height: 28px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 0 12px;
+  margin-top: 6px;
+  border-top: 1px solid var(--border0);
+  font: var(--type-ui-sm);
+  color: var(--text2);
+  text-align: left;
+}
+.disc-head:hover {
+  color: var(--text1);
+}
+/* the caret points down when open and right when shut, the way every disclosure does */
+.disc-caret {
+  transition: transform 0.12s ease;
+}
+.disc-caret.shut {
+  transform: rotate(-90deg);
+}
+.wt-rail .disc-item {
+  height: 33px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 0 12px;
+  color: var(--text2);
+}
+.wt-rail .disc-item .dot {
+  margin-left: 12px;
+}
+/* only shows once the panel is open: in the strip there is no room, and the row is not a target */
+.disc-take {
+  font: var(--type-ui-sm);
+  color: var(--text2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.disc-take:hover {
+  color: var(--text1);
+  background: var(--surface2);
+}
+.disc-lock {
+  display: flex;
+  color: var(--text2);
+}
 /* the socket is down: every row is stale and nothing you click will answer. Fading them read as
    "still loading", so they take the fault colour instead and hovering the rail says what happened.
    The dots go with them: what they were reporting is exactly what we have stopped hearing. */
-.wt-rail.offline .wt-item {
+.wt-rail.offline .wt-item,
+.wt-rail.offline .disc-item {
   color: var(--orange);
 }
 .wt-rail.offline .wt-item .dot {
   background: var(--orange);
   animation: none;
   box-shadow: none;
+}
+/* the hollow dot keeps its shape offline; it is a ring, so blanking box-shadow would erase it */
+.wt-rail.offline .disc-item .dot.discovered {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--orange);
 }
 /* identical row heights in both modes, and the dot keeps its x too: 20px from the right edge, the
    centre of the collapsed strip. The peek then unfurls leftward from under the pointer that opened

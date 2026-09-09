@@ -25,6 +25,7 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
   const repos = useStore((s) => s.repos);
   const current = useStore((s) => s.activeRepoId);
   const worktrees = useStore((s) => s.worktrees);
+  const discovered = useStore((s) => s.discovered);
   const paths = useStore((s) => s.paths);
   const home = useStore((s) => s.home);
   const pending = useStore((s) => s.pending);
@@ -58,7 +59,14 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
     const mine = worktrees.filter((w) => w.worktree.repoId === r.id && w.worktree.kind !== "spare");
     const working = mine.filter(isBusy).length;
     const n = mine.length - 1; // main is not a task
-    const parts = [n > 0 ? `${n} worktree${n === 1 ? "" : "s"}` : null, working > 0 ? `${working} working` : null];
+    // "where's my stuff" is asked here, before the rail is on screen: a project with worktrees
+    // toyon did not make should say so at the point you are choosing it
+    const found = discovered.filter((d) => d.repoId === r.id).length;
+    const parts = [
+      n > 0 ? `${n} worktree${n === 1 ? "" : "s"}` : null,
+      working > 0 ? `${working} working` : null,
+      found > 0 ? `${found} discovered` : null,
+    ];
     return parts.filter(Boolean).join(" · ") || undefined;
   };
 

@@ -36,6 +36,7 @@ export function App() {
   const railOpen = useStore((s) => s.railOpen);
   const panels = useStore((s) => s.panels);
   const lastActive = useStore((s) => s.lastActive);
+  const discoveredOpen = useStore((s) => s.discoveredOpen);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
   const toast = useStore((s) => s.toast);
@@ -123,6 +124,13 @@ export function App() {
       localStorage.setItem(STORAGE.lastActive, JSON.stringify(lastActive));
     } catch {}
   }, [lastActive]);
+  // so is an opened discovered section: it is collapsed by default, and re-collapsing it on every
+  // reload would make the one repo where you are watching stray worktrees the most annoying one
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.discoveredOpen, JSON.stringify(discoveredOpen));
+    } catch {}
+  }, [discoveredOpen]);
 
   useChords();
   // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the

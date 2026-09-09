@@ -124,3 +124,27 @@ export function pickLabel(p: { component: string | null; tag: string }): string 
 /** the path to show people for a worktree: the title-named link when the directory itself is a
  * claimed spare's, else the directory (git and the procs always use `path`) */
 export const wtDir = (w: WorktreeInfo) => w.linkPath ?? w.path;
+
+/** Whose advertised slash commands stand in for a session that does not exist yet.
+ *
+ * ⌘K opens before there is a worktree, so it has no session to ask, but it does not need its own:
+ * commands come from the repo's settings, skills and MCP servers, so every worktree of a repo
+ * running the same agent advertises the same list, and the one ⌘K is about to create will too.
+ * Main first, because it exists from the moment the repo is registered and is the likeliest to
+ * have run. An agent the person switched to but has never started anywhere yet has no stand-in,
+ * and the menu says so rather than showing another agent's commands.
+ *
+ * A worktree carries no `agent` until its session first spawns, when the daemon stamps it with the
+ * default: unstamped therefore reads as the default here too, or main would never match before it
+ * had run, which is exactly when the menu needs to find it and start it. */
+export function commandSource(
+  worktrees: WorktreeStatus[],
+  repoId: string | undefined,
+  agent: string,
+  defaultAgent: string,
+): string | null {
+  if (!repoId) return null;
+  const mine = worktrees.filter((w) => w.worktree.repoId === repoId && (w.worktree.agent ?? defaultAgent) === agent);
+  const main = mine.find((w) => w.worktree.kind === "main");
+  return (main ?? mine[0])?.worktree.id ?? null;
+}

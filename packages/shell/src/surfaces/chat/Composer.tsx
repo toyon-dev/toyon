@@ -10,8 +10,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { tip } from "../../ui/Tooltip.tsx";
-import { commandHits } from "../palettes/commands.ts";
-import { markHits } from "../palettes/highlight.tsx";
+import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
@@ -295,16 +294,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             if (r.kind === "file") return fileRow(r.path, r.status, trigger.query);
             if (r.kind === "changes")
               return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
-            const needle = trigger.query.trim();
-            // the name is what gets typed, so it is what holds its width; the description gives
-            // way and ellipsises. PaletteRow's hint slot never shrinks, which is right for a chord
-            // and wrong for a sentence.
-            return (
-              <>
-                <span className="ip-name">/{markHits(r.c.name, needle ? commandHits(r.c.name, needle) : null, 0)}</span>
-                <span className="ip-desc row-dim">{r.c.description}</span>
-              </>
-            );
+            return <CommandRow c={r.c} query={trigger.query} />;
           }}
         />
       )}

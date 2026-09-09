@@ -1733,6 +1733,19 @@ body.resizing .rb-center {
   gap: 20px;
 }
 /* ---- new worktree prompt overlay ---- */
+/* ⌘K's copy of the `/` menu. The composer anchors its own upward, over the transcript, so the
+   rows never cover what is being typed; here there is a title above and empty scrim below, so
+   down is the side with room. */
+.prompt-picker {
+  position: relative;
+}
+.prompt-picker .inline-picker {
+  top: 100%;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  margin: 4px 0 0;
+}
 /* anchored near the top, not centered: a palette's height changes as you type, and a centered
    box would bob with it — the input stays put this way (editor/launcher convention) */
 /* ---- repo setup pane (replaces the preview while a repo's config is unconfirmed) ---- */

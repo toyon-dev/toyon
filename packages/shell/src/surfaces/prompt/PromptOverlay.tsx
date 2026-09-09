@@ -1,8 +1,14 @@
-import { useRef, useState } from "react";
+import type { AgentCommand } from "@toyon/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { useActiveRepo } from "../../state/selectors.ts";
+import { useActiveRepo, useLocalField } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
+import { InlinePicker } from "../../ui/InlinePicker.tsx";
+import { useListNav } from "../../ui/listNav.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
+import { filterCommands, insertAt, triggerAt } from "../chat/mentions.ts";
+import { CommandRow } from "../palettes/CommandRow.tsx";
+import { commandSource } from "../util.ts";
 import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
 import { RepoChip } from "./RepoChip.tsx";
 
@@ -21,6 +27,53 @@ export function PromptOverlay() {
   const [agent, setAgent] = useState(defaultAgent);
   const [profile, setProfile] = useNewWorktreeProfile(repo);
   const field = useRef<HTMLTextAreaElement>(null);
+
+  // the `/` menu. A command dispatches on a worktree's first prompt like any other, so it is worth
+  // offering here; `@path` is not, because the worktree whose files it would name does not exist.
+  const [caret, setCaret] = useState(0);
+  /** the trigger the user dismissed with esc, so it does not reopen on the next keystroke */
+  const [dismissed, setDismissed] = useState<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const source = useStore((s) => commandSource(s.worktrees, repo?.id, agent, defaultAgent));
+  const commands = useLocalField(source, "commands");
+  const trigger = triggerAt(text, caret);
+  const cmd = trigger?.kind === "command" ? trigger : null;
+  // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing
+  const menuOpen = cmd !== null && cmd.from !== dismissed && !batch;
+  // keyed on the query, not the trigger: triggerAt rebuilds that object on every keystroke
+  const rows = useMemo(() => (cmd ? filterCommands(commands, cmd.query).slice(0, 8) : []), [cmd?.query, commands]);
+
+  const nav = useListNav<AgentCommand>({
+    results: rows,
+    keyOf: (c) => c.name,
+    q: cmd?.query ?? "",
+    listRef,
+    tabPicks: true,
+    onPick: (c) => {
+      if (!cmd) return;
+      // verbatim: the adapter re-expands mcp: names
+      const { text: next, caret: at } = insertAt(text, cmd, `/${c.name} `);
+      setText(next);
+      setDismissed(cmd.from);
+      requestAnimationFrame(() => {
+        const el = field.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(at, at);
+        setCaret(at);
+      });
+    },
+  });
+
+  // An empty list means no session of this repo has run the selected agent yet. Opening the menu
+  // starts one, so this is a wait rather than a dead end; the reply is the agent-commands push.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    const opening = menuOpen && !wasOpen.current;
+    wasOpen.current = menuOpen;
+    if (opening && source && commands.length === 0) sock?.send({ t: "list-commands", worktreeId: source });
+  }, [menuOpen, source, commands.length, sock]);
+
   if (!repo) return null;
 
   const submit = () => {
@@ -56,24 +109,65 @@ export function PromptOverlay() {
           ? "batch: an agent splits this into separate worktrees, one per task"
           : "new worktree: describe the change; an agent starts on it immediately"}
       </div>
-      <textarea
-        className="field field-lg"
-        ref={field}
-        autoFocus
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && text.trim()) {
-            e.preventDefault();
-            submit();
+      {/* the field owns the menu's position: nothing sits under this box, so it opens downward */}
+      <div className="prompt-picker">
+        <textarea
+          className="field field-lg"
+          ref={field}
+          autoFocus
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setCaret(e.target.selectionStart ?? e.target.value.length);
+            nav.setIndex(0);
+            setDismissed(null);
+          }}
+          // arrow keys and clicks move the caret without changing the text, and the menu follows it
+          onKeyUp={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+          onClick={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+          onKeyDown={(e) => {
+            // an IME builds a word out of several keystrokes; a menu opening mid-composition would
+            // fight the candidate list
+            if (e.nativeEvent.isComposing) return;
+            if (menuOpen) {
+              if (e.key === "Escape") {
+                // the overlay's own esc closes the whole box; the menu takes this one first
+                e.preventDefault();
+                e.stopPropagation();
+                setDismissed(cmd?.from ?? null);
+                return;
+              }
+              if (nav.onKeyDown(e)) return;
+            }
+            if (e.key === "Enter" && !e.shiftKey && text.trim()) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder={
+            batch
+              ? "fix the header overflow, add a dark mode toggle, and update the footer copy"
+              : "make the header sticky and add a dark mode toggle"
           }
-        }}
-        placeholder={
-          batch
-            ? "fix the header overflow, add a dark mode toggle, and update the footer copy"
-            : "make the header sticky and add a dark mode toggle"
-        }
-      />
+        />
+        {menuOpen && cmd && (
+          <InlinePicker
+            results={rows}
+            keyOf={(c) => c.name}
+            rowClass={() => "cmd-item ip-cmd"}
+            nav={nav}
+            listRef={listRef}
+            empty={
+              !source
+                ? "no session has run this agent yet, so it has offered no commands"
+                : commands.length === 0
+                  ? "starting the agent to see what it offers…"
+                  : "no matching command"
+            }
+            row={(c) => <CommandRow c={c} query={cmd.query} />}
+          />
+        )}
+      </div>
       <div className="variants-row">
         {/* the picker takes focus while it is up, so put the caret back when it closes */}
         <RepoChip onClose={() => field.current?.focus()} />

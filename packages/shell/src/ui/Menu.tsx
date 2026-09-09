@@ -40,10 +40,17 @@ export function Menu({
     const onClick = (e: MouseEvent) => {
       if (e.timeStamp > openedAt) onClose();
     };
+    // Capture, and the third argument is the whole point: app/keys.ts holds its own keydown on
+    // window for the Escape ladder, and it cannot know a menu is open because a menu is local state
+    // in the surface that opened it. Bubbling, both handlers ran, so Escape shut the menu and then
+    // the diff pane behind it. Capture reaches the menu first and stopPropagation ends the key
+    // there, which is what "the topmost thing owns Escape" has to mean when the topmost thing is
+    // not in the store.
     const onKeyDown = (e: KeyboardEvent) => {
       const { idx: i, items: its } = live.current;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
+        e.stopPropagation();
         const d = e.key === "ArrowDown" ? 1 : -1;
         // from nothing, down takes the first row and up the last, so either key opens the list
         setIdx(i < 0 ? (d === 1 ? 0 : its.length - 1) : step(i, d, its.length));
@@ -51,19 +58,26 @@ export function Menu({
       }
       if (e.key === "Enter" && i >= 0 && its[i]) {
         e.preventDefault();
+        e.stopPropagation();
         its[i].onClick();
         onClose();
         return;
       }
-      // everything else, escape included, closes: a menu is not somewhere you type
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      // anything else closes the menu and is still let through, so a chord reaches the app: hitting
+      // one is a way of saying you are done here, not a key the menu has a use for
       onClose();
     };
     window.addEventListener("click", onClick);
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("blur", onClose);
     return () => {
       window.removeEventListener("click", onClick);
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("blur", onClose);
     };
   }, [onClose]);

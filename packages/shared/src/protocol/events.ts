@@ -122,7 +122,19 @@ export type AgentEvent =
   | { type: "turn-start"; ts: number }
   | { type: "text-delta"; text: string }
   | { type: "thinking-delta"; text: string }
-  | { type: "tool-start"; toolId: string; name: string; input: unknown; kind?: ToolKind; title?: string }
+  /** `parentToolId` is the call that spawned this one: a subagent's own tools arrive in the same
+   * session as everything else, and only the id ties them to the row that started them. `subagent`
+   * marks that spawning row itself. Both are absent for an agent that does not report either. */
+  | {
+      type: "tool-start";
+      toolId: string;
+      name: string;
+      input: unknown;
+      kind?: ToolKind;
+      title?: string;
+      parentToolId?: string;
+      subagent?: boolean;
+    }
   /** the agent refined a running tool call (a placeholder title became the real one, input arrived) */
   | { type: "tool-update"; toolId: string; name?: string; title?: string; input?: unknown; kind?: ToolKind }
   | { type: "tool-end"; toolId: string; output?: string; isError?: boolean }

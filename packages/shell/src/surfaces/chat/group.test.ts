@@ -90,4 +90,29 @@ describe("groupTools", () => {
       { at: 1, n: 1 },
     ]);
   });
+
+  test("the same file read at two depths is a row each, and each depth still groups", () => {
+    const items = [
+      tool("read", "/wt/a.ts"),
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+      tool("read", "/wt/a.ts"),
+    ];
+    expect(shape(items, ["/wt"])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 2 },
+      { at: 3, n: 1 },
+    ]);
+  });
+
+  test("two subagents reading one file do not fold into each other's row", () => {
+    const items = [
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+      tool("read", "/wt/a.ts", { parentToolId: "task2" }),
+    ];
+    expect(shape(items, ["/wt"])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 1 },
+    ]);
+  });
 });

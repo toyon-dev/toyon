@@ -50,6 +50,10 @@ export type ChatItem =
       done: boolean;
       toolKind?: ToolKind;
       title?: string;
+      /** the call that spawned this one, when the agent said so: the row indents under it */
+      parentToolId?: string;
+      /** this call is the spawn itself (a Task), so its children have somewhere to sit */
+      subagent?: boolean;
     }
   | { kind: "error"; text: string }
   | { kind: "blocked"; tool: string; path: string; reason: string }
@@ -903,6 +907,8 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
           done: false,
           ...(event.kind ? { toolKind: event.kind } : {}),
           ...(event.title ? { title: event.title } : {}),
+          ...(event.parentToolId ? { parentToolId: event.parentToolId } : {}),
+          ...(event.subagent ? { subagent: true } : {}),
         },
       ];
     case "tool-update": {

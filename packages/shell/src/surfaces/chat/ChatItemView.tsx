@@ -260,7 +260,9 @@ export const ToolRow = memo(
     return (
       <details
         ref={card}
-        className={`tool-row ${tools.some((t) => t.isError) ? "error" : ""}`}
+        className={`tool-row ${tools.some((t) => t.isError) ? "error" : ""} ${head.parentToolId ? "nested" : ""} ${
+          head.subagent ? "spawn" : ""
+        }`}
         open={open}
         // clicking the output selects text and leaves focus on the body, so the card takes it: that is
         // what makes Escape close the row you are reading, not only the one whose chip you clicked

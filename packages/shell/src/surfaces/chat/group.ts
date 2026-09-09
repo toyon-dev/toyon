@@ -22,11 +22,13 @@ const GROUPABLE: ReadonlySet<string> = new Set(["read", "edit"]);
 /** what two calls have to share to print as one row: the glyph, the tool behind it and the file it
  * names. The agent's own tool name is in the key even where the row does not print it, so an edit
  * and a write of one file stay apart: they read the same on the line and are not the same call. A
- * call that failed groups with nothing, since a count is how you miss it. */
+ * call that failed groups with nothing, since a count is how you miss it. The spawning call is in
+ * the key too: a subagent reading a file and the main agent reading it are at different depths, and
+ * folding them into one row would print the count on whichever depth happened to come first. */
 function groupKey(item: ToolItem, roots: string[]): string {
   if (item.isError || !item.toolKind || !GROUPABLE.has(item.toolKind)) return "";
   const { hint } = toolLabel(item, roots);
-  return hint ? `${item.toolKind}\n${item.name}\n${hint}` : "";
+  return hint ? `${item.parentToolId ?? ""}\n${item.toolKind}\n${item.name}\n${hint}` : "";
 }
 
 export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {

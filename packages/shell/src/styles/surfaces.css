@@ -1150,6 +1150,46 @@ body.resizing .row-resize {
 .tool-row summary::-webkit-details-marker {
   display: none;
 }
+/* a subagent's calls arrive in the parent's stream, so depth is the only thing that says whose work
+   a row is. The indent is on the summary's padding rather than the row's margin: the row's box is
+   what makes the whole band under the pointer hoverable (see .tool-row above), and pushing that in
+   would leave a dead strip down the left of every nested call. */
+.tool-row.nested summary {
+  padding-left: 30px;
+  position: relative;
+}
+/* the rail sits in the gutter the indent opened, at the depth of the spawn row's own glyph, so a
+   run of children reads as one bracket rather than as rows that happen to start further right. It
+   is drawn on the summary: an open row already spends its ::before on the accent marker. */
+.tool-row.nested summary::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border0);
+}
+/* open, the accent marker moves onto the rail's column and the rail gives way to it: at left 0 it
+   marked the band as belonging to the top-level row above, which is the one thing the panel does
+   not belong to. On the rail it reads as the bracket thickening around the row you opened. */
+.tool-row.nested[open]::before {
+  left: 17px;
+}
+.tool-row.nested[open] > summary::before {
+  display: none;
+}
+/* the body sits under the summary's text, not under the rail: a panel that starts back at the
+   top-level column detaches from the row that opened it */
+.tool-row.nested .tool-out,
+.tool-row.nested .tool-block.cmd {
+  padding-left: 30px;
+}
+/* the row that started the subagent: the same weight as a name the agent chose to print, since the
+   rows underneath belong to it and a spawn that reads like any other call loses them */
+.tool-row.spawn .tool-name {
+  color: var(--text1);
+}
 /* the project pill's vocabulary, on a row instead of a button: a fill under the pointer, and the
    same fill held while the row is open, since the header is the control you are still holding */
 .tool-row summary:hover,

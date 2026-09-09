@@ -19,6 +19,27 @@ export interface ToolMemo {
 /** per-session memory of tool calls; cleared when the session's process goes away */
 export type ToolMemos = Map<string, ToolMemo>;
 
+/** Which call spawned this one, out of the `_meta` each adapter stamps on its own updates.
+ *
+ * Neither shape is the ACP draft for subagent sessions (agent-client-protocol#1992): that one moves
+ * a subagent onto a session of its own and is negotiated at initialize, which toyon does not ask
+ * for. What is left is the fallback both adapters emit unconditionally, and the two are not the
+ * same fallback. Claude streams the subagent's own calls into the parent session stamped with the
+ * id of the Task that started them, so those rows nest. Codex streams lifecycle markers only
+ * ("Start subagent x") and never tags a child, so its rows carry the flag and stay flat: there is
+ * no tree to draw from updates that do not arrive.
+ */
+function spawnOf(meta: Record<string, unknown> | null | undefined): { parentToolId?: string; subagent?: boolean } {
+  const claude = asRecord(asRecord(meta).claudeCode);
+  const parentToolId = typeof claude.parentToolUseId === "string" ? claude.parentToolUseId : undefined;
+  const subagent = claude.subagent === true || asRecord(asRecord(meta).codex).subagent !== undefined;
+  return { ...(parentToolId ? { parentToolId } : {}), ...(subagent ? { subagent: true } : {}) };
+}
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
 export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string): AgentEvent[] {
   switch (update.sessionUpdate) {
     case "agent_message_chunk":
@@ -43,6 +64,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
           input: update.rawInput ?? { locations: update.locations ?? [] },
           ...(memo.kind ? { kind: memo.kind } : {}),
           title: memo.title,
+          ...spawnOf(update._meta),
         },
       ];
       // some agents report a one-shot tool already finished
@@ -70,6 +92,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
           input: update.rawInput ?? { locations: update.locations ?? [] },
           ...(memo.kind ? { kind: memo.kind } : {}),
           title: memo.title,
+          ...spawnOf(update._meta),
         });
       }
       const refined: Extract<AgentEvent, { type: "tool-update" }> = { type: "tool-update", toolId: update.toolCallId };

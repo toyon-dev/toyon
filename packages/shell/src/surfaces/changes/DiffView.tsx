@@ -3,6 +3,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { localOf, type State, worktreeById } from "../../state/store.ts";
+import { Button } from "../../ui/Button.tsx";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
@@ -54,13 +55,14 @@ export function DiffView({
       onClose={() => dispatch({ a: "close-diff" })}
       actions={
         <>
-          <button
-            className="btn btn-outline deep-link"
+          <Button
+            outline
+            tone="deep-link"
             onClick={onToggleFull}
             data-tip={full ? "Split view: show the preview above" : "Full height: hide the preview"}
           >
             <Icon name={full ? "split" : "full"} className="icon-inline" /> {full ? "split" : "full"}
-          </button>
+          </Button>
           <OpenInMenu
             absPath={absPath}
             onReveal={() => sock?.send({ t: "reveal", worktreeId: diff.worktreeId, path: diff.path })}

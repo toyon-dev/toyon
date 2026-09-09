@@ -4,6 +4,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { useSock, useStore } from "../../state/context.tsx";
 import { useActive, useActiveId, useLocalField } from "../../state/selectors.ts";
 import { repoById } from "../../state/store.ts";
+import { Button } from "../../ui/Button.tsx";
 import { step } from "../../ui/listNav.ts";
 import { editorItems, Menu } from "../../ui/Menu.tsx";
 import { shiftRanges, wtDir } from "../util.ts";
@@ -237,16 +238,17 @@ export function LeftDock({ width }: { width: number }) {
     <div className={`left-dock ${leftOpen ? "" : "collapsed"}`} style={{ width }}>
       <div className="dock-tabs" role="tablist">
         {(["changes", "history"] as const).map((t) => (
-          <button
+          <Button
             key={t}
-            type="button"
             role="tab"
-            className={`btn btn-outline dock-tab ${tab === t ? "on" : ""}`}
+            outline
+            tone="dock-tab"
+            on={tab === t}
             aria-selected={tab === t}
             onClick={() => setTab(t)}
           >
             {t}
-          </button>
+          </Button>
         ))}
       </div>
       <div

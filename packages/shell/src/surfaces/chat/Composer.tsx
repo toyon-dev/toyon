@@ -5,6 +5,7 @@ import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useLocalField } from "../../state/selectors.ts";
+import { IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
@@ -392,14 +393,15 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             <Icon name="terminal" />
             {trouble && <span className="term-badge" />}
           </button>
-          <button
-            className={`btn-icon composer-pick ${picking ? "on" : ""}`}
+          <IconButton
+            icon="pick"
+            label="Pick an element on the page to attach"
+            hint={chord("pick")}
+            tone="composer-pick"
+            on={picking}
             disabled={!active}
-            {...tip("Pick an element on the page to attach", chord("pick"))}
             onClick={() => id && togglePick(id, picking, dispatch)}
-          >
-            <Icon name="pick" />
-          </button>
+          />
         </span>
       </div>
     </div>

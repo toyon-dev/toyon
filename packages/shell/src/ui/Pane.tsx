@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Icon } from "./Icon.tsx";
+import { IconButton } from "./Button.tsx";
 import { tip } from "./Tooltip.tsx";
 
 /** a bottom pane of the preview column (editor, terminal): drag handle, header row, close button.
@@ -36,9 +36,7 @@ export function Pane({
       <div className={`file-head ${floating ? "floating" : ""}`}>
         <span className="file-path">{title}</span>
         {actions}
-        <button className="btn-icon" onClick={onClose} {...tip("Close", closeHint)}>
-          <Icon name="close" />
-        </button>
+        <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />
       </div>
       {children}
     </div>

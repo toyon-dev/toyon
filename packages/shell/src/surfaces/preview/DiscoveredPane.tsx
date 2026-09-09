@@ -1,5 +1,6 @@
 import type { DiscoveredWorktree } from "@toyon/shared";
 import { useSock, useStore } from "../../state/context.tsx";
+import { Button } from "../../ui/Button.tsx";
 
 /** What fills the preview column for a worktree git knows about but toyon does not run. There is
  * no preview to show: nothing is serving. The same slot the setup pane uses, for the same reason
@@ -29,12 +30,12 @@ export function DiscoveredPane({ row }: { row: DiscoveredWorktree }) {
             other worktrees. Your files are left alone: the install and setup commands do not re-run.
           </p>
           <div>
-            <button
-              className="btn btn-outline"
+            <Button
+              outline
               onClick={() => sock?.send({ t: "adopt-worktree", repoId: row.repoId, path: row.path, clientId })}
             >
               take over
-            </button>
+            </Button>
           </div>
         </>
       )}

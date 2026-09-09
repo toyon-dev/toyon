@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "./Button.tsx";
 
 /** Vite could not load a chunk. A rebuilt shell rotates every hashed filename, so a tab that has
  * been open across a rebuild asks the daemon for code that no longer exists. React.lazy caches the
@@ -33,9 +34,9 @@ export class ErrorBoundary extends Component<{ children: ReactNode; pane?: boole
             ? "This page is still running the old build. Reload to pick up the new one."
             : error.message || String(error)}
         </div>
-        <button className="btn btn-outline" onClick={() => window.location.reload()}>
+        <Button outline onClick={() => window.location.reload()}>
           reload
-        </button>
+        </Button>
       </div>
     );
   }

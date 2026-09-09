@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
+import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
@@ -34,27 +35,21 @@ export function KeysHelp() {
         <div className="keys-h">Settings</div>
         <div className="set-row">
           <span className="keys-d">theme</span>
-          <button
-            className="btn btn-outline set-v"
-            onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}
-          >
+          <Button outline tone="set-v" onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
             {resolveTheme(prefs, themes, systemDark).name}
-          </button>
+          </Button>
         </div>
         <div className="set-row">
           <span className="keys-d">light/dark mode</span>
-          <button
-            className="btn btn-outline set-v"
-            onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}
-          >
+          <Button outline tone="set-v" onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}>
             {appearanceLabel[prefs.mode]}
-          </button>
+          </Button>
         </div>
         <div className="set-row">
           <span className="keys-d">default agent</span>
-          <button className="btn btn-outline set-v" onClick={() => open({ a: "open", overlay: { kind: "agent" } })}>
+          <Button outline tone="set-v" onClick={() => open({ a: "open", overlay: { kind: "agent" } })}>
             {agents.find((a) => a.id === defaultAgent)?.name ?? defaultAgent}
-          </button>
+          </Button>
         </div>
         {/* per agent: who it is logged in as, so a refused or stale credential is fixable here
             rather than only in the terminal that wrote it */}
@@ -66,13 +61,14 @@ export function KeysHelp() {
         {repo && (
           <div className="set-row">
             <span className="keys-d">{repo.name}</span>
-            <button
-              className="btn btn-outline set-v"
+            <Button
+              outline
+              tone="set-v"
               data-tip={`edit the install + start commands in ${repo.name}'s toyon.json`}
               onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
             >
               {Object.keys(repo.config.procs).join(" + ") || "not set up"}
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -125,14 +121,15 @@ function AgentRow({ agent }: { agent: AgentInfo }) {
   return (
     <div className="set-row">
       <span className="keys-d">{agent.name}</span>
-      <button
-        className="btn btn-outline set-v"
+      <Button
+        outline
+        tone="set-v"
         data-tip={authTip(agent)}
         disabled={items.length === 0}
         onClick={(e) => setMenu(e.currentTarget.getBoundingClientRect())}
       >
         {authLabel(agent)}
-      </button>
+      </Button>
       {menu && <Menu anchor={menu} align="right" items={items} onClose={closeMenu} />}
     </div>
   );

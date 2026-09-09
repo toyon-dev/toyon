@@ -1,6 +1,7 @@
 /* Base layer: the reset and the primitives every surface composes. A semantic class (.ship-btn,
-   .deep-link, .rb-path…) adds color or a size delta on top of one of these; hover and disabled
-   states are defined here, once. */
+   .deep-link, .rb-path…) adds colour on top of one of these, never the box: padding and height
+   belong to the primitive and to Button's size prop, and styles/button.test.ts enforces that.
+   Hover and disabled states are defined here, once. */
 
 * {
   box-sizing: border-box;
@@ -47,6 +48,15 @@ button {
   border-radius: var(--r-sm);
   padding: 1px 8px;
   white-space: nowrap;
+}
+/* three sizes, because the ten hand-written paddings collapsed to three once they were laid out
+   next to each other: the compact default, a chip you aim at, and the action a panel is asking
+   for. The four near-misses (2px 8px, 3px 7px, 2px 10px, 1px 7px) were nobody's decision. */
+.btn-md {
+  padding: 4px 8px;
+}
+.btn-lg {
+  padding: 4px 16px;
 }
 .btn:hover {
   color: var(--text0);

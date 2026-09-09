@@ -5,6 +5,7 @@ import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import type { ChatItem } from "../../state/store.ts";
+import { Button } from "../../ui/Button.tsx";
 import { useHoldInPlace } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { attachmentUrl } from "../../ws.ts";
@@ -331,18 +332,19 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
         <div className="auth-methods">
           {item.methods.map((m) =>
             m.needsKey ? (
-              <button
+              <Button
                 key={m.id}
-                className={`btn btn-outline ${keyFor === m.id ? "on" : ""}`}
+                outline
+                on={keyFor === m.id}
                 data-tip={m.description}
                 onClick={() => setKeyFor(keyFor === m.id ? null : m.id)}
               >
                 {m.name}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 key={m.id}
-                className="btn btn-outline"
+                outline
                 data-tip={m.kind === "terminal" ? "runs in the terminal pane" : m.description}
                 onClick={() => {
                   go(m.id);
@@ -350,16 +352,16 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
                 }}
               >
                 {m.name}
-              </button>
+              </Button>
             ),
           )}
-          <button
-            className="btn btn-outline"
+          <Button
+            outline
             data-tip="after logging in elsewhere (the terminal, another window)"
             onClick={() => sock?.send({ t: "agent-retry", worktreeId: id })}
           >
             send again
-          </button>
+          </Button>
         </div>
       )}
       {!item.done && keyMethod && (
@@ -381,9 +383,7 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
             value={key}
             onChange={(e) => setKey(e.target.value)}
           />
-          <button className="btn" type="submit">
-            use key
-          </button>
+          <Button type="submit">use key</Button>
         </form>
       )}
     </div>

@@ -2,6 +2,7 @@ import { SHELL_STREAM } from "@toyon/shared";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive, useLocalField, useTheme } from "../../state/selectors.ts";
+import { IconButton } from "../../ui/Button.tsx";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
@@ -52,13 +53,11 @@ export function TerminalPane({
       actions={
         <>
           {exit !== null && <span className="term-exit">exited {exit}</span>}
-          <button
-            className="btn-icon"
+          <IconButton
+            icon="reload"
+            label={stream === SHELL_STREAM ? "Restart the shell" : `Restart ${stream}`}
             onClick={() => sock?.send({ t: "term-restart", worktreeId, stream })}
-            {...tip(stream === SHELL_STREAM ? "Restart the shell" : `Restart ${stream}`)}
-          >
-            <Icon name="reload" />
-          </button>
+          />
         </>
       }
     >

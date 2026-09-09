@@ -1,6 +1,7 @@
 import type { RepoInfo } from "@toyon/shared";
 import { useCallback } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -123,14 +124,11 @@ export function ProjectPicker({
       }
       trailing={
         dialog || embedded ? undefined : (
-          <button
-            type="button"
-            className="btn-icon"
-            {...tip("Find a project on disk")}
+          <IconButton
+            icon="folder"
+            label="Find a project on disk"
             onClick={() => dispatch({ a: "open", overlay: { kind: "projects", dialog: true } })}
-          >
-            <Icon name="folder" />
-          </button>
+          />
         )
       }
       items={[]}

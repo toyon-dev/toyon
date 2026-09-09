@@ -1,6 +1,7 @@
 import type { PendingRepo } from "@toyon/shared";
 import { useEffect, useRef } from "react";
 import { useDispatch, useSock } from "../../state/context.tsx";
+import { Button } from "../../ui/Button.tsx";
 
 /** A clone in flight, in the preview area where that project's app will be. Sibling of the setup
  * pane: both take the preview slot for a project that cannot show one yet, and both are the place
@@ -55,9 +56,9 @@ export function ImportPane({ pending }: { pending: PendingRepo }) {
 
       <div className="np-actions">
         <span className="np-dest" />
-        <button className="btn btn-outline np-create" onClick={cancel}>
+        <Button outline size="lg" tone="np-create" onClick={cancel}>
           {failed ? "dismiss" : "stop"}
-        </button>
+        </Button>
       </div>
     </div>
   );

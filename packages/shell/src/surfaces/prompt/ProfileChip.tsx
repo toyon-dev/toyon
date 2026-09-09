@@ -1,6 +1,7 @@
 import type { RepoInfo } from "@toyon/shared";
 import { STORAGE } from "../../state/keys.ts";
 import { nextProfile, profileNames } from "../../state/profiles.ts";
+import { Button } from "../../ui/Button.tsx";
 import { usePersisted } from "../../ui/hooks.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 
@@ -32,12 +33,13 @@ export function ProfileChip({
   if (names.length === 0 || !value) return null;
   const next = nextProfile(names, value);
   return (
-    <button
-      className="btn btn-outline profile-chip"
+    <Button
+      outline
+      tone="profile-chip"
       {...tip(names.length > 1 ? `run with ${next} instead` : "the only profile in toyon.json")}
       onClick={() => next && onChange(next)}
     >
       {value}
-    </button>
+    </Button>
   );
 }

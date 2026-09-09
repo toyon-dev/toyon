@@ -1,6 +1,7 @@
 import type { WorktreeStatus } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
+import { Button } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
@@ -72,30 +73,33 @@ export function CommitBox({
         </span>
         <span className="commit-acts">
           {dirty ? (
-            <button
-              className="btn btn-outline ship-btn"
+            <Button
+              outline
+              tone="ship-btn"
               disabled={!msg.trim()}
               onClick={commit}
               {...tip("git add -A && git commit", "⌘⏎")}
             >
               commit
-            </button>
+            </Button>
           ) : (
             canLand && (
               <>
                 {behind > 0 && (
-                  <button
-                    className="btn btn-outline ship-btn"
+                  <Button
+                    outline
+                    tone="ship-btn"
                     data-tip={`Pull ${behind} commit(s) from main into this worktree`}
                     onClick={() => sock?.send({ t: "sync-main", worktreeId: wt.id })}
                   >
                     sync <Icon name="pull" className="icon-inline" />
-                  </button>
+                  </Button>
                 )}
                 {ahead > 0 && (
                   <>
-                    <button
-                      className="btn btn-outline ship-btn"
+                    <Button
+                      outline
+                      tone="ship-btn"
                       data-tip={
                         wt.prUrl
                           ? "Merge locally: the open PR will show as merged once main is pushed"
@@ -104,23 +108,25 @@ export function CommitBox({
                       onClick={() => sock?.send({ t: "merge-main", worktreeId: wt.id })}
                     >
                       merge
-                    </button>
+                    </Button>
                     {wt.prUrl ? (
-                      <button
-                        className="btn btn-outline ship-btn pr-open"
+                      <Button
+                        outline
+                        tone="ship-btn"
                         data-tip={`PR open: click to view · ${wt.prUrl}`}
                         onClick={() => window.open(wt.prUrl, "_blank")}
                       >
                         pr open <Icon name="external" className="icon-inline" />
-                      </button>
+                      </Button>
                     ) : (
-                      <button
-                        className="btn btn-outline ship-btn"
+                      <Button
+                        outline
+                        tone="ship-btn"
                         data-tip="Push and open a PR"
                         onClick={() => sock?.send({ t: "ship", worktreeId: wt.id })}
                       >
                         pr <Icon name="external" className="icon-inline" />
-                      </button>
+                      </Button>
                     )}
                   </>
                 )}

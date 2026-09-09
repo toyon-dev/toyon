@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStore } from "../../state/context.tsx";
+import { Button } from "../../ui/Button.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../palettes/ProjectPicker.tsx";
 
@@ -30,13 +31,14 @@ export function RepoChip({ onClose }: { onClose?: () => void }) {
         close();
       }}
     >
-      <button
-        className="btn btn-outline repo-chip"
+      <Button
+        outline
+        tone="repo-chip"
         {...tip("the project this worktree branches from; click to switch")}
         onClick={() => setOpen((v) => !v)}
       >
         <span className="repo-name">{repo.name}</span>
-      </button>
+      </Button>
       {open && <ProjectPicker embedded onDone={close} />}
     </span>
   );

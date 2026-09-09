@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useStore } from "../../state/context.tsx";
 import { useActive, useActiveRepo, useLocalField } from "../../state/selectors.ts";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -28,56 +29,60 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   return (
     <div className="status-bar top-bar">
       {zen && <span className="zen-title">{active?.worktree.title ?? "toyon"}</span>}
-      <button
-        className={`btn-icon toggle ${leftOpen ? "on" : ""}`}
+      <IconButton
+        icon="branch"
+        label="Changes panel"
+        hint={chord("left")}
+        tone="toggle"
+        on={leftOpen}
         onClick={() => dispatch({ a: "toggle-left" })}
-        {...tip("Changes panel", chord("left"))}
-      >
-        <Icon name="branch" />
-      </button>
+      />
       <ProjectPill />
       <RouteBar worktreeId={id} ready={ready} left={navCenter} />
       {installEvt && (
-        <button
-          className="btn toggle"
+        <Button
+          tone="toggle"
           data-tip="Install Toyon as an app (own window, dock icon)"
           onClick={() => void installEvt.prompt()}
         >
           <Icon name="download" className="icon-inline" /> install app
-        </button>
+        </Button>
       )}
       <span className="grow" />
       {/* right cluster: settings · chat · zen (zen last — it hides everything, so it sits at the edge).
           the terminal toggle lives in the composer: one shell per worktree, not app chrome. */}
       <span className="bar-tools">
-        <button
-          className={`btn-icon toggle keys-btn ${keysOpen ? "on" : ""}`}
-          {...tip("Settings & shortcuts", chord("keys"))}
+        <IconButton
+          icon="settings"
+          label="Settings & shortcuts"
+          hint={chord("keys")}
+          tone="toggle keys-btn"
+          on={keysOpen}
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
-        >
-          <Icon name="settings" />
-        </button>
-        <button
-          className={`btn-icon toggle ${designOpen ? "on" : ""}`}
+        />
+        <IconButton
+          icon="palette"
+          label="Design system"
+          hint={chord("design")}
+          tone="toggle"
+          on={designOpen}
           onClick={() => dispatch({ a: "toggle-design" })}
-          {...tip("Design system", chord("design"))}
-        >
-          <Icon name="palette" />
-        </button>
-        <button
-          className={`btn-icon toggle ${rightOpen ? "on" : ""}`}
+        />
+        <IconButton
+          icon="chat"
+          label="Chat panel"
+          hint={chord("right")}
+          tone="toggle"
+          on={rightOpen}
           onClick={() => dispatch({ a: "toggle-right" })}
-          {...tip("Chat panel", chord("right"))}
-        >
-          <Icon name="chat" />
-        </button>
-        <button
-          className="btn-icon toggle"
-          {...tip("Full-bleed preview", chord("zen"))}
+        />
+        <IconButton
+          icon="zen"
+          label="Full-bleed preview"
+          hint={chord("zen")}
+          tone="toggle"
           onClick={() => dispatch({ a: "toggle-zen" })}
-        >
-          <Icon name="zen" />
-        </button>
+        />
       </span>
     </div>
   );
@@ -95,14 +100,15 @@ function ProjectPill() {
   const busyElsewhere = useStore((s) => s.worktrees.some((w) => isBusy(w) && w.worktree.repoId !== s.activeRepoId));
   return (
     <span className="pp-wrap">
-      <button
-        className={`btn project-pill ${open ? "on" : ""}`}
+      <Button
+        tone="project-pill"
+        on={open}
         {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
         onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
       >
         <span className="pp-name">{repo?.name ?? "open project"}</span>
         {busyElsewhere && <span className="pp-dot" {...tip("An agent is working in another project")} />}
-      </button>
+      </Button>
       {open && <ProjectPicker />}
     </span>
   );
@@ -137,30 +143,27 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
   };
   return (
     <div className="rb-center" style={{ left }}>
-      <button
-        className="btn-icon rb-btn"
+      <IconButton
+        icon="back"
+        label="Back"
+        tone="rb-btn"
         disabled={!ready}
-        {...tip("Back")}
         onClick={() => id && previewBus.post(id, { type: "back" })}
-      >
-        <Icon name="back" />
-      </button>
-      <button
-        className="btn-icon rb-btn"
+      />
+      <IconButton
+        icon="forward"
+        label="Forward"
+        tone="rb-btn"
         disabled={!ready}
-        {...tip("Forward")}
         onClick={() => id && previewBus.post(id, { type: "forward" })}
-      >
-        <Icon name="forward" />
-      </button>
-      <button
-        className="btn-icon rb-btn rb-reload"
+      />
+      <IconButton
+        icon="reload"
+        label="Reload preview"
+        tone="rb-btn rb-reload"
         disabled={!ready}
-        {...tip("Reload preview")}
         onClick={() => id && previewBus.post(id, { type: "reload" })}
-      >
-        <Icon name="reload" />
-      </button>
+      />
       <input
         className="field rb-path"
         value={ready ? val : ""}

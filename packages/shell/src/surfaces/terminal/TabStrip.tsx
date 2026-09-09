@@ -1,4 +1,5 @@
 import { type ProcState, SHELL_STREAM } from "@toyon/shared";
+import { Button } from "../../ui/Button.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
 /** the pane's header: one chip per stream the worktree owns. The shell first, then the procs in
@@ -15,25 +16,27 @@ export function TabStrip({
 }) {
   return (
     <span className="term-tabs">
-      <button
-        type="button"
-        className={`btn btn-outline term-tab ${active === SHELL_STREAM ? "on" : ""}`}
+      <Button
+        outline
+        tone="term-tab"
+        on={active === SHELL_STREAM}
         onClick={() => onPick(SHELL_STREAM)}
         {...tip("A shell in this worktree")}
       >
         shell
-      </button>
+      </Button>
       {procs.map((p) => (
-        <button
-          type="button"
+        <Button
           key={p.name}
-          className={`btn btn-outline term-tab ${active === p.name ? "on" : ""}`}
+          outline
+          tone="term-tab"
+          on={active === p.name}
           onClick={() => onPick(p.name)}
           {...tip(`${p.command}\n${p.status} on :${p.port}`)}
         >
           <span className={`dot ${p.status}`} />
           {p.name}
-        </button>
+        </Button>
       ))}
     </span>
   );

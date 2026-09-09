@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { isBusy, pickLabel } from "../util.ts";
@@ -86,13 +87,14 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
         {busy && active && (
           <div className="msg-thinking working-row">
             {active.agent === "waiting" ? "waiting for your answer…" : "working…"}
-            <button
-              className="btn btn-outline stop-btn"
+            <Button
+              outline
+              tone="stop-btn"
               data-tip={`Stop the agent (context up to here is kept${queue.length ? "; queued messages dropped" : ""})`}
               onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
             >
               <Icon name="stop" className="icon-inline" /> stop
-            </button>
+            </Button>
           </div>
         )}
         {/* only an agent that cannot take a message mid-turn leaves one waiting here. The rest go
@@ -103,21 +105,19 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
               <span className="queued-tag">queued</span>
               <span className="queued-text">{text}</span>
               <span className="queued-actions">
-                <button
-                  {...tip("Edit: removes from queue, puts it back in the input")}
+                <IconButton
+                  icon="edit"
+                  label="Edit: removes from queue, puts it back in the input"
                   onClick={() => {
                     sock?.send({ t: "unqueue", worktreeId: id, index: i });
                     dispatch({ a: "set-draft", id, text });
                   }}
-                >
-                  <Icon name="edit" className="icon-inline" />
-                </button>
-                <button
-                  {...tip("Remove from queue")}
+                />
+                <IconButton
+                  icon="close"
+                  label="Remove from queue"
                   onClick={() => sock?.send({ t: "unqueue", worktreeId: id, index: i })}
-                >
-                  <Icon name="close" className="icon-inline" />
-                </button>
+                />
               </span>
             </div>
           ))}

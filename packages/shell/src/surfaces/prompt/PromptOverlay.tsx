@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
+import { Button } from "../../ui/Button.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
 import { RepoChip } from "./RepoChip.tsx";
@@ -79,9 +80,11 @@ export function PromptOverlay() {
         {agents.length > 1 && (
           <span className="agent-chips">
             {agents.map((a) => (
-              <button
+              <Button
                 key={a.id}
-                className={`btn btn-outline variant-chip ${agent === a.id ? "on" : ""}`}
+                outline
+                tone="variant-chip"
+                on={agent === a.id}
                 disabled={!a.available}
                 data-tip={
                   !a.available
@@ -93,7 +96,7 @@ export function PromptOverlay() {
                 onClick={() => setAgent(a.id)}
               >
                 {a.name}
-              </button>
+              </Button>
             ))}
           </span>
         )}
@@ -106,13 +109,9 @@ export function PromptOverlay() {
           <span className="variants-right">
             <span data-tip="Run the same prompt in N parallel worktrees, keep the best">variants</span>
             {[1, 2, 3].map((n) => (
-              <button
-                key={n}
-                className={`btn btn-outline variant-chip ${variants === n ? "on" : ""}`}
-                onClick={() => setVariants(n)}
-              >
+              <Button key={n} outline tone="variant-chip" on={variants === n} onClick={() => setVariants(n)}>
                 {n}
-              </button>
+              </Button>
             ))}
           </span>
         )}

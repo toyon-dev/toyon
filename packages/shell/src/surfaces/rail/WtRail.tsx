@@ -9,6 +9,7 @@ import {
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
@@ -282,8 +283,9 @@ export function WtRail() {
           ))}
           {graftMode && (
             <div className="graft-row">
-              <button
-                className="btn bulk-btn combine-btn"
+              <Button
+                size="md"
+                tone="bulk-btn combine-btn"
                 disabled={sel.length < 2}
                 data-tip="Preview these worktrees merged together (local octopus merge)"
                 onClick={() => {
@@ -292,9 +294,10 @@ export function WtRail() {
                 }}
               >
                 <Icon name="layers" className="icon-inline" /> graft {sel.length}
-              </button>
-              <button
-                className="btn bulk-btn"
+              </Button>
+              <Button
+                size="md"
+                tone="bulk-btn"
                 disabled={!sel.some((id) => (worktrees.find((w) => w.worktree.id === id)?.behind ?? 0) > 0)}
                 data-tip="Pull main into every selected worktree that's behind"
                 onClick={() => {
@@ -306,9 +309,10 @@ export function WtRail() {
                 }}
               >
                 <Icon name="pull" className="icon-inline" /> sync
-              </button>
-              <button
-                className="btn bulk-btn danger"
+              </Button>
+              <Button
+                size="md"
+                tone="bulk-btn danger"
                 disabled={sel.length === 0}
                 data-tip="Remove all selected worktrees (branches and changes deleted)"
                 onClick={() => {
@@ -323,10 +327,8 @@ export function WtRail() {
                 }}
               >
                 remove…
-              </button>
-              <button className="btn bulk-btn" {...tip("Cancel", "esc")} onClick={cancelGraft}>
-                <Icon name="close" className="icon-inline" />
-              </button>
+              </Button>
+              <IconButton icon="close" label="Cancel" hint="esc" tone="bulk-btn" onClick={cancelGraft} />
             </div>
           )}
           {!graftMode && (
@@ -390,13 +392,13 @@ export function WtRail() {
           )}
         </div>
         <div className="rail-foot">
-          <button
-            className={`btn-icon ${railOpen ? "on" : ""}`}
-            {...tip("Worktree panel", chord("rail"))}
+          <IconButton
+            icon="worktrees"
+            label="Worktree panel"
+            hint={chord("rail")}
+            on={railOpen}
             onClick={() => dispatch({ a: "toggle-rail" })}
-          >
-            <Icon name="worktrees" />
-          </button>
+          />
         </div>
         {menu && menuWt && <Menu at={menu.at} onClose={closeMenu} items={menuItems(menuWt, menu.land)} />}
         {discMenu && discMenuRow && (

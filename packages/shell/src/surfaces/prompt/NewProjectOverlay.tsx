@@ -2,6 +2,7 @@ import { projectNameError } from "@toyon/shared";
 import { useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { Overlay as OverlayState } from "../../state/store.ts";
+import { Button } from "../../ui/Button.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { destination } from "../palettes/projectPicker.ts";
@@ -80,12 +81,10 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
 
       <div className="np-actions">
         <span className="np-dest">{ready ? destination(parent, name) : ""}</span>
-        <button className="btn" onClick={() => dispatch({ a: "close" })}>
-          cancel
-        </button>
-        <button className="btn btn-outline np-create" disabled={!ready} onClick={submit}>
+        <Button onClick={() => dispatch({ a: "close" })}>cancel</Button>
+        <Button outline size="lg" tone="np-create" disabled={!ready} onClick={submit}>
           {clone ? "clone" : "create"}
-        </button>
+        </Button>
       </div>
     </Overlay>
   );

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Button } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { editorItems, Menu } from "../../ui/Menu.tsx";
 
@@ -8,15 +9,16 @@ export function OpenInMenu({ absPath, onReveal }: { absPath: string; onReveal?: 
   const close = useCallback(() => setAnchor(null), []);
   return (
     <>
-      <button
-        className="btn btn-outline deep-link"
+      <Button
+        outline
+        tone="deep-link"
         onClick={(e) => {
           e.stopPropagation();
           setAnchor(anchor ? null : (e.currentTarget as HTMLElement).getBoundingClientRect());
         }}
       >
         open in <Icon name="caret" className="icon-inline" />
-      </button>
+      </Button>
       {anchor && <Menu anchor={anchor} align="right" onClose={close} items={editorItems(absPath, onReveal)} />}
     </>
   );

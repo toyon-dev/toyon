@@ -10,6 +10,7 @@ import { WtRail } from "../surfaces/rail/WtRail.tsx";
 import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
 import { clampW } from "../surfaces/util.ts";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "../theme.ts";
+import { Button } from "../ui/Button.tsx";
 import { useDragResize, usePersisted } from "../ui/hooks.ts";
 import { Tooltips } from "../ui/Tooltip.tsx";
 import { useChords } from "./keys.ts";
@@ -207,8 +208,10 @@ export function App() {
         <div className={`toast ${toast.ok ? "ok" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
           {toast.message}
           {toast.removeIds && toast.removeIds.length > 0 && (
-            <button
-              className="btn btn-outline toast-action"
+            <Button
+              outline
+              size="md"
+              tone="toast-action"
               onClick={(e) => {
                 e.stopPropagation();
                 for (const id of toast.removeIds ?? []) sock?.send({ t: "remove-worktree", worktreeId: id });
@@ -216,7 +219,7 @@ export function App() {
               }}
             >
               {toast.removeIds.length > 1 ? `clean up ${toast.removeIds.length} worktrees` : "remove worktree"}
-            </button>
+            </Button>
           )}
         </div>
       )}

@@ -13,6 +13,7 @@ import { marked } from "marked";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
+import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import {
@@ -159,10 +160,12 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
               const at = rows.findIndex((r) => r.q === qi && r.option.value === o.value);
               const on = draft[qi]?.selected.includes(o.value);
               return (
-                <button
+                <Button
                   key={o.value}
-                  type="button"
-                  className={`btn btn-outline qo-item ask-opt ${on ? "on" : ""} ${at === nav.index ? "active" : ""}`}
+                  outline
+                  size="md"
+                  tone={`ask-opt ${at === nav.index ? "active" : ""}`}
+                  on={on}
                   onClick={() => {
                     nav.setIndex(at);
                     pick(rows[at]!);
@@ -172,7 +175,7 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
                   <Kbd k={String(oi + 1)} chip />
                   <span className="ask-label">{o.label}</span>
                   {o.description && <span className="ask-desc">{o.description}</span>}
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -180,10 +183,10 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
             <pre className="ask-preview">{nav.active.option.preview}</pre>
           )}
           {q.note && noteFor !== qi && (
-            <button type="button" className="btn ask-note-btn" onClick={() => setNoteFor(qi)}>
+            <Button tone="ask-note-btn" onClick={() => setNoteFor(qi)}>
               <Kbd k="n" chip />
               {draft[qi]?.note?.trim() ? "edit your note" : "add a note"}
-            </button>
+            </Button>
           )}
           {q.note && noteFor === qi && (
             <textarea
@@ -209,18 +212,13 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
         </div>
       ))}
       <div className="ask-foot">
-        <button
-          type="button"
-          className="btn btn-outline ask-send"
-          disabled={!canSubmit(questions, draft)}
-          onClick={submit}
-        >
+        <Button outline tone="ask-send" disabled={!canSubmit(questions, draft)} onClick={submit}>
           send
-        </button>
-        <button type="button" className="btn ask-skip" onClick={() => send()}>
+        </Button>
+        <Button tone="ask-skip" onClick={() => send()}>
           <Kbd k="s" chip />
           skip
-        </button>
+        </Button>
         <span className="ask-keys">
           <Kbd k="↑↓" /> move <Kbd k="⏎" /> choose <Kbd k="⌘⏎" /> send <Kbd k="esc" /> back to the message box
         </span>
@@ -267,15 +265,16 @@ function PermissionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { k
       {open ? (
         <div className="ask-options ask-choices">
           {ask.choices.map((c, i) => (
-            <button
+            <Button
               key={c.id}
-              type="button"
-              className={`btn btn-outline ask-opt ${c.kind.startsWith("reject") ? "ask-no" : ""}`}
+              outline
+              size="md"
+              tone={`ask-opt ${c.kind.startsWith("reject") ? "ask-no" : ""}`}
               onClick={() => decide(c.id)}
             >
               <Kbd k={String(i + 1)} chip />
               <span className="ask-label">{c.name}</span>
-            </button>
+            </Button>
           ))}
         </div>
       ) : (

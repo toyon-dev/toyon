@@ -1,6 +1,7 @@
 import type { RepoInfo } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -91,13 +92,7 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
                 onChange={(e) => edit(i, { cmd: e.target.value })}
               />
               {multi && (
-                <button
-                  className="btn btn-icon"
-                  {...tip("Remove")}
-                  onClick={() => setProcs(procs.filter((_, j) => j !== i))}
-                >
-                  <Icon name="close" />
-                </button>
+                <IconButton icon="close" label="Remove" onClick={() => setProcs(procs.filter((_, j) => j !== i))} />
               )}
             </div>
             {i === 0 && (
@@ -111,20 +106,16 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
 
       <div className="form-row">
         <span className="form-label" />
-        <button className="btn setup-add" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
+        <Button tone="setup-add" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
           + another process (an api, a worker…)
-        </button>
+        </Button>
       </div>
 
       <div className="setup-actions">
-        {onClose && (
-          <button className="btn" onClick={onClose}>
-            cancel
-          </button>
-        )}
-        <button className="btn btn-outline setup-start" disabled={!canStart} onClick={start}>
+        {onClose && <Button onClick={onClose}>cancel</Button>}
+        <Button outline size="lg" tone="setup-start" disabled={!canStart} onClick={start}>
           {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
-        </button>
+        </Button>
       </div>
     </div>
   );

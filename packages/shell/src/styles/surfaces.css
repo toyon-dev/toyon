@@ -48,7 +48,6 @@
   color: var(--text0);
   background: var(--sunken);
   border-color: var(--border0);
-  padding: 2px 8px;
 }
 .set-v:hover {
   background: var(--sunken);
@@ -291,7 +290,6 @@ body.resizing iframe {
   gap: 2px;
 }
 .bulk-btn {
-  padding: 3px 7px;
 }
 .bulk-btn.danger {
   color: var(--red);
@@ -1471,7 +1469,6 @@ body.resizing .row-resize {
 }
 .profile-chip {
   font: var(--type-mono);
-  padding: 0 6px;
 }
 .spawn-row input {
   accent-color: var(--accent);
@@ -1495,7 +1492,6 @@ body.resizing .row-resize {
   font: var(--type-mono);
   color: var(--text2);
   border-color: var(--border0);
-  padding: 1px 7px;
   align-self: center;
 }
 .deep-link:hover {
@@ -1525,7 +1521,6 @@ body.resizing .row-resize {
   display: block;
   margin-top: 8px;
   color: var(--accent);
-  padding: 2px 10px;
 }
 
 .ahead-badge {
@@ -1702,11 +1697,11 @@ body.resizing .rb-center {
 }
 
 .pick-chip {
+  padding: 4px 8px;
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
-  padding: 4px 8px;
   background: var(--sunken);
   border: 1px solid var(--border1);
   border-left: 3px solid var(--accent);
@@ -1877,7 +1872,6 @@ body.resizing .rb-center {
   color: var(--text2);
 }
 .np-create {
-  padding: 4px 16px;
 }
 .np-url {
   font: var(--type-mono);
@@ -1911,7 +1905,6 @@ body.resizing .rb-center {
   margin-top: 12px;
 }
 .setup-start {
-  padding: 4px 16px;
 }
 
 .variants-row {
@@ -2054,12 +2047,12 @@ body.resizing .rb-center {
 /* what the query is scoped to, in the pill's own box so the project name does not move when the
    panel opens over it */
 .lp-chip {
+  padding: 1px 8px;
   flex: none;
   display: inline-flex;
   align-items: center;
   min-height: 20px;
   max-width: 160px;
-  padding: 1px 8px;
   background: var(--surface2);
   border-radius: var(--r-sm);
   color: var(--text0);
@@ -2315,7 +2308,6 @@ body.resizing .rb-center {
 .ask-opt {
   align-items: baseline;
   text-align: left;
-  padding: 4px 8px;
 }
 .ask-opt.on {
   color: var(--accent);

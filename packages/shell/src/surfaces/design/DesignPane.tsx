@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { localOf } from "../../state/store.ts";
+import { Button } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -63,20 +64,21 @@ export function DesignPane({
       onClose={() => dispatch({ a: "toggle-design" })}
       actions={
         <>
-          <button
-            className="btn btn-outline"
+          <Button
+            outline
             onClick={() => sock?.send({ t: "design-scan", worktreeId })}
             data-tip="Scan this worktree again"
           >
             <Icon name="reload" className="icon-inline" /> rescan
-          </button>
-          <button
-            className="btn btn-outline deep-link"
+          </Button>
+          <Button
+            outline
+            tone="deep-link"
             onClick={onToggleFull}
             data-tip={full ? "Split view: show the preview above" : "Full height: hide the preview"}
           >
             <Icon name={full ? "split" : "full"} className="icon-inline" /> {full ? "split" : "full"}
-          </button>
+          </Button>
         </>
       }
     >

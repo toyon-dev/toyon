@@ -48,6 +48,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     protocol: PROTOCOL_VERSION,
     repos,
     worktrees: w,
+    discovered: [],
     themes: initial.themes,
     themePrefs: initial.themePrefs,
     agents: [],
@@ -56,7 +57,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     pending: [],
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
-const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w });
+const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w, discovered: [] });
 const repos = (...r: RepoInfo[]): Action => server({ t: "repos", repos: r });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });
 

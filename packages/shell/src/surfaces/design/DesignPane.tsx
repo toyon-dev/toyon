@@ -333,7 +333,7 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
               >
                 {family}
               </span>
-              {face && <span className="design-face-name">{face.token.name}</span>}
+              {face && <span className="design-face-name row-dim">{face.token.name}</span>}
             </div>
             {sized.map((r) => (
               <div
@@ -346,7 +346,7 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
                 <span className="design-face-sample" style={{ font: r.actual }}>
                   {`${r.family} ${r.size}${r.lead === null ? "" : `/${r.lead}`}`}
                 </span>
-                <span className="design-face-name">{r.token.name}</span>
+                <span className="design-face-name row-dim">{r.token.name}</span>
               </div>
             ))}
           </div>
@@ -506,7 +506,7 @@ function Components({
       {rest.length > 0 && (
         <details className="design-tail">
           <summary className="row-edge">
-            <span className="design-count">{rest.length}</span>
+            <span className="design-count row-dim">{rest.length}</span>
             used once or never
           </summary>
           <ul className="design-rows">{rest.map(row)}</ul>
@@ -560,7 +560,7 @@ function Classes({
           {rest.length > 0 && (
             <details className="design-tail">
               <summary className="row-edge">
-                <span className="design-count">{rest.length}</span>
+                <span className="design-count row-dim">{rest.length}</span>
                 used once or never
               </summary>
               <ul className="design-rows">
@@ -632,9 +632,9 @@ function Row({
         onClick={onOpen}
         disabled={!path}
       >
-        <span className="design-count">{count}</span>
+        <span className="design-count row-dim">{count}</span>
         <span className="design-name">{name}</span>
-        <span className="design-path">{path}</span>
+        <span className="design-path row-dim">{path}</span>
         {children}
       </button>
     </li>

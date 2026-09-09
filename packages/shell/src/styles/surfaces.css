@@ -333,7 +333,6 @@ body.resizing iframe {
 }
 .wt-item .wt-more {
   visibility: hidden;
-  color: var(--text2);
   padding: 0 2px;
   border-radius: var(--r-xs);
   flex-shrink: 0;
@@ -759,7 +758,6 @@ body.resizing .row-resize {
 }
 .disc-lock {
   display: flex;
-  color: var(--text2);
 }
 /* the socket is down: every row is stale and nothing you click will answer. Fading them read as
    "still loading", so they take the fault colour instead and hovering the rail says what happened.
@@ -2424,6 +2422,7 @@ body.resizing .rb-center {
 .design-tail > summary:hover {
   background: var(--element0);
   color: var(--text1);
+  --row-dim-color: var(--text1);
 }
 .design-tail > summary::-webkit-details-marker {
   display: none;
@@ -2539,6 +2538,7 @@ body.resizing .rb-center {
 .design-face-head:hover {
   background: var(--element0);
   --row-edge-color: var(--accent);
+  --row-dim-color: var(--text1);
 }
 .design-face-head {
   margin-bottom: 2px;
@@ -2549,7 +2549,6 @@ body.resizing .rb-center {
 }
 .design-face-name {
   font: var(--type-mono-sm);
-  color: var(--text2);
   white-space: nowrap;
 }
 .design-plate {
@@ -2640,13 +2639,13 @@ body.resizing .rb-center {
 .design-row:focus-visible {
   background: var(--element0);
   --row-edge-color: var(--accent);
+  --row-dim-color: var(--text1);
   outline: none;
 }
 .design-count {
   width: 28px;
   flex-shrink: 0;
   text-align: right;
-  color: var(--text2);
   font: var(--type-mono);
 }
 .design-name {
@@ -2655,7 +2654,6 @@ body.resizing .rb-center {
   flex-shrink: 0;
 }
 .design-path {
-  color: var(--text2);
   font: var(--type-mono);
   overflow: hidden;
   text-overflow: ellipsis;

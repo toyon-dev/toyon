@@ -248,7 +248,7 @@ export function WtRail() {
                 </span>
               )}
               <span
-                className="wt-more"
+                className="wt-more row-dim"
                 {...tip("Actions")}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -379,7 +379,7 @@ export function WtRail() {
                     {/* no inline "take over": the row opens a pane that explains what it would do
                         and offers it there, and a button inside this button would be invalid */}
                     {d.locked && (
-                      <span className="disc-lock">
+                      <span className="disc-lock row-dim">
                         <Icon name="lock" className="icon-inline" />
                       </span>
                     )}

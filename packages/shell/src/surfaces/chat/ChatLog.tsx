@@ -9,7 +9,7 @@ import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, ToolRow } from "./ChatItemView.tsx";
 import { groupTools } from "./group.ts";
 
-/** the transcript for the active worktree: items, working indicator, queued messages, jump-down pill */
+/** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill */
 export function ChatLog({ active }: { active: WorktreeStatus | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -88,13 +88,15 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
             {active.agent === "waiting" ? "waiting for your answer…" : "working…"}
             <button
               className="btn btn-outline stop-btn"
-              data-tip="Stop the agent (context up to here is kept; queued messages dropped)"
+              data-tip={`Stop the agent (context up to here is kept${queue.length ? "; queued messages dropped" : ""})`}
               onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
             >
               <Icon name="stop" className="icon-inline" /> stop
             </button>
           </div>
         )}
+        {/* only an agent that cannot take a message mid-turn leaves one waiting here. The rest go
+            into the turn as they are sent, and read as an ordinary message in the place they landed. */}
         {id &&
           queue.map((text, i) => (
             <div key={`q-${i}`} className="msg-user queued-msg">

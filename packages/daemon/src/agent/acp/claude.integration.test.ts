@@ -109,6 +109,31 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
     }
   }, 180_000);
 
+  test("a message sent mid-turn joins the turn the agent is already running", async () => {
+    const { t, wt, events, session, settle } = world();
+    try {
+      session.send(
+        "Create five files named n1.txt through n5.txt in the current directory, each containing its own " +
+          "number as a word (one, two, three, four, five). Write them one at a time. Do nothing else.",
+      );
+      // the first tool call means the turn is really under way: the window steering exists for
+      for (let i = 0; i < 600 && !events.some((e) => e.type === "tool-start"); i++) await Bun.sleep(100);
+      expect(session.status).toBe("working");
+      session.send("Also create extra.txt containing exactly the word steered.");
+      await settle();
+      expect(session.status).toBe("idle");
+      expect(readFileSync(join(wt, "extra.txt"), "utf8").trim()).toBe("steered");
+      // the point of steering: one turn, not a second one queued behind the first
+      expect(session.queueLength).toBe(0);
+      expect(events.filter((e) => e.type === "turn-start")).toHaveLength(1);
+      expect(events.filter((e) => e.type === "turn-end")).toHaveLength(1);
+      expect(events.filter((e) => e.type === "user-message")).toHaveLength(2);
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 300_000);
+
   test("ask() names a task on a side session without touching the transcript; a fresh agent plans a batch", async () => {
     const { t, wt, events, session } = world();
     try {

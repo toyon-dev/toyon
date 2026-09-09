@@ -33,6 +33,7 @@ import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
 import { parseForm, toContent } from "./elicit.ts";
 import { mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
+import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
 
 export type AgentEventListener = (event: AgentEvent, seq: number) => void;
@@ -86,6 +87,8 @@ interface Conn {
   closeSupported: boolean;
   /** promptCapabilities.image from initialize: whether image blocks may go in a prompt */
   acceptsImages: boolean;
+  /** `_meta.steering` from initialize: whether a message may join the turn already running */
+  steering: boolean;
   /** side sessions (ask): text listeners by session id */
   side: Map<string, (text: string) => void>;
   /** commands pushed per session id, including sessions we have not adopted yet. Adapters send
@@ -103,12 +106,21 @@ interface Live {
   tools: ToolMemos;
 }
 
+/** the attachments written and the bubble emitted: what a message needs before it can go out on
+ * any path. Held on the item so a message that changes path — steered at a turn that settled first,
+ * or sent again after a login — is recorded once and keeps the attachment numbers it was shown with. */
+interface Recorded {
+  images: StoredImage[];
+  pastes: StoredPaste[];
+}
+
 interface QueueItem {
   text: string;
   context?: string;
   pick?: PickMeta;
   images?: ImageInput[];
   pastes?: PasteInput[];
+  recorded?: Recorded;
 }
 
 /** what the end event keeps of the answer, so a reload can read the card back */
@@ -248,15 +260,66 @@ export class AcpSession implements AgentAdapter {
   send(text: string, opts: SendOpts = {}) {
     if (this.stopped) return log.warn(this.d.worktreeId, "send after close dropped");
     const { context, pick, images, pastes } = opts;
-    this.queue.push({
+    const item: QueueItem = {
       text,
       context,
       pick,
       ...(images?.length ? { images } : {}),
       ...(pastes?.length ? { pastes } : {}),
-    });
+    };
+    // sending during a turn means "while you are doing that": an agent that takes steering reads the
+    // message as part of the work it is already on, which is the whole reason a person types then.
+    // A stop already on its way is the exception — that turn is going away, so the message waits.
+    if (this.running && !this.interrupted && this.live?.conn.steering) {
+      return fireAndForget(this.d.worktreeId, this.steer(item), "agent steer");
+    }
+    this.enqueue(item);
+  }
+
+  private enqueue(item: QueueItem) {
+    this.queue.push(item);
     this.queueChanged();
     if (!this.running) fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
+  }
+
+  /** A message that joins the turn in flight. The agent settles that turn once, at its real end, so
+   * the running prompt keeps owning turn-start and turn-end; all this adds to the transcript is the
+   * person's own bubble, in the place they sent it. */
+  private async steer(item: QueueItem) {
+    item.recorded ??= await this.record(item);
+    const live = this.live;
+    // writing the attachments is a window the turn can settle in, and then this is a plain message
+    if (!live || !this.running || this.interrupted) return this.enqueue(item);
+    let outcome: SteerOutcome;
+    try {
+      outcome = steerOutcome(
+        await live.conn.ctx.request(STEER_METHOD, {
+          sessionId: live.sessionId,
+          prompt: buildPrompt(
+            item.text,
+            item.context,
+            undefined,
+            this.carriedImages(live, item.recorded.images),
+            item.recorded.pastes,
+          ),
+          // the turn can also end on the wire: ask for the message back rather than let the agent
+          // prompt itself with it, since nothing here would be tracking a turn it started alone
+          _meta: { steering: { idleBehavior: "promptRequired" } },
+        }),
+      );
+    } catch (e) {
+      // nothing was injected: both adapters validate the request before they push anything
+      log.warn(this.d.worktreeId, "steering failed; the message goes as its own turn", e);
+      return this.enqueue(item);
+    }
+    if (outcome === "promptRequired") return this.enqueue(item);
+    if (outcome === "startedNewTurn") {
+      // an agent that ignored the opt-in and prompted itself. Sending it again would run the same
+      // message twice and cancelling could take the new turn with it, so the agent keeps it: what
+      // is lost is the turn's framing, and status reads idle a beat early. Hold the reaper off it.
+      this.clearReaper();
+      log.warn(this.d.worktreeId, "steered message started a turn of the agent's own");
+    }
   }
 
   /** Interrupt the running turn and drop anything queued. Context up to the interrupt persists
@@ -384,6 +447,8 @@ export class AcpSession implements AgentAdapter {
   retry() {
     const item = this.refused;
     this.refused = null;
+    // back through send(), which records it again: the message is shown a second time, above the
+    // turn the login finally lets it start
     if (item) this.send(item.text, item);
   }
 
@@ -401,9 +466,9 @@ export class AcpSession implements AgentAdapter {
     return /connection closed/i.test(message) ? (this.conn?.link.exitInfo() ?? message) : message;
   }
 
-  private async runTurn({ text, context, pick, images, pastes }: QueueItem) {
-    // numbered and written in send order before anything is shown, so the bubble and the prompt
-    // agree on "image N" and "pasted text N"
+  /** write the attachments and show the message. Numbered and written in send order before anything
+   * is shown, so the bubble and the prompt agree on "image N" and "pasted text N". */
+  private async record({ text, pick, images, pastes }: QueueItem): Promise<Recorded> {
     const stored: StoredImage[] = [];
     for (const img of images ?? [])
       stored.push(await this.d.attachments.putImage(this.d.worktreeId, ++this.imageSeq, img));
@@ -418,23 +483,31 @@ export class AcpSession implements AgentAdapter {
       ...(stored.length ? { images: stored.map((s) => s.ref) } : {}),
       ...(storedPastes.length ? { pastes: storedPastes.map((p) => p.ref) } : {}),
     });
+    return { images: stored, pastes: storedPastes };
+  }
+
+  /** the images this connection will take, and the visible note when it will not take them */
+  private carriedImages(live: Live, stored: StoredImage[]): StoredImage[] {
+    if (!stored.length || live.conn.acceptsImages) return stored;
+    // visible rather than silent: the text still goes, the person sees why the image did not
+    this.emit({
+      type: "agent-error",
+      message: `${live.conn.spec.name} does not accept images; the message went without ${stored.length === 1 ? "it" : "them"}`,
+      ts: Date.now(),
+    });
+    return [];
+  }
+
+  private async runTurn(item: QueueItem) {
+    item.recorded ??= await this.record(item);
     this.emit({ type: "turn-start", ts: Date.now() });
     const live = await this.ensureLive();
-    let carried = stored;
-    if (stored.length && !live.conn.acceptsImages) {
-      // visible rather than silent: the text still goes, the person sees why the image did not
-      this.emit({
-        type: "agent-error",
-        message: `${live.conn.spec.name} does not accept images; the message went without ${stored.length === 1 ? "it" : "them"}`,
-        ts: Date.now(),
-      });
-      carried = [];
-    }
+    const carried = this.carriedImages(live, item.recorded.images);
     const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
     live.prefixPending = false;
     const res = await live.conn.ctx.request(acp.methods.agent.session.prompt, {
       sessionId: live.sessionId,
-      prompt: buildPrompt(text, context, prefix, carried, storedPastes),
+      prompt: buildPrompt(item.text, item.context, prefix, carried, item.recorded.pastes),
     });
     this.emit({ type: "turn-end", stopReason: mapStopReason(res.stopReason), ts: Date.now() });
   }
@@ -496,6 +569,7 @@ export class AcpSession implements AgentAdapter {
         loadSession: !!init.agentCapabilities?.loadSession,
         closeSupported: !!init.agentCapabilities?.sessionCapabilities?.close,
         acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
+        steering: supportsSteering(init),
         side,
         commands,
       };

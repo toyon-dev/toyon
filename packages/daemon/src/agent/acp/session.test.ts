@@ -11,6 +11,7 @@ import type { AgentSpec } from "../registry.ts";
 import type { Bounds } from "../sandbox.ts";
 import { AUTH_STATUS_UPDATE_METHOD } from "./authstatus.ts";
 import { AcpSession, type AcpSessionDeps } from "./session.ts";
+import { STEER_METHOD } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
 
 // The session talks to an in-process acp.agent() through the SDK's transport-less connect, so
@@ -50,7 +51,11 @@ interface FakeAgent {
   newSessions: acp.NewSessionRequest[];
   loads: acp.LoadSessionRequest[];
   prompts: acp.PromptRequest[];
+  steers: Array<{ sessionId: string; prompt: acp.ContentBlock[]; _meta?: unknown }>;
   cancels: number;
+  /** what the next `_session/steering` answers; the agent decides, so the client must take any */
+  steerOutcome: "injected" | "promptRequired" | "startedNewTurn";
+  steerError: boolean;
   modes: string[];
   script: PromptScript;
   loadSession: boolean;
@@ -65,6 +70,7 @@ function fakeAgent(
     currentMode?: string;
     images?: boolean;
     logout?: boolean;
+    steering?: boolean;
     authStatus?: AuthStatus;
     /** commands to push from inside session/new, keyed by the id it is about to return: that is
      * when real adapters send them, before the client knows the session exists */
@@ -76,7 +82,10 @@ function fakeAgent(
     newSessions: [],
     loads: [],
     prompts: [],
+    steers: [],
     cancels: 0,
+    steerOutcome: "injected",
+    steerError: false,
     modes: [],
     script,
     loadSession: opts.loadSession ?? true,
@@ -111,8 +120,18 @@ function fakeAgent(
           { id: "chat-gpt", name: "ChatGPT", description: "browser" },
           { id: "claude-login", name: "Claude login", type: "terminal", args: ["--cli", "auth", "login"] },
         ],
+        ...(opts.steering ? { _meta: { steering: { supported: true } } } : {}),
       };
     })
+    .onRequest(
+      STEER_METHOD,
+      (v) => v as { sessionId: string; prompt: acp.ContentBlock[]; _meta?: unknown },
+      (c) => {
+        f.steers.push(c.params);
+        if (f.steerError) throw new acp.RequestError(-32602, "the model does not accept that");
+        return { outcome: f.steerOutcome };
+      },
+    )
     .onRequest(acp.methods.agent.session.new, async (c) => {
       f.newSessions.push(c.params);
       const id = `s${++n}`;
@@ -265,6 +284,117 @@ describe("AcpSession", () => {
     expect(fake.newSessions).toHaveLength(1);
     expect(w.types().filter((t) => t === "turn-end")).toHaveLength(2);
     expect(queues.at(-1)).toEqual([]);
+    await w.session.close();
+  });
+
+  test("an agent that steers takes a mid-turn message into the running turn, not the queue", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(
+      async (p, client) => {
+        await gate;
+        return say("done")(p, client);
+      },
+      { steering: true },
+    );
+    const w = world(fake);
+    w.session.send("one");
+    await Bun.sleep(20);
+    w.session.send("two");
+    await Bun.sleep(20);
+    // it went out, so there is nothing waiting and nothing to unqueue
+    expect(w.session.queueItems).toEqual([]);
+    expect(fake.steers).toHaveLength(1);
+    expect(fake.steers[0]!.prompt).toEqual([{ type: "text", text: "two" }]);
+    expect(fake.steers[0]!.sessionId).toBe("s1");
+    // the message is shown where it was sent; the turn it joined still starts and ends once
+    expect(w.types()).toEqual(["user-message", "turn-start", "session-info", "user-message"]);
+    release();
+    await w.idle();
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.types().filter((t) => t === "turn-start")).toHaveLength(1);
+    expect(w.types().filter((t) => t === "turn-end")).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("a steered message the agent hands back runs as its own turn, shown once", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(
+      async (p, client) => {
+        if ((p.prompt[0] as { text: string }).text === "one") await gate;
+        return say("done")(p, client);
+      },
+      { steering: true },
+    );
+    fake.steerOutcome = "promptRequired";
+    const w = world(fake);
+    w.session.send("one");
+    await Bun.sleep(20);
+    w.session.send("two");
+    await Bun.sleep(20);
+    expect(fake.steers).toHaveLength(1);
+    expect(w.session.queueItems).toEqual(["two"]);
+    release();
+    await w.idle();
+    expect(fake.prompts.map((p) => (p.prompt[0] as { text: string }).text)).toEqual(["one", "two"]);
+    // recorded on the way to the steer, not again on the way to the prompt
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(2);
+    await w.session.close();
+  });
+
+  test("a steering request that fails sends the message as a prompt instead", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(
+      async (p, client) => {
+        if ((p.prompt[0] as { text: string }).text === "one") await gate;
+        return say("done")(p, client);
+      },
+      { steering: true },
+    );
+    fake.steerError = true;
+    const w = world(fake);
+    w.session.send("one");
+    await Bun.sleep(20);
+    w.session.send("two");
+    await Bun.sleep(20);
+    expect(w.session.queueItems).toEqual(["two"]);
+    release();
+    await w.idle();
+    expect(fake.prompts.map((p) => (p.prompt[0] as { text: string }).text)).toEqual(["one", "two"]);
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(2);
+    await w.session.close();
+  });
+
+  test("a turn the agent started for itself is left to it, not sent again", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(
+      async (p, client) => {
+        await gate;
+        return say("done")(p, client);
+      },
+      { steering: true },
+    );
+    fake.steerOutcome = "startedNewTurn";
+    const w = world(fake);
+    w.session.send("one");
+    await Bun.sleep(20);
+    w.session.send("two");
+    await Bun.sleep(20);
+    release();
+    await w.idle();
+    expect(w.session.queueItems).toEqual([]);
+    expect(fake.prompts).toHaveLength(1);
     await w.session.close();
   });
 

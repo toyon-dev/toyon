@@ -4,6 +4,8 @@ export const STORAGE = {
   active: "toyon-active",
   /** last selected project (repo id), restored on reload */
   repo: "toyon-repo",
+  /** the worktree each project was left on, keyed by repo id: {"<repo>":"<worktree>"} */
+  lastActive: "toyon-last",
   /** daemon token; an installed PWA launches without the #token fragment */
   token: "toyon-token",
   /** last painted theme, applied before the daemon's hello to avoid a flash */

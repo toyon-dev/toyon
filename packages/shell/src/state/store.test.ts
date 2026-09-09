@@ -592,6 +592,25 @@ describe("projects", () => {
     expect(s.activeId).toBe("b");
   });
 
+  test("a reload restores each project's worktree, not just the active one's", () => {
+    const from = initialState({
+      clientId: ME,
+      storedActive: "a",
+      storedRepo: "r1",
+      storedLastActive: { r1: "a", r2: "b" },
+    });
+    const s = reducer(run([two()], from), { a: "activate-repo", id: "r2" });
+    expect(s.activeId).toBe("b");
+  });
+
+  test("a remembered worktree that is gone lands on that project's main", () => {
+    const from = initialState({ clientId: ME, storedLastActive: { r1: "m1", r2: "deleted" } });
+    let s = run([two()], from);
+    expect(s.lastActive.r2).toBeUndefined();
+    s = reducer(s, { a: "activate-repo", id: "r2" });
+    expect(s.activeId).toBe("m2");
+  });
+
   test("selecting a worktree carries its project with it (a chord can't split the two)", () => {
     const s = reducer(run([two()]), { a: "activate", id: "b" });
     expect(s.activeRepoId).toBe("r2");

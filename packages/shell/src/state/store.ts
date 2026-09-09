@@ -195,7 +195,8 @@ export interface State {
   activeRepoId: string | null;
   /** `worktrees` narrowed to the active repo (kept in step by the reducer so selectors stay stable) */
   visible: WorktreeStatus[];
-  /** the worktree last selected in each repo: switching back to a project lands where you left it */
+  /** the worktree last selected in each repo: switching back to a project lands where you left it.
+   * Persisted (App.tsx), so it survives a reload the same way the panel layout does. */
   lastActive: Record<string, string>;
   /** an "open project" was sent: the next repo the daemon adds becomes the active one */
   pendingOpen: boolean;
@@ -266,6 +267,9 @@ export interface InitialOpts {
   storedRailOpen?: boolean;
   /** every project's remembered panel layout; the stored project's is painted before hello */
   storedPanels?: Record<string, Panels>;
+  /** the worktree each project was left on, so switching projects after a reload lands where you
+   * left off rather than on main */
+  storedLastActive?: Record<string, string>;
 }
 
 export function initialState(opts: InitialOpts): State {
@@ -276,7 +280,7 @@ export function initialState(opts: InitialOpts): State {
     worktrees: [],
     activeRepoId: null,
     visible: [],
-    lastActive: {},
+    lastActive: opts.storedLastActive ?? {},
     pendingOpen: false,
     activeId: null,
     clientId: opts.clientId,
@@ -552,6 +556,14 @@ function pruneLocal(local: State["local"], worktrees: WorktreeStatus[]): State["
   return Object.fromEntries(Object.entries(local).filter(([id]) => keep.has(id)));
 }
 
+/** drop the per-project landing spots whose worktree is gone; the fallback is that project's main
+ * either way, this just keeps dead ids out of storage */
+function pruneLastActive(lastActive: Record<string, string>, worktrees: WorktreeStatus[]): Record<string, string> {
+  const keep = new Set(worktrees.map((w) => w.worktree.id));
+  if (Object.values(lastActive).every((id) => keep.has(id))) return lastActive;
+  return Object.fromEntries(Object.entries(lastActive).filter(([, id]) => keep.has(id)));
+}
+
 function onServer(s: State, msg: StoreServerMsg): State {
   switch (msg.t) {
     case "hello": {
@@ -574,6 +586,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeId,
         activeRepoId: wt?.worktree.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
         local: pruneLocal(s.local, msg.worktrees),
+        lastActive: pruneLastActive(s.lastActive, msg.worktrees),
         themes: msg.themes ?? s.themes,
         themePrefs: msg.themePrefs ?? s.themePrefs,
         agents: msg.agents,

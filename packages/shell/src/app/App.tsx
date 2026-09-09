@@ -35,6 +35,7 @@ export function App() {
   const rightOpen = useStore((s) => s.rightOpen);
   const railOpen = useStore((s) => s.railOpen);
   const panels = useStore((s) => s.panels);
+  const lastActive = useStore((s) => s.lastActive);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
   const toast = useStore((s) => s.toast);
@@ -115,6 +116,13 @@ export function App() {
       localStorage.setItem(STORAGE.panels, JSON.stringify(panels));
     } catch {}
   }, [panels]);
+  // and so is the selected worktree: switching projects after a reload lands where you left that
+  // one, not on its main
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.lastActive, JSON.stringify(lastActive));
+    } catch {}
+  }, [lastActive]);
 
   useChords();
   // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the

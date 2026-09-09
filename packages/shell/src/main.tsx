@@ -51,6 +51,20 @@ function storedPanels(): Record<string, Panels> {
   return out;
 }
 
+/** the worktree each project was left on; anything that is not a string pair is dropped, so a
+ * hand-edited value costs a landing on main rather than a selection that names nothing */
+function storedLastActive(): Record<string, string> {
+  const out: Record<string, string> = {};
+  try {
+    const raw: unknown = JSON.parse(read(localStorage, STORAGE.lastActive) ?? "{}");
+    if (!raw || typeof raw !== "object") return out;
+    for (const [repoId, wtId] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof wtId === "string" && wtId) out[repoId] = wtId;
+    }
+  } catch {}
+  return out;
+}
+
 /** per-tab id: a worktree created from this tab steals focus here and nowhere else */
 function clientId(): string {
   const existing = read(sessionStorage, STORAGE.client);
@@ -70,6 +84,7 @@ const store = createStore(
     storedRepo: read(localStorage, STORAGE.repo),
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",
     storedPanels: storedPanels(),
+    storedLastActive: storedLastActive(),
     clientId: clientId(),
   }),
 );

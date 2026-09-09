@@ -23,6 +23,12 @@ const FOLLOW_MIN_W = 120;
 // after leaving a visible tooltip, the next one within this window shows
 // instantly (sweeping a toolbar shouldn't re-wait on every button)
 const WARM_MS = 600;
+/** Leaving a tip doesn't hide it at once. List rows sit flush against each other but carry their
+ * tip on the label inside them, so the pointer crosses a strip of untipped padding on the way to
+ * the next one; hiding there unmounted the box and replayed its entry animation, which read as a
+ * fade out and back in between two touching rows. Within this window the box stays mounted and
+ * only swaps its text and position. */
+const HIDE_GRACE = 150;
 const GAP = 6;
 /** clear of the pointer itself, which is taller than the gap a box needs from an edge */
 const CURSOR_GAP = 18;
@@ -63,24 +69,27 @@ export function Tooltips() {
   const pointer = useRef<Point>({ x: 0, y: 0 });
 
   useEffect(() => {
-    let timer = 0;
+    let showTimer = 0;
+    let hideTimer = 0;
     let current: HTMLElement | null = null;
     let visible = false;
     let lastHidden = 0;
 
-    const clear = () => {
-      window.clearTimeout(timer);
-      if (visible) lastHidden = Date.now();
-      visible = false;
-      setAnchor(null);
+    const stopTimers = () => {
+      window.clearTimeout(showTimer);
+      window.clearTimeout(hideTimer);
     };
     const hide = () => {
-      clear();
+      stopTimers();
+      if (visible) lastHidden = Date.now();
+      visible = false;
       current = null;
+      setAnchor(null);
     };
     const show = (el: HTMLElement, follow: boolean) => {
       const text = el.dataset.tip;
       if (!text) return hide();
+      stopTimers();
       visible = true;
       setAnchor({ el, text, key: el.dataset.tipKey, follow });
     };
@@ -93,12 +102,16 @@ export function Tooltips() {
       pointer.current = { x: e.clientX, y: e.clientY };
       const el = target(e);
       if (el === current) return;
-      clear();
+      stopTimers();
       current = el;
-      if (!el) return;
+      if (!el) {
+        if (visible) hideTimer = window.setTimeout(hide, HIDE_GRACE);
+        return;
+      }
       const follow = el.getBoundingClientRect().width > FOLLOW_MIN_W;
-      if (Date.now() - lastHidden < WARM_MS) return show(el, follow);
-      timer = window.setTimeout(() => show(el, follow), SHOW_DELAY);
+      // one box already up: move it rather than tear it down and animate a new one in
+      if (visible || Date.now() - lastHidden < WARM_MS) return show(el, follow);
+      showTimer = window.setTimeout(() => show(el, follow), SHOW_DELAY);
     };
     const onOut = (e: MouseEvent) => {
       // left the window entirely
@@ -107,7 +120,7 @@ export function Tooltips() {
     const onFocus = (e: FocusEvent) => {
       const el = target(e);
       if (el?.matches(":focus-visible")) {
-        window.clearTimeout(timer);
+        stopTimers();
         current = el;
         // reached by keyboard: there is no pointer to sit near, so anchor it
         show(el, false);
@@ -130,7 +143,7 @@ export function Tooltips() {
     document.addEventListener("focusout", onBlur);
     window.addEventListener("blur", hide);
     return () => {
-      window.clearTimeout(timer);
+      stopTimers();
       document.removeEventListener("mouseover", onOver);
       document.removeEventListener("mouseout", onOut);
       document.removeEventListener("mousedown", hide);

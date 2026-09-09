@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "@toyon/shared";
 import type { GitWorktree } from "../git/worktrees.ts";
-import { subtractKnown } from "./discover.ts";
+import { discoveredId, subtractKnown } from "./discover.ts";
 
 const listed = (path: string, over: Partial<GitWorktree> = {}): GitWorktree => ({
   path,
@@ -30,7 +30,9 @@ describe("subtractKnown", () => {
       [listed("/repo", { branch: "main" }), listed("/wt/foreign", { branch: "feature" })],
       [known("/repo", { kind: "main", branch: "main" })],
     );
-    expect(rows).toEqual([{ repoId: "r1", name: "feature", path: "/wt/foreign", branch: "feature" }]);
+    expect(rows).toEqual([
+      { id: discoveredId("/wt/foreign"), repoId: "r1", name: "feature", path: "/wt/foreign", branch: "feature" },
+    ]);
   });
 
   test("the pre-warmed spare is toyon's, not a stray worktree", () => {

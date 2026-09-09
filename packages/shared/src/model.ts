@@ -195,6 +195,10 @@ export interface WorktreeStatus {
  * record: toyon can show it and take it over, and has no way to delete it. It becomes an ordinary
  * `WorktreeInfo` only when someone adopts it. */
 export interface DiscoveredWorktree {
+  /** Stable for a given path, and derived from it rather than stored: the row has no record to
+   * hold an id, but the terminal, the changes panel and every other per-worktree message key off
+   * one, and a row that changed id between two pushes would drop its open shell. */
+  id: string;
   repoId: string;
   path: string;
   /** what the row is called: its branch, or the directory's own name when detached */

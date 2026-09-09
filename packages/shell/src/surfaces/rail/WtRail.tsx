@@ -66,8 +66,9 @@ export function WtRail() {
   const discMenuRow = discMenu ? (discovered.find((d) => d.path === discMenu.path) ?? null) : null;
 
   /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.
-   * No "open terminal": a terminal is a pty the runtime opens for a worktree it runs, and this one
-   * has no runtime and no id to key one by. Take it over first.
+   * "open a shell here" is a real pty at that path with no runtime behind it, which is why it is
+   * phrased as a shell rather than as this worktree's terminal: there are no proc tabs to go with
+   * it, because nothing is running.
    * No "remove": the person made this directory outside toyon, and deleting it is the one thing
    * here that cannot be undone. Nothing in the daemon can delete a discovered worktree at all,
    * which is what keeps that true. `git worktree remove` is where it belongs. */
@@ -79,6 +80,13 @@ export function WtRail() {
         onClick: () => sock?.send({ t: "adopt-worktree", repoId: d.repoId, path: d.path, clientId }),
       });
     }
+    items.push({
+      label: "open a shell here",
+      onClick: () => {
+        dispatch({ a: "activate", id: d.id });
+        if (!termOpen) dispatch({ a: "toggle-terminal" });
+      },
+    });
     items.push({
       label: "reveal in Finder",
       onClick: () => sock?.send({ t: "reveal-discovered", repoId: d.repoId, path: d.path }),
@@ -356,31 +364,27 @@ export function WtRail() {
               </button>
               {discOpen &&
                 discovered.map((d) => (
-                  <div
+                  <button
                     key={d.path}
-                    className={`disc-item ${discMenu?.path === d.path ? "menu-open" : ""}`}
+                    type="button"
+                    className={`disc-item row-edge ${d.id === activeId ? "active" : ""} ${discMenu?.path === d.path ? "menu-open" : ""}`}
                     {...tip(d.locked ? `${wtDirLabel(d)} · held by ${d.lockReason ?? "another tool"}` : wtDirLabel(d))}
+                    onClick={() => dispatch({ a: "activate", id: d.id })}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setDiscMenu({ at: { x: e.clientX, y: e.clientY }, path: d.path });
                     }}
                   >
                     <span className="branch">{d.name}</span>
-                    {d.locked ? (
+                    {/* no inline "take over": the row opens a pane that explains what it would do
+                        and offers it there, and a button inside this button would be invalid */}
+                    {d.locked && (
                       <span className="disc-lock">
                         <Icon name="lock" className="icon-inline" />
                       </span>
-                    ) : (
-                      <button
-                        className="disc-take"
-                        {...tip("Give it a port, start its procs and run it here")}
-                        onClick={() => sock?.send({ t: "adopt-worktree", repoId: d.repoId, path: d.path, clientId })}
-                      >
-                        take over
-                      </button>
                     )}
                     <span className="dot discovered" />
-                  </div>
+                  </button>
                 ))}
             </>
           )}

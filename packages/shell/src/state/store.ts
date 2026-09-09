@@ -403,7 +403,11 @@ function landingIn(s: State, repoId: string | null, worktrees = s.worktrees): st
  * a project that is not the one on screen) */
 function activate(s: State, id: string | null): State {
   const wt = worktreeById(s, id);
-  const activeRepoId = wt ? wt.worktree.repoId : s.activeRepoId;
+  // a discovered worktree can be selected too: it has a shell and a pane of its own, just nothing
+  // toyon runs. It is deliberately not written to lastActive, which is the landing spot for a
+  // project and should be somewhere that still exists next time.
+  const disc = wt ? null : s.discovered.find((d) => d.id === id);
+  const activeRepoId = wt ? wt.worktree.repoId : (disc?.repoId ?? s.activeRepoId);
   const lastActive = wt ? { ...s.lastActive, [wt.worktree.repoId]: wt.worktree.id } : s.lastActive;
   return { ...s, activeId: id, activeRepoId, lastActive, diff: null };
 }
@@ -718,7 +722,11 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "worktrees": {
       let activeId = s.activeId;
-      if (!activeId || !msg.worktrees.some((w) => w.worktree.id === activeId)) {
+      // a selected discovered worktree counts as still there: without this the next push, which
+      // arrives on every proc event, would bounce the selection back to a real worktree
+      const stillHere =
+        msg.worktrees.some((w) => w.worktree.id === activeId) || msg.discovered.some((d) => d.id === activeId);
+      if (!activeId || !stillHere) {
         activeId = landingIn(s, s.activeRepoId, msg.worktrees);
       }
       // auto-focus a worktree THIS tab just created (the "prompt spawns a tab" moment); one made

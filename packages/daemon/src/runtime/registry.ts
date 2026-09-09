@@ -12,7 +12,7 @@ import { AttachmentStore } from "../agent/attachments.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
-import { log } from "../core/log.ts";
+import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
 import { expandEnv, resolveRun } from "./profile.ts";
@@ -53,7 +53,8 @@ export interface RuntimeDeps {
     deps: RuntimeDeps,
   ) => WorktreeProxy;
   makeTerminal?: (
-    wt: WorktreeInfo,
+    /** only the id is used, so a loose shell (no worktree record) can pass its discovered id */
+    wt: { id: string },
     opts: PtyOpts,
     onData: (data: string) => void,
     onExit: (exitCode: number) => void,
@@ -82,7 +83,7 @@ export function procUrlEnv(states: ProcState[], previewName: string | undefined)
  * shell wants color and has no port), the sibling URLs, a 256-color TERM, and the worktree id */
 export function terminalEnv(
   base: Record<string, string | undefined>,
-  wt: WorktreeInfo,
+  wt: { id: string },
   urls: Record<string, string>,
 ): Record<string, string> {
   const env: Record<string, string> = {};
@@ -140,7 +141,7 @@ function defaultProcs(wt: WorktreeInfo, d: RuntimeDeps): WorktreeProcs {
 }
 
 function defaultTerminal(
-  _wt: WorktreeInfo,
+  _wt: { id: string },
   opts: PtyOpts,
   onData: (data: string) => void,
   onExit: (exitCode: number) => void,
@@ -169,8 +170,58 @@ function previewTargetOf(procs: WorktreeProcs, previewName: string | undefined):
 
 export class RuntimeRegistry {
   private runtimes = new Map<string, Runtime>();
+  /** Shells opened at a discovered worktree's path: a pty, and nothing else around it. There is no
+   * Runtime here because there is nothing to run — no procs, no proxy, no agent — and no record to
+   * hang one off. Keyed by the discovered id, which is derived from the path, so the same
+   * directory keeps its shell across every re-derivation of the list. */
+  private looseShells = new Map<string, PtyHandle>();
 
   constructor(private deps: RuntimeDeps) {}
+
+  /** A shell at a path toyon does not run. Same contract as openTerminal's shell branch: spawned
+   * on the first open and after it exits, resized before snapshotting so a TUI's redraw lands as
+   * live data rather than inside the snapshot. */
+  openLooseShell(id: string, cwd: string, cols: number, rows: number): { snapshot: string; alive: boolean } {
+    let term = this.looseShells.get(id);
+    if (!term?.alive) {
+      const opts: PtyOpts = {
+        cwd,
+        env: { ...terminalEnv(process.env, { id }, {}), PWD: cwd },
+        cols,
+        rows,
+        file: process.env.SHELL || "sh",
+        args: ["-l"],
+      };
+      try {
+        term = (this.deps.makeTerminal ?? defaultTerminal)(
+          { id },
+          opts,
+          (data) => this.deps.hub.emit("termData", id, SHELL_STREAM, data),
+          (code) => this.deps.hub.emit("termExit", id, SHELL_STREAM, code),
+        );
+      } catch (e) {
+        throw new UserError(`could not start a shell: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      this.looseShells.set(id, term);
+    } else if (term.cols !== cols || term.rows !== rows) {
+      term.resize(cols, rows);
+    }
+    return { snapshot: term.snapshot(), alive: term.alive };
+  }
+
+  looseShell(id: string): PtyHandle | undefined {
+    return this.looseShells.get(id);
+  }
+
+  /** Kill shells whose directory is no longer a discovered worktree: it was taken over, removed,
+   * or the repo was forgotten. Called after every derivation, so the set is the current truth. */
+  pruneLooseShells(keep: Set<string>): void {
+    for (const [id, term] of this.looseShells) {
+      if (keep.has(id)) continue;
+      this.looseShells.delete(id);
+      fireAndForget(id, Promise.resolve(term.kill()), "loose shell cleanup");
+    }
+  }
 
   get(id: string): Runtime | undefined {
     return this.runtimes.get(id);
@@ -353,6 +404,7 @@ export class RuntimeRegistry {
   }
 
   async shutdown(): Promise<void> {
+    this.pruneLooseShells(new Set());
     await Promise.all([...this.runtimes.keys()].map((id) => this.stop(id)));
   }
 }

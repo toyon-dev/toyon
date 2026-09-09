@@ -3,7 +3,7 @@
 // run git or decide policy.
 
 import type { ClientMsg, ServerMsg } from "@toyon/shared";
-import { pickTheme } from "@toyon/shared";
+import { pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
@@ -386,20 +386,33 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   "term-open"(msg, ctx, s) {
     // open, watch and reply in one synchronous block: pty output only arrives on later ticks, so
     // nothing the stream prints can fall between the snapshot and the watch
-    const { snapshot, alive } = s.runtime.openTerminal(msg.worktreeId, msg.stream, msg.cols, msg.rows);
+    const loose = looseCwd(s, msg.worktreeId, msg.stream);
+    const { snapshot, alive } = loose
+      ? s.runtime.openLooseShell(msg.worktreeId, loose, msg.cols, msg.rows)
+      : s.runtime.openTerminal(msg.worktreeId, msg.stream, msg.cols, msg.rows);
     ctx.watchTerminal(msg.worktreeId, msg.stream);
     ctx.reply({ t: "term-snapshot", worktreeId: msg.worktreeId, stream: msg.stream, data: snapshot, alive });
   },
 
   "term-input"(msg, _ctx, s) {
-    s.runtime.terminalInput(msg.worktreeId, msg.stream, msg.data);
+    const loose = s.runtime.looseShell(msg.worktreeId);
+    if (loose) loose.write(msg.data);
+    else s.runtime.terminalInput(msg.worktreeId, msg.stream, msg.data);
   },
 
   "term-resize"(msg, _ctx, s) {
-    s.runtime.terminalResize(msg.worktreeId, msg.stream, msg.cols, msg.rows);
+    const loose = s.runtime.looseShell(msg.worktreeId);
+    if (loose) loose.resize(msg.cols, msg.rows);
+    else s.runtime.terminalResize(msg.worktreeId, msg.stream, msg.cols, msg.rows);
   },
 
   "term-restart"(msg, _ctx, s) {
+    // a loose shell restarts by dying: the next term-open respawns it, same as a worktree's own
+    const loose = s.runtime.looseShell(msg.worktreeId);
+    if (loose) {
+      fireAndForget("term-restart", Promise.resolve(loose.kill()));
+      return;
+    }
     s.state.requireWorktree(msg.worktreeId);
     // the tab reopens on its own once the stream is gone; nothing waits on the restart
     fireAndForget("term-restart", s.runtime.restartStream(msg.worktreeId, msg.stream));
@@ -409,6 +422,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.unwatchTerminal(msg.worktreeId, msg.stream);
   },
 };
+
+/** The directory a loose shell should open in, or null when this id is an ordinary worktree.
+ * A discovered worktree runs nothing, so its only stream is a shell: asking for a proc's stream on
+ * one is a bug in the caller, not a tab to open. */
+function looseCwd(s: Services, id: string, stream: string): string | null {
+  const disc = s.worktrees.discoveredById(id);
+  if (!disc) return null;
+  if (stream !== SHELL_STREAM) throw new UserError(`${disc.name} runs no processes: only a shell`);
+  return disc.path;
+}
 
 /** dispatch one validated message */
 export async function dispatch(msg: ClientMsg, ctx: HandlerCtx, s: Services): Promise<void> {

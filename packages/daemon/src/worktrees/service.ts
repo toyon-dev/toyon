@@ -592,6 +592,20 @@ export class WorktreeService {
     this.discoverCache.clear();
   }
 
+  /** A discovered row by id, from the last derivation only: no git, no await.
+   *
+   * The terminal opens inside one synchronous block on purpose (see the `term-open` handler), so
+   * this cannot shell out. Reading the cache is honest here because the person can only click a
+   * row that was pushed to them, and every push fills this cache: the watcher invalidates and then
+   * emits, and the emit re-derives before the frame goes out. */
+  discoveredById(id: string): DiscoveredWorktree | null {
+    for (const { rows } of this.discoverCache.values()) {
+      const found = rows.find((r) => r.id === id);
+      if (found) return found;
+    }
+    return null;
+  }
+
   /** Worktrees git knows about that toyon does not, across every registered repo.
    *
    * Cached per repo on the same 10s floor as `counts()`: this runs on every `worktreesChanged`,
@@ -613,7 +627,11 @@ export class WorktreeService {
         }
       }),
     );
-    return perRepo.flat();
+    const rows = perRepo.flat();
+    // a shell at a directory that is no longer a discovered worktree has nothing to belong to: it
+    // was taken over (its worktree runs a real shell now), removed, or its repo was forgotten
+    this.d.runtime.pruneLooseShells(new Set(rows.map((r) => r.id)));
+    return rows;
   }
 
   private async counts(wt: WorktreeInfo): Promise<{ ahead?: number; behind?: number; dirty?: number }> {

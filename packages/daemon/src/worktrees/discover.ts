@@ -7,10 +7,19 @@
 // is what makes "toyon cannot delete a directory it did not create" structural rather than a rule
 // someone has to remember.
 
+import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import type { DiscoveredWorktree, WorktreeInfo } from "@toyon/shared";
 import { canonical } from "../agent/bounds.ts";
 import { type GitWorktree, listWorktrees } from "../git/worktrees.ts";
+
+/** A discovered worktree's id: the canonical path, hashed. Derived rather than minted because
+ * there is no record to keep a minted one in, and it has to be the same across pushes or an open
+ * shell would lose its stream key every time the list is re-derived. The prefix is for whoever is
+ * reading a log line and wondering why an id does not resolve to a worktree. */
+export function discoveredId(path: string): string {
+  return `disc-${createHash("sha1").update(canonical(path)).digest("hex").slice(0, 12)}`;
+}
 
 /** The paths toyon already accounts for. Spares are in here too even though `statuses()` filters
  * them out of the rail, or the pre-warmed spare would show up as somebody's stray worktree. The
@@ -39,6 +48,7 @@ export function subtractKnown(repoId: string, listed: GitWorktree[], known: Work
     if (g.prunable) continue;
     if (mine.has(canonical(g.path))) continue;
     rows.push({
+      id: discoveredId(g.path),
       repoId,
       name: g.branch ?? basename(g.path),
       path: g.path,

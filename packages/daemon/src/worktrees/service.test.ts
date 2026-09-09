@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -609,5 +609,52 @@ describe("adopt", () => {
     const repoId = await registered();
     await settle();
     expect(w.worktrees.adopt(repoId, join(dirname(w.repo), "never-existed"))).rejects.toThrow(UserError);
+  });
+});
+
+describe("a shell at a discovered worktree", () => {
+  test("opens at its path, with no runtime and no agent behind it", async () => {
+    await registered();
+    await settle();
+    const dir = foreignWorktree("shellhere", "shell-here");
+    const [row] = await w.worktrees.discovered();
+
+    w.runtime.openLooseShell(row!.id, row!.path, 80, 24);
+    const term = w.terminals.get(row!.id)?.[0];
+    // git reports the real directory, so the shell lands there rather than on the /var symlink
+    expect(term?.opts.cwd).toBe(realpathSync(dir));
+    // nothing else was spun up for it: a discovered worktree runs nothing
+    expect(w.agents.get(row!.id)).toBeUndefined();
+    expect(w.procs.get(row!.id)).toBeUndefined();
+    expect(w.runtime.get(row!.id)).toBeUndefined();
+  });
+
+  test("the same directory keeps its shell across re-derivations", async () => {
+    await registered();
+    await settle();
+    foreignWorktree("stable", "stable-branch");
+    const first = (await w.worktrees.discovered())[0]!;
+    w.runtime.openLooseShell(first.id, first.path, 80, 24);
+
+    w.worktrees.invalidateDiscovered();
+    const again = (await w.worktrees.discovered())[0]!;
+    expect(again.id).toBe(first.id);
+    w.runtime.openLooseShell(again.id, again.path, 80, 24);
+    // reused, not respawned: the id is derived from the path, so the stream key held
+    expect(w.terminals.get(first.id)?.length).toBe(1);
+  });
+
+  test("taking the worktree over takes the loose shell with it", async () => {
+    const repoId = await registered();
+    await settle();
+    const dir = foreignWorktree("adoptshell", "adopt-shell");
+    const row = (await w.worktrees.discovered())[0]!;
+    w.runtime.openLooseShell(row.id, row.path, 80, 24);
+    expect(w.runtime.looseShell(row.id)).toBeDefined();
+
+    await w.worktrees.adopt(repoId, dir);
+    await w.worktrees.discovered(); // the derivation that no longer lists it prunes the shell
+    expect(w.runtime.looseShell(row.id)).toBeUndefined();
+    expect(w.terminals.get(row.id)?.[0]?.alive).toBe(false);
   });
 });

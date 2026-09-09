@@ -781,26 +781,30 @@ body.resizing .row-resize {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* the same width, padding and edge-marker anchoring as .wt-item: these rows sit in the same
+     column and their dots have to land on the same centre line */
+  width: 100%;
   padding: 0 16px 0 12px;
+  position: relative;
+  --row-edge-x: var(--rail-edge, 0px);
   color: var(--text2);
+  text-align: left;
+}
+.disc-item:hover {
+  background: var(--element0);
+}
+/* selected the same way a worktree row is: it is the same selection, and the pane beside it is
+   showing this row */
+.disc-item.active {
+  --row-edge-color: var(--accent);
+  color: var(--text0);
+  background: var(--element1);
 }
 .disc-item.menu-open {
-  background: var(--surface2);
+  background: var(--element0);
 }
 .wt-rail .disc-item .dot {
   margin-left: 12px;
-}
-/* only shows once the panel is open: in the strip there is no room, and the row is not a target */
-.disc-take {
-  font: var(--type-ui-sm);
-  color: var(--text2);
-  padding: 2px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-.disc-take:hover {
-  color: var(--text1);
-  background: var(--surface2);
 }
 .disc-lock {
   display: flex;

@@ -764,7 +764,12 @@ describe("panel layout", () => {
 
 describe("discovered worktrees", () => {
   // "r" is what the wt() fixture defaults its repoId to
-  const found = (path: string, repoId = "r"): DiscoveredWorktree => ({ repoId, path, name: path.split("/").pop()! });
+  const found = (path: string, repoId = "r"): DiscoveredWorktree => ({
+    id: `disc-${path}`,
+    repoId,
+    path,
+    name: path.split("/").pop()!,
+  });
   const withFound = (...d: DiscoveredWorktree[]): Action =>
     server({ t: "worktrees", worktrees: [wt("main", "main")], discovered: d });
   // the remembered-section map is keyed by repo, so these need the repo to actually exist

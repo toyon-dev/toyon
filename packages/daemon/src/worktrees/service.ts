@@ -47,6 +47,22 @@ const LOCAL_CONFIG_FILES = [".env", ".env.local", ".env.development", ".env.deve
 
 export type Variant = { group: string; index: number; of: number };
 
+/** Where a worktree id points, for work that only reads.
+ *
+ * Reading a worktree needs a directory and a branch to compare against, and nothing else:
+ * `requireWorktree` was only ever how those two were fetched. That is why a worktree toyon did not
+ * create could not be looked at, even though it has a path and a branch like any other. `wt` is
+ * present only when there is a record, and it is what the handful of record-only behaviours key
+ * off: clearing `landed`, and skipping ahead/behind on main, where HEAD is the default branch and
+ * the counts are zero by definition. */
+export interface ReadableWorktree {
+  id: string;
+  path: string;
+  defaultBranch: string;
+  /** absent for a discovered worktree: there is nothing to mutate and nothing that owns it */
+  wt?: WorktreeInfo;
+}
+
 /** what `git status` + ahead/behind say about one worktree */
 export interface GitInfo {
   files: GitFileStatus[];
@@ -650,19 +666,35 @@ export class WorktreeService {
 
   /** the working-tree state the changes panel shows (subscribe, edits, ref ticks). Also the one
    * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
+  /** Resolve an id for reading: a worktree toyon runs, or one it merely knows about. Null for a
+   * spare (nobody looks at those) and for an id that is neither. */
+  readable(id: string): ReadableWorktree | null {
+    const wt = this.d.state.worktree(id);
+    if (wt) {
+      if (wt.kind === "spare") return null;
+      return { id, path: wt.path, defaultBranch: this.d.state.requireRepo(wt.repoId).defaultBranch, wt };
+    }
+    const disc = this.discoveredById(id);
+    const repo = disc && this.d.state.repo(disc.repoId);
+    if (!disc || !repo) return null;
+    return { id, path: disc.path, defaultBranch: repo.defaultBranch };
+  }
+
   async gitStatus(worktreeId: string): Promise<GitInfo | null> {
-    const wt = this.d.state.worktree(worktreeId);
-    if (!wt || wt.kind === "spare") return null;
+    const r = this.readable(worktreeId);
+    if (!r) return null;
     try {
-      const defaultBr = this.d.state.requireRepo(wt.repoId).defaultBranch;
+      // only main is its own baseline; every other worktree, discovered ones included, has a
+      // branch worth counting against the default one
+      const isMain = r.wt?.kind === "main";
       const [files, counts, head] = await Promise.all([
-        statusFilesWithCounts(wt.path),
-        wt.kind === "main" ? Promise.resolve({}) : aheadBehind(wt.path, defaultBr),
-        git(wt.path, "rev-parse", "HEAD"),
+        statusFilesWithCounts(r.path),
+        isMain ? Promise.resolve({}) : aheadBehind(r.path, r.defaultBranch),
+        git(r.path, "rev-parse", "HEAD"),
       ]);
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
-      const committed = wt.kind !== "main" && ahead > 0 ? await committedFiles(wt.path, defaultBr) : undefined;
-      if (wt.landed && (files.length > 0 || ahead > 0)) this.setLanded(wt.id, false);
+      const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.defaultBranch) : undefined;
+      if (r.wt?.landed && (files.length > 0 || ahead > 0)) this.setLanded(r.wt.id, false);
       return { files, committed, head: head.ok ? head.out : undefined, ...counts };
     } catch (e) {
       log.warn(worktreeId, "git status failed", e);
@@ -674,17 +706,14 @@ export class WorktreeService {
    * requests it when the tab is opened and after a commit, so a worktree nobody is reviewing
    * never pays for it. */
   async gitLog(worktreeId: string): Promise<CommitEntry[]> {
-    const wt = this.d.state.worktree(worktreeId);
-    if (!wt || wt.kind === "spare") return [];
-    const defaultBr = this.d.state.requireRepo(wt.repoId).defaultBranch;
-    return logCommits(wt.path, defaultBr);
+    const r = this.readable(worktreeId);
+    return r ? logCommits(r.path, r.defaultBranch) : [];
   }
 
   /** the files one commit touched, on expanding it in the history tab */
   async commitFiles(worktreeId: string, sha: string): Promise<GitFileStatus[]> {
-    const wt = this.d.state.worktree(worktreeId);
-    if (!wt || wt.kind === "spare") return [];
-    return readCommitFiles(wt.path, sha);
+    const r = this.readable(worktreeId);
+    return r ? readCommitFiles(r.path, sha) : [];
   }
 
   /** someone is looking at this worktree right now: clear its unseen ring */

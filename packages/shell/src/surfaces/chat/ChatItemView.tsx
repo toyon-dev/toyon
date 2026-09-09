@@ -2,7 +2,8 @@ import type { PickMeta } from "@toyon/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { openSource } from "../../state/openSource.ts";
 import type { ChatItem } from "../../state/store.ts";
 import { useHoldInPlace } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -401,6 +402,8 @@ export const ChatItemView = memo(function ChatItemView({
   worktreeId?: string | null;
   onPickHover?: (p: PickMeta, entering: boolean) => void;
 }) {
+  const store = useStoreInstance();
+  const sock = useSock();
   switch (item.kind) {
     case "user":
       return (
@@ -435,6 +438,7 @@ export const ChatItemView = memo(function ChatItemView({
               className="in-chat"
               tipText="Hover to highlight on the page"
               onHover={(entering) => onPickHover?.(item.pick!, entering)}
+              onOpen={worktreeId ? (path, line) => openSource(store, sock, worktreeId, path, line) : undefined}
             />
           )}
         </div>

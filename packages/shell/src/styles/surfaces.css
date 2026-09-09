@@ -16,7 +16,7 @@
   border: 1px solid var(--border1);
   border-radius: var(--r-lg);
   padding: 18px 24px 20px;
-  box-shadow: 0 10px 36px var(--shadow);
+  box-shadow: var(--elev-overlay);
   font: var(--type-ui);
   color: var(--text0);
   /* two columns of sections: Find | Preview over Panels | Worktrees */
@@ -1522,7 +1522,7 @@ body.resizing .row-resize {
   padding: 10px 14px;
   cursor: pointer;
   z-index: 30;
-  box-shadow: 0 4px 16px var(--shadow);
+  box-shadow: var(--elev-float);
 }
 .toast.err {
   border-left-color: var(--red);

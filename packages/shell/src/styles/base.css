@@ -233,7 +233,7 @@ a code {
      .prompt-box.quick-open clips its own. The padding is vertical only, for the same reason. */
   overflow: hidden;
   padding: 4px 0;
-  box-shadow: 0 6px 20px var(--shadow);
+  box-shadow: var(--elev-float);
   display: flex;
   flex-direction: column;
   /* width is set by Menu.tsx, which needs the number for its off-screen clamp */
@@ -273,6 +273,7 @@ a code {
 .prompt-box {
   width: min(560px, 90%);
   background: var(--surface1);
+  box-shadow: var(--elev-overlay);
   border: 1px solid var(--border0);
   border-radius: var(--r-lg);
   padding: 14px;
@@ -289,7 +290,8 @@ a code {
   left: 0;
   width: min(460px, calc(100vw - 60px));
   z-index: 40;
-  box-shadow: 0 6px 20px var(--shadow);
+  /* anchored drops the scrim (see Overlay.tsx), so the box has to separate itself again */
+  box-shadow: var(--elev-float);
 }
 
 .dock-empty {
@@ -474,7 +476,7 @@ a code {
   background: var(--surface1);
   border: 1px solid var(--border1);
   border-radius: var(--r-md);
-  box-shadow: 0 6px 20px var(--shadow);
+  box-shadow: var(--elev-float);
   white-space: pre-line;
   overflow-wrap: anywhere;
   animation: tooltip-in 90ms ease-out;

@@ -97,6 +97,23 @@
   --row-h-sm: 24px;
   --row-h: 32px;
   --row-pad-x: 12px;
+
+  /* Elevation. Two tiers, and the question each answers is what the thing is doing rather than how
+   * far off the page it looks:
+   *
+   *   float     it appears over chrome you can still see and use, so it has to separate itself:
+   *             the context menu, the tooltip, an anchored picker, a toast
+   *   overlay   it has taken the screen and the app is dimmed behind a scrim
+   *
+   * These are complete box-shadow values, which is why they are not --shadow-something: --shadow is
+   * the colour inside them, the same way --face-* is the family inside a --type-*. There were five
+   * floating surfaces and four recipes between them before this, including one scrimmed card with
+   * the largest shadow in the app and another, also scrimmed, with none at all.
+   *
+   * Two things deliberately stay off this: the worktree rail's peek, whose negative spread is a
+   * seam rather than a lift, and the jump-down pill, which is a control and not a surface. */
+  --elev-float: 0 6px 20px var(--shadow);
+  --elev-overlay: 0 10px 36px var(--shadow);
   /* Four prefixes, one per kind, and the prefix is what tells you which kind you have:
    *
    *   --face-*    a font stack. Raw material: it belongs inside a --type-* value, and no rule sets

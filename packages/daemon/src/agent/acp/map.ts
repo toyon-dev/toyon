@@ -32,7 +32,10 @@ export type ToolMemos = Map<string, ToolMemo>;
 function spawnOf(meta: Record<string, unknown> | null | undefined): { parentToolId?: string; subagent?: boolean } {
   const claude = asRecord(asRecord(meta).claudeCode);
   const parentToolId = typeof claude.parentToolUseId === "string" ? claude.parentToolUseId : undefined;
-  const subagent = claude.subagent === true || asRecord(asRecord(meta).codex).subagent !== undefined;
+  // codex's marker is the thread it describes, not a flag. Reading it as one would put the mark on
+  // anything that ever lands under that key, so the shape has to be there as well as the key.
+  const codex = asRecord(asRecord(meta).codex).subagent;
+  const subagent = claude.subagent === true || Object.keys(asRecord(codex)).length > 0;
   return { ...(parentToolId ? { parentToolId } : {}), ...(subagent ? { subagent: true } : {}) };
 }
 

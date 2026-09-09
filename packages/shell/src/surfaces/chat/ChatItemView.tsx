@@ -229,11 +229,14 @@ export const ToolRow = memo(
     live,
     roots,
     worktreeId,
+    rail,
   }: {
     tools: ToolItem[];
     live?: boolean;
     roots?: string[];
     worktreeId?: string | null;
+    /** which subagent's rail this row sits on, while more than one of them is running */
+    rail?: number;
   }) {
     const [pinned, setPinned] = useState<boolean | null>(null);
     const card = useRef<HTMLDetailsElement>(null);
@@ -262,7 +265,7 @@ export const ToolRow = memo(
         ref={card}
         className={`tool-row ${tools.some((t) => t.isError) ? "error" : ""} ${head.parentToolId ? "nested" : ""} ${
           head.subagent ? "spawn" : ""
-        }`}
+        } ${rail === undefined ? "" : `rail-${rail}`}`}
         open={open}
         // clicking the output selects text and leaves focus on the body, so the card takes it: that is
         // what makes Escape close the row you are reading, not only the one whose chip you clicked
@@ -300,7 +303,12 @@ export const ToolRow = memo(
       </details>
     );
   },
-  (a, b) => a.live === b.live && a.roots === b.roots && a.worktreeId === b.worktreeId && sameTools(a.tools, b.tools),
+  (a, b) =>
+    a.live === b.live &&
+    a.roots === b.roots &&
+    a.worktreeId === b.worktreeId &&
+    a.rail === b.rail &&
+    sameTools(a.tools, b.tools),
 );
 
 /** the agent asked for credentials: one button per login method it offered. A terminal method runs

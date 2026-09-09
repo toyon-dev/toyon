@@ -184,6 +184,31 @@ describe("mapUpdate", () => {
     ]);
   });
 
+  test("a bare codex key is not a subagent marker; the marker's own shape is", () => {
+    const flags = run([
+      { sessionUpdate: "tool_call", toolCallId: "a", title: "x", status: "pending", _meta: { codex: {} } },
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "b",
+        title: "y",
+        status: "pending",
+        _meta: { codex: { subagent: {} } },
+      },
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "c",
+        title: "z",
+        status: "pending",
+        _meta: { codex: { subagent: { threadId: "t1" } } },
+      },
+    ]);
+    expect(flags.map((e) => (e.type === "tool-start" ? [e.toolId, e.subagent] : null))).toEqual([
+      ["a", undefined],
+      ["b", undefined],
+      ["c", true],
+    ]);
+  });
+
   test("an update for a call we never saw start keeps its parent", () => {
     expect(
       run([

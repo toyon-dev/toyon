@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import { groupTools } from "./group.ts";
+import { groupTools, RAILS, railSlots } from "./group.ts";
 
 let n = 0;
 const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): ChatItem =>
@@ -102,6 +102,30 @@ describe("groupTools", () => {
       { at: 0, n: 1 },
       { at: 1, n: 2 },
       { at: 3, n: 1 },
+    ]);
+  });
+
+  test("one subagent gets no rail; from two on, each holds a slot for the whole transcript", () => {
+    const one = [tool("read", "/wt/a.ts", { parentToolId: "t1" }), tool("read", "/wt/b.ts", { parentToolId: "t1" })];
+    expect([...railSlots(one)]).toEqual([]);
+    const many = [
+      tool("read", "/wt/a.ts", { parentToolId: "t1" }),
+      tool("read", "/wt/b.ts", { parentToolId: "t2" }),
+      tool("read", "/wt/c.ts", { parentToolId: "t1" }),
+      tool("read", "/wt/d.ts"),
+    ];
+    expect([...railSlots(many)]).toEqual([
+      ["t1", 0],
+      ["t2", 1],
+    ]);
+  });
+
+  test("more subagents than rails wrap round rather than running out", () => {
+    const items = Array.from({ length: RAILS + 2 }, (_, i) => tool("read", "/wt/a.ts", { parentToolId: `t${i}` }));
+    expect([...railSlots(items)].map(([, slot]) => slot)).toEqual([
+      ...Array.from({ length: RAILS }, (_, i) => i),
+      0,
+      1,
     ]);
   });
 

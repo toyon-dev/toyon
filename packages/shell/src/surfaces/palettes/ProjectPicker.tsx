@@ -14,12 +14,23 @@ import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker
  * plain folders are drilled into (enter or tab), so a nested checkout is reachable without typing
  * it out, and a name or a git URL matching nothing becomes an offer to create or clone.
  *
- * Two forms, one component. Normally it drops out of the pill and takes the bar over the way a
+ * Three forms, one component. Normally it drops out of the pill and takes the bar over the way a
  * browser's address bar does: the open project becomes a chip in the field, the caret sits after
  * it, and the rows are the projects you could switch to. `dialog` is the centered form the field's
  * folder button opens, which starts in the home directory: more room for walking the filesystem,
- * where the anchored one would run out of screen. */
-export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
+ * where the anchored one would run out of screen. `embedded` is the same dropdown hanging off ⌘K's
+ * repo chip, inside an overlay that is already open and has to survive the switch. */
+export function ProjectPicker({
+  dialog = false,
+  embedded = false,
+  onDone,
+}: {
+  dialog?: boolean;
+  /** mounted inside another overlay (⌘K's repo chip) rather than owning the screen: closing is the
+   * host's to define, since dispatching `close` here would take the host down with it */
+  embedded?: boolean;
+  onDone?: () => void;
+}) {
   const dispatch = useDispatch();
   const sock = useSock();
   const repos = useStore((s) => s.repos);
@@ -70,6 +81,10 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
     return parts.filter(Boolean).join(" · ") || undefined;
   };
 
+  /** picked something, or backed out: the embedded picker hands both to its host */
+  const finish = () => (onDone ? onDone() : dispatch({ a: "close" }));
+  const goBack = () => (onDone ? onDone() : dispatch({ a: "close", back: true }));
+
   const open = (path: string) => {
     dispatch({ a: "open-repo" });
     sock?.send({ t: "register-repo", path });
@@ -107,7 +122,7 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
         )
       }
       trailing={
-        dialog ? undefined : (
+        dialog || embedded ? undefined : (
           <button
             type="button"
             className="btn-icon"
@@ -151,9 +166,9 @@ export function ProjectPicker({ dialog = false }: { dialog?: boolean }) {
         else if (r.kind === "dir")
           open(r.entry.path); // only repo folders get here; narrowTo takes the rest
         else if (r.parent) createAt(r.parent, r.name);
-        dispatch({ a: "close" });
+        finish();
       }}
-      onBack={() => dispatch({ a: "close", back: true })}
+      onBack={goBack}
       placeholder={repos.length > 1 ? "switch project, or type a name or path" : "type a name or a path to start"}
       keys={(active) => ({
         complete: "completes the path",

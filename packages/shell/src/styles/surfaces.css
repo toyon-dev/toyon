@@ -1920,12 +1920,21 @@ body.resizing .rb-center {
   gap: 6px;
   margin-top: 8px;
   color: var(--text2);
+  /* the row holds one item of unknown width (the project name) and several that will not shrink,
+     so at some combination of a long name, a third agent and a narrow window it stops fitting.
+     Wrapping is what it does then; before this it overflowed the box and clipped the last chip. */
+  flex-wrap: wrap;
+  /* the repo chip's picker positions against the row rather than the chip: see .repo-chip-wrap */
+  position: relative;
 }
 .variants-right {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 6px;
+  /* the auto margin is the gap only while the row has slack; a long project name eats it and
+     "batch variants" closes up into one phrase. This is the floor under that. */
+  padding-left: 14px;
 }
 .variants-row label {
   display: flex;
@@ -1944,6 +1953,53 @@ body.resizing .rb-center {
   align-items: center;
   gap: 6px;
   margin-right: 8px;
+}
+/* a project name has no length limit, so the cap is what keeps one from pushing the whole row onto
+   a second line. Mono groups the chip with the profile chip, both names read off disk, and tells it
+   apart from the agent chips beside it, which are product names and toggles rather than a place. */
+.repo-chip {
+  font: var(--type-mono);
+  max-width: 140px;
+  /* still worth reading when the row is tight: a few characters and the ellipsis */
+  min-width: 56px;
+  margin-right: 2px;
+}
+/* .btn is a centring inline-flex, so the name has to be an element of its own to truncate: as a
+   bare text node it is an anonymous flex item, and a centred one clips both ends and leaves the
+   ellipsis nowhere to go. nowrap comes down from .btn. */
+.repo-chip .repo-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.repo-chip-wrap {
+  display: flex;
+  align-items: center;
+}
+/* The picker opens *over* the chip the way it opens over the pill in the top bar: its own lp-chip
+   lands on the name, so it reads as the chip expanding into a field rather than a menu dropping out
+   of one. Two things differ from the pill. It spans the row instead of taking the pill's 460px,
+   because at that width its right edge cut through the variant chips and left half a `1` beside it;
+   the field then sits where the composer's does and hides the controls it covers, which is what the
+   bar does too. And it positions against the row, so the horizontal is the pill's own -9px plus the
+   2px a .btn-outline's border adds over a bare .btn, which is what holds the name still. */
+.variants-row > .repo-chip-wrap > .prompt-box.anchored {
+  /* the row centres its items, so the panel's chip is centred too: 16px is the panel's border, the
+     field strip's padding and half that chip, and it holds whatever the row is tall enough for */
+  top: calc(50% - 16px);
+  left: -7px;
+  right: -7px;
+  width: auto;
+}
+/* the same room for the name as the chip it lands on, so a long one truncates in the same place:
+   140px of button less its border and padding, put back inside a box that has padding only */
+.repo-chip-wrap .lp-chip {
+  max-width: 138px;
+}
+/* a shorter list than the pill's: this one hangs inside a box that is already most of the way down
+   the screen, and the pill's 340px would put its last rows off the bottom */
+.repo-chip-wrap .prompt-box .qo-list {
+  max-height: min(240px, 34vh);
 }
 .variant-chip:disabled {
   opacity: 0.45;

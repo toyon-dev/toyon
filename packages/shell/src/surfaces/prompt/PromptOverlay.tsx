@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
+import { RepoChip } from "./RepoChip.tsx";
 
 /** ⌘K: describe a change → an agent starts on it in a new worktree (or N variants, or a batch) */
 export function PromptOverlay() {
@@ -18,6 +19,7 @@ export function PromptOverlay() {
   const [batch, setBatch] = useState(false);
   const [agent, setAgent] = useState(defaultAgent);
   const [profile, setProfile] = useNewWorktreeProfile(repo);
+  const field = useRef<HTMLTextAreaElement>(null);
   if (!repo) return null;
 
   const submit = () => {
@@ -55,6 +57,7 @@ export function PromptOverlay() {
       </div>
       <textarea
         className="field field-lg"
+        ref={field}
         autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -71,6 +74,8 @@ export function PromptOverlay() {
         }
       />
       <div className="variants-row">
+        {/* the picker takes focus while it is up, so put the caret back when it closes */}
+        <RepoChip onClose={() => field.current?.focus()} />
         {agents.length > 1 && (
           <span className="agent-chips">
             {agents.map((a) => (

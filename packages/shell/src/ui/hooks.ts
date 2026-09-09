@@ -9,7 +9,7 @@ export function useDismissOutside(box: RefObject<HTMLElement | null>, onOutside:
   useEffect(() => {
     const h = (e: MouseEvent) => {
       const t = e.target as Element | null;
-      if (t?.closest?.(".keys-btn, .project-pill")) return;
+      if (t?.closest?.(".keys-btn, .project-pill, .repo-chip")) return;
       if (box.current && !box.current.contains(t as Node)) cb.current();
     };
     // a click in the preview iframe never reaches this document, but it does move focus into the

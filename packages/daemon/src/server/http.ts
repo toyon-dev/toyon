@@ -36,6 +36,15 @@ export interface HttpOpts {
   noteShellOrigin: (origin: string | null) => void;
 }
 
+/** a year, and never revalidate: for a name that cannot mean different bytes later */
+const IMMUTABLE = "private, max-age=31536000, immutable";
+/** vite content-hashes everything under /assets, so those are immutable by construction. Nothing
+ * else the shell serves is: index.html is what maps those hashes to the current build, and a
+ * cached one boots an asset graph the daemon no longer has. That lands on the stale-build screen
+ * whose reload button reads the same cached index again, with no way out. manifest.json, icon.svg
+ * and sw.js are unhashed for the same reason, and a cached worker script is slow to replace. */
+const NO_STORE = "no-store";
+
 export function createFetch(opts: HttpOpts) {
   return async function fetch(req: Request, srv: Server<WsData>): Promise<Response | undefined> {
     const url = new URL(req.url);
@@ -96,19 +105,22 @@ export function createFetch(opts: HttpOpts) {
       const [worktreeId, file, extra] = url.pathname.slice("/attachments/".length).split("/");
       const path = worktreeId && file && !extra ? opts.attachments.fileFor(worktreeId, file) : null;
       if (!path || !existsSync(path)) return new Response("not found", { status: 404 });
-      return new Response(Bun.file(path), { headers: { "cache-control": "private, max-age=31536000, immutable" } });
+      return new Response(Bun.file(path), { headers: { "cache-control": IMMUTABLE } });
     }
 
     // static shell
     const rel = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = join(opts.shellDist, rel.replaceAll("..", ""));
-    if (existsSync(file) && Bun.file(file).size > 0) return new Response(Bun.file(file));
+    const hashed = rel.startsWith("/assets/");
+    if (existsSync(file) && Bun.file(file).size > 0) {
+      return new Response(Bun.file(file), { headers: { "cache-control": hashed ? IMMUTABLE : NO_STORE } });
+    }
     // a hashed asset that is gone means the shell was rebuilt under an open tab. Falling through to
     // index.html would answer a module request with HTML, so the import fails on MIME rather than
     // status and the tab can't tell why; 404 lets vite raise preloadError instead.
-    if (rel.startsWith("/assets/")) return new Response("not found", { status: 404 });
+    if (hashed) return new Response("not found", { status: 404 });
     const index = join(opts.shellDist, "index.html");
-    if (existsSync(index)) return new Response(Bun.file(index));
+    if (existsSync(index)) return new Response(Bun.file(index), { headers: { "cache-control": NO_STORE } });
     return new Response("toyon daemon running; shell not built (run: bun run build)", { status: 200 });
   };
 }

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "bun";
@@ -129,6 +129,9 @@ describe("static shell", () => {
   const dist = mkdtempSync(join(tmpdir(), "toyon-dist-"));
   afterAll(() => rmSync(dist, { recursive: true, force: true }));
   writeFileSync(join(dist, "index.html"), "<!doctype html><title>toyon</title>");
+  writeFileSync(join(dist, "sw.js"), "// worker");
+  mkdirSync(join(dist, "assets"));
+  writeFileSync(join(dist, "assets", "index-abc123.js"), "export default 1;");
   const serve = createFetch({
     token: "secret",
     shellDist: dist,
@@ -151,5 +154,28 @@ describe("static shell", () => {
     const r = await serve(req("/assets/MonacoDiff-old.js"), srv());
     expect(r?.status).toBe(404);
     expect(await r?.text()).not.toContain("doctype");
+  });
+
+  test("a hashed asset is immutable: the name cannot mean different bytes later", async () => {
+    const r = await serve(req("/assets/index-abc123.js"), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("cache-control")).toContain("immutable");
+  });
+
+  // index.html is what maps hashes to the current build. Cached, a rebuilt daemon leaves the tab
+  // booting an asset graph that is gone, and the stale-build screen's reload reads it again.
+  test("index.html is never stored", async () => {
+    const r = await serve(req("/"), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+  });
+  test("the SPA fallback is never stored either", async () => {
+    const r = await serve(req("/some/deep/route"), srv());
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+  });
+  test("an unhashed file beside the shell is never stored", async () => {
+    const r = await serve(req("/sw.js"), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("cache-control")).toBe("no-store");
   });
 });

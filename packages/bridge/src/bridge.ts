@@ -402,6 +402,12 @@ window.addEventListener("message", (e) => {
     case "pick-start":
       startPicking();
       break;
+    case "pick-alt":
+      if (picking && alt !== d.on) {
+        alt = d.on;
+        if (shownEl) paintPick(shownEl);
+      }
+      break;
     case "pick-cancel":
       stopPicking();
       break;

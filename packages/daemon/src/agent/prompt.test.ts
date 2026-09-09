@@ -47,8 +47,23 @@ describe("buildPrompt with a leading slash command", () => {
       { type: "text", text: SYSTEM_APPEND },
       { type: "text", text: "Image 2: shot.png (10×5)" },
       { type: "image", mimeType: "image/png", data: "YWJj" },
-      { type: "text", text: "[ctx]" },
     ]);
+  });
+
+  // The Claude adapter runs `/usage` only when the prompt is that one text block, so a command sent
+  // with nothing attached has to be exactly one block or it lands on the model as prose.
+  test("a bare command goes alone: the ambient context is dropped, not appended", () => {
+    expect(buildPrompt("/usage", "[Live preview context, current route: /]")).toEqual([
+      { type: "text", text: "/usage" },
+    ]);
+  });
+
+  test("a command with arguments loses the context too", () => {
+    expect(buildPrompt("/code-review high", "[ctx]")).toEqual([{ type: "text", text: "/code-review high" }]);
+  });
+
+  test("text that only looks like a path keeps its context", () => {
+    expect(buildPrompt("look at /Users/me/x", "[ctx]")).toHaveLength(2);
   });
 
   test("a Codex first prompt gets the prefix as its own block, never glued in front", () => {
@@ -61,7 +76,7 @@ describe("buildPrompt with a leading slash command", () => {
 
   test("an mcp command reaches the agent verbatim, with nothing appended to its line", () => {
     const blocks = buildPrompt("/mcp:linear:issue 42", "[ctx]");
-    expect(blocks[0]).toEqual({ type: "text", text: "/mcp:linear:issue 42" });
+    expect(blocks).toEqual([{ type: "text", text: "/mcp:linear:issue 42" }]);
   });
 
   test("a bare slash or a path is not a command, so nothing is hoisted", () => {

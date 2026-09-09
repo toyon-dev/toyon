@@ -2242,7 +2242,7 @@ body.resizing .rb-center {
 }
 .design-pane .file-path {
   flex: 1;
-  font: var(--fs-sm) var(--font-ui);
+  font: var(--type-mono);
   color: var(--text1);
 }
 /* min-width guards the flex column it sits in: a long path or a wide grid inside a pane should
@@ -2252,13 +2252,14 @@ body.resizing .rb-center {
   overflow: auto;
   padding: 28px 20px 80px;
   color: var(--text0);
-  font: var(--fs-sm) var(--font-ui);
+  font: var(--type-ui);
 }
 .design-section {
   margin-bottom: 52px;
 }
 .design-h {
-  font: 600 var(--fs-sm) var(--font-ui);
+  font: var(--type-ui-lg);
+  font-weight: var(--weight-title);
   color: var(--text0);
   margin: 0 0 16px;
   display: flex;
@@ -2266,7 +2267,7 @@ body.resizing .rb-center {
   gap: 8px;
 }
 .design-note {
-  font: var(--fs-xs) var(--font-ui);
+  font: var(--type-ui-sm);
   color: var(--text2);
   font-weight: 400;
 }
@@ -2320,7 +2321,7 @@ body.resizing .rb-center {
 }
 .design-group-name {
   display: block;
-  font: var(--fs-xs) var(--font-mono);
+  font: var(--type-mono);
   color: var(--text1);
   margin-bottom: 9px;
 }
@@ -2385,9 +2386,45 @@ body.resizing .rb-center {
   height: 24px;
   background: var(--element1);
 }
-.design-specimen {
-  font: 20px / 1 var(--font-ui);
-  color: var(--text1);
+/* Grouped by face, large to small inside it, each row rendered in itself. The face heads its own
+   block in the same quiet label the other groups use, because that is what a face token is: the
+   thing the sizes under it are cut from. No rules between rows; the token name on each already
+   separates them. */
+.design-faces {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.design-face-group {
+  display: flex;
+  flex-direction: column;
+}
+.design-face-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+  min-width: 0;
+}
+/* the same treatment as a group heading, because it is one */
+.design-face-family {
+  font: var(--type-mono-sm);
+  color: var(--text2);
+}
+.design-face {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.design-face-sample {
+  color: var(--text0);
+  white-space: nowrap;
+}
+.design-face-name {
+  font: var(--type-mono-sm);
+  color: var(--text2);
+  white-space: nowrap;
 }
 .design-plate {
   display: flex;
@@ -2396,7 +2433,7 @@ body.resizing .rb-center {
 }
 /* the token's own name, as you would type it: these are custom properties, so they read as code */
 .design-cell-name {
-  font: var(--fs-xs) var(--font-mono);
+  font: var(--type-mono);
   color: var(--text0);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2410,6 +2447,7 @@ body.resizing .rb-center {
   min-width: 0;
 }
 .design-cell-value {
+  font-variant-numeric: tabular-nums;
   flex: 1;
   min-width: 0;
 }
@@ -2424,7 +2462,7 @@ body.resizing .rb-center {
 }
 .design-cell-value,
 .design-cell-note {
-  font: var(--fs-xs) var(--font-mono);
+  font: var(--type-mono);
   color: var(--text1);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2478,16 +2516,16 @@ body.resizing .rb-center {
   flex-shrink: 0;
   text-align: right;
   color: var(--text2);
-  font: var(--fs-xs) var(--font-mono);
+  font: var(--type-mono);
 }
 .design-name {
   color: var(--text0);
-  font: var(--fs-xs) var(--font-mono);
+  font: var(--type-mono);
   flex-shrink: 0;
 }
 .design-path {
   color: var(--text2);
-  font: var(--fs-xs) var(--font-mono);
+  font: var(--type-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2522,6 +2560,7 @@ body.resizing .rb-center {
 .design-h,
 .design-group-name,
 .design-rows,
+.design-faces,
 .design-gap,
 .design-tail {
   max-width: var(--ds-col);

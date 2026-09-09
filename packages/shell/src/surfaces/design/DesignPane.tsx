@@ -146,9 +146,9 @@ function Gap({ children }: { children: React.ReactNode }) {
  * then the elements, then the text ladder, because that is the order they mean something in.
  */
 const GROUPS: Array<{ kind: DesignToken["kind"]; label: string }> = [
+  { kind: "font", label: "type" },
   { kind: "color", label: "color" },
   { kind: "length", label: "size & radius" },
-  { kind: "font", label: "type" },
   { kind: "shadow", label: "shadow" },
   { kind: "other", label: "computed" },
 ];
@@ -179,14 +179,18 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
           if (group.length === 0) return null;
           return (
             <div key={kind} className="design-group">
-              <span className="design-group-name">{label}</span>
-              <div className="design-breakout" style={breakout(group.length)}>
-                <div className="design-grid">
-                  {group.map((t) => (
-                    <Swatch key={t.name} token={t} ground={ground} largest={largestIn(group)} />
-                  ))}
+              {kind !== "font" && <span className="design-group-name">{label}</span>}
+              {kind === "font" ? (
+                <Faces tokens={group} />
+              ) : (
+                <div className="design-breakout" style={breakout(group.length)}>
+                  <div className="design-grid">
+                    {group.map((t) => (
+                      <Swatch key={t.name} token={t} ground={ground} largest={largestIn(group)} />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           );
         })
@@ -222,6 +226,65 @@ function largestIn(group: DesignToken[]): number {
   return group.reduce((max, t) => Math.max(max, Math.abs(Number.parseFloat(t.value)) || 0), 0);
 }
 
+/** A type token is either a stack (`--face-mono`) or a whole `font` shorthand (`--type-mono`). A
+ * shorthand is not a valid font-family, so setting it as one fell back to the pane's own face and
+ * every sample rendered identical sans. */
+const isFontShorthand = (v: string) => /^[1-9]00\s/.test(v.trim());
+const firstFamily = (list: string) => (list.split(",")[0] ?? list).replace(/["']/g, "").trim();
+
+/** What the sample says, in the face it says it in: `-apple-system 13/19.5`. A ratio is multiplied
+ * out, because a leading you have to do arithmetic on is not one you can compare down a column, and
+ * comparing them is the whole reason these are stacked. */
+function parseFace(v: string): { family: string; size: number | null; lead: number | null } {
+  const m = /^[1-9]00\s+([\d.]+)px(?:\s*\/\s*([\d.]+)(px)?)?\s+(.+)$/.exec(v.trim());
+  if (!m) return { family: firstFamily(v), size: null, lead: null };
+  const size = Number(m[1]);
+  const raw = m[2] ? Number(m[2]) : null;
+  const lead = raw === null ? null : Math.round((m[3] ? raw : size * raw) * 100) / 100;
+  return { family: firstFamily(m[4] ?? ""), size, lead };
+}
+
+/**
+ * The type group reads down the column rather than across a lattice of chips. A colour is one value
+ * and fits in a swatch; a type token is a face, a size and a leading at once, and none of those are
+ * legible in a 148px cell.
+ *
+ * Each face heads its own block, named in the same quiet label the other groups use for their
+ * heading, because that is what a face token is: the thing the sizes under it are cut from. The
+ * sizes then run large to small, each rendered in itself, so the scale is a scale on screen.
+ */
+function Faces({ tokens }: { tokens: DesignToken[] }) {
+  const rows = tokens.map((t) => ({ token: t, actual: t.resolved ?? t.value, ...parseFace(t.resolved ?? t.value) }));
+  const families = [...new Set(rows.map((r) => r.family))];
+  return (
+    <div className="design-faces">
+      {families.map((family) => {
+        const group = rows.filter((r) => r.family === family);
+        // the stack token, if the project declares one. A project can set a family inline in every
+        // rule and never name it, and then the heading is the family with no token to point at.
+        const face = group.find((r) => r.size === null);
+        const sized = group.filter((r) => r.size !== null).sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
+        return (
+          <div key={family} className="design-face-group">
+            <div className="design-face-head" {...(face ? tip(`${face.token.name}\n${face.actual}`) : {})}>
+              <span className="design-face-family">{family}</span>
+              {face && <span className="design-face-name">{face.token.name}</span>}
+            </div>
+            {sized.map((r) => (
+              <div key={r.token.name} className="design-face" {...tip(`${r.token.name}\n${r.actual}`)}>
+                <span className="design-face-sample" style={{ font: r.actual }}>
+                  {`${r.family} ${r.size}${r.lead === null ? "" : `/${r.lead}`}`}
+                </span>
+                <span className="design-face-name">{r.token.name}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Swatch({ token, ground, largest }: { token: DesignToken; ground: DesignToken | undefined; largest: number }) {
   // what it resolves to is what to paint and measure; what it says is what to go and edit
   const actual = token.resolved ?? token.value;
@@ -230,7 +293,7 @@ function Swatch({ token, ground, largest }: { token: DesignToken; ground: Design
   // Painting a value nothing can resolve would paint it with the *shell's* token of that name.
   // A translucent colour still paints; it just has no ratio to print.
   const paintable = token.kind === "color" && parseHex(actual) !== null;
-  const sample = token.kind === "color" || token.kind === "font";
+  const sample = token.kind === "color";
   const size = token.kind === "length" ? Number.parseFloat(actual) : Number.NaN;
 
   return (
@@ -238,11 +301,6 @@ function Swatch({ token, ground, largest }: { token: DesignToken; ground: Design
       {sample && (
         <div className="design-sample">
           {paintable && <span className="design-fill" style={{ background: actual }} />}
-          {token.kind === "font" && (
-            <span className="design-specimen" style={{ fontFamily: actual }}>
-              Ag
-            </span>
-          )}
         </div>
       )}
       <div className="design-plate">

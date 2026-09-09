@@ -27,6 +27,16 @@ describe("tokenKind", () => {
     expect(tokenKind("var(--surface0)")).toBe("other");
   });
 
+  test("a font shorthand is type, not a shadow with spaces in it", () => {
+    // both are three parts or more; only one of them is a shadow, and a shadow never opens with a
+    // font weight. Filed as shadows, the whole type scale showed up under the wrong heading.
+    expect(tokenKind("400 13px / 1.5 var(--face-ui)")).toBe("font");
+    expect(tokenKind("400 11px var(--face-mono)")).toBe("font");
+    expect(tokenKind("400 var(--size-mono) var(--face-mono)")).toBe("font");
+    expect(tokenKind("0 8px 24px #0006")).toBe("shadow");
+    expect(tokenKind("0 2px 6px rgba(0,0,0,.4)")).toBe("shadow");
+  });
+
   test("a colour function is a colour, however many commas it has", () => {
     // this one was filed as a font stack on the strength of its commas, and shown as a specimen
     expect(tokenKind("color-mix(in srgb, var(--text0) 8%, transparent)")).toBe("color");
@@ -195,6 +205,19 @@ describe("resolveAliases", () => {
     // the authored value is kept: it is what you would go and edit
     expect(accent?.value).toBe("var(--red)");
     expect(red?.resolved).toBeUndefined();
+  });
+
+  test("fills in references sitting inside a larger value", () => {
+    // the type scale is the case: a `font` shorthand names two other tokens, and leaving them
+    // unresolved sent the raw var()s to the shell, where they resolved against the shell's own
+    // tokens instead of the project's and every specimen rendered in the same face
+    const [type] = resolveAliases([
+      tok("--type-mono", "400 var(--size-mono) var(--face-mono)"),
+      tok("--size-mono", "12px"),
+      tok("--face-mono", "ui-monospace, monospace"),
+    ]);
+    expect(type?.resolved).toBe("400 12px ui-monospace, monospace");
+    expect(type?.kind).toBe("font");
   });
 
   test("follows a chain, and survives one that eats itself", () => {

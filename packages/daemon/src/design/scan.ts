@@ -12,19 +12,29 @@ const UNIT = /px|rem|em|%|ch|vh|vw|vmin|vmax|deg/;
 const LENGTH = new RegExp(`^-?[\\d.]+(${UNIT.source}|s|ms)?$`);
 /** a value computed from other values: `calc(var(--rail-w) - 1px)` */
 const COMPUTED = /^(calc|var|clamp|min|max)\(/;
+/** a `font` shorthand: a weight, then a size. Checked before the shadow rule, which otherwise
+ * claims it on word count alone: `400 13px / 1.5 var(--face-ui)` and `0 2px 6px #0006` are both
+ * three or more parts, and only one of them is a shadow. A shadow never opens with 100..900. The
+ * size may itself be a var(), as it is wherever an editor has to parseFloat it back out. */
+const FONT_SHORTHAND = /^[1-9]00\s+([\d.]|var\()/;
 
 /** Decided from the value, not the name: a project can call a color anything, but `#6fae5f` is
  * only ever a color. Order matters, a shadow contains a color and a length both. */
 export function tokenKind(value: string): DesignTokenKind {
   const v = value.trim();
   if (COLOR.test(v)) return "color";
-  if (FONT_STACK.test(v)) return "font";
+  if (FONT_STACK.test(v) || FONT_SHORTHAND.test(v)) return "font";
   // a computed value is whatever it computes to, and only the running page knows that. Reading a
   // unit out of it beats calling every `calc()` a shadow because it has spaces in it.
   if (COMPUTED.test(v)) return UNIT.test(v) ? "length" : "other";
+  // a shadow whose colour is rgba() or hsl() has commas in it, and the comma rule below would
+  // file it as a font stack: same trap color-mix fell into. A font stack opens with a family name,
+  // a shadow with an offset, so the first part decides it.
+  const parts = v.split(/\s+/);
+  if (parts.length >= 3 && LENGTH.test(parts[0] ?? "")) return "shadow";
   if (v.includes(",")) return "font";
   if (LENGTH.test(v)) return "length";
-  if (v.split(/\s+/).length >= 3) return "shadow";
+  if (parts.length >= 3) return "shadow";
   return "other";
 }
 
@@ -270,29 +280,34 @@ function unionLiterals(ts: any, type: any): string[] {
 }
 
 /**
- * Follow `--accent: var(--red)` to the value it actually names.
+ * Follow `--accent: var(--red)` to the value it actually names, including references sitting inside
+ * a larger value: `400 var(--size-mono) var(--face-mono)` resolves to `400 12px ui-monospace, ...`.
  *
- * Only a bare reference is followed, never a `calc()` or a `color-mix()`: those need the cascade,
- * and the point of resolving here is that the answer comes out of the project's own declarations
- * rather than being guessed. The shell cannot do this itself, because a `var(--red)` evaluated in
- * the shell's document resolves against the *shell's* red and paints a confident lie.
+ * Arithmetic is still left alone entirely: a `calc()` needs the cascade and a layout, and half of
+ * it filled in is not an answer either. The shell cannot do any of this itself: a `var(--red)` evaluated in the shell's
+ * document resolves against the *shell's* red and paints a confident lie, which is exactly what the
+ * type specimens were doing before this followed embedded references.
  */
 export function resolveAliases(tokens: DesignToken[]): DesignToken[] {
   const byName = new Map(tokens.map((t) => [t.name, t]));
-  const alias = (value: string) => /^var\(\s*(--[\w-]+)/.exec(value)?.[1];
+  // a reference, with or without a fallback. A nested var() in the fallback is left alone: the
+  // fallback only applies when the reference misses, and a miss is not something to flatten.
+  const REF = /var\(\s*(--[\w-]+)\s*(?:,[^()]*)?\)/g;
+  const ARITHMETIC = /^(calc|clamp|min|max)\(/;
+
+  const expand = (value: string, seen: ReadonlySet<string>, hop: number): string =>
+    hop > 8
+      ? value
+      : value.replace(REF, (whole, name: string) => {
+          // a cycle would otherwise spin here; a token that points at itself has no value to find
+          if (seen.has(name)) return whole;
+          const target = byName.get(name);
+          return target ? expand(target.value, new Set([...seen, name]), hop + 1) : whole;
+        });
 
   return tokens.map((t) => {
-    const seen = new Set<string>([t.name]);
-    let value = t.value;
-    for (let hop = 0; hop < 8; hop++) {
-      const next = alias(value);
-      // a cycle would otherwise spin here; a token that points at itself has no value to find
-      if (!next || seen.has(next)) break;
-      seen.add(next);
-      const target = byName.get(next);
-      if (!target) break;
-      value = target.value;
-    }
+    if (ARITHMETIC.test(t.value.trim())) return t;
+    const value = expand(t.value, new Set([t.name]), 0);
     if (value === t.value) return t;
     return { ...t, resolved: value, kind: tokenKind(value) };
   });

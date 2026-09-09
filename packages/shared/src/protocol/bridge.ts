@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 import type { PickMeta } from "./events.ts";
-import { pickMetaSchema } from "./ws.ts";
+import { pickMetaSchema } from "./pick.ts";
 
 declare global {
   interface Window {

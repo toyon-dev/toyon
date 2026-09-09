@@ -23,17 +23,15 @@ import type {
 } from "../model.ts";
 import { SHELL_STREAM } from "../model.ts";
 import type { AgentCommand, AgentEvent, AskAnswer, PickMeta } from "./events.ts";
-
-/**
- * Bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello and
- * stops talking rather than misreading frames.
- *
- * A *new* ClientMsg kind counts, however additive it looks: the shell ships from dist and the
- * daemon from source, so a reloaded tab routinely talks to a daemon that has not restarted, and
- * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
- * same goes for a new required field on an existing kind.
- */
-export const PROTOCOL_VERSION = 13;
+import {
+  IMAGE_MAX_BYTES,
+  IMAGE_MAX_EDGE,
+  IMAGE_MIME_TYPES,
+  IMAGES_PER_MESSAGE,
+  PASTE_MAX_CHARS,
+  PASTES_PER_MESSAGE,
+} from "./limits.ts";
+import { pickMetaSchema } from "./pick.ts";
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -114,9 +112,6 @@ export type ServerMsg =
 
 /** the terminal stream: bytes for xterm, which the shell routes around its store */
 export type TermServerMsg = Extract<ServerMsg, { t: "term-data" | "term-snapshot" | "term-exit" }>;
-export function isTermMsg(m: ServerMsg): m is TermServerMsg {
-  return m.t === "term-data" || m.t === "term-snapshot" || m.t === "term-exit";
-}
 
 // ---- client → daemon: schemas are the source of truth ----
 
@@ -136,14 +131,6 @@ const termInput = z.string().max(65_536);
 /** which of a worktree's streams: SHELL_STREAM, or a proc named in toyon.json */
 const streamName = z.string().min(1).max(100);
 
-/** image formats the models accept; the shell re-encodes anything else (and anything too large) */
-export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
-export type ImageMimeType = (typeof IMAGE_MIME_TYPES)[number];
-/** the models' long-edge ceiling; the shell downscales to it before sending */
-export const IMAGE_MAX_EDGE = 2576;
-export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-export const IMAGES_PER_MESSAGE = 6;
-
 /** an image as the shell sends it: already downscaled, base64 so it rides in the JSON frame */
 export const imageInputSchema = z.object({
   name: z.string().max(200),
@@ -155,13 +142,6 @@ export const imageInputSchema = z.object({
 });
 export type ImageInput = z.infer<typeof imageInputSchema>;
 const images = z.array(imageInputSchema).max(IMAGES_PER_MESSAGE).optional();
-
-/** when a paste collapses into a chip instead of filling the textarea. Either bound trips it: a
- * wall of prose has few lines, a stack trace has short ones. */
-export const PASTE_MIN_CHARS = 1200;
-export const PASTE_MIN_LINES = 10;
-export const PASTE_MAX_CHARS = 100_000;
-export const PASTES_PER_MESSAGE = 4;
 
 /** a paste as the shell sends it; the daemon derives the counts rather than trusting them */
 export const pasteInputSchema = z.object({
@@ -176,14 +156,6 @@ const pastes = z.array(pasteInputSchema).max(PASTES_PER_MESSAGE).optional();
 const askAnswerSchema = z.object({
   selected: z.array(z.string().max(2_000)).max(32),
   note: z.string().max(10_000).optional(),
-});
-
-export const pickMetaSchema = z.object({
-  component: z.string().nullable(),
-  file: z.string().nullable(),
-  line: z.number().nullable(),
-  tag: z.string(),
-  selector: z.string(),
 });
 
 const procName = z.string().max(100);

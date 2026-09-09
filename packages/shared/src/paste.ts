@@ -2,7 +2,7 @@
 // numbers from the same text: the shell to label the chip before sending, the daemon to build the
 // PasteRef it stores, so a chip and its transcript entry can never disagree.
 
-import { PASTE_MIN_CHARS, PASTE_MIN_LINES } from "./protocol/ws.ts";
+import { PASTE_MIN_CHARS, PASTE_MIN_LINES } from "./protocol/limits.ts";
 
 /** how many characters of the first line the chip and the prompt header carry */
 const PREVIEW_CHARS = 80;

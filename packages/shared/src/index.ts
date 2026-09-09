@@ -11,6 +11,8 @@ export * from "./ports.ts";
 export * from "./project.ts";
 export * from "./protocol/bridge.ts";
 export * from "./protocol/events.ts";
+export * from "./protocol/limits.ts";
+export * from "./protocol/pick.ts";
 export * from "./protocol/ws.ts";
 export * from "./themes.ts";
 export * from "./vscode-theme.ts";

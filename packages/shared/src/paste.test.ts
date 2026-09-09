@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isLongPaste, pasteSummary, stripAnsi } from "./paste.ts";
-import { PASTE_MIN_CHARS, PASTE_MIN_LINES } from "./protocol/ws.ts";
+import { PASTE_MIN_CHARS, PASTE_MIN_LINES } from "./protocol/limits.ts";
 
 describe("pasteSummary", () => {
   test("counts what the chip shows", () => {

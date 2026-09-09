@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { PASTE_MAX_CHARS, PASTES_PER_MESSAGE, parseClientMsg } from "./ws.ts";
+import { PASTE_MAX_CHARS, PASTES_PER_MESSAGE } from "./limits.ts";
+import { parseClientMsg } from "./ws.ts";
 
 describe("parseClientMsg", () => {
   test("accepts every well-formed kind it is given", () => {

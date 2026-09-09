@@ -135,7 +135,11 @@ function collectComponents(src: SourceFile[], ts: any, importers: Map<string, Se
       out.push({ name, path: file.path, imports: importers.get(name)?.size ?? 0, variants });
     }
   }
-  return out.sort((a, b) => b.imports - a.imports || a.name.localeCompare(b.name));
+  /* Count first, because what is reused is the question. The tie breaks on path rather than name:
+     most of this list is the tail where every count is one, so a name sort there is an arbitrary
+     order carrying nothing, while a path sort groups a surface's one-offs together and says which
+     part of the app is not abstracting anything. */
+  return out.sort((a, b) => b.imports - a.imports || a.path.localeCompare(b.path));
 }
 
 /** A parse throw must not take the whole scan down: one file with syntax the project's own
@@ -188,7 +192,8 @@ function collectClasses(
       unwrapped: false,
     });
   }
-  out.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
+  // same reasoning as components: count first, then path, because the tail is most of the list
+  out.sort((a, b) => b.uses - a.uses || (a.path ?? "").localeCompare(b.path ?? ""));
 
   const named = new Set(components.map((c) => normal(c.name)));
   const busy = typicalUse(out);

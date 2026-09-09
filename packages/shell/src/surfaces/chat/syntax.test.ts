@@ -18,6 +18,21 @@ describe("languageOf", () => {
     expect(languageOf("", "/repo/Makefile")).toBeNull();
     expect(languageOf("brainfuck", "")).toBeNull();
   });
+
+  test("the C family borrows javascript rather than carrying five more grammars", () => {
+    expect(languageOf("", "/repo/Main.java")).toBe("javascript");
+    expect(languageOf("", "/repo/app/Model.kt")).toBe("javascript");
+    expect(languageOf("", "/repo/vendor/zlib.c")).toBe("javascript");
+    expect(languageOf("", "/repo/src/render.cpp")).toBe("javascript");
+    expect(languageOf("", "/repo/Program.cs")).toBe("javascript");
+    expect(languageOf("", "/repo/View.swift")).toBe("javascript");
+  });
+
+  test("a language with no near neighbour colours nothing rather than colouring wrong", () => {
+    expect(languageOf("", "/repo/app/models/user.rb")).toBeNull();
+    expect(languageOf("", "/repo/index.php")).toBeNull();
+    expect(languageOf("", "/repo/schema.sql")).toBeNull();
+  });
 });
 
 describe("tokenLines", () => {

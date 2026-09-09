@@ -6,22 +6,14 @@
 
 import type { Span } from "@toyon/shared";
 import bash from "highlight.js/lib/languages/bash";
-import c from "highlight.js/lib/languages/c";
-import cpp from "highlight.js/lib/languages/cpp";
-import csharp from "highlight.js/lib/languages/csharp";
 import css from "highlight.js/lib/languages/css";
 import go from "highlight.js/lib/languages/go";
 import ini from "highlight.js/lib/languages/ini";
-import java from "highlight.js/lib/languages/java";
 import javascript from "highlight.js/lib/languages/javascript";
 import json from "highlight.js/lib/languages/json";
 import markdown from "highlight.js/lib/languages/markdown";
-import php from "highlight.js/lib/languages/php";
 import python from "highlight.js/lib/languages/python";
-import ruby from "highlight.js/lib/languages/ruby";
 import rust from "highlight.js/lib/languages/rust";
-import sql from "highlight.js/lib/languages/sql";
-import swift from "highlight.js/lib/languages/swift";
 import typescript from "highlight.js/lib/languages/typescript";
 import xml from "highlight.js/lib/languages/xml";
 import yaml from "highlight.js/lib/languages/yaml";
@@ -30,25 +22,22 @@ import type { DiffLine } from "./toolCall.ts";
 
 /** Registered one by one rather than by importing lowlight's `common`: the set is what a repo you
  * would open in toyon is written in, and every grammar past that is weight on the first paint of a
- * transcript. An unregistered language colours nothing, which is the right failure. */
+ * transcript. An unregistered language colours nothing, which is the right failure.
+ *
+ * The C-family grammars are not here; BY_EXT sends those extensions to javascript instead. It gets
+ * their comments, strings, numbers and shared keywords right, which is most of what a glance down a
+ * transcript reads, and costs 27 KB less than carrying c, cpp, csharp, java and swift. Ruby, php
+ * and sql have no such neighbour and are left to colour nothing. */
 const low = createLowlight({
   bash,
-  c,
-  cpp,
-  csharp,
   css,
   go,
   ini,
-  java,
   javascript,
   json,
   markdown,
-  php,
   python,
-  ruby,
   rust,
-  sql,
-  swift,
   typescript,
   xml,
   yaml,
@@ -80,18 +69,17 @@ const BY_EXT: Record<string, string> = {
   pyi: "python",
   rs: "rust",
   go: "go",
-  java: "java",
-  kt: "java",
-  c: "c",
-  h: "c",
-  cc: "cpp",
-  cpp: "cpp",
-  hpp: "cpp",
-  cs: "csharp",
-  rb: "ruby",
-  php: "php",
-  swift: "swift",
-  sql: "sql",
+  // the C family borrows javascript: braces, line comments, quoted strings and half the keywords
+  // land, `int` and `#include` do not. Better than plain, and 27 KB cheaper than five grammars
+  java: "javascript",
+  kt: "javascript",
+  c: "javascript",
+  h: "javascript",
+  cc: "javascript",
+  cpp: "javascript",
+  hpp: "javascript",
+  cs: "javascript",
+  swift: "javascript",
   yml: "yaml",
   yaml: "yaml",
   toml: "ini",

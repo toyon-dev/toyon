@@ -170,6 +170,19 @@ export interface GitFileStatus {
   del?: number;
 }
 
+/** one commit in the history list: enough to draw a row, not to diff it */
+export interface CommitEntry {
+  sha: string;
+  /** abbreviated sha, however git chose to abbreviate it for this repo */
+  short: string;
+  subject: string;
+  author: string;
+  /** author date, epoch ms */
+  at: number;
+  /** ahead of the default branch: this worktree's own work, not history it inherited */
+  ahead: boolean;
+}
+
 // ---- Themes ----
 
 /** always #rrggbb or #rrggbbaa — CSS and Monaco both take 8-digit hex as-is */

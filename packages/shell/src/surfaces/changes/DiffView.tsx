@@ -33,12 +33,15 @@ export function DiffView({
     return w && wtDir(w);
   });
   const absPath = wtPath ? `${wtPath}/${diff.path}` : diff.path;
+  // a commit's diff: read-only, and none of the working-tree wiring below applies to it
+  const history = diff.ref !== undefined;
   const cached = useStore((s) => localOf(s, diff.worktreeId).changedRanges[diff.path]);
   // warm the line-offset/ranges cache so line-hover highlights align; a git-status wipes the
-  // cache, so `cached` is a dependency and the request re-fires
+  // cache, so `cached` is a dependency and the request re-fires. Ranges are measured against the
+  // working tree, so for a commit they would light up lines the page never rendered.
   useEffect(() => {
-    if (!cached) sock?.send({ t: "changed-ranges", worktreeId: diff.worktreeId, path: diff.path });
-  }, [diff.worktreeId, diff.path, cached, sock]);
+    if (!cached && !history) sock?.send({ t: "changed-ranges", worktreeId: diff.worktreeId, path: diff.path });
+  }, [diff.worktreeId, diff.path, cached, history, sock]);
   const lineOff = cached?.offset ?? 0;
   return (
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%
@@ -47,7 +50,7 @@ export function DiffView({
       height={full ? undefined : height}
       resizable={!full}
       onDragStart={onDragStart}
-      title={diff.path}
+      title={history ? `${diff.path} at ${diff.ref?.slice(0, 7)}` : diff.path}
       onClose={() => dispatch({ a: "close-diff" })}
       actions={
         <>
@@ -73,16 +76,21 @@ export function DiffView({
             path={diff.path}
             line={diff.line}
             theme={theme}
+            readOnly={history}
             onSave={(content) => sock?.send({ t: "write-file", worktreeId: diff.worktreeId, path: diff.path, content })}
-            onLineHover={(line) => {
-              if (line == null) previewBus.post(diff.worktreeId, { type: "highlight-clear" });
-              else
-                previewBus.post(diff.worktreeId, {
-                  type: "highlight-file",
-                  path: diff.path,
-                  ranges: [[line + lineOff, line + lineOff]],
-                });
-            }}
+            onLineHover={
+              history
+                ? undefined
+                : (line) => {
+                    if (line == null) previewBus.post(diff.worktreeId, { type: "highlight-clear" });
+                    else
+                      previewBus.post(diff.worktreeId, {
+                        type: "highlight-file",
+                        path: diff.path,
+                        ranges: [[line + lineOff, line + lineOff]],
+                      });
+                  }
+            }
           />
         </Suspense>
       </ErrorBoundary>

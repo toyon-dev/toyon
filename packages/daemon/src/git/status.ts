@@ -37,20 +37,24 @@ export async function fileBefore(worktreePath: string, defaultBr: string, file: 
   return r.ok ? r.out : "";
 }
 
-type LineCounts = Pick<GitFileStatus, "add" | "del">;
+export type LineCounts = Pick<GitFileStatus, "add" | "del">;
 
-/** `git diff --numstat` for the given range, keyed by path. Binary files map to {}. */
-async function numstat(worktreePath: string, ...range: string[]): Promise<Map<string, LineCounts>> {
-  const out = new Map<string, LineCounts>();
-  const r = await git(worktreePath, "diff", "--numstat", "--no-renames", ...range);
-  if (!r.ok) return out;
-  for (const line of r.out.split("\n")) {
+/** `--numstat` output → counts by path, whichever command produced it. Binary files map to {}. */
+export function parseNumstat(out: string): Map<string, LineCounts> {
+  const counts = new Map<string, LineCounts>();
+  for (const line of out.split("\n")) {
     const [a, d, ...rest] = line.split("\t");
     const path = rest.join("\t").replace(/^"(.*)"$/, "$1");
     if (!path) continue;
-    out.set(path, a === "-" || d === "-" ? {} : { add: Number(a), del: Number(d) });
+    counts.set(path, a === "-" || d === "-" ? {} : { add: Number(a), del: Number(d) });
   }
-  return out;
+  return counts;
+}
+
+/** `git diff --numstat` for the given range, keyed by path. */
+async function numstat(worktreePath: string, ...range: string[]): Promise<Map<string, LineCounts>> {
+  const r = await git(worktreePath, "diff", "--numstat", "--no-renames", ...range);
+  return r.ok ? parseNumstat(r.out) : new Map<string, LineCounts>();
 }
 
 /** Line count of an untracked file (all insertions). Undefined for binaries and directories. */

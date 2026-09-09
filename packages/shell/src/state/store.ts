@@ -241,8 +241,10 @@ export interface State {
   /** armed element picker + last picked element (pending chat attachment) */
   picking: boolean;
   pick: (PickedElement & { worktreeId: string }) | null;
-  /** a search hit was picked: reveal this line once its file-diff arrives */
-  gotoLine: { worktreeId: string; path: string; line: number } | null;
+  /** a search hit or a picked element: reveal this line once its file-diff arrives. `fiber` marks
+   * a line the running page reported, counted against the served module rather than the file, and
+   * mapped back by the changed-ranges offset for that path. */
+  gotoLine: { worktreeId: string; path: string; line: number; fiber?: boolean } | null;
   overlay: Overlay | null;
   /** a sub-picker (theme, appearance) was opened from a palette: esc goes back there with the query restored */
   paletteReturn: { mode: "commands" | "quick-open" | "keys"; q: string } | null;
@@ -784,15 +786,26 @@ function onServer(s: State, msg: StoreServerMsg): State {
       }));
       return { ...next, leftOpen, leftAuto };
     }
-    case "changed-ranges":
-      return withLocal(s, msg.worktreeId, (l) => ({
+    case "changed-ranges": {
+      const next = withLocal(s, msg.worktreeId, (l) => ({
         ...l,
         changedRanges: { ...l.changedRanges, [msg.path]: { ranges: msg.ranges, offset: msg.lineOffset } },
       }));
+      // the offset this reply carries is what a held fiber line was waiting for
+      const g = s.gotoLine;
+      if (!g?.fiber || g.worktreeId !== msg.worktreeId || g.path !== msg.path) return next;
+      if (next.diff?.worktreeId !== msg.worktreeId || next.diff.path !== msg.path) return next;
+      return { ...next, diff: { ...next.diff, line: g.line - msg.lineOffset }, gotoLine: null };
+    }
     case "file-diff": {
       const g = s.gotoLine;
-      const line = g && g.worktreeId === msg.worktreeId && g.path === msg.path ? g.line : undefined;
-      return { ...s, diff: { ...msg, line }, gotoLine: null };
+      if (!g || g.worktreeId !== msg.worktreeId || g.path !== msg.path)
+        return { ...s, diff: { ...msg }, gotoLine: null };
+      const offset = localOf(s, msg.worktreeId).changedRanges[msg.path]?.offset;
+      // hold the goto rather than reveal the wrong line: without the offset a preamble-shifted
+      // file lands a few lines off, and changed-ranges (which DiffView asks for on mount) places it
+      if (g.fiber && offset === undefined) return { ...s, diff: { ...msg } };
+      return { ...s, diff: { ...msg, line: g.line - (g.fiber ? (offset ?? 0) : 0) }, gotoLine: null };
     }
     case "shipped": {
       // a suggestion lands in that worktree's composer and focuses it

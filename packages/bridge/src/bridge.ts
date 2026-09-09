@@ -173,47 +173,81 @@ function clearOverlay() {
   if (overlay) overlay.innerHTML = "";
 }
 
-function drawBox(rect: DOMRect, label?: string) {
+/** The fill is what separates the two things a box can mean. An outline alone is the picker's
+ * default, where a click attaches the element to the chat. A filled box means source: the picker
+ * with the modifier held, and the change-hover highlight arriving from the other direction. */
+function drawBox(rect: DOMRect, label?: HTMLElement, fill = true) {
   const box = document.createElement("div");
-  box.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;outline:2px solid ${accent};outline-offset:-1px;background:${accent}14;border-radius:2px;`;
-  if (label) {
-    const tag = document.createElement("div");
-    tag.textContent = label;
-    tag.style.cssText = `position:absolute;left:0;top:-20px;background:${accent};color:${accentFg};font:11px -apple-system,sans-serif;padding:1px 6px;border-radius:3px;white-space:nowrap;`;
-    box.appendChild(tag);
-  }
+  box.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;outline:2px solid ${accent};outline-offset:-1px;${fill ? `background:${accent}14;` : ""}border-radius:2px;`;
+  if (label) box.appendChild(label);
   ensureOverlay().appendChild(box);
+}
+
+/** the chip above the box, built rather than templated: the hint is a second run at its own
+ * weight, and anything richer than one string is where a pinned chip would start */
+function chip(text: string, hint?: string): HTMLElement {
+  const el = document.createElement("div");
+  el.textContent = text;
+  el.style.cssText = `position:absolute;left:0;top:-20px;background:${accent};color:${accentFg};font:11px -apple-system,sans-serif;padding:1px 6px;border-radius:3px;white-space:nowrap;`;
+  if (hint) {
+    const h = document.createElement("span");
+    h.textContent = `  ${hint}`;
+    h.style.opacity = "0.55";
+    el.appendChild(h);
+  }
+  return el;
 }
 
 // ---- element picker ----
 
 let picking = false;
-let hoverEl: Element | null = null;
+// what the overlay is drawing, which is also what a click acts on: the box you saw is the thing
+// you get. Pinning a pick (to read it rather than to click it) is then a matter of not calling
+// paintPick from the move handler, rather than a rewrite of either.
+let shownEl: Element | null = null;
+// the modifier swaps where a click sends the element: the chat by default, its source while held.
+// Read off the mouse rather than the keyboard, because the chord that armed the picker may have
+// left focus in the shell, where a keydown in here never arrives. Every mousemove carries it.
+let alt = false;
 
-function onPickMove(e: MouseEvent) {
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  if (!el || el === hoverEl) return;
-  hoverEl = el;
+function paintPick(el: Element) {
+  shownEl = el;
   clearOverlay();
   const fiber = fiberOf(el);
   const comp = componentOf(fiber);
   const src = sourceOf(fiber);
-  const label = comp
-    ? `<${comp}>${src ? ` · ${shortFile(src.file)}${src.line ? `:${src.line}` : ""}` : ""}`
-    : el.tagName.toLowerCase();
-  drawBox(el.getBoundingClientRect(), label);
+  const where = src ? `${shortFile(src.file)}${src.line ? `:${src.line}` : ""}` : "";
+  // the hint is drawn only when there is a file to open, so it never advertises a dead end: an
+  // element with no fiber source offers the one verb it can honour and says nothing about the other
+  const label =
+    alt && src
+      ? chip(`open ${where}`)
+      : chip(comp ? `<${comp}>${where ? ` · ${where}` : ""}` : el.tagName.toLowerCase(), src ? "⌥ code" : undefined);
+  drawBox(el.getBoundingClientRect(), label, alt && !!src);
+}
+
+function onPickMove(e: MouseEvent) {
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (!el) return;
+  const changed = el !== shownEl || e.altKey !== alt;
+  alt = e.altKey;
+  if (changed) paintPick(el);
 }
 
 function onPickClick(e: MouseEvent) {
   e.preventDefault();
   e.stopPropagation();
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  stopPicking();
-  if (!el) return;
-  const fiber = fiberOf(el);
+  const el = shownEl ?? document.elementFromPoint(e.clientX, e.clientY);
+  const fiber = el ? fiberOf(el) : null;
   const src = sourceOf(fiber);
+  // opening the source is browsing, so it leaves the picker armed and the next element is one
+  // click away; attaching to the chat is a commit, and ends the mode
+  const code = e.altKey && !!src;
+  if (!code) stopPicking();
+  if (!el) return;
   post({
     type: "picked",
+    verb: code ? "code" : "chat",
     component: componentOf(fiber),
     file: src?.file ?? null,
     line: src?.line ?? null,
@@ -227,30 +261,41 @@ function onPickClick(e: MouseEvent) {
 }
 
 function onPickKey(e: KeyboardEvent) {
-  if (e.key === "Escape") {
+  if (e.key === "Escape" && e.type === "keydown") {
     e.preventDefault();
     e.stopPropagation();
     stopPicking();
     post({ type: "pick-cancel" });
+    return;
+  }
+  // the pointer is often still, resting on the element being decided about
+  if (e.key === "Alt" && alt !== (e.type === "keydown")) {
+    alt = e.type === "keydown";
+    if (shownEl) paintPick(shownEl);
   }
 }
 
 function startPicking() {
   if (picking) return;
   picking = true;
-  hoverEl = null;
+  shownEl = null;
+  alt = false;
   document.addEventListener("mousemove", onPickMove, true);
   document.addEventListener("click", onPickClick, true);
   document.addEventListener("keydown", onPickKey, true);
+  document.addEventListener("keyup", onPickKey, true);
   document.documentElement.style.cursor = "crosshair";
 }
 
 function stopPicking() {
   picking = false;
+  shownEl = null;
+  alt = false;
   clearOverlay();
   document.removeEventListener("mousemove", onPickMove, true);
   document.removeEventListener("click", onPickClick, true);
   document.removeEventListener("keydown", onPickKey, true);
+  document.removeEventListener("keyup", onPickKey, true);
   document.documentElement.style.cursor = "";
 }
 
@@ -330,37 +375,6 @@ function highlightFile(path: string, ranges: Array<[number, number]> | null) {
   }
 }
 
-// ---- headless self-test hook: #__toyontest=src/App.tsx@27-27 ----
-const LOOPBACK = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
-if (LOOPBACK && location.hash.startsWith("#__toyontest=")) {
-  const spec = decodeURIComponent(location.hash.slice("#__toyontest=".length));
-  const [path, span] = spec.split("@");
-  const ranges: Array<[number, number]> | null = span
-    ? [[Number(span.split("-")[0]), Number(span.split("-")[1] ?? span.split("-")[0])]]
-    : null;
-  setTimeout(() => {
-    const { matched, fromFile, withSource } = matchElements(String(path), ranges);
-    const out = document.createElement("pre");
-    out.id = "__toyontest";
-    out.textContent = JSON.stringify(
-      {
-        path,
-        ranges,
-        withSource,
-        fileMatched: fromFile.length,
-        matched: matched.map((m) => ({
-          tag: m.el.tagName.toLowerCase(),
-          line: m.line,
-          text: m.el.textContent?.slice(0, 30),
-        })),
-      },
-      null,
-      1,
-    );
-    document.body.appendChild(out);
-  }, 1500);
-}
-
 // ---- commands from the shell ----
 
 window.addEventListener("message", (e) => {
@@ -423,7 +437,7 @@ window.addEventListener("message", (e) => {
         const hit = d.match === "any" ? d.props.some(ok) : d.props.every(ok);
         // only the first carries the label, for the same reason highlight-selector does it
         if (hit) {
-          drawBox(els[i]!.getBoundingClientRect(), first ? d.label || undefined : undefined);
+          drawBox(els[i]!.getBoundingClientRect(), first && d.label ? chip(d.label) : undefined);
           first = false;
         }
       }
@@ -437,7 +451,7 @@ window.addEventListener("message", (e) => {
         // carries the label, or a dense page turns into a wall of tags.
         const all = document.querySelectorAll(d.selector);
         for (let i = 0; i < all.length; i++) {
-          drawBox(all[i]!.getBoundingClientRect(), i === 0 ? d.label || undefined : undefined);
+          drawBox(all[i]!.getBoundingClientRect(), i === 0 && d.label ? chip(d.label) : undefined);
         }
       } catch {
         // an invalid selector is the caller's bug, and throwing here would kill the message pump

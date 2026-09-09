@@ -560,6 +560,43 @@ describe("streams and notices", () => {
     expect(s.diff?.line).toBeUndefined();
     expect(s.gotoLine).toBeNull();
   });
+  test("a line the page reported waits for the offset that maps it back to the file", () => {
+    const opened = run([
+      hello(wt("a")),
+      { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55, fiber: true } },
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
+    ]);
+    // the file is open, but revealing 55 now would land three lines past the element
+    expect(opened.diff?.path).toBe("x.tsx");
+    expect(opened.diff?.line).toBeUndefined();
+    expect(opened.gotoLine?.line).toBe(55);
+
+    const placed = reducer(
+      opened,
+      server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
+    );
+    expect(placed.diff?.line).toBe(52);
+    expect(placed.gotoLine).toBeNull();
+  });
+  test("a known offset places the line as the file opens", () => {
+    const s = run([
+      hello(wt("a")),
+      server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
+      { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55, fiber: true } },
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
+    ]);
+    expect(s.diff?.line).toBe(52);
+    expect(s.gotoLine).toBeNull();
+  });
+  test("a search hit is a file line already, and no offset is taken off it", () => {
+    const s = run([
+      hello(wt("a")),
+      server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
+      { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55 } },
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
+    ]);
+    expect(s.diff?.line).toBe(55);
+  });
 });
 
 // The shell is scoped to one project at a time while the daemon runs them all: `visible` is what

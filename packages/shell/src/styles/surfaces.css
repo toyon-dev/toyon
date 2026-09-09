@@ -1771,6 +1771,17 @@ body.resizing .rb-center {
 .pick-chip button:hover {
   color: var(--text0);
 }
+/* the file half of a pick opens it: a link, so the underline only arrives on hover and the row
+   keeps reading as one line of text until you aim at it */
+.pick-chip .pick-open {
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+}
+.pick-chip .pick-open:hover {
+  text-decoration-color: currentColor;
+}
 .pick-chip.in-chat {
   margin: 6px 0 0;
   padding: 2px 6px;

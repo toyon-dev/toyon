@@ -319,7 +319,7 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
         return (
           <div key={family} className="design-face-group">
             <div
-              className="design-face-head"
+              className="design-face-head row-edge"
               onMouseEnter={(e) => hover(e, false, face ? face.token.name : family)}
               onMouseLeave={clear}
               {...(face ? tip(`${face.token.name}\n${face.actual}`) : {})}
@@ -338,7 +338,7 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
             {sized.map((r) => (
               <div
                 key={r.token.name}
-                className="design-face"
+                className="design-face row-edge"
                 onMouseEnter={(e) => hover(e, true, r.token.name)}
                 onMouseLeave={clear}
                 {...tip(`${r.token.name}\n${r.actual}`)}
@@ -505,7 +505,7 @@ function Components({
       <ul className="design-rows">{shared.map(row)}</ul>
       {rest.length > 0 && (
         <details className="design-tail">
-          <summary>
+          <summary className="row-edge">
             <span className="design-count">{rest.length}</span>
             used once or never
           </summary>
@@ -559,7 +559,7 @@ function Classes({
           </ul>
           {rest.length > 0 && (
             <details className="design-tail">
-              <summary>
+              <summary className="row-edge">
                 <span className="design-count">{rest.length}</span>
                 used once or never
               </summary>
@@ -624,7 +624,7 @@ function Row({
     <li>
       <button
         type="button"
-        className="design-row"
+        className="design-row row-edge"
         onMouseEnter={onEnter}
         onFocus={onEnter}
         onMouseLeave={onLeave}

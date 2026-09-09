@@ -47,7 +47,7 @@ function shellType() {
   const s = getComputedStyle(document.documentElement);
   return {
     fontFamily: s.getPropertyValue("--font-mono").trim() || "ui-monospace, monospace",
-    fontSize: Number.parseFloat(s.getPropertyValue("--type-mono-px")) || 12,
+    fontSize: Number.parseFloat(s.getPropertyValue("--fs-xs")) || 11,
   };
 }
 

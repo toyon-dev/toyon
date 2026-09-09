@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { step } from "./listNav.ts";
 
 export type MenuItem = { label: ReactNode; onClick: () => void; danger?: boolean };
 
@@ -6,8 +7,13 @@ const WIDTH = 180;
 
 /**
  * The context menu. Positioned at a point (right-click) or under an anchor's rect; clamped to the
- * viewport. Closes on any click, key, or window blur — the last one matters because clicks inside
- * the preview iframe never bubble here but do steal focus.
+ * viewport. Closes on any click, unhandled key, or window blur; the last one matters because clicks
+ * inside the preview iframe never bubble here but do steal focus.
+ *
+ * Its rows are .row like every other list in the app, and it navigates like one: arrows move a
+ * highlight, enter runs it, and hovering sets the same index so there is only ever one highlight.
+ * Nothing is highlighted until a key arrives, so opening a menu with the mouse does not paint a
+ * choice you have not made yet.
  */
 export function Menu({
   at,
@@ -23,18 +29,41 @@ export function Menu({
   items: MenuItem[];
   onClose: () => void;
 }) {
+  // -1 is "no row yet", which is why this is not 0: see the note above about opening with the mouse
+  const [idx, setIdx] = useState(-1);
+  // the listener is bound once, so what it reads has to be a ref: items are rebuilt every render
+  const live = useRef({ idx, items });
+  live.current = { idx, items };
   useEffect(() => {
     // the click that opened the menu is still bubbling when this mounts: ignore events older than us
     const openedAt = performance.now();
     const onClick = (e: MouseEvent) => {
       if (e.timeStamp > openedAt) onClose();
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const { idx: i, items: its } = live.current;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const d = e.key === "ArrowDown" ? 1 : -1;
+        // from nothing, down takes the first row and up the last, so either key opens the list
+        setIdx(i < 0 ? (d === 1 ? 0 : its.length - 1) : step(i, d, its.length));
+        return;
+      }
+      if (e.key === "Enter" && i >= 0 && its[i]) {
+        e.preventDefault();
+        its[i].onClick();
+        onClose();
+        return;
+      }
+      // everything else, escape included, closes: a menu is not somewhere you type
+      onClose();
+    };
     window.addEventListener("click", onClick);
-    window.addEventListener("keydown", onClose);
+    window.addEventListener("keydown", onKeyDown);
     window.addEventListener("blur", onClose);
     return () => {
       window.removeEventListener("click", onClick);
-      window.removeEventListener("keydown", onClose);
+      window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("blur", onClose);
     };
   }, [onClose]);
@@ -47,17 +76,21 @@ export function Menu({
   const rowH = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h")) || 32;
   const top = Math.max(4, Math.min(y, window.innerHeight - items.length * rowH - 12));
   return (
-    <div className="menu" style={{ position: "fixed", left, top }}>
+    // the width is set here rather than in the stylesheet because the clamp above depends on it,
+    // and a menu that is one width in CSS and another in the maths lands off screen at the edges
+    <div className="menu" style={{ position: "fixed", left, top, width: WIDTH }}>
       {items.map((it, i) => (
         <button
           key={i}
-          className={it.danger ? "danger" : undefined}
+          className={`row ${it.danger ? "danger" : ""} ${i === idx ? "active" : ""}`}
+          // the pointer and the arrows drive one highlight, not two
+          onMouseEnter={() => setIdx(i)}
           onClick={() => {
             it.onClick();
             onClose();
           }}
         >
-          {it.label}
+          <span className="menu-label">{it.label}</span>
         </button>
       ))}
     </div>

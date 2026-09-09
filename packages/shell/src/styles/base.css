@@ -226,33 +226,36 @@ a code {
 .menu {
   position: fixed;
   z-index: 40;
-  min-width: 160px;
   background: var(--surface1);
   border: 1px solid var(--border1);
   border-radius: var(--r-md);
-  padding: 4px;
+  /* the rows reach both edges, so the box is what keeps the corners round: the same reason
+     .prompt-box.quick-open clips its own. The padding is vertical only, for the same reason. */
+  overflow: hidden;
+  padding: 4px 0;
   box-shadow: 0 6px 20px var(--shadow);
   display: flex;
   flex-direction: column;
+  /* width is set by Menu.tsx, which needs the number for its off-screen clamp */
 }
+/* the geometry is .row's. A menu row rests a tier above a list row because every one of them is an
+   action you are about to take, not a thing you are scanning past. */
 .menu button {
-  display: flex;
-  align-items: center;
-  min-height: var(--row-h);
-  text-align: left;
-  padding: 0 10px;
-  border-radius: var(--r-sm);
   color: var(--text0);
 }
-.menu button:hover {
+.menu .menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* the arrows and the pointer set the same index, so this is one highlight with two ways in */
+.menu button:hover,
+.menu button.active {
   background: var(--element0);
 }
 .menu button.danger {
   color: var(--red);
-}
-.menu button:disabled {
-  color: var(--text2);
-  cursor: default;
 }
 
 /* ---- overlay: scrim over the preview column + a box anchored near the top (a palette's height

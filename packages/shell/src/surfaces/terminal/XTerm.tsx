@@ -46,6 +46,14 @@ function monoFont(): string {
   return v || "ui-monospace, Menlo, monospace";
 }
 
+/* --type-mono is a `font` shorthand and xterm wants a number, so the size lives apart from it in
+   --type-mono-px. MonacoDiff reads the same token, which is what keeps the three code surfaces
+   (terminal, diff, tool log) at one size. */
+function monoSize(): number {
+  const v = getComputedStyle(document.documentElement).getPropertyValue("--type-mono-px");
+  return Number.parseFloat(v) || 12;
+}
+
 export default function XTerm({
   worktreeId,
   stream,
@@ -82,7 +90,9 @@ export default function XTerm({
     const term = new Terminal({
       theme: toXtermTheme(themeRef.current),
       fontFamily: monoFont(),
-      fontSize: 12,
+      // the same token the diff pane reads: a `font` shorthand is not parseable, so the size is
+      // held apart in --type-mono-px and both editors take it from there
+      fontSize: monoSize(),
       cursorBlink: true,
       scrollback: 5000,
       macOptionIsMeta: true,

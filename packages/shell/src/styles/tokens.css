@@ -87,10 +87,41 @@
   --r-md: 6px;
   --r-lg: 8px;
   --r-pill: 999px;
-  /* type scale: xs hints/mono chrome, sm rows, md body */
-  --fs-xs: 11px;
-  --fs-sm: 12px;
-  --fs-md: 13px;
-  --font-ui: -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  /* The two stacks. These are raw material: they belong inside a --type-* value and nowhere else,
+   * so no rule ever sets font-family on its own. The exceptions are MonacoDiff.tsx and XTerm.tsx,
+   * which read --font-mono off the root because their editors want a string, not a shorthand.
+   * -apple-system already resolves optical sizing on Apple platforms; naming "SF Pro Text"
+   * explicitly pins the Text cut and defeats the switch to Display at larger sizes. */
+  --font-ui: -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+
+  /* Type is two families by two tiers, plus one rung above for the things that arrive. Each token
+   * is a whole `font` shorthand, so family, weight, size and leading move together and cannot be
+   * half-applied; the shell already wrote `font:` shorthands everywhere, so this is fewer
+   * declarations than naming the parts, not more.
+   *
+   *   ui / mono        the app: rows, prose, menus, file paths, the tool log, the diff
+   *   ui-sm / mono-sm  the frame: key chips, and the bars that describe state rather than hold it
+   *   ui-lg            arrival, and nothing else. A heading that is not an arrival is ui + strong
+   *
+   * mono sits a point under ui at the body tier because mono reads optically larger; at the small
+   * tier the correction is under a pixel and both are 11. There is no mono-lg: if one is ever
+   * needed, that is its name.
+   *
+   * The one trap: `font` resets every font-variant-* longhand, so a rule using one of these has to
+   * re-declare font-variant-numeric: tabular-nums after it. Everything with a number that changes
+   * under you depends on that. */
+  --type-ui-sm: 400 11px / 16px var(--font-ui);
+  --type-ui: 400 13px / 21px var(--font-ui);
+  --type-ui-lg: 400 20px / 28px var(--font-ui);
+  --type-mono-sm: 400 11px / 16px var(--font-mono);
+  /* held apart from the shorthand so Monaco and xterm can parseFloat a size out of it: a `font`
+     value is not parseable, and both editors take a number */
+  --type-mono-px: 12px;
+  --type-mono: 400 var(--type-mono-px) / 18px var(--font-mono);
+
+  /* 500 marks the one word in a row you would read first; 600 is for --type-ui-lg. Never 700:
+     light text on a dark ground blooms, and mono bold at 12px on surface0 smears. */
+  --fw-strong: 500;
+  --fw-title: 600;
 }

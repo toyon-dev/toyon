@@ -1,4 +1,5 @@
 import { useActiveId, useOverlay } from "../../state/selectors.ts";
+import { NewProjectOverlay } from "../prompt/NewProjectOverlay.tsx";
 import { PromptOverlay } from "../prompt/PromptOverlay.tsx";
 import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
@@ -25,6 +26,7 @@ export function Overlays() {
       {overlay?.kind === "commands" && <CommandPalette />}
       {overlay?.kind === "prompt" && <PromptOverlay />}
       {overlay?.kind === "projects" && overlay.dialog && <ProjectPicker dialog />}
+      {overlay?.kind === "new-project" && <NewProjectOverlay overlay={overlay} />}
     </>
   );
 }

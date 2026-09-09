@@ -52,6 +52,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     themePrefs: initial.themePrefs,
     agents: [],
     defaultAgent: "claude",
+    home: "/home/t",
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w });

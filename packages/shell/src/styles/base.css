@@ -189,6 +189,39 @@ a code {
   padding: 8px 10px;
 }
 
+/* ---- form rows (FormRow: the setup pane and the new-project form) ---- */
+.form-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.form-label {
+  width: 56px;
+  flex-shrink: 0;
+  padding-top: 5px;
+  color: var(--text1);
+}
+.form-control {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.form-control .field {
+  padding: 5px 8px;
+  line-height: 1.6;
+}
+.form-control > .field {
+  width: 100%;
+}
+.form-control textarea.field {
+  resize: none;
+}
+.form-hint {
+  color: var(--text2);
+}
+
 /* ---- menu (context menus, "open in") ---- */
 .menu {
   position: fixed;

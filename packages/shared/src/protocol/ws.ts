@@ -12,6 +12,7 @@ import type {
   GitFileStatus,
   LogLine,
   PathEntry,
+  PathTarget,
   RepoInfo,
   Theme,
   ThemePrefs,
@@ -31,7 +32,7 @@ import type { AgentCommand, AgentEvent, AskAnswer, PickMeta } from "./events.ts"
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -48,12 +49,17 @@ export type ServerMsg =
       /** the daemon's agent registry and which entry new worktrees get by default */
       agents: AgentInfo[];
       defaultAgent: string;
+      /** the daemon's home directory. RepoInfo.path is absolute while PathEntry.path is
+       * tilde-collapsed daemon side, so without this the shell cannot write a `~` path of its own */
+      home: string;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
   | { t: "repos"; repos: RepoInfo[] }
-  /** directories matching what the project picker has typed so far */
-  | { t: "path-entries"; query: string; entries: PathEntry[] }
+  /** directories matching what the project picker has typed so far, plus what the typed path
+   * itself is: an empty `entries` means "nothing matches here" and "there is no here" alike, and
+   * only `target` separates the two */
+  | { t: "path-entries"; query: string; entries: PathEntry[]; target: PathTarget }
   | { t: "worktrees"; worktrees: WorktreeStatus[] }
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
   | { t: "log"; worktreeId: string; proc: string; line: string }
@@ -288,6 +294,24 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("confirm-config"), repoId: id, config: toyonConfigSchema }),
   /** open another repo in this daemon (the project switcher's "open folder"); `~` is expanded */
   z.object({ t: z.literal("register-repo"), path: z.string().min(1).max(4_000) }),
+  /** make a project where there was not one and open it: a new folder, or a clone of a remote.
+   * `parent` and `name` stay apart because the rule is structural (exactly one new leaf under a
+   * parent that already exists), and rebuilding it by splitting a joined string daemon side would
+   * let the row promise something the daemon then refuses. `~` is expanded daemon side. */
+  z
+    .object({
+      t: z.literal("create-repo"),
+      mode: z.enum(["create", "clone"]),
+      parent: z.string().min(1).max(4_000),
+      name: z.string().min(1).max(100),
+      /** clone only: what to clone from. Any git remote, not just GitHub */
+      url: z.string().min(1).max(2_000).optional(),
+    })
+    .superRefine((m, ctx) => {
+      if (m.mode === "clone" && !m.url) ctx.addIssue({ code: "custom", path: ["url"], message: "a clone needs a url" });
+      if (m.mode !== "clone" && m.url)
+        ctx.addIssue({ code: "custom", path: ["url"], message: "only a clone takes a url" });
+    }),
   /** what directories could complete this partial path (project picker autocomplete) */
   z.object({ t: z.literal("browse-path"), path: z.string().max(4_000) }),
   /** drop a repo from the daemon; refused while it still has task worktrees */

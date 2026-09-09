@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { clientMsgSchema, type ServerMsg, SHELL_STREAM, streamKey } from "@toyon/shared";
 import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -17,6 +17,15 @@ import { WorktreeService } from "../worktrees/service.ts";
 import { dispatch, type HandlerCtx, handlers, type Services } from "./handlers.ts";
 
 let cleanup = () => {};
+
+/** wait for a background reply (a clone reports through fireAndForget, after the handler returns) */
+async function until(done: () => boolean, ms = 15_000): Promise<void> {
+  const stop = Date.now() + ms;
+  while (!done()) {
+    if (Date.now() > stop) throw new Error("timed out waiting for a reply");
+    await Bun.sleep(10);
+  }
+}
 
 /** the text of the last toast reply (toasts ride the `shipped` frame) */
 function lastToast(replies: ServerMsg[]): string | undefined {
@@ -299,6 +308,55 @@ describe("handlers", () => {
     expect(lastToast(replies)).toBe(`forgot ${r.name}`);
     // the checkout itself is untouched
     expect(existsSync(join(repo, "README.md"))).toBe(true);
+  });
+
+  test("create-repo makes a project in a folder that was not one, and opens it", async () => {
+    const { services, ctx, replies, repo } = make();
+    const parent = dirname(repo); // the tmp root: exists, and outside any repo
+    await dispatch({ t: "create-repo", mode: "create", parent, name: "fresh" }, ctx, services);
+    const r = services.state.repos.find((x) => x.name === "fresh");
+    expect(r).toBeDefined();
+    expect(lastToast(replies)).toBe("created fresh");
+    // registration gives it a main pseudo-worktree, exactly as opening an existing repo does
+    expect(services.state.worktrees.some((w) => w.repoId === r?.id && w.kind === "main")).toBe(true);
+  });
+
+  test("create-repo refuses a bad name, and a spot inside a project toyon manages", async () => {
+    const { services, ctx, repo } = make();
+    const parent = dirname(repo);
+    await expect(
+      dispatch({ t: "create-repo", mode: "create", parent, name: "../escape" }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
+    // nested inside a managed checkout is the case to prevent. A parent that merely happens to be
+    // someone's dotfiles repo is not: that is an ordinary place to keep projects.
+    await dispatch({ t: "register-repo", path: repo }, ctx, services);
+    await expect(
+      dispatch({ t: "create-repo", mode: "create", parent: repo, name: "nested" }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("a clone toasts twice: it runs too long to report only at the end", async () => {
+    const { services, ctx, replies, repo } = make();
+    // a local path is a valid clone source, so this exercises the real path with no network
+    await dispatch({ t: "create-repo", mode: "clone", parent: dirname(repo), name: "copy", url: repo }, ctx, services);
+    expect(lastToast(replies)).toBe("cloning copy…");
+    await until(() => replies.length > 1);
+    expect(lastToast(replies)).toBe("cloned copy");
+    expect(services.state.repos.some((x) => x.name === "copy")).toBe(true);
+  });
+
+  test("a clone that fails still says so, rather than leaving the shell on 'cloning'", async () => {
+    const { services, ctx, replies, repo } = make();
+    await dispatch(
+      { t: "create-repo", mode: "clone", parent: dirname(repo), name: "copy", url: "/definitely/not/a/repo" },
+      ctx,
+      services,
+    );
+    await until(() => replies.length > 1);
+    const last = replies.at(-1);
+    // fireAndForget alone would put the reason in the daemon log and nowhere the person can see
+    expect(last?.t === "shipped" && last.ok).toBe(false);
+    expect(services.state.repos.some((x) => x.name === "copy")).toBe(false);
   });
 
   test("write-file then file-diff round-trips and replies git-status", async () => {

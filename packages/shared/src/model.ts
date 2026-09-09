@@ -45,6 +45,18 @@ export interface PathEntry {
   isRepo: boolean;
 }
 
+/** what the picker's typed path *is*, as opposed to what is inside it. Without this the picker
+ * cannot tell "no such folder" from "folder with nothing matching yet": both arrive as an empty
+ * entry list, and only one of them is somewhere a project could be made. */
+export interface PathTarget {
+  /** the typed path itself exists */
+  exists: boolean;
+  isDir: boolean;
+  isRepo: boolean;
+  /** its parent exists, which is what decides whether one new folder may be made here */
+  parentExists: boolean;
+}
+
 export type WorktreeKind = "main" | "worktree" | "spare" | "combined";
 
 export interface WorktreeInfo {

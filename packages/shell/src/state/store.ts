@@ -20,6 +20,7 @@ import type {
   PasteInput,
   PasteRef,
   PathEntry,
+  PathTarget,
   PickedElement,
   PickMeta,
   RepoInfo,
@@ -166,7 +167,10 @@ export type Overlay =
   | { kind: "setup"; repoId: string }
   /** the project switcher: pick a registered repo, or type a path to open another. It hangs off
    * the pill in the bar; `dialog` is the roomier centered form its browse button opens. */
-  | { kind: "projects"; dialog?: boolean };
+  | { kind: "projects"; dialog?: boolean }
+  /** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
+   * a location; `clone` has both derived from the URL and shows them so they can be changed. */
+  | { kind: "new-project"; mode: "create" | "clone"; name: string; parent: string; url?: string };
 
 /** which docks and panes a project is left with. The layout is remembered per project, so a reload
  * comes back to it and switching projects carries each one's own back (zen is deliberately not in
@@ -256,8 +260,12 @@ export interface State {
   previewTheme: Theme | null;
   /** OS appearance (prefers-color-scheme), for themePrefs.mode === "system" */
   systemDark: boolean;
-  /** the project picker's path completion: directories the daemon found for `query` */
-  paths: { query: string; entries: PathEntry[] };
+  /** the project picker's path completion: what the daemon found for `query`, and what `query`
+   * itself is. `target` is what separates "no such folder" from "nothing matches yet": both arrive
+   * as an empty `entries`, and only one of them is somewhere a project can be made. */
+  paths: { query: string; entries: PathEntry[]; target: PathTarget | null };
+  /** the daemon's home directory, for writing `~` paths the way a person would type them */
+  home: string;
   /** the daemon's agent registry and the default for new worktrees */
   agents: AgentInfo[];
   defaultAgent: string;
@@ -319,7 +327,8 @@ export function initialState(opts: InitialOpts): State {
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
     systemDark: opts.systemDark ?? true,
-    paths: { query: "", entries: [] },
+    paths: { query: "", entries: [], target: null },
+    home: "",
     agents: [],
     defaultAgent: "claude",
   };
@@ -465,7 +474,9 @@ function reduce(s: State, action: Action): State {
     case "activate-repo": {
       if (action.id === s.activeRepoId || !repoById(s, action.id)) return s;
       const id = landingIn(s, action.id);
-      return { ...activate(s, id), activeRepoId: action.id };
+      // an explicit switch beats a pending one: a clone can take minutes, and its repo arriving
+      // afterwards must not yank the person out of whatever they moved to in the meantime
+      return { ...activate(s, id), activeRepoId: action.id, pendingOpen: false };
     }
     case "open-repo":
       return { ...s, pendingOpen: true };
@@ -600,6 +611,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         themePrefs: msg.themePrefs ?? s.themePrefs,
         agents: msg.agents,
         defaultAgent: msg.defaultAgent,
+        home: msg.home,
       };
     }
     case "themes":
@@ -607,7 +619,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
     case "agents":
       return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent };
     case "path-entries":
-      return { ...s, paths: { query: msg.query, entries: msg.entries } };
+      return { ...s, paths: { query: msg.query, entries: msg.entries, target: msg.target } };
     case "repos": {
       const known = new Set(s.repos.map((r) => r.id));
       const added = msg.repos.find((r) => !known.has(r.id));

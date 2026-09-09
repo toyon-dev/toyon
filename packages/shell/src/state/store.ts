@@ -11,6 +11,7 @@ import type {
   AskOutcome,
   AskQuestion,
   AuthMethodInfo,
+  CommitEntry,
   DesignIndex,
   GitFileStatus,
   ImageInput,
@@ -77,6 +78,8 @@ export interface GitInfo {
   committed?: GitFileStatus[];
   ahead?: number;
   behind?: number;
+  /** HEAD's sha; the history tab re-reads its log when this moves */
+  head?: string;
 }
 
 /** everything the shell tracks for one worktree; dropped when the worktree disappears */
@@ -93,6 +96,10 @@ export interface WorktreeLocal {
   turn: { edits: boolean; hmr: boolean };
   /** changed line ranges cache by path (post-offset numbering from the daemon) */
   changedRanges: Record<string, { ranges: Array<[number, number]>; offset: number }>;
+  /** the history tab's commit list; undefined until that tab has been opened once */
+  commits?: CommitEntry[];
+  /** files by commit sha, filled in as commits are expanded */
+  commitFiles: Record<string, GitFileStatus[]>;
   /** ⌘⇧F results */
   search: { query: string; hits: SearchHit[]; truncated: boolean } | null;
   /** the design pane's last scan; null until it has been opened once for this worktree */
@@ -133,6 +140,7 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   page: { errors: [] },
   turn: { edits: false, hmr: false },
   changedRanges: {},
+  commitFiles: {},
   search: null,
   design: null,
   draft: "",
@@ -207,7 +215,8 @@ export interface State {
   storedActive: string | null;
   storedRepo: string | null;
   local: Record<string, WorktreeLocal>;
-  diff: { worktreeId: string; path: string; before: string; after: string; line?: number } | null;
+  /** `ref` set means this is a commit's diff: history, so the editor opens it read-only */
+  diff: { worktreeId: string; path: string; before: string; after: string; line?: number; ref?: string } | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
@@ -677,7 +686,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // ranges go stale whenever the worktree's git state moves
       const next = withLocal(s, msg.worktreeId, (l) => ({
         ...l,
-        git: { files: msg.files, committed: msg.committed, ahead: msg.ahead, behind: msg.behind },
+        git: { files: msg.files, committed: msg.committed, ahead: msg.ahead, behind: msg.behind, head: msg.head },
         changedRanges: {},
       }));
       return { ...next, leftOpen, leftAuto };
@@ -720,6 +729,15 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, queue: msg.items }));
     case "agent-commands":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, commands: msg.commands }));
+    case "git-log":
+      // the expanded commit's files outlive the list they came with: the same shas are usually
+      // still there after a refresh, and re-fetching them would collapse the row under the cursor
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, commits: msg.commits }));
+    case "git-commit":
+      return withLocal(s, msg.worktreeId, (l) => ({
+        ...l,
+        commitFiles: { ...l.commitFiles, [msg.sha]: msg.files },
+      }));
     case "error":
       return { ...s, toast: { ok: false, message: msg.message } };
     default: {

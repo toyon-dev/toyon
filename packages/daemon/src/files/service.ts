@@ -7,6 +7,7 @@ import type { SearchHit } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, git, run } from "../git/exec.ts";
+import { fileAtCommit } from "../git/log.ts";
 import { changedRanges, fileBefore, statusFiles } from "../git/status.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { resolveInside } from "../worktrees/paths.ts";
@@ -20,9 +21,14 @@ export class FileService {
     private runtime: RuntimeRegistry,
   ) {}
 
-  async diff(worktreeId: string, path: string): Promise<{ before: string; after: string }> {
+  /** With `ref`, the file on either side of that commit (history, read-only in the editor);
+   * without it, the working tree against the merge-base with main. */
+  async diff(worktreeId: string, path: string, ref?: string): Promise<{ before: string; after: string }> {
     const { wt, repo } = this.state.requireWorktreeWithRepo(worktreeId);
+    // the ref side never opens the file, but the path is still the client's: bound it the same
+    // way, then hand git the relative form it wants
     const target = resolveInside(wt.path, path);
+    if (ref) return fileAtCommit(wt.path, ref, path);
     const before = await fileBefore(wt.path, repo.defaultBranch, path);
     const afterFile = Bun.file(target);
     const after = (await afterFile.exists()) ? await afterFile.text() : "";

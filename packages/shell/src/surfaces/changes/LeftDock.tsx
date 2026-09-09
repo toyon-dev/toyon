@@ -1,19 +1,27 @@
-import type { GitFileStatus } from "@toyon/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CommitEntry, GitFileStatus } from "@toyon/shared";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useSock, useStore } from "../../state/context.tsx";
 import { useActive, useActiveId, useLocalField } from "../../state/selectors.ts";
+import { repoById } from "../../state/store.ts";
 import { step } from "../../ui/listNav.ts";
 import { editorItems, Menu } from "../../ui/Menu.tsx";
 import { shiftRanges, wtDir } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
+import { CommitRow } from "./CommitRow.tsx";
 import { GitFileRow } from "./GitFileRow.tsx";
 
 /** one array, so a worktree the daemon has not reported on yet does not hand the row list a fresh
  * identity on every render and re-render every row with it */
 const NO_FILES: GitFileStatus[] = [];
 
-/** the changes panel: uncommitted + committed-not-landed files over a commit box */
+/** which list the panel is showing: the working tree, or the branch's commits */
+type Tab = "changes" | "history";
+
+/** a history row is a commit, or one file inside the commit expanded under it */
+type HistRow = { commit: CommitEntry; file?: GitFileStatus };
+
+/** the changes panel: the working tree over a commit box, or the branch's history */
 export function LeftDock({ width }: { width: number }) {
   const sock = useSock();
   const activeId = useActiveId();
@@ -21,11 +29,23 @@ export function LeftDock({ width }: { width: number }) {
   const leftOpen = useStore((s) => s.leftOpen);
   const focusReq = useStore((s) => s.focusLeft);
   const gitInfo = useLocalField(activeId, "git");
-  // the row whose diff is open in the editor; a plain string so the selector stays identity-stable
+  // the row whose diff is open in the editor; plain strings so the selectors stay identity-stable
   const openPath = useStore((s) => (s.diff && s.diff.worktreeId === activeId ? s.diff.path : null));
+  const openRef = useStore((s) => (s.diff && s.diff.worktreeId === activeId ? (s.diff.ref ?? null) : null));
   const files = gitInfo?.files ?? NO_FILES;
   const committed = gitInfo?.committed ?? NO_FILES;
   const clean = files.length === 0;
+
+  const [tab, setTab] = useState<Tab>("changes");
+  // names the second half of the history: the commits this branch inherited rather than made
+  const defaultBranch = useStore((s) => repoById(s, active?.worktree.repoId)?.defaultBranch ?? "main");
+  const commits = useLocalField(activeId, "commits");
+  const filesBySha = useLocalField(activeId, "commitFiles");
+  // only one commit is expanded at a time, which is also what lets a file row below it be opened
+  // without carrying its sha: the sha is whichever commit is open
+  const [openSha, setOpenSha] = useState<string | null>(null);
+  const openShaRef = useRef<string | null>(null);
+  openShaRef.current = openSha;
 
   const [fileMenu, setFileMenu] = useState<{ x: number; y: number; path: string; canDiscard: boolean } | null>(null);
   const closeMenu = useCallback(() => setFileMenu(null), []);
@@ -63,13 +83,49 @@ export function LeftDock({ width }: { width: number }) {
 
   // one flat order across both sections, so ↑↓ crosses the section titles the way the eye does
   const rows = useMemo(() => [...files, ...committed], [files, committed]);
+  // the expanded commit's files sit in the same flat order, so the arrows walk into a commit and
+  // out the other side without the list needing a notion of depth
+  const histRows = useMemo(() => {
+    const out: HistRow[] = [];
+    for (const c of commits ?? []) {
+      out.push({ commit: c });
+      if (c.sha === openSha) for (const f of filesBySha[c.sha] ?? []) out.push({ commit: c, file: f });
+    }
+    return out;
+  }, [commits, openSha, filesBySha]);
+  // the ahead commits are a contiguous run at the top, so where the run ends is the one place the
+  // list has to say so. Two titles rather than a mark on every row, and none at all on a worktree
+  // whose branch is the default one, where every commit is inherited history.
+  const aheadCount = useMemo(() => histRows.filter((r) => !r.file && r.commit.ahead).length, [histRows]);
+  const firstLanded = useMemo(() => histRows.findIndex((r) => !r.file && !r.commit.ahead), [histRows]);
   const listRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState(0);
   const [focused, setFocused] = useState(false);
-  useEffect(() => setSel(0), [activeId]);
+  useEffect(() => setSel(0), [activeId, tab]);
+
+  // the log is pulled, not pushed: reading it costs a git process, so a worktree nobody is
+  // reviewing never pays for one. HEAD moving under an open tab (the agent committed) re-reads it.
+  const head = gitInfo?.head;
+  const lastLog = useRef("");
+  useEffect(() => {
+    if (tab !== "history" || !activeId) return;
+    const key = `${activeId}:${head ?? ""}`;
+    if (lastLog.current === key) return;
+    lastLog.current = key;
+    sock?.send({ t: "git-log", worktreeId: activeId });
+  }, [tab, activeId, head, sock]);
+  // a commit's files are fetched once and kept: the same shas are still there after a re-read
+  const toggleCommit = useCallback(
+    (sha: string) => {
+      setOpenSha((prev) => (prev === sha ? null : sha));
+      if (activeId && !filesBySha[sha]) sock?.send({ t: "git-commit", worktreeId: activeId, sha });
+    },
+    [activeId, filesBySha, sock],
+  );
   // a moved selection has to come into view, and it is the row that scrolls, not the list
   useEffect(() => {
-    if (focused) listRef.current?.querySelector<HTMLElement>(".git-file.sel")?.scrollIntoView({ block: "nearest" });
+    // a file row or a commit row: both carry .sel, and only one of them is ever selected
+    if (focused) listRef.current?.querySelector<HTMLElement>(".sel")?.scrollIntoView({ block: "nearest" });
   }, [sel, focused]);
   // ⌘B on a panel that is already open and unfocused lands the keyboard here (the chord itself is
   // in app/keys.ts). Next frame: the dock may be re-appearing in this same commit. The arrows pick
@@ -97,13 +153,46 @@ export function LeftDock({ width }: { width: number }) {
     },
     [rows, open, hoverFile],
   );
+  /** open a file as one commit left it. The sha is the expanded commit's: only one is ever open. */
+  const openAt = useCallback(
+    (path: string) => {
+      const ref = openShaRef.current;
+      if (activeId && ref) sock?.send({ t: "file-diff", worktreeId: activeId, path, ref });
+    },
+    [activeId, sock],
+  );
+  // arrows only move over a commit: expanding every row they crossed would push the list around
+  // under the person walking it. A file row opens on arrival, the way the changes list does.
+  const moveHist = useCallback(
+    (i: number) => {
+      const r = histRows[i];
+      if (!r) return;
+      setSel(i);
+      if (r.file) openAt(r.file.path);
+    },
+    [histRows, openAt],
+  );
+  const enterHist = useCallback(
+    (i: number) => {
+      const r = histRows[i];
+      if (!r) return;
+      setSel(i);
+      if (r.file) openAt(r.file.path);
+      else toggleCommit(r.commit.sha);
+    },
+    [histRows, openAt, toggleCommit],
+  );
   const onKeyDown = (e: React.KeyboardEvent) => {
+    const hist = tab === "history";
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      select(step(sel, e.key === "ArrowDown" ? 1 : -1, rows.length));
+      const i = step(sel, e.key === "ArrowDown" ? 1 : -1, hist ? histRows.length : rows.length);
+      if (hist) moveHist(i);
+      else select(i);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      select(sel);
+      if (hist) enterHist(sel);
+      else select(sel);
     } else if (e.key === "Escape") {
       // the app-wide Escape closes the diff pane, which is the thing this list just opened: here it
       // only hands the keyboard back to the preview
@@ -127,13 +216,43 @@ export function LeftDock({ width }: { width: number }) {
     },
     [rows, open],
   );
+  const clickCommit = useCallback(
+    (sha: string) => {
+      setSel(histRows.findIndex((r) => !r.file && r.commit.sha === sha));
+      toggleCommit(sha);
+    },
+    [histRows, toggleCommit],
+  );
+  const clickHistFile = useCallback(
+    (path: string) => {
+      setSel(histRows.findIndex((r) => r.file?.path === path));
+      openAt(path);
+    },
+    [histRows, openAt],
+  );
+  // the preview shows the working tree, so a line in a commit has nowhere on the page to light up
+  const noHover = useCallback(() => {}, []);
 
   return (
     <div className={`left-dock ${leftOpen ? "" : "collapsed"}`} style={{ width }}>
+      <div className="dock-tabs" role="tablist">
+        {(["changes", "history"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            className={`btn btn-outline dock-tab ${tab === t ? "on" : ""}`}
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
       <div
-        className="changes-list"
+        className={`changes-list ${tab === "history" ? "history" : ""}`}
         role="listbox"
-        aria-label="changed files"
+        aria-label={tab === "history" ? "commits" : "changed files"}
         tabIndex={0}
         ref={listRef}
         onKeyDown={onKeyDown}
@@ -142,14 +261,14 @@ export function LeftDock({ width }: { width: number }) {
         // list should put the selection band away
         onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocused(false)}
       >
-        {files.length > 0 && (
+        {tab === "changes" && files.length > 0 && (
           <>
             <div className="dock-section-title">uncommitted · {files.length}</div>
             {files.map((f, i) => (
               <GitFileRow
                 key={f.path}
                 f={f}
-                active={f.path === openPath}
+                active={!openRef && f.path === openPath}
                 selected={focused && sel === i}
                 onOpen={clickRow}
                 onContext={ctxUncommitted}
@@ -158,7 +277,7 @@ export function LeftDock({ width }: { width: number }) {
             ))}
           </>
         )}
-        {committed.length > 0 && (
+        {tab === "changes" && committed.length > 0 && (
           <>
             <div className="dock-section-title" data-tip="Committed on this branch, not yet on main">
               committed · {committed.length}
@@ -167,7 +286,7 @@ export function LeftDock({ width }: { width: number }) {
               <GitFileRow
                 key={`c-${f.path}`}
                 f={f}
-                active={f.path === openPath}
+                active={!openRef && f.path === openPath}
                 selected={focused && sel === files.length + i}
                 onOpen={clickRow}
                 onContext={ctxCommitted}
@@ -176,7 +295,33 @@ export function LeftDock({ width }: { width: number }) {
             ))}
           </>
         )}
-        {clean && committed.length === 0 && <div className="dock-empty">clean</div>}
+        {tab === "changes" && clean && committed.length === 0 && <div className="dock-empty">clean</div>}
+        {tab === "history" &&
+          histRows.map((r, i) => (
+            <Fragment key={r.file ? `${r.commit.sha}:${r.file.path}` : r.commit.sha}>
+              {aheadCount > 0 && i === 0 && <div className="dock-section-title">on this branch · {aheadCount}</div>}
+              {aheadCount > 0 && i === firstLanded && <div className="dock-section-title">{defaultBranch}</div>}
+              {r.file ? (
+                <GitFileRow
+                  f={r.file}
+                  active={openRef === r.commit.sha && r.file.path === openPath}
+                  selected={focused && sel === i}
+                  onOpen={clickHistFile}
+                  onContext={ctxCommitted}
+                  onHover={noHover}
+                />
+              ) : (
+                <CommitRow
+                  c={r.commit}
+                  open={r.commit.sha === openSha}
+                  selected={focused && sel === i}
+                  onToggle={clickCommit}
+                />
+              )}
+            </Fragment>
+          ))}
+        {tab === "history" && commits === undefined && <div className="dock-empty">reading history…</div>}
+        {tab === "history" && commits?.length === 0 && <div className="dock-empty">no commits yet</div>}
       </div>
       {active && <CommitBox active={active} ahead={gitInfo?.ahead ?? 0} behind={gitInfo?.behind ?? 0} dirty={!clean} />}
       {fileMenu && active && (

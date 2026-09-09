@@ -7,6 +7,7 @@
 import { z } from "zod";
 import type {
   AgentInfo,
+  CommitEntry,
   DesignIndex,
   GitFileStatus,
   LogLine,
@@ -30,7 +31,7 @@ import type { AgentCommand, AgentEvent, AskAnswer, PickMeta } from "./events.ts"
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -66,8 +67,15 @@ export type ServerMsg =
       committed?: GitFileStatus[];
       ahead?: number;
       behind?: number;
+      /** HEAD's sha: the history tab re-reads its log when this moves (the agent committed) */
+      head?: string;
     }
-  | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string }
+  /** the worktree's branch history, newest first (ahead-of-main commits are flagged, not sorted) */
+  | { t: "git-log"; worktreeId: string; commits: CommitEntry[] }
+  /** the files one commit touched; the reply to picking a commit in the history list */
+  | { t: "git-commit"; worktreeId: string; sha: string; files: GitFileStatus[] }
+  /** `ref` set means the diff is a commit's, and the editor opens it read-only */
+  | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string; ref?: string }
   | {
       t: "shipped";
       worktreeId: string;
@@ -104,6 +112,9 @@ export function isTermMsg(m: ServerMsg): m is TermServerMsg {
 const id = z.string().min(1).max(200);
 /** a worktree-relative path; the daemon still canonicalises and bounds it (resolveInside) */
 const relPath = z.string().min(1).max(4096);
+/** a commit the shell is echoing back from a git-log it was sent. Hex-only, so it can never carry
+ * an option or a revision expression into the `git show` that reads it. */
+const sha = z.string().regex(/^[0-9a-f]{4,40}$/);
 /** a chat message or its ambient context */
 const prose = z.string().max(200_000);
 const prompt = z.string().max(20_000);
@@ -247,7 +258,12 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
-  z.object({ t: z.literal("file-diff"), worktreeId: id, path: relPath }),
+  /** `ref` reads the file as of that commit instead of the working tree */
+  z.object({ t: z.literal("file-diff"), worktreeId: id, path: relPath, ref: sha.optional() }),
+  /** the branch's commits for the history tab */
+  z.object({ t: z.literal("git-log"), worktreeId: id }),
+  /** the files one commit touched, on expanding it in the history tab */
+  z.object({ t: z.literal("git-commit"), worktreeId: id, sha }),
   z.object({ t: z.literal("ship"), worktreeId: id }),
   z.object({ t: z.literal("merge-main"), worktreeId: id }),
   z.object({ t: z.literal("commit"), worktreeId: id, message: z.string().max(5_000) }),

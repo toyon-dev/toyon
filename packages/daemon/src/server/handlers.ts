@@ -169,8 +169,18 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "file-diff"(msg, ctx, s) {
-    const { before, after } = await s.files.diff(msg.worktreeId, msg.path);
-    ctx.reply({ t: "file-diff", worktreeId: msg.worktreeId, path: msg.path, before, after });
+    const { before, after } = await s.files.diff(msg.worktreeId, msg.path, msg.ref);
+    ctx.reply({ t: "file-diff", worktreeId: msg.worktreeId, path: msg.path, before, after, ref: msg.ref });
+  },
+
+  async "git-log"(msg, ctx, s) {
+    const commits = await s.worktrees.gitLog(msg.worktreeId);
+    ctx.reply({ t: "git-log", worktreeId: msg.worktreeId, commits });
+  },
+
+  async "git-commit"(msg, ctx, s) {
+    const files = await s.worktrees.commitFiles(msg.worktreeId, msg.sha);
+    ctx.reply({ t: "git-commit", worktreeId: msg.worktreeId, sha: msg.sha, files });
   },
 
   async ship(msg, ctx, s) {

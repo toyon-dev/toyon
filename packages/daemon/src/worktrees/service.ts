@@ -6,6 +6,7 @@ import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } 
 import { dirname, join } from "node:path";
 import type {
   AgentStatus,
+  CommitEntry,
   GitFileStatus,
   ImageInput,
   PasteInput,
@@ -26,6 +27,7 @@ import type { StateStore } from "../core/state.ts";
 import { git, gitOrThrow, run } from "../git/exec.ts";
 import { commitWorktree, mergeToMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
+import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
 import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts } from "../git/status.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
@@ -47,6 +49,8 @@ export interface GitInfo {
   committed?: GitFileStatus[];
   ahead?: number;
   behind?: number;
+  /** HEAD's sha, so the history tab knows when its log went stale */
+  head?: string;
 }
 
 export interface CreateOpts {
@@ -518,18 +522,36 @@ export class WorktreeService {
     if (!wt || wt.kind === "spare") return null;
     try {
       const defaultBr = this.d.state.requireRepo(wt.repoId).defaultBranch;
-      const [files, counts] = await Promise.all([
+      const [files, counts, head] = await Promise.all([
         statusFilesWithCounts(wt.path),
         wt.kind === "main" ? Promise.resolve({}) : aheadBehind(wt.path, defaultBr),
+        git(wt.path, "rev-parse", "HEAD"),
       ]);
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
       const committed = wt.kind !== "main" && ahead > 0 ? await committedFiles(wt.path, defaultBr) : undefined;
       if (wt.landed && (files.length > 0 || ahead > 0)) this.setLanded(wt.id, false);
-      return { files, committed, ...counts };
+      return { files, committed, head: head.ok ? head.out : undefined, ...counts };
     } catch (e) {
       log.warn(worktreeId, "git status failed", e);
       return null;
     }
+  }
+
+  /** the history tab's commit list. Unlike gitStatus this is asked for, not pushed: the panel
+   * requests it when the tab is opened and after a commit, so a worktree nobody is reviewing
+   * never pays for it. */
+  async gitLog(worktreeId: string): Promise<CommitEntry[]> {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt || wt.kind === "spare") return [];
+    const defaultBr = this.d.state.requireRepo(wt.repoId).defaultBranch;
+    return logCommits(wt.path, defaultBr);
+  }
+
+  /** the files one commit touched, on expanding it in the history tab */
+  async commitFiles(worktreeId: string, sha: string): Promise<GitFileStatus[]> {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt || wt.kind === "spare") return [];
+    return readCommitFiles(wt.path, sha);
   }
 
   /** someone is looking at this worktree right now: clear its unseen ring */

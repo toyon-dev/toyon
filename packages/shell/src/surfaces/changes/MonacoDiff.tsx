@@ -1,5 +1,5 @@
-// Lazy-loaded Monaco diff viewer (read-only). Loaded via React.lazy so the
-// editor bundle only downloads when a diff is first opened.
+// Lazy-loaded Monaco diff editor. Loaded via React.lazy so the editor bundle only downloads when
+// a diff is first opened. Working-tree diffs are editable and autosave; a commit's are read-only.
 
 import type { Theme } from "@toyon/shared";
 import { toyonDark } from "@toyon/shared";
@@ -60,6 +60,7 @@ export default function MonacoDiff({
   path,
   line: focusLine,
   theme,
+  readOnly = false,
   onSave,
   onLineHover,
 }: {
@@ -69,6 +70,8 @@ export default function MonacoDiff({
   /** 1-based line to reveal + place the cursor on (search hit); otherwise the first change */
   line?: number;
   theme: Theme;
+  /** a commit's diff: the modified side is history, not a file to edit */
+  readOnly?: boolean;
   onSave: (content: string) => void;
   onLineHover?: (line: number | null) => void;
 }) {
@@ -92,7 +95,7 @@ export default function MonacoDiff({
     // a targeted line may sit inside an unchanged region — don't collapse those, or it'd be hidden
     const keepAll = unchanged || focusLine != null;
     const editor = monaco.editor.createDiffEditor(el, {
-      readOnly: false,
+      readOnly,
       originalEditable: false,
       automaticLayout: true,
       renderSideBySide: false,
@@ -147,16 +150,21 @@ export default function MonacoDiff({
       // safety: never stay hidden if the diff event doesn't fire
       setTimeout(() => reveal(), 400);
     }
-    // IDE-style autosave: debounce after last keystroke; cmd+s still forces it
+    // IDE-style autosave: debounce after last keystroke; cmd+s still forces it. A commit's diff is
+    // history, so neither is wired up: there is no working file for a write to land in.
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
-    const sub2 = modified.onDidChangeContent(() => {
-      if (saveTimer) clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => saveRef.current(modified.getValue()), 800);
-    });
-    editor.getModifiedEditor().addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      if (saveTimer) clearTimeout(saveTimer);
-      saveRef.current(modified.getValue());
-    });
+    const sub2 = readOnly
+      ? null
+      : modified.onDidChangeContent(() => {
+          if (saveTimer) clearTimeout(saveTimer);
+          saveTimer = setTimeout(() => saveRef.current(modified.getValue()), 800);
+        });
+    if (!readOnly) {
+      editor.getModifiedEditor().addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        if (saveTimer) clearTimeout(saveTimer);
+        saveRef.current(modified.getValue());
+      });
+    }
 
     // line hover -> highlight what that line renders on the page
     let lastLine: number | null = null;
@@ -173,7 +181,7 @@ export default function MonacoDiff({
       hoverRef.current?.(null);
     });
     return () => {
-      sub2.dispose();
+      sub2?.dispose();
       subMove.dispose();
       subLeave.dispose();
       if (saveTimer) clearTimeout(saveTimer);
@@ -182,7 +190,7 @@ export default function MonacoDiff({
       original.dispose();
       modified.dispose();
     };
-  }, [before, after, path, focusLine]);
+  }, [before, after, path, focusLine, readOnly]);
 
   return <div ref={ref} style={{ position: "absolute", inset: "33px 0 0 0" }} />;
 }

@@ -87,10 +87,61 @@
   --r-md: 6px;
   --r-lg: 8px;
   --r-pill: 999px;
-  /* type scale: xs hints/mono chrome, sm rows, md body */
-  --fs-xs: 11px;
-  --fs-sm: 12px;
-  --fs-md: 13px;
-  --font-ui: -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  /* Four prefixes, one per kind, and the prefix is what tells you which kind you have:
+   *
+   *   --face-*    a font stack. Raw material: it belongs inside a --type-* value, and no rule sets
+   *               font-family on its own. Shared by several sets, which is why it is not a suffix.
+   *   --type-*    a complete set, as a `font` shorthand. This is what rules use.
+   *   --size-*    one bare size, and --weight-* one bare weight. Both are a single value pulled out
+   *               of a set for a consumer that cannot take the whole thing: JS in the first case,
+   *               a declaration that comes after the shorthand in the second.
+   *
+   * A suffix on --type-* is therefore always a tier, never a different species.
+   *
+   * MonacoDiff.tsx and XTerm.tsx read --face-mono off the root because their editors want a string.
+   * -apple-system already resolves optical sizing on Apple platforms; naming "SF Pro Text"
+   * explicitly pins the Text cut and defeats the switch to Display at larger sizes. */
+  --face-ui: -apple-system, "Segoe UI", sans-serif;
+  --face-mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+
+  /* Type is two families by two tiers, plus one rung above for the things that arrive. Each token
+   * is a whole `font` shorthand, so family, weight, size and leading move together and cannot be
+   * half-applied; the shell already wrote `font:` shorthands everywhere, so this is fewer
+   * declarations than naming the parts, not more.
+   *
+   *   ui / mono        the app: rows, prose, menus, file paths, the tool log, the diff
+   *   ui-sm / mono-sm  the frame: key chips, and the bars that describe state rather than hold it
+   *   ui-lg            arrival, and nothing else. A heading that is not an arrival is ui + strong
+   *
+   * mono sits a point under ui at the body tier because mono reads optically larger; at the small
+   * tier the correction is under a pixel and both are 11. There is no mono-lg: if one is ever
+   * needed, that is its name.
+   *
+   * No mono token states a leading. Every consumer is a row, an input or a stacked line whose height
+ * is padding plus one line box, and naming an absolute there moved all of them: 18px grew the tool
+ * block by 38%, and 13px on stacked code was half a pixel tight. `normal` is the leading mono has
+ * always had here and it is the right one. Only the sans tiers carry a ratio, the 1.5 the shell has
+ * inherited from the root all along.
+ *
+ * The one trap: `font` resets every font-variant-* longhand, so a rule using one of these has to
+   * re-declare font-variant-numeric: tabular-nums after it. Everything with a number that changes
+   * under you depends on that. */
+  --type-ui-sm: 400 11px / 1.4 var(--face-ui);
+  --type-ui: 400 13px / 1.5 var(--face-ui);
+  --type-ui-lg: 400 20px / 28px var(--face-ui);
+  --type-mono-sm: 400 var(--size-mono-sm) var(--face-mono);
+  --type-mono: 400 var(--size-mono) var(--face-mono);
+
+  /* The two sizes above, on their own. Monaco and xterm parseFloat these, because a `font`
+     shorthand is not parseable and both editors want a number. They sit outside --type-* on
+     purpose: everything under that prefix is a complete set, and a suffix on it is always a tier,
+     so --type-mono-px would have read as a sibling of --type-mono-sm and it is not one. */
+  --size-mono: 12px;
+  --size-mono-sm: 11px;
+
+  /* 500 marks the one word in a row you would read first; 600 is for --type-ui-lg. Never 700:
+     light text on a dark ground blooms, and mono bold at 12px on surface0 smears. These are applied
+     after a --type-* shorthand, which is why they are values rather than part of one. */
+  --weight-strong: 500;
+  --weight-title: 600;
 }

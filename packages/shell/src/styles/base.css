@@ -13,7 +13,7 @@ body,
   height: 100%;
   background: var(--surface0);
   color: var(--text0);
-  font: 14px / 1.5 var(--font-ui);
+  font: var(--type-ui);
 }
 html,
 body {
@@ -42,7 +42,6 @@ button {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  font-size: var(--fs-xs);
   line-height: 1.4;
   color: var(--text1);
   border-radius: var(--r-sm);
@@ -124,9 +123,7 @@ button {
    word has to hold its proportion inside a heading or a table cell. The padding is optically
    square: 5px of side bearing against the ~5px the line-height leaves above the caps. */
 code {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  line-height: 1.35;
+  font: var(--type-mono);
   padding: 1px 5px;
   border-radius: var(--r-xs);
   background: var(--code);
@@ -176,7 +173,9 @@ a code {
   border: 1px solid var(--border0);
   border-radius: var(--r-sm);
   color: var(--text0);
-  font: var(--fs-sm) var(--font-mono);
+  /* identifier and filter inputs: a path, a URL, a branch, a command. Prose you write is
+     .field-lg, which the commit box and the composer already take. */
+  font: var(--type-mono);
   padding: 3px 8px;
   outline: none;
 }
@@ -186,7 +185,7 @@ a code {
 /* multi-line / palette inputs */
 .field-lg {
   border-radius: var(--r-md);
-  font: var(--fs-md) / 1.5 var(--font-ui);
+  font: var(--type-ui);
   padding: 8px 10px;
 }
 
@@ -206,7 +205,6 @@ a code {
 .menu button {
   text-align: left;
   padding: 5px 10px;
-  font-size: var(--fs-md);
   border-radius: var(--r-sm);
   color: var(--text0);
 }
@@ -241,7 +239,6 @@ a code {
   padding: 14px;
 }
 .prompt-box .title {
-  font-size: var(--fs-sm);
   color: var(--text2);
   margin-bottom: 8px;
 }
@@ -258,7 +255,6 @@ a code {
 
 .dock-empty {
   padding: 4px 12px;
-  font-size: var(--fs-sm);
   color: var(--text2);
 }
 
@@ -343,7 +339,7 @@ a code {
   display: inline-flex;
   align-items: baseline;
   white-space: nowrap;
-  font: var(--fs-xs) / 1 var(--font-ui);
+  font: var(--type-ui-sm);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
@@ -369,7 +365,7 @@ a code {
   pointer-events: none;
   max-width: 320px;
   padding: 4px 8px;
-  font: var(--fs-sm) / 1.4 var(--font-ui);
+  font: var(--type-ui);
   color: var(--text0);
   background: var(--surface0);
   border: 1px solid var(--border1);
@@ -417,12 +413,12 @@ a code {
   inset: 33px 0 0 0;
 }
 .crash-title {
-  font: var(--fs-md) var(--font-ui);
+  font: var(--type-ui);
   color: var(--text0);
 }
 .crash-body {
   max-width: 520px;
-  font: var(--fs-sm) / 1.5 var(--font-mono);
+  font: var(--type-mono);
   color: var(--text2);
   overflow-wrap: anywhere;
 }

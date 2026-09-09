@@ -46,8 +46,8 @@ for (const d of [typescriptDefaults, javascriptDefaults]) {
 function shellType() {
   const s = getComputedStyle(document.documentElement);
   return {
-    fontFamily: s.getPropertyValue("--font-mono").trim() || "ui-monospace, monospace",
-    fontSize: Number.parseFloat(s.getPropertyValue("--fs-xs")) || 11,
+    fontFamily: s.getPropertyValue("--face-mono").trim() || "ui-monospace, monospace",
+    fontSize: Number.parseFloat(s.getPropertyValue("--size-mono-sm")) || 11,
   };
 }
 

@@ -262,6 +262,32 @@ a code {
   color: var(--text2);
 }
 
+/* ---- the selected-row edge ----
+   A 2px bar down a row's leading edge: the app's one mark for "this is the one you are on". A row
+   type that can carry it takes .row-edge, which reserves the bar permanently and leaves it
+   transparent; each state then names its color with --row-edge-color, so turning the mark on
+   costs one declaration and never moves the row's content. A row whose element belongs to a
+   shared component (a ListPicker row) can't take the class, so it puts a <span class="row-current">
+   in its own markup instead; same bar, same geometry.
+
+   --row-edge-x moves the bar off the row's own left edge, for the worktree rail, whose rows start
+   off screen while it is collapsed. */
+.row-edge {
+  position: relative;
+}
+.row-edge::before {
+  content: "";
+}
+.row-edge::before,
+.row-current {
+  position: absolute;
+  left: var(--row-edge-x, 0);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--row-edge-color, transparent);
+}
+
 /* ---- status dots ---- */
 .dot {
   width: 8px;

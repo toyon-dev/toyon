@@ -106,7 +106,7 @@ export function WtRail() {
           {worktrees.map((w) => (
             <button
               key={w.worktree.id}
-              className={`wt-item ${w.worktree.id === activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""} ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
+              className={`wt-item row-edge ${w.worktree.id === activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""} ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
               onClick={(e) => {
                 if (graftMode || e.shiftKey) toggleSel(w);
                 else dispatch({ a: "activate", id: w.worktree.id });

@@ -32,8 +32,9 @@ export function RepoChip({ onClose }: { onClose?: () => void }) {
       }}
     >
       <Button
-        outline
-        tone="repo-chip"
+        variant="outline"
+        mono
+        className="repo-chip"
         {...tip("the project this worktree branches from; click to switch")}
         onClick={() => setOpen((v) => !v)}
       >

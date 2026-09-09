@@ -162,9 +162,9 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
               return (
                 <Button
                   key={o.value}
-                  outline
+                  variant="outline"
                   size="md"
-                  tone={`ask-opt ${at === nav.index ? "active" : ""}`}
+                  className={`ask-opt ${at === nav.index ? "active" : ""}`}
                   on={on}
                   onClick={() => {
                     nav.setIndex(at);
@@ -183,7 +183,7 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
             <pre className="ask-preview">{nav.active.option.preview}</pre>
           )}
           {q.note && noteFor !== qi && (
-            <Button tone="ask-note-btn" onClick={() => setNoteFor(qi)}>
+            <Button tone="quiet" className="ask-note-btn" onClick={() => setNoteFor(qi)}>
               <Kbd k="n" chip />
               {draft[qi]?.note?.trim() ? "edit your note" : "add a note"}
             </Button>
@@ -212,10 +212,10 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
         </div>
       ))}
       <div className="ask-foot">
-        <Button outline tone="ask-send" disabled={!canSubmit(questions, draft)} onClick={submit}>
+        <Button variant="outline" className="ask-send" disabled={!canSubmit(questions, draft)} onClick={submit}>
           send
         </Button>
-        <Button tone="ask-skip" onClick={() => send()}>
+        <Button tone="quiet" onClick={() => send()}>
           <Kbd k="s" chip />
           skip
         </Button>
@@ -267,9 +267,10 @@ function PermissionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { k
           {ask.choices.map((c, i) => (
             <Button
               key={c.id}
-              outline
+              variant="outline"
               size="md"
-              tone={`ask-opt ${c.kind.startsWith("reject") ? "ask-no" : ""}`}
+              tone={c.kind.startsWith("reject") ? "danger" : undefined}
+              className="ask-opt"
               onClick={() => decide(c.id)}
             >
               <Kbd k={String(i + 1)} chip />

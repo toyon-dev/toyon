@@ -334,7 +334,7 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
             m.needsKey ? (
               <Button
                 key={m.id}
-                outline
+                variant="outline"
                 on={keyFor === m.id}
                 data-tip={m.description}
                 onClick={() => setKeyFor(keyFor === m.id ? null : m.id)}
@@ -344,7 +344,7 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
             ) : (
               <Button
                 key={m.id}
-                outline
+                variant="outline"
                 data-tip={m.kind === "terminal" ? "runs in the terminal pane" : m.description}
                 onClick={() => {
                   go(m.id);
@@ -356,7 +356,7 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
             ),
           )}
           <Button
-            outline
+            variant="outline"
             data-tip="after logging in elsewhere (the terminal, another window)"
             onClick={() => sock?.send({ t: "agent-retry", worktreeId: id })}
           >

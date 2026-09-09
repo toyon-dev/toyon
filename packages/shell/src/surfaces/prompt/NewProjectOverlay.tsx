@@ -82,7 +82,7 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
       <div className="np-actions">
         <span className="np-dest">{ready ? destination(parent, name) : ""}</span>
         <Button onClick={() => dispatch({ a: "close" })}>cancel</Button>
-        <Button outline size="lg" tone="np-create" disabled={!ready} onClick={submit}>
+        <Button variant="outline" size="lg" disabled={!ready} onClick={submit}>
           {clone ? "clone" : "create"}
         </Button>
       </div>

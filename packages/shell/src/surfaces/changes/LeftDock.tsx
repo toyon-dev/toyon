@@ -241,8 +241,8 @@ export function LeftDock({ width }: { width: number }) {
           <Button
             key={t}
             role="tab"
-            outline
-            tone="dock-tab"
+            variant="outline"
+            className="dock-tab"
             on={tab === t}
             aria-selected={tab === t}
             onClick={() => setTab(t)}

@@ -31,7 +31,7 @@ export function DiscoveredPane({ row }: { row: DiscoveredWorktree }) {
           </p>
           <div>
             <Button
-              outline
+              variant="outline"
               onClick={() => sock?.send({ t: "adopt-worktree", repoId: row.repoId, path: row.path, clientId })}
             >
               take over

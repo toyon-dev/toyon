@@ -209,9 +209,10 @@ export function App() {
           {toast.message}
           {toast.removeIds && toast.removeIds.length > 0 && (
             <Button
-              outline
+              variant="outline"
               size="md"
-              tone="toast-action"
+              tone="primary"
+              className="toast-action"
               onClick={(e) => {
                 e.stopPropagation();
                 for (const id of toast.removeIds ?? []) sock?.send({ t: "remove-worktree", worktreeId: id });

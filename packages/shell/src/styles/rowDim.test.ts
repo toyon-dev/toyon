@@ -38,14 +38,16 @@ const NOT_A_TIER = [".dot.starting", ".dot.discovered", ".dot.unseen"];
 
 /** text on something that never lifts: an empty state, a hint, a heading, a control switched off */
 const NEVER_LIFTS = [
+  /* the quiet tone: a way out, an aside, a link. It replaced .deep-link, .ask-note-btn and
+     .ask-skip, which were each here for the same reason and are one rule now. No quiet button
+     sits inside a row; if one ever does it takes .row-dim like any other passenger. */
+  ".tone-quiet",
   ".ask-answered",
   ".ask-card.done",
   ".ask-card.done .ask-lead",
   ".ask-desc",
   ".ask-header",
   ".ask-keys",
-  ".ask-note-btn",
-  ".ask-skip",
   ".auth-card.done",
   ".auth-card.done .auth-title",
   ".blocked-row .tool-hint",
@@ -54,10 +56,8 @@ const NEVER_LIFTS = [
   ".btn:disabled",
   ".center .empty",
   ".chat-hint",
-  ".combine-btn:disabled",
   ".composer-ghost",
   ".crash-body",
-  ".deep-link",
   ".design-cell-note",
   '.design-cell[data-kind="color"] .design-cell-value',
   ".design-gap",
@@ -78,8 +78,6 @@ const NEVER_LIFTS = [
   ".pick-chip .pick-file",
   ".pick-chip button",
   ".prompt-box .title",
-  ".set-v:disabled",
-  ".set-v:disabled:hover",
   ".setup-aside",
   ".status-bar",
   ".tool-row .dl.meta",

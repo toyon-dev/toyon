@@ -65,15 +65,17 @@ export function DesignPane({
       actions={
         <>
           <Button
-            outline
+            variant="outline"
             onClick={() => sock?.send({ t: "design-scan", worktreeId })}
             data-tip="Scan this worktree again"
           >
             <Icon name="reload" className="icon-inline" /> rescan
           </Button>
           <Button
-            outline
-            tone="deep-link"
+            variant="outline"
+            tone="quiet"
+            mono
+            className="deep-link"
             onClick={onToggleFull}
             data-tip={full ? "Split view: show the preview above" : "Full height: hide the preview"}
           >

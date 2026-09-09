@@ -35,19 +35,19 @@ export function KeysHelp() {
         <div className="keys-h">Settings</div>
         <div className="set-row">
           <span className="keys-d">theme</span>
-          <Button outline tone="set-v" onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
+          <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
             {resolveTheme(prefs, themes, systemDark).name}
           </Button>
         </div>
         <div className="set-row">
           <span className="keys-d">light/dark mode</span>
-          <Button outline tone="set-v" onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}>
+          <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}>
             {appearanceLabel[prefs.mode]}
           </Button>
         </div>
         <div className="set-row">
           <span className="keys-d">default agent</span>
-          <Button outline tone="set-v" onClick={() => open({ a: "open", overlay: { kind: "agent" } })}>
+          <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "agent" } })}>
             {agents.find((a) => a.id === defaultAgent)?.name ?? defaultAgent}
           </Button>
         </div>
@@ -62,8 +62,8 @@ export function KeysHelp() {
           <div className="set-row">
             <span className="keys-d">{repo.name}</span>
             <Button
-              outline
-              tone="set-v"
+              variant="field"
+              mono
               data-tip={`edit the install + start commands in ${repo.name}'s toyon.json`}
               onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
             >
@@ -122,8 +122,8 @@ function AgentRow({ agent }: { agent: AgentInfo }) {
     <div className="set-row">
       <span className="keys-d">{agent.name}</span>
       <Button
-        outline
-        tone="set-v"
+        variant="field"
+        mono
         data-tip={authTip(agent)}
         disabled={items.length === 0}
         onClick={(e) => setMenu(e.currentTarget.getBoundingClientRect())}

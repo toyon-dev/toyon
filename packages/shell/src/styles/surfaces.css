@@ -43,25 +43,8 @@
   gap: 24px;
   padding: 3px 0;
 }
-.set-v {
-  font: var(--type-mono);
-  color: var(--text0);
-  background: var(--sunken);
-  border-color: var(--border0);
-}
-.set-v:hover {
-  background: var(--sunken);
-  color: var(--accent);
-  border-color: var(--accent);
-}
 /* a row with nothing to change reads as a value, not a control: :hover still fires on a disabled
    button, so the hover state has to be overridden too */
-.set-v:disabled,
-.set-v:disabled:hover {
-  background: var(--sunken);
-  color: var(--text2);
-  border-color: var(--border0);
-}
 .keys-row {
   display: grid;
   grid-template-columns: 76px 1fr;
@@ -171,9 +154,6 @@ body.resizing iframe {
   font: var(--type-ui-sm);
   flex-shrink: 0;
 }
-.dock-tab.on {
-  color: var(--accent);
-}
 
 /* one commit: the subject takes the row, the age ends it where a file row ends with its counts */
 /* expanded, so its files are the rows underneath: the same picked pair a file open in the editor
@@ -271,32 +251,12 @@ body.resizing iframe {
 .new-wt:hover .kbd-hint {
   opacity: 0.7;
 }
-.combine-btn {
-  color: var(--aqua);
-}
-.combine-btn:hover {
-  color: var(--aqua);
-  background: var(--element0);
-}
-.combine-btn:disabled {
-  color: var(--text2);
-  cursor: default;
-}
 .graft-row {
   display: flex;
   border-top: 1px solid var(--border0);
   align-items: center;
   padding: 4px 6px;
   gap: 2px;
-}
-.bulk-btn {
-}
-.bulk-btn.danger {
-  color: var(--red);
-}
-.bulk-btn.danger:hover {
-  background: var(--element0);
-  color: var(--red);
 }
 .graft-check {
   accent-color: var(--accent);
@@ -444,9 +404,6 @@ body.resizing iframe {
   background: #fff;
 }
 
-.rb-btn {
-  color: var(--text1);
-}
 .rb-path {
   flex: 1;
   min-width: 0;
@@ -541,11 +498,7 @@ body.resizing iframe {
   display: none;
 }
 .term-tab {
-  font: var(--type-mono);
   flex-shrink: 0;
-}
-.term-tab.on {
-  color: var(--accent);
 }
 .term-exit {
   color: var(--red);
@@ -1043,10 +996,6 @@ body.resizing .row-resize {
   align-items: center;
   gap: 10px;
 }
-.stop-btn {
-  color: var(--red);
-  font-style: normal;
-}
 
 /* a collapsed row is a line of the transcript, not a card: no fill and no border, so twenty calls in
    a turn read as text to skip over. It spans the log's full width and its box meets its neighbours'
@@ -1425,9 +1374,6 @@ body.resizing .row-resize {
 }
 /* same 20px box as the status-bar icons, flush with the textarea's right edge
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
-.composer-pick.on {
-  color: var(--accent);
-}
 /* a crashed proc in this worktree, badged on the terminal button: the only status this row shows,
    and only because the tab that explains it is one click away */
 .term-btn {
@@ -1467,9 +1413,6 @@ body.resizing .row-resize {
   gap: 2px;
   flex-shrink: 0;
 }
-.profile-chip {
-  font: var(--type-mono);
-}
 .spawn-row input {
   accent-color: var(--accent);
 }
@@ -1481,16 +1424,8 @@ body.resizing .row-resize {
 }
 
 /* ---- commit box / land buttons / toast ---- */
-.ship-btn {
-  color: var(--accent);
-}
-.ship-btn.pr-open {
-  color: var(--aqua);
-}
 
 .deep-link {
-  font: var(--type-mono);
-  color: var(--text2);
   border-color: var(--border0);
   align-self: center;
 }
@@ -1520,7 +1455,6 @@ body.resizing .row-resize {
 .toast-action {
   display: block;
   margin-top: 8px;
-  color: var(--accent);
 }
 
 .ahead-badge {
@@ -1647,12 +1581,6 @@ body.resizing .rb-center {
 .status-bar .btn {
   min-height: 20px;
 }
-.status-bar .toggle:hover {
-  color: var(--text0);
-}
-.status-bar .toggle.on {
-  color: var(--text0);
-}
 
 /* top-left project pill: it names what the shell is scoped to, so at rest it is a label and
    nothing more — .btn already gives the hover background and .on the open one, which is the
@@ -1677,10 +1605,6 @@ body.resizing .rb-center {
 /* half the viewport is a centred palette's budget; hanging off the bar, that would bury the app */
 .pp-wrap .prompt-box .qo-list {
   max-height: min(340px, 50vh);
-}
-.project-pill.on {
-  color: var(--text0);
-  background: var(--element1);
 }
 .pp-name {
   overflow: hidden;
@@ -1871,8 +1795,6 @@ body.resizing .rb-center {
   font: var(--type-mono);
   color: var(--text2);
 }
-.np-create {
-}
 .np-url {
   font: var(--type-mono);
   color: var(--text1);
@@ -1903,8 +1825,6 @@ body.resizing .rb-center {
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
-}
-.setup-start {
 }
 
 .variants-row {
@@ -1938,9 +1858,6 @@ body.resizing .rb-center {
 .variants-row input {
   accent-color: var(--accent);
 }
-.variant-chip.on {
-  color: var(--accent);
-}
 .agent-chips {
   display: flex;
   align-items: center;
@@ -1951,7 +1868,6 @@ body.resizing .rb-center {
    a second line. Mono groups the chip with the profile chip, both names read off disk, and tells it
    apart from the agent chips beside it, which are product names and toggles rather than a place. */
 .repo-chip {
-  font: var(--type-mono);
   max-width: 140px;
   /* still worth reading when the row is tight: a few characters and the ellipsis */
   min-width: 56px;
@@ -2320,10 +2236,6 @@ body.resizing .rb-center {
   color: var(--text2);
   margin-left: 6px;
 }
-.ask-opt.ask-no.on,
-.ask-opt.ask-no:hover {
-  color: var(--red);
-}
 .ask-preview {
   margin: 6px 0 0;
   padding: 6px 8px;
@@ -2332,10 +2244,6 @@ body.resizing .rb-center {
   color: var(--text1);
   overflow-x: auto;
   white-space: pre;
-}
-.ask-note-btn {
-  margin-top: 6px;
-  color: var(--text2);
 }
 .ask-note {
   display: block;
@@ -2349,13 +2257,6 @@ body.resizing .rb-center {
   align-items: center;
   gap: 8px;
   margin-top: 10px;
-}
-.ask-send.on,
-.ask-send:hover:not(:disabled) {
-  color: var(--accent);
-}
-.ask-skip {
-  color: var(--text2);
 }
 .ask-keys {
   margin-left: auto;

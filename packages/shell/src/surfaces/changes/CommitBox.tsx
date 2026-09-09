@@ -74,8 +74,8 @@ export function CommitBox({
         <span className="commit-acts">
           {dirty ? (
             <Button
-              outline
-              tone="ship-btn"
+              variant="outline"
+              tone="primary"
               disabled={!msg.trim()}
               onClick={commit}
               {...tip("git add -A && git commit", "⌘⏎")}
@@ -87,8 +87,8 @@ export function CommitBox({
               <>
                 {behind > 0 && (
                   <Button
-                    outline
-                    tone="ship-btn"
+                    variant="outline"
+                    tone="primary"
                     data-tip={`Pull ${behind} commit(s) from main into this worktree`}
                     onClick={() => sock?.send({ t: "sync-main", worktreeId: wt.id })}
                   >
@@ -98,8 +98,8 @@ export function CommitBox({
                 {ahead > 0 && (
                   <>
                     <Button
-                      outline
-                      tone="ship-btn"
+                      variant="outline"
+                      tone="primary"
                       data-tip={
                         wt.prUrl
                           ? "Merge locally: the open PR will show as merged once main is pushed"
@@ -111,8 +111,8 @@ export function CommitBox({
                     </Button>
                     {wt.prUrl ? (
                       <Button
-                        outline
-                        tone="ship-btn"
+                        variant="outline"
+                        tone="primary"
                         data-tip={`PR open: click to view · ${wt.prUrl}`}
                         onClick={() => window.open(wt.prUrl, "_blank")}
                       >
@@ -120,8 +120,8 @@ export function CommitBox({
                       </Button>
                     ) : (
                       <Button
-                        outline
-                        tone="ship-btn"
+                        variant="outline"
+                        tone="primary"
                         data-tip="Push and open a PR"
                         onClick={() => sock?.send({ t: "ship", worktreeId: wt.id })}
                       >

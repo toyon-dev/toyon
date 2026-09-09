@@ -285,7 +285,7 @@ export function WtRail() {
             <div className="graft-row">
               <Button
                 size="md"
-                tone="bulk-btn combine-btn"
+                tone="primary"
                 disabled={sel.length < 2}
                 data-tip="Preview these worktrees merged together (local octopus merge)"
                 onClick={() => {
@@ -297,7 +297,6 @@ export function WtRail() {
               </Button>
               <Button
                 size="md"
-                tone="bulk-btn"
                 disabled={!sel.some((id) => (worktrees.find((w) => w.worktree.id === id)?.behind ?? 0) > 0)}
                 data-tip="Pull main into every selected worktree that's behind"
                 onClick={() => {
@@ -312,7 +311,7 @@ export function WtRail() {
               </Button>
               <Button
                 size="md"
-                tone="bulk-btn danger"
+                tone="danger"
                 disabled={sel.length === 0}
                 data-tip="Remove all selected worktrees (branches and changes deleted)"
                 onClick={() => {
@@ -328,7 +327,7 @@ export function WtRail() {
               >
                 remove…
               </Button>
-              <IconButton icon="close" label="Cancel" hint="esc" tone="bulk-btn" onClick={cancelGraft} />
+              <IconButton icon="close" label="Cancel" hint="esc" onClick={cancelGraft} />
             </div>
           )}
           {!graftMode && (

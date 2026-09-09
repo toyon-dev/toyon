@@ -56,8 +56,10 @@ export function DiffView({
       actions={
         <>
           <Button
-            outline
-            tone="deep-link"
+            variant="outline"
+            tone="quiet"
+            mono
+            className="deep-link"
             onClick={onToggleFull}
             data-tip={full ? "Split view: show the preview above" : "Full height: hide the preview"}
           >

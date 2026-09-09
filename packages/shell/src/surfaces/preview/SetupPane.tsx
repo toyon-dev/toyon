@@ -106,14 +106,14 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
 
       <div className="form-row">
         <span className="form-label" />
-        <Button tone="setup-add" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
+        <Button className="setup-add" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
           + another process (an api, a worker…)
         </Button>
       </div>
 
       <div className="setup-actions">
         {onClose && <Button onClick={onClose}>cancel</Button>}
-        <Button outline size="lg" tone="setup-start" disabled={!canStart} onClick={start}>
+        <Button variant="outline" size="lg" disabled={!canStart} onClick={start}>
           {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
         </Button>
       </div>

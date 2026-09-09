@@ -17,8 +17,9 @@ export function TabStrip({
   return (
     <span className="term-tabs">
       <Button
-        outline
-        tone="term-tab"
+        variant="outline"
+        mono
+        className="term-tab"
         on={active === SHELL_STREAM}
         onClick={() => onPick(SHELL_STREAM)}
         {...tip("A shell in this worktree")}
@@ -28,8 +29,9 @@ export function TabStrip({
       {procs.map((p) => (
         <Button
           key={p.name}
-          outline
-          tone="term-tab"
+          variant="outline"
+          mono
+          className="term-tab"
           on={active === p.name}
           onClick={() => onPick(p.name)}
           {...tip(`${p.command}\n${p.status} on :${p.port}`)}

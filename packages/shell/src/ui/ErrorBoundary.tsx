@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode; pane?: boole
             ? "This page is still running the old build. Reload to pick up the new one."
             : error.message || String(error)}
         </div>
-        <Button outline onClick={() => window.location.reload()}>
+        <Button variant="outline" onClick={() => window.location.reload()}>
           reload
         </Button>
       </div>

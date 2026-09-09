@@ -34,8 +34,8 @@ export function ProfileChip({
   const next = nextProfile(names, value);
   return (
     <Button
-      outline
-      tone="profile-chip"
+      variant="outline"
+      mono
       {...tip(names.length > 1 ? `run with ${next} instead` : "the only profile in toyon.json")}
       onClick={() => next && onChange(next)}
     >

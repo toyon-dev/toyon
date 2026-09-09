@@ -380,7 +380,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar */}
           <button
-            className={`btn-icon term-btn ${termOpen ? "on" : ""}`}
+            className={`btn-icon tone-chrome term-btn ${termOpen ? "on" : ""}`}
             disabled={!active}
             {...tip(trouble ? trouble.tip : "Terminal", chord("terminal"))}
             onClick={() => {
@@ -397,7 +397,6 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             icon="pick"
             label="Pick an element on the page to attach"
             hint={chord("pick")}
-            tone="composer-pick"
             on={picking}
             disabled={!active}
             onClick={() => id && togglePick(id, picking, dispatch)}

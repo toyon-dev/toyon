@@ -10,8 +10,10 @@ export function OpenInMenu({ absPath, onReveal }: { absPath: string; onReveal?: 
   return (
     <>
       <Button
-        outline
-        tone="deep-link"
+        variant="outline"
+        tone="quiet"
+        mono
+        className="deep-link"
         onClick={(e) => {
           e.stopPropagation();
           setAnchor(anchor ? null : (e.currentTarget as HTMLElement).getBoundingClientRect());

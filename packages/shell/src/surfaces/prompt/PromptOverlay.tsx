@@ -82,8 +82,8 @@ export function PromptOverlay() {
             {agents.map((a) => (
               <Button
                 key={a.id}
-                outline
-                tone="variant-chip"
+                variant="outline"
+                className="variant-chip"
                 on={agent === a.id}
                 disabled={!a.available}
                 data-tip={
@@ -109,7 +109,13 @@ export function PromptOverlay() {
           <span className="variants-right">
             <span data-tip="Run the same prompt in N parallel worktrees, keep the best">variants</span>
             {[1, 2, 3].map((n) => (
-              <Button key={n} outline tone="variant-chip" on={variants === n} onClick={() => setVariants(n)}>
+              <Button
+                key={n}
+                variant="outline"
+                className="variant-chip"
+                on={variants === n}
+                onClick={() => setVariants(n)}
+              >
                 {n}
               </Button>
             ))}

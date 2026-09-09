@@ -33,7 +33,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
         icon="branch"
         label="Changes panel"
         hint={chord("left")}
-        tone="toggle"
+        tone="chrome"
         on={leftOpen}
         onClick={() => dispatch({ a: "toggle-left" })}
       />
@@ -41,7 +41,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
       <RouteBar worktreeId={id} ready={ready} left={navCenter} />
       {installEvt && (
         <Button
-          tone="toggle"
+          tone="chrome"
           data-tip="Install Toyon as an app (own window, dock icon)"
           onClick={() => void installEvt.prompt()}
         >
@@ -56,7 +56,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           icon="settings"
           label="Settings & shortcuts"
           hint={chord("keys")}
-          tone="toggle keys-btn"
+          tone="chrome"
           on={keysOpen}
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
         />
@@ -64,7 +64,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           icon="palette"
           label="Design system"
           hint={chord("design")}
-          tone="toggle"
+          tone="chrome"
           on={designOpen}
           onClick={() => dispatch({ a: "toggle-design" })}
         />
@@ -72,7 +72,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           icon="chat"
           label="Chat panel"
           hint={chord("right")}
-          tone="toggle"
+          tone="chrome"
           on={rightOpen}
           onClick={() => dispatch({ a: "toggle-right" })}
         />
@@ -80,7 +80,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           icon="zen"
           label="Full-bleed preview"
           hint={chord("zen")}
-          tone="toggle"
+          tone="chrome"
           onClick={() => dispatch({ a: "toggle-zen" })}
         />
       </span>
@@ -101,7 +101,8 @@ function ProjectPill() {
   return (
     <span className="pp-wrap">
       <Button
-        tone="project-pill"
+        tone="chrome"
+        className="project-pill"
         on={open}
         {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
         onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
@@ -146,21 +147,18 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
       <IconButton
         icon="back"
         label="Back"
-        tone="rb-btn"
         disabled={!ready}
         onClick={() => id && previewBus.post(id, { type: "back" })}
       />
       <IconButton
         icon="forward"
         label="Forward"
-        tone="rb-btn"
         disabled={!ready}
         onClick={() => id && previewBus.post(id, { type: "forward" })}
       />
       <IconButton
         icon="reload"
         label="Reload preview"
-        tone="rb-btn rb-reload"
         disabled={!ready}
         onClick={() => id && previewBus.post(id, { type: "reload" })}
       />

@@ -4,6 +4,7 @@ import { marked } from "marked";
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
+import { useHoldInPlace } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { attachmentUrl } from "../../ws.ts";
 import { AskCard } from "./AskCard.tsx";
@@ -235,6 +236,8 @@ export const ToolRow = memo(
   }) {
     const [pinned, setPinned] = useState<boolean | null>(null);
     const card = useRef<HTMLDetailsElement>(null);
+    // a row opens and closes under the pointer, so the header it was on has to stay there
+    const hold = useHoldInPlace(".chat-log");
     // every call in a run prints the same line, so the first one is the row
     const head = tools[0]!;
     // While the agent is in the file the row is a feed: each call appends what it just did, and
@@ -268,6 +271,7 @@ export const ToolRow = memo(
           // falls through to it.
           if (e.key !== "Escape" || !open) return;
           e.stopPropagation();
+          hold(card.current);
           setPinned(false);
         }}
       >
@@ -276,6 +280,7 @@ export const ToolRow = memo(
           aria-label={tools.length > 1 ? `${what}, ${tools.length} calls` : what}
           onClick={(e) => {
             e.preventDefault();
+            hold(e.currentTarget);
             setPinned(!open);
           }}
         >

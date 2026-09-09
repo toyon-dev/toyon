@@ -25,6 +25,9 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
     const el = logRef.current;
     if (!el) return;
     if (atBottomRef.current) {
+      // an open row may be holding the gap above the transcript; a new message is what it was
+      // holding it for, and the log is about to sit on the composer again anyway
+      el.style.removeProperty("--hold-lead");
       el.scrollTop = el.scrollHeight;
       setShowJump(false);
     } else if (items.length > 0) {
@@ -32,6 +35,7 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
     }
   }, [items]);
   useEffect(() => {
+    logRef.current?.style.removeProperty("--hold-lead");
     atBottomRef.current = true;
     setShowJump(false);
   }, [id]);

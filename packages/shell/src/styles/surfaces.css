@@ -829,9 +829,12 @@ body.resizing .row-resize {
 }
 /* a short transcript sits on the composer instead of the top of the pane; once the
    content overflows there is no free space left and the margin collapses to nothing.
-   justify-content: flex-end would do the same but makes the overflowing top unreachable. */
+   justify-content: flex-end would do the same but makes the overflowing top unreachable.
+   A row that opens is the one thing that must not spend this space: it would grow upward
+   and take its own header out from under the pointer, so useHoldInPlace freezes the gap
+   at the size it had and ChatLog drops it again on the next message. */
 .chat-log > *:first-child {
-  margin-top: auto;
+  margin-top: var(--hold-lead, auto);
 }
 
 .jump-down {

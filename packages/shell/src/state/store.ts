@@ -925,6 +925,16 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
       };
       return next;
     }
+    case "tool-delta": {
+      const idx = items.findLastIndex((i) => i.kind === "tool" && i.id === event.toolId);
+      // the spawning row is the only place this text belongs, so a chunk that arrives before it (or
+      // after a replay dropped it) is let go rather than opening a row of its own
+      if (idx === -1) return items;
+      const next = items.slice();
+      const tool = next[idx] as Extract<ChatItem, { kind: "tool" }>;
+      next[idx] = { ...tool, output: (tool.output ?? "") + event.text };
+      return next;
+    }
     case "tool-end": {
       const idx = items.findLastIndex((i) => i.kind === "tool" && i.id === event.toolId);
       if (idx === -1) return items;

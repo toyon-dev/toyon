@@ -42,10 +42,22 @@ function asRecord(v: unknown): Record<string, unknown> {
 
 export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string): AgentEvent[] {
   switch (update.sessionUpdate) {
-    case "agent_message_chunk":
-      return textOf(update.content, tag, "message");
-    case "agent_thought_chunk":
-      return textOf(update.content, tag, "thought").map((e) => ({ ...e, type: "thinking-delta" }) as AgentEvent);
+    case "agent_message_chunk": {
+      const text = textOf(update.content, tag, "message");
+      if (text === null) return [];
+      // the adapter forwards a subagent's prose like any other chunk and only declines to count it
+      // as the turn's answer, so without this it lands in the transcript under the main agent's
+      // name: the one thing it is not
+      const { parentToolId } = spawnOf(update._meta);
+      return [parentToolId ? { type: "tool-delta", toolId: parentToolId, text } : { type: "text-delta", text }];
+    }
+    case "agent_thought_chunk": {
+      // a subagent's reasoning stays where it was thought. The row is a record of what the call
+      // produced, and unlabelled thinking folded into that panel reads as something it decided.
+      if (spawnOf(update._meta).parentToolId) return [];
+      const text = textOf(update.content, tag, "thought");
+      return text === null ? [] : [{ type: "thinking-delta", text }];
+    }
     case "tool_call": {
       const memo: ToolMemo = {
         name: update.name ?? update.title,
@@ -127,10 +139,10 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
   }
 }
 
-function textOf(content: { type: string; text?: string }, tag: string, what: string): AgentEvent[] {
-  if (content.type === "text" && typeof content.text === "string") return [{ type: "text-delta", text: content.text }];
+function textOf(content: { type: string; text?: string }, tag: string, what: string): string | null {
+  if (content.type === "text" && typeof content.text === "string") return content.text;
   log.debug(tag, `acp: dropping non-text ${what} block (${content.type})`);
-  return [];
+  return null;
 }
 
 function endOf(toolId: string, memo: ToolMemo, status: "completed" | "failed"): AgentEvent {

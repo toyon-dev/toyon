@@ -137,6 +137,10 @@ export type AgentEvent =
     }
   /** the agent refined a running tool call (a placeholder title became the real one, input arrived) */
   | { type: "tool-update"; toolId: string; name?: string; title?: string; input?: unknown; kind?: ToolKind }
+  /** prose a subagent wrote, going to the row that spawned it rather than the transcript. It reads
+   * as the main agent's own writing anywhere else, and the panel is where the rest of that call's
+   * work already is. Superseded by the `tool-end` output, which is the report it finished with. */
+  | { type: "tool-delta"; toolId: string; text: string }
   | { type: "tool-end"; toolId: string; output?: string; isError?: boolean }
   | { type: "turn-end"; stopReason: string; ts: number }
   | { type: "session-info"; sessionId: string; model?: string }

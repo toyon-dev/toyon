@@ -208,6 +208,29 @@ describe("mapUpdate", () => {
     ]);
   });
 
+  test("a subagent's prose goes to the row that spawned it, and its thinking is let go", () => {
+    expect(
+      run([
+        {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "found it" },
+          _meta: { claudeCode: { parentToolUseId: "task1" } },
+        },
+        {
+          sessionUpdate: "agent_thought_chunk",
+          content: { type: "text", text: "hmm" },
+          _meta: { claudeCode: { parentToolUseId: "task1" } },
+        },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "top level" } },
+        { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "mine" } },
+      ]),
+    ).toEqual([
+      { type: "tool-delta", toolId: "task1", text: "found it" },
+      { type: "text-delta", text: "top level" },
+      { type: "thinking-delta", text: "mine" },
+    ]);
+  });
+
   test("an agent that stamps no subagent meta gets neither field", () => {
     expect(
       run([{ sessionUpdate: "tool_call", toolCallId: "p", title: "Read", kind: "read", status: "pending" }]),

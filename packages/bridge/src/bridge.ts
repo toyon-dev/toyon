@@ -330,37 +330,6 @@ function highlightFile(path: string, ranges: Array<[number, number]> | null) {
   }
 }
 
-// ---- headless self-test hook: #__toyontest=src/App.tsx@27-27 ----
-const LOOPBACK = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
-if (LOOPBACK && location.hash.startsWith("#__toyontest=")) {
-  const spec = decodeURIComponent(location.hash.slice("#__toyontest=".length));
-  const [path, span] = spec.split("@");
-  const ranges: Array<[number, number]> | null = span
-    ? [[Number(span.split("-")[0]), Number(span.split("-")[1] ?? span.split("-")[0])]]
-    : null;
-  setTimeout(() => {
-    const { matched, fromFile, withSource } = matchElements(String(path), ranges);
-    const out = document.createElement("pre");
-    out.id = "__toyontest";
-    out.textContent = JSON.stringify(
-      {
-        path,
-        ranges,
-        withSource,
-        fileMatched: fromFile.length,
-        matched: matched.map((m) => ({
-          tag: m.el.tagName.toLowerCase(),
-          line: m.line,
-          text: m.el.textContent?.slice(0, 30),
-        })),
-      },
-      null,
-      1,
-    );
-    document.body.appendChild(out);
-  }, 1500);
-}
-
 // ---- commands from the shell ----
 
 window.addEventListener("message", (e) => {

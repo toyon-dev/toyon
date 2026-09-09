@@ -158,7 +158,7 @@ export function WtRail() {
           {worktrees.map((w) => (
             <button
               key={w.worktree.id}
-              className={`wt-item row-edge ${w.worktree.id === activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""} ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
+              className={`row wt-item row-edge ${w.worktree.id === activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""} ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
               onClick={(e) => {
                 if (graftMode || e.shiftKey) toggleSel(w);
                 else dispatch({ a: "activate", id: w.worktree.id });
@@ -367,7 +367,7 @@ export function WtRail() {
                   <button
                     key={d.path}
                     type="button"
-                    className={`disc-item row-edge ${d.id === activeId ? "active" : ""} ${discMenu?.path === d.path ? "menu-open" : ""}`}
+                    className={`row row-quiet disc-item row-edge ${d.id === activeId ? "active" : ""} ${discMenu?.path === d.path ? "menu-open" : ""}`}
                     {...tip(d.locked ? `${wtDirLabel(d)} · held by ${d.lockReason ?? "another tool"}` : wtDirLabel(d))}
                     onClick={() => dispatch({ a: "activate", id: d.id })}
                     onContextMenu={(e) => {

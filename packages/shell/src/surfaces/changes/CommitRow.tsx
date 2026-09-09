@@ -38,7 +38,7 @@ export const CommitRow = memo(function CommitRow({
 }) {
   return (
     <button
-      className={`log-row row-edge ${open ? "open" : ""} ${selected ? "sel" : ""}`}
+      className={`row row-sm log-row row-edge ${open ? "open" : ""} ${selected ? "sel" : ""}`}
       role="option"
       aria-selected={selected}
       // the list owns the keyboard, the same way the changed-files list does
@@ -47,7 +47,7 @@ export const CommitRow = memo(function CommitRow({
       data-tip={`${c.subject}\n${c.short} · ${c.author}`}
     >
       <span className="subject">{c.subject}</span>
-      <span className="at">{ago(c.at)}</span>
+      <span className="at row-dim">{ago(c.at)}</span>
     </button>
   );
 });

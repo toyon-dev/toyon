@@ -236,8 +236,11 @@ a code {
   flex-direction: column;
 }
 .menu button {
+  display: flex;
+  align-items: center;
+  min-height: var(--row-h);
   text-align: left;
-  padding: 5px 10px;
+  padding: 0 10px;
   border-radius: var(--r-sm);
   color: var(--text0);
 }
@@ -289,6 +292,58 @@ a code {
 .dock-empty {
   padding: 4px 12px;
   color: var(--text2);
+}
+
+/* ---- rows ----
+   Every full-bleed list row: changed files, commits, worktrees, picker results, menu items. A band
+   you point at, not a chip you press, which is the whole difference from .btn and why there is no
+   radius and no inset here: the row reaches both edges of whatever holds it. A surface adds only
+   what is its own, a status letter or a diffstat or a dot.
+
+   Hover is a tier shift, not a colour: the seat lifts and everything on it lifts with it, because a
+   tier is measured against the surface under it and text that stays put while its seat rises goes
+   illegible (fg3 on bg2 is 1.4:1). .row-dim is a child that sits one rung below its row and rides
+   up with it; .row-quiet is a whole row a rung down, for the discovered list and collapsed tool
+   calls. Status colours are exempt on purpose: a green dot that shifts under the pointer reads as
+   the proc changing state. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--row-h);
+  padding: 0 var(--row-pad-x);
+  text-align: left;
+  color: var(--text1);
+  position: relative;
+}
+.row-sm {
+  min-height: var(--row-h-sm);
+  font: var(--type-mono);
+}
+.row:hover {
+  background: var(--element0);
+  color: var(--text0);
+}
+.row .row-dim {
+  color: var(--text2);
+}
+/* a lifted seat lifts its dim child too, and picked lifts further than hover: text2 on element1 is
+   1.06:1, which is not a quiet tier but an invisible one. text1 rather than text0, because at text0
+   a filename and its directory read as one string instead of a name with a location after it. The
+   picked states are still each surface's own class until they are one name; .sel is deliberately
+   not here, since on a file or a commit it is the keyboard cursor and moves no background. */
+.row:hover .row-dim,
+.row.active .row-dim,
+.row.open .row-dim,
+.row.menu-open .row-dim {
+  color: var(--text1);
+}
+.row-quiet {
+  color: var(--text2);
+}
+.row-quiet:hover {
+  color: var(--text1);
 }
 
 /* ---- the selected-row edge ----

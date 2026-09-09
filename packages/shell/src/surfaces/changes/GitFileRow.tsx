@@ -33,7 +33,7 @@ export const GitFileRow = memo(function GitFileRow({
   const { name, dir } = splitPath(f.path);
   return (
     <button
-      className={`git-file row-edge ${active ? "active" : ""} ${selected ? "sel" : ""}`}
+      className={`row row-sm git-file row-edge ${active ? "active" : ""} ${selected ? "sel" : ""}`}
       role="option"
       aria-selected={selected}
       // the list owns the keyboard: tab reaches the panel, not each of fifty files in it
@@ -46,7 +46,7 @@ export const GitFileRow = memo(function GitFileRow({
       <span className={`xy ${xyClass(f.xy)}`}>{xyLetter(f.xy)}</span>
       <span className="path" data-tip={dir ? f.path : undefined}>
         <span className="name">{name}</span>
-        {dir && <span className="dir">{dir}</span>}
+        {dir && <span className="dir row-dim">{dir}</span>}
       </span>
       <LineCounts f={f} />
     </button>

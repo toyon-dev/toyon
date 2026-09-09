@@ -177,20 +177,6 @@ body.resizing iframe {
 }
 
 /* one commit: the subject takes the row, the age ends it where a file row ends with its counts */
-.log-row {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-  padding: 3px 12px;
-  font: var(--type-mono);
-  color: var(--text1);
-  text-align: left;
-  position: relative;
-}
-.log-row:hover {
-  background: var(--element0);
-  color: var(--text0);
-}
 /* expanded, so its files are the rows underneath: the same picked pair a file open in the editor
    takes, because it is the same idea one level up */
 .log-row.open {
@@ -210,7 +196,6 @@ body.resizing iframe {
 }
 .log-row .at {
   font: var(--type-mono-sm);
-  color: var(--text2);
   margin-left: auto;
   padding-left: 8px;
   flex-shrink: 0;
@@ -230,14 +215,6 @@ body.resizing iframe {
 }
 
 .wt-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 12px;
-  text-align: left;
-  color: var(--text1);
-  position: relative;
   /* the active/graft marker rides the panel's left edge rather than the row's, because the row's
      own left edge is off screen while the rail is collapsed */
   --row-edge-x: var(--rail-edge, 0px);
@@ -252,7 +229,6 @@ body.resizing iframe {
 /* --dot-gap follows the row's own background so the unseen ring keeps a clean gap instead of a
    grey band once the row is hovered or selected */
 .wt-item:hover {
-  background: var(--element0);
   --dot-gap: var(--element0);
 }
 .wt-item.active {
@@ -379,20 +355,6 @@ body.resizing iframe {
   background: var(--element0);
 }
 
-.git-file {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-  padding: 3px 12px;
-  font: var(--type-mono);
-  color: var(--text1);
-  text-align: left;
-  position: relative;
-}
-.git-file:hover {
-  background: var(--element0);
-  color: var(--text0);
-}
 /* the file open in the editor: picked, so element1 and the accent edge, the same pair the active
    worktree and the open tool call carry. */
 .git-file.active {
@@ -434,7 +396,6 @@ body.resizing iframe {
   white-space: nowrap;
 }
 .git-file .dir {
-  color: var(--text2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -777,21 +738,11 @@ body.resizing .row-resize {
 .wt-rail:hover .disc-item,
 .wt-rail.hold .disc-item,
 .wt-rail.open .disc-item {
-  height: 33px;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  /* the same width, padding and edge-marker anchoring as .wt-item: these rows sit in the same
-     column and their dots have to land on the same centre line */
-  width: 100%;
+  /* the same padding and edge-marker anchoring as .wt-item: these rows sit in the same column and
+     their dots have to land on the same centre line. Height and the rest come from .row. */
   padding: 0 16px 0 12px;
-  position: relative;
   --row-edge-x: var(--rail-edge, 0px);
-  color: var(--text2);
-  text-align: left;
-}
-.disc-item:hover {
-  background: var(--element0);
 }
 /* selected the same way a worktree row is: it is the same selection, and the pane beside it is
    showing this row */
@@ -801,7 +752,7 @@ body.resizing .row-resize {
   background: var(--element1);
 }
 .disc-item.menu-open {
-  background: var(--element0);
+  background: var(--element1);
 }
 .wt-rail .disc-item .dot {
   margin-left: 12px;
@@ -832,9 +783,9 @@ body.resizing .row-resize {
    it, so the pointer is still resting on the row and not on the "…" that used to slide under it.
    Everything clickable stays left of the strip: 12px of margin plus the row's 8px gap. */
 .wt-rail .wt-item {
-  height: 33px;
+  height: var(--row-h);
+  /* the dot keeps its x: 20px from the right edge, the centre of the collapsed strip */
   padding: 0 16px 0 12px;
-  align-items: center;
 }
 .wt-rail .wt-item .dot,
 .wt-rail .rail-glyph {
@@ -1139,7 +1090,8 @@ body.resizing .row-resize {
   background: var(--accent);
 }
 .tool-row summary {
-  padding: 5px 12px;
+  min-height: var(--row-h-sm);
+  padding: 0 var(--row-pad-x);
   cursor: pointer;
   list-style: none;
   display: flex;
@@ -1604,12 +1556,6 @@ body.resizing .row-resize {
 }
 .commit-box textarea {
   min-height: 56px;
-}
-.log-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
 }
 .commit-where {
   display: flex;
@@ -2139,6 +2085,10 @@ body.resizing .rb-center {
   text-align: left;
   font: var(--type-mono);
   color: var(--text1);
+  /* min-height rather than .row's centring: the row is display:block because the ellipsis lives on
+     the button itself, and a search hit stacks two lines inside it. It takes the height token so it
+     tracks the others; true centring arrives when the label gets its own span. */
+  min-height: var(--row-h-sm);
   padding: 4px var(--lp-pad, 10px);
   overflow: hidden;
   text-overflow: ellipsis;

@@ -41,8 +41,11 @@ export function Menu({
   const x = anchor ? (align === "right" ? anchor.right - WIDTH : anchor.left) : (at?.x ?? 0);
   const y = anchor ? anchor.bottom + 4 : (at?.y ?? 0);
   const left = Math.max(4, Math.min(x, window.innerWidth - WIDTH - 4));
-  // ~32px per row; keep the whole menu on screen when opened near the bottom
-  const top = Math.max(4, Math.min(y, window.innerHeight - items.length * 32 - 12));
+  // keep the whole menu on screen when opened near the bottom. The row height is a token, so it is
+  // read off the root rather than written here twice: MonacoDiff and XTerm read --face-mono the
+  // same way, for the same reason.
+  const rowH = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h")) || 32;
+  const top = Math.max(4, Math.min(y, window.innerHeight - items.length * rowH - 12));
   return (
     <div className="menu" style={{ position: "fixed", left, top }}>
       {items.map((it, i) => (

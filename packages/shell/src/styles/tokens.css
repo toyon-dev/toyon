@@ -87,6 +87,16 @@
   --r-md: 6px;
   --r-lg: 8px;
   --r-pill: 999px;
+
+  /* Row heights. Two tiers, because a list is either dense enough to scan or comfortable enough to
+     point at and there is no third thing; the app had five, none of them named, and the worktree
+     row alone asserted its height in three places. The -sm tier is mono: changed files, commits,
+     picker results, the tool log. The bare one is ui: worktrees, menu items. 22 is where the
+     tool log had already landed on its own, and it is the height at which a 12px mono row stops
+     reading as a paragraph and starts reading as rows. */
+  --row-h-sm: 24px;
+  --row-h: 32px;
+  --row-pad-x: 12px;
   /* Four prefixes, one per kind, and the prefix is what tells you which kind you have:
    *
    *   --face-*    a font stack. Raw material: it belongs inside a --type-* value, and no rule sets

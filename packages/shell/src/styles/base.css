@@ -468,10 +468,13 @@ a code {
   padding: 4px 8px;
   font: var(--type-ui);
   color: var(--text0);
-  background: var(--surface0);
+  /* the same box the menu is: a thing floating over the app reads as one treatment or as several
+     accidents, and this one was painting itself in the canvas colour, darker than the chrome it
+     was floating above. r-sm is a control's radius and a tooltip is a box. */
+  background: var(--surface1);
   border: 1px solid var(--border1);
-  border-radius: var(--r-sm);
-  box-shadow: 0 4px 14px var(--shadow);
+  border-radius: var(--r-md);
+  box-shadow: 0 6px 20px var(--shadow);
   white-space: pre-line;
   overflow-wrap: anywhere;
   animation: tooltip-in 90ms ease-out;

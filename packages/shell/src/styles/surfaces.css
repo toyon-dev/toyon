@@ -2399,23 +2399,34 @@ body.resizing .rb-center {
   display: flex;
   flex-direction: column;
 }
+/* a group heading, in the same treatment `color` and `size & radius` get: the sizes under it are
+   the specimens, and a heading that was also one competed with them */
+.design-face-family {
+  font: var(--type-mono);
+  color: var(--text1);
+}
+/* the same armed state a component row gets, for the same reason: hovering it outlines the thing in
+   the running app, so it has to look like it did something. The band bleeds 40px left the way that
+   row does, and the padding puts the content back on the column: a component row spends that 40 on
+   its count gutter and a token row has nothing to put there. */
+.design-face,
 .design-face-head {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  margin-bottom: 4px;
   min-width: 0;
+  width: calc(100% + 40px);
+  margin-left: -40px;
+  padding: 2px 10px 2px 40px;
+  border-left: 2px solid transparent;
 }
-/* the same treatment as a group heading, because it is one */
-.design-face-family {
-  font: var(--type-mono-sm);
-  color: var(--text2);
+.design-face:hover,
+.design-face-head:hover {
+  background: var(--element0);
+  border-left-color: var(--accent);
 }
-.design-face {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
+.design-face-head {
+  margin-bottom: 2px;
 }
 .design-face-sample {
   color: var(--text0);

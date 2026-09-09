@@ -82,7 +82,7 @@ export function DesignPane({
     >
       {index ? (
         <div className="design-body" style={LAYOUT} onMouseLeave={live.clear}>
-          <Tokens tokens={index.tokens} />
+          <Tokens tokens={index.tokens} outline={live.outline} clear={live.clear} />
           <Components index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
           <Classes index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
         </div>
@@ -164,8 +164,17 @@ function groundOf(tokens: DesignToken[]): DesignToken | undefined {
 // `index.live` is not read here on purpose. It said "declared, not resolved" in the header, which
 // is true of every scan so far and so told a reader nothing; when the live half lands and the two
 // actually differ, the difference is worth a word and this is where it goes.
-function Tokens({ tokens }: { tokens: DesignToken[] }) {
+function Tokens({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Outline; clear: () => void }) {
   const ground = groundOf(tokens);
+  /* Which other tokens carry this one's value. Built once for the whole set rather than per swatch,
+     because every swatch would otherwise walk every token. */
+  const byValue = new Map<string, string[]>();
+  for (const t of tokens) {
+    const v = (t.resolved ?? t.value).trim().toLowerCase();
+    byValue.set(v, [...(byValue.get(v) ?? []), t.name]);
+  }
+  const sharesWith = (t: DesignToken) =>
+    (byValue.get((t.resolved ?? t.value).trim().toLowerCase()) ?? []).filter((n) => n !== t.name);
   return (
     <Section title="Tokens">
       {tokens.length === 0 ? (
@@ -181,12 +190,20 @@ function Tokens({ tokens }: { tokens: DesignToken[] }) {
             <div key={kind} className="design-group">
               {kind !== "font" && <span className="design-group-name">{label}</span>}
               {kind === "font" ? (
-                <Faces tokens={group} />
+                <Faces tokens={group} outline={outline} clear={clear} />
               ) : (
                 <div className="design-breakout" style={breakout(group.length)}>
                   <div className="design-grid">
                     {group.map((t) => (
-                      <Swatch key={t.name} token={t} ground={ground} largest={largestIn(group)} />
+                      <Swatch
+                        key={t.name}
+                        token={t}
+                        ground={ground}
+                        largest={largestIn(group)}
+                        outline={outline}
+                        clear={clear}
+                        sharing={sharesWith(t)}
+                      />
                     ))}
                   </div>
                 </div>
@@ -226,6 +243,28 @@ function largestIn(group: DesignToken[]): number {
   return group.reduce((max, t) => Math.max(max, Math.abs(Number.parseFloat(t.value)) || 0), 0);
 }
 
+/** A colour lands on a background, a border or the text itself, so any of these matching is a use.
+ * Kept to the seven that actually carry a token; the resolved style object is shared across the
+ * reads, so the length of this list is not what the sweep costs. */
+const COLOR_PROPS = [
+  "color",
+  "background-color",
+  "border-top-color",
+  "border-right-color",
+  "border-bottom-color",
+  "border-left-color",
+  "outline-color",
+];
+
+/** What a token computes to, taken off the element the pane is already showing it on. Sending the
+ * browser's own serialisation means the bridge compares strings and never has to parse a colour,
+ * which it has no room for. */
+function computedFrom(el: Element | null, props: string[]): Array<[string, string]> {
+  if (!el) return [];
+  const cs = getComputedStyle(el);
+  return props.map((p) => [p, cs.getPropertyValue(p)] as [string, string]);
+}
+
 /** A type token is either a stack (`--face-mono`) or a whole `font` shorthand (`--type-mono`). A
  * shorthand is not a valid font-family, so setting it as one fell back to the pane's own face and
  * every sample rendered identical sans. */
@@ -253,7 +292,20 @@ function parseFace(v: string): { family: string; size: number | null; lead: numb
  * heading, because that is what a face token is: the thing the sizes under it are cut from. The
  * sizes then run large to small, each rendered in itself, so the scale is a scale on screen.
  */
-function Faces({ tokens }: { tokens: DesignToken[] }) {
+function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Outline; clear: () => void }) {
+  /* A face is a family and nothing else, so it matches on family alone: hover the heading and every
+     element set in that face lights up, whatever size it is. A sized token matches on all three,
+     because a face, a size and a leading only name a tier together. */
+  const hover = (e: React.MouseEvent<HTMLElement>, sized: boolean, label: string) =>
+    outline({
+      type: "highlight-computed",
+      props: computedFrom(
+        e.currentTarget.querySelector(".design-face-sample"),
+        sized ? ["font-family", "font-size", "line-height"] : ["font-family"],
+      ),
+      match: "all",
+      label,
+    });
   const rows = tokens.map((t) => ({ token: t, actual: t.resolved ?? t.value, ...parseFace(t.resolved ?? t.value) }));
   const families = [...new Set(rows.map((r) => r.family))];
   return (
@@ -266,12 +318,31 @@ function Faces({ tokens }: { tokens: DesignToken[] }) {
         const sized = group.filter((r) => r.size !== null).sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
         return (
           <div key={family} className="design-face-group">
-            <div className="design-face-head" {...(face ? tip(`${face.token.name}\n${face.actual}`) : {})}>
-              <span className="design-face-family">{family}</span>
+            <div
+              className="design-face-head"
+              onMouseEnter={(e) => hover(e, false, face ? face.token.name : family)}
+              onMouseLeave={clear}
+              {...(face ? tip(`${face.token.name}\n${face.actual}`) : {})}
+            >
+              {/* the whole stack, not the first name in it: `ui-monospace` on its own resolves to
+                  nothing here and falls back to the default serif, so the mono heading rendered in
+                  a face that appears nowhere in the project */}
+              <span
+                className="design-face-sample design-face-family"
+                style={{ fontFamily: face ? face.actual : family }}
+              >
+                {family}
+              </span>
               {face && <span className="design-face-name">{face.token.name}</span>}
             </div>
             {sized.map((r) => (
-              <div key={r.token.name} className="design-face" {...tip(`${r.token.name}\n${r.actual}`)}>
+              <div
+                key={r.token.name}
+                className="design-face"
+                onMouseEnter={(e) => hover(e, true, r.token.name)}
+                onMouseLeave={clear}
+                {...tip(`${r.token.name}\n${r.actual}`)}
+              >
                 <span className="design-face-sample" style={{ font: r.actual }}>
                   {`${r.family} ${r.size}${r.lead === null ? "" : `/${r.lead}`}`}
                 </span>
@@ -285,7 +356,21 @@ function Faces({ tokens }: { tokens: DesignToken[] }) {
   );
 }
 
-function Swatch({ token, ground, largest }: { token: DesignToken; ground: DesignToken | undefined; largest: number }) {
+function Swatch({
+  token,
+  ground,
+  largest,
+  outline,
+  clear,
+  sharing,
+}: {
+  token: DesignToken;
+  ground: DesignToken | undefined;
+  largest: number;
+  outline: Outline;
+  clear: () => void;
+  sharing: string[];
+}) {
   // what it resolves to is what to paint and measure; what it says is what to go and edit
   const actual = token.resolved ?? token.value;
   const groundValue = ground && (ground.resolved ?? ground.value);
@@ -297,7 +382,26 @@ function Swatch({ token, ground, largest }: { token: DesignToken; ground: Design
   const size = token.kind === "length" ? Number.parseFloat(actual) : Number.NaN;
 
   return (
-    <div className="design-cell" data-kind={token.kind} {...tip(describe(token, ratio, ground))}>
+    <div
+      className="design-cell"
+      data-kind={token.kind}
+      onMouseEnter={
+        paintable
+          ? (e) => {
+              const fill = e.currentTarget.querySelector(".design-fill");
+              const bg = fill ? getComputedStyle(fill).backgroundColor : "";
+              outline({
+                type: "highlight-computed",
+                props: COLOR_PROPS.map((p) => [p, bg]),
+                match: "any",
+                label: token.name,
+              });
+            }
+          : undefined
+      }
+      onMouseLeave={paintable ? clear : undefined}
+      {...tip(describe(token, ratio, ground, sharing))}
+    >
       {sample && (
         <div className="design-sample">
           {paintable && <span className="design-fill" style={{ background: actual }} />}
@@ -329,8 +433,18 @@ function Swatch({ token, ground, largest }: { token: DesignToken; ground: Design
  * are three separate facts and belong on three lines. The value is worth repeating even though the
  * cell shows it, because the cell truncates and this is where you come to read it in full.
  */
-function describe(token: DesignToken, ratio: string | null, ground: DesignToken | undefined): string {
+function describe(
+  token: DesignToken,
+  ratio: string | null,
+  ground: DesignToken | undefined,
+  sharing: string[] = [],
+): string {
   const lines = [token.name, token.resolved ? `${token.value} resolves to ${token.resolved}` : token.value];
+  // Two tokens with one value are the same colour for different reasons, which is a deliberate thing
+  // for a palette to do and an invisible one on screen: nothing survives to the DOM but the value, so
+  // hovering this lights every use of all of them. Saying whose value it also is turns that from a
+  // bug you report into a fact about the palette.
+  if (sharing.length > 0) lines.push(`same value as ${sharing.join(", ")}`);
   if (ratio && ground) {
     // a token measured against itself is the ground, and "1.00:1 against --surface0" written on
     // --surface0 explains nothing

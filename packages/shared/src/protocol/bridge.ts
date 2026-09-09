@@ -28,6 +28,12 @@ export type ShellToBridgeMsg =
   /** ranges: changed line spans (post-offset numbering); null/absent = whole file */
   | { type: "highlight-file"; path: string; ranges?: Array<[number, number]> | null }
   | { type: "highlight-selector"; selector: string; label?: string }
+  /** A design token has no selector to look for, so it is found by what it computes to. `props` are
+   * already in the browser's own serialisation, read off the sample the pane is rendering, so the
+   * bridge compares strings and needs no colour parsing: it has 600 bytes of budget, not a parser.
+   * `all` for a type token, where the face, the size and the leading only mean anything together;
+   * `any` for a colour, which can land on a background, a border or the text itself. */
+  | { type: "highlight-computed"; props: Array<[string, string]>; match: "all" | "any"; label?: string }
   | { type: "highlight-clear" }
   /** overlay colors follow the shell theme */
   | { type: "theme"; accent: string; accentFg: string }

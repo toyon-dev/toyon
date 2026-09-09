@@ -1,4 +1,4 @@
-import type { WorktreeStatus } from "@toyon/shared";
+import type { DiscoveredWorktree, WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
@@ -37,6 +37,12 @@ export function WtRail() {
   const repoOf = (w: WorktreeStatus) => repos.find((r) => r.id === w.worktree.repoId) ?? null;
   const [menu, setMenu] = useState<MenuState | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  const [discMenu, setDiscMenu] = useState<{ at: { x: number; y: number }; path: string } | null>(null);
+  const closeDiscMenu = useCallback(() => setDiscMenu(null), []);
+  // the daemon sends absolute paths; ~ is how the person wrote it and how the picker shows it back
+  const home = useStore((s) => s.home);
+  const wtDirLabel = (d: DiscoveredWorktree) =>
+    home && d.path.startsWith(`${home}/`) ? `~${d.path.slice(home.length)}` : d.path;
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
 
@@ -57,6 +63,33 @@ export function WtRail() {
 
   const acts = worktreeActions(sock);
   const menuWt = menu ? (worktrees.find((w) => w.worktree.id === menu.id) ?? null) : null;
+  const discMenuRow = discMenu ? (discovered.find((d) => d.path === discMenu.path) ?? null) : null;
+
+  /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.
+   * No "open terminal": a terminal is a pty the runtime opens for a worktree it runs, and this one
+   * has no runtime and no id to key one by. Take it over first.
+   * No "remove": the person made this directory outside toyon, and deleting it is the one thing
+   * here that cannot be undone. Nothing in the daemon can delete a discovered worktree at all,
+   * which is what keeps that true. `git worktree remove` is where it belongs. */
+  const discMenuItems = (d: DiscoveredWorktree): MenuItem[] => {
+    const items: MenuItem[] = [];
+    if (!d.locked) {
+      items.push({
+        label: "take over",
+        onClick: () => sock?.send({ t: "adopt-worktree", repoId: d.repoId, path: d.path, clientId }),
+      });
+    }
+    items.push({
+      label: "reveal in Finder",
+      onClick: () => sock?.send({ t: "reveal-discovered", repoId: d.repoId, path: d.path }),
+    });
+    items.push({
+      label: "copy path",
+      // best effort: a denied clipboard permission is not worth a toast over a path you can read
+      onClick: () => void navigator.clipboard?.writeText(d.path).catch(() => {}),
+    });
+    return items;
+  };
   const menuItems = (w: WorktreeStatus, land: boolean | undefined): MenuItem[] => {
     const id = w.worktree.id;
     const merge: MenuItem = {
@@ -107,7 +140,9 @@ export function WtRail() {
   };
 
   return (
-    <div className={`wt-rail ${graftMode || menu ? "hold" : ""} ${railOpen ? "open" : ""} ${offline ? "offline" : ""}`}>
+    <div
+      className={`wt-rail ${graftMode || menu || discMenu ? "hold" : ""} ${railOpen ? "open" : ""} ${offline ? "offline" : ""}`}
+    >
       {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
           tip of its own, and the tooltip walks up to the nearest one */}
       <div className="rail-panel" data-tip={offline ? "Lost the daemon; retrying" : undefined}>
@@ -303,14 +338,17 @@ export function WtRail() {
               </span>
             </button>
           )}
-          {/* Below "new worktree", not above it: expanding the section then pushes nothing anyone
-              is aiming at. The header is full width like every row, so in the 40px strip its
-              border is all that shows, which is the divider the collapsed state wants. */}
+          {/* Below "new worktree", not above it: the whole section is hidden in the strip (see
+              surfaces.css), so what appears when the panel opens pushes nothing anyone is aiming
+              at. The rows are divs, not .wt-item buttons, so a shift-click never drags one into
+              the graft selection. */}
           {!graftMode && discovered.length > 0 && (
             <>
               <button
                 className={`disc-head ${discOpen ? "open" : ""}`}
-                data-tip="Worktrees in this repo that toyon did not create"
+                {...tip(
+                  `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that toyon did not make`,
+                )}
                 onClick={() => dispatch({ a: "toggle-discovered" })}
               >
                 <Icon name="caret" className={`icon-inline disc-caret ${discOpen ? "" : "shut"}`} />
@@ -318,19 +356,24 @@ export function WtRail() {
               </button>
               {discOpen &&
                 discovered.map((d) => (
-                  <div key={d.path} className="disc-item" title={d.path}>
+                  <div
+                    key={d.path}
+                    className={`disc-item ${discMenu?.path === d.path ? "menu-open" : ""}`}
+                    {...tip(d.locked ? `${wtDirLabel(d)} · held by ${d.lockReason ?? "another tool"}` : wtDirLabel(d))}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setDiscMenu({ at: { x: e.clientX, y: e.clientY }, path: d.path });
+                    }}
+                  >
                     <span className="branch">{d.name}</span>
                     {d.locked ? (
-                      <span
-                        className="disc-lock"
-                        data-tip={d.lockReason ? `Held by ${d.lockReason}` : "Held by another tool"}
-                      >
+                      <span className="disc-lock">
                         <Icon name="lock" className="icon-inline" />
                       </span>
                     ) : (
                       <button
                         className="disc-take"
-                        data-tip="Run this worktree in toyon"
+                        {...tip("Give it a port, start its procs and run it here")}
                         onClick={() => sock?.send({ t: "adopt-worktree", repoId: d.repoId, path: d.path, clientId })}
                       >
                         take over
@@ -352,6 +395,9 @@ export function WtRail() {
           </button>
         </div>
         {menu && menuWt && <Menu at={menu.at} onClose={closeMenu} items={menuItems(menuWt, menu.land)} />}
+        {discMenu && discMenuRow && (
+          <Menu at={discMenu.at} onClose={closeDiscMenu} items={discMenuItems(discMenuRow)} />
+        )}
       </div>
     </div>
   );

@@ -34,7 +34,7 @@ import type { AgentCommand, AgentEvent, AskAnswer, PickMeta } from "./events.ts"
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 14;
+export const PROTOCOL_VERSION = 15;
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -283,6 +283,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     repoId: id,
     path: z.string().min(1).max(4_000),
   }),
+  /** Finder-reveal a discovered worktree. Separate from `reveal`, which addresses a worktree by id
+   * and resolves inside it; this one has only a path, so the daemon re-derives the list and
+   * reveals nothing that is not still on it. */
+  z.object({ t: z.literal("reveal-discovered"), repoId: id, path: z.string().min(1).max(4_000) }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
   /** `ref` reads the file as of that commit instead of the working tree */
   z.object({ t: z.literal("file-diff"), worktreeId: id, path: relPath, ref: sha.optional() }),

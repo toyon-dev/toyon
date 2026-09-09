@@ -202,18 +202,32 @@ export class WorktreeService {
    * starts the procs. It deliberately does not run `toyon.json`'s setup commands (see
    * `setupAndStart`) and does not start an agent: take-over is not a task, and the agent comes up
    * on the first message like it does anywhere else. */
+  /** The discovered row at this path as it stands right now, or a toast.
+   *
+   * Never trust a path the client sends: a discovered worktree has no id, so the path is the whole
+   * address, and it must still be on the list the daemon would push. Re-derived rather than read
+   * from the cache because the frame the person clicked can be seconds old, and a lock is the only
+   * thing standing between us and another agent's working directory. */
+  private async requireDiscovered(repoId: string, repoPath: string, target: string): Promise<DiscoveredWorktree> {
+    const rows = await discoverIn(repoId, repoPath, this.d.state.worktrees);
+    const found = rows.find((r) => canonical(r.path) === target);
+    if (!found) throw new UserError("that worktree is gone, or toyon already has it");
+    return found;
+  }
+
+  /** the absolute path of a discovered worktree, once it is established it is still one */
+  async discoveredPath(repoId: string, path: string): Promise<string> {
+    const repo = this.d.state.requireRepo(repoId);
+    return (await this.requireDiscovered(repoId, repo.path, canonical(path))).path;
+  }
+
   async adopt(repoId: string, path: string, createdBy?: string): Promise<WorktreeInfo> {
     const repo = this.d.state.requireRepo(repoId);
     const target = canonical(path);
     // the whole verify-then-record step holds the lock: outside it this races `worktree remove`
     // and leaves a record pointing at a directory that is already gone
     const wt = await withRepoLock(repo.path, async () => {
-      // re-read rather than trust what the client was shown. A lock is the only thing standing
-      // between us and another agent's working directory, and it can be taken or dropped between
-      // the push and the click.
-      const rows = await discoverIn(repoId, repo.path, this.d.state.worktrees);
-      const found = rows.find((r) => canonical(r.path) === target);
-      if (!found) throw new UserError("that worktree is gone, or toyon already has it");
+      const found = await this.requireDiscovered(repoId, repo.path, target);
       if (found.locked) {
         throw new UserError(`${found.name} is held by another tool${found.lockReason ? `: ${found.lockReason}` : ""}`);
       }

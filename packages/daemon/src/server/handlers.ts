@@ -168,6 +168,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     await s.worktrees.adopt(msg.repoId, msg.path, msg.clientId);
   },
 
+  async "reveal-discovered"(msg, _ctx, s) {
+    s.files.revealPath(await s.worktrees.discoveredPath(msg.repoId, msg.path));
+  },
+
   async "git-status"(msg, ctx, s) {
     await gitStatus(s, ctx, msg.worktreeId);
   },

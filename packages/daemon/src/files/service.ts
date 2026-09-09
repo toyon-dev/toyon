@@ -96,7 +96,13 @@ export class FileService {
   /** Finder reveal (macOS only; elsewhere there is no viewer-side filesystem) */
   reveal(worktreeId: string, path?: string): void {
     const wt = this.state.requireWorktree(worktreeId);
-    const target = resolveInside(wt.path, path ?? ".", { allowRoot: true });
+    this.revealPath(resolveInside(wt.path, path ?? ".", { allowRoot: true }));
+  }
+
+  /** Reveal an absolute path the caller has already established the person may see. Used for
+   * discovered worktrees, which have no record to resolve against: the worktree service checks
+   * the path is still one git reports before this is reached. */
+  revealPath(target: string): void {
     if (process.platform !== "darwin") throw new UserError("reveal is only available on macOS");
     const child = spawn("open", ["-R", target], { stdio: "ignore" });
     child.on("error", () => {});

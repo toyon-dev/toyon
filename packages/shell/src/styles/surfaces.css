@@ -1783,13 +1783,13 @@ body.resizing .rb-center {
 }
 .setup-control .field {
   padding: 5px 8px;
+  line-height: 1.6;
 }
 .setup-control > .field {
   width: 100%;
 }
 .setup-control textarea.field {
   resize: none;
-  line-height: 1.6;
 }
 .setup-proc {
   display: flex;

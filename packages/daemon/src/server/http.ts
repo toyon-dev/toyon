@@ -34,6 +34,8 @@ export interface HttpOpts {
   metrics: () => unknown;
   /** the origin a shell just authenticated from, for the bridge's list of who may frame a preview */
   noteShellOrigin: (origin: string | null) => void;
+  /** the hello frame, for a page that asks before its socket exists */
+  bootstrap: () => Promise<unknown>;
 }
 
 /** a year, and never revalidate: for a name that cannot mean different bytes later */
@@ -89,6 +91,14 @@ export function createFetch(opts: HttpOpts) {
     }
 
     // CLI: register a repo with the running daemon
+    // The same frame the socket opens with, fetched by an inline script while the bundle is still
+    // loading, so the first paint is the real project and not a placeholder. Token in the query
+    // like /ws: the page has it before any of its own code runs.
+    if (url.pathname === "/bootstrap") {
+      if (url.searchParams.get("token") !== opts.token) return new Response("unauthorized", { status: 401 });
+      return Response.json(await opts.bootstrap(), { headers: { "cache-control": NO_STORE } });
+    }
+
     if (url.pathname === "/register" && req.method === "POST") {
       if (req.headers.get("authorization") !== `Bearer ${opts.token}`) {
         return new Response("unauthorized", { status: 401 });

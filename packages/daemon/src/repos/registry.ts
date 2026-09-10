@@ -9,6 +9,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { defaultBranch, isGitRepo, repoRoot } from "../git/exec.ts";
+import { statusFiles, treeEmpty } from "../git/status.ts";
 import { allocateProxyPort, releasePort, reservePort } from "../runtime/ports.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { shortId } from "../worktrees/naming.ts";
@@ -217,6 +218,8 @@ export class RepoRegistry {
       // titled by repo so multi-repo lists don't show identical "main" rows
       title: repo.name,
       createdAt: Date.now(),
+      // known before the first frame goes out: a project made from the picker opens greenfield
+      empty: (await statusFiles(root)).length === 0 && (await treeEmpty(root)),
     };
     this.d.state.addWorktree(main);
     this.warmed.add(repo.id);

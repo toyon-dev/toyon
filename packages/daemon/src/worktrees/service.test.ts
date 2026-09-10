@@ -323,15 +323,16 @@ describe("config reload", () => {
 });
 
 describe("empty tree", () => {
-  test("main says whether the tree is empty; a task worktree never does", async () => {
+  test("main's record says whether the tree is empty; a task worktree never does", async () => {
     const repoId = await registered();
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
-    expect((await w.worktrees.gitStatus(main.id))?.empty).toBe(false);
+    expect(main.empty).toBe(false);
     const wt = await w.worktrees.create(repoId, "task");
-    expect((await w.worktrees.gitStatus(wt.id))?.empty).toBeUndefined();
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.requireWorktree(wt.id).empty).toBeUndefined();
   });
 
-  test("a project made from the picker is empty until something lands in it", async () => {
+  test("a project made from the picker is empty until something lands in it, and the rows say so", async () => {
     const dir = join(dirname(w.repo), "fresh");
     sh(dirname(w.repo), "git", "init", "-q", "-b", "main", dir);
     sh(
@@ -350,9 +351,39 @@ describe("empty tree", () => {
     );
     const repo = await w.repos.register(dir);
     const main = w.state.worktrees.find((x) => x.repoId === repo.id && x.kind === "main")!;
-    expect((await w.worktrees.gitStatus(main.id))?.empty).toBe(true);
+    expect(main.empty).toBe(true);
+    expect((await w.worktrees.rows({ quick: true })).find((r) => r.id === main.id)?.worktree?.empty).toBe(true);
     writeFileSync(join(dir, "index.html"), "<h1>hi</h1>\n");
-    expect((await w.worktrees.gitStatus(main.id))?.empty).toBeUndefined();
+    await w.worktrees.gitStatus(main.id);
+    expect(w.state.requireWorktree(main.id).empty).toBe(false);
+    // the same answer again is not a change (counted after the register's spare has settled,
+    // since its own worktreesChanged lands whenever it likes)
+    await settle();
+    let changed = 0;
+    w.hub.on("worktreesChanged", () => changed++);
+    await w.worktrees.gitStatus(main.id);
+    expect(changed).toBe(0);
+  });
+});
+
+describe("quick rows", () => {
+  test("answers from the caches without git, then queues the real pass", async () => {
+    const repoId = await registered();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    let changed = 0;
+    w.hub.on("worktreesChanged", () => changed++);
+    // nothing cached yet: the row comes back without counts and a pass is queued behind it
+    const cold = await w.worktrees.rows({ quick: true });
+    expect(cold.find((r) => r.id === main.id)?.dirty).toBeUndefined();
+    await settle();
+    expect(changed).toBe(1);
+    // the full pass fills the cache; quick now answers with it and queues nothing
+    const full = await w.worktrees.rows();
+    expect(full.find((r) => r.id === main.id)?.dirty).toBe(0);
+    const warm = await w.worktrees.rows({ quick: true });
+    expect(warm.find((r) => r.id === main.id)?.dirty).toBe(0);
+    await settle();
+    expect(changed).toBe(1);
   });
 });
 

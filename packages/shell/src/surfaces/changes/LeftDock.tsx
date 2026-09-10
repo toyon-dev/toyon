@@ -8,7 +8,7 @@ import { useActive, useActiveId, useActiveRow, useGreenfield, useLocalField } fr
 import { repoById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { step } from "../../ui/listNav.ts";
-import { type MenuItem, useContextMenu } from "../../ui/menu.ts";
+import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { shiftRanges, wtDir } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
@@ -215,17 +215,17 @@ export function LeftDock({ width }: { width: number }) {
   const wtId = active?.worktree.id;
   const dir = active ? wtDir(active.worktree) : "";
   const menuUncommitted = useCallback(
-    (path: string): MenuItem[] => (wtId ? fileItems({ id: wtId, dir }, path, true, { sock, dispatch }) : []),
+    (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, true, { sock, dispatch }) : []),
     [wtId, dir, sock, dispatch],
   );
   const menuCommitted = useCallback(
-    (path: string): MenuItem[] => (wtId ? fileItems({ id: wtId, dir }, path, false, { sock, dispatch }) : []),
+    (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, false, { sock, dispatch }) : []),
     [wtId, dir, sock, dispatch],
   );
   // the list has the keyboard, so shift+F10 lands here rather than on the highlighted row: answer
   // for that row. A right-click reaches a row first and never gets here with a pointer.
   const cm = useContextMenu("changes");
-  const selectedMenu = (): MenuItem[] => {
+  const selectedMenu = (): MenuEntry[] => {
     if (tab === "changes") {
       const f = rows[sel];
       return f ? (sel < files.length ? menuUncommitted : menuCommitted)(f.path) : [];

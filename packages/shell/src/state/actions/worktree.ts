@@ -10,7 +10,7 @@ import {
   type WorktreeStatus,
 } from "@toyon/shared";
 import { isBusy } from "../../surfaces/util.ts";
-import type { MenuItem } from "../../ui/menu.ts";
+import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { profileNames, profileOf } from "../profiles.ts";
 import type { Action, ShipOp, State } from "../store.ts";
@@ -80,26 +80,24 @@ export function worktreeItems(
   s: WorktreeItemState,
   { sock, dispatch }: Deps,
   ui: { graft?: (id: string) => void } = {},
-): MenuItem[] {
+): MenuEntry[] {
   const id = w.worktree.id;
   const acts = worktreeActions(sock, dispatch);
-  const items: MenuItem[] = [];
+  // five groups: stop, look at it, run it, change it, land it; then remove on its own
+  const stop: MenuItem[] = [];
+  const look: MenuItem[] = [];
+  const run: MenuItem[] = [];
+  const change: MenuItem[] = [];
+  const land: MenuItem[] = [];
+  const gone: MenuItem[] = [];
   // stop stays offered while an ask card is open: that is the way out of a question you do not
   // want to answer
   if (isBusy(w))
-    items.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
+    stop.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
   // a landing op already out for this worktree takes the others off the list until it answers
   const idle = !s.shipping[id];
-  // the count on the row is read, not pressed, so the sync it used to offer lives here
-  if (canSync(w) && (w.behind ?? 0) > 0 && idle) {
-    items.push({
-      id: "sync",
-      label: `sync from main (${w.behind} behind)`,
-      onClick: () => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
-    });
-  }
   if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !s.leftOpen) {
-    items.push({
+    look.push({
       id: "changes",
       label: `view changes${(w.dirty ?? 0) > 0 ? ` (${w.dirty})` : ""}`,
       onClick: () => {
@@ -109,7 +107,7 @@ export function worktreeItems(
     });
   }
   if (w.worktree.kind !== "spare") {
-    items.push({
+    look.push({
       id: "terminal",
       label: "open terminal",
       onClick: () => {
@@ -118,34 +116,41 @@ export function worktreeItems(
       },
     });
   }
-  items.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
+  look.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
   // main runs procs too, and is where switching is wanted most; flat items, the menu has no submenus
   const current = profileOf(w.worktree, repo);
   for (const name of profileNames(repo)) {
     if (name !== current)
-      items.push({ id: `profile:${name}`, label: `run with ${name}`, onClick: () => acts.setProfile(w, name) });
+      run.push({ id: `profile:${name}`, label: `run with ${name}`, onClick: () => acts.setProfile(w, name) });
   }
-  if (canRename(w.worktree)) items.push({ id: "rename", label: "rename…", onClick: () => acts.rename(w) });
-  if (w.worktree.variant) items.push({ id: "keep", label: "keep this variant…", onClick: () => acts.pickVariant(w) });
+  if (canRename(w.worktree)) change.push({ id: "rename", label: "rename…", onClick: () => acts.rename(w) });
+  if (w.worktree.variant) change.push({ id: "keep", label: "keep this variant…", onClick: () => acts.pickVariant(w) });
   if (ui.graft && canGraft(w.worktree)) {
     const graft = ui.graft;
-    items.push({ id: "graft", label: "graft with…", onClick: () => graft(id) });
+    change.push({ id: "graft", label: "graft with…", onClick: () => graft(id) });
+  }
+  // the count on the row is read, not pressed, so the sync it used to offer lives here
+  if (canSync(w) && (w.behind ?? 0) > 0 && idle) {
+    land.push({
+      id: "sync",
+      label: `sync from main (${w.behind} behind)`,
+      onClick: () => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
+    });
   }
   if (canLand(w.worktree) && idle) {
-    items.push({
+    land.push({
       id: "merge",
       label: "merge into main",
       onClick: () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }),
     });
-    items.push({
+    land.push({
       id: "ship",
       label: "push + PR",
       onClick: () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }),
     });
   }
-  if (canRemove(w.worktree))
-    items.push({ id: "remove", label: "remove…", danger: true, onClick: () => acts.remove(w) });
-  return items;
+  if (canRemove(w.worktree)) gone.push({ id: "remove", label: "remove…", danger: true, onClick: () => acts.remove(w) });
+  return grouped([stop, look, run, change, land, gone]);
 }
 
 /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.
@@ -159,10 +164,11 @@ export function discoveredItems(
   d: WorktreeStatus,
   s: Pick<State, "termOpen" | "clientId">,
   { sock, dispatch }: Deps,
-): MenuItem[] {
+): MenuEntry[] {
+  const adopt: MenuItem[] = [];
   const items: MenuItem[] = [];
   if (!d.locked) {
-    items.push({
+    adopt.push({
       id: "adopt",
       label: "take over",
       onClick: () => sock?.send({ t: "adopt-worktree", worktreeId: d.id, clientId: s.clientId }),
@@ -185,6 +191,5 @@ export function discoveredItems(
     },
   });
   items.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: d.id }) });
-  items.push({ id: "copy-path", label: "copy path", onClick: () => copyText(d.path) });
-  return items;
+  return grouped([adopt, items, [{ id: "copy-path", label: "copy path", onClick: () => copyText(d.path) }]]);
 }

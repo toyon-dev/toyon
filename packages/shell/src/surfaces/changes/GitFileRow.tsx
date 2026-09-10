@@ -1,6 +1,6 @@
 import type { GitFileStatus } from "@toyon/shared";
 import { memo } from "react";
-import { type MenuItem, useContextMenu } from "../../ui/menu.ts";
+import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { splitPath, xyClass, xyLetter } from "../util.ts";
 
@@ -30,7 +30,7 @@ export const GitFileRow = memo(function GitFileRow({
   selected: boolean;
   onOpen: (path: string) => void;
   /** what a right-click on this file offers */
-  menu: (path: string) => MenuItem[];
+  menu: (path: string) => MenuEntry[];
   onHover: (path: string, entering: boolean) => void;
 }) {
   const cm = useContextMenu("changes");

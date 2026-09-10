@@ -1,7 +1,26 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { fromKeyboard, type MenuItem, type MenuSpec, menuBox, menuStore } from "./menu.ts";
+import { fromKeyboard, grouped, isItem, type MenuItem, type MenuSpec, menuBox, menuStore, SEP, tidy } from "./menu.ts";
 
 const item = (id: string): MenuItem => ({ id, label: id, onClick: () => {} });
+const shape = (entries: ReturnType<typeof tidy>) => entries.map((e) => (isItem(e) ? e.id : "|")).join(" ");
+
+describe("groups and the rules between them", () => {
+  test("a rule stands only between two items", () => {
+    expect(shape(tidy([SEP, item("a"), SEP, SEP, item("b"), SEP]))).toBe("a | b");
+    expect(shape(tidy([SEP, SEP]))).toBe("");
+  });
+
+  test("empty groups leave no rule behind", () => {
+    expect(shape(grouped([[item("a")], [], [item("b"), item("c")], []]))).toBe("a | b c");
+    expect(shape(grouped([[], [item("a")]]))).toBe("a");
+  });
+
+  test("the slot keeps the tidied list", () => {
+    menuStore.open({ items: [SEP, item("a"), SEP], owner: "t", target: {} as Element });
+    expect(shape(menuStore.get()?.items ?? [])).toBe("a");
+    menuStore.close();
+  });
+});
 // the store only compares targets by identity, so any object stands in for an element here
 const el = () => ({}) as unknown as Element;
 const spec = (owner: string, target = el(), items = [item("a")]): MenuSpec => ({ items, owner, target });

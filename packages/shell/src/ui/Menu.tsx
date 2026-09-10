@@ -4,10 +4,12 @@ import { useStoreInstance } from "../state/context.tsx";
 import { jumpTo, step } from "./listNav.ts";
 import "./menu.css";
 import { cx } from "./cx.ts";
-import { type MenuItem, type MenuSpec, menuBox, menuStore, useMenu } from "./menu.ts";
+import { Kbd } from "./Kbd.tsx";
+import { isItem, type MenuItem, type MenuSpec, menuBox, menuStore, useMenu } from "./menu.ts";
 import { rowState } from "./rowState.ts";
 
-const WIDTH = 180;
+/** wide enough for the longest verb and its chord on one line ("show worktree panel  ⌘⇧K") */
+const WIDTH = 220;
 
 /** a modifier on its own: shift for a screenshot chord, cmd held while deciding. Not a key meant
  * for the menu or for anything behind it, so it neither moves the highlight nor closes anything. */
@@ -54,7 +56,9 @@ export function Menus() {
  * so opening a menu with the mouse does not paint a choice you have not made yet.
  */
 function Menu({ spec }: { spec: MenuSpec }) {
-  const { items } = spec;
+  // the rows are what the keys walk; the rules between groups are drawn and never landed on
+  const entries = spec.items;
+  const items = entries.filter(isItem);
   // -1 is "no row yet", which is why this is not 0: see the note above about opening with the mouse
   const [idx, setIdx] = useState(-1);
   // the listeners are bound once per spec, so what they read has to be a ref
@@ -154,9 +158,13 @@ function Menu({ spec }: { spec: MenuSpec }) {
       // a right-click on the menu itself is not a request for another one
       onContextMenu={(e) => e.preventDefault()}
     >
-      {items.map((it, i) => (
-        <MenuRow key={it.id} item={it} cursor={i === idx} onEnter={() => setIdx(i)} />
-      ))}
+      {entries.map((e, n) => {
+        // a rule between groups: it has no index in the rows, so the arrows walk straight past it
+        // biome-ignore lint/suspicious/noArrayIndexKey: a rule has no identity but its place
+        if (!isItem(e)) return <div key={`sep-${n}`} className="menu-sep" aria-hidden="true" />;
+        const i = items.indexOf(e);
+        return <MenuRow key={e.id} item={e} cursor={i === idx} onEnter={() => setIdx(i)} />;
+      })}
     </div>
   );
 }
@@ -177,6 +185,7 @@ function MenuRow({ item, cursor, onEnter }: { item: MenuItem; cursor: boolean; o
         <span className="menu-label">{item.label}</span>
         {item.detail !== undefined && <span className="menu-detail row-dim">{item.detail}</span>}
       </span>
+      {item.key && <Kbd k={item.key} className="menu-key" />}
     </button>
   );
 }

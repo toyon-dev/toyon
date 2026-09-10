@@ -16,14 +16,37 @@ export type MenuItem = {
   label: string;
   /** a quieter line under the label: what a mode does, a proc's status */
   detail?: ReactNode;
+  /** the chord that does the same, drawn at the right edge: the menu is where people learn it */
+  key?: string;
   onClick: () => void;
   danger?: boolean;
 };
 
+/** a rule between two groups of items */
+export type MenuSep = { sep: true };
+export type MenuEntry = MenuItem | MenuSep;
+export const SEP: MenuSep = { sep: true };
+export const isItem = (e: MenuEntry): e is MenuItem => !("sep" in e);
+
+/** drops a rule with nothing on one side of it, so a gated group that came up empty leaves no
+ * mark, and two rules never stand together */
+export function tidy(entries: MenuEntry[]): MenuEntry[] {
+  const out: MenuEntry[] = [];
+  for (const e of entries) {
+    if (isItem(e)) out.push(e);
+    else if (out.length > 0 && isItem(out[out.length - 1]!)) out.push(e);
+  }
+  while (out.length > 0 && !isItem(out[out.length - 1]!)) out.pop();
+  return out;
+}
+
+/** groups of items with a rule between each, empty groups dropped */
+export const grouped = (groups: MenuEntry[][]): MenuEntry[] => tidy(groups.flatMap((g, i) => (i ? [SEP, ...g] : g)));
+
 export type Point = { x: number; y: number };
 
 export type MenuSpec = {
-  items: MenuItem[];
+  items: MenuEntry[];
   /** where it opens: at a pointer, or under an element's rect with `align` saying which edge */
   at?: Point;
   anchor?: DOMRect;
@@ -53,8 +76,9 @@ export const menuStore = {
   },
   /** replaces whatever is open; an empty list closes, since a box with nothing in it says nothing */
   open(spec: MenuSpec) {
-    if (spec.items.length === 0) return menuStore.close();
-    current = spec;
+    const items = tidy(spec.items);
+    if (items.length === 0) return menuStore.close();
+    current = { ...spec, items };
     emit();
   },
   close() {
@@ -124,10 +148,10 @@ export function useContextMenu(owner: string) {
   return useMemo(
     () => ({
       /** right-click, shift+F10 or the menu key on the element */
-      contextMenu(build: (from: MenuFrom) => MenuItem[], key?: string) {
+      contextMenu(build: (from: MenuFrom) => MenuEntry[], key?: string) {
         return {
           onContextMenu: (e: ReactMouseEvent) => {
-            const items = build(fromKeyboard(e) ? "keyboard" : "pointer");
+            const items = tidy(build(fromKeyboard(e) ? "keyboard" : "pointer"));
             if (items.length === 0) return;
             e.preventDefault();
             // the dock behind the row must not answer as well, and the app's fallback checks
@@ -139,7 +163,7 @@ export function useContextMenu(owner: string) {
         };
       },
       /** a trigger's click opens the list under it; a second click closes it */
-      dropdown(build: () => MenuItem[], align: "left" | "right" = "left") {
+      dropdown(build: () => MenuEntry[], align: "left" | "right" = "left") {
         return {
           onClick: (e: ReactMouseEvent) => {
             // the window click that would dismiss the menu is this one; keep it here
@@ -150,7 +174,7 @@ export function useContextMenu(owner: string) {
         };
       },
       /** open under an element from code (the rail's kebab, which sits inside its row) */
-      openUnder(el: Element, build: () => MenuItem[], key?: string) {
+      openUnder(el: Element, build: () => MenuEntry[], key?: string) {
         menuStore.open({ items: build(), owner, key, target: el, anchor: el.getBoundingClientRect(), align: "left" });
       },
     }),

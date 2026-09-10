@@ -67,6 +67,9 @@ export type ChatItem =
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
+  /** the figures after a reply: `turn` is what that reply cost (the agent's cumulative `cost`
+   * less the previous row's), absent when the agent prices nothing */
+  | { kind: "usage"; used: number; size: number; cost?: number; turn?: number }
   /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
    * credential and the provider refused it, so the error above this card says what went wrong */
   | {
@@ -1071,6 +1074,26 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":
       return [...items, { kind: "grafted", title: event.title, branch: event.branch }];
+    case "usage": {
+      // the agent's cost is the session's running total; the row shows what this reply added.
+      // A second figure with nothing said in between (a rate-limit notice, a late correction)
+      // updates the row rather than stacking one under it.
+      const last = items.at(-1);
+      const before = items.findLast((i) => i.kind === "usage" && i !== last && i.cost !== undefined) as
+        | Extract<ChatItem, { kind: "usage" }>
+        | undefined;
+      const prior = last?.kind === "usage" ? before : (items.findLast((i) => i.kind === "usage") as typeof before);
+      const row: ChatItem = {
+        kind: "usage",
+        used: event.used,
+        size: event.size,
+        // to the hundredth of a cent: a difference of two floats is otherwise 0.24999999999999997
+        ...(event.cost !== undefined
+          ? { cost: event.cost, turn: Math.max(0, Math.round((event.cost - (prior?.cost ?? 0)) * 10_000) / 10_000) }
+          : {}),
+      };
+      return last?.kind === "usage" ? [...items.slice(0, -1), row] : [...items, row];
+    }
     case "agent-auth-required":
       return [
         ...items,

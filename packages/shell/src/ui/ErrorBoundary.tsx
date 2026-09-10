@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "./Button.tsx";
+import { cx } from "./cx.ts";
 import "./crash.css";
 
 /** Vite could not load a chunk. A rebuilt shell rotates every hashed filename, so a tab that has
@@ -28,7 +29,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode; pane?: boole
     const { error } = this.state;
     if (!error) return this.props.children;
     return (
-      <div className={`crash ${this.props.pane ? "in-pane" : ""}`}>
+      <div className={cx("crash", this.props.pane && "in-pane")}>
         <div className="crash-title">{staleBuild ? "toyon was updated" : "toyon hit an error"}</div>
         <div className="crash-body">
           {staleBuild

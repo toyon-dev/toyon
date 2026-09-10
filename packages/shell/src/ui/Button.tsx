@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { cx } from "./cx.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { tip } from "./Tooltip.tsx";
 import "./button.css";
@@ -81,9 +82,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> &
   };
 
 export function Button({ variant = "ghost", size = "sm", tone, on, mono, className, type = "button", ...rest }: Props) {
-  const cls = ["btn", VARIANT[variant], SIZE[size], tone && TONE[tone], on && "on", mono && "btn-mono", className]
-    .filter(Boolean)
-    .join(" ");
+  const cls = cx("btn", VARIANT[variant], SIZE[size], tone && TONE[tone], on && "on", mono && "btn-mono", className);
   return <button className={cls} type={type} {...rest} />;
 }
 
@@ -98,14 +97,19 @@ type IconProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "ari
     label: string;
     /** shortcut shown set apart in the tooltip, and folded into the accessible name */
     hint?: string;
+    /** a mark over the glyph's corner, positioned by the caller's class: the composer's terminal
+     * button wears a dot while a proc is down. A slot rather than children, so the glyph stays the
+     * one thing an icon button draws. */
+    badge?: ReactNode;
   };
 
 /** A 20px square glyph control: a pane's close, a toolbar switch, a chip's remove. */
-export function IconButton({ icon, label, hint, tone, on, className, type = "button", ...rest }: IconProps) {
-  const cls = ["btn-icon", tone && TONE[tone], on && "on", className].filter(Boolean).join(" ");
+export function IconButton({ icon, label, hint, badge, tone, on, className, type = "button", ...rest }: IconProps) {
+  const cls = cx("btn-icon", tone && TONE[tone], on && "on", className);
   return (
     <button className={cls} type={type} {...tip(label, hint)} {...rest}>
       <Icon name={icon} />
+      {badge}
     </button>
   );
 }

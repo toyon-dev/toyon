@@ -4,6 +4,7 @@ import { ChatLog } from "./ChatLog.tsx";
 import { Composer } from "./Composer.tsx";
 import { chatPanel } from "./useIntake.ts";
 import "./chat.css";
+import { cx } from "../../ui/cx.ts";
 
 /** the chat panel: transcript above, composer below */
 export function RightDock({ width }: { width: number }) {
@@ -14,7 +15,7 @@ export function RightDock({ width }: { width: number }) {
   const over = useStore((s) => s.dragFiles);
   return (
     <div
-      className={`right-dock ${rightOpen ? "" : "collapsed"} ${over ? "drop-over" : ""}`}
+      className={cx("right-dock", !rightOpen && "collapsed", over && "drop-over")}
       style={{ width }}
       ref={(el) => {
         chatPanel.el = el;

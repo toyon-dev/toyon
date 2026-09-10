@@ -19,6 +19,7 @@ import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { contrastRatio, parseHex } from "./contrast.ts";
 import "./design.css";
+import { cx } from "../../ui/cx.ts";
 
 export function DesignPane({
   worktreeId,
@@ -54,7 +55,7 @@ export function DesignPane({
 
   return (
     <Pane
-      className={`design-pane ${full ? "full" : ""}`}
+      className={cx("design-pane", full && "full")}
       height={full ? undefined : height}
       resizable={!full}
       onDragStart={onDragStart}

@@ -19,10 +19,6 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    & .field {
-      padding: 5px 8px;
-      line-height: 1.6;
-    }
     & > .field {
       width: 100%;
     }

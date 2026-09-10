@@ -1,3 +1,5 @@
+import { IconButton } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 
 /** A block of pasted text, collapsed. Same chip family as the picked element and the image: a
@@ -34,7 +36,7 @@ export function PasteChip({
     </>
   );
   return (
-    <div className={`pick-chip paste-chip ${className}`} data-tip={preview || undefined}>
+    <div className={cx("pick-chip paste-chip", className)} data-tip={preview || undefined}>
       {href ? (
         <a className="image-link" href={href} target="_blank" rel="noreferrer">
           {label}
@@ -42,11 +44,7 @@ export function PasteChip({
       ) : (
         label
       )}
-      {onRemove && (
-        <button type="button" data-tip="Remove attachment" aria-label="Remove attachment" onClick={onRemove}>
-          <Icon name="close" />
-        </button>
-      )}
+      {onRemove && <IconButton icon="close" label="Remove attachment" tone="quiet" onClick={onRemove} />}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { WorktreeStatus } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
+import { TextArea } from "../../ui/Field.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
@@ -35,8 +36,9 @@ export function CommitBox({
     <div className="composer commit-box">
       {dirty && (
         <div className="composer-field">
-          <textarea
-            className="field field-lg"
+          <TextArea
+            size="lg"
+            bare
             value={msg}
             onChange={(e) => setMsg(e.target.value)}
             onKeyDown={(e) => {

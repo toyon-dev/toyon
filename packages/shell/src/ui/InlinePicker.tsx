@@ -1,4 +1,5 @@
 import type { ReactNode, RefObject } from "react";
+import { cx } from "./cx.ts";
 import { KeyHints } from "./KeyHints.tsx";
 import type { ListNav } from "./listNav.ts";
 import "./picker.css";
@@ -33,7 +34,7 @@ export function InlinePicker<T>({
         {results.map((t, i) => (
           <button
             key={keyOf(t)}
-            className={`picker-item ${rowClass?.(t) ?? ""}`}
+            className={cx("picker-item", rowClass?.(t))}
             data-state={rowState({ cursor: i === nav.index })}
             // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal
             // the highlight

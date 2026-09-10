@@ -1,4 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { cx } from "./cx.ts";
+import { Field } from "./Field.tsx";
 import { useFocusOnMount } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
 import { useListNav } from "./listNav.ts";
@@ -120,8 +122,10 @@ export function ListPicker<T>({
     <div className="picker-input">
       {lead}
       <div className="picker-caret">
-        <input
-          className="field field-lg"
+        <Field
+          size="lg"
+          font="mono"
+          bare={anchored}
           ref={inputRef}
           value={q}
           onChange={(e) => {
@@ -146,7 +150,7 @@ export function ListPicker<T>({
       {results.map((t, i) => (
         <button
           key={keyOf(t)}
-          className={`picker-item ${rowClass?.(t) ?? ""}`}
+          className={cx("picker-item", rowClass?.(t))}
           data-state={rowState({ cursor: i === clamped })}
           title={rowTitle?.(t)}
           // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight

@@ -2,6 +2,7 @@ import type { RepoInfo } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
 import { Button, IconButton } from "../../ui/Button.tsx";
+import { Field, TextArea } from "../../ui/Field.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -62,8 +63,8 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
       </p>
 
       <FormRow label="install" hint="runs once in each new worktree; one command per line">
-        <textarea
-          className="field"
+        <TextArea
+          size="md"
           rows={Math.max(1, install.split("\n").length)}
           value={install}
           placeholder="bun install"
@@ -77,16 +78,18 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
           <div className="form-control">
             <div className="setup-proc">
               {multi && (
-                <input
-                  className="field setup-name"
+                <Field
+                  size="md"
+                  className="setup-name"
                   value={p.name}
                   placeholder="name"
                   {...tip("Process name, shown in the status bar")}
                   onChange={(e) => edit(i, { name: e.target.value })}
                 />
               )}
-              <input
-                className="field setup-cmd"
+              <Field
+                size="md"
+                className="setup-cmd"
                 value={p.cmd}
                 placeholder="npm run dev"
                 onChange={(e) => edit(i, { cmd: e.target.value })}

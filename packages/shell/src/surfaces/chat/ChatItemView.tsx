@@ -6,6 +6,8 @@ import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/co
 import { openSource } from "../../state/openSource.ts";
 import type { ChatItem } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
+import { Field } from "../../ui/Field.tsx";
 import { useReveal } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { attachmentUrl } from "../../ws.ts";
@@ -262,7 +264,7 @@ export const ToolRow = memo(
     return (
       <details
         ref={card}
-        className={`tool-row ${tools.some((t) => t.isError) ? "error" : ""}`}
+        className={cx("tool-row", tools.some((t) => t.isError) && "error")}
         open={open}
         // clicking the output selects text and leaves focus on the body, so the card takes it: that is
         // what makes Escape close the row you are reading, not only the one whose chip you clicked
@@ -375,8 +377,7 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
             setKeyFor(null);
           }}
         >
-          <input
-            className="field"
+          <Field
             type="password"
             autoFocus
             placeholder={`${keyMethod.name} for ${item.agentName}`}

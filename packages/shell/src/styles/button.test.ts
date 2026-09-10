@@ -29,7 +29,7 @@ import { cssRules, shellCss } from "./cssRules.ts";
 /** the box: what a size owns */
 const BOX = ["padding", "padding-top", "padding-bottom", "padding-left", "padding-right", "height", "min-height"];
 
-/** the primitives: sizes, variants and tones */
+/** the primitives: Button's sizes, variants and tones, and Field's sizes and faces */
 const PRIMITIVES = new Set([
   ".btn",
   ".btn-md",
@@ -42,20 +42,45 @@ const PRIMITIVES = new Set([
   ".tone-quiet",
   ".tone-danger",
   ".tone-chrome",
+  ".field",
+  ".field-md",
+  ".field-lg",
+  ".field-ui",
+  ".field-bare",
 ]);
 
 /**
- * Controls that are deliberately not one of the three sizes, each for a reason:
+ * Controls that are deliberately not one of the sizes, each for a reason:
  * - .setup-add is a bare text link in a form, no horizontal box at all
  * - .jump-down is a floating pill over the transcript, sized to clear the composer
  * - .rail-new and .rail-disc-head are full-width rail rows that happen to be buttons
+ * - .bar-path is the address strip: chrome, so quieter at rest than a form field, with the bar's
+ *   own inset
  */
-const ONE_OFFS = new Set([".setup-add", ".jump-down", ".rail-new", ".rail-disc-head"]);
+const ONE_OFFS = new Set([".setup-add", ".jump-down", ".rail-new", ".rail-disc-head", ".bar-path"]);
 
-/** `<Button className={...}>`, `<IconButton …>`, and a raw `<button>` still wearing a primitive */
-function classesReachingAButton(src: string): string[] {
-  const out: string[] = [];
-  for (const m of src.matchAll(/<(Button|IconButton|button)\b/g)) {
+/**
+ * A raw <button> is a row, or one of three inline controls that are text rather than a chip:
+ * .pick-open is a link inside a chip's sentence, .dl.more the last line of a diff block, and the
+ * rail's two full-width rows are above. Anything else pressable is a Button or an IconButton.
+ */
+const RAW_BUTTON_OK = new Set([
+  "row",
+  "picker-item",
+  "design-row",
+  "rail-new",
+  "rail-disc-head",
+  "jump-down",
+  "pick-open",
+  "dl",
+]);
+
+type Tag = { kind: string; words: string[]; text: string };
+
+/** every control's opening tag, with the static words of its className */
+function controls(src: string): Tag[] {
+  const out: Tag[] = [];
+  for (const m of src.matchAll(/<(Button|IconButton|Field|TextArea|button|input|textarea)\b/g)) {
     // walk to the end of the opening tag, so a className full of braces stays in one piece
     let depth = 0;
     let i = m.index + m[0].length;
@@ -65,25 +90,44 @@ function classesReachingAButton(src: string): string[] {
       else if (c === "}") depth--;
       else if (c === ">" && depth === 0) break;
     }
-    const tag = src.slice(m.index, i);
-    const cn = tag.match(/className=(?:"([^"]*)"|\{`([^`]*)`\})/);
-    if (!cn) continue;
-    const words: string[] = (cn[1] ?? cn[2] ?? "").match(/[a-z][\w-]*/g) ?? [];
-    // a raw <button> only counts when it is actually wearing a primitive; otherwise it is a row
-    if (m[1] === "button" && !words.includes("btn") && !words.includes("btn-icon")) continue;
-    out.push(...words);
+    const text = src.slice(m.index, i);
+    out.push({ kind: m[1]!, words: classWords(text), text });
   }
   return out;
 }
 
-describe("a button's box and its resting colour", () => {
-  test("belong to Button, so a surface class is left with how it sits in its parent", async () => {
-    const onAButton = new Set<string>();
+/** the class names an opening tag writes: a quoted className, the static text and quoted strings
+ * of a template, or the quoted strings handed to cx(). Identifiers inside `${}` are not classes. */
+function classWords(tag: string): string[] {
+  const cn = tag.match(/className=(?:"([^"]*)"|\{`([^`]*)`\}|\{cx\(([^)]*)\))/);
+  if (!cn) return [];
+  const words = (s: string) => s.match(/[a-z][\w-]*/g) ?? [];
+  const quoted = (s: string) => [...s.matchAll(/"([^"]*)"/g)].flatMap((q) => words(q[1] ?? ""));
+  if (cn[1] !== undefined) return words(cn[1]);
+  if (cn[2] !== undefined) return [...words(cn[2].replace(/\$\{[^}]*\}/g, " ")), ...quoted(cn[2])];
+  return quoted(cn[3] ?? "");
+}
+
+describe("a control's box and its resting colour", () => {
+  test("belong to Button and Field, so a surface class is left with how it sits in its parent", async () => {
+    const onAControl = new Set<string>();
+    const raw: string[] = [];
     for (const file of new Bun.Glob("**/*.tsx").scanSync({ cwd: new URL("..", import.meta.url).pathname })) {
-      if (file.endsWith("ui/Button.tsx")) continue;
+      if (file.endsWith("ui/Button.tsx") || file.endsWith("ui/Field.tsx")) continue;
       const src = await Bun.file(new URL(`../${file}`, import.meta.url)).text();
-      for (const w of classesReachingAButton(src)) onAButton.add(`.${w}`);
+      for (const t of controls(src)) {
+        if (t.kind === "button" && !t.words.some((w) => RAW_BUTTON_OK.has(w)))
+          raw.push(`${file}: <button> wearing "${t.words.join(" ")}"`);
+        // a checkbox, radio or file input is not a field; anything else typed into is one
+        if ((t.kind === "input" || t.kind === "textarea") && !/type="(checkbox|radio|file)"/.test(t.text)) {
+          raw.push(`${file}: <${t.kind}> that is not a Field`);
+        }
+        // a raw <button> is a row, and a row's box is the row idiom's, not Button's
+        if (t.kind === "button" && !t.words.includes("btn") && !t.words.includes("btn-icon")) continue;
+        for (const w of t.words) onAControl.add(`.${w}`);
+      }
     }
+    expect(raw.sort()).toEqual([]);
 
     const offenders: string[] = [];
     for (const rule of cssRules(await shellCss())) {
@@ -96,7 +140,7 @@ describe("a button's box and its resting colour", () => {
         const m = sel.match(/^\.([a-z][\w-]*)$/);
         if (!m) continue;
         const cls = `.${m[1]}`;
-        if (PRIMITIVES.has(cls) || ONE_OFFS.has(cls) || !onAButton.has(cls)) continue;
+        if (PRIMITIVES.has(cls) || ONE_OFFS.has(cls) || !onAControl.has(cls)) continue;
         offenders.push(`${cls} sets ${named.join(", ")}`);
       }
     }

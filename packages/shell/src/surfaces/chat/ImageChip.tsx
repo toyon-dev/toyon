@@ -1,5 +1,6 @@
 import type { ImageRef } from "@toyon/shared";
-import { Icon } from "../../ui/Icon.tsx";
+import { IconButton } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
 import { fmtBytes } from "./images.ts";
 
 /** an attached image as a chip: thumbnail, its session number, name and size. In the composer it
@@ -37,7 +38,7 @@ export function ImageChip({
     </>
   );
   return (
-    <div className={`pick-chip image-chip ${className}`} data-tip={onRemove ? undefined : "Open full size"}>
+    <div className={cx("pick-chip image-chip", className)} data-tip={onRemove ? undefined : "Open full size"}>
       {onRemove ? (
         body
       ) : (
@@ -45,11 +46,7 @@ export function ImageChip({
           {body}
         </a>
       )}
-      {onRemove && (
-        <button data-tip="Remove image" aria-label="Remove image" onClick={onRemove}>
-          <Icon name="close" className="icon-inline" />
-        </button>
-      )}
+      {onRemove && <IconButton icon="close" label="Remove image" tone="quiet" onClick={onRemove} />}
     </div>
   );
 }

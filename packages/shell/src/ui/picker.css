@@ -68,11 +68,11 @@
     }
     &.picker input {
       width: 100%;
-      font: var(--type-mono);
     }
     /* Anchored, the field is the top of the panel and borrows the composer's treatment: the field's
-   background carried by the whole strip and no inset box, so the panel reads as the bar it drops
-   out of rather than a control floating in a menu. -8px undoes .picker's padding. */
+   background carried by the whole strip and no inset box (the Field is `bare`), so the panel reads
+   as the bar it drops out of rather than a control floating in a menu. -8px undoes .picker's
+   padding. */
     &.anchored {
       --picker-pad: 8px;
     }
@@ -82,14 +82,6 @@
       background: var(--sunken);
       border-bottom: 1px solid var(--border0);
       border-radius: var(--r-lg) var(--r-lg) 0 0;
-    }
-    &.anchored .picker-input input {
-      background: none;
-      border: none;
-      border-radius: 0;
-      padding: 0;
-      /* the strip is a row of the bar, so it takes the bar's size rather than the palette's */
-      font: var(--type-mono);
     }
     /* the ghost tracks the caret, so it loses the same border and padding the input just did */
     &.anchored .picker-ghost {

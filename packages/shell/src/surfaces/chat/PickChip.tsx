@@ -1,4 +1,6 @@
 import type { PickMeta } from "@toyon/shared";
+import { IconButton } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { pickLabel, relFile } from "../util.ts";
 
@@ -41,7 +43,7 @@ export function PickChip({
     );
   return (
     <div
-      className={`pick-chip ${className}`}
+      className={cx("pick-chip", className)}
       data-tip={tipText}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
@@ -67,11 +69,7 @@ export function PickChip({
           </span>
         )}
       </span>
-      {onRemove && (
-        <button data-tip="Remove attachment" aria-label="Remove attachment" onClick={onRemove}>
-          <Icon name="close" className="icon-inline" />
-        </button>
-      )}
+      {onRemove && <IconButton icon="close" label="Remove attachment" tone="quiet" onClick={onRemove} />}
     </div>
   );
 }

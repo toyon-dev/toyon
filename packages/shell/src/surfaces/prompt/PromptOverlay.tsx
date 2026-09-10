@@ -12,6 +12,7 @@ import { commandSource } from "../util.ts";
 import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
 import { RepoChip } from "./RepoChip.tsx";
 import "./prompt.css";
+import { TextArea } from "../../ui/Field.tsx";
 
 /** ⌘K: describe a change → an agent starts on it in a new worktree (or N variants, or a batch) */
 export function PromptOverlay() {
@@ -112,8 +113,8 @@ export function PromptOverlay() {
       </div>
       {/* the field owns the menu's position: nothing sits under this box, so it opens downward */}
       <div className="prompt-picker">
-        <textarea
-          className="field field-lg"
+        <TextArea
+          size="lg"
           ref={field}
           autoFocus
           value={text}

@@ -6,6 +6,8 @@ import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/co
 import { openSource } from "../../state/openSource.ts";
 import { useLocalField } from "../../state/selectors.ts";
 import { IconButton } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
+import { TextArea } from "../../ui/Field.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
@@ -335,9 +337,11 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           }}
         />
       )}
-      <div className={`composer-field${shellCmd !== null ? " shell" : ""}`}>
-        <textarea
-          className={`field field-lg${shellCmd !== null ? " field-shell" : ""}`}
+      <div className={cx("composer-field", shellCmd !== null && "shell")}>
+        <TextArea
+          size="lg"
+          bare
+          font={shellCmd !== null ? "mono" : "ui"}
           ref={composerRef}
           value={text}
           onChange={(e) => {
@@ -422,20 +426,22 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         <span className="spawn-tools">
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar */}
-          <button
-            className={`btn-icon tone-chrome composer-term ${termOpen ? "on" : ""}`}
+          <IconButton
+            icon="terminal"
+            tone="chrome"
+            on={termOpen}
+            className="composer-term"
             disabled={!active}
-            {...tip(trouble ? trouble.tip : "Terminal", chord("terminal"))}
+            label={trouble ? trouble.tip : "Terminal"}
+            hint={chord("terminal")}
+            badge={trouble && <span className="composer-term-dot" />}
             onClick={() => {
               // opening onto the badge's own tab: the dot is the only thing that says a proc died,
               // so following it should land on the crash, not on whichever tab you left open
               if (trouble && !termOpen && id) dispatch({ a: "term-stream", id, stream: trouble.stream });
               else dispatch({ a: "toggle-terminal" });
             }}
-          >
-            <Icon name="terminal" />
-            {trouble && <span className="composer-term-dot" />}
-          </button>
+          />
           <IconButton
             icon="pick"
             label="Pick an element on the page to attach"

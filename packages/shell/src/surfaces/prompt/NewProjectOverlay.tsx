@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { Overlay as OverlayState } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
+import { Field } from "../../ui/Field.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { destination } from "../palettes/projectPicker.ts";
@@ -58,8 +59,8 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
       )}
 
       <FormRow label="name" hint={nameError ?? undefined}>
-        <input
-          className="field"
+        <Field
+          size="md"
           autoFocus={!overlay.name}
           value={name}
           placeholder="my-app"
@@ -69,8 +70,8 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
       </FormRow>
 
       <FormRow label="in" hint={home && parent.startsWith("~") ? "where your other projects live" : undefined}>
-        <input
-          className="field"
+        <Field
+          size="md"
           autoFocus={!!overlay.name}
           value={parent}
           placeholder="~/Projects"

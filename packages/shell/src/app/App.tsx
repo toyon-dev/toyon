@@ -16,6 +16,7 @@ import { Tooltips } from "../ui/Tooltip.tsx";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
 import "./app.css";
+import { cx } from "../ui/cx.ts";
 
 /** the worktree rail: the strip it keeps when it peeks, and the column it takes when kept open
  *  (both also in surfaces.css, as the rail's width and --rail-w) */
@@ -194,7 +195,7 @@ export function App() {
   const dragRight = useDragResize((ev) => clampW(window.innerWidth - railPx - ev.clientX, 380), setRightW);
 
   return (
-    <div className={`app ${zen ? "zen" : ""}`}>
+    <div className={cx("app", zen && "zen")}>
       <Tooltips />
       <StatusBar leftPx={leftOpen ? leftW : 0} rightPx={(rightOpen ? rightW : 0) + railPx} />
       <div className="docks">
@@ -206,7 +207,7 @@ export function App() {
         <WtRail />
       </div>
       {toast && (
-        <div className={`toast ${toast.ok ? "" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
+        <div className={cx("toast", !toast.ok && "err")} onClick={() => dispatch({ a: "dismiss-toast" })}>
           {toast.message}
           {toast.removeIds && toast.removeIds.length > 0 && (
             <Button

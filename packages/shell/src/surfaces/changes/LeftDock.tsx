@@ -12,6 +12,7 @@ import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
 import { GitFileRow } from "./GitFileRow.tsx";
 import "./changes.css";
+import { cx } from "../../ui/cx.ts";
 
 /** one array, so a worktree the daemon has not reported on yet does not hand the row list a fresh
  * identity on every render and re-render every row with it */
@@ -236,7 +237,7 @@ export function LeftDock({ width }: { width: number }) {
   const noHover = useCallback(() => {}, []);
 
   return (
-    <div className={`left-dock ${leftOpen ? "" : "collapsed"}`} style={{ width }}>
+    <div className={cx("left-dock", !leftOpen && "collapsed")} style={{ width }}>
       <div className="changes-tabs" role="tablist">
         {(["changes", "history"] as const).map((t) => (
           <Button
@@ -253,7 +254,7 @@ export function LeftDock({ width }: { width: number }) {
         ))}
       </div>
       <div
-        className={`changes-list ${tab === "history" ? "history" : ""}`}
+        className={cx("changes-list", tab === "history" && "history")}
         role="listbox"
         aria-label={tab === "history" ? "commits" : "changed files"}
         tabIndex={0}

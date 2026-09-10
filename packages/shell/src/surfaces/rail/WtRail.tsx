@@ -17,6 +17,7 @@ import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass, procTrouble } from "../util.ts";
 import { worktreeActions } from "./worktreeActions.ts";
 import "./rail.css";
+import { cx } from "../../ui/cx.ts";
 import { rowState } from "../../ui/rowState.ts";
 
 type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
@@ -151,9 +152,7 @@ export function WtRail() {
   };
 
   return (
-    <div
-      className={`rail ${graftMode || menu || discMenu ? "hold" : ""} ${railOpen ? "pinned" : ""} ${offline ? "offline" : ""}`}
-    >
+    <div className={cx("rail", (graftMode || menu || discMenu) && "hold", railOpen && "pinned", offline && "offline")}>
       {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
           tip of its own, and the tooltip walks up to the nearest one */}
       <div className="rail-panel" data-tip={offline ? "Lost the daemon; retrying" : undefined}>
@@ -161,7 +160,7 @@ export function WtRail() {
           {worktrees.map((w) => (
             <button
               key={w.worktree.id}
-              className={`row rail-item row-edge ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
+              className={cx("row rail-item row-edge", menu?.id === w.worktree.id && "menu-open")}
               data-state={rowState({ current: w.worktree.id === activeId, checked: sel.includes(w.worktree.id) })}
               onClick={(e) => {
                 if (graftMode || e.shiftKey) toggleSel(w);
@@ -372,7 +371,7 @@ export function WtRail() {
                   <button
                     key={d.path}
                     type="button"
-                    className={`row row-quiet rail-disc-item row-edge ${discMenu?.path === d.path ? "menu-open" : ""}`}
+                    className={cx("row row-quiet rail-disc-item row-edge", discMenu?.path === d.path && "menu-open")}
                     data-state={rowState({ current: d.id === activeId })}
                     {...tip(d.locked ? `${wtDirLabel(d)} · held by ${d.lockReason ?? "another tool"}` : wtDirLabel(d))}
                     onClick={() => dispatch({ a: "activate", id: d.id })}

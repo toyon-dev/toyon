@@ -1,14 +1,13 @@
-/* The input primitive: .field for identifiers, .field-lg for prose. */
+/* Field and TextArea: the box, the sizes, the faces. See Field.tsx for the axes. */
 @layer tokens, base, surfaces;
 @layer base {
-  /* ---- fields ---- */
   .field {
     background: var(--sunken);
     border: 1px solid var(--border0);
     border-radius: var(--r-sm);
     color: var(--text0);
-    /* identifier and filter inputs: a path, a URL, a branch, a command. Prose you write is
-     .field-lg, which the commit box and the composer already take. */
+    /* identifier and filter inputs: a path, a URL, a branch, a command. The prose face is
+       .field-ui, which Field adds for a prose-sized box unless told otherwise. */
     font: var(--type-mono);
     padding: 3px 8px;
     outline: none;
@@ -16,15 +15,26 @@
       border-color: var(--border1);
     }
   }
-  /* multi-line / palette inputs */
+  /* three sizes, the same way .btn has three: the compact default, the form's input, and prose */
+  .field-md {
+    padding: 5px 8px;
+    line-height: 1.6;
+  }
   .field-lg {
     border-radius: var(--r-md);
-    font: var(--type-ui);
     padding: 8px 10px;
-    /* the composer once its draft leads with `!`: what follows is a command, and the face changing
-   under the caret is what says the box has changed contract before anything runs */
-    &.field-shell {
-      font: var(--type-mono);
-    }
+  }
+  /* the face, apart from the size: the composer's face changes under the caret once its draft
+     leads with `!`, which is what says the box has changed contract before anything runs */
+  .field-ui {
+    font: var(--type-ui);
+  }
+  /* no box: the region around it is the field. The composer carries the sunken ground for the
+     whole panel, and an anchored picker's strip is a row of the bar it drops out of. */
+  .field-bare {
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
   }
 }

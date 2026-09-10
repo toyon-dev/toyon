@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
+import { TextArea } from "../../ui/Field.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { KeyHints } from "../../ui/KeyHints.tsx";
 import { useListNav } from "../../ui/listNav.ts";
@@ -202,8 +203,9 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
             </Button>
           )}
           {q.note && noteFor === qi && (
-            <textarea
-              className="field ask-note"
+            <TextArea
+              font="ui"
+              className="ask-note"
               autoFocus
               rows={2}
               placeholder={`${q.note.label}: goes to the agent with your pick`}

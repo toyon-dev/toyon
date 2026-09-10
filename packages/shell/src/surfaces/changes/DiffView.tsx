@@ -4,6 +4,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { localOf, type State, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
@@ -47,7 +48,7 @@ export function DiffView({
   return (
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%
     <Pane
-      className={`diff-pane ${full ? "full" : ""}`}
+      className={cx("diff-pane", full && "full")}
       height={full ? undefined : height}
       resizable={!full}
       onDragStart={onDragStart}

@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { step } from "./listNav.ts";
 import "./menu.css";
+import { cx } from "./cx.ts";
 import { rowState } from "./rowState.ts";
 
 export type MenuItem = { label: ReactNode; onClick: () => void; danger?: boolean };
@@ -98,7 +99,7 @@ export function Menu({
       {items.map((it, i) => (
         <button
           key={i}
-          className={`row ${it.danger ? "danger" : ""}`}
+          className={cx("row", it.danger && "danger")}
           data-state={rowState({ cursor: i === idx })}
           // the pointer and the arrows drive one highlight, not two
           onMouseEnter={() => setIdx(i)}

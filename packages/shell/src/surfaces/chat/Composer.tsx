@@ -1,12 +1,13 @@
 import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree } from "@toyon/shared";
-import { DEFAULT_PERMISSION_MODE, pickMetaOf } from "@toyon/shared";
+import { canSync, DEFAULT_PERMISSION_MODE, pickMetaOf } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
+import { shipOp } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useLocalField } from "../../state/selectors.ts";
-import { IconButton } from "../../ui/Button.tsx";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -18,6 +19,7 @@ import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
 import { greenfieldContext, type Kind } from "../preview/kinds.ts";
+import { baseNote, behindNote } from "../prompt/baseNote.ts";
 import { ModeChip, useNewWorktreeMode } from "../prompt/ModeChip.tsx";
 import { ModelChip, useNewWorktreeModel } from "../prompt/ModelChip.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
@@ -134,6 +136,14 @@ export function Composer({
   const spawnDefault = () => active?.worktree.kind === "main" && !repo?.needsSetup;
   const [spawnNew, setSpawnNew] = useState(spawnDefault);
   useOnChange([id], () => setSpawnNew(spawnDefault()));
+
+  // the live status when this worktree is subscribed, else the rail's ten-second count
+  const dirty = git?.files.length ?? active?.dirty ?? 0;
+  const op = useStore((s) => (id ? s.shipping[id] : undefined));
+  const note =
+    !active || !repo ? null : spawnNew ? baseNote(isMain ? repo.defaultBranch : active.worktree.title, dirty) : null;
+  const behind =
+    !active || !repo || spawnNew || !canSync(active) ? null : behindNote(repo.defaultBranch, active.behind);
 
   // picking happens inside the iframe, which takes focus; hand it back to the composer so the
   // user can type about the element straight away (next frame: the dock may be re-appearing)
@@ -524,6 +534,24 @@ export function Composer({
           )}
         </span>
       </div>
+      {/* a sentence about the base or the branch: its own line, so the row above keeps its shape */}
+      {note && <div className="hint spawn-note">{note}</div>}
+      {behind && active && id && (
+        <div className="hint spawn-note">
+          <span>{behind}</span>
+          <Button
+            variant="outline"
+            busy={op === "sync-main"}
+            disabled={!!op || dirty > 0}
+            data-tip={
+              dirty > 0 ? "commit or discard the changes here first" : `Merge ${repo?.defaultBranch} into this worktree`
+            }
+            onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
+          >
+            sync
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

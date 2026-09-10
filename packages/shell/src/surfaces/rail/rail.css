@@ -229,7 +229,6 @@
     width: var(--rail-inner);
     overflow-y: auto;
     background: var(--surface1);
-    padding-top: 6px;
   }
   /* the pin sits at the foot of the drawer, so a long list scrolls under it. It is the drawer's own
    control, so it only exists while the drawer is open: in the strip there is nothing to pin yet. */

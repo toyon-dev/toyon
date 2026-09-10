@@ -9,6 +9,10 @@
     z-index: 100;
     pointer-events: none;
     max-width: 320px;
+    /* sized by its text, not by where it last stood: a fixed box with `left` set shrinks to the
+     room left of the viewport edge, so one measured while it sat near the right edge came back
+     narrow and two lines tall, and was then placed for that shape */
+    width: max-content;
     padding: 4px 8px;
     font: var(--type-ui);
     color: var(--text0);
@@ -37,9 +41,9 @@
     margin-left: 12px;
     color: var(--text1);
   }
-  /* the second line, a tier under the first: the key's tier, since both are the aside to the
-   line above them */
+  /* ahead of the text, a tier under it: the key's tier, since both are the aside to the line */
   .tooltip-detail {
+    margin-right: 12px;
     color: var(--text1);
   }
   @keyframes tooltip-in-bottom {

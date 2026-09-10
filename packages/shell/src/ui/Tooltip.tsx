@@ -22,8 +22,9 @@ import "./tooltip.css";
 export type TipPlacement = "follow" | "top" | "bottom" | "left" | "right";
 type Side = Exclude<TipPlacement, "follow">;
 
-/** `detail` is a second line in the quiet tier, for the where or the which under the what: a
- * worktree's path under its state. On one line with a middot the two read as one phrase. */
+/** `detail` sits before the text in the quiet tier, for the where or the which ahead of the what:
+ * a worktree's path, then its state. The two tiers keep them apart; a middot between them read as
+ * one phrase, and a second line made a box twice as tall for a row the pointer sweeps through. */
 export function tip(text: string, key?: string, placement?: TipPlacement, detail?: string) {
   const label = detail ? `${text}, ${detail}` : text;
   return {
@@ -226,9 +227,9 @@ export function Tooltips() {
   if (!anchor) return null;
   return createPortal(
     <div ref={box} className="tooltip" role="tooltip">
+      {anchor.detail && <span className="tooltip-detail">{anchor.detail}</span>}
       {anchor.text}
       {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}
-      {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
     </div>,
     document.body,
   );

@@ -638,21 +638,13 @@
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 6px;
     font: var(--type-ui);
     color: var(--text0);
-  }
-  .draft-lead {
-    margin: 0;
-    font: var(--type-ui-lg);
-    color: var(--text1);
   }
   .draft-intro {
     & .hint {
       margin: 0;
-    }
-    & input {
-      accent-color: var(--accent);
     }
     /* inline mono inside a sans sentence, the same case as `code` in the transcript: the branch is
      marked by being mono, which is what mono is for, rather than by making sans bold */
@@ -661,11 +653,17 @@
       font: var(--type-mono);
     }
   }
+  /* the two one-shot choices on one line: the word, the three numbers, then batch set apart */
   .draft-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    cursor: pointer;
+    gap: 2px;
+    & > span {
+      margin-right: 4px;
+    }
+  }
+  .draft-batch {
+    margin-left: 10px;
   }
 
   .pick-chip {

@@ -581,6 +581,10 @@ export class WorktreeService {
     // touches the main checkout: serialize with spare refresh / worktree add on the same repo
     const result = await withRepoLock(repo.path, () => mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch));
     if (!result.ok) return { result };
+    // main moved, so every row of this repo counts against it now. The ref watcher clears this
+    // too, but on the fs event's schedule, and the frame setLanded pushes must not carry the old
+    // ahead
+    this.invalidateCounts();
     this.setLanded(wt.id, true);
     let removeIds: string[];
     if (wt.kind === "combined") {
@@ -597,6 +601,7 @@ export class WorktreeService {
   async sync(worktreeId: string): Promise<{ result: ShipResult; defaultBranch: string }> {
     const { wt, repo } = this.landable(worktreeId, "sync");
     const result = await withRepoLock(repo.path, () => syncFromMain(wt.path, repo.defaultBranch));
+    if (result.ok) this.headMoved(wt.id);
     return { result, defaultBranch: repo.defaultBranch };
   }
 
@@ -604,7 +609,17 @@ export class WorktreeService {
     const wt = this.d.state.requireWorktree(worktreeId);
     const m = message.trim();
     if (!m) throw new UserError("commit message required");
-    return commitWorktree(wt.path, m);
+    const result = await commitWorktree(wt.path, m);
+    if (result.ok) this.headMoved(wt.id);
+    return result;
+  }
+
+  /** this worktree's own HEAD moved (a sync or a commit): its cached ahead/behind describe the
+   * old one, and nothing watches a worktree's branch the way the repo watcher watches main, so
+   * the rail would keep the old badge until the TTL lapsed and something unrelated pushed a frame */
+  private headMoved(worktreeId: string) {
+    this.countsCache.delete(worktreeId);
+    this.d.hub.emit("worktreesChanged");
   }
 
   // ---- queries ----

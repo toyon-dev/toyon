@@ -364,6 +364,33 @@ describe("landing", () => {
     const wt = await w.worktrees.create(repoId, "feature");
     await expect(w.worktrees.commit(wt.id, "  ")).rejects.toBeInstanceOf(UserError);
   });
+
+  // the rail's badges come from statuses(), which caches counts for 10s; a landing op that moves
+  // the worktree's own HEAD has to drop that entry and push a frame, or the rail keeps showing the
+  // count the person just acted on
+  test("sync and commit refresh the badge counts at once and push a worktrees frame", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    let frames = 0;
+    w.hub.on("worktreesChanged", () => frames++);
+    const row = async () => (await w.worktrees.statuses()).find((s) => s.worktree.id === wt.id)!;
+
+    sh(w.repo, "git", "commit", "--allow-empty", "-m", "main moves on");
+    w.worktrees.invalidateCounts();
+    expect((await row()).behind).toBe(1);
+
+    frames = 0;
+    expect((await w.worktrees.sync(wt.id)).result.ok).toBe(true);
+    expect(frames).toBe(1);
+    expect((await row()).behind).toBe(0);
+    expect((await row()).ahead).toBe(0);
+
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    frames = 0;
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    expect(frames).toBe(1);
+    expect((await row()).ahead).toBe(1);
+  });
 });
 
 describe("combine", () => {

@@ -405,6 +405,13 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      /* the draft tab is this row selected, marked the way a worktree row is: same edge, same seat */
+      --row-edge-x: var(--rail-edge, 0px);
+    }
+    & .rail-new[data-state~="current"] {
+      --row-edge-color: var(--accent);
+      color: var(--text0);
+      background: var(--element1);
     }
   }
   /* the label takes the slack, so the hint and the glyph sit against the right edge */

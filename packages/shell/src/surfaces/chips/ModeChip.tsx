@@ -3,7 +3,7 @@ import { STORAGE } from "../../state/keys.ts";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { cx } from "../../ui/cx.ts";
 import { usePersisted } from "../../ui/hooks.ts";
-import "./mode.css";
+import "./chips.css";
 
 /** the mode a new worktree of this repo starts in: remembered per repo in this browser */
 export function useNewWorktreeMode(repo: RepoInfo | null): [PermissionMode, (m: PermissionMode) => void] {

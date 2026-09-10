@@ -39,6 +39,8 @@ export function WtRail() {
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
   const greenfield = useGreenfield();
+  // the draft tab: the new-worktree row is the selected one while a worktree is being drafted
+  const draftOpen = useStore((s) => s.draft !== null);
   const discovered = useVisibleDiscovered();
   const discOpen = useDiscoveredOpen();
   const clientId = useStore((s) => s.clientId);
@@ -358,11 +360,12 @@ export function WtRail() {
               branch while main stayed blank, and the row comes back with the first message */}
           {!graftMode && !greenfield && (
             <button
-              className="rail-new"
-              data-tip="New worktree"
-              data-tip-key={chord("new")}
+              className="rail-new row-edge"
+              data-state={rowState({ current: draftOpen })}
+              data-tip={draftOpen ? "The worktree being drafted; esc leaves it" : "New worktree"}
+              data-tip-key={draftOpen ? undefined : chord("new")}
               data-tip-placement="left"
-              onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
+              onClick={() => dispatch({ a: "open-draft" })}
             >
               <span className="rail-gut">
                 <Icon name="plus" className="icon-inline" />

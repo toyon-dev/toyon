@@ -4,6 +4,7 @@
 import type { LogLine, ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
+import { OPTION_FIELDS } from "../agent/acp/options.ts";
 import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
 import type { AgentAdapter } from "../agent/adapter.ts";
@@ -132,12 +133,12 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
       d.state.save();
       d.hub.emit("worktreesChanged");
     },
-    model: () => d.state.requireWorktree(wt.id).model,
+    option: (category) => d.state.requireWorktree(wt.id)[OPTION_FIELDS[category]],
     // kept per agent, not per worktree: the picker on a worktree whose session has not opened
     // yet shows what this agent offered last time
-    onModelsLearned: (models) => {
+    onOptionsLearned: (category, choices) => {
       const agentId = d.state.requireWorktree(wt.id).agent ?? "";
-      if (d.state.setCachedModels(agentId, models)) d.hub.emit("agentsChanged");
+      if (d.state.setCachedOptions(agentId, category, choices)) d.hub.emit("agentsChanged");
     },
   });
   agent.onQueueChange = () => d.hub.emit("queue", wt.id, agent.queueItems);

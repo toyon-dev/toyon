@@ -149,6 +149,36 @@ describe("spare pool", () => {
     expect(wt.agent).toBe("claude");
   });
 
+  test("a claim carries the mode, model and effort the task asked for, like a cold create does", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const wt = await w.worktrees.create(repoId, "use the spare", { mode: "plan", model: "big", effort: "high" });
+    expect(wt.kind).toBe("worktree");
+    expect([wt.mode, wt.model, wt.effort]).toEqual(["plan", "big", "high"]);
+    w.worktrees.setEffort(wt.id, "");
+    expect(w.state.requireWorktree(wt.id).effort).toBeUndefined();
+    const spare = w.state.worktrees.find((x) => x.kind === "spare");
+    if (spare) expect(() => w.worktrees.setEffort(spare.id, "high")).toThrow(UserError);
+  });
+
+  test("the warm spare is listed for the draft tab's preview, and leaves the list on claim", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    expect(w.worktrees.spares()).toEqual([{ repoId, id: spare.id, proxyPort: spare.proxyPort, ready: true }]);
+    const wt = await w.worktrees.create(repoId, "use the spare");
+    expect(w.worktrees.spares().some((s) => s.id === wt.id)).toBe(false);
+    // the next one warms in the background and says so with a frame once it is ready
+    let changed = 0;
+    w.hub.on("worktreesChanged", () => changed++);
+    await settle();
+    await settle();
+    const next = w.worktrees.spares().find((s) => s.repoId === repoId);
+    expect(next?.id).not.toBe(wt.id);
+    expect(next?.ready).toBe(true);
+    expect(changed).toBeGreaterThan(0);
+  });
+
   test("a claimed spare keeps its directory but gets a title-named link that follows renames and removal", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
@@ -665,6 +695,13 @@ describe("boot", () => {
     repos2.touch(main.id);
     await settle();
     expect(runtime2.get(main.id)?.procs).toBeTruthy();
+    // the adopted spare comes back warm with the repo: procs up, so the draft tab has a preview
+    // and a claim hands over a running worktree
+    await settle();
+    await settle();
+    const adopted = state2.worktrees.find((x) => x.kind === "spare")!;
+    expect(runtime2.get(adopted.id)?.procs).toBeTruthy();
+    expect(worktrees2.spares()).toEqual([{ repoId, id: adopted.id, proxyPort: adopted.proxyPort, ready: true }]);
     await runtime2.shutdown();
     repos2.stopWatchers();
   });

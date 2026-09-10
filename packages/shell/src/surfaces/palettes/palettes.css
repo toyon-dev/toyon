@@ -1,6 +1,13 @@
-/* The palettes' own rows and the settings and shortcuts cards. */
+/* The palettes' own rows, the settings and shortcuts cards, and the new-project form. */
 @layer tokens, base, surfaces;
 @layer surfaces {
+  /* the clone form's URL, read back as typed */
+  .new-project-url {
+    font: var(--type-mono);
+    color: var(--text1);
+    overflow-wrap: anywhere;
+    padding-top: 5px;
+  }
   /* ---- keyboard shortcuts help ---- */
   .keys-card {
     background: var(--surface1);

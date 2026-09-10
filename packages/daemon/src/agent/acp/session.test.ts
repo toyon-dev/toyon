@@ -56,6 +56,11 @@ interface FakeAgent {
   modes: string[];
   /** set_config_option calls as `<id>=<value>` */
   configs: string[];
+  /** the model and effort the fake is on, and its option list as it stands, for an update sent
+   * from inside a prompt script */
+  model: string;
+  effort: string;
+  options: () => acp.SessionConfigOption[];
   script: PromptScript;
   loadSession: boolean;
   failLoad: boolean;
@@ -74,11 +79,17 @@ function fakeAgent(
     /** commands to push from inside session/new, keyed by the id it is about to return: that is
      * when real adapters send them, before the client knows the session exists */
     commands?: Record<string, Array<{ name: string; description?: string; input?: { hint: string } }>>;
+    /** advertise an effort option (under `id`, `effort` by default) while the current model is
+     * one of `for`: Claude's shape, where effort comes and goes with the model */
+    effort?: { id?: string; for: string[] };
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
     inits: [],
     newSessions: [],
+    model: "test-model",
+    effort: "default",
+    options: () => configOptions(),
     loads: [],
     prompts: [],
     steers: [],
@@ -93,6 +104,34 @@ function fakeAgent(
     app: null!,
   };
   let n = 0;
+  const configOptions = (): acp.SessionConfigOption[] => [
+    {
+      id: "model",
+      name: "m",
+      category: "model",
+      type: "select",
+      currentValue: f.model,
+      options: [
+        { value: "test-model", name: "Test Model" },
+        { value: "big-model", name: "Big Model", description: "slower" },
+      ],
+    },
+    ...(opts.effort?.for.includes(f.model)
+      ? [
+          {
+            id: opts.effort.id ?? "effort",
+            name: "Effort",
+            category: "thought_level",
+            type: "select" as const,
+            currentValue: f.effort,
+            options: [
+              { value: "default", name: "Default" },
+              { value: "high", name: "High" },
+            ],
+          },
+        ]
+      : []),
+  ];
   const modes = opts.withModes
     ? {
         currentModeId: opts.currentMode ?? "read-only",
@@ -142,23 +181,7 @@ function fakeAgent(
           update: { sessionUpdate: "available_commands_update", availableCommands: pushed },
         });
       }
-      return {
-        sessionId: id,
-        modes,
-        configOptions: [
-          {
-            id: "model",
-            name: "m",
-            category: "model",
-            type: "select",
-            currentValue: "test-model",
-            options: [
-              { value: "test-model", name: "Test Model" },
-              { value: "big-model", name: "Big Model", description: "slower" },
-            ],
-          },
-        ],
-      };
+      return { sessionId: id, modes, configOptions: configOptions() };
     })
     .onRequest(acp.methods.agent.session.load, async (c) => {
       f.loads.push(c.params);
@@ -176,21 +199,10 @@ function fakeAgent(
     })
     .onRequest(acp.methods.agent.session.setConfigOption, (c) => {
       f.configs.push(`${c.params.configId}=${String(c.params.value)}`);
-      return {
-        configOptions: [
-          {
-            id: "model",
-            name: "m",
-            category: "model",
-            type: "select",
-            currentValue: String(c.params.value),
-            options: [
-              { value: "test-model", name: "Test Model" },
-              { value: "big-model", name: "Big Model" },
-            ],
-          },
-        ],
-      };
+      if (c.params.configId === "model") f.model = String(c.params.value);
+      else f.effort = String(c.params.value);
+      // the reply is the whole list, rebuilt: a model without effort takes that option away
+      return { configOptions: configOptions() };
     })
     .onRequest(acp.methods.agent.session.prompt, (c) => {
       f.prompts.push(c.params);
@@ -1319,17 +1331,20 @@ describe("AcpSession permission modes", () => {
   });
 });
 
-// The model: the agent's advertised choices reach the picker, and a worktree that asks for one
-// gets it set before the prompt, once, with the agent's answer kept as the truth.
-describe("AcpSession model", () => {
+// The model and the effort: the agent's advertised choices reach the picker, and a worktree that
+// asks for one gets it set before the prompt, once, with the agent's answer kept as the truth.
+describe("AcpSession options", () => {
+  const infos = (events: AgentEvent[]) =>
+    events.filter((e) => e.type === "session-info").map(({ type: _t, sessionId: _s, ...rest }) => rest);
+
   test("the choices are learned when the session opens, and the record's model is applied before the prompt", async () => {
     let learned: Array<{ id: string; name: string }> = [];
     let model: string | undefined = "big-model";
     const fake = fakeAgent(say("ok"));
     const w = world(fake, claudeSpec, 60_000, undefined, {
-      model: () => model,
-      onModelsLearned: (m) => {
-        learned = m;
+      option: (c) => (c === "model" ? model : undefined),
+      onOptionsLearned: (c, m) => {
+        if (c === "model") learned = m;
       },
     });
     w.session.send("one");
@@ -1337,10 +1352,7 @@ describe("AcpSession model", () => {
     expect(learned.map((m) => m.id)).toEqual(["test-model", "big-model"]);
     expect(fake.configs).toEqual(["model=big-model"]);
     // the switch is visible in the transcript, and not asked for again while it holds
-    expect(w.events.filter((e) => e.type === "session-info").map((e) => (e as { model?: string }).model)).toEqual([
-      "test-model",
-      "big-model",
-    ]);
+    expect(infos(w.events)).toEqual([{ model: "test-model" }, { model: "big-model" }]);
     w.session.send("two");
     await w.idle();
     expect(fake.configs).toEqual(["model=big-model"]);
@@ -1354,6 +1366,70 @@ describe("AcpSession model", () => {
     w.session.send("four");
     await w.idle();
     expect(fake.configs).toEqual(["model=big-model"]);
+    await w.session.close();
+  });
+
+  // Claude's id is `effort`, Codex's is `reasoning_effort`: the category is what toyon reads
+  for (const id of ["effort", "reasoning_effort"]) {
+    test(`effort (${id}) is applied after the model, from the list the model switch came back with`, async () => {
+      const learned = new Map<string, string[]>();
+      const fake = fakeAgent(say("ok"), { effort: { id, for: ["big-model"] } });
+      const w = world(fake, claudeSpec, 60_000, undefined, {
+        option: (c) => (c === "model" ? "big-model" : "high"),
+        onOptionsLearned: (c, m) =>
+          learned.set(
+            c,
+            m.map((x) => x.id),
+          ),
+      });
+      w.session.send("one");
+      await w.idle();
+      // the session opened on test-model, which has no effort: the switch brought the option in
+      expect(fake.configs).toEqual(["model=big-model", `${id}=high`]);
+      expect(infos(w.events)).toEqual([
+        { model: "test-model" },
+        { model: "big-model", effort: "default" },
+        { model: "big-model", effort: "high" },
+      ]);
+      expect(learned.get("thought_level")).toEqual(["default", "high"]);
+      w.session.send("two");
+      await w.idle();
+      expect(fake.configs).toEqual(["model=big-model", `${id}=high`]);
+      await w.session.close();
+    });
+  }
+
+  test("an effort the current model has not got is left alone, and the agent's own change is absorbed", async () => {
+    let effort: string | undefined = "high";
+    const fake: FakeAgent = fakeAgent(
+      async (p, client) => {
+        // the agent switches its own effort mid-turn (a slash command would)
+        fake.effort = "default";
+        await client.notify(acp.methods.client.session.update, {
+          sessionId: p.sessionId,
+          update: { sessionUpdate: "config_option_update", configOptions: fake.options() },
+        });
+        return { stopReason: "end_turn" };
+      },
+      { effort: { for: ["test-model"] } },
+    );
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      option: (c) => (c === "thought_level" ? effort : undefined),
+    });
+    w.session.send("one");
+    await w.idle();
+    expect(fake.configs).toEqual(["effort=high"]);
+    // the update is the truth now: the next turn asks for high again, since the record still says so
+    expect(infos(w.events).at(-1)).toEqual({ model: "test-model", effort: "default" });
+    w.session.send("two");
+    await w.idle();
+    expect(fake.configs).toEqual(["effort=high", "effort=high"]);
+    // a level the list lacks is not sent
+    effort = "max";
+    fake.effort = "default";
+    w.session.send("three");
+    await w.idle();
+    expect(fake.configs).toEqual(["effort=high", "effort=high"]);
     await w.session.close();
   });
 });

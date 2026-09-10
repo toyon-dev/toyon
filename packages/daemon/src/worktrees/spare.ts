@@ -40,6 +40,12 @@ export class SparePool {
 
   constructor(private d: SparePoolDeps) {}
 
+  /** the repo's spare as the pool sees it: null before a warm-up has a record */
+  current(repoId: string): { worktreeId: string; ready: boolean } | null {
+    const entry = this.spares.get(repoId);
+    return entry?.worktreeId ? { worktreeId: entry.worktreeId, ready: entry.ready } : null;
+  }
+
   /** Take over a spare persisted by a previous daemon run, without touching it: bookkeeping only,
    * so boot stays cheap. Stale extras are removed. `warm` is what brings it up to date. */
   adopt(repoId: string) {
@@ -59,8 +65,19 @@ export class SparePool {
   /** the repo is in use: refresh its adopted spare (main may have moved while the daemon was
    * down), or warm a fresh one when there is none */
   warm(repoId: string) {
-    if (this.spares.has(repoId)) fireAndForget(repoId, this.refresh(repoId), "spare refresh");
+    if (this.spares.has(repoId)) fireAndForget(repoId, this.revive(repoId), "spare refresh");
     else fireAndForget(repoId, this.ensure(repoId), "spare warm-up");
+  }
+
+  /** an adopted spare, brought back to warm: reset onto main, then its procs and proxy up, since
+   * a spare with no preview is not warm (the draft tab shows it, and a claim hands it over as is;
+   * before this the procs waited for the first subscribe after the claim) */
+  private async revive(repoId: string): Promise<void> {
+    await this.refresh(repoId);
+    const entry = this.spares.get(repoId);
+    const wt = entry?.ready ? this.d.state.worktree(entry.worktreeId) : undefined;
+    if (wt?.kind !== "spare" || this.d.runtime.get(wt.id)?.procs) return;
+    await this.d.runtime.start(wt, this.d.state.requireRepo(repoId));
   }
 
   async ensure(repoId: string): Promise<void> {
@@ -91,6 +108,8 @@ export class SparePool {
       await this.d.setupAndStart(wt, repo); // CoW deps + setup + warm servers
       entry.lockHash = lockfileHash(wt.path);
       entry.ready = true;
+      // the frame that says the spare is ready: the runtime's own emit went out before this flag
+      this.d.hub.emit("worktreesChanged");
     } catch (e) {
       log.warn(repoId, "spare warm-up failed; rolling back", e);
       this.spares.delete(repoId);

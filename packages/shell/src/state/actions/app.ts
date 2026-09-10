@@ -22,7 +22,7 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       id: "new",
       label: "new worktree…",
       key: chord("new"),
-      onClick: () => dispatch({ a: "open", overlay: { kind: "prompt" } }),
+      onClick: () => dispatch({ a: "open-draft" }),
     });
     go.push({
       id: "refs",

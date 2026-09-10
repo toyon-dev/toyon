@@ -1,12 +1,11 @@
 import { useStore } from "../../state/context.tsx";
 import { useActiveId, useOverlay } from "../../state/selectors.ts";
-import { NewProjectOverlay } from "../prompt/NewProjectOverlay.tsx";
-import { PromptOverlay } from "../prompt/PromptOverlay.tsx";
 import { AgentPage } from "./AgentPage.tsx";
 import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
+import { NewProjectOverlay } from "./NewProjectOverlay.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import { RefPicker } from "./RefPicker.tsx";
@@ -31,7 +30,6 @@ export function Overlays() {
       {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "agent-page" && <AgentPage agentId={overlay.agent} />}
       {overlay?.kind === "commands" && <CommandPalette />}
-      {overlay?.kind === "prompt" && <PromptOverlay />}
       {overlay?.kind === "projects" && overlay.dialog && <ProjectPicker dialog />}
       {overlay?.kind === "new-project" && <NewProjectOverlay overlay={overlay} />}
     </>

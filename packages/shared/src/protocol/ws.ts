@@ -17,6 +17,7 @@ import type {
   PendingRepo,
   RefHit,
   RepoInfo,
+  SpareInfo,
   Theme,
   ThemePrefs,
   ToyonConfig,
@@ -47,6 +48,7 @@ export type ServerMsg =
       /** every row: toyon's own worktrees first, in its order, then the ones git knows about that
        * toyon did not create; see the `worktrees` frame */
       rows: WorktreeStatus[];
+      spares: SpareInfo[];
       themes: Theme[];
       themePrefs: ThemePrefs;
       /** the daemon's agent registry and which entry new worktrees get by default */
@@ -70,8 +72,9 @@ export type ServerMsg =
    * only `target` separates the two */
   | { t: "path-entries"; query: string; entries: PathEntry[]; target: PathTarget }
   /** One array, owned and found rows alike: take-over turns a row owned, and were the two kinds
-   * to travel in separate frames the rail would show it twice or not at all in between. */
-  | { t: "worktrees"; rows: WorktreeStatus[] }
+   * to travel in separate frames the rail would show it twice or not at all in between. The
+   * spares ride beside the rows rather than among them: see SpareInfo. */
+  | { t: "worktrees"; rows: WorktreeStatus[]; spares: SpareInfo[] }
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
   | { t: "log"; worktreeId: string; proc: string; line: string }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
@@ -250,12 +253,16 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     mode: permissionModeSchema.optional(),
     /** one of the agent's advertised model ids; its own default when absent */
     model: z.string().max(200).optional(),
+    /** one of the agent's advertised effort levels; its own default when absent */
+    effort: z.string().max(100).optional(),
   }),
   z.object({ t: z.literal("batch-worktrees"), repoId: id, prompt, agent: id.optional() }),
   /** change what the agent may do here without asking; takes effect on its next turn */
   z.object({ t: z.literal("set-worktree-mode"), worktreeId: id, mode: permissionModeSchema }),
   /** ask the agent to run another of its models here; takes effect on its next turn */
   z.object({ t: z.literal("set-worktree-model"), worktreeId: id, model: z.string().max(200) }),
+  /** ask the agent to run at another of its effort levels here; takes effect on its next turn */
+  z.object({ t: z.literal("set-worktree-effort"), worktreeId: id, effort: z.string().max(100) }),
   /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),

@@ -142,7 +142,7 @@ export type AgentEvent =
    * the session's spend so far when the agent prices itself (Claude does; a rate-limit notice
    * carries no cost). Cumulative on purpose: a turn's cost is the difference from the last one. */
   | { type: "usage"; used: number; size: number; cost?: number; ts: number }
-  | { type: "session-info"; sessionId: string; model?: string }
+  | { type: "session-info"; sessionId: string; model?: string; effort?: string }
   | { type: "agent-error"; message: string; ts: number }
   /** the turn was refused for want of credentials; the shell offers the methods as buttons.
    * `rejected` distinguishes "the credential it has was refused" from "it has none" — the second

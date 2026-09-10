@@ -15,8 +15,11 @@ export interface PersistedState {
    * function of the repo's .claude/ plus the user's settings, so the last one is a good guess and
    * beats an empty menu on every worktree until the first prompt. */
   commandCache?: Record<string, AgentCommand[]>;
-  /** the models each agent advertised the last time one of its sessions opened, keyed by agent
-   * id, so the picker has a list before a worktree's own session exists */
+  /** the select choices each agent last advertised per ACP option category (`model`,
+   * `thought_level`), keyed by agent id, so a picker has a list before a worktree's own session
+   * exists */
+  optionCache?: Record<string, Record<string, ModelChoice[]>>;
+  /** the shape before optionCache; read once at load and folded in */
   modelCache?: Record<string, ModelChoice[]>;
   /** shell theme selection (shared by every browser that connects) */
   theme?: ThemePrefs;
@@ -54,6 +57,14 @@ export function loadState(paths: Paths): PersistedState {
   // sessions belong to worktrees; a removed worktree's entry is an orphan
   const ids = new Set(state.worktrees.map((w) => w.id));
   for (const id of Object.keys(state.sessions)) if (!ids.has(id)) delete state.sessions[id];
+  if (state.modelCache) {
+    state.optionCache ??= {};
+    for (const [agentId, models] of Object.entries(state.modelCache)) {
+      state.optionCache[agentId] ??= {};
+      state.optionCache[agentId].model ??= models;
+    }
+    delete state.modelCache;
+  }
   return state;
 }
 
@@ -170,14 +181,16 @@ export class StateStore {
     this.save();
   }
 
-  cachedModels(agentId: string): ModelChoice[] {
-    return this.state.modelCache?.[agentId] ?? [];
+  /** `category` is an ACP config option category; core sits below agent/, so it is a string here */
+  cachedOptions(agentId: string, category: string): ModelChoice[] {
+    return this.state.optionCache?.[agentId]?.[category] ?? [];
   }
   /** returns whether the list changed, so the caller can skip a broadcast that says nothing new */
-  setCachedModels(agentId: string, models: ModelChoice[]): boolean {
-    if (JSON.stringify(this.cachedModels(agentId)) === JSON.stringify(models)) return false;
-    this.state.modelCache ??= {};
-    this.state.modelCache[agentId] = models;
+  setCachedOptions(agentId: string, category: string, choices: ModelChoice[]): boolean {
+    if (JSON.stringify(this.cachedOptions(agentId, category)) === JSON.stringify(choices)) return false;
+    this.state.optionCache ??= {};
+    this.state.optionCache[agentId] ??= {};
+    this.state.optionCache[agentId][category] = choices;
     this.save();
     return true;
   }

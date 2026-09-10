@@ -1,6 +1,7 @@
 import { isOwned, type RepoInfo } from "@toyon/shared";
 import { useEffect, useState } from "react";
-import { useSock, useStore } from "../../state/context.tsx";
+import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { openSource } from "../../state/openSource.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
@@ -23,6 +24,7 @@ const proc = (name: string, cmd: string): Proc => ({ id: nextProcId++, name, cmd
  * to start, and the agent when the detector found nothing and nothing has been typed yet. */
 export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => void }) {
   const sock = useSock();
+  const store = useStoreInstance();
   // the repo's main worktree is where the agent writes toyon.json: the daemon watches that copy
   const main = useStore(
     (s) => s.rows.find((r) => isOwned(r) && r.repoId === repo.id && r.worktree.kind === "main") ?? null,
@@ -120,6 +122,21 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
           hint={
             <>
               must listen on <code {...tip("toyon sets a different port for each worktree")}>$PORT</code>
+              {/* where the guess came from, and the way to it: the file opens in the editor pane
+                  under this card, so the script the person meant is a copy and a paste away */}
+              {repo.guess && main && (
+                <>
+                  {" · from "}
+                  <Button
+                    mono
+                    tone="quiet"
+                    {...tip(`open ${repo.guess} in the editor pane`)}
+                    onClick={() => openSource(store, sock, main.id, repo.guess ?? "", 1)}
+                  >
+                    {repo.guess}
+                  </Button>
+                </>
+              )}
             </>
           }
         >

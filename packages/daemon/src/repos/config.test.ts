@@ -23,7 +23,12 @@ describe("detectConfig", () => {
     expect(d).toEqual({
       config: { procs: { web: "bun run dev", api: "bun run dev:api" }, setup: ["bun install"] },
       needsSetup: true,
+      from: "package.json",
     });
+    // a repo with nothing to read names no file; a confirmed file is not a guess
+    expect(detectConfig(repo({ "README.md": "" })).from).toBeUndefined();
+    expect(detectConfig(repo({ "toyon.json": JSON.stringify({ procs: {} }) })).from).toBeUndefined();
+    expect(detectConfig(repo({ "start.sh": "" })).from).toBe("start.sh");
   });
 
   test("a vite script gets the port flag, since vite never reads $PORT; npm needs the `--`", () => {
@@ -64,6 +69,7 @@ describe("detectConfig", () => {
         setup: ["npm install"],
       },
       needsSetup: true,
+      from: "package.json",
     });
   });
 

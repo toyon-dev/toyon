@@ -7,6 +7,9 @@ export interface DetectedConfig {
   config: ToyonConfig;
   /** false when read from toyon.json (user-authored = confirmed) */
   needsSetup: boolean;
+  /** the file the guess was read from, relative to the root: what the setup pane offers to open
+   * so the person can copy the script they meant. Absent for a confirmed file or an empty guess. */
+  from?: string;
 }
 
 export type ConfigFile = { ok: true; config: ToyonConfig } | { ok: false; reason: string } | null;
@@ -41,7 +44,10 @@ export function detectConfig(repoPath: string): DetectedConfig {
     const scripts: Record<string, string> = pkg.scripts ?? {};
     const runner = detectRunner(repoPath, pkg.packageManager);
     const pages = detectPages(repoPath, scripts, runner);
-    if (pages) return { config: { procs: pages, setup: [`${runner} install`] }, needsSetup: true };
+    // the pages command is built from the wrangler file, but the scripts a person would copy from
+    // are package.json's
+    if (pages)
+      return { config: { procs: pages, setup: [`${runner} install`] }, needsSetup: true, from: "package.json" };
     const procs: Record<string, string> = {};
     // `dev` is the vite/next convention, `start` the CRA/yarn one; a repo with both means dev
     if (scripts.dev) procs.web = procCommand(runner, "dev", scripts.dev);
@@ -51,12 +57,13 @@ export function detectConfig(repoPath: string): DetectedConfig {
       return {
         config: { procs, setup: [`${runner} install`] },
         needsSetup: true,
+        from: "package.json",
       };
     }
   }
 
   if (existsSync(join(repoPath, "start.sh"))) {
-    return { config: { procs: { app: "./start.sh" } }, needsSetup: true };
+    return { config: { procs: { app: "./start.sh" } }, needsSetup: true, from: "start.sh" };
   }
 
   return { config: { procs: {} }, needsSetup: true };

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
 import { cx } from "./cx.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { Spinner } from "./Spinner.tsx";
@@ -104,7 +104,8 @@ export function Button({
 
 type IconProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "aria-label"> &
   Shared & {
-    icon: IconName;
+    /** an Icon by name, or a drawn glyph that takes a value (a Ring's fraction) and so cannot be one */
+    icon: IconName | ReactElement;
     /**
      * What the control does, as a sentence a person reads. Required, because an icon on its own
      * says nothing to a screen reader and 20 of the 26 icon-only buttons here had no name until
@@ -113,6 +114,8 @@ type IconProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "ari
     label: string;
     /** shortcut shown set apart in the tooltip, and folded into the accessible name */
     hint?: string;
+    /** a second line under the tooltip's text: the figures behind a gauge */
+    detail?: string;
     /** a mark over the glyph's corner, positioned by the caller's class: the composer's terminal
      * button wears a dot while a proc is down. A slot rather than children, so the glyph stays the
      * one thing an icon button draws. */
@@ -120,11 +123,22 @@ type IconProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "ari
   };
 
 /** A 20px square glyph control: a pane's close, a toolbar switch, a chip's remove. */
-export function IconButton({ icon, label, hint, badge, tone, on, className, type = "button", ...rest }: IconProps) {
+export function IconButton({
+  icon,
+  label,
+  hint,
+  detail,
+  badge,
+  tone,
+  on,
+  className,
+  type = "button",
+  ...rest
+}: IconProps) {
   const cls = cx("btn-icon", tone && TONE[tone], on && "on", className);
   return (
-    <button className={cls} type={type} {...tip(label, hint)} {...rest}>
-      <Icon name={icon} />
+    <button className={cls} type={type} {...tip(label, hint, { detail })} {...rest}>
+      {typeof icon === "string" ? <Icon name={icon} /> : icon}
       {badge}
     </button>
   );

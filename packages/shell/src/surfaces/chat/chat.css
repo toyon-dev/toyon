@@ -544,14 +544,6 @@
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
   /* a crashed proc in this worktree, badged on the terminal button: the only status this row shows,
    and only because the tab that explains it is one click away */
-  /* context fill by the tools: the ring is an Icon's size in the same 20px box the buttons take,
-   so the row reads as one strip; the figures are its tip */
-  .composer-ring {
-    display: grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-  }
   .composer-term {
     position: relative;
   }

@@ -45,10 +45,22 @@
     text-align: left;
   }
 
+  /* The control column. Every label in the panel starts one gap after it, and what sits in it says
+   what the row is: the plus on "new worktree", the caret on "discovered", the kebab on a worktree
+   row while the pointer is on it, the checkbox while a graft is being picked. It is also as far as
+   the row gets from the dot, which matters: the peek unfurls from under a pointer resting on the
+   dot, and this is where a control can sit without a small drift landing on it. */
+  .rail-gut {
+    width: 30px;
+    flex-shrink: 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   /* an idle control is an idle control: the same rest tier as .btn and .btn-icon */
   .rail-new {
     color: var(--text1);
-    padding: 6px 12px;
     text-align: left;
     width: 100%;
     display: flex;
@@ -78,14 +90,27 @@
     pointer-events: none;
     margin: 0;
   }
-  /* badges and the kebab belong to both kinds of row: a found worktree's counts are as real as an
-   owned one's, and the menu is where it is taken over */
+  /* The counts: one fixed column per kind, dirty then behind then ahead, right-aligned tabular
+   digits, so the numbers form straight edges down the list and the column says which is which.
+   They are read, not pressed (see .badge-* in base.css): the verbs live in the row menu. */
+  .rail-counts {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    /* the counts tick live; `font` resets the variant */
+    font: var(--type-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .rail-count {
+    width: 3ch;
+    text-align: right;
+  }
+  /* the word badges and the kebab belong to both kinds of row: a found worktree's marks are as real
+   as an owned one's, and the menu is where it is taken over */
   .rail-item,
   .rail-disc-item {
     & .rail-badge {
-      /* ahead/behind/dirty tick live; `font` above reset the variant */
       font: var(--type-mono);
-      font-variant-numeric: tabular-nums;
       flex-shrink: 0;
     }
     & .rail-badge.clickable {
@@ -106,9 +131,10 @@
     }
     & .rail-more {
       visibility: hidden;
-      padding: 0 2px;
+      padding: 2px;
       border-radius: var(--radius-xs);
-      flex-shrink: 0;
+      /* the 13px glyph in a 17px box, so its dots sit on the column's centre line with the plus */
+      display: flex;
     }
     &:hover .rail-more {
       visibility: visible;
@@ -131,7 +157,9 @@
   /* ---- far-right worktree rail: 40px dot strip, hover peeks the full panel
    as an overlay (no reflow), pin (« ») keeps it wide ---- */
   .rail {
-    --rail-width: 232px;
+    /* the control column, a name, three count columns and the dot: 280 is where a sixteen-letter
+     branch name fits with all three columns drawn */
+    --rail-width: 280px;
     /* the list sits inside the panel's 1px left border, so both states line up on the same pixel */
     --rail-inner: calc(var(--rail-width) - 1px);
     /* x of the panel's left edge within a row: the strip's edge collapsed, the row's own edge open */
@@ -189,8 +217,8 @@
     }
   }
   /* the list is always the full width and pinned to the right edge; the peek only widens the window
-   onto it (the panel clips the rest). Laying the rows out twice — once for 40px, once for 232 —
-   is what made the dots swing and the labels wrap halfway through the animation. */
+   onto it (the panel clips the rest). Laying the rows out twice — once for 40px, once for the
+   open width — is what made the dots swing and the labels wrap halfway through the animation. */
   .rail-list {
     position: absolute;
     top: 0;
@@ -249,9 +277,11 @@
       width: 100%;
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 0 16px 0 12px;
-      margin-top: 6px;
+      gap: 8px;
+      padding: 0 16px 0 0;
+      /* a section's worth of air above it, not a row's: at 6px it read as one more row under
+       "new worktree" */
+      margin-top: 14px;
       font: var(--type-ui-sm);
       color: var(--text2);
       text-align: left;
@@ -275,8 +305,10 @@
     &.pinned .rail-disc-item {
       display: flex;
       /* the same padding and edge-marker anchoring as .rail-item: these rows sit in the same column and
-     their dots have to land on the same centre line. Height and the rest come from .row. */
-      padding: 0 16px 0 12px;
+     their dots have to land on the same centre line. A rung down in height as well as colour,
+     because these are not main's peers and nine of them should not outweigh one of yours. */
+      padding: 0 16px 0 0;
+      min-height: var(--row-height-sm);
       --row-edge-x: var(--rail-edge, 0px);
     }
   }
@@ -315,12 +347,13 @@
     }
     /* identical row heights in both modes, and the dot keeps its x too: 20px from the right edge, the
    centre of the collapsed strip. The peek then unfurls leftward from under the pointer that opened
-   it, so the pointer is still resting on the row and not on the "…" that used to slide under it.
-   Everything clickable stays left of the strip: 12px of margin plus the row's 8px gap. */
+   it, so the pointer is still resting on the row. Nothing beside the dot is pressable: the counts
+   are read and the kebab is in the control column at the far left, so a drift while the panel
+   opens has nothing to land on but the row itself. */
     & .rail-item {
       height: var(--row-height);
       /* the dot keeps its x: 20px from the right edge, the centre of the collapsed strip */
-      padding: 0 16px 0 12px;
+      padding: 0 16px 0 0;
     }
     & .rail-item .dot,
     & .rail-disc-item .dot,
@@ -350,20 +383,17 @@
   .rail {
     & .rail-new {
       height: var(--row-height);
-      padding: 0 12px;
+      padding: 0 12px 0 0;
       display: flex;
       align-items: center;
+      /* the row idiom's gap, so the label starts where the worktree names do */
+      gap: 8px;
     }
   }
   /* the label takes the slack, so the hint and the glyph sit against the right edge */
   .rail-label {
     flex: 1;
     text-align: left;
-  }
-  .rail-new {
-    & .rail-new-plus {
-      margin-right: 8px;
-    }
   }
   /* 4px in from the row's own padding, which lands the hint on the dots' right edge */
   .rail {

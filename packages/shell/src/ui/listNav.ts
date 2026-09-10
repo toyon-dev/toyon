@@ -12,6 +12,19 @@ export function step(i: number, delta: number, n: number): number {
   return n === 0 ? 0 : (i + delta + n) % n;
 }
 
+/** typeahead: the next row after `from` whose label starts with `ch`, wrapping, so pressing the
+ * same letter again walks the rows that share it; -1 when none does. `from` may be -1 for "no row
+ * yet", which is where a menu opened with the mouse starts. */
+export function jumpTo(labels: string[], from: number, ch: string): number {
+  const n = labels.length;
+  const c = ch.toLowerCase();
+  for (let k = 1; k <= n; k++) {
+    const j = (Math.max(from, -1) + k) % n;
+    if (labels[j]?.trim().toLowerCase().startsWith(c)) return j;
+  }
+  return -1;
+}
+
 /** the tail of what the active row would complete `q` to, or null. A case-insensitive match must
  * not repaint the typed part, so this is only ever the part past what was typed. */
 export function ghostOf(completion: string | null | undefined, q: string): string | null {

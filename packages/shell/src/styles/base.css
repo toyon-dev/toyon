@@ -113,8 +113,12 @@
     min-height: var(--row-height-sm);
     font: var(--type-mono);
   }
+  /* .menu-open is the hover held: the row whose context menu is up keeps its lifted seat and its
+   lifted text after the pointer has left it for the menu, or the text falls back to text1 on a
+   seat that did not, and the row you are acting on is the hardest one to read */
   .row {
-    &:hover {
+    &:hover,
+    &.menu-open {
       background: var(--element0);
       color: var(--text0);
     }
@@ -142,7 +146,8 @@
   }
   .row-quiet {
     color: var(--text2);
-    &:hover {
+    &:hover,
+    &.menu-open {
       color: var(--text1);
     }
   }

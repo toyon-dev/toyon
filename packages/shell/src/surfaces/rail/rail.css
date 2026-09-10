@@ -72,7 +72,7 @@
   .rail-new {
     & .rail-new-kbd {
       margin-left: auto;
-      color: var(--text2);
+      color: var(--text1);
       opacity: 0;
       transition: opacity 0.1s;
     }
@@ -418,8 +418,17 @@
       margin-right: 4px;
     }
   }
-  /* the strip's plus fades out as the one beside the label comes into view */
+  /* the strip's plus fades out as the one beside the label comes into view. It sits over the dot
+   column out of the flow, so the chord hint takes the row's right edge instead of stopping short
+   of an invisible glyph. */
   .rail-new-strip {
+    position: absolute;
+    right: 12px;
+    top: 0;
+    bottom: 0;
+    margin-left: 0;
+    display: flex;
+    align-items: center;
     transition: opacity 0.12s ease 120ms;
   }
   .rail {

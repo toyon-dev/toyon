@@ -32,6 +32,11 @@
       padding: 12px 24px 12px;
     }
   }
+  /* a section that reads better wide than in a column: the agents, whose rows are few and whose
+   chips open pages */
+  .keys-span {
+    grid-column: 1 / -1;
+  }
   /* a chip holding a list (the project's processes) gives way before its column does: the chip
    shrinks and its label truncates, so a fourth process never widens the card */
   .keys-chip {

@@ -128,6 +128,10 @@ export function PromptOverlay() {
         ...(model ? { model } : {}),
       });
     }
+    // the box remembers what it last started with, the way its mode and model chips do; the
+    // agent is the daemon's default rather than this browser's so a spare or an adopted worktree
+    // gets the same one. Settings has no row for it because this is where it is chosen.
+    if (agent !== defaultAgent) sock?.send({ t: "set-default-agent", agent });
     dispatch({ a: "close" });
     // the agent starts talking in the chat panel — make sure it's on screen
     if (!rightOpen) dispatch({ a: "toggle-right" });

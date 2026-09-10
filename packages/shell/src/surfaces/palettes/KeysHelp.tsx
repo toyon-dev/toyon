@@ -20,7 +20,8 @@ const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
  * settings live here as well as in the palette; esc from a picker opened here comes back. The
  * settings card is the shortcut card's grid: sections in two columns, so the two read as one
  * shape, and a row means what its section says (a row under Agents is an agent, not a
- * preference). The project leads the left column, then its agents; appearance is the right. */
+ * preference). The project is top left, appearance top right, and the agents span the card
+ * under them. */
 export function KeysHelp() {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -29,7 +30,6 @@ export function KeysHelp() {
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
   const agents = useStore((s) => s.agents);
-  const defaultAgent = useStore((s) => s.defaultAgent);
   const repo = useActiveRepo();
   const open = (a: Action) => {
     dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
@@ -60,18 +60,6 @@ export function KeysHelp() {
               </div>
             </>
           )}
-          <div className="section-title keys-h">Agents</div>
-          <div className="keys-setting">
-            <span className="keys-d">default</span>
-            <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "agent" } })}>
-              {agents.find((a) => a.id === defaultAgent)?.name ?? defaultAgent}
-            </Button>
-          </div>
-          {/* per agent: who it is logged in as, so a refused or stale credential is fixable here
-              rather than only in the terminal that wrote it */}
-          {agents.map((a) => (
-            <AgentRow key={a.id} agent={a} />
-          ))}
         </div>
         <div>
           <div className="section-title keys-h">Appearance</div>
@@ -89,6 +77,16 @@ export function KeysHelp() {
               {resolveTheme(prefs, themes, systemDark).name}
             </Button>
           </div>
+        </div>
+        {/* the agents, across the card under the two: one row each, who it is logged in as, so a
+            refused or stale credential is fixable here rather than only in the terminal that
+            wrote it. No default row: which agent, mode and model a new worktree gets is chosen in
+            the box that starts it, and the box remembers. */}
+        <div className="keys-span">
+          <div className="section-title keys-h">Agents</div>
+          {agents.map((a) => (
+            <AgentRow key={a.id} agent={a} />
+          ))}
         </div>
       </div>
       <div className="keys-card">

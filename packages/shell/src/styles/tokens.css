@@ -67,6 +67,11 @@
      the theme's to name (Theme.accent, orange unless it says otherwise) and applyTheme
      overwrites this, so every other theme keeps selecting in orange. */
     --accent: var(--red);
+    /* what a lost connection is painted in: the rail's rows and dots while the daemon is down. Warm,
+     because it is a fault, and never the accent, because it colours whole rows and a row in the
+     accent reads as selected. applyTheme overwrites this too (faultKey): orange unless the theme
+     selects in orange, then red. */
+    --fault: var(--orange);
     /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
     /* where you type: four L* under the chrome it sits in, darker in both halves. Not a ramp
      position, because the surface ramp reverses direction between them and a recess does not. */

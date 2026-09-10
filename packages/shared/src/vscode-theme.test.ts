@@ -17,6 +17,7 @@ import {
   themeColorKeys,
   themeFamilies,
   themeToCssVars,
+  toyonDark,
   vscodeDark2026,
   vscodeLight2026,
 } from "./themes.ts";
@@ -89,8 +90,11 @@ describe("color helpers", () => {
     // the word weight is the line tint's own alpha scaled, so a theme names one and gets both
     expect(v["--diff-add-word"]).toBe("#b8bb2611");
     expect(v["--accent"]).toBe(gruvboxDarkSoft.colors.orange); // no accent key: orange, as every theme did
-    // + accent, sunken, scrim, shadow, a word weight per diff tint, and the seven syntax colours
-    expect(Object.keys(v).length).toBe(themeColorKeys.length + 13);
+    // the fault paints whole rows, so it steps off the accent: red here, orange where a theme selects in red
+    expect(v["--fault"]).toBe(gruvboxDarkSoft.colors.red);
+    expect(themeToCssVars(toyonDark)["--fault"]).toBe(toyonDark.colors.orange);
+    // + accent, fault, sunken, scrim, shadow, a word weight per diff tint, and the seven syntax colours
+    expect(Object.keys(v).length).toBe(themeColorKeys.length + 14);
   });
 });
 

@@ -993,6 +993,7 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
   for (const k of themeColorKeys) out[cssVarName(k)] = theme.colors[k];
   for (const [token, color] of Object.entries(syntaxOf(theme))) out[`--syntax-${token}`] = color;
   out["--accent"] = theme.colors[accentKey(theme)];
+  out["--fault"] = theme.colors[faultKey(theme)];
   out["--sunken"] = sunkenOf(theme);
   out["--scrim"] = hex8(theme.colors.surface0, 0.7);
   out["--shadow"] = theme.kind === "dark" ? "#00000066" : "#0000002e";
@@ -1004,6 +1005,15 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
 /** the palette color a theme selects in; orange unless the theme says otherwise */
 export function accentKey(theme: Theme): ThemeColorKey {
   return theme.accent ?? "orange";
+}
+
+/** The colour of a connection we have lost: the rail while the daemon is down. It has to be a warm
+ * hue that is not the accent, because the fault paints whole rows and rows painted in the accent
+ * read as selected. Orange where the theme selects in something else; red where orange is the
+ * accent, which most imported themes leave it as. Red doubles as `crashed` there, and that is the
+ * cheaper collision: a crashed proc is a fault too, and its dot is not shown while offline. */
+export function faultKey(theme: Theme): ThemeColorKey {
+  return accentKey(theme) === "orange" ? "red" : "orange";
 }
 
 /** which slot the prefs paint right now */

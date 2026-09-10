@@ -343,17 +343,17 @@
   .rail {
     &.offline .rail-item,
     &.offline .rail-disc-item {
-      color: var(--orange);
+      color: var(--fault);
     }
     &.offline .rail-item .dot {
-      background: var(--orange);
+      background: var(--fault);
       animation: none;
       box-shadow: none;
     }
     /* the hollow dot keeps its shape offline; it is a ring, so blanking box-shadow would erase it */
     &.offline .rail-disc-item .dot.discovered {
       background: none;
-      box-shadow: inset 0 0 0 1px var(--orange);
+      box-shadow: inset 0 0 0 1px var(--fault);
     }
     /* identical row heights in both modes, and the dot keeps its x too: 20px from the right edge, the
    centre of the collapsed strip. The peek then unfurls leftward from under the pointer that opened

@@ -18,7 +18,9 @@ export function importItems(p: PendingRepo, { sock, dispatch }: Deps): MenuEntry
   ];
 }
 
-/** a project: switch to it, then run its setup again or take it off the list */
+/** a project: switch to it, then change how it runs or take it off the list. The setup pane is
+ * the form for the install and start commands, and what it writes is toyon.json, so the line
+ * says both rather than "set up", which named neither. */
 export function projectItems(r: RepoInfo, activeRepoId: string | null, { sock, dispatch }: Deps): MenuEntry[] {
   const go: MenuItem[] = [];
   if (r.id !== activeRepoId) {
@@ -31,8 +33,8 @@ export function projectItems(r: RepoInfo, activeRepoId: string | null, { sock, d
   const manage: MenuItem[] = [
     {
       id: `setup:${r.id}`,
-      label: `set up ${r.name}…`,
-      detail: "install + start",
+      label: `install + start commands for ${r.name}…`,
+      detail: "edits toyon.json",
       onClick: () => dispatch({ a: "open", overlay: { kind: "setup", repoId: r.id } }),
     },
     {

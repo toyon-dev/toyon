@@ -1,8 +1,6 @@
 # Toyon
 
-Every worktree gets its own agent and a live preview. Run several at once, land the one you like, from the browser.
-
-Toyon is a browser-first workbench for parallel AI coding agents: `npx toyon` in any repo starts a local daemon that manages git worktrees (one chat per worktree), runs each worktree's dev servers, and shows them live in a Zed-minimal browser UI. Switch worktrees like tabs; each one is a running version of your app with its own agent.
+One chat per git worktree, every worktree running live in the browser. Run several agents on the same repo at once, watch each one's app as it builds, and land the one you like.
 
 **Status: pre-alpha, building in the open.** macOS today; Linux next. Expect rough edges, and say so in an issue.
 
@@ -13,7 +11,17 @@ cd your-repo
 npx toyon
 ```
 
-Needs git and Node 18 or newer; bun comes with the package. `npm i -g toyon` puts `toyon` on your PATH for good, after which `toyon`, `toyon .` and `toyon ~/projects/app` all open a project. `toyon --help` lists the rest: `stop`, `doctor`, `logs`, `version`.
+Needs git and Node 18 or newer. bun comes with the package. `npm i -g toyon` puts `toyon` on your PATH for good, after which `toyon`, `toyon .` and `toyon ~/projects/app` all open a project. `toyon --help` lists the rest: `stop`, `doctor`, `logs`, `version`.
+
+Agents: Claude Code and Codex, each through its own login. Toyon installs the adapters on first start and asks you to sign in from the chat when one is needed.
+
+## What you get
+
+- **A worktree per task.** Type what you want; toyon makes a branch and a worktree, clones the dependencies, starts the dev servers and opens an agent in it. A warm spare means the next one starts in seconds.
+- **Every worktree live.** Each one runs its own servers behind its own preview URL. Switch between them like tabs; each keeps its state and HMR socket while hidden.
+- **Variants.** One prompt, several worktrees, side by side. Point at an element in a preview to talk about it.
+- **Land from the browser.** Diff against main, commit, merge or open a PR, remove the worktree. Nothing is committed or pushed without you.
+- **The rest of the loop.** A terminal per worktree, quick-open and search, a diff you can edit, a design pane that maps the page back to your tokens and components, themes including your VS Code ones, and an installable app window.
 
 ## How it works
 
@@ -26,17 +34,19 @@ browser (shell UI) ──HTTP/WS──> daemon (one per machine)
                                   └─ git ops (status/diff, ref watcher)
 ```
 
-The proc contract: *run in foreground, listen on `$PORT`, reload yourself however you like.* Works with Vite, uvicorn `--reload`, `cargo watch`, or a `start.sh`.
+The proc contract: *run in foreground, listen on `$PORT`, reload yourself however you like.* Works with Vite, uvicorn `--reload`, `cargo watch`, or a `start.sh`. A `toyon.json` in the repo names the install and start commands and any profiles; the first open guesses one and asks you to confirm it.
 
-Worktrees start when you open them, not when the daemon boots. `toyon stop` stops the daemon and everything it runs; `toyon doctor` says what is running and why a page cannot connect.
+Worktrees start when you open them, not when the daemon boots. `toyon stop` stops the daemon and everything it runs. `toyon doctor` says what is running and why a page cannot connect.
 
 ## What it does not do
 
-Toyon never commits, pushes, or opens a pull request on its own. Landing a worktree is a button you press, and the agent is told not to push or delete branches. It does not replace your editor: there is a diff, quick-open and search, and a one-keystroke jump to the editor you already use.
+- It is not an editor. There is no file tree, no tabs, no multi-file editing, no debugger, no extensions, no inline completion. The diff is editable and there is a one-keystroke jump to the editor you already use.
+- It does not commit, push or open pull requests on its own. Landing is a button you press, and the agent is told not to push or delete branches.
+- It is for git repos. The nouns are git's nouns on purpose.
 
 ## Disk
 
-Each worktree is a real `git worktree` under `~/.toyon/worktrees.noindex`, with its own `node_modules`. That directory is cloned from the main checkout with copy-on-write where the filesystem has it: `cp -c` on APFS, `--reflink=auto` on btrfs and XFS, so a new worktree costs seconds and almost no space until files diverge. On ext4 and other filesystems without reflinks it is a plain recursive copy, and each worktree costs a full `node_modules`. The setup log says which path ran (`deps via clonefile`, `reflink`, or `copy`). Landed worktrees are offered for removal; nothing is deleted without you.
+Each worktree is a real `git worktree` under `~/.toyon/worktrees.noindex` with its own `node_modules`, cloned from the main checkout with copy-on-write where the filesystem has it: `cp -c` on APFS, `--reflink=auto` on btrfs and XFS. A new worktree then costs seconds and almost no space until files diverge. On ext4 and other filesystems without reflinks it is a plain copy, and each worktree costs a full `node_modules`. The setup log says which path ran. Landed worktrees are offered for removal; nothing is deleted without you.
 
 ## Trust
 
@@ -50,22 +60,19 @@ One honest gap: a linked worktree's commits write into the main repo's shared `.
 
 ```sh
 bun install
-bun run daemon          # start the daemon
-bun run shell:dev       # shell UI dev server
+bun run daemon          # start the daemon from source
+bun run shell:dev       # shell UI dev server with HMR
+bun run check           # typecheck, lint, tests, bridge size gate
 ```
 
-`bun run check` (typecheck, lint, tests, bridge size gate) is the bar for every commit, and CI runs it on every pull request.
+`check` is the bar for every commit, and CI runs it on every pull request. `bun run pack` assembles the npm package under `packages/cli/dist`, which is what `npm publish` ships.
 
 ### Toyon in toyon
 
-This repo carries a `toyon.json`, so you can open it as a project in toyon and get a working
-toyon in the preview. The `dev` profile runs the nested daemon on the port the supervisor hands
-it, with its own state under `~/.toyon-dev/<worktree>`, and previews the Vite shell against it.
-The `built` profile builds the shell and previews the daemon serving it, which is what a user
-gets. Pick one per worktree in the profile menu.
+This repo carries a `toyon.json`, so you can open it as a project in toyon and get a working toyon in the preview. The `dev` profile runs the nested daemon on the port the supervisor hands it, with its own state under `~/.toyon-dev/<worktree>`, and previews the Vite shell against it. The `built` profile builds the shell and previews the daemon serving it, which is what a user gets. Pick one per worktree in the profile menu.
 
-The nested shell needs the nested daemon's token once per worktree. It is printed in the `daemon`
-proc's tab at startup; open the preview URL in its own tab with that `#token=` fragment on the
-end, and the browser keeps it for that origin from then on.
+The nested shell needs the nested daemon's token once per worktree. It is printed in the `daemon` proc's tab at startup; open the preview URL in its own tab with that `#token=` fragment on the end, and the browser keeps it for that origin from then on.
+
+## License
 
 MIT

@@ -216,17 +216,20 @@ export function WtRail() {
         type="button"
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
         data-state={rowState({ current: id === activeId, checked: sel.includes(id) })}
-        // one tip per row, on the row: where the worktree is, then the dot's state in words. A tip
-        // per element would swap fifty times as the mouse crosses the panel. Badges and the
-        // crashed dot keep their own, since those are what a hover over them is asking about. A
-        // found row has no state to name, so the path is its text, unless something holds it.
-        // The main checkout is named, not located: its path is the project's and says nothing.
+        // one tip per row, on the row: where the worktree is, then the dot's state in words with
+        // the dot restated beside it, since the real one is at the far end of the row from where
+        // the tip sits. A tip per element would swap fifty times as the mouse crosses the panel.
+        // Badges and the crashed dot keep their own, since those are what a hover over them is
+        // asking about. A found row has no state to name, so the path is its text, unless
+        // something holds it. The main checkout is named, not located: its path is the project's
+        // and says nothing.
         {...(owned
           ? tip(
               stateLabel(w, repoOf(owned)?.needsSetup),
               undefined,
               "left",
               isMain(owned.worktree) ? "main" : wtDirLabel(w),
+              dotClass(w),
             )
           : w.locked
             ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, "left", wtDirLabel(w))

@@ -24,14 +24,18 @@ type Side = Exclude<TipPlacement, "follow">;
 
 /** `detail` sits before the text in the quiet tier, for the where or the which ahead of the what:
  * a worktree's path, then its state. The two tiers keep them apart; a middot between them read as
- * one phrase, and a second line made a box twice as tall for a row the pointer sweeps through. */
-export function tip(text: string, key?: string, placement?: TipPlacement, detail?: string) {
+ * one phrase, and a second line made a box twice as tall for a row the pointer sweeps through.
+ * `dot` is a status dot class (`running`, `waiting`, see base.css) drawn just before the text:
+ * for a tip that names a dot's state, so the colour and the word sit together even when the dot
+ * itself is at the other end of the row. */
+export function tip(text: string, key?: string, placement?: TipPlacement, detail?: string, dot?: string) {
   const label = detail ? `${text}, ${detail}` : text;
   return {
     "data-tip": text,
     "data-tip-key": key,
     "data-tip-placement": placement,
     "data-tip-detail": detail,
+    "data-tip-dot": dot,
     "aria-label": key ? `${label} (${key})` : label,
   } as const;
 }
@@ -53,7 +57,14 @@ const CURSOR_GAP = 18;
 const CURSOR_NUDGE = 12;
 const MARGIN = 8;
 
-export type Anchor = { el: HTMLElement; text: string; key?: string; detail?: string; placement: TipPlacement };
+export type Anchor = {
+  el: HTMLElement;
+  text: string;
+  key?: string;
+  detail?: string;
+  dot?: string;
+  placement: TipPlacement;
+};
 type Point = { x: number; y: number };
 
 /** The element's own placement; below when it names none. Nothing is guessed from the anchor's
@@ -139,7 +150,14 @@ export function Tooltips() {
       if (!text) return hide();
       stopTimers();
       visible = true;
-      setAnchor({ el, text, key: el.dataset.tipKey, detail: el.dataset.tipDetail, placement });
+      setAnchor({
+        el,
+        text,
+        key: el.dataset.tipKey,
+        detail: el.dataset.tipDetail,
+        dot: el.dataset.tipDot,
+        placement,
+      });
     };
     const target = (e: Event) => {
       const t = e.target;
@@ -228,6 +246,7 @@ export function Tooltips() {
   return createPortal(
     <div ref={box} className="tooltip" role="tooltip">
       {anchor.detail && <span className="tooltip-detail">{anchor.detail}</span>}
+      {anchor.dot && <span className={`dot ${anchor.dot} tooltip-dot`} />}
       {anchor.text}
       {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}
     </div>,

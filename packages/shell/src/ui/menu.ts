@@ -18,6 +18,8 @@ export type MenuItem = {
   detail?: ReactNode;
   /** the chord that does the same, drawn at the right edge: the menu is where people learn it */
   key?: string;
+  /** opens a picker of its own: the palette comes back to itself when that picker is escaped */
+  sub?: boolean;
   onClick: () => void;
   danger?: boolean;
 };

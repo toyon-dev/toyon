@@ -1,4 +1,5 @@
 import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveTheme } from "@toyon/shared";
+import { appearanceLabel } from "../../state/actions/settings.ts";
 import { useDispatch, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
@@ -6,7 +7,6 @@ import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { chord } from "../util.ts";
-import { appearanceLabel } from "./commands.ts";
 
 const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
   title,

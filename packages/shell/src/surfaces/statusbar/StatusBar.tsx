@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { useDispatch, useStore } from "../../state/context.tsx";
+import { settingsItems } from "../../state/actions/settings.ts";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useActive, useActiveRepo, useGreenfield, useLocalField } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../palettes/ProjectPicker.tsx";
 import { chord, isBusy, isInstalledApp } from "../util.ts";
@@ -19,6 +21,12 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const winW = useWindowWidth();
   const navCenter = leftPx + (winW - leftPx - rightPx) / 2;
   const dispatch = useDispatch();
+  const sock = useSock();
+  const store = useStoreInstance();
+  // a right-click on a control offers what the control opens, one level in: the gear's is the
+  // settings card's choices. The toggles beside it have nothing of their own to add, and the app
+  // menu that answers for them already carries each toggle with its chord.
+  const cm = useContextMenu("bar");
   const active = useActive();
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
@@ -66,6 +74,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           tone="chrome"
           on={keysOpen}
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
+          {...cm.contextMenu(() => settingsItems(store.getState(), { sock, dispatch }))}
         />
         {!greenfield && (
           <IconButton

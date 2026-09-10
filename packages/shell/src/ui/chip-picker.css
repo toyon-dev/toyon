@@ -1,0 +1,39 @@
+/* ChipPicker: a chip holding a value, and the panel it opens into. */
+@layer tokens, base, surfaces;
+@layer base {
+  .chip-picker {
+    display: inline-flex;
+    align-items: center;
+  }
+  /* the panel takes the row's width, positioned against the row (see ChipPicker.tsx): the anchored
+   box's own 460px is the pill's, sized for the top bar, and here it ran past the box the row is in */
+  .chip-picker {
+    & > .overlay-box.anchored {
+      left: 0;
+      right: 0;
+      width: auto;
+    }
+    /* a chip's list is a handful of rows inside a panel that is already most of the way down the
+     screen, so it takes the inline picker's budget rather than a centred palette's half viewport */
+    & .picker-list {
+      max-height: min(280px, 40vh);
+    }
+  }
+  /* An option is its name over a line saying what it means. The descriptions are sentences, and
+   on a one-line row beside the name they were the part that got cut; the row is nowrap for its
+   ellipsis, so the line opts back into wrapping. The colour is .row-dim's, so it lifts with the
+   row; only the size is this line's own. */
+  .chip-option {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .chip-option-name {
+    color: var(--text0);
+  }
+  .chip-option-desc {
+    font: var(--type-ui-sm);
+    white-space: normal;
+  }
+}

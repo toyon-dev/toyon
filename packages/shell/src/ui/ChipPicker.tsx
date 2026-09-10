@@ -1,0 +1,117 @@
+import { useState } from "react";
+import { Button } from "./Button.tsx";
+import "./chip-picker.css";
+import { cx } from "./cx.ts";
+import { Icon } from "./Icon.tsx";
+import { ListPicker } from "./ListPicker.tsx";
+import { tip } from "./Tooltip.tsx";
+
+export type ChipOption<T extends string> = {
+  id: T;
+  /** what the row and the chip show; the id when absent */
+  label?: string;
+  /** one line saying what picking it means */
+  description?: string;
+};
+
+/**
+ * A chip holding one value out of a few, and the panel it opens into: the one the project pill
+ * drops, with the value as the field's lead chip, a row per option with a line under its name
+ * saying what it means, and the current one marked down its edge. A context menu is a list of
+ * actions; a value you set gets the picker, so every chip with options reads as the switcher does.
+ *
+ * The panel spans the row the chip sits in rather than hanging off the chip, because a chip can
+ * be anywhere in its row and a panel hung off one in the middle ran past the box's edge. The host
+ * row is the containing block (the prompt's variants row, the composer), so the wrapper takes no
+ * position of its own; the composer turns the panel upward in its own stylesheet.
+ */
+export function ChipPicker<T extends string>({
+  value,
+  options,
+  onChange,
+  placeholder,
+  hint,
+  pickVerb = "picks",
+  className,
+  onClose,
+}: {
+  value: T;
+  options: ChipOption<T>[];
+  onChange: (id: T) => void;
+  /** the field's placeholder: what the value is, as the person at the shell would say it */
+  placeholder: string;
+  /** the chip's tooltip */
+  hint: string;
+  /** what enter does, for the key row */
+  pickVerb?: string;
+  /** how the chip sits in its row, and the surface's own colour for a value worth flagging */
+  className?: string;
+  /** the panel went away, picked or not: the host puts the caret back where it was */
+  onClose?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const close = () => {
+    setOpen(false);
+    onClose?.();
+  };
+  const shown = options.find((o) => o.id === value)?.label ?? value;
+  return (
+    // Escape inside the picker reaches app/keys.ts otherwise, which knows only about the store's
+    // overlay and would shut whatever this chip sits in (the prompt, a bottom pane). The topmost
+    // thing owns Escape, and this one is not in the store.
+    <span
+      className="chip-picker"
+      onKeyDownCapture={(e) => {
+        if (!open || e.key !== "Escape") return;
+        e.stopPropagation();
+        close();
+      }}
+    >
+      <Button
+        variant="outline"
+        mono
+        on={open}
+        className={cx("chip-picker-btn", className)}
+        {...tip(hint)}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {shown} <Icon name="caret" className="icon-inline" />
+      </Button>
+      {open && (
+        <ListPicker<ChipOption<T>>
+          anchored
+          items={options}
+          filter={(os, q) => {
+            const n = q.trim().toLowerCase();
+            return n ? os.filter((o) => (o.label ?? o.id).toLowerCase().includes(n)) : os;
+          }}
+          keyOf={(o) => o.id}
+          initialIndex={(os) =>
+            Math.max(
+              0,
+              os.findIndex((o) => o.id === value),
+            )
+          }
+          lead={<span className="picker-chip">{shown}</span>}
+          placeholder={placeholder}
+          rowClass={() => "picker-row"}
+          row={(o) => (
+            <>
+              {o.id === value && <span className="row-current" aria-hidden="true" />}
+              <span className="chip-option">
+                <span className="chip-option-name">{o.label ?? o.id}</span>
+                {o.description && <span className="chip-option-desc row-dim">{o.description}</span>}
+              </span>
+            </>
+          )}
+          onPick={(o) => {
+            onChange(o.id);
+            close();
+          }}
+          onBack={close}
+          keys={{ pick: pickVerb, back: "closes" }}
+        />
+      )}
+    </span>
+  );
+}

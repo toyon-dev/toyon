@@ -31,6 +31,7 @@ export function PromptOverlay() {
   const [profile, setProfile] = useNewWorktreeProfile(repo);
   const [mode, setMode] = useNewWorktreeMode(repo);
   const field = useRef<HTMLTextAreaElement>(null);
+  const refocus = () => field.current?.focus();
 
   // the `/` menu. A command dispatches on a worktree's first prompt like any other, so it is worth
   // offering here; `@path` is not, because the worktree whose files it would name does not exist.
@@ -178,8 +179,8 @@ export function PromptOverlay() {
         )}
       </div>
       <div className="prompt-variants">
-        {/* the picker takes focus while it is up, so put the caret back when it closes */}
-        <RepoChip onClose={() => field.current?.focus()} />
+        {/* a picker takes focus while it is up, so put the caret back when it closes */}
+        <RepoChip onClose={refocus} />
         {agents.length > 1 && (
           <span className="prompt-agents">
             {agents.map((a) => (
@@ -203,8 +204,8 @@ export function PromptOverlay() {
             ))}
           </span>
         )}
-        {!batch && <ProfileChip repo={repo} value={profile} onChange={setProfile} />}
-        {!batch && <ModeChip value={mode} onChange={setMode} />}
+        {!batch && <ProfileChip repo={repo} value={profile} onChange={setProfile} onClose={refocus} />}
+        {!batch && <ModeChip value={mode} onChange={setMode} onClose={refocus} />}
         <label data-tip="An agent decomposes the request into independent tasks and starts a worktree for each">
           <input type="checkbox" checked={batch} onChange={(e) => setBatch(e.target.checked)} />
           <span>batch</span>

@@ -9,7 +9,11 @@ export function useDismissOutside(box: RefObject<HTMLElement | null>, onOutside:
   useEffect(() => {
     const h = (e: MouseEvent) => {
       const t = e.target as Element | null;
-      if (t?.closest?.(".keys-btn, .bar-pill, .repo-chip")) return;
+      if (t?.closest?.(".keys-btn, .bar-pill")) return;
+      // a chip's button is exempt only for the panel hanging in its own wrapper: another chip's
+      // button is an outside click like any other, or two panels end up open at once
+      const wrap = t?.closest?.(".repo-chip-wrap, .chip-picker");
+      if (wrap && box.current && wrap.contains(box.current)) return;
       if (box.current && !box.current.contains(t as Node)) cb.current();
     };
     // a click in the preview iframe never reaches this document, but it does move focus into the

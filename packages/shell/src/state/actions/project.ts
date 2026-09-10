@@ -18,9 +18,10 @@ export function importItems(p: PendingRepo, { sock, dispatch }: Deps): MenuEntry
   ];
 }
 
-/** a project: switch to it, then change how it runs or take it off the list. The setup pane is
- * the form for the install and start commands, and what it writes is toyon.json, so the line
- * says both rather than "set up", which named neither. */
+/** a project: switch to it, then change how it runs or take it off the list. The menu is always
+ * about one project (its row, the pill), so the lines do not repeat its name; the palette appends
+ * it. The setup pane is the form for the install and start commands and writes toyon.json, which
+ * is the name people know it by, so that is the label and the commands are the detail. */
 export function projectItems(r: RepoInfo, activeRepoId: string | null, { sock, dispatch }: Deps): MenuEntry[] {
   const go: MenuItem[] = [];
   if (r.id !== activeRepoId) {
@@ -33,13 +34,13 @@ export function projectItems(r: RepoInfo, activeRepoId: string | null, { sock, d
   const manage: MenuItem[] = [
     {
       id: `setup:${r.id}`,
-      label: `install + start commands for ${r.name}…`,
-      detail: "edits toyon.json",
+      label: "edit toyon.json…",
+      detail: "install + start commands",
       onClick: () => dispatch({ a: "open", overlay: { kind: "setup", repoId: r.id } }),
     },
     {
       id: `forget:${r.id}`,
-      label: `forget ${r.name}…`,
+      label: "forget project…",
       danger: true,
       onClick: () => {
         if (

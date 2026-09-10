@@ -1,6 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
-import { diffLineKind, diffLines, parseToolOutput, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
+import { diffLineKind, diffLines, firstLine, parseToolOutput, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
+
+describe("firstLine", () => {
+  test("a thought folds down to its first sentence", () => {
+    expect(firstLine("I'll set up theme tokens as CSS variables. Then a toggle.")).toBe(
+      "I'll set up theme tokens as CSS variables.",
+    );
+  });
+
+  test("a line with no sentence end is the line", () => {
+    expect(firstLine("Checking the build config\nthen the tests")).toBe("Checking the build config");
+  });
+
+  test("a leading blank line or heading is skipped over", () => {
+    expect(firstLine("\n\n## Plan\nRead App.tsx first.")).toBe("Plan");
+    expect(firstLine("")).toBe("");
+  });
+
+  test("a version number is not a sentence end", () => {
+    expect(firstLine("Bun 1.2 ships this. Good.")).toBe("Bun 1.2 ships this.");
+  });
+});
 
 describe("parseToolOutput", () => {
   test("splits prose from a fenced block and drops the fences", () => {

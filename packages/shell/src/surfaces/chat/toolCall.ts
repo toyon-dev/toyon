@@ -58,10 +58,18 @@ const KIND_ICON: Record<ToolKind, IconName> = {
  * a panel open per call reads itself out loud and walks the message you were reading off the top of
  * the log. A set rather than a check so a kind can be added back on its own.
  *
- * `think` never reaches a row for Claude (its adapter sends thoughts as `agent_thought_chunk`,
- * which becomes a `thinking` item; acp/map.ts). It is here for an agent that models its reasoning
- * as a call, which reads the way a streamed thought does: open. */
+ * `think` never reaches a tool row for Claude (its adapter sends thoughts as `agent_thought_chunk`,
+ * which becomes a `thinking` item and a ThoughtRow; acp/map.ts). It is here for an agent that
+ * models its reasoning as a call, so that it reads the way a streamed thought does: open. */
 export const AUTO_OPEN: ReadonlySet<ToolKind> = new Set<ToolKind>(["edit", "think"]);
+
+/** the line a thought folds down to: its first sentence, which is usually the plan. A thought that
+ * opens with a heading or a blank line is not summarised by either. */
+export function firstLine(text: string): string {
+  const line = text.split("\n").find((l) => l.trim()) ?? "";
+  const sentence = /^.*?[.!?](?=\s|$)/.exec(line.trim());
+  return (sentence?.[0] ?? line.trim()).replace(/^#+\s*/, "");
+}
 
 /** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
  * commit, and the column reads better following the command than the kind. Conservative on purpose:

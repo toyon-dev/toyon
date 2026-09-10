@@ -9,6 +9,7 @@ import { toolLabel } from "./toolCall.ts";
  * reducer keeps addressing calls by id. */
 
 export type ToolItem = Extract<ChatItem, { kind: "tool" }>;
+export type ThinkingItem = Extract<ChatItem, { kind: "thinking" }>;
 
 /** a row of the transcript, and where it starts in the item list: React's key, and what says which
  * row the agent is on */

@@ -120,7 +120,9 @@ export function WtRail() {
         key={id}
         type="button"
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
-        data-state={rowState({ current: id === activeId, checked: sel.includes(id) })}
+        // while a worktree is being drafted the draft's row is the selected one, and the base it
+        // branches from stays the active id underneath without reading as picked
+        data-state={rowState({ current: id === activeId && !draftOpen, checked: sel.includes(id) })}
         // one tip per row, on the row: the dot's state in words with the dot restated beside it,
         // since the real one is at the far end of the row from where the tip sits, and where the
         // worktree is on the line under. A tip per element would swap fifty times as the mouse
@@ -360,7 +362,9 @@ export function WtRail() {
               branch while main stayed blank, and the row comes back with the first message */}
           {!graftMode && !greenfield && (
             <button
-              className="rail-new row-edge"
+              // a row like the worktree rows above it, since the draft tab it opens is one: the
+              // same seat under the pointer and the same edge and lift when it is the one picked
+              className="row row-edge rail-new"
               data-state={rowState({ current: draftOpen })}
               data-tip={draftOpen ? "The worktree being drafted; esc leaves it" : "New worktree"}
               data-tip-key={draftOpen ? undefined : chord("new")}

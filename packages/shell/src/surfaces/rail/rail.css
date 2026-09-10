@@ -67,16 +67,9 @@
     align-items: center;
     justify-content: center;
   }
-  /* an idle control is an idle control: the same rest tier as .btn and .btn-icon */
+  /* a .row: it rests, lifts and reads as picked the way the worktree rows above it do, because the
+   draft tab it opens is a worktree row that does not exist yet. Only the chord hint is its own. */
   .rail-new {
-    color: var(--text1);
-    text-align: left;
-    width: 100%;
-    display: flex;
-    align-items: baseline;
-    &:hover {
-      color: var(--accent);
-    }
     & .rail-new-kbd {
       margin-left: auto;
       color: var(--text2);

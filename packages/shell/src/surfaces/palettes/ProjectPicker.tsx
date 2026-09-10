@@ -1,4 +1,4 @@
-import type { RepoInfo } from "@toyon/shared";
+import { isOwned, type RepoInfo } from "@toyon/shared";
 import { useCallback } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { IconButton } from "../../ui/Button.tsx";
@@ -36,8 +36,7 @@ export function ProjectPicker({
   const sock = useSock();
   const repos = useStore((s) => s.repos);
   const current = useStore((s) => s.activeRepoId);
-  const worktrees = useStore((s) => s.worktrees);
-  const discovered = useStore((s) => s.discovered);
+  const rows = useStore((s) => s.rows);
   const paths = useStore((s) => s.paths);
   const home = useStore((s) => s.home);
   const pending = useStore((s) => s.pending);
@@ -68,12 +67,13 @@ export function ProjectPicker({
   );
 
   const hintFor = (r: RepoInfo) => {
-    const mine = worktrees.filter((w) => w.worktree.repoId === r.id && w.worktree.kind !== "spare");
+    const here = rows.filter((w) => w.repoId === r.id);
+    const mine = here.filter(isOwned).filter((w) => w.worktree.kind !== "spare");
     const working = mine.filter(isBusy).length;
     const n = mine.length - 1; // main is not a task
     // "where's my stuff" is asked here, before the rail is on screen: a project with worktrees
     // toyon did not make should say so at the point you are choosing it
-    const found = discovered.filter((d) => d.repoId === r.id).length;
+    const found = here.length - here.filter(isOwned).length;
     const parts = [
       n > 0 ? `${n} worktree${n === 1 ? "" : "s"}` : null,
       working > 0 ? `${working} working` : null,

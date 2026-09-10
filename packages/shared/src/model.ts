@@ -183,11 +183,37 @@ export interface AgentInfo {
   canLogout?: boolean;
 }
 
+/** One row of the rail: a worktree toyon runs, or one git knows about that toyon did not create
+ * (made in a terminal, by another agent, by an editor). Ownership is `worktree`. Present, and
+ * toyon has a record, a port, procs and an agent for it, and may write to it. Absent, and the
+ * row is derived from `git worktree list` on every push and never persisted: readable through
+ * its id (status, history, diffs, a shell), never written to, and gone from the list the moment
+ * git stops listing it. One type rather than two so take-over is a change of one field and every
+ * frame lists every row at once; two frames once let the rail show a taken-over row twice. */
 export interface WorktreeStatus {
-  worktree: WorktreeInfo;
+  /** the record's id, or for a found worktree its canonical path hashed: derived rather than
+   * stored, so the terminal, the changes panel and every per-worktree message keep their key
+   * across pushes, and an open shell is not dropped by a re-derivation */
+  id: string;
+  repoId: string;
+  path: string;
+  /** the title, or for a found worktree its branch, or its directory's name when detached */
+  name: string;
+  /** absent when the worktree is detached */
+  branch?: string;
+  /** another tool holds it (a live agent session, usually): nothing may write to it, and
+   * take-over is refused */
+  locked?: boolean;
+  /** git's reason for the lock, when it gave one */
+  lockReason?: string;
+  /** the record, when toyon owns the row */
+  worktree?: WorktreeInfo;
+  /** empty for a row toyon does not run */
   procs: ProcState[];
+  /** "idle" for a row toyon does not run */
   agent: AgentStatus;
-  /** commits ahead/behind the default branch (cached, ~10s freshness) */
+  /** commits ahead/behind the default branch (cached, ~10s freshness); absent on main and on a
+   * detached worktree, which have nothing to count against */
   ahead?: number;
   behind?: number;
   /** uncommitted file count (cached, ~10s freshness) */
@@ -199,26 +225,8 @@ export interface WorktreeStatus {
   unseen?: boolean;
 }
 
-/** A worktree git knows about that toyon did not create: made in a terminal, by another agent, or
- * by an editor. Derived on every push and never persisted, so it has no id, no proxy port and no
- * record: toyon can show it and take it over, and has no way to delete it. It becomes an ordinary
- * `WorktreeInfo` only when someone adopts it. */
-export interface DiscoveredWorktree {
-  /** Stable for a given path, and derived from it rather than stored: the row has no record to
-   * hold an id, but the terminal, the changes panel and every other per-worktree message key off
-   * one, and a row that changed id between two pushes would drop its open shell. */
-  id: string;
-  repoId: string;
-  path: string;
-  /** what the row is called: its branch, or the directory's own name when detached */
-  name: string;
-  /** absent when the worktree is detached */
-  branch?: string;
-  /** another tool holds this worktree (a live agent session, usually); take-over is refused */
-  locked?: boolean;
-  /** git's reason for the lock, when it gave one */
-  lockReason?: string;
-}
+/** a row toyon owns, which is the one most of the shell reads: the chat, the composer, landing */
+export type OwnedWorktree = WorktreeStatus & { worktree: WorktreeInfo };
 
 export interface GitFileStatus {
   path: string;

@@ -151,8 +151,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       (async () => {
         do {
           statusesDirty = false;
-          const [worktrees, discovered] = await Promise.all([s.worktrees.statuses(), s.worktrees.discovered()]);
-          broadcast({ t: "worktrees", worktrees, discovered });
+          broadcast({ t: "worktrees", rows: await s.worktrees.rows() });
         } while (statusesDirty);
       })().finally(() => {
         statusesInFlight = false;
@@ -253,8 +252,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           version,
           protocol: PROTOCOL_VERSION,
           repos: s.state.repos,
-          worktrees: await s.worktrees.statuses(),
-          discovered: await s.worktrees.discovered(),
+          rows: await s.worktrees.rows(),
           themes: s.themes.themes,
           themePrefs: s.themes.prefs,
           agents: agentInfos(),

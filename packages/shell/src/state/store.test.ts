@@ -1,11 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type AgentEvent,
-  type DiscoveredWorktree,
-  PROTOCOL_VERSION,
-  type RepoInfo,
-  type WorktreeStatus,
-} from "@toyon/shared";
+import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
 import { type Action, EMPTY_LOCAL, initialState, localOf, reducer, type State, type StoreServerMsg } from "./store.ts";
 
 // The reducer's rules the UI depends on and nothing else documents: which worktree becomes active,
@@ -16,11 +10,16 @@ const ME = "tab-1";
 
 function wt(
   id: string,
-  kind: WorktreeStatus["worktree"]["kind"] = "worktree",
+  kind: "main" | "worktree" | "spare" = "worktree",
   createdBy?: string,
   repoId = "r",
 ): WorktreeStatus {
   return {
+    id,
+    repoId,
+    path: `/w/${id}`,
+    name: id,
+    branch: `toyon/${id}`,
     worktree: {
       id,
       repoId,
@@ -53,8 +52,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     version: "0",
     protocol: PROTOCOL_VERSION,
     repos,
-    worktrees: w,
-    discovered: [],
+    rows: w,
     themes: initial.themes,
     themePrefs: initial.themePrefs,
     agents: [],
@@ -63,7 +61,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     pending: [],
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
-const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", worktrees: w, discovered: [] });
+const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w });
 const repos = (...r: RepoInfo[]): Action => server({ t: "repos", repos: r });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });
 
@@ -778,28 +776,66 @@ describe("panel layout", () => {
 });
 
 describe("discovered worktrees", () => {
-  // "r" is what the wt() fixture defaults its repoId to
-  const found = (path: string, repoId = "r"): DiscoveredWorktree => ({
+  // "r" is what the wt() fixture defaults its repoId to. A found row is the same shape with no
+  // record: nothing runs there, so no procs and an idle agent.
+  const found = (path: string, repoId = "r"): WorktreeStatus => ({
     id: `disc-${path}`,
     repoId,
     path,
     name: path.split("/").pop()!,
+    branch: path.split("/").pop()!,
+    procs: [],
+    agent: "idle",
   });
-  const withFound = (...d: DiscoveredWorktree[]): Action =>
-    server({ t: "worktrees", worktrees: [wt("main", "main")], discovered: d });
+  const withFound = (...d: WorktreeStatus[]): Action => server({ t: "worktrees", rows: [wt("main", "main"), ...d] });
   // the remembered-section map is keyed by repo, so these need the repo to actually exist
   const helloR = (...w: WorktreeStatus[]): Action => helloIn([repo("r")], ...w);
 
-  test("they stay out of the list ⌘1-9 and the palette number over", () => {
-    const s = run([helloR(wt("main", "main"), wt("a")), withFound(found("/w/stray"), found("/w/other"))]);
-    // the whole reason for a second array: these two indexes must not move
-    expect(s.visible.map((w) => w.worktree.id)).toEqual(["main"]);
-    expect(s.discovered).toHaveLength(2);
+  test("they stay out of the list ⌘1-9 and the palette number over, and nothing in it moves", () => {
+    const before = run([helloR(wt("main", "main"), wt("a"))]);
+    expect(before.visible.map((w) => w.id)).toEqual(["main", "a"]);
+    const s = run(
+      [server({ t: "worktrees", rows: [wt("main", "main"), found("/w/stray"), wt("a"), found("/w/x")] })],
+      before,
+    );
+    // the whole reason for a second view: these positions must not move
+    expect(s.visible.map((w) => w.id)).toEqual(["main", "a"]);
+    expect(s.visibleDiscovered.map((d) => d.path)).toEqual(["/w/stray", "/w/x"]);
   });
 
   test("a discovered row is never landed on", () => {
     const s = run([helloR(wt("main", "main")), withFound(found("/w/stray"))]);
     expect(s.activeId).toBe("main");
+  });
+
+  test("selecting one scopes the project but is not its landing spot", () => {
+    const s = run([
+      helloR(wt("main", "main"), wt("a")),
+      server({ t: "worktrees", rows: [wt("main", "main"), wt("a"), found("/w/stray")] }),
+      { a: "activate", id: "a" },
+    ]);
+    const on = run([{ a: "activate", id: "disc-/w/stray" }], s);
+    expect(on.activeId).toBe("disc-/w/stray");
+    expect(on.activeRepoId).toBe("r");
+    expect(on.lastActive.r).toBe("a");
+  });
+
+  test("its records survive a push, and a reload restores it while it is still listed", () => {
+    const s = run([
+      helloR(wt("main", "main")),
+      withFound(found("/w/stray")),
+      { a: "activate", id: "disc-/w/stray" },
+      server({ t: "git-status", worktreeId: "disc-/w/stray", files: [], ahead: 0, behind: 2 }),
+      withFound(found("/w/stray")),
+    ]);
+    expect(localOf(s, "disc-/w/stray").git?.behind).toBe(2);
+    const reloaded = run([helloR(wt("main", "main"), found("/w/stray"))], {
+      ...s,
+      activeId: null,
+      storedActive: s.activeId,
+    });
+    expect(reloaded.activeId).toBe("disc-/w/stray");
+    expect(run([helloR(wt("main", "main"))], { ...s, activeId: null, storedActive: s.activeId }).activeId).toBe("main");
   });
 
   test("they are narrowed to the active project, like worktrees are", () => {
@@ -808,9 +844,9 @@ describe("discovered worktrees", () => {
     const s = run([
       helloIn([repo("r1"), repo("r2")], m1, m2),
       { a: "activate", id: "m2" },
-      server({ t: "worktrees", worktrees: [m1, m2], discovered: [found("/w/one", "r1"), found("/w/two", "r2")] }),
+      server({ t: "worktrees", rows: [m1, m2, found("/w/one", "r1"), found("/w/two", "r2")] }),
     ]);
-    expect(s.discovered).toHaveLength(2);
+    expect(s.rows.filter((r) => !r.worktree)).toHaveLength(2);
     expect(s.visibleDiscovered.map((d) => d.path)).toEqual(["/w/two"]);
   });
 
@@ -843,7 +879,7 @@ describe("removing a worktree", () => {
   test("the row is hidden at once and the daemon's list is left alone", () => {
     const s = run([three(), { a: "remove-worktrees", ids: ["a"] }]);
     expect(ids(s)).toEqual(["main", "b"]);
-    expect(s.worktrees.map((w) => w.worktree.id)).toEqual(["main", "a", "b"]);
+    expect(s.rows.map((w) => w.id)).toEqual(["main", "a", "b"]);
   });
 
   test("removing the active worktree lands the selection somewhere still shown", () => {

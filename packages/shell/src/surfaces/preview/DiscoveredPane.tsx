@@ -1,11 +1,11 @@
-import type { DiscoveredWorktree } from "@toyon/shared";
+import type { WorktreeStatus } from "@toyon/shared";
 import { useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 
 /** What fills the preview column for a worktree git knows about but toyon does not run. There is
  * no preview to show: nothing is serving. The same slot the setup pane uses, for the same reason
  * — the preview column is where a repo explains itself when it has no app to display yet. */
-export function DiscoveredPane({ row }: { row: DiscoveredWorktree }) {
+export function DiscoveredPane({ row }: { row: WorktreeStatus }) {
   const sock = useSock();
   const clientId = useStore((s) => s.clientId);
   const home = useStore((s) => s.home);
@@ -30,10 +30,7 @@ export function DiscoveredPane({ row }: { row: DiscoveredWorktree }) {
             other worktrees. Your files are left alone: the install and setup commands do not re-run.
           </p>
           <div>
-            <Button
-              variant="outline"
-              onClick={() => sock?.send({ t: "adopt-worktree", repoId: row.repoId, path: row.path, clientId })}
-            >
+            <Button variant="outline" onClick={() => sock?.send({ t: "adopt-worktree", worktreeId: row.id, clientId })}>
               take over
             </Button>
           </div>

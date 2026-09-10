@@ -1,10 +1,10 @@
 // Selector hooks. Each returns a field or a stable constant so a component re-renders only when
 // what it reads changes (useSyncExternalStore compares by identity: never build a fresh object here).
 
-import type { DiscoveredWorktree, RepoInfo, WorktreeStatus } from "@toyon/shared";
+import type { OwnedWorktree, RepoInfo, WorktreeStatus } from "@toyon/shared";
 import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
-import { currentTheme, localOf, repoById, type WorktreeLocal, worktreeById } from "./store.ts";
+import { currentTheme, localOf, repoById, rowById, type WorktreeLocal, worktreeById } from "./store.ts";
 
 export const useActiveId = () => useStore((s) => s.activeId);
 
@@ -12,22 +12,22 @@ export const useActiveId = () => useStore((s) => s.activeId);
  * a blink on every reconnect; painting either reads as the app still loading. */
 export const useOffline = (): boolean => useSettled(!useStore((s) => s.connected), 900);
 
-/** the active worktree's status row (identity changes with every worktrees/proc message, like before) */
-export const useActive = (): WorktreeStatus | null => useStore((s) => worktreeById(s, s.activeId));
+/** the active row when toyon owns it: what the chat, the composer and landing read. Null while a
+ * found worktree is selected, so nothing that writes or talks to an agent sees one. (identity
+ * changes with every worktrees/proc message, like before) */
+export const useActive = (): OwnedWorktree | null => useStore((s) => worktreeById(s, s.activeId));
 
-export const useWorktrees = () => useStore((s) => s.worktrees);
+/** the active row whoever owns it: the title, the pane, the dock and the rail read this one */
+export const useActiveRow = (): WorktreeStatus | null => useStore((s) => rowById(s, s.activeId));
 
-/** the active project's worktrees: what the rail lists and ⌘1–9 count over */
+export const useRows = () => useStore((s) => s.rows);
+
+/** the active project's owned worktrees: what the rail lists and ⌘1–9 count over */
 export const useVisibleWorktrees = () => useStore((s) => s.visible);
 
 /** the active project's worktrees that toyon did not create. A separate list from `visible` on
  * purpose: ⌘1-9 and the palette number that one positionally. */
 export const useVisibleDiscovered = () => useStore((s) => s.visibleDiscovered);
-
-/** the discovered worktree that is selected, when the selection is one of those rather than a
- * worktree toyon runs. Exactly one of this and `useActive()` is ever set. */
-export const useActiveDiscovered = (): DiscoveredWorktree | null =>
-  useStore((s) => (s.activeId ? (s.discovered.find((d) => d.id === s.activeId) ?? null) : null));
 
 /** has the discovered section been opened in this project (collapsed by default) */
 export const useDiscoveredOpen = (): boolean =>
@@ -52,7 +52,7 @@ export const useTheme = () => useStore(currentTheme);
 /** the active worktree's repo while its detected config is still unconfirmed (an element of the repos array) */
 export const useActiveRepoNeedingSetup = () =>
   useStore((s) => {
-    const wt = worktreeById(s, s.activeId);
-    const repo = wt ? s.repos.find((r) => r.id === wt.worktree.repoId) : null;
+    const wt = rowById(s, s.activeId);
+    const repo = wt ? s.repos.find((r) => r.id === wt.repoId) : null;
     return repo?.needsSetup ? repo : null;
   });

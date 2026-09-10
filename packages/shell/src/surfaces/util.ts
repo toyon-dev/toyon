@@ -1,4 +1,12 @@
-import { type ChordId, chordLabel, type ProcState, type WorktreeInfo, type WorktreeStatus } from "@toyon/shared";
+import {
+  type ChordId,
+  chordLabel,
+  isMain,
+  isOwned,
+  type ProcState,
+  type WorktreeInfo,
+  type WorktreeStatus,
+} from "@toyon/shared";
 
 /** Preview iframes hit the worktree's proxy port. Locally that is always loopback (the daemon
  * binds 127.0.0.1); in cloud mode the same port is a public TLS port on the host that served this
@@ -51,7 +59,7 @@ export function dotClass(w: WorktreeStatus): string {
   // a worktree that needs you outranks one that is merely busy
   if (w.agent === "waiting") return "waiting";
   if (w.agent === "working") return "working";
-  if (w.worktree.landed) return "landed";
+  if (w.worktree?.landed) return "landed";
   if (w.procs.some((p) => p.status === "crashed")) return "crashed";
   if (w.procs.some((p) => p.status === "running")) return "running";
   if (w.procs.some((p) => p.status === "starting")) return "starting";
@@ -138,13 +146,14 @@ export const wtDir = (w: WorktreeInfo) => w.linkPath ?? w.path;
  * default: unstamped therefore reads as the default here too, or main would never match before it
  * had run, which is exactly when the menu needs to find it and start it. */
 export function commandSource(
-  worktrees: WorktreeStatus[],
+  rows: WorktreeStatus[],
   repoId: string | undefined,
   agent: string,
   defaultAgent: string,
 ): string | null {
   if (!repoId) return null;
-  const mine = worktrees.filter((w) => w.worktree.repoId === repoId && (w.worktree.agent ?? defaultAgent) === agent);
-  const main = mine.find((w) => w.worktree.kind === "main");
-  return (main ?? mine[0])?.worktree.id ?? null;
+  // only a worktree toyon runs has a session to ask
+  const mine = rows.filter(isOwned).filter((w) => w.repoId === repoId && (w.worktree.agent ?? defaultAgent) === agent);
+  const main = mine.find((w) => isMain(w.worktree));
+  return (main ?? mine[0])?.id ?? null;
 }

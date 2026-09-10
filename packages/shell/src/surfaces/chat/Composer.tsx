@@ -1,4 +1,4 @@
-import type { AgentCommand, GitFileStatus, WorktreeStatus } from "@toyon/shared";
+import type { AgentCommand, GitFileStatus, OwnedWorktree } from "@toyon/shared";
 import { pickMetaOf } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
@@ -52,7 +52,7 @@ function insertionFor(r: Row): string {
 
 /** the message box: draft (kept per worktree), picked-element and image attachments, spawn-a-worktree
  * toggle, and the per-worktree tools (terminal, element picker) */
-export function Composer({ active }: { active: WorktreeStatus | null }) {
+export function Composer({ active }: { active: OwnedWorktree | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();

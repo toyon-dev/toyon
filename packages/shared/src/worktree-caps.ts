@@ -5,9 +5,14 @@
 // had made. An adopted worktree broke rename, which would have moved the person's branch under a
 // toyon/ name, and a pulled-in PR breaks land, since landing a review means something else.
 
-import { hasOwnBranch, type WorktreeInfo } from "./model.ts";
+import { hasOwnBranch, type OwnedWorktree, type WorktreeInfo, type WorktreeStatus } from "./model.ts";
 
 type Wt = Pick<WorktreeInfo, "kind" | "branch" | "from">;
+
+/** toyon has a record for this row: something runs here, and something may write here */
+export function isOwned(row: WorktreeStatus): row is OwnedWorktree {
+  return row.worktree !== undefined;
+}
 
 /** git's own main checkout: the baseline everything else is counted against */
 export function isMain(wt: Pick<WorktreeInfo, "kind">): boolean {

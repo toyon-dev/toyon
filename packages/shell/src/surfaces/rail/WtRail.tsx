@@ -1,4 +1,4 @@
-import { canGraft, canLand, canRemove, canRename, type DiscoveredWorktree, type WorktreeStatus } from "@toyon/shared";
+import { canGraft, canLand, canRemove, canRename, type OwnedWorktree, type WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
@@ -38,19 +38,19 @@ export function WtRail() {
   const railOpen = useStore((s) => s.railOpen);
   const termOpen = useStore((s) => s.termOpen);
   const repos = useStore((s) => s.repos);
-  const repoOf = (w: WorktreeStatus) => repos.find((r) => r.id === w.worktree.repoId) ?? null;
+  const repoOf = (w: OwnedWorktree) => repos.find((r) => r.id === w.repoId) ?? null;
   const [menu, setMenu] = useState<MenuState | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
-  const [discMenu, setDiscMenu] = useState<{ at: { x: number; y: number }; path: string } | null>(null);
+  const [discMenu, setDiscMenu] = useState<{ at: { x: number; y: number }; id: string } | null>(null);
   const closeDiscMenu = useCallback(() => setDiscMenu(null), []);
   // the daemon sends absolute paths; ~ is how the person wrote it and how the picker shows it back
   const home = useStore((s) => s.home);
-  const wtDirLabel = (d: DiscoveredWorktree) =>
+  const wtDirLabel = (d: WorktreeStatus) =>
     home && d.path.startsWith(`${home}/`) ? `~${d.path.slice(home.length)}` : d.path;
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
 
-  const toggleSel = (w: WorktreeStatus) => {
+  const toggleSel = (w: OwnedWorktree) => {
     if (!canGraft(w.worktree)) return;
     setGraftMode(true);
     setSel((s) => (s.includes(w.worktree.id) ? s.filter((x) => x !== w.worktree.id) : [...s, w.worktree.id]));
@@ -67,7 +67,7 @@ export function WtRail() {
 
   const acts = worktreeActions(sock, dispatch);
   const menuWt = menu ? (worktrees.find((w) => w.worktree.id === menu.id) ?? null) : null;
-  const discMenuRow = discMenu ? (discovered.find((d) => d.path === discMenu.path) ?? null) : null;
+  const discMenuRow = discMenu ? (discovered.find((d) => d.id === discMenu.id) ?? null) : null;
 
   /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.
    * "open a shell here" is a real pty at that path with no runtime behind it, which is why it is
@@ -76,12 +76,12 @@ export function WtRail() {
    * No "remove": the person made this directory outside toyon, and deleting it is the one thing
    * here that cannot be undone. Nothing in the daemon can delete a discovered worktree at all,
    * which is what keeps that true. `git worktree remove` is where it belongs. */
-  const discMenuItems = (d: DiscoveredWorktree): MenuItem[] => {
+  const discMenuItems = (d: WorktreeStatus): MenuItem[] => {
     const items: MenuItem[] = [];
     if (!d.locked) {
       items.push({
         label: "take over",
-        onClick: () => sock?.send({ t: "adopt-worktree", repoId: d.repoId, path: d.path, clientId }),
+        onClick: () => sock?.send({ t: "adopt-worktree", worktreeId: d.id, clientId }),
       });
     }
     items.push({
@@ -91,10 +91,7 @@ export function WtRail() {
         if (!termOpen) dispatch({ a: "toggle-terminal" });
       },
     });
-    items.push({
-      label: "reveal in Finder",
-      onClick: () => sock?.send({ t: "reveal-discovered", repoId: d.repoId, path: d.path }),
-    });
+    items.push({ label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: d.id }) });
     items.push({
       label: "copy path",
       // best effort: a denied clipboard permission is not worth a toast over a path you can read
@@ -102,7 +99,7 @@ export function WtRail() {
     });
     return items;
   };
-  const menuItems = (w: WorktreeStatus, land: boolean | undefined): MenuItem[] => {
+  const menuItems = (w: OwnedWorktree, land: boolean | undefined): MenuItem[] => {
     const id = w.worktree.id;
     const merge: MenuItem = {
       label: "merge into main",
@@ -390,15 +387,15 @@ export function WtRail() {
               {discOpen &&
                 discovered.map((d) => (
                   <button
-                    key={d.path}
+                    key={d.id}
                     type="button"
-                    className={cx("row row-quiet rail-disc-item row-edge", discMenu?.path === d.path && "menu-open")}
+                    className={cx("row row-quiet rail-disc-item row-edge", discMenu?.id === d.id && "menu-open")}
                     data-state={rowState({ current: d.id === activeId })}
                     {...tip(d.locked ? `${wtDirLabel(d)} · held by ${d.lockReason ?? "another tool"}` : wtDirLabel(d))}
                     onClick={() => dispatch({ a: "activate", id: d.id })}
                     onContextMenu={(e) => {
                       e.preventDefault();
-                      setDiscMenu({ at: { x: e.clientX, y: e.clientY }, path: d.path });
+                      setDiscMenu({ at: { x: e.clientX, y: e.clientY }, id: d.id });
                     }}
                   >
                     <span className="branch">{d.name}</span>

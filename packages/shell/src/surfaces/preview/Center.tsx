@@ -1,4 +1,4 @@
-import { type ConnectFailure, parseBridgeMsg } from "@toyon/shared";
+import { type ConnectFailure, isOwned, parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
@@ -6,12 +6,12 @@ import { STORAGE } from "../../state/keys.ts";
 import { openSource } from "../../state/openSource.ts";
 import {
   useActive,
-  useActiveDiscovered,
   useActiveId,
   useActiveRepoNeedingSetup,
+  useActiveRow,
   useLocalField,
+  useRows,
   useTheme,
-  useWorktrees,
 } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
 import { bridgeThemeMsg } from "../../theme.ts";
@@ -47,7 +47,7 @@ export function Center() {
   const dispatch = useDispatch();
   const store = useStoreInstance();
   const sock = useSock();
-  const worktrees = useWorktrees();
+  const rows = useRows();
   const activeId = useActiveId();
   const active = useActive();
   const connected = useStore((s) => s.connected);
@@ -188,12 +188,13 @@ export function Center() {
   }, [reloadReq?.n]);
 
   // a worktree toyon did not make: its own pane, and a shell in the terminal below it
-  const activeDiscovered = useActiveDiscovered();
+  const activeRow = useActiveRow();
+  const activeDiscovered = activeRow && !isOwned(activeRow) ? activeRow : null;
   const activeReady = !!active && active.procs.length > 0 && active.procs.some((p) => p.status !== "stopped");
   useEffect(() => {
     if (activeId && activeReady && !mounted.includes(activeId)) setMounted((m) => [...m, activeId]);
   }, [activeId, activeReady]);
-  const frames = worktrees.filter((w) => mounted.includes(w.worktree.id));
+  const frames = rows.filter(isOwned).filter((w) => mounted.includes(w.id));
 
   // editor pane: draggable height + full-height toggle, persisted
   const centerRef = useRef<HTMLDivElement>(null);

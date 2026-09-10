@@ -36,7 +36,7 @@ export function PromptOverlay() {
   /** the trigger the user dismissed with esc, so it does not reopen on the next keystroke */
   const [dismissed, setDismissed] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const source = useStore((s) => commandSource(s.worktrees, repo?.id, agent, defaultAgent));
+  const source = useStore((s) => commandSource(s.rows, repo?.id, agent, defaultAgent));
   const commands = useLocalField(source, "commands");
   const trigger = triggerAt(text, caret);
   const cmd = trigger?.kind === "command" ? trigger : null;

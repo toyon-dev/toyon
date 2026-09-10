@@ -47,7 +47,7 @@ describe("procTrouble", () => {
 
 describe("commandSource", () => {
   const wt = (id: string, kind: "main" | "task", repoId = "r1", agent?: string) =>
-    ({ worktree: { id, kind, repoId, ...(agent ? { agent } : {}) } }) as unknown as WorktreeStatus;
+    ({ id, repoId, worktree: { id, kind, repoId, ...(agent ? { agent } : {}) } }) as unknown as WorktreeStatus;
 
   test("main stands in for the session ⌘K has not created yet", () => {
     const ws = [wt("t1", "task", "r1", "claude"), wt("m1", "main")];

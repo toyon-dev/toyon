@@ -99,7 +99,7 @@ function ProjectPill() {
   const repos = useStore((s) => s.repos);
   // the dialog form draws over the preview instead; this is only the panel that drops out of here
   const open = useStore((s) => s.overlay?.kind === "projects" && !s.overlay.dialog);
-  const busyElsewhere = useStore((s) => s.worktrees.some((w) => isBusy(w) && w.worktree.repoId !== s.activeRepoId));
+  const busyElsewhere = useStore((s) => s.rows.some((w) => isBusy(w) && w.repoId !== s.activeRepoId));
   return (
     <span className="bar-project">
       <Button

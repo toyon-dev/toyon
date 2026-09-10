@@ -1,7 +1,7 @@
 // Everything the UI can do, as typeable commands — chords first, then the context-menu long tail.
 // The ⌘⇧P palette and ⌘P's `>` mode share this list and its matcher, so highlight and score can't drift.
 
-import type { RepoInfo, ThemePrefs, WorktreeStatus } from "@toyon/shared";
+import type { OwnedWorktree, RepoInfo, ThemePrefs } from "@toyon/shared";
 import { canLand, canRemove, canRename, resolveTheme, worktreeChord } from "@toyon/shared";
 import { useMemo } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
@@ -31,7 +31,7 @@ export function buildCommands(
   state: CommandState,
   dispatch: (a: Action) => void,
   sock: DaemonSocket | null,
-  active: WorktreeStatus | null,
+  active: OwnedWorktree | null,
   repo: RepoInfo | null,
 ): Command[] {
   const cmds: Command[] = [];
@@ -206,7 +206,7 @@ export type CommandState = Pick<
   | "themePrefs"
   | "themes"
   | "systemDark"
-  | "worktrees"
+  | "rows"
   | "visible"
   | "activeId"
   | "activeRepoId"
@@ -227,7 +227,7 @@ export function useCommands(): Command[] {
   const themePrefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
-  const worktrees = useStore((s) => s.worktrees);
+  const rows = useStore((s) => s.rows);
   const visible = useStore((s) => s.visible);
   const activeId = useStore((s) => s.activeId);
   const activeRepoId = useStore((s) => s.activeRepoId);
@@ -245,7 +245,7 @@ export function useCommands(): Command[] {
       themePrefs,
       themes,
       systemDark,
-      worktrees,
+      rows,
       visible,
       activeId,
       activeRepoId,
@@ -264,7 +264,7 @@ export function useCommands(): Command[] {
     themePrefs,
     themes,
     systemDark,
-    worktrees,
+    rows,
     visible,
     activeId,
     activeRepoId,

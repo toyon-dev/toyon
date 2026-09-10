@@ -12,7 +12,6 @@ import {
   canLand,
   canRemove,
   canRename,
-  type DiscoveredWorktree,
   type GitFileStatus,
   hasOwnBranch,
   type ImageInput,
@@ -43,7 +42,7 @@ import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
-import { discoverIn } from "./discover.ts";
+import { discoverIn, type FoundWorktree } from "./discover.ts";
 import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 
@@ -124,7 +123,7 @@ export class WorktreeService {
   readonly spare: SparePool;
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
   /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
-  private discoverCache = new Map<string, { rows: DiscoveredWorktree[]; at: number }>();
+  private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
   /** the agent status each worktree last reported, so a turn's end is an edge and not a level */
   private lastAgentStatus = new Map<string, AgentStatus>();
 
@@ -242,26 +241,23 @@ export class WorktreeService {
    * on the first message like it does anywhere else. */
   /** The discovered row at this path as it stands right now, or a toast.
    *
-   * Never trust a path the client sends: a discovered worktree has no id, so the path is the whole
-   * address, and it must still be on the list the daemon would push. Re-derived rather than read
-   * from the cache because the frame the person clicked can be seconds old, and a lock is the only
-   * thing standing between us and another agent's working directory. */
-  private async requireDiscovered(repoId: string, repoPath: string, target: string): Promise<DiscoveredWorktree> {
+   * Re-derived rather than read from the cache because the frame the person clicked can be
+   * seconds old, and a lock is the only thing standing between us and another agent's working
+   * directory: it must still be on the list the daemon would push. */
+  private async requireDiscovered(repoId: string, repoPath: string, target: string): Promise<FoundWorktree> {
     const rows = await discoverIn(repoId, repoPath, this.d.state.worktrees);
     const found = rows.find((r) => canonical(r.path) === target);
     if (!found) throw new UserError("that worktree is gone, or toyon already has it");
     return found;
   }
 
-  /** the absolute path of a discovered worktree, once it is established it is still one */
-  async discoveredPath(repoId: string, path: string): Promise<string> {
+  async adopt(worktreeId: string, createdBy?: string): Promise<WorktreeInfo> {
+    const r = this.readable(worktreeId);
+    if (!r) throw new UserError("that worktree is gone");
+    if (r.wt) throw new UserError(`toyon already runs ${r.name}`);
+    const repoId = r.repoId;
     const repo = this.d.state.requireRepo(repoId);
-    return (await this.requireDiscovered(repoId, repo.path, canonical(path))).path;
-  }
-
-  async adopt(repoId: string, path: string, createdBy?: string): Promise<WorktreeInfo> {
-    const repo = this.d.state.requireRepo(repoId);
-    const target = canonical(path);
+    const target = canonical(r.path);
     // the whole verify-then-record step holds the lock: outside it this races `worktree remove`
     // and leaves a record pointing at a directory that is already gone
     const wt = await withRepoLock(repo.path, async () => {
@@ -653,7 +649,7 @@ export class WorktreeService {
    * this cannot shell out. Reading the cache is honest here because the person can only click a
    * row that was pushed to them, and every push fills this cache: the watcher invalidates and then
    * emits, and the emit re-derives before the frame goes out. */
-  discoveredById(id: string): DiscoveredWorktree | null {
+  discoveredById(id: string): FoundWorktree | null {
     for (const { rows } of this.discoverCache.values()) {
       const found = rows.find((r) => r.id === id);
       if (found) return found;
@@ -667,7 +663,7 @@ export class WorktreeService {
    * which fires on every proc event, and a dev-server log line should not shell out to git. The
    * watcher clears the cache when a worktree actually appears or goes, so the TTL bounds how often
    * we ask when nothing has happened, not how long a real change stays invisible. */
-  async discovered(): Promise<DiscoveredWorktree[]> {
+  async discovered(): Promise<FoundWorktree[]> {
     const perRepo = await Promise.all(
       this.d.state.repos.map(async (repo) => {
         const cached = this.discoverCache.get(repo.id);
@@ -689,14 +685,20 @@ export class WorktreeService {
     return rows;
   }
 
-  private async counts(wt: WorktreeInfo): Promise<{ ahead?: number; behind?: number; dirty?: number }> {
-    const cached = this.countsCache.get(wt.id);
+  /** the badge numbers for one row. `baseline` is main, where HEAD is the default branch and
+   * ahead/behind are zero by definition; a detached worktree has no branch to count either. */
+  private async counts(
+    id: string,
+    path: string,
+    defaultBranch: string,
+    countable: boolean,
+  ): Promise<{ ahead?: number; behind?: number; dirty?: number }> {
+    const cached = this.countsCache.get(id);
     if (cached && Date.now() - cached.at < 10_000) return cached;
     try {
-      const ab =
-        wt.kind === "main" ? {} : await aheadBehind(wt.path, this.d.state.requireRepo(wt.repoId).defaultBranch);
-      const fresh = { ...ab, dirty: (await statusFiles(wt.path)).length, at: Date.now() };
-      this.countsCache.set(wt.id, fresh);
+      const ab = countable ? await aheadBehind(path, defaultBranch) : {};
+      const fresh = { ...ab, dirty: (await statusFiles(path)).length, at: Date.now() };
+      this.countsCache.set(id, fresh);
       return fresh;
     } catch {
       return cached ?? {};
@@ -775,14 +777,28 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
   }
 
-  async statuses(): Promise<WorktreeStatus[]> {
+  /** every row the rail shows: toyon's own worktrees in state order, then the ones git knows
+   * about that toyon did not create. Both halves are awaited before either is returned, so a
+   * frame never shows a taken-over worktree twice or not at all. */
+  async rows(): Promise<WorktreeStatus[]> {
+    const [owned, found] = await Promise.all([this.ownedRows(), this.foundRows()]);
+    return [...owned, ...found];
+  }
+
+  private async ownedRows(): Promise<WorktreeStatus[]> {
     return Promise.all(
       this.d.state.worktrees
         .filter((wt) => wt.kind !== "spare")
         .map(async (wt) => {
           const rt = this.d.runtime.get(wt.id);
-          const { ahead, behind, dirty } = await this.counts(wt);
+          const { defaultBranch } = this.d.state.requireRepo(wt.repoId);
+          const { ahead, behind, dirty } = await this.counts(wt.id, wt.path, defaultBranch, !isMain(wt));
           return {
+            id: wt.id,
+            repoId: wt.repoId,
+            path: wt.path,
+            name: wt.title,
+            branch: wt.branch,
             worktree: wt,
             procs: rt?.procs?.states() ?? [],
             agent: rt?.agent.status ?? "idle",
@@ -793,6 +809,17 @@ export class WorktreeService {
             unseen: isUnseen(wt) || undefined,
           };
         }),
+    );
+  }
+
+  private async foundRows(): Promise<WorktreeStatus[]> {
+    const found = await this.discovered();
+    return Promise.all(
+      found.map(async (f) => {
+        const repo = this.d.state.repo(f.repoId);
+        const { ahead, behind, dirty } = repo ? await this.counts(f.id, f.path, repo.defaultBranch, !!f.branch) : {};
+        return { ...f, procs: [], agent: "idle" as const, ahead, behind, dirty };
+      }),
     );
   }
 }

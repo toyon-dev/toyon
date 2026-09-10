@@ -14,11 +14,11 @@ import type {
   CommitEntry,
   ConnectFailure,
   DesignIndex,
-  DiscoveredWorktree,
   GitFileStatus,
   ImageInput,
   ImageRef,
   LogLine,
+  OwnedWorktree,
   PasteInput,
   PasteRef,
   PathEntry,
@@ -35,7 +35,16 @@ import type {
   ToolKind,
   WorktreeStatus,
 } from "@toyon/shared";
-import { builtinThemes, defaultThemePrefs, isEditTool, resolveTheme, SHELL_STREAM, toyonDark } from "@toyon/shared";
+import {
+  builtinThemes,
+  defaultThemePrefs,
+  isEditTool,
+  isMain,
+  isOwned,
+  resolveTheme,
+  SHELL_STREAM,
+  toyonDark,
+} from "@toyon/shared";
 
 export type ChatItem =
   | { kind: "user"; text: string; pick?: PickMeta; images?: ImageRef[]; pastes?: PasteRef[] }
@@ -208,26 +217,26 @@ export interface State {
   /** why the socket is down, once the shell has worked it out; null while connected or still probing */
   connectFailure: ConnectFailure | null;
   repos: RepoInfo[];
-  worktrees: WorktreeStatus[];
+  /** every row the daemon lists, in its order: toyon's own worktrees, then the ones git knows
+   * about that toyon did not create. One array, as it arrives; the two views below split it. */
+  rows: WorktreeStatus[];
   /** the project the shell is scoped to: the rail, ⌘1–9, ⌘K and settings show only its worktrees.
    * The daemon keeps every repo's procs and agents running regardless; this is a view choice. */
   activeRepoId: string | null;
-  /** `worktrees` narrowed to the active repo, minus `removing` (kept in step by the reducer so
-   * selectors stay stable) */
-  visible: WorktreeStatus[];
+  /** the rows toyon owns in the active repo, minus `removing` (kept in step by the reducer so
+   * selectors stay stable). Owned only, and in the daemon's order: ⌘1-9 indexes this positionally,
+   * the palette numbers its "switch to" rows from it, and the project pill counts tasks as
+   * `length - 1`. A found row entering it would move all three silently. */
+  visible: OwnedWorktree[];
   /** removes this tab has sent and the daemon has not yet confirmed. The row leaves the screen
    * on the click rather than when the daemon's next worktrees frame lands, which sits behind
    * killing the procs and the agent. `worktrees` stays the daemon's list: the snapshot that no
    * longer carries an id retires it here, an error frame brings every pending row back, and a
    * hello starts clean because a daemon that restarted mid-remove may still list it. */
   removing: string[];
-  /** worktrees git knows about that toyon did not create. Deliberately not folded into
-   * `worktrees`: ⌘1-9 indexes `visible` positionally, the palette numbers its "switch to" rows
-   * from the same list, and the project pill counts tasks as `length - 1`. A new kind of row in
-   * that array breaks all three silently. */
-  discovered: DiscoveredWorktree[];
-  /** `discovered` narrowed to the active repo, materialised here for the same reason as `visible` */
-  visibleDiscovered: DiscoveredWorktree[];
+  /** the active repo's rows toyon did not create, materialised here for the same reason as
+   * `visible` */
+  visibleDiscovered: WorktreeStatus[];
   /** per repo: has the discovered section been opened. Collapsed is the default, so the common
    * case (a repo with nothing stray) costs nothing and never surprises anyone. */
   discoveredOpen: Record<string, boolean>;
@@ -328,11 +337,10 @@ export function initialState(opts: InitialOpts): State {
     connected: false,
     connectFailure: null,
     repos: [],
-    worktrees: [],
+    rows: [],
     activeRepoId: null,
     visible: [],
     removing: [],
-    discovered: [],
     visibleDiscovered: [],
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
     lastActive: opts.storedLastActive ?? {},
@@ -387,46 +395,56 @@ export function localOf(s: State, id: string | null | undefined): WorktreeLocal 
   return (id && s.local[id]) || EMPTY_LOCAL;
 }
 
-export function worktreeById(s: State, id: string | null | undefined): WorktreeStatus | null {
-  return (id && s.worktrees.find((w) => w.worktree.id === id)) || null;
+/** any row by id, owned or not */
+export function rowById(s: State, id: string | null | undefined): WorktreeStatus | null {
+  return (id && s.rows.find((w) => w.id === id)) || null;
+}
+
+/** a row toyon owns, by id: what the chat, the composer and landing read */
+export function worktreeById(s: State, id: string | null | undefined): OwnedWorktree | null {
+  const row = rowById(s, id);
+  return row && isOwned(row) ? row : null;
 }
 
 export function repoById(s: State, id: string | null | undefined): RepoInfo | null {
   return (id && s.repos.find((r) => r.id === id)) || null;
 }
 
-/** the active repo's worktrees; every repo's when nothing is selected (a daemon with no repos).
+/** the active repo's owned rows; every repo's when nothing is selected (a daemon with no repos).
  * A row whose remove is in flight is already gone from the person's point of view. */
-function visibleOf(worktrees: WorktreeStatus[], repoId: string | null, removing: string[]): WorktreeStatus[] {
-  const shown = removing.length ? worktrees.filter((w) => !removing.includes(w.worktree.id)) : worktrees;
-  return repoId ? shown.filter((w) => w.worktree.repoId === repoId) : shown;
+function visibleOf(rows: WorktreeStatus[], repoId: string | null, removing: string[]): OwnedWorktree[] {
+  const owned = rows.filter(isOwned);
+  const shown = removing.length ? owned.filter((w) => !removing.includes(w.id)) : owned;
+  return repoId ? shown.filter((w) => w.repoId === repoId) : shown;
 }
 
-/** the same narrowing for the discovered list */
-function visibleDiscoveredOf(discovered: DiscoveredWorktree[], repoId: string | null): DiscoveredWorktree[] {
-  return repoId ? discovered.filter((d) => d.repoId === repoId) : discovered;
+/** the same narrowing for the rows toyon did not create */
+function visibleDiscoveredOf(rows: WorktreeStatus[], repoId: string | null): WorktreeStatus[] {
+  const found = rows.filter((r) => !isOwned(r));
+  return repoId ? found.filter((d) => d.repoId === repoId) : found;
 }
 
-/** the worktree to land on in a repo: the one last selected there, else its first row (main).
- * Never a row whose remove is pending: it is off screen, and landing on it would select nothing. */
-function landingIn(s: State, repoId: string | null, worktrees = s.worktrees): string | null {
-  const live = s.removing.length ? worktrees.filter((w) => !s.removing.includes(w.worktree.id)) : worktrees;
-  if (!repoId) return live[0]?.worktree.id ?? null;
+/** the worktree to land on in a repo: the one last selected there, else its first owned row
+ * (main). Never a found row, which may be gone next push, and never a row whose remove is
+ * pending: it is off screen, and landing on it would select nothing. */
+function landingIn(s: State, repoId: string | null, rows = s.rows): string | null {
+  const owned = rows.filter(isOwned);
+  const live = s.removing.length ? owned.filter((w) => !s.removing.includes(w.id)) : owned;
+  if (!repoId) return live[0]?.id ?? null;
   const last = s.lastActive[repoId];
-  if (last && live.some((w) => w.worktree.id === last)) return last;
-  return live.find((w) => w.worktree.repoId === repoId)?.worktree.id ?? null;
+  if (last && live.some((w) => w.id === last)) return last;
+  return live.find((w) => w.repoId === repoId)?.id ?? null;
 }
 
 /** select a worktree, and with it its repo (a chord or a rail click never leaves you scoped to
  * a project that is not the one on screen) */
 function activate(s: State, id: string | null): State {
-  const wt = worktreeById(s, id);
-  // a discovered worktree can be selected too: it has a shell and a pane of its own, just nothing
+  const row = rowById(s, id);
+  // a found worktree can be selected too: it has a shell and a pane of its own, just nothing
   // toyon runs. It is deliberately not written to lastActive, which is the landing spot for a
   // project and should be somewhere that still exists next time.
-  const disc = wt ? null : s.discovered.find((d) => d.id === id);
-  const activeRepoId = wt ? wt.worktree.repoId : (disc?.repoId ?? s.activeRepoId);
-  const lastActive = wt ? { ...s.lastActive, [wt.worktree.repoId]: wt.worktree.id } : s.lastActive;
+  const activeRepoId = row?.repoId ?? s.activeRepoId;
+  const lastActive = row && isOwned(row) ? { ...s.lastActive, [row.repoId]: row.id } : s.lastActive;
   return { ...s, activeId: id, activeRepoId, lastActive, diff: null };
 }
 
@@ -520,18 +538,13 @@ export function reducer(s: State, action: Action): State {
   else if (next.activeRepoId && !guessed(action) && !samePanels(panelsOf(s), panelsOf(next))) {
     next = { ...next, panels: { ...next.panels, [next.activeRepoId]: panelsOf(next) } };
   }
-  if (
-    next.worktrees === s.worktrees &&
-    next.discovered === s.discovered &&
-    next.activeRepoId === s.activeRepoId &&
-    next.removing === s.removing
-  ) {
+  if (next.rows === s.rows && next.activeRepoId === s.activeRepoId && next.removing === s.removing) {
     return next;
   }
   return {
     ...next,
-    visible: visibleOf(next.worktrees, next.activeRepoId, next.removing),
-    visibleDiscovered: visibleDiscoveredOf(next.discovered, next.activeRepoId),
+    visible: visibleOf(next.rows, next.activeRepoId, next.removing),
+    visibleDiscovered: visibleDiscoveredOf(next.rows, next.activeRepoId),
   };
 }
 
@@ -655,17 +668,18 @@ function reduce(s: State, action: Action): State {
   }
 }
 
-/** drop per-worktree records for worktrees the daemon no longer lists */
-function pruneLocal(local: State["local"], worktrees: WorktreeStatus[]): State["local"] {
-  const keep = new Set(worktrees.map((w) => w.worktree.id));
+/** drop per-worktree records for rows the daemon no longer lists, found rows included: theirs
+ * hold git status and history too, and a push arrives on every proc event */
+function pruneLocal(local: State["local"], rows: WorktreeStatus[]): State["local"] {
+  const keep = new Set(rows.map((w) => w.id));
   if (Object.keys(local).every((id) => keep.has(id))) return local;
   return Object.fromEntries(Object.entries(local).filter(([id]) => keep.has(id)));
 }
 
 /** drop the per-project landing spots whose worktree is gone; the fallback is that project's main
  * either way, this just keeps dead ids out of storage */
-function pruneLastActive(lastActive: Record<string, string>, worktrees: WorktreeStatus[]): Record<string, string> {
-  const keep = new Set(worktrees.map((w) => w.worktree.id));
+function pruneLastActive(lastActive: Record<string, string>, rows: WorktreeStatus[]): Record<string, string> {
+  const keep = new Set(rows.map((w) => w.id));
   if (Object.values(lastActive).every((id) => keep.has(id))) return lastActive;
   return Object.fromEntries(Object.entries(lastActive).filter(([, id]) => keep.has(id)));
 }
@@ -681,8 +695,9 @@ function pruneByRepo(flags: Record<string, boolean>, repos: RepoInfo[]): Record<
 function onServer(s: State, msg: StoreServerMsg): State {
   switch (msg.t) {
     case "hello": {
-      // restore the previously selected worktree across reloads
-      const has = (id: string | null) => !!id && msg.worktrees.some((w) => w.worktree.id === id);
+      // restore the previously selected worktree across reloads, a found one included: it is
+      // still listed, and its shell and dock are what the person was looking at
+      const has = (id: string | null) => !!id && msg.rows.some((w) => w.id === id);
       const hasRepo = (id: string | null) => !!id && msg.repos.some((r) => r.id === id);
       // the project narrows the fallback: a stored repo whose stored worktree is gone still opens
       // on that repo, not on whichever worktree the daemon lists first
@@ -691,18 +706,17 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ? s.activeId
         : has(s.storedActive)
           ? s.storedActive
-          : landingIn(s, repoId, msg.worktrees);
-      const wt = msg.worktrees.find((w) => w.worktree.id === activeId);
+          : landingIn(s, repoId, msg.rows);
+      const wt = msg.rows.find((w) => w.id === activeId);
       return {
         ...s,
         repos: msg.repos,
-        worktrees: msg.worktrees,
-        discovered: msg.discovered,
+        rows: msg.rows,
         activeId,
-        activeRepoId: wt?.worktree.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
+        activeRepoId: wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
         removing: s.removing.length ? [] : s.removing,
-        local: pruneLocal(s.local, msg.worktrees),
-        lastActive: pruneLastActive(s.lastActive, msg.worktrees),
+        local: pruneLocal(s.local, msg.rows),
+        lastActive: pruneLastActive(s.lastActive, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         themes: msg.themes ?? s.themes,
         themePrefs: msg.themePrefs ?? s.themePrefs,
@@ -757,39 +771,34 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "worktrees": {
       let activeId = s.activeId;
-      // a selected discovered worktree counts as still there: without this the next push, which
-      // arrives on every proc event, would bounce the selection back to a real worktree
-      const stillHere =
-        msg.worktrees.some((w) => w.worktree.id === activeId) || msg.discovered.some((d) => d.id === activeId);
-      if (!activeId || !stillHere) {
-        activeId = landingIn(s, s.activeRepoId, msg.worktrees);
+      // the selection holds as long as its row is still listed, found rows included: a push
+      // arrives on every proc event and must not bounce the selection back to an owned row
+      if (!activeId || !msg.rows.some((w) => w.id === activeId)) {
+        activeId = landingIn(s, s.activeRepoId, msg.rows);
       }
       // auto-focus a worktree THIS tab just created (the "prompt spawns a tab" moment); one made
       // from another tab or the CLI stays where it is
-      const known = new Set(s.worktrees.map((w) => w.worktree.id));
-      const fresh = msg.worktrees.find(
-        (w) => !known.has(w.worktree.id) && w.worktree.kind === "worktree" && w.worktree.createdBy === s.clientId,
+      const known = new Set(s.rows.map((w) => w.id));
+      const fresh = msg.rows.find(
+        (w) => !known.has(w.id) && w.worktree?.kind === "worktree" && w.worktree.createdBy === s.clientId,
       );
-      if (fresh && s.worktrees.length > 0) activeId = fresh.worktree.id;
+      if (fresh && s.rows.length > 0) activeId = fresh.id;
       // a pending remove is done once the daemon stops listing the row; one it still lists is
       // still in flight (this frame is as likely another worktree's proc event as the reply)
-      const removing = s.removing.filter((id) => msg.worktrees.some((w) => w.worktree.id === id));
+      const removing = s.removing.filter((id) => msg.rows.some((w) => w.id === id));
       return activate(
         {
           ...s,
-          worktrees: msg.worktrees,
-          discovered: msg.discovered,
+          rows: msg.rows,
           removing: removing.length === s.removing.length ? s.removing : removing,
-          local: pruneLocal(s.local, msg.worktrees),
+          local: pruneLocal(s.local, msg.rows),
         },
         activeId,
       );
     }
     case "proc": {
-      const worktrees = s.worktrees.map((w) =>
-        w.worktree.id === msg.worktreeId ? { ...w, procs: upsertProc(w.procs, msg.proc) } : w,
-      );
-      return { ...s, worktrees };
+      const rows = s.rows.map((w) => (w.id === msg.worktreeId ? { ...w, procs: upsertProc(w.procs, msg.proc) } : w));
+      return { ...s, rows };
     }
     case "log":
       return withLocal(s, msg.worktreeId, (l) => ({
@@ -824,8 +833,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       let leftOpen = s.leftOpen;
       let leftAuto = s.leftAuto;
       if (s.leftAuto && msg.worktreeId === s.activeId) {
-        const wt = s.worktrees.find((w) => w.worktree.id === msg.worktreeId);
-        if (wt?.worktree.kind === "main" && msg.files.length === 0 && (msg.committed?.length ?? 0) === 0) {
+        const wt = worktreeById(s, msg.worktreeId);
+        if (wt && isMain(wt.worktree) && msg.files.length === 0 && (msg.committed?.length ?? 0) === 0) {
           leftOpen = false;
         }
         leftAuto = false;

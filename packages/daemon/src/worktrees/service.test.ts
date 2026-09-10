@@ -117,7 +117,7 @@ describe("create / remove", () => {
   test("removing an adopted worktree keeps the person's branch", async () => {
     const repoId = await registered();
     await settle();
-    const wt = await w.worktrees.adopt(repoId, foreignWorktree("theirs", "their-branch"));
+    const wt = await adoptDir(foreignWorktree("theirs", "their-branch"));
     await settle();
     await w.worktrees.remove(wt.id);
     expect(existsSync(wt.path)).toBe(false);
@@ -183,7 +183,7 @@ describe("spare pool", () => {
   test("the spare's statuses row is hidden until claimed", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
-    expect((await w.worktrees.statuses()).some((s) => s.worktree.kind === "spare")).toBe(false);
+    expect((await w.worktrees.rows()).some((s) => s.worktree?.kind === "spare")).toBe(false);
   });
 });
 
@@ -534,7 +534,7 @@ describe("boot", () => {
 // The rail rings a worktree whose turn ended while nobody was looking. Green alone cannot separate
 // "just finished" from "untouched for a week", and the ring is what closes that gap.
 describe("unseen", () => {
-  const unseenOf = async (id: string) => (await w.worktrees.statuses()).find((x) => x.worktree.id === id)?.unseen;
+  const unseenOf = async (id: string) => (await w.worktrees.rows()).find((x) => x.id === id)?.unseen;
 
   test("a worktree nothing has run in is not unseen", async () => {
     await registered();
@@ -590,6 +590,16 @@ function foreignWorktree(name: string, branch: string): string {
   return dir;
 }
 
+/** the id the row at this directory was pushed with; adopt is addressed by it. A directory that
+ * was never a worktree has no row, and an id nothing resolves is what the shell would send then. */
+async function foundId(dir: string): Promise<string> {
+  w.worktrees.invalidateDiscovered();
+  const want = existsSync(dir) ? realpathSync(dir) : dir;
+  const row = (await w.worktrees.discovered()).find((r) => realpathSync(r.path) === want);
+  return row?.id ?? "nope";
+}
+const adoptDir = async (dir: string, createdBy?: string) => w.worktrees.adopt(await foundId(dir), createdBy);
+
 describe("discovery", () => {
   test("a worktree made behind toyon's back is discovered", async () => {
     const repoId = await registered();
@@ -601,6 +611,25 @@ describe("discovery", () => {
     expect(rows[0]?.repoId).toBe(repoId);
     expect(rows[0]?.branch).toBe("made-elsewhere");
     expect(existsSync(dir)).toBe(true);
+  });
+
+  test("rows() lists toyon's own first, then what it found, with counts on both", async () => {
+    const repoId = await registered();
+    const task = await w.worktrees.create(repoId, "mine");
+    await settle();
+    const dir = foreignWorktree("theirs", "their-branch");
+    writeFileSync(join(dir, "wip.txt"), "x\n");
+    sh(dir, "git", "add", "wip.txt");
+    sh(dir, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "theirs");
+    writeFileSync(join(dir, "dirty.txt"), "y\n");
+    const rows = await w.worktrees.rows();
+    const found = rows.at(-1)!;
+    expect(rows.slice(0, -1).every((r) => r.worktree)).toBe(true);
+    expect(rows.some((r) => r.id === task.id)).toBe(true);
+    expect(found.worktree).toBeUndefined();
+    expect(found).toMatchObject({ name: "their-branch", branch: "their-branch", procs: [], agent: "idle" });
+    expect(found.ahead).toBe(1);
+    expect(found.dirty).toBe(1);
   });
 
   test("toyon's own worktrees never appear, spare included", async () => {
@@ -630,14 +659,16 @@ describe("adopt", () => {
     await settle();
     const dir = foreignWorktree("takeover", "take-me");
 
-    const wt = await w.worktrees.adopt(repoId, dir);
+    const wt = await adoptDir(dir);
     expect(wt.kind).toBe("worktree");
     expect(wt.branch).toBe("take-me");
     expect(wt.title).toBe("take-me");
     expect(wt.proxyPort).toBeGreaterThan(0);
     await settle();
 
-    expect((await w.worktrees.statuses()).some((s) => s.worktree.id === wt.id)).toBe(true);
+    const rows = await w.worktrees.rows();
+    expect(rows.find((s) => s.id === wt.id)?.worktree).toBe(wt);
+    expect(rows.every((s) => s.worktree)).toBe(true);
     expect(await w.worktrees.discovered()).toEqual([]);
     expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
     // take-over is not a task: no prompt goes anywhere
@@ -647,10 +678,17 @@ describe("adopt", () => {
   test("an adopted worktree keeps its branch name: rename refuses rather than moving it under toyon/", async () => {
     const repoId = await registered();
     await settle();
-    const wt = await w.worktrees.adopt(repoId, foreignWorktree("theirs", "their-branch"));
+    const wt = await adoptDir(foreignWorktree("theirs", "their-branch"));
     await expect(w.worktrees.rename(wt.id, "mine now")).rejects.toBeInstanceOf(UserError);
     expect(wt.branch).toBe("their-branch");
     expect(wt.title).toBe("their-branch");
+  });
+
+  test("adopting a row toyon already owns, or an id nothing resolves, is a toast", async () => {
+    const repoId = await registered();
+    const task = await w.worktrees.create(repoId, "mine");
+    await expect(w.worktrees.adopt(task.id)).rejects.toBeInstanceOf(UserError);
+    await expect(w.worktrees.adopt("disc-000000000000")).rejects.toBeInstanceOf(UserError);
   });
 
   test("it does not run the repo's setup commands in a directory someone is using", async () => {
@@ -661,7 +699,7 @@ describe("adopt", () => {
     await settle();
     const dir = foreignWorktree("nosetup", "no-setup");
 
-    const wt = await w.worktrees.adopt(repoId, dir);
+    const wt = await adoptDir(dir);
     await settle();
     expect(existsSync(join(wt.path, "SETUP_RAN"))).toBe(false);
   });
@@ -671,7 +709,7 @@ describe("adopt", () => {
     await settle();
     const dir = foreignWorktree("linkless", "editor-pane");
 
-    const wt = await w.worktrees.adopt(repoId, dir);
+    const wt = await adoptDir(dir);
     await settle();
     expect(wt.linkPath).toBeUndefined();
     // the name refreshLink would otherwise have chosen: <parent>/<branch>
@@ -696,7 +734,7 @@ describe("adopt", () => {
     sh(w.repo, "git", "worktree", "lock", "--reason", "claude session dsys (pid 900)", dir);
     w.worktrees.invalidateDiscovered();
 
-    expect(w.worktrees.adopt(repoId, dir)).rejects.toThrow(UserError);
+    expect(adoptDir(dir)).rejects.toThrow(UserError);
     expect(w.state.worktrees.some((x) => x.branch === "held")).toBe(false);
   });
 
@@ -707,7 +745,7 @@ describe("adopt", () => {
     sh(w.repo, "git", "worktree", "add", "-q", "-b", "nested-branch", inside, "main");
     w.worktrees.invalidateDiscovered();
 
-    expect(w.worktrees.adopt(repoId, inside)).rejects.toThrow(UserError);
+    expect(adoptDir(inside)).rejects.toThrow(UserError);
   });
 
   test("a detached worktree has no branch to land or ship", async () => {
@@ -717,13 +755,13 @@ describe("adopt", () => {
     sh(w.repo, "git", "worktree", "add", "-q", "--detach", dir, "main");
     w.worktrees.invalidateDiscovered();
 
-    expect(w.worktrees.adopt(repoId, dir)).rejects.toThrow(UserError);
+    expect(adoptDir(dir)).rejects.toThrow(UserError);
   });
 
   test("a path toyon was never offered is refused", async () => {
     const repoId = await registered();
     await settle();
-    expect(w.worktrees.adopt(repoId, join(dirname(w.repo), "never-existed"))).rejects.toThrow(UserError);
+    expect(adoptDir(join(dirname(w.repo), "never-existed"))).rejects.toThrow(UserError);
   });
 });
 
@@ -767,7 +805,7 @@ describe("a shell at a discovered worktree", () => {
     w.runtime.openLooseShell(row.id, row.path, 80, 24);
     expect(w.runtime.looseShell(row.id)).toBeDefined();
 
-    await w.worktrees.adopt(repoId, dir);
+    await adoptDir(dir);
     await w.worktrees.discovered(); // the derivation that no longer lists it prunes the shell
     expect(w.runtime.looseShell(row.id)).toBeUndefined();
     expect(w.terminals.get(row.id)?.[0]?.alive).toBe(false);

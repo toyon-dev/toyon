@@ -9,7 +9,6 @@ import type {
   AgentInfo,
   CommitEntry,
   DesignIndex,
-  DiscoveredWorktree,
   GitFileStatus,
   LogLine,
   PathEntry,
@@ -43,9 +42,9 @@ export type ServerMsg =
       version: string;
       protocol: number;
       repos: RepoInfo[];
-      worktrees: WorktreeStatus[];
-      /** worktrees git knows about that toyon did not create; see the `worktrees` frame */
-      discovered: DiscoveredWorktree[];
+      /** every row: toyon's own worktrees first, in its order, then the ones git knows about that
+       * toyon did not create; see the `worktrees` frame */
+      rows: WorktreeStatus[];
       themes: Theme[];
       themePrefs: ThemePrefs;
       /** the daemon's agent registry and which entry new worktrees get by default */
@@ -66,9 +65,9 @@ export type ServerMsg =
    * itself is: an empty `entries` means "nothing matches here" and "there is no here" alike, and
    * only `target` separates the two */
   | { t: "path-entries"; query: string; entries: PathEntry[]; target: PathTarget }
-  /** Both lists travel together on purpose: take-over moves a row from `discovered` to
-   * `worktrees`, and split across two frames the rail would show it twice or not at all. */
-  | { t: "worktrees"; worktrees: WorktreeStatus[]; discovered: DiscoveredWorktree[] }
+  /** One array, owned and found rows alike: take-over turns a row owned, and were the two kinds
+   * to travel in separate frames the rail would show it twice or not at all in between. */
+  | { t: "worktrees"; rows: WorktreeStatus[] }
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
   | { t: "log"; worktreeId: string; proc: string; line: string }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
@@ -245,20 +244,14 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
-  /** take over a worktree git knows about but toyon did not create. Addressed by path because a
-   * discovered worktree has no record and so no id; the daemon re-derives the list and refuses
-   * anything that is not still on it. */
+  /** take over a worktree git knows about but toyon did not create: the row's id, which the
+   * daemon resolves to a path and then re-derives the list for, refusing anything not still on it */
   z.object({
     t: z.literal("adopt-worktree"),
     /** as on create-worktree: only the tab that asked focuses the promoted row */
     clientId: z.string().max(64).optional(),
-    repoId: id,
-    path: z.string().min(1).max(4_000),
+    worktreeId: id,
   }),
-  /** Finder-reveal a discovered worktree. Separate from `reveal`, which addresses a worktree by id
-   * and resolves inside it; this one has only a path, so the daemon re-derives the list and
-   * reveals nothing that is not still on it. */
-  z.object({ t: z.literal("reveal-discovered"), repoId: id, path: z.string().min(1).max(4_000) }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
   /** `ref` reads the file as of that commit instead of the working tree */
   z.object({ t: z.literal("file-diff"), worktreeId: id, path: relPath, ref: sha.optional() }),

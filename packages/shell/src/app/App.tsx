@@ -1,7 +1,8 @@
+import { isOwned } from "@toyon/shared";
 import { useEffect, useRef } from "react";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
-import { useActive, useActiveDiscovered, useActiveId, useTheme, useWorktrees } from "../state/selectors.ts";
+import { useActive, useActiveId, useActiveRow, useRows, useTheme } from "../state/selectors.ts";
 import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
 import { RightDock } from "../surfaces/chat/RightDock.tsx";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
@@ -33,7 +34,8 @@ export function App() {
   const activeId = useActiveId();
   const activeRepoId = useStore((s) => s.activeRepoId);
   const active = useActive();
-  const activeDiscovered = useActiveDiscovered();
+  const activeRow = useActiveRow();
+  const activeDiscovered = activeRow && !isOwned(activeRow) ? activeRow : null;
   const connected = useStore((s) => s.connected);
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
@@ -45,7 +47,7 @@ export function App() {
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
   const toast = useStore((s) => s.toast);
-  const worktrees = useWorktrees();
+  const rows = useRows();
 
   // the daemon streams only subscribed worktrees. Keep the last few visited subscribed so their
   // previews still reload after an agent turn while hidden and switching back is instant; drop
@@ -68,18 +70,14 @@ export function App() {
   }, [connected, sock]);
   // worktrees that disappeared drop out of the set
   useEffect(() => {
-    const alive = new Set(worktrees.map((w) => w.worktree.id));
+    const alive = new Set(rows.map((w) => w.id));
     subsRef.current = subsRef.current.filter((id) => alive.has(id));
-  }, [worktrees]);
+  }, [rows]);
 
-  // window/app title follows the active worktree
+  // window/app title follows the active row
   useEffect(() => {
-    document.title = active
-      ? `${active.worktree.title} · toyon`
-      : activeDiscovered
-        ? `${activeDiscovered.name} · toyon`
-        : "toyon";
-  }, [active?.worktree.title]);
+    document.title = activeRow ? `${activeRow.name} · toyon` : "toyon";
+  }, [activeRow?.name]);
 
   // Selecting a worktree clears the rail's unseen ring: whichever way you got here (a rail click,
   // ⌘1-9, the palette), you are looking at it now. Focus is the one condition kept, and it is what
@@ -168,10 +166,10 @@ export function App() {
     prevActiveRef.current = activeId;
     if (!prevId || !activeId || prevId === activeId) return;
     const s = store.getState();
-    const prev = worktrees.find((w) => w.worktree.id === prevId);
-    const next = worktrees.find((w) => w.worktree.id === activeId);
-    const g = prev?.worktree.variant?.group;
-    if (!g || next?.worktree.variant?.group !== g) return;
+    const prev = rows.find((w) => w.id === prevId);
+    const next = rows.find((w) => w.id === activeId);
+    const g = prev?.worktree?.variant?.group;
+    if (!g || next?.worktree?.variant?.group !== g) return;
     const pathOf = (id: string) => {
       try {
         const u = s.local[id]?.page.url;

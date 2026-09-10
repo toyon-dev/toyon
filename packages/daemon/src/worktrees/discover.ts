@@ -9,9 +9,22 @@
 
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import type { DiscoveredWorktree, WorktreeInfo } from "@toyon/shared";
+import type { WorktreeInfo } from "@toyon/shared";
 import { canonical } from "../agent/bounds.ts";
 import { type GitWorktree, listWorktrees } from "../git/worktrees.ts";
+
+/** what git says about a worktree toyon has no record for; the row the shell sees is built from
+ * this plus counts, in `WorktreeService.rows()` */
+export interface FoundWorktree {
+  id: string;
+  repoId: string;
+  path: string;
+  /** its branch, or the directory's own name when detached */
+  name: string;
+  branch?: string;
+  locked?: boolean;
+  lockReason?: string;
+}
 
 /** A discovered worktree's id: the canonical path, hashed. Derived rather than minted because
  * there is no record to keep a minted one in, and it has to be the same across pushes or an open
@@ -38,9 +51,9 @@ function knownPaths(known: WorktreeInfo[]): Set<string> {
 /** git's worktree list minus the ones toyon owns. Pure, so the matching rule is testable without
  * a repo: paths are canonicalised on both sides because /tmp is a symlink to /private/tmp on
  * macOS, and a worktree reached through either spelling is the same worktree. */
-export function subtractKnown(repoId: string, listed: GitWorktree[], known: WorktreeInfo[]): DiscoveredWorktree[] {
+export function subtractKnown(repoId: string, listed: GitWorktree[], known: WorktreeInfo[]): FoundWorktree[] {
   const mine = knownPaths(known);
-  const rows: DiscoveredWorktree[] = [];
+  const rows: FoundWorktree[] = [];
   for (const g of listed) {
     // the repository itself, not a place work happens
     if (g.bare) continue;
@@ -61,10 +74,6 @@ export function subtractKnown(repoId: string, listed: GitWorktree[], known: Work
 }
 
 /** What one repo has that toyon does not know about. */
-export async function discoverIn(
-  repoId: string,
-  repoPath: string,
-  known: WorktreeInfo[],
-): Promise<DiscoveredWorktree[]> {
+export async function discoverIn(repoId: string, repoPath: string, known: WorktreeInfo[]): Promise<FoundWorktree[]> {
   return subtractKnown(repoId, await listWorktrees(repoPath), known);
 }

@@ -1,4 +1,4 @@
-import { canLand as landable, type WorktreeStatus } from "@toyon/shared";
+import { canLand as landable, type OwnedWorktree } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
@@ -15,7 +15,7 @@ export function CommitBox({
   behind,
   dirty,
 }: {
-  active: WorktreeStatus;
+  active: OwnedWorktree;
   ahead: number;
   behind: number;
   dirty: boolean;

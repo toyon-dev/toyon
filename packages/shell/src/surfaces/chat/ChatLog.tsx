@@ -1,4 +1,4 @@
-import { type PickMeta, SHELL_TOOL, type WorktreeStatus } from "@toyon/shared";
+import { type OwnedWorktree, type PickMeta, SHELL_TOOL } from "@toyon/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
@@ -11,7 +11,7 @@ import { ChatItemView, ToolRow } from "./ChatItemView.tsx";
 import { groupTools } from "./group.ts";
 
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill */
-export function ChatLog({ active }: { active: WorktreeStatus | null }) {
+export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const id = active?.worktree.id ?? null;

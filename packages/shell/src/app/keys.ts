@@ -24,7 +24,7 @@ export function useChords() {
           case "worktree": {
             const i = worktreeIndex(chord.digit, s.visible.length);
             const wt = i === null ? undefined : s.visible[i];
-            if (wt) dispatch({ a: "activate", id: wt.worktree.id });
+            if (wt) dispatch({ a: "activate", id: wt.id });
             break;
           }
           case "new":
@@ -77,13 +77,13 @@ export function useChords() {
             dispatch({ a: "toggle-design" });
             break;
           case "term-tab": {
-            const wt = s.worktrees.find((w) => w.worktree.id === s.activeId);
+            const wt = s.rows.find((w) => w.id === s.activeId);
             if (!wt) break;
             const streams = [SHELL_STREAM, ...wt.procs.map((p) => p.name)];
             const at = streams.indexOf(localOf(s, s.activeId).termStream);
             dispatch({
               a: "term-stream",
-              id: wt.worktree.id,
+              id: wt.id,
               stream: streams[(at + 1) % streams.length] ?? SHELL_STREAM,
             });
             break;

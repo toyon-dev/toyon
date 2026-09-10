@@ -295,7 +295,7 @@ function Fold({
  * comes next. The body is the message's markdown, not a call's mono: it is prose. */
 export const ThoughtRow = memo(function ThoughtRow({ item, live }: { item: ThinkingItem; live?: boolean }) {
   const html = useThrottledMarkdown(item.text);
-  const word = live ? "thinking" : "thought";
+  const word = live ? "Thinking" : "Thought";
   return (
     <Fold
       className="tool-row"

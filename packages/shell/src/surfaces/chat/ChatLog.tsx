@@ -4,8 +4,8 @@ import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
+import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
-import { tip } from "../../ui/Tooltip.tsx";
 import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, ToolRow } from "./ChatItemView.tsx";
 import { groupTools } from "./group.ts";
@@ -32,10 +32,10 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
       setShowJump(true);
     }
   }, [items]);
-  useEffect(() => {
+  useOnChange([id], () => {
     atBottomRef.current = true;
     setShowJump(false);
-  }, [id]);
+  });
 
   const onScroll = () => {
     const el = logRef.current;
@@ -112,7 +112,11 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
             into the turn as they are sent, and read as an ordinary message in the place they landed. */}
         {id &&
           queue.map((text, i) => (
-            <div key={`q-${i}`} className="msg-user queued-msg">
+            <div
+              // biome-ignore lint/suspicious/noArrayIndexKey: the queue is strings in send order; position is the identity, and a removed entry closes the gap
+              key={`q-${i}`}
+              className="msg-user queued-msg"
+            >
               <span className="queued-tag">queued</span>
               <span className="queued-text">{text}</span>
               <span className="queued-actions">

@@ -1,7 +1,8 @@
 import type { Theme } from "@toyon/shared";
 import { effectiveKind, pickFamily, type ThemeFamily, themeFamilies } from "@toyon/shared";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { rowState } from "../../ui/rowState.ts";
 import { byName } from "./commands.ts";
@@ -30,9 +31,9 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
   const previewOf = (f: ThemeFamily, k: "dark" | "light" | null) => f[k ?? nowKind] ?? f.dark ?? f.light ?? null;
   const families = useMemo(() => themeFamilies(themes), [themes]);
   const slotThemes = useMemo(() => themes.filter((t) => t.kind === slot), [themes, slot]);
-  useEffect(() => {
+  useOnChange([active, peek], () => {
     if (slot === "theme") preview(active ? previewOf(active, peek) : null);
-  }, [active, peek]);
+  });
 
   if (slot !== "theme") {
     return (

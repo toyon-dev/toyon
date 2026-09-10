@@ -86,4 +86,9 @@
     display: block;
     margin-top: 8px;
   }
+  /* the one control a toast always has, so the keyboard can close it; the text runs beside it */
+  .toast-dismiss {
+    float: right;
+    margin: -2px -6px 0 8px;
+  }
 }

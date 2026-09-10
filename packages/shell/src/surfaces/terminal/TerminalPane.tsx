@@ -4,9 +4,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive, useLocalField, useTheme } from "../../state/selectors.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
-import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
-import { tip } from "../../ui/Tooltip.tsx";
 import { TabStrip } from "./TabStrip.tsx";
 import "./terminal.css";
 

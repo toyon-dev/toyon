@@ -204,10 +204,21 @@ function clearOverlay() {
 /** The fill is what separates the two things a box can mean. An outline alone is the picker's
  * default, where a click attaches the element to the chat. A filled box means source: the picker
  * with the modifier held, and the change-hover highlight arriving from the other direction. */
+const CHIP_H = 20;
+
 function drawBox(rect: DOMRect, label?: HTMLElement, fill = true) {
   const box = document.createElement("div");
   box.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;outline:2px solid ${accent};outline-offset:-1px;${fill ? `background:${accent}14;` : ""}border-radius:2px;`;
-  if (label) box.appendChild(label);
+  if (label) {
+    // the chip sits above the box, but the box's viewport is an iframe: anything pinned near the top
+    // edge would put the chip under the shell's chrome, so it drops below the box instead, and
+    // inside it when the bottom is off-screen too
+    const above = rect.top >= CHIP_H;
+    const below = rect.bottom + CHIP_H <= window.innerHeight;
+    label.style.top = above ? `${-CHIP_H}px` : below ? `${rect.height + 4}px` : "2px";
+    if (!above && !below) label.style.left = "2px";
+    box.appendChild(label);
+  }
   ensureOverlay().appendChild(box);
 }
 
@@ -216,7 +227,7 @@ function drawBox(rect: DOMRect, label?: HTMLElement, fill = true) {
 function chip(text: string, hint?: string): HTMLElement {
   const el = document.createElement("div");
   el.textContent = text;
-  el.style.cssText = `position:absolute;left:0;top:-20px;background:${accent};color:${accentFg};font:11px -apple-system,sans-serif;padding:1px 6px;border-radius:3px;white-space:nowrap;`;
+  el.style.cssText = `position:absolute;left:0;background:${accent};color:${accentFg};font:11px -apple-system,sans-serif;padding:1px 6px;border-radius:3px;white-space:nowrap;`;
   if (hint) {
     const h = document.createElement("span");
     h.textContent = `  ${hint}`;

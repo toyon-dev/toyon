@@ -4,7 +4,8 @@
 // than part of the component - the two differ in where the query lives and who holds focus, not
 // in how the list behaves.
 
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useRef, useState } from "react";
+import { useOnChange } from "./hooks.ts";
 
 /** ↑↓ with wrap-around */
 export function step(i: number, delta: number, n: number): number {
@@ -54,12 +55,12 @@ export function useListNav<T>(opts: {
   const activeKey = results[idx] ? keyOf(results[idx]!) : null;
   const onActiveRef = useRef(onActive);
   onActiveRef.current = onActive;
-  useEffect(() => {
+  useOnChange([activeKey], () => {
     listRef.current
       ?.querySelector<HTMLElement>('.picker-item[data-state~="cursor"]')
       ?.scrollIntoView({ block: "nearest" });
     onActiveRef.current?.(results[idx] ?? null);
-  }, [activeKey]);
+  });
 
   const clamped = Math.min(idx, Math.max(0, results.length - 1));
   const active = results[clamped] ?? null;

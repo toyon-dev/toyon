@@ -98,6 +98,7 @@ export function Menu({
     <div className="menu" style={{ position: "fixed", left, top, width: WIDTH }}>
       {items.map((it, i) => (
         <button
+          // biome-ignore lint/suspicious/noArrayIndexKey: a menu's items have no identity but their position, and the list is built whole each time it opens
           key={i}
           className={cx("row", it.danger && "danger")}
           data-state={rowState({ cursor: i === idx })}

@@ -1,8 +1,9 @@
 import type { WorktreeStatus } from "@toyon/shared";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { TextArea } from "../../ui/Field.tsx";
+import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
@@ -23,7 +24,7 @@ export function CommitBox({
   const sock = useSock();
   const wt = active.worktree;
   const [msg, setMsg] = useState("");
-  useEffect(() => setMsg(""), [wt.id]);
+  useOnChange([wt.id], () => setMsg(""));
 
   const commit = () => {
     if (!msg.trim()) return;

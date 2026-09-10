@@ -94,7 +94,7 @@ describe("policy.decide", () => {
 
   test("requestedPaths merges locations and raw input keys without duplicates", () => {
     const r = req({ locations: [{ path: "/a" }], rawInput: { file_path: "/a", path: "/b", paths: ["/c", 1] } });
-    expect(requestedPaths(r, wt)).toEqual(["/a", "/b", "/c"]);
+    expect(requestedPaths(r)).toEqual(["/a", "/b", "/c"]);
   });
 });
 

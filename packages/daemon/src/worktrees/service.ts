@@ -179,7 +179,7 @@ export class WorktreeService {
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
         this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, { context, pick, images, pastes });
-        this.scheduleNaming(claimed, prompt, repo, variant);
+        this.scheduleNaming(claimed, prompt, variant);
         return claimed;
       }
     }
@@ -209,7 +209,7 @@ export class WorktreeService {
     // RuntimeRegistry.start emits worktreesChanged once the procs are up
     fireAndForget(wt.id, this.setupAndStart(wt, repo, base?.path ?? repo.path), "setup + start");
     this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context, pick, images, pastes });
-    this.scheduleNaming(wt, prompt, repo, variant);
+    this.scheduleNaming(wt, prompt, variant);
     return wt;
   }
 
@@ -308,7 +308,7 @@ export class WorktreeService {
 
   /** Async pretty-naming: solo worktrees rename directly; variant groups rename together
    * (index 1 runs the Haiku call, then every sibling becomes <name>-v<index>). */
-  private scheduleNaming(wt: WorktreeInfo, prompt: string, repo: RepoInfo, variant?: Variant) {
+  private scheduleNaming(wt: WorktreeInfo, prompt: string, variant?: Variant) {
     if (!variant) {
       fireAndForget(
         wt.id,

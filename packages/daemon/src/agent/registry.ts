@@ -210,7 +210,7 @@ export class AgentRegistry {
   async installMissing(order: string[] = ["claude", "codex"]): Promise<void> {
     for (const id of order) {
       const spec = this.specs.get(id);
-      if (!spec || spec.run.kind !== "npm-bin") continue;
+      if (spec?.run.kind !== "npm-bin") continue;
       await this.install(id);
     }
   }

@@ -1,5 +1,5 @@
 import type { DiscoveredWorktree, WorktreeStatus } from "@toyon/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
 import {
@@ -18,6 +18,7 @@ import { chord, dotClass, procTrouble } from "../util.ts";
 import { removeWorktrees, worktreeActions } from "./worktreeActions.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
+import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
 
 type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
@@ -59,11 +60,11 @@ export function WtRail() {
     setGraftMode(false);
     setSel([]);
   };
-  useEffect(() => {
+  useOnChange([graftMode], () => {
     const onEsc = (e: KeyboardEvent) => e.key === "Escape" && cancelGraft();
     if (graftMode) window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
-  }, [graftMode]);
+  });
 
   const acts = worktreeActions(sock, dispatch);
   const menuWt = menu ? (worktrees.find((w) => w.worktree.id === menu.id) ?? null) : null;
@@ -195,6 +196,7 @@ export function WtRail() {
                 ) : null;
               })()}
               {w.worktree.variant && (
+                // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
                 <span
                   className="rail-badge badge-variant clickable"
                   data-tip="Keep this variant, remove the others"
@@ -210,6 +212,7 @@ export function WtRail() {
                 </span>
               )}
               {(w.dirty ?? 0) > 0 && (
+                // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
                 <span
                   className="rail-badge badge-dirty clickable"
                   data-tip="View changes"
@@ -224,6 +227,7 @@ export function WtRail() {
                 </span>
               )}
               {(w.behind ?? 0) > 0 && (
+                // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
                 <span
                   className="rail-badge badge-behind clickable"
                   data-tip="Sync from main"
@@ -237,6 +241,7 @@ export function WtRail() {
                 </span>
               )}
               {(w.ahead ?? 0) > 0 && (
+                // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
                 <span
                   className="rail-badge badge-ahead clickable"
                   data-tip="Land"
@@ -250,6 +255,7 @@ export function WtRail() {
                   <span className="act">land</span>
                 </span>
               )}
+              {/* biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row) */}
               <span
                 className="rail-more row-dim"
                 {...tip("Actions")}
@@ -270,6 +276,7 @@ export function WtRail() {
                 const unseen = w.unseen ? " unseen" : "";
                 if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}${unseen}`} />;
                 return (
+                  // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
                   <span
                     className={`dot crashed clickable${unseen}`}
                     {...tip(trouble.tip)}

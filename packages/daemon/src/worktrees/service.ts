@@ -8,7 +8,7 @@ import {
   type AgentEvent,
   type AgentStatus,
   type CommitEntry,
-  canGraft,
+  canFold,
   canLand,
   canRemove,
   canRename,
@@ -55,7 +55,7 @@ const LOCAL_CONFIG_FILES = [".env", ".env.local", ".env.development", ".env.deve
 
 export type Variant = { group: string; index: number; of: number };
 
-/** what a grafted transcript keeps of a message: the source's attachment store goes with the
+/** what a folded-in transcript keeps of a message: the source's attachment store goes with the
  * source, so an image or paste ref would point at nothing; the captions in the text stay */
 function withoutAttachments(event: AgentEvent): AgentEvent {
   if (event.type !== "user-message") return event;
@@ -531,18 +531,18 @@ export class WorktreeService {
    * before anything is touched, and a conflict leaves both sides exactly as they were. No third
    * worktree holds the result: a `combined` kind would cost a directory, a deps clone, a port and a
    * cold agent with no memory of either side, for insurance the merge already provides. */
-  async graft(targetId: string, sourceIds: string[]): Promise<{ target: WorktreeInfo; grafted: string[] }> {
+  async fold(targetId: string, sourceIds: string[]): Promise<{ target: WorktreeInfo; folded: string[] }> {
     const target = this.d.state.worktree(targetId);
     if (!target) throw new UserError("that worktree is gone");
     const sources = [...new Set(sourceIds)]
       .filter((id) => id !== targetId)
       .map((id) => this.d.state.worktree(id))
       .filter((w): w is WorktreeInfo => !!w);
-    if (sources.length === 0) throw new UserError("pick at least one worktree to graft in");
+    if (sources.length === 0) throw new UserError("pick at least one worktree to fold in");
     const all = [target, ...sources];
     for (const w of all) {
-      if (isMain(w)) throw new UserError("graft between worktrees, not into or out of main");
-      if (!canGraft(w)) throw new UserError(`${w.title} cannot be grafted`);
+      if (isMain(w)) throw new UserError("fold between worktrees, not into or out of main");
+      if (!canFold(w)) throw new UserError(`${w.title} cannot be folded in`);
       if (w.repoId !== target.repoId) throw new UserError("worktrees must belong to one repo");
       // a merge under an editing agent races its file tools, and a removal under one loses its
       // turn; refusing beats stopping someone's turn from a rail button
@@ -560,7 +560,9 @@ export class WorktreeService {
       const m = await git(target.path, "merge", "--no-edit", ...sources.map((w) => w.branch));
       if (!m.ok) {
         await git(target.path, "merge", "--abort");
-        throw new UserError(`branches conflict: these worktrees can't be grafted cleanly (${m.err.slice(0, 200)})`);
+        throw new UserError(
+          `branches conflict: these worktrees can't be folded together cleanly (${m.err.slice(0, 200)})`,
+        );
       }
     });
     // the sources' history rides along in order, each behind a marker saying where it came from.
@@ -569,14 +571,14 @@ export class WorktreeService {
     const agent = this.d.runtime.ensureAgent(target).agent;
     for (const w of sources) {
       const entries = this.d.runtime.ensureAgent(w).agent.transcript();
-      agent.note({ type: "grafted", title: w.title, branch: w.branch, ts: Date.now() });
+      agent.note({ type: "folded", title: w.title, branch: w.branch, ts: Date.now() });
       for (const { event } of entries.slice(cutPoint(entries))) agent.note(withoutAttachments(event));
     }
     for (const w of sources) await this.remove(w.id);
     this.setLanded(target.id, false);
     this.countsCache.delete(target.id);
     this.d.hub.emit("worktreesChanged");
-    return { target, grafted: sources.map((w) => w.title) };
+    return { target, folded: sources.map((w) => w.title) };
   }
 
   // ---- setup ----

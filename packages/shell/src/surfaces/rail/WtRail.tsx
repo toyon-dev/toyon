@@ -1,5 +1,5 @@
 import {
-  canGraft,
+  canFold,
   canLand,
   canRemove,
   canRename,
@@ -33,8 +33,8 @@ import { rowState } from "../../ui/rowState.ts";
 
 type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
 
-/** far-right worktree rail: 40px dot strip, hover peeks the full panel; shift-click / "graft with…"
- * enters a multi-select for grafting, bulk sync and bulk remove */
+/** far-right worktree rail: 40px dot strip, hover peeks the full panel; shift-click / "fold into…"
+ * enters a multi-select for folding worktrees into one, bulk sync and bulk remove */
 export function WtRail() {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -59,21 +59,21 @@ export function WtRail() {
   const home = useStore((s) => s.home);
   const wtDirLabel = (d: WorktreeStatus) =>
     home && d.path.startsWith(`${home}/`) ? `~${d.path.slice(home.length)}` : d.path;
-  const [graftMode, setGraftMode] = useState(false);
+  const [foldMode, setFoldMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
 
   const toggleSel = (w: OwnedWorktree) => {
-    if (!canGraft(w.worktree)) return;
-    setGraftMode(true);
+    if (!canFold(w.worktree)) return;
+    setFoldMode(true);
     setSel((s) => (s.includes(w.worktree.id) ? s.filter((x) => x !== w.worktree.id) : [...s, w.worktree.id]));
   };
-  const cancelGraft = () => {
-    setGraftMode(false);
+  const cancelFold = () => {
+    setFoldMode(false);
     setSel([]);
   };
-  useOnChange([graftMode], () => {
-    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && cancelGraft();
-    if (graftMode) window.addEventListener("keydown", onEsc);
+  useOnChange([foldMode], () => {
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && cancelFold();
+    if (foldMode) window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
   });
 
@@ -154,11 +154,11 @@ export function WtRail() {
     }
     if (canRename(w.worktree)) items.push({ label: "rename…", onClick: () => acts.rename(w) });
     if (w.worktree.variant) items.push({ label: "keep this variant…", onClick: () => acts.pickVariant(w) });
-    if (canGraft(w.worktree)) {
+    if (canFold(w.worktree)) {
       items.push({
-        label: "graft with…",
+        label: "fold into…",
         onClick: () => {
-          setGraftMode(true);
+          setFoldMode(true);
           setSel((s) => (s.includes(id) ? s : [...s, id]));
         },
       });
@@ -195,7 +195,7 @@ export function WtRail() {
           ? {}
           : tip(w.locked ? `${wtDirLabel(w)} · held by ${w.lockReason ?? "another tool"}` : wtDirLabel(w)))}
         onClick={(e) => {
-          if (owned && (graftMode || e.shiftKey)) toggleSel(owned);
+          if (owned && (foldMode || e.shiftKey)) toggleSel(owned);
           else dispatch({ a: "activate", id });
         }}
         onContextMenu={(e) => {
@@ -203,8 +203,8 @@ export function WtRail() {
           openMenu({ x: e.clientX, y: e.clientY });
         }}
       >
-        {owned && graftMode && canGraft(owned.worktree) && (
-          <input type="checkbox" className="rail-graft-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
+        {owned && foldMode && canFold(owned.worktree) && (
+          <input type="checkbox" className="rail-fold-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
         )}
         <span className="branch">{w.name}</span>
         {owned &&
@@ -311,7 +311,7 @@ export function WtRail() {
           // a red dot means a proc died, and the only thing anyone wants next is its log. The
           // dot is the click target because in the collapsed strip it is the whole row you
           // can see; offline the colour is the socket's, not the proc's, so it stays inert.
-          const trouble = graftMode || offline ? null : procTrouble(w.procs);
+          const trouble = foldMode || offline ? null : procTrouble(w.procs);
           // the ring is a modifier, not a state: it rides on whatever the dot already says
           const unseen = w.unseen ? " unseen" : "";
           if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}${unseen}`} />;
@@ -333,18 +333,18 @@ export function WtRail() {
   };
 
   return (
-    <div className={cx("rail", (graftMode || menu || discMenu) && "hold", railOpen && "pinned", offline && "offline")}>
+    <div className={cx("rail", (foldMode || menu || discMenu) && "hold", railOpen && "pinned", offline && "offline")}>
       {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
           tip of its own, and the tooltip walks up to the nearest one */}
       <div className="rail-panel" data-tip={offline ? "Lost the daemon; retrying" : undefined}>
         <div className="rail-list">
           {worktrees.map(railRow)}
-          {graftMode && (
-            <div className="rail-graft">
+          {foldMode && (
+            <div className="rail-fold">
               {(() => {
                 // the row you are on takes the others: it keeps its agent, procs and port, and
                 // the checked ones are merged into it and removed
-                const target = worktrees.find((w) => w.worktree.id === activeId && canGraft(w.worktree));
+                const target = worktrees.find((w) => w.worktree.id === activeId && canFold(w.worktree));
                 const sources = sel.filter((id) => id !== target?.worktree.id);
                 const names = sources
                   .map((id) => worktrees.find((w) => w.worktree.id === id)?.worktree.title ?? id)
@@ -357,21 +357,21 @@ export function WtRail() {
                     data-tip={
                       target
                         ? `Merge the checked worktrees into ${target.worktree.title} and remove them`
-                        : "Select a worktree to graft into"
+                        : "Select a worktree to fold into"
                     }
                     onClick={() => {
                       if (!target) return;
                       if (
                         window.confirm(
-                          `Graft ${names} into ${target.worktree.title}?\n\nTheir branches are merged in, then their directories and branches are removed.`,
+                          `Fold ${names} into ${target.worktree.title}?\n\nTheir branches are merged in, then their directories and branches are removed.`,
                         )
                       ) {
-                        sock?.send({ t: "graft", targetId: target.worktree.id, sourceIds: sources });
-                        cancelGraft();
+                        sock?.send({ t: "fold", targetId: target.worktree.id, sourceIds: sources });
+                        cancelFold();
                       }
                     }}
                   >
-                    <Icon name="layers" className="icon-inline" /> graft {sources.length} into{" "}
+                    <Icon name="layers" className="icon-inline" /> fold {sources.length} into{" "}
                     {target?.worktree.title ?? "…"}
                   </Button>
                 );
@@ -385,7 +385,7 @@ export function WtRail() {
                     const w = worktrees.find((x) => x.worktree.id === id);
                     if ((w?.behind ?? 0) > 0) shipOp(sock, dispatch, { t: "sync-main", worktreeId: id });
                   }
-                  cancelGraft();
+                  cancelFold();
                 }}
               >
                 <Icon name="pull" className="icon-inline" /> sync
@@ -402,16 +402,16 @@ export function WtRail() {
                     )
                   ) {
                     removeWorktrees(sock, dispatch, sel);
-                    cancelGraft();
+                    cancelFold();
                   }
                 }}
               >
                 remove…
               </Button>
-              <IconButton icon="close" label="Cancel" hint="esc" onClick={cancelGraft} />
+              <IconButton icon="close" label="Cancel" hint="esc" onClick={cancelFold} />
             </div>
           )}
-          {!graftMode && (
+          {!foldMode && (
             <button
               className="rail-new"
               data-tip="New worktree"
@@ -431,8 +431,8 @@ export function WtRail() {
           {/* Below "new worktree", not above it: the whole section is hidden in the strip (see
               rail.css), so what appears when the panel opens pushes nothing anyone is aiming
               at. The rows are divs, not .rail-item buttons, so a shift-click never drags one into
-              the graft selection. */}
-          {!graftMode && discovered.length > 0 && (
+              the fold selection. */}
+          {!foldMode && discovered.length > 0 && (
             <>
               <button
                 className="rail-disc-head"

@@ -461,10 +461,10 @@
       text-align: center;
     }
   }
-  /* the graft divider is the blocked row's box with the accent's edge: both are one line the
+  /* the fold divider is the blocked row's box with the accent's edge: both are one line the
    daemon wrote into the transcript, and only the second is good news */
   .blocked-row,
-  .graft-row {
+  .fold-row {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -474,7 +474,7 @@
     background: var(--surface0);
     border-left: 2px solid var(--red);
     & .blocked-tag,
-    & .graft-tag {
+    & .fold-tag {
       color: var(--red);
       font: var(--type-ui-sm);
     }
@@ -482,9 +482,9 @@
       color: var(--text1);
     }
   }
-  .graft-row {
+  .fold-row {
     border-left-color: var(--accent);
-    & .graft-tag {
+    & .fold-tag {
       color: var(--accent);
     }
   }

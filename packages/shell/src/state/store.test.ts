@@ -152,14 +152,14 @@ describe("chat folding", () => {
       s.local.a?.chat.map((i) => (i.kind === "user" || i.kind === "assistant" ? `${i.kind}:${i.text}` : i.kind)),
     ).toEqual(["user:hi", "assistant:hello", "user:more", "assistant:x"]);
   });
-  test("a graft marker is a divider item; what follows folds as usual", () => {
+  test("a fold marker is a divider item; what follows folds as usual", () => {
     const s = run([
       hello(wt("a")),
-      agent("a", { type: "grafted", title: "beta", branch: "toyon/beta", ts: 0 }),
+      agent("a", { type: "folded", title: "beta", branch: "toyon/beta", ts: 0 }),
       agent("a", { type: "user-message", text: "in beta", ts: 0 }),
     ]);
     expect(s.local.a?.chat).toEqual([
-      { kind: "grafted", title: "beta", branch: "toyon/beta" },
+      { kind: "folded", title: "beta", branch: "toyon/beta" },
       { kind: "user", text: "in beta" },
     ]);
   });

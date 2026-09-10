@@ -7,9 +7,9 @@
   "homepage": "https://toyon.dev",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kyleshay/toyon.git"
+    "url": "git+https://github.com/toyon-dev/toyon.git"
   },
-  "bugs": "https://github.com/kyleshay/toyon/issues",
+  "bugs": "https://github.com/toyon-dev/toyon/issues",
   "keywords": [
     "ai",
     "agents",

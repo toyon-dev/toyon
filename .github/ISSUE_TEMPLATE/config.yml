@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: Questions and ideas
-    url: https://github.com/kyleshay/toyon/discussions
+    url: https://github.com/toyon-dev/toyon/discussions
     about: Anything that is not a bug goes in Discussions.

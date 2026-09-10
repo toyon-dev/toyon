@@ -25,6 +25,7 @@ import { BridgeScript } from "./runtime/bridge-script.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
+import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
 
 // Bun exits the process on an unhandled rejection or exception. For a daemon that owns every
@@ -67,6 +68,7 @@ const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
 const files = new FileService(state, runtime, (id) => worktrees.readable(id));
 const design = new DesignService(state);
 const exec = new ExecService({ state, runtime });
+const refs = new RefSearch({ state });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees });
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);
 themes.load();
@@ -86,6 +88,7 @@ const { branded, stop: stopServer } = startServer({
     design,
     runtime,
     exec,
+    refs,
     themes,
     agents,
     accounts,

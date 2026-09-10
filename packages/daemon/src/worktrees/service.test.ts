@@ -369,6 +369,47 @@ describe("landing", () => {
   });
 });
 
+describe("open a ref", () => {
+  test("a local branch becomes a worktree toyon owns, on that branch, with no prompt sent", async () => {
+    const repoId = await registered();
+    sh(w.repo, "git", "branch", "feat", "main");
+    const wt = await w.worktrees.openRef(repoId, "branch", "feat", { createdBy: "tab" });
+    await settle();
+    expect(wt).toMatchObject({ kind: "worktree", branch: "feat", title: "feat", createdBy: "tab" });
+    expect(wt.from).toEqual({ kind: "branch", ref: "feat" });
+    expect(wt.path.startsWith(w.paths.worktreesDir)).toBe(true);
+    expect((await git(wt.path, "branch", "--show-current")).out).toBe("feat");
+    expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
+    expect(w.agents.get(wt.id)?.sent ?? []).toEqual([]);
+    // a branch has one worktree: opening it again says where it already is
+    await expect(w.worktrees.openRef(repoId, "branch", "feat")).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("a remote branch is opened tracking its remote, and a PR from the remote's refs/pull", async () => {
+    const repoId = await registered();
+    // a local "origin" with a branch and a PR head that this repo does not have
+    const origin = join(dirname(w.repo), "origin.git");
+    sh(dirname(w.repo), "git", "clone", "-q", "--bare", w.repo, origin);
+    sh(w.repo, "git", "remote", "add", "origin", origin);
+    sh(w.repo, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "theirs");
+    sh(w.repo, "git", "push", "-q", "origin", "main:refs/heads/theirs", "main:refs/pull/7/head");
+    sh(w.repo, "git", "reset", "-q", "--hard", "HEAD~1");
+    sh(w.repo, "git", "fetch", "-q", "origin");
+
+    const remote = await w.worktrees.openRef(repoId, "remote", "theirs");
+    expect(remote.from).toEqual({ kind: "remote", ref: "theirs" });
+    expect((await git(remote.path, "rev-parse", "--abbrev-ref", "theirs@{u}")).out).toBe("origin/theirs");
+
+    const pr = await w.worktrees.openRef(repoId, "pr", "7", { pr: { title: "Seven", url: "https://x/pull/7" } });
+    expect(pr).toMatchObject({ branch: "pr/7", title: "pr-7" });
+    expect(pr.from).toEqual({ kind: "pr", ref: "7", pr: { number: 7, title: "Seven", url: "https://x/pull/7" } });
+    expect((await git(pr.path, "log", "-1", "--format=%s")).out).toBe("theirs");
+    // a review is landed upstream, not here
+    await expect(w.worktrees.merge(pr.id)).rejects.toBeInstanceOf(UserError);
+    await expect(w.worktrees.openRef(repoId, "pr", "x")).rejects.toBeInstanceOf(UserError);
+  });
+});
+
 describe("graft", () => {
   const commitIn = (path: string, file: string) => {
     writeFileSync(join(path, file), `${file}\n`);

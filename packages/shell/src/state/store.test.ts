@@ -775,6 +775,22 @@ describe("panel layout", () => {
   });
 });
 
+describe("ref search", () => {
+  test("replies are kept per project, newest query wins, and a forgotten project takes its rows", () => {
+    const hit = { kind: "branch" as const, ref: "x", name: "x" };
+    const s = run([
+      helloIn([repo("r"), repo("q")], wt("main", "main")),
+      server({ t: "refs", repoId: "r", query: "", refs: [hit] }),
+      server({ t: "refs", repoId: "q", query: "", refs: [] }),
+      server({ t: "refs", repoId: "r", query: "x", refs: [hit] }),
+    ]);
+    expect(s.refs.r).toEqual({ query: "x", refs: [hit] });
+    expect(s.refs.q).toEqual({ query: "", refs: [] });
+    const after = run([helloIn([repo("r")], wt("main", "main"))], s);
+    expect(Object.keys(after.refs)).toEqual(["r"]);
+  });
+});
+
 describe("discovered worktrees", () => {
   // "r" is what the wt() fixture defaults its repoId to. A found row is the same shape with no
   // record: nothing runs there, so no procs and an idle agent.

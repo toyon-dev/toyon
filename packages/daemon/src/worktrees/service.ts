@@ -18,6 +18,7 @@ import {
   isMain,
   type PasteInput,
   type PickMeta,
+  type RefKind,
   type RepoInfo,
   type WorktreeInfo,
   type WorktreeStatus,
@@ -32,11 +33,12 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
-import { git, gitOrThrow, run } from "../git/exec.ts";
+import { GIT, git, gitOrThrow, NO_PROMPT, run } from "../git/exec.ts";
 import { commitWorktree, mergeToMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
 import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts } from "../git/status.ts";
+import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
@@ -222,14 +224,80 @@ export class WorktreeService {
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
       ...(profile !== undefined ? { profile } : {}),
     };
-    this.d.state.addWorktree(wt);
-    this.d.hub.emit("worktreesChanged");
-
     // setup + procs warm in the background; the agent starts immediately
-    // RuntimeRegistry.start emits worktreesChanged once the procs are up
-    fireAndForget(wt.id, this.setupAndStart(wt, repo, base?.path ?? repo.path), "setup + start");
+    this.launch(wt, repo, base?.path ?? repo.path);
     this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context, pick, images, pastes });
     this.scheduleNaming(wt, prompt, repo, variant);
+    return wt;
+  }
+
+  /** the record goes in, the rail hears about it, and the slow part (a deps clone, setup
+   * commands, the procs) runs behind; RuntimeRegistry.start emits worktreesChanged again once the
+   * procs are up. The one step create, take-over and opening a ref all share. */
+  private launch(wt: WorktreeInfo, repo: RepoInfo, depsSource: string, opts: { setupCommands?: boolean } = {}) {
+    this.d.state.addWorktree(wt);
+    this.d.hub.emit("worktreesChanged");
+    fireAndForget(wt.id, this.setupAndStart(wt, repo, depsSource, opts), "setup + start");
+  }
+
+  /** Open a branch, a remote branch or a PR as a worktree toyon owns. Not a task: no prompt goes
+   * anywhere, and the agent comes up on the first message. Unlike take-over the directory is
+   * toyon's own, so the repo's setup commands run. */
+  async openRef(
+    repoId: string,
+    kind: RefKind,
+    ref: string,
+    opts: { createdBy?: string; pr?: { title: string; url: string } } = {},
+  ): Promise<WorktreeInfo> {
+    const repo = this.d.state.requireRepo(repoId);
+    const agent = this.d.agents.require(this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
+    const number = kind === "pr" ? Number.parseInt(ref, 10) : Number.NaN;
+    if (kind === "pr" && !(number > 0)) throw new UserError("that is not a PR number");
+    const branch = kind === "pr" ? `pr/${number}` : ref;
+    const title = kind === "pr" ? `pr-${number}` : cleanTitle(ref) || "branch";
+    let slug = title;
+    if (existsSync(join(this.d.paths.worktreesDir, repo.name, slug))) slug = `${slug}-${shortId().slice(0, 4)}`;
+    const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
+
+    await withRepoLock(repo.path, async () => {
+      const out = (await listWorktrees(repo.path)).find((w) => w.branch === branch);
+      if (out) throw new UserError(`${branch} is already checked out at ${out.path}`);
+      if (kind === "branch") {
+        await gitOrThrow(repo.path, "worktree", "add", wtPath, ref);
+      } else if (kind === "remote") {
+        await gitOrThrow(repo.path, "worktree", "add", "--track", "-b", ref, wtPath, `origin/${ref}`);
+      } else {
+        // the base repo exposes every PR's head under refs/pull, fork or not, so no second remote
+        // is needed; a credential prompt would hang a daemon, so it fails instead
+        const f = await run(
+          GIT,
+          ["fetch", "origin", `+refs/pull/${number}/head:refs/heads/${branch}`],
+          repo.path,
+          NO_PROMPT,
+        );
+        if (!f.ok) throw new UserError(`could not fetch PR #${number}: ${f.err.slice(-200)}`);
+        await gitOrThrow(repo.path, "worktree", "add", wtPath, branch);
+      }
+    });
+
+    const wt: WorktreeInfo = {
+      id: shortId(),
+      repoId,
+      path: wtPath,
+      branch,
+      kind: "worktree",
+      proxyPort: await allocateProxyPort(),
+      title,
+      createdAt: Date.now(),
+      agent,
+      from: {
+        kind,
+        ref,
+        ...(kind === "pr" ? { pr: { number, title: opts.pr?.title ?? "", url: opts.pr?.url ?? "" } } : {}),
+      },
+      ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
+    };
+    this.launch(wt, repo, repo.path);
     return wt;
   }
 
@@ -285,13 +353,11 @@ export class WorktreeService {
         agent: this.d.agents.require(this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id,
         ...(createdBy ? { createdBy } : {}),
       };
-      this.d.state.addWorktree(rec);
       return rec;
     });
     this.invalidateDiscovered();
-    this.d.hub.emit("worktreesChanged");
     // slow, and nothing above depends on it: outside the lock, like create()'s own setup
-    fireAndForget(wt.id, this.setupAndStart(wt, repo, repo.path, { setupCommands: false }), "adopt setup");
+    this.launch(wt, repo, repo.path, { setupCommands: false });
     return wt;
   }
 

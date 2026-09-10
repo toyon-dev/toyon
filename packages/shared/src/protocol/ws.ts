@@ -14,6 +14,7 @@ import type {
   PathEntry,
   PathTarget,
   PendingRepo,
+  RefHit,
   RepoInfo,
   Theme,
   ThemePrefs,
@@ -101,6 +102,8 @@ export type ServerMsg =
     }
   | { t: "files"; worktreeId: string; paths: string[] }
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
+  /** the ref palette's rows for a query; `query` is echoed so a stale reply is told from a fresh one */
+  | { t: "refs"; repoId: string; query: string; refs: RefHit[] }
   | { t: "design-index"; worktreeId: string; index: DesignIndex }
   | { t: "queue"; worktreeId: string; items: string[] }
   /** the slash commands this worktree's agent session advertises. Ephemeral, never a transcript
@@ -351,6 +354,20 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("exec"), worktreeId: id, command: shellCommand.min(1) }),
   /** kill whatever `exec` is still running in the worktree */
   z.object({ t: z.literal("exec-stop"), worktreeId: id }),
+  /** the ref palette: local branches, remote branches and open PRs matching the query; replies
+   * `refs`. An empty query lists the work that is open. */
+  z.object({ t: z.literal("search-refs"), repoId: id, query: z.string().max(200) }),
+  /** open a ref as a worktree toyon owns. `ref` is what the `refs` reply carried; a PR's title and
+   * url ride along for the record, since only the hit knew them. */
+  z.object({
+    t: z.literal("open-ref"),
+    /** as on create-worktree: only the tab that asked focuses the new row */
+    clientId: z.string().max(64).optional(),
+    repoId: id,
+    kind: z.enum(["branch", "remote", "pr"]),
+    ref: z.string().min(1).max(300),
+    pr: z.object({ title: z.string().max(300), url: z.string().max(500) }).optional(),
+  }),
 ]);
 
 export type ClientMsg = z.infer<typeof clientMsgSchema>;

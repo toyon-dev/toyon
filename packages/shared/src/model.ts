@@ -228,6 +228,30 @@ export interface WorktreeStatus {
 /** a row toyon owns, which is the one most of the shell reads: the chat, the composer, landing */
 export type OwnedWorktree = WorktreeStatus & { worktree: WorktreeInfo };
 
+export type RefKind = "branch" | "remote" | "pr";
+
+/** Something the ref palette can open as a worktree: a local branch nobody has checked out, a
+ * remote branch as of the last fetch, or an open pull request. Never a rail row: the rail lists
+ * directories, and a ref becomes one only when someone opens it. */
+export interface RefHit {
+  kind: RefKind;
+  /** what open-ref takes back: the branch name, the remote branch without its remote, or the PR
+   * number as a string */
+  ref: string;
+  /** what the row prints: the branch, `origin/branch`, or `#n title` */
+  name: string;
+  /** the tip's subject, for a branch */
+  subject?: string;
+  /** when it last moved, ms since the epoch */
+  at?: number;
+  /** already merged into the default branch; listed only when searched for by name */
+  merged?: boolean;
+  pr?: { number: number; url: string; title: string; author: string; draft?: boolean; head: string; fork?: boolean };
+  /** the row that already has it checked out: picking this switches there instead of opening
+   * a second worktree on the same branch, which git would refuse anyway */
+  openIn?: string;
+}
+
 export interface GitFileStatus {
   path: string;
   /** two-char porcelain XY code, e.g. "M ", " M", "A ", "??" */

@@ -14,6 +14,7 @@ import { FileService } from "../files/service.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
+import { RefSearch } from "../worktrees/refs.ts";
 import { WorktreeService } from "../worktrees/service.ts";
 import { dispatch, type HandlerCtx, handlers, type Services } from "./handlers.ts";
 
@@ -59,6 +60,14 @@ function make() {
   const files = new FileService(state, runtime, (id) => worktrees.readable(id));
   const design = new DesignService(state);
   const exec = new ExecService({ state, runtime });
+  // a PR list that throws: gh is absent on most machines that run this, and its absence must be a
+  // repo without PRs rather than a failed search
+  const refs = new RefSearch({
+    state,
+    prs: async () => {
+      throw new Error("no gh here");
+    },
+  });
   const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, t.paths.themesDir);
   const planned: string[][] = [];
   const services: Services = {
@@ -70,6 +79,7 @@ function make() {
     design,
     runtime,
     exec,
+    refs,
     themes,
     agents,
     accounts,
@@ -149,6 +159,29 @@ describe("handlers", () => {
     expect(services.runtime.get(found.id)).toBeUndefined();
     expect(agents.get(found.id)).toBeUndefined();
     await expect(dispatch({ t: "subscribe", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("search-refs lists the repo's open branches even when the PR list fails, and open-ref makes a row", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    // parked has a commit main does not; landed has nothing main lacks, so it is hidden until named
+    sh(repo, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "parked work");
+    sh(repo, "git", "branch", "parked", "main");
+    sh(repo, "git", "reset", "-q", "--hard", "HEAD~1");
+    sh(repo, "git", "branch", "landed", "main");
+    await dispatch({ t: "search-refs", repoId: r.id, query: "" }, ctx, services);
+    const reply = replies.at(-1);
+    if (reply?.t !== "refs") throw new Error("expected a refs reply");
+    expect(reply.query).toBe("");
+    expect(reply.refs.map((h) => `${h.kind}:${h.ref}`)).toEqual(["branch:parked"]);
+    await dispatch({ t: "search-refs", repoId: r.id, query: "land" }, ctx, services);
+    const found = replies.at(-1);
+    if (found?.t !== "refs") throw new Error("expected a refs reply");
+    expect(found.refs[0]).toMatchObject({ kind: "branch", ref: "landed", merged: true });
+    await dispatch({ t: "open-ref", repoId: r.id, kind: "branch", ref: "parked", clientId: "tab" }, ctx, services);
+    const wt = services.state.worktrees.find((x) => x.branch === "parked");
+    expect(wt).toMatchObject({ kind: "worktree", createdBy: "tab", from: { kind: "branch", ref: "parked" } });
   });
 
   test("sync-main on a dirty tree toasts the refusal with no prompt to prefill", async () => {

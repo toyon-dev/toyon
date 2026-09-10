@@ -18,6 +18,7 @@ import { browsePath } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import type { ThemeStore } from "../themes/store.ts";
+import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
 
 export interface Services {
@@ -31,6 +32,8 @@ export interface Services {
   runtime: RuntimeRegistry;
   /** one-off commands from the composer's `!` mode */
   exec: ExecService;
+  /** the ref palette: branches and PRs a worktree could be opened on */
+  refs: RefSearch;
   themes: ThemeStore;
   agents: AgentRegistry;
   /** per-agent login state, and the one write on it (sign out) */
@@ -447,6 +450,15 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   "exec-stop"(msg, _ctx, s) {
     s.state.requireWorktree(msg.worktreeId);
     s.exec.stop(msg.worktreeId);
+  },
+
+  async "search-refs"(msg, ctx, s) {
+    const refs = await s.refs.search(msg.repoId, msg.query);
+    ctx.reply({ t: "refs", repoId: msg.repoId, query: msg.query, refs });
+  },
+
+  async "open-ref"(msg, _ctx, s) {
+    await s.worktrees.openRef(msg.repoId, msg.kind, msg.ref, { createdBy: msg.clientId, pr: msg.pr });
   },
 };
 

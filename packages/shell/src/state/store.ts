@@ -26,6 +26,7 @@ import type {
   PendingRepo,
   PickedElement,
   PickMeta,
+  RefHit,
   RepoInfo,
   SearchHit,
   ServerMsg,
@@ -170,6 +171,8 @@ export type Overlay =
   | { kind: "quick-open" }
   | { kind: "commands" }
   | { kind: "search" }
+  /** the ref palette: a branch or PR to open as a worktree */
+  | { kind: "refs" }
   | { kind: "prompt" }
   | { kind: "keys" }
   /** theme picker: which pref slot Enter writes */
@@ -240,6 +243,9 @@ export interface State {
   /** per repo: has the discovered section been opened. Collapsed is the default, so the common
    * case (a repo with nothing stray) costs nothing and never surprises anyone. */
   discoveredOpen: Record<string, boolean>;
+  /** per repo: the ref palette's last reply, with the query it answered so a stale one is told
+   * from the one the person is waiting on. Repo-scoped, since a ref is not a worktree's. */
+  refs: Record<string, { query: string; refs: RefHit[] }>;
   /** the worktree last selected in each repo: switching back to a project lands where you left it.
    * Persisted (App.tsx), so it survives a reload the same way the panel layout does. */
   lastActive: Record<string, string>;
@@ -343,6 +349,7 @@ export function initialState(opts: InitialOpts): State {
     removing: [],
     visibleDiscovered: [],
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
+    refs: {},
     lastActive: opts.storedLastActive ?? {},
     pendingOpen: false,
     activeId: null,
@@ -686,7 +693,7 @@ function pruneLastActive(lastActive: Record<string, string>, rows: WorktreeStatu
 
 /** drop remembered flags for projects the daemon no longer has, so forgetting a project does not
  * leave its key in storage forever */
-function pruneByRepo(flags: Record<string, boolean>, repos: RepoInfo[]): Record<string, boolean> {
+function pruneByRepo<T>(flags: Record<string, T>, repos: RepoInfo[]): Record<string, T> {
   const keep = new Set(repos.map((r) => r.id));
   if (Object.keys(flags).every((id) => keep.has(id))) return flags;
   return Object.fromEntries(Object.entries(flags).filter(([id]) => keep.has(id)));
@@ -718,6 +725,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         local: pruneLocal(s.local, msg.rows),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
+        refs: pruneByRepo(s.refs, msg.repos),
         themes: msg.themes ?? s.themes,
         themePrefs: msg.themePrefs ?? s.themePrefs,
         agents: msg.agents,
@@ -753,6 +761,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "path-entries":
       return { ...s, paths: { query: msg.query, entries: msg.entries, target: msg.target } };
+    case "refs":
+      return { ...s, refs: { ...s.refs, [msg.repoId]: { query: msg.query, refs: msg.refs } } };
     case "repos": {
       const known = new Set(s.repos.map((r) => r.id));
       const added = msg.repos.find((r) => !known.has(r.id));

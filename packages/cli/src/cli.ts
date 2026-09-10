@@ -12,6 +12,7 @@ import { type Command, HELP, parseArgs } from "./args.ts";
 import { base, health, logFile, port, readToken, shellUrl, startDaemon } from "./daemon.ts";
 import { doctor } from "./doctor.ts";
 import { logs } from "./logs.ts";
+import { missingSandboxTools, sandboxAdvice } from "./sandboxDeps.ts";
 import { stop } from "./stop.ts";
 import { uninstall } from "./uninstall.ts";
 
@@ -33,6 +34,8 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   // the package installs on Linux and nobody has run it there yet; say so before the first gap does
   if (process.platform === "linux") {
     console.log("toyon on Linux is untested: macOS today, Linux next. Expect gaps, and say so in an issue.");
+    const missing = missingSandboxTools();
+    if (missing.length > 0) console.log(sandboxAdvice(missing));
   }
 
   if (!(await health())) {

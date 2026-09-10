@@ -92,6 +92,22 @@ describe("policy.decide", () => {
     expect(decide(req({ kind: "edit", title: "Edit files" }), bounds, wt).kind).toBe("reject");
   });
 
+  test("ask mode turns inside writes and commands into a card; reads stay free and outside stays refused", () => {
+    const edit = req({ kind: "edit", title: "Edit", locations: [{ path: join(wt, "src", "a.ts") }] });
+    expect(decide(edit, bounds, wt, "ask").kind).toBe("prompt");
+    expect(decide(edit, bounds, wt, "plan").kind).toBe("prompt");
+    expect(decide(edit, bounds, wt, "auto").kind).toBe("allow");
+    const run = req({ kind: "execute", title: "bun test", rawInput: { command: "bun test" } });
+    expect(decide(run, bounds, wt, "ask").kind).toBe("prompt");
+    expect(
+      decide(req({ kind: "read", title: "Read", locations: [{ path: join(wt, "a.ts") }] }), bounds, wt, "ask").kind,
+    ).toBe("allow");
+    expect(decide(req({ kind: "search", title: "Grep" }), bounds, wt, "ask").kind).toBe("allow");
+    const outside = req({ kind: "edit", title: "Edit", locations: [{ path: "/etc/hosts" }] });
+    expect(decide(outside, bounds, wt, "ask").kind).toBe("reject");
+    expect(decide(req({ kind: "switch_mode", title: "Approve Plan" }), bounds, wt, "auto").kind).toBe("prompt");
+  });
+
   test("requestedPaths merges locations and raw input keys without duplicates", () => {
     const r = req({ locations: [{ path: "/a" }], rawInput: { file_path: "/a", path: "/b", paths: ["/c", 1] } });
     expect(requestedPaths(r)).toEqual(["/a", "/b", "/c"]);

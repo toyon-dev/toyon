@@ -161,7 +161,8 @@ export function WtRail() {
         label: "graft with…",
         onClick: () => {
           setGraftMode(true);
-          setSel((s) => (s.includes(id) ? s : [...s, id]));
+          // on the row you are on it means "graft others onto this": nothing to check yet
+          setSel((s) => (id === activeId || s.includes(id) ? s : [...s, id]));
         },
       });
     }
@@ -199,18 +200,29 @@ export function WtRail() {
           ? tip(`${stateLabel(w, repoOf(owned)?.needsSetup)} · ${wtDirLabel(w)}`)
           : tip(w.locked ? `${wtDirLabel(w)} · held by ${w.lockReason ?? "another tool"}` : wtDirLabel(w)))}
         onClick={(e) => {
-          if (owned && (graftMode || e.shiftKey)) toggleSel(owned);
-          else dispatch({ a: "activate", id });
+          // in graft mode the row you are on is the stock the others go onto, marked by its edge,
+          // and has nothing to check; every other graftable row is a source to check or uncheck.
+          // A shift-click on it opens the mode with nothing checked yet.
+          if (owned && (graftMode || e.shiftKey)) {
+            if (id === activeId) setGraftMode(true);
+            else toggleSel(owned);
+          } else dispatch({ a: "activate", id });
         }}
         onContextMenu={(e) => {
           e.preventDefault();
           openMenu({ x: e.clientX, y: e.clientY });
         }}
       >
-        {owned && graftMode && canGraft(owned.worktree) && (
+        {owned && graftMode && canGraft(owned.worktree) && id !== activeId && (
           <input type="checkbox" className="rail-graft-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
         )}
         <span className="branch">{w.name}</span>
+        {owned?.worktree.mode && owned.worktree.mode !== "auto" && (
+          // auto is the default and says nothing; ask and plan change what happens when you look away
+          <span className="rail-badge badge-mode" data-tip={`${owned.worktree.mode} mode: the agent waits for you`}>
+            {owned.worktree.mode}
+          </span>
+        )}
         {owned &&
           (() => {
             // only the non-default profile is worth a tag: it is the one you need to notice
@@ -353,6 +365,8 @@ export function WtRail() {
                 const names = sources
                   .map((id) => worktrees.find((w) => w.worktree.id === id)?.worktree.title ?? id)
                   .join(", ");
+                // the count alone, no icon: the stock is the row marked current, and its name or a glyph
+                // on the button pushed sync, remove and cancel off the rail's 231px
                 return (
                   <Button
                     size="md"
@@ -361,13 +375,13 @@ export function WtRail() {
                     data-tip={
                       target
                         ? `Merge the checked worktrees into ${target.worktree.title} and remove them`
-                        : "Select a worktree to graft into"
+                        : "Select a worktree to graft onto"
                     }
                     onClick={() => {
                       if (!target) return;
                       if (
                         window.confirm(
-                          `Graft ${names} into ${target.worktree.title}?\n\nTheir branches are merged in, then their directories and branches are removed.`,
+                          `Graft ${names} onto ${target.worktree.title}?\n\nTheir branches are merged in, then their directories and branches are removed.`,
                         )
                       ) {
                         sock?.send({ t: "graft", targetId: target.worktree.id, sourceIds: sources });
@@ -375,8 +389,7 @@ export function WtRail() {
                       }
                     }}
                   >
-                    <Icon name="layers" className="icon-inline" /> graft {sources.length} into{" "}
-                    {target?.worktree.title ?? "…"}
+                    graft {sources.length}
                   </Button>
                 );
               })()}

@@ -27,6 +27,8 @@ export const STORAGE = {
   client: "toyon-client",
   /** + repo id: the profile the composer last started a worktree with, for that repo */
   profilePrefix: "toyon-profile-",
+  /** + repo id: the permission mode the composer last started a worktree with, for that repo */
+  modePrefix: "toyon-mode-",
 } as const;
 
 /** the same keys under the pre-rename prefix; migrated once on load so nobody loses a token or layout */

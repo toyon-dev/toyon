@@ -17,6 +17,7 @@ import {
   type ImageInput,
   isMain,
   type PasteInput,
+  type PermissionMode,
   type PickMeta,
   type RefKind,
   type RepoInfo,
@@ -108,6 +109,8 @@ export interface CreateOpts {
   pick?: PickMeta;
   /** one of the repo's profiles; the repo's default when absent */
   profile?: string;
+  /** what the agent may do without asking; the default mode when absent */
+  mode?: PermissionMode;
   images?: ImageInput[];
   pastes?: PasteInput[];
 }
@@ -224,6 +227,7 @@ export class WorktreeService {
       ...(variant ? { variant } : {}),
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
       ...(profile !== undefined ? { profile } : {}),
+      ...(opts.mode ? { mode: opts.mode } : {}),
     };
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, base?.path ?? repo.path);
@@ -390,6 +394,17 @@ export class WorktreeService {
     this.restartProcs(wt, repo);
   }
 
+  /** what the agent may do here without asking. Nothing restarts: the session reads the record
+   * before its next turn and every permission request, so it holds from the next prompt on. */
+  setMode(worktreeId: string, mode: PermissionMode) {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    if (wt.kind === "spare") throw new UserError("no mode for a spare worktree");
+    if (wt.mode === mode) return;
+    wt.mode = mode;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+  }
+
   /** Async pretty-naming: solo worktrees rename directly; variant groups rename together
    * (index 1 runs the Haiku call, then every sibling becomes <name>-v<index>). */
   private scheduleNaming(wt: WorktreeInfo, prompt: string, variant?: Variant) {
@@ -540,10 +555,10 @@ export class WorktreeService {
       .filter((id) => id !== targetId)
       .map((id) => this.d.state.worktree(id))
       .filter((w): w is WorktreeInfo => !!w);
-    if (sources.length === 0) throw new UserError("pick at least one worktree to graft in");
+    if (sources.length === 0) throw new UserError("pick at least one worktree to graft on");
     const all = [target, ...sources];
     for (const w of all) {
-      if (isMain(w)) throw new UserError("graft between worktrees, not into or out of main");
+      if (isMain(w)) throw new UserError("graft between worktrees, not onto or from main");
       if (!canGraft(w)) throw new UserError(`${w.title} cannot be grafted`);
       if (w.repoId !== target.repoId) throw new UserError("worktrees must belong to one repo");
       // a merge under an editing agent races its file tools, and a removal under one loses its

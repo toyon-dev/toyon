@@ -126,6 +126,7 @@ export type TermServerMsg = Extract<ServerMsg, { t: "term-data" | "term-snapshot
 // ---- client → daemon: schemas are the source of truth ----
 
 const id = z.string().min(1).max(200);
+const permissionModeSchema = z.enum(["auto", "ask", "plan"]);
 /** a worktree-relative path; the daemon still canonicalises and bounds it (resolveInside) */
 const relPath = z.string().min(1).max(4096);
 /** a commit the shell is echoing back from a git-log it was sent. Hex-only, so it can never carry
@@ -245,8 +246,12 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     agent: id.optional(),
     /** one of the repo's profiles; its defaultProfile when absent */
     profile: z.string().max(100).optional(),
+    /** what the agent may do without asking; the default mode when absent */
+    mode: permissionModeSchema.optional(),
   }),
   z.object({ t: z.literal("batch-worktrees"), repoId: id, prompt, agent: id.optional() }),
+  /** change what the agent may do here without asking; takes effect on its next turn */
+  z.object({ t: z.literal("set-worktree-mode"), worktreeId: id, mode: permissionModeSchema }),
   /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),

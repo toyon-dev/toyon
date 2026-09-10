@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "../git/exec.ts";
 import { canonical, within } from "./bounds.ts";
-import { SETTINGS_REL, worktreeBounds, writeClaudeLocalSettings } from "./sandbox.ts";
+import { DENIED_COMMANDS, SETTINGS_REL, worktreeBounds, writeClaudeLocalSettings } from "./sandbox.ts";
 
 let cleanup = () => {};
 afterEach(() => cleanup());
@@ -52,13 +52,27 @@ describe("sandbox", () => {
     await writeClaudeLocalSettings(wt, b);
     const second = JSON.parse(readFileSync(file, "utf8"));
     expect(second.hooks).toEqual({ x: 1 });
-    expect(second.permissions).toEqual({ allow: ["Bash(ls)"], defaultMode: "default" });
+    expect(second.permissions).toEqual({ allow: ["Bash(ls)"], defaultMode: "default", deny: DENIED_COMMANDS });
     expect(second.sandbox.enabled).toBe(true);
     expect(existsSync(`${file}.tmp`)).toBe(false);
     // ignored by git, and the exclude line is added once even after two writes
     expect(sh(wt, GIT, "status", "--porcelain")).toBe("");
     const exclude = readFileSync(join(repo, ".git", "info", "exclude"), "utf8");
     expect(exclude.split("\n").filter((l) => l === SETTINGS_REL)).toHaveLength(1);
+  });
+
+  test("the user's own deny rules survive and ours are never written twice", async () => {
+    const { wt } = linkedWorktree();
+    const file = join(wt, SETTINGS_REL);
+    const b = await worktreeBounds(wt);
+    mkdirSync(join(wt, ".claude"));
+    writeFileSync(file, JSON.stringify({ permissions: { deny: ["Bash(rm -rf:*)", "Bash(git push:*)"] } }));
+    await writeClaudeLocalSettings(wt, b);
+    await writeClaudeLocalSettings(wt, b);
+    const deny: string[] = JSON.parse(readFileSync(file, "utf8")).permissions.deny;
+    expect(deny[0]).toBe("Bash(rm -rf:*)");
+    expect(deny.filter((r) => r === "Bash(git push:*)")).toHaveLength(1);
+    for (const r of DENIED_COMMANDS) expect(deny).toContain(r);
   });
 
   test("an unparsable existing file is kept as .bak and replaced", async () => {

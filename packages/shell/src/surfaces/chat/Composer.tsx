@@ -1,5 +1,5 @@
 import type { AgentCommand, GitFileStatus, OwnedWorktree } from "@toyon/shared";
-import { pickMetaOf } from "@toyon/shared";
+import { DEFAULT_PERMISSION_MODE, pickMetaOf } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
@@ -16,6 +16,7 @@ import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
 import { greenfieldContext, type StackPreset } from "../preview/stacks.ts";
+import { ModeChip, useNewWorktreeMode } from "../prompt/ModeChip.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
 import { chord, pickLabel, procTrouble, relFile } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
@@ -77,6 +78,9 @@ export function Composer({
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
   const [profile, setProfile] = useNewWorktreeProfile(repo);
+  // one chip, two meanings: the mode a new worktree starts in, or the active worktree's own
+  const [newMode, setNewMode] = useNewWorktreeMode(repo);
+  const activeMode = active?.worktree.mode ?? DEFAULT_PERMISSION_MODE;
   const picking = useStore((s) => s.picking);
   const termOpen = useStore((s) => s.termOpen);
   const pick = useStore((s) => (s.pick && s.pick.worktreeId === id ? s.pick : null));
@@ -251,6 +255,7 @@ export function Composer({
         // a stacked worktree continues with the same agent as its parent
         agent: active.worktree.agent,
         profile,
+        mode: newMode,
       });
     } else {
       sock?.send({
@@ -442,6 +447,16 @@ export function Composer({
             </label>
           )}
           {spawnNew && <ProfileChip repo={repo} value={profile} onChange={setProfile} />}
+          {spawnNew ? (
+            <ModeChip value={newMode} onChange={setNewMode} />
+          ) : (
+            active && (
+              <ModeChip
+                value={activeMode}
+                onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
+              />
+            )
+          )}
         </span>
         <span className="spawn-tools">
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree

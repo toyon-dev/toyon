@@ -601,18 +601,6 @@
     gap: 8px;
     min-width: 0;
   }
-  /* The mode and profile chips' panels take the slash menu's place: anchored to the composer and
-   opening upward over the transcript, so the rows never cover what is being typed. The chips are
-   at the foot of the panel, and a panel dropping down from there would be off the screen. */
-  .composer {
-    & .chip-picker > .overlay-box.anchored {
-      top: auto;
-      bottom: 100%;
-      left: 10px;
-      right: 10px;
-      margin-bottom: 4px;
-    }
-  }
   /* .btn-icon is a grid box, so an inline wrapper would stack the two tools; keep them on one line */
   .spawn-tools {
     display: flex;

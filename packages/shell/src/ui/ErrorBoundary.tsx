@@ -11,6 +11,35 @@ export function markStaleBuild() {
   staleBuild = true;
 }
 
+/** The card for a thing that has stopped and the one move that brings it back: a render error, a
+ * stale build, a stream that exited. `pane` fits it inside a Pane, from the head down, instead
+ * of the whole window. */
+export function CrashCard({
+  title,
+  body,
+  action,
+  pane,
+}: {
+  title: string;
+  body?: string;
+  action: ReactNode;
+  pane?: boolean;
+}) {
+  return (
+    <div className={cx("crash", pane && "in-pane")}>
+      <div className="crash-title">{title}</div>
+      {body && <div className="crash-body">{body}</div>}
+      {action}
+    </div>
+  );
+}
+
+/** what a stale build says, wherever it is noticed: here, and the preview's protocol check */
+export const STALE_BUILD = {
+  title: "toyon was updated",
+  body: "This page is still running the old build. Reload to pick up the new one.",
+} as const;
+
 /** Catches a render throw so it can't unmount the root. Without one, any error anywhere leaves an
  * empty #root painted --surface0: a flat gray screen that says nothing about what happened or that a
  * reload fixes it. `pane` fits the boundary inside a Pane instead of the whole window. */
@@ -29,17 +58,16 @@ export class ErrorBoundary extends Component<{ children: ReactNode; pane?: boole
     const { error } = this.state;
     if (!error) return this.props.children;
     return (
-      <div className={cx("crash", this.props.pane && "in-pane")}>
-        <div className="crash-title">{staleBuild ? "toyon was updated" : "toyon hit an error"}</div>
-        <div className="crash-body">
-          {staleBuild
-            ? "This page is still running the old build. Reload to pick up the new one."
-            : error.message || String(error)}
-        </div>
-        <Button variant="outline" onClick={() => window.location.reload()}>
-          reload
-        </Button>
-      </div>
+      <CrashCard
+        pane={this.props.pane}
+        title={staleBuild ? STALE_BUILD.title : "toyon hit an error"}
+        body={staleBuild ? STALE_BUILD.body : error.message || String(error)}
+        action={
+          <Button variant="outline" onClick={() => window.location.reload()}>
+            reload
+          </Button>
+        }
+      />
     );
   }
 }

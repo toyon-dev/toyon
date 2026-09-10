@@ -45,7 +45,8 @@ describe("the one context menu", () => {
       "surfaces/rail/WtRail.tsx",
       "surfaces/changes/GitFileRow.tsx",
       "surfaces/changes/CommitRow.tsx",
-      "surfaces/terminal/TabStrip.tsx",
+      // the terminal's tabs: their menus are the items', spread by the strip they sit in
+      "ui/Tabs.tsx",
       "surfaces/chat/ChatItemView.tsx",
       "surfaces/design/DesignPane.tsx",
       "ui/ListPicker.tsx",

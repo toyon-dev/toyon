@@ -157,12 +157,17 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
               let the agent work it out
             </Button>
           )}
-          <Button
-            {...tip("This project has no dev server: chat, changes and the terminal work, the preview stays empty")}
-            onClick={nothingToRun}
-          >
-            nothing to run here
-          </Button>
+          {/* the third answer, only where it is one: beside a guessed start command it read as a
+              verdict on the repo. A repo the detector could not read gets it, and so does the
+              reopened pane, which is where a preview is turned off. */}
+          {(!guessed || onClose) && (
+            <Button
+              {...tip("This project has no dev server: chat, changes and the terminal work, the preview stays empty")}
+              onClick={nothingToRun}
+            >
+              no dev server
+            </Button>
+          )}
           <Button
             variant={agentLeads ? undefined : "outline"}
             size={agentLeads ? undefined : "lg"}

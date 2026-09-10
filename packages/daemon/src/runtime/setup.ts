@@ -9,15 +9,22 @@ const SETUP_RING = 64 * 1024;
 const SETUP_COLS = 120;
 const SETUP_ROWS = 30;
 
-/** Run one setup command, streaming its lines as they land. Resolves with the exit code. */
-export function runSetup(cmd: string, cwd: string, onLine: (line: string) => void): Promise<number> {
+/** Run one setup command, streaming its lines as they land. Resolves with the exit code. `extra`
+ * is what the command sees beyond the daemon's own env: the worktree id, so a setup step can
+ * create a database or a compose project that is this worktree's alone. */
+export function runSetup(
+  cmd: string,
+  cwd: string,
+  onLine: (line: string) => void,
+  extra: Record<string, string> = {},
+): Promise<number> {
   return new Promise((resolve) => {
     const lines = new LineSplitter();
     try {
       new PtyStream(
         {
           cwd,
-          env: { ...envStrings(process.env), TERM: "xterm-256color", COLORTERM: "truecolor" },
+          env: { ...envStrings(process.env), TERM: "xterm-256color", COLORTERM: "truecolor", ...extra },
           cols: SETUP_COLS,
           rows: SETUP_ROWS,
           file: "sh",

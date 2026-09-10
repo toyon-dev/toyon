@@ -106,7 +106,14 @@ describe("RuntimeRegistry", () => {
       config: {
         procs: { api: "true", web: "true", worker: "true" },
         profiles: {
-          full: { procs: ["api", "web"], env: { VITE_BACKEND_URL: "$API_URL", MODE: "local" } },
+          full: {
+            procs: ["api", "web"],
+            env: {
+              VITE_BACKEND_URL: "$API_URL",
+              MODE: "local",
+              DATABASE_URL: "postgres://localhost/app_$TOYON_WORKTREE",
+            },
+          },
           fe: { procs: ["web"], env: { VITE_ENVIRONMENT: "staging" } },
         },
         defaultProfile: "fe",
@@ -115,16 +122,22 @@ describe("RuntimeRegistry", () => {
     await registry.start({ ...wt, profile: "full" }, profiled);
     const started = procs.get(wt.id)!.started;
     expect(started.map((p) => p.name)).toEqual(["api", "web"]);
-    // nothing is up when api starts: the reference stays literal
-    expect(started[0]?.env).toEqual({ VITE_BACKEND_URL: "$API_URL", MODE: "local" });
+    // nothing is up when api starts: the reference stays literal; the worktree id is always there
+    expect(started[0]?.env).toEqual({
+      VITE_BACKEND_URL: "$API_URL",
+      MODE: "local",
+      TOYON_WORKTREE: wt.id,
+      DATABASE_URL: `postgres://localhost/app_${wt.id}`,
+    });
     expect(started[1]?.env.VITE_BACKEND_URL).toBe(started[1]?.env.API_URL);
     expect(started[1]?.env.MODE).toBe("local");
+    expect(started[1]?.env.TOYON_WORKTREE).toBe(wt.id);
     expect(registry.get(wt.id)?.previewName).toBe("web");
 
     await registry.stopProcs(wt.id);
     await registry.start(wt, profiled); // no profile on the row → the default
     expect(procs.get(wt.id)!.started.map((p) => p.name)).toEqual(["web"]);
-    expect(procs.get(wt.id)!.started[0]?.env).toEqual({ VITE_ENVIRONMENT: "staging" });
+    expect(procs.get(wt.id)!.started[0]?.env).toEqual({ VITE_ENVIRONMENT: "staging", TOYON_WORKTREE: wt.id });
   });
 
   test("previewTarget() is the running preview proc", async () => {

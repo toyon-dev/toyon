@@ -6,9 +6,9 @@ import { fileItems } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive, useActiveId, useActiveRow, useGreenfield, useLocalField } from "../../state/selectors.ts";
 import { repoById } from "../../state/store.ts";
-import { Button } from "../../ui/Button.tsx";
 import { step } from "../../ui/listNav.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
+import { Tabs } from "../../ui/Tabs.tsx";
 import { shiftRanges, wtDir } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
@@ -259,21 +259,18 @@ export function LeftDock({ width }: { width: number }) {
 
   return (
     <div className={cx("left-dock", (!leftOpen || greenfield) && "collapsed")} style={{ width }}>
-      <div className="changes-tabs" role="tablist">
-        {(["changes", "history"] as const).map((t) => (
-          <Button
-            key={t}
-            role="tab"
-            variant="outline"
-            className="changes-tab"
-            on={tab === t}
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-          >
-            {t}
-          </Button>
-        ))}
-      </div>
+      {/* the count is the working tree's: the committed section under it keeps its own title */}
+      <Tabs<Tab>
+        fill
+        owner="changes-tabs"
+        label="changes panel"
+        items={[
+          { id: "changes", label: files.length > 0 ? `changes · ${files.length}` : "changes" },
+          { id: "history", label: "history" },
+        ]}
+        current={tab}
+        onPick={setTab}
+      />
       <div
         className={cx("changes-list", tab === "history" && "history")}
         role="listbox"

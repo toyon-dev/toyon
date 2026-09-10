@@ -6,6 +6,9 @@
     width: 220px;
     flex-shrink: 0;
     background: var(--surface1);
+    /* the panel's two lists are alternatives, so they take the shared strip; its open tab is
+     painted in this ground so it joins the list under it */
+    --tabs-ground: var(--surface1);
     border-right: 1px solid var(--border0);
     display: flex;
     flex-direction: column;
@@ -24,20 +27,6 @@
   .left-dock.collapsed,
   .right-dock.collapsed {
     display: none;
-  }
-
-  /* the panel's two lists are alternatives, not sections, so they get the tab strip the terminal
-   pane already uses rather than a second section title */
-  .changes-tabs {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    padding: 8px 12px 2px;
-  }
-  .changes-tab {
-    font: var(--type-ui-sm);
-    flex-shrink: 0;
   }
 
   /* one commit: the subject takes the row, the age ends it where a file row ends with its counts */

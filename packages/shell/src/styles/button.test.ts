@@ -17,6 +17,9 @@ import { cssRules, shellCss } from "./cssRules.ts";
 
 /** the box: what a size owns */
 const BOX = ["padding", "padding-top", "padding-bottom", "padding-left", "padding-right", "height", "min-height"];
+/** the face: Button's `mono` and Field's `font` are how a control asks for one. Unguarded, this is
+ * how two tab strips built from the same buttons ended up in two faces. */
+const FACE = ["font", "font-family", "font-size"];
 
 /** the primitives: Button's sizes, variants and tones, and Field's sizes and faces */
 const PRIMITIVES = new Set([
@@ -125,6 +128,7 @@ describe("a control's box and its resting colour", () => {
     for (const rule of cssRules(await shellCss())) {
       const named = BOX.filter((p) => rule.decls.has(p));
       if (rule.decls.has("color")) named.push("a resting colour");
+      if (FACE.some((p) => rule.decls.has(p))) named.push("a face");
       if (named.length === 0) continue;
       for (const sel of rule.selectors) {
         // a bare single-class rule only: `.foo { … }`. A state or descendant rule is scoped, and

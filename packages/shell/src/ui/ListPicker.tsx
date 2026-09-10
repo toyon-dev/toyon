@@ -4,7 +4,7 @@ import { Field } from "./Field.tsx";
 import { useFocusOnMount } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
 import { useListNav } from "./listNav.ts";
-import { type MenuItem, useContextMenu } from "./menu.ts";
+import { type MenuEntry, useContextMenu } from "./menu.ts";
 import { Overlay } from "./Overlay.tsx";
 import "./picker.css";
 import { rowState } from "./rowState.ts";
@@ -89,7 +89,7 @@ export function ListPicker<T>({
   trailing?: ReactNode;
   /** what a right-click on a row offers, for a picker whose rows are things and not only choices
    * (a project has a setup and a forget); a row with nothing gets the app's menu like any chrome */
-  rowMenu?: (t: T) => MenuItem[];
+  rowMenu?: (t: T) => MenuEntry[];
 }) {
   const cm = useContextMenu("picker");
   const [q, setQ] = useState(initialQuery);

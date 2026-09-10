@@ -1,6 +1,6 @@
 import { copyText, type Deps } from "../../state/actions/deps.ts";
 import { editorItems } from "../../state/actions/editor.ts";
-import type { MenuItem } from "../../ui/menu.ts";
+import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { ToolItem } from "./group.ts";
 import { callPath, relPath, toolLabel } from "./toolCall.ts";
 
@@ -13,21 +13,22 @@ export function toolRowItems(
   wt: { id: string; dir: string } | null,
   { sock }: Deps,
   ui: { open: boolean; toggle: () => void },
-): MenuItem[] {
+): MenuEntry[] {
   const head = tools[0];
   if (!head) return [];
-  const items: MenuItem[] = [];
+  const open: MenuItem[] = [];
   const rel = relPath(callPath(head), roots);
   if (rel && !rel.startsWith("/") && wt) {
-    items.push(...editorItems(`${wt.dir}/${rel}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel })));
+    open.push(...editorItems(`${wt.dir}/${rel}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel })));
   }
+  const copies: MenuItem[] = [];
   const command = toolLabel(head, roots).command;
-  if (command) items.push({ id: "copy-command", label: "copy command", onClick: () => copyText(command) });
+  if (command) copies.push({ id: "copy-command", label: "copy command", onClick: () => copyText(command) });
   const output = tools
     .map((t) => t.output ?? "")
     .filter(Boolean)
     .join("\n");
-  if (output) items.push({ id: "copy-output", label: "copy output", onClick: () => copyText(output) });
-  items.push({ id: "fold", label: ui.open ? "collapse" : "expand", onClick: ui.toggle });
-  return items;
+  if (output) copies.push({ id: "copy-output", label: "copy output", onClick: () => copyText(output) });
+  const fold: MenuItem[] = [{ id: "fold", label: ui.open ? "collapse" : "expand", onClick: ui.toggle }];
+  return grouped([open, copies, fold]);
 }

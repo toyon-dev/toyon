@@ -1,4 +1,4 @@
-import type { MenuItem } from "../../ui/menu.ts";
+import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { copyText, type Deps } from "./deps.ts";
 import { editorItems } from "./editor.ts";
 
@@ -8,11 +8,11 @@ export function designRowItems(
   path: string | undefined,
   { sock }: Deps,
   onOpen: () => void,
-): MenuItem[] {
+): MenuEntry[] {
   if (!path) return [];
-  return [
-    { id: "source", label: "open source", onClick: onOpen },
-    ...editorItems(`${wt.dir}/${path}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path })),
-    { id: "copy-path", label: "copy path", onClick: () => copyText(path) },
-  ];
+  return grouped([
+    [{ id: "source", label: "open source", onClick: onOpen }],
+    editorItems(`${wt.dir}/${path}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path })),
+    [{ id: "copy-path", label: "copy path", onClick: () => copyText(path) }],
+  ]);
 }

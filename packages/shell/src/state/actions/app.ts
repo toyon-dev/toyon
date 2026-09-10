@@ -1,21 +1,105 @@
-import type { MenuItem } from "../../ui/menu.ts";
-import type { State } from "../store.ts";
+import { chord } from "../../surfaces/util.ts";
+import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
+import { type State, worktreeById } from "../store.ts";
 import type { Deps } from "./deps.ts";
 
-export type AppState = Pick<State, "leftOpen" | "rightOpen" | "railOpen" | "termOpen" | "designOpen">;
+export type AppState = Pick<
+  State,
+  "leftOpen" | "rightOpen" | "railOpen" | "termOpen" | "designOpen" | "activeId" | "activeRepoId" | "repos" | "rows"
+>;
 
-/** The app's own actions: what a right-click on bare chrome offers, and the panel lines of the
- * palette. The ids are the chord ids where one exists, which is how the palette finds the key. */
-export function appItems(s: AppState, { dispatch }: Deps): MenuItem[] {
+/** The app's own actions, in three groups: somewhere to go, the panels, and the app itself. What
+ * a right-click on bare chrome offers, and the head of the palette; the ids are the chord ids
+ * where one exists, and `key` carries the chord so both places teach it. */
+export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
   const show = (open: boolean) => (open ? "hide" : "show");
-  return [
-    { id: "left", label: `${show(s.leftOpen)} changes panel`, onClick: () => dispatch({ a: "toggle-left" }) },
-    { id: "right", label: `${show(s.rightOpen)} chat panel`, onClick: () => dispatch({ a: "toggle-right" }) },
-    { id: "rail", label: `${show(s.railOpen)} worktree panel`, onClick: () => dispatch({ a: "toggle-rail" }) },
-    { id: "terminal", label: `${show(s.termOpen)} terminal`, onClick: () => dispatch({ a: "toggle-terminal" }) },
-    { id: "design", label: `${show(s.designOpen)} design system`, onClick: () => dispatch({ a: "toggle-design" }) },
-    { id: "zen", label: "full-bleed preview", onClick: () => dispatch({ a: "toggle-zen" }) },
-    { id: "commands", label: "command palette", onClick: () => dispatch({ a: "open", overlay: { kind: "commands" } }) },
-    { id: "keys", label: "settings & shortcuts", onClick: () => dispatch({ a: "open", overlay: { kind: "keys" } }) },
+  const repo = s.repos.some((r) => r.id === s.activeRepoId);
+  // a found worktree has no session to list files for: the go group reads the active one we run
+  const id = worktreeById(s as State, s.activeId)?.worktree.id;
+  const go: MenuItem[] = [];
+  if (repo) {
+    go.push({
+      id: "new",
+      label: "new worktree…",
+      key: chord("new"),
+      onClick: () => dispatch({ a: "open", overlay: { kind: "prompt" } }),
+    });
+    go.push({
+      id: "refs",
+      label: "open a branch or PR…",
+      key: chord("refs"),
+      onClick: () => dispatch({ a: "open", overlay: { kind: "refs" } }),
+    });
+  }
+  if (id) {
+    go.push({
+      id: "jump",
+      label: "jump to file…",
+      key: chord("quick-open"),
+      onClick: () => {
+        sock?.send({ t: "list-files", worktreeId: id });
+        dispatch({ a: "open", overlay: { kind: "quick-open" } });
+      },
+    });
+    go.push({
+      id: "search",
+      label: "search in files…",
+      key: chord("search"),
+      onClick: () => dispatch({ a: "open", overlay: { kind: "search" } }),
+    });
+  }
+  go.push({
+    id: "project",
+    label: s.repos.length > 1 ? "switch project…" : "open project…",
+    key: chord("project"),
+    onClick: () => dispatch({ a: "open", overlay: { kind: "projects" } }),
+  });
+  const panels: MenuItem[] = [
+    {
+      id: "left",
+      label: `${show(s.leftOpen)} changes panel`,
+      key: chord("left"),
+      onClick: () => dispatch({ a: "toggle-left" }),
+    },
+    {
+      id: "right",
+      label: `${show(s.rightOpen)} chat panel`,
+      key: chord("right"),
+      onClick: () => dispatch({ a: "toggle-right" }),
+    },
+    {
+      id: "terminal",
+      label: `${show(s.termOpen)} terminal`,
+      key: chord("terminal"),
+      onClick: () => dispatch({ a: "toggle-terminal" }),
+    },
+    {
+      id: "rail",
+      label: `${show(s.railOpen)} worktree panel`,
+      key: chord("rail"),
+      onClick: () => dispatch({ a: "toggle-rail" }),
+    },
+    {
+      id: "design",
+      label: `${show(s.designOpen)} design system`,
+      key: chord("design"),
+      onClick: () => dispatch({ a: "toggle-design" }),
+    },
+    { id: "zen", label: "full-bleed preview", key: chord("zen"), onClick: () => dispatch({ a: "toggle-zen" }) },
   ];
+  const app: MenuItem[] = [
+    {
+      id: "commands",
+      label: "command palette",
+      key: chord("commands"),
+      onClick: () => dispatch({ a: "open", overlay: { kind: "commands" } }),
+    },
+    {
+      id: "keys",
+      label: "settings & shortcuts",
+      key: chord("keys"),
+      onClick: () => dispatch({ a: "open", overlay: { kind: "keys" } }),
+    },
+  ];
+  return grouped([go, panels, app]);
 }

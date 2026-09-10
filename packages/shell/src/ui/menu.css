@@ -29,9 +29,21 @@
     }
     & .menu-text {
       min-width: 0;
+      flex: 1 1 auto;
       display: flex;
       flex-direction: column;
       gap: 1px;
+    }
+    /* the chord sits at the far edge, the way the OS menus put it: read after the verb, not with it */
+    & .menu-key {
+      margin-left: auto;
+      flex: none;
+    }
+    /* a rule between groups, inset to the row's text like the row idiom's own dividers */
+    & .menu-sep {
+      height: 1px;
+      margin: 4px 0;
+      background: var(--border0);
     }
     & .menu-label,
     & .menu-detail {

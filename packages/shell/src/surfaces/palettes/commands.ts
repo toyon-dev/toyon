@@ -4,7 +4,7 @@
 // builders the context menus read, in state/actions/, so a verb exists once and reads the same
 // in both; the palette appends whose it is.
 
-import type { ChordId, OwnedWorktree, RepoInfo, ThemePrefs } from "@toyon/shared";
+import type { OwnedWorktree, RepoInfo, ThemePrefs } from "@toyon/shared";
 import { resolveTheme, worktreeChord } from "@toyon/shared";
 import { useMemo } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
@@ -14,7 +14,7 @@ import { projectItems } from "../../state/actions/project.ts";
 import { worktreeItems } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { type Action, repoById, type State, worktreeById } from "../../state/store.ts";
-import type { MenuItem } from "../../ui/menu.ts";
+import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { chord } from "../util.ts";
 
@@ -26,17 +26,6 @@ export type Command = {
   /** opens a sub-picker: esc there returns to the palette */
   sub?: boolean;
 };
-
-/** the app items whose id is a chord's, so the palette can show the key beside them */
-const APP_CHORDS: ReadonlySet<string> = new Set<ChordId>([
-  "left",
-  "right",
-  "rail",
-  "terminal",
-  "design",
-  "zen",
-  "keys",
-]);
 
 export const appearanceLabel: Record<ThemePrefs["mode"], string> = {
   dark: "dark",
@@ -54,11 +43,12 @@ export function buildCommands(
   const cmds: Command[] = [];
   const add = (id: string, label: string, run: () => void, hint?: string, sub?: boolean) =>
     cmds.push({ id, label, hint, run, sub });
-  /** a menu's items as commands: `whose` is appended so the line says which worktree it is about,
-   * and a string detail becomes the hint */
-  const addItems = (items: MenuItem[], whose?: string, hintOf?: (it: MenuItem) => string | undefined) => {
+  /** a menu's items as commands, the rules between groups dropped: `whose` is appended so the
+   * line says which worktree it is about, and the chord or a string detail becomes the hint */
+  const addItems = (items: MenuEntry[], whose?: string) => {
     for (const it of items) {
-      const hint = hintOf?.(it) ?? (typeof it.detail === "string" ? it.detail : undefined);
+      if (!isItem(it)) continue;
+      const hint = it.key ?? (typeof it.detail === "string" ? it.detail : undefined);
       add(it.id, whose ? `${it.label} · ${whose}` : it.label, it.onClick, hint);
     }
   };
@@ -66,28 +56,12 @@ export function buildCommands(
   const wt = active;
   const id = wt?.worktree.id;
 
-  if (repo) add("new", "new worktree…", () => dispatch({ a: "open", overlay: { kind: "prompt" } }), chord("new"));
-  if (repo)
-    add("refs", "open a branch or PR…", () => dispatch({ a: "open", overlay: { kind: "refs" } }), chord("refs"));
-  add(
-    "project",
-    state.repos.length > 1 ? "switch project…" : "open project…",
-    () => dispatch({ a: "open", overlay: { kind: "projects" } }),
-    chord("project"),
-  );
+  // where to go, the panels and the app's own: the same list a right-click on bare chrome shows,
+  // minus the line that opens this palette
+  addItems(appItems(state, deps).filter((it) => !isItem(it) || it.id !== "commands"));
   // the open project's own verbs (set up, forget); the others are listed by name below
   if (repo) addItems(projectItems(repo, repo.id, deps));
   if (id) {
-    add(
-      "jump",
-      "jump to file…",
-      () => {
-        sock?.send({ t: "list-files", worktreeId: id });
-        dispatch({ a: "open", overlay: { kind: "quick-open" } });
-      },
-      chord("quick-open"),
-    );
-    add("search", "search in files…", () => dispatch({ a: "open", overlay: { kind: "search" } }), chord("search"));
     add(
       "pick",
       state.picking ? "cancel element picker" : "pick an element on the page",
@@ -96,13 +70,6 @@ export function buildCommands(
     );
     add("reload", "reload preview", () => previewBus.post(id, { type: "reload" }));
   }
-  // the panels and the app's own: the same list a right-click on bare chrome shows, minus the
-  // line that opens this palette
-  addItems(
-    appItems(state, deps).filter((it) => it.id !== "commands"),
-    undefined,
-    (it) => (APP_CHORDS.has(it.id) ? chord(it.id as ChordId) : undefined),
-  );
 
   const prefs = state.themePrefs;
   const themeName = (tid: string) => state.themes.find((t) => t.id === tid)?.name ?? tid;

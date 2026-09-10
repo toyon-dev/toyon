@@ -1,4 +1,4 @@
-import type { MenuItem } from "../../ui/menu.ts";
+import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import type { Deps } from "./deps.ts";
 import { editorItems } from "./editor.ts";
 
@@ -8,19 +8,21 @@ export function fileItems(
   path: string,
   canDiscard: boolean,
   { sock }: Deps,
-): MenuItem[] {
-  const items = editorItems(`${wt.dir}/${path}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));
-  if (canDiscard) {
-    items.push({
-      id: "discard",
-      label: "discard changes…",
-      danger: true,
-      onClick: () => {
-        if (window.confirm(`Discard uncommitted changes to ${path}?`)) {
-          sock?.send({ t: "discard-file", worktreeId: wt.id, path });
-        }
-      },
-    });
-  }
-  return items;
+): MenuEntry[] {
+  const open = editorItems(`${wt.dir}/${path}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));
+  const discard = canDiscard
+    ? [
+        {
+          id: "discard",
+          label: "discard changes…",
+          danger: true,
+          onClick: () => {
+            if (window.confirm(`Discard uncommitted changes to ${path}?`)) {
+              sock?.send({ t: "discard-file", worktreeId: wt.id, path });
+            }
+          },
+        },
+      ]
+    : [];
+  return grouped([open, discard]);
 }

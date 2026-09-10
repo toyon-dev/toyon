@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { OwnedWorktree, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
+import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import { discoveredItems, worktreeItems } from "./worktree.ts";
 
 const info: WorktreeInfo = {
@@ -30,17 +31,21 @@ const owned = (over: Partial<OwnedWorktree> = {}): OwnedWorktree =>
   }) as OwnedWorktree;
 
 const deps = { sock: null, dispatch: () => {} };
-const labels = (items: Array<{ label: string }>) => items.map((i) => i.label);
+/** the list as read: a label per item, a bar where a rule sits between groups */
+const labels = (items: MenuEntry[]) => items.map((i) => (isItem(i) ? i.label : "|"));
 
 describe("a worktree's actions", () => {
-  test("read the same in the menu and the palette: one list, gated by state", () => {
+  test("read the same in the menu and the palette: one list, grouped, gated by state", () => {
     const quiet = worktreeItems(owned(), null, { leftOpen: true, termOpen: true, shipping: {} }, deps);
     expect(labels(quiet)).toEqual([
       "open terminal",
       "reveal in Finder",
+      "|",
       "rename…",
+      "|",
       "merge into main",
       "push + PR",
+      "|",
       "remove…",
     ]);
     const busy = worktreeItems(
@@ -52,14 +57,18 @@ describe("a worktree's actions", () => {
     );
     expect(labels(busy)).toEqual([
       "stop agent",
-      "sync from main (3 behind)",
+      "|",
       "view changes (2)",
       "open terminal",
       "reveal in Finder",
+      "|",
       "rename…",
       "graft with…",
+      "|",
+      "sync from main (3 behind)",
       "merge into main",
       "push + PR",
+      "|",
       "remove…",
     ]);
   });
@@ -88,12 +97,14 @@ describe("a worktree's actions", () => {
     const items = discoveredItems(found, { termOpen: true, clientId: "c" }, deps);
     expect(labels(items)).toEqual([
       "take over",
+      "|",
       "sync from main (1 behind)",
       "open a shell here",
       "reveal in Finder",
+      "|",
       "copy path",
     ]);
     const held = discoveredItems({ ...found, locked: true, behind: 0 }, { termOpen: true, clientId: "c" }, deps);
-    expect(labels(held)).toEqual(["open a shell here", "reveal in Finder", "copy path"]);
+    expect(labels(held)).toEqual(["open a shell here", "reveal in Finder", "|", "copy path"]);
   });
 });

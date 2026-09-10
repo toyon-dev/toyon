@@ -1,11 +1,9 @@
 import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveTheme } from "@toyon/shared";
-import { agentItems } from "../../state/actions/agent.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDispatch, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
-import { useContextMenu } from "../../ui/menu.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { chord } from "../util.ts";
 import { appearanceLabel } from "./commands.ts";

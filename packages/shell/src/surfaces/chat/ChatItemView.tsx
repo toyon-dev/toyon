@@ -11,7 +11,7 @@ import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
 import { useReveal } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
-import { type MenuItem, useContextMenu } from "../../ui/menu.ts";
+import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { attachmentUrl } from "../../ws.ts";
 import { wtDir } from "../util.ts";
 import { AskCard } from "./AskCard.tsx";
@@ -243,7 +243,7 @@ function Fold({
   label: string;
   summary: ReactNode;
   /** what a right-click on the row offers; told whether the row is open, and how to fold it */
-  menu: (fold: { open: boolean; toggle: () => void }) => MenuItem[];
+  menu: (fold: { open: boolean; toggle: () => void }) => MenuEntry[];
   children: ReactNode;
 }) {
   const [pinned, setPinned] = useState<boolean | null>(null);
@@ -301,10 +301,12 @@ export const ThoughtRow = memo(function ThoughtRow({ item, live }: { item: Think
       className="tool-row"
       auto={!!live}
       label={word}
-      menu={(fold) => [
-        { id: "copy", label: "copy thought", onClick: () => copyText(item.text) },
-        { id: "fold", label: fold.open ? "collapse" : "expand", onClick: fold.toggle },
-      ]}
+      menu={(fold) =>
+        grouped([
+          [{ id: "copy", label: "copy thought", onClick: () => copyText(item.text) }],
+          [{ id: "fold", label: fold.open ? "collapse" : "expand", onClick: fold.toggle }],
+        ])
+      }
       summary={
         <>
           {live ? <span className="spinner">●</span> : <Icon name="bulb" className="tool-icon" />}

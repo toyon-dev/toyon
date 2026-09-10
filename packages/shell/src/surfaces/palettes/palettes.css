@@ -43,11 +43,12 @@
   }
   /* a shortcut is read, not clicked, so it is drawn the way every other Kbd in the app is, as
    glyphs with no tile, and the rows sit on the dense token: a legend, not a column of buttons.
-   The glyphs right-align against the label column so the ragged widths of the modifiers land on
-   the same edge. */
+   The glyphs start on the column edge, under the section title, and the column is sized to the
+   widest chord (three glyphs, about 30px) plus a little air, so a short chord does not leave a
+   hole before its label. */
   .keys-row {
     display: grid;
-    grid-template-columns: 76px 1fr;
+    grid-template-columns: 40px 1fr;
     gap: 12px;
     align-items: center;
     min-height: var(--row-height-sm);

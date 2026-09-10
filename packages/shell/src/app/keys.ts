@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import { isSubPicker, localOf, previewIdOf } from "../state/store.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
+import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
 
 /** the chords a focused Monaco keeps for itself (see the check in useChords) */
@@ -38,18 +39,9 @@ export function useChords() {
           }
           case "wt-prev":
           case "wt-next": {
-            // the rail's order, top to bottom, with the new-worktree row as the last stop: down
-            // from the last worktree opens the draft, up from the draft is the last worktree, and
-            // the ends stop rather than wrap. The found list below is not on the walk.
-            const last = s.visible[s.visible.length - 1];
-            if (s.draft) {
-              if (chord.id === "wt-prev" && last) dispatch({ a: "activate", id: last.id });
-              break;
-            }
-            const at = s.visible.findIndex((w) => w.id === s.activeId);
-            const wt = s.visible[at + (chord.id === "wt-next" ? 1 : -1)];
-            if (wt) dispatch({ a: "activate", id: wt.id });
-            else if (chord.id === "wt-next" && at >= 0) dispatch({ a: "open-draft" });
+            const to = railWalk(s.visible, s.visibleDiscovered, s.activeId, !!s.draft, chord.id === "wt-next" ? 1 : -1);
+            if (to && "draft" in to) dispatch({ a: "open-draft" });
+            else if (to) dispatch({ a: "activate", id: to.activate });
             break;
           }
           case "wt-unseen-prev":

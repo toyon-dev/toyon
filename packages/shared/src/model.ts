@@ -34,6 +34,9 @@ export interface RepoInfo {
   config: ToyonConfig;
   /** config was auto-detected and not yet confirmed by the user */
   needsSetup: boolean;
+  /** the file the unconfirmed guess was read from, relative to the root (package.json, start.sh):
+   * the setup pane opens it so the person can copy the script they meant. Gone once confirmed. */
+  guess?: string;
 }
 
 /** one directory offered by the project picker's path completion */

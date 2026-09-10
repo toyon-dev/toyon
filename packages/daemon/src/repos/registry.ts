@@ -204,6 +204,7 @@ export class RepoRegistry {
       defaultBranch: await defaultBranch(root),
       config: detected.config,
       needsSetup: detected.needsSetup,
+      guess: detected.from,
     };
     this.d.state.addRepo(repo);
 
@@ -259,6 +260,7 @@ export class RepoRegistry {
     const repo = this.d.state.requireRepo(repoId);
     repo.config = config;
     repo.needsSetup = false;
+    repo.guess = undefined;
     this.d.state.save();
     // persist next to the code so it's shared/committed and future registers skip the card
     try {
@@ -316,9 +318,10 @@ export class RepoRegistry {
       this.reloadConfig(repo.id);
       return;
     }
-    const detected = detectConfig(wt.path).config;
-    if (JSON.stringify(detected) === JSON.stringify(repo.config)) return;
-    repo.config = detected;
+    const detected = detectConfig(wt.path);
+    if (JSON.stringify(detected.config) === JSON.stringify(repo.config) && detected.from === repo.guess) return;
+    repo.config = detected.config;
+    repo.guess = detected.from;
     this.d.state.save();
     this.d.hub.emit("reposChanged");
   }
@@ -339,6 +342,7 @@ export class RepoRegistry {
     if (same) return false;
     repo.config = file.config;
     repo.needsSetup = false;
+    repo.guess = undefined;
     this.d.state.save();
     return true;
   }

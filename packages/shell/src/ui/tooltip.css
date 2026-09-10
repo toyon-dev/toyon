@@ -37,6 +37,11 @@
     margin-left: 12px;
     color: var(--text1);
   }
+  /* the second line, a tier under the first: the key's tier, since both are the aside to the
+   line above them */
+  .tooltip-detail {
+    color: var(--text1);
+  }
   @keyframes tooltip-in-bottom {
     from {
       opacity: 0;

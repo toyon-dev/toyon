@@ -215,16 +215,16 @@ export function WtRail() {
         type="button"
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
         data-state={rowState({ current: id === activeId, checked: sel.includes(id) })}
-        // one tip per row, on the row: the dot's state in words and where the worktree is. A tip
-        // per element would swap fifty times as the mouse crosses the panel. Badges and the crashed
-        // dot keep their own, since those are what a hover over them is asking about.
+        // one tip per row, on the row: the dot's state in words, and where the worktree is on a
+        // line of its own. A tip per element would swap fifty times as the mouse crosses the
+        // panel. Badges and the crashed dot keep their own, since those are what a hover over
+        // them is asking about. A found row has no state to name, so the path is its line,
+        // unless something holds it.
         {...(owned
-          ? tip(`${stateLabel(w, repoOf(owned)?.needsSetup)} · ${wtDirLabel(w)}`, undefined, "left")
-          : tip(
-              w.locked ? `${wtDirLabel(w)} · held by ${w.lockReason ?? "another tool"}` : wtDirLabel(w),
-              undefined,
-              "left",
-            ))}
+          ? tip(stateLabel(w, repoOf(owned)?.needsSetup), undefined, "left", wtDirLabel(w))
+          : w.locked
+            ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, "left", wtDirLabel(w))
+            : tip(wtDirLabel(w), undefined, "left"))}
         onClick={(e) => {
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
           // and has nothing to check; every other graftable row is a source to check or uncheck.

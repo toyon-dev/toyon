@@ -22,12 +22,16 @@ import "./tooltip.css";
 export type TipPlacement = "follow" | "top" | "bottom" | "left" | "right";
 type Side = Exclude<TipPlacement, "follow">;
 
-export function tip(text: string, key?: string, placement?: TipPlacement) {
+/** `detail` is a second line in the quiet tier, for the where or the which under the what: a
+ * worktree's path under its state. On one line with a middot the two read as one phrase. */
+export function tip(text: string, key?: string, placement?: TipPlacement, detail?: string) {
+  const label = detail ? `${text}, ${detail}` : text;
   return {
     "data-tip": text,
     "data-tip-key": key,
     "data-tip-placement": placement,
-    "aria-label": key ? `${text} (${key})` : text,
+    "data-tip-detail": detail,
+    "aria-label": key ? `${label} (${key})` : label,
   } as const;
 }
 
@@ -48,7 +52,7 @@ const CURSOR_GAP = 18;
 const CURSOR_NUDGE = 12;
 const MARGIN = 8;
 
-export type Anchor = { el: HTMLElement; text: string; key?: string; placement: TipPlacement };
+export type Anchor = { el: HTMLElement; text: string; key?: string; detail?: string; placement: TipPlacement };
 type Point = { x: number; y: number };
 
 /** The element's own placement; below when it names none. Nothing is guessed from the anchor's
@@ -134,7 +138,7 @@ export function Tooltips() {
       if (!text) return hide();
       stopTimers();
       visible = true;
-      setAnchor({ el, text, key: el.dataset.tipKey, placement });
+      setAnchor({ el, text, key: el.dataset.tipKey, detail: el.dataset.tipDetail, placement });
     };
     const target = (e: Event) => {
       const t = e.target;
@@ -224,6 +228,7 @@ export function Tooltips() {
     <div ref={box} className="tooltip" role="tooltip">
       {anchor.text}
       {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}
+      {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
     </div>,
     document.body,
   );

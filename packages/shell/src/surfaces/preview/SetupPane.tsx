@@ -39,6 +39,11 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
 
   const edit = (i: number, patch: Partial<Proc>) => setProcs(procs.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
+  const setupLines = () =>
+    install
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
   const start = () => {
     sock?.send({
       t: "confirm-config",
@@ -49,12 +54,15 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
         procs: Object.fromEntries(
           procs.filter((p) => p.name.trim() && p.cmd.trim()).map((p) => [p.name.trim(), p.cmd.trim()]),
         ),
-        setup: install
-          .split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean),
+        setup: setupLines(),
       },
     });
+    onClose?.();
+  };
+  // a library, a CLI, a backend with no HTTP server: nothing to preview, everything else works.
+  // Confirmed with no procs so the pane stops asking and the worktrees get their agents.
+  const nothingToRun = () => {
+    sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...repo.config, procs: {}, setup: setupLines() } });
     onClose?.();
   };
 
@@ -135,6 +143,13 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
             let the agent work it out
           </Button>
         )}
+        <Button
+          size="lg"
+          {...tip("This project has no dev server: chat, changes and the terminal work, the preview stays empty")}
+          onClick={nothingToRun}
+        >
+          nothing to run here
+        </Button>
         <Button variant="outline" size="lg" disabled={!canStart} onClick={start}>
           {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
         </Button>

@@ -7,6 +7,7 @@ import { openSource } from "../../state/openSource.ts";
 import {
   useActive,
   useActiveId,
+  useActiveRepo,
   useActiveRepoNeedingSetup,
   useActiveRow,
   useGreenfield,
@@ -41,6 +42,7 @@ import { BootPane } from "./BootPane.tsx";
 import { DiscoveredPane } from "./DiscoveredPane.tsx";
 import { GreenfieldPane } from "./GreenfieldPane.tsx";
 import { ImportPane } from "./ImportPane.tsx";
+import { NoPreviewPane } from "./NoPreviewPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 import "./preview.css";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -73,6 +75,10 @@ export function Center() {
   const log = useLocalField(activeId, "log");
   const incompatible = useStore((s) => s.incompatible);
   const needsSetup = useActiveRepoNeedingSetup();
+  // set up on purpose with nothing to run: the boot pane would wait for a server forever
+  const activeRepo = useActiveRepo();
+  const noProcs =
+    activeRepo && !activeRepo.needsSetup && Object.keys(activeRepo.config.procs).length === 0 ? activeRepo : null;
   // reopened from settings / the palette for a repo that is already configured
   const reopened = useStore((s) =>
     s.overlay?.kind === "setup"
@@ -319,6 +325,8 @@ export function Center() {
                 `building in ${active.worktree.title}; the preview appears once it starts`
               ) : needsSetup && treeEmpty ? (
                 `${active.worktree.title} is empty so far; say what to build`
+              ) : noProcs ? (
+                <NoPreviewPane repo={noProcs} />
               ) : (
                 <BootPane worktree={active} log={log} />
               )}

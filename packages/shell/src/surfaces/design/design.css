@@ -74,7 +74,7 @@
       gap: 10px;
       width: calc(100% + 40px);
       margin-left: -40px;
-      min-height: var(--row-h-sm);
+      min-height: var(--row-height-sm);
       /* the same two pixels the rows above it keep, so the counts stay in one column */
       padding: 0 10px 0 2px;
       cursor: pointer;
@@ -120,7 +120,7 @@
  */
   .design-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, var(--ds-cell));
+    grid-template-columns: repeat(auto-fit, var(--design-cell));
     justify-content: start;
   }
 
@@ -277,7 +277,7 @@
     gap: 10px;
     width: calc(100% + 40px);
     margin-left: -40px;
-    min-height: var(--row-h-sm);
+    min-height: var(--row-height-sm);
     text-align: left;
     /* the 2px was the marker's border, which was load bearing: it plus the 28px count and the 10px
      gap are what put the name on the column. .row-edge draws the marker out of flow, so the gutter
@@ -350,7 +350,7 @@
   .design-faces,
   .design-gap,
   .design-tail {
-    max-width: var(--ds-col);
+    max-width: var(--design-column);
     margin-inline: auto;
   }
 }

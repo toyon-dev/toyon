@@ -90,7 +90,7 @@ export function Menu({
   // keep the whole menu on screen when opened near the bottom. The row height is a token, so it is
   // read off the root rather than written here twice: MonacoDiff and XTerm read --face-mono the
   // same way, for the same reason.
-  const rowH = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h")) || 32;
+  const rowH = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-height")) || 32;
   const top = Math.max(4, Math.min(y, window.innerHeight - items.length * rowH - 12));
   return (
     // the width is set here rather than in the stylesheet because the clamp above depends on it,

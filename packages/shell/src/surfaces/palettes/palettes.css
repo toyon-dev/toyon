@@ -5,9 +5,9 @@
   .keys-card {
     background: var(--surface1);
     border: 1px solid var(--border1);
-    border-radius: var(--r-lg);
+    border-radius: var(--radius-lg);
     padding: 18px 24px 20px;
-    box-shadow: var(--elev-overlay);
+    box-shadow: var(--elevation-overlay);
     font: var(--type-ui);
     color: var(--text0);
     /* two columns of sections: Find | Preview over Panels | Worktrees */
@@ -61,7 +61,7 @@
       width: 44px;
       text-align: center;
       border: 1px solid transparent;
-      border-radius: var(--r-sm);
+      border-radius: var(--radius);
       padding: 0;
     }
     & .kind[data-state~="current"] {
@@ -71,7 +71,7 @@
   /* search hits: location on top, matched line beneath */
   .search-hit {
     white-space: normal;
-    padding: 5px var(--picker-pad, 10px);
+    padding: 5px var(--picker-inset, 10px);
   }
   .search-loc {
     display: block;

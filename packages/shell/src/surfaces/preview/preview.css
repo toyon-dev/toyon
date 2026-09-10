@@ -92,7 +92,7 @@
       overflow-y: auto;
       background: var(--sunken);
       border: 1px solid var(--border0);
-      border-radius: var(--r-sm);
+      border-radius: var(--radius);
       padding: 8px 10px;
       font: var(--type-mono-sm);
       color: var(--text1);

@@ -44,7 +44,7 @@
   code {
     font: var(--type-mono);
     padding: 1px 5px;
-    border-radius: var(--r-xs);
+    border-radius: var(--radius-xs);
     background: var(--code);
     /* a chip that wraps mid-sentence keeps its padding and corners on both halves */
     -webkit-box-decoration-break: clone;
@@ -103,14 +103,14 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    min-height: var(--row-h);
-    padding: 0 var(--row-pad-x);
+    min-height: var(--row-height);
+    padding: 0 var(--row-inset);
     text-align: left;
     color: var(--text1);
     position: relative;
   }
   .row-sm {
-    min-height: var(--row-h-sm);
+    min-height: var(--row-height-sm);
     font: var(--type-mono);
   }
   .row {

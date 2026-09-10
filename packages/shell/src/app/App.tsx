@@ -19,7 +19,7 @@ import "./app.css";
 import { cx } from "../ui/cx.ts";
 
 /** the worktree rail: the strip it keeps when it peeks, and the column it takes when kept open
- *  (both also in surfaces.css, as the rail's width and --rail-w) */
+ *  (both also in surfaces.css, as the rail's width and --rail-width) */
 const RAIL_PX = 40;
 const RAIL_OPEN_PX = 232;
 const MRU_SUBSCRIPTIONS = 3;

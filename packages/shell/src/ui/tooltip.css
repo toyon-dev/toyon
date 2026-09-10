@@ -17,8 +17,8 @@
      was floating above. r-sm is a control's radius and a tooltip is a box. */
     background: var(--surface1);
     border: 1px solid var(--border1);
-    border-radius: var(--r-md);
-    box-shadow: var(--elev-float);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-float);
     white-space: pre-line;
     overflow-wrap: anywhere;
     animation: tooltip-in 90ms ease-out;

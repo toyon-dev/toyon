@@ -16,9 +16,9 @@
   .overlay-box {
     width: min(560px, 90%);
     background: var(--surface1);
-    box-shadow: var(--elev-overlay);
+    box-shadow: var(--elevation-overlay);
     border: 1px solid var(--border0);
-    border-radius: var(--r-lg);
+    border-radius: var(--radius-lg);
     padding: 14px;
     /* anchored variant: no scrim, hanging under whatever opened it (the caller's wrapper is the
    offset parent). Sits above the rail panel and the toast, under the tooltip. */
@@ -29,7 +29,7 @@
       width: min(460px, calc(100vw - 60px));
       z-index: 40;
       /* anchored drops the scrim (see Overlay.tsx), so the box has to separate itself again */
-      box-shadow: var(--elev-float);
+      box-shadow: var(--elevation-float);
     }
   }
   /* the line above a prompt's field saying what the box is for */

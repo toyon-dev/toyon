@@ -112,7 +112,7 @@ type Outline = (msg: Parameters<typeof previewBus.post>[1]) => void;
  */
 const COLUMN = 720;
 const CELL = 132;
-const LAYOUT = { "--ds-col": `${COLUMN}px`, "--ds-cell": `${CELL}px` } as React.CSSProperties;
+const LAYOUT = { "--design-column": `${COLUMN}px`, "--design-cell": `${CELL}px` } as React.CSSProperties;
 
 /** what the scan actually opened, which is the one thing about this pane the body never says and
  * the first thing to doubt when a section comes back thinner than you expected */
@@ -236,12 +236,12 @@ function Tokens({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Ou
  * chips or thirty-three. round() does the same snapping with the row's own width in hand.
  */
 function breakout(count: number): React.CSSProperties {
-  const cell = "var(--ds-cell)";
+  const cell = "var(--design-cell)";
   const row = `min(round(down, 100%, ${cell}), calc(${count} * ${cell}))`;
   // how far past the column the row runs, in whole cells: half of it goes to each side
-  const fits = `round(down, var(--ds-col), ${cell})`;
+  const fits = `round(down, var(--design-column), ${cell})`;
   const over = `round(down, max(0px, calc((${row} - ${fits}) / 2)), ${cell})`;
-  return { width: row, marginLeft: `max(0px, calc((100% - var(--ds-col)) / 2 - ${over}))` };
+  return { width: row, marginLeft: `max(0px, calc((100% - var(--design-column)) / 2 - ${over}))` };
 }
 
 /** the biggest length in a group, so the scale bars can be drawn relative to their own scale */

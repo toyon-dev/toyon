@@ -15,12 +15,12 @@
     border: 1px solid var(--border1);
     /* the menu's box: a floating thing is a box, not a control, and it separates itself from the
      transcript the way every other float does */
-    border-radius: var(--r-md);
-    box-shadow: var(--elev-float);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-float);
     padding: 4px;
     overflow: hidden;
     --picker-bleed: -4px;
-    --picker-pad: 8px;
+    --picker-inset: 8px;
     /* .picker-list is half the viewport for a centred palette; anchored here that would bury the chat */
     & .picker-list {
       max-height: min(280px, 40vh);
@@ -56,13 +56,13 @@
   /* A picker's rows are bands across the panel, not chips inside it: everywhere else in the app a
    list you run down with the keyboard (the worktree panel, the transcript's tool rows) is full
    bleed, and a rounded pill inset in a padded box reads as a control you press. --picker-bleed undoes
-   the box's padding for the list and the key row; --picker-pad puts it back inside the row, so the
+   the box's padding for the list and the key row; --picker-inset puts it back inside the row, so the
    row's text still sits under the caret while its fill reaches both edges. */
   .overlay-box {
     &.picker {
       padding: 8px;
       --picker-bleed: -8px;
-      --picker-pad: 18px;
+      --picker-inset: 18px;
       /* the rows reach the box's edge, so the box has to be the thing that keeps its corners round */
       overflow: hidden;
     }
@@ -74,14 +74,14 @@
    as the bar it drops out of rather than a control floating in a menu. -8px undoes .picker's
    padding. */
     &.anchored {
-      --picker-pad: 8px;
+      --picker-inset: 8px;
     }
     &.anchored .picker-input {
       margin: -8px -8px 0;
       padding: 5px 8px;
       background: var(--sunken);
       border-bottom: 1px solid var(--border0);
-      border-radius: var(--r-lg) var(--r-lg) 0 0;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     }
     /* the ghost tracks the caret, so it loses the same border and padding the input just did */
     &.anchored .picker-ghost {
@@ -100,7 +100,7 @@
     min-height: 20px;
     max-width: 160px;
     background: var(--surface2);
-    border-radius: var(--r-sm);
+    border-radius: var(--radius);
     color: var(--text0);
     font: var(--type-mono);
     overflow: hidden;
@@ -143,7 +143,7 @@
     margin: 6px var(--picker-bleed, 0) 0;
     /* the empty line and the footer are rows of the same list, so they sit on the rows' text column */
     & .empty {
-      padding-inline: var(--picker-pad, 10px);
+      padding-inline: var(--picker-inset, 10px);
     }
   }
   /* selection, one idiom everywhere: a 2px bar down the leading edge and a seat that stays neutral.
@@ -159,8 +159,8 @@
     /* min-height rather than .row's centring: the row is display:block because the ellipsis lives on
      the button itself, and a search hit stacks two lines inside it. It takes the height token so it
      tracks the others; true centring arrives when the label gets its own span. */
-    min-height: var(--row-h-sm);
-    padding: 4px var(--picker-pad, 10px);
+    min-height: var(--row-height-sm);
+    padding: 4px var(--picker-inset, 10px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

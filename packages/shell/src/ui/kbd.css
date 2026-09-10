@@ -20,6 +20,6 @@
     color: var(--text0);
     background: var(--sunken);
     border: 1px solid var(--border0);
-    border-radius: var(--r-sm);
+    border-radius: var(--radius);
   }
 }

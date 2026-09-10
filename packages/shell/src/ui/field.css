@@ -4,7 +4,7 @@
   .field {
     background: var(--sunken);
     border: 1px solid var(--border0);
-    border-radius: var(--r-sm);
+    border-radius: var(--radius);
     color: var(--text0);
     /* identifier and filter inputs: a path, a URL, a branch, a command. The prose face is
        .field-ui, which Field adds for a prose-sized box unless told otherwise. */
@@ -21,7 +21,7 @@
     line-height: 1.6;
   }
   .field-lg {
-    border-radius: var(--r-md);
+    border-radius: var(--radius-md);
     padding: 8px 10px;
   }
   /* the face, apart from the size: the composer's face changes under the caret once its draft

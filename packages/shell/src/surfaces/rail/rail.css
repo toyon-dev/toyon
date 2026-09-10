@@ -88,7 +88,7 @@
     }
     & .rail-badge.clickable {
       padding: 1px 4px;
-      border-radius: var(--r-xs);
+      border-radius: var(--radius-xs);
     }
     & .rail-badge.clickable:hover {
       background: var(--element0);
@@ -105,7 +105,7 @@
     & .rail-more {
       visibility: hidden;
       padding: 0 2px;
-      border-radius: var(--r-xs);
+      border-radius: var(--radius-xs);
       flex-shrink: 0;
     }
     &:hover .rail-more {
@@ -129,11 +129,11 @@
   /* ---- far-right worktree rail: 40px dot strip, hover peeks the full panel
    as an overlay (no reflow), pin (« ») keeps it wide ---- */
   .rail {
-    --rail-w: 232px;
+    --rail-width: 232px;
     /* the list sits inside the panel's 1px left border, so both states line up on the same pixel */
-    --rail-inner: calc(var(--rail-w) - 1px);
+    --rail-inner: calc(var(--rail-width) - 1px);
     /* x of the panel's left edge within a row: the strip's edge collapsed, the row's own edge open */
-    --rail-edge: calc(var(--rail-w) - 40px);
+    --rail-edge: calc(var(--rail-width) - 40px);
     width: 40px;
     flex-shrink: 0;
     position: relative;
@@ -168,7 +168,7 @@
   .rail {
     &:hover .rail-panel,
     &.hold .rail-panel {
-      width: var(--rail-w);
+      width: var(--rail-width);
       /* a step above the page, not a floating dialog: the negative spread keeps the dark out of the
      seam itself, so what shows is the tail of the blur */
       box-shadow: -10px 0 20px -10px var(--shadow);
@@ -180,7 +180,7 @@
     /* kept open: the rail is a column of its own, so it takes the width out of the layout and drops the
    shadow with it. Nothing overlaps, nothing to lift off the page. */
     &.pinned {
-      width: var(--rail-w);
+      width: var(--rail-width);
     }
     &.pinned .rail-panel {
       box-shadow: none;
@@ -193,7 +193,7 @@
     position: absolute;
     top: 0;
     right: 0;
-    bottom: var(--row-h);
+    bottom: var(--row-height);
     width: var(--rail-inner);
     overflow-y: auto;
     background: var(--surface1);
@@ -207,7 +207,7 @@
     bottom: 0;
     width: var(--rail-inner);
     /* the pin is a row of the drawer, so it takes the row height rather than a number of its own */
-    height: var(--row-h);
+    height: var(--row-height);
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -243,7 +243,7 @@
     &:hover .rail-disc-head,
     &.hold .rail-disc-head,
     &.pinned .rail-disc-head {
-      height: var(--row-h-sm);
+      height: var(--row-height-sm);
       width: 100%;
       display: flex;
       align-items: center;
@@ -321,7 +321,7 @@
    it, so the pointer is still resting on the row and not on the "…" that used to slide under it.
    Everything clickable stays left of the strip: 12px of margin plus the row's 8px gap. */
     & .rail-item {
-      height: var(--row-h);
+      height: var(--row-height);
       /* the dot keeps its x: 20px from the right edge, the centre of the collapsed strip */
       padding: 0 16px 0 12px;
     }
@@ -349,7 +349,7 @@
   }
   .rail {
     & .rail-new {
-      height: var(--row-h);
+      height: var(--row-height);
       padding: 0 12px;
       display: flex;
       align-items: center;

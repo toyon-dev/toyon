@@ -9,7 +9,7 @@
     flex-wrap: wrap;
     gap: 4px 12px;
     margin-inline: var(--picker-bleed, 0);
-    padding: 7px var(--picker-pad, 10px);
+    padding: 7px var(--picker-inset, 10px);
     color: var(--text2);
     font: var(--type-ui-sm);
     border-top: 1px solid var(--border0);

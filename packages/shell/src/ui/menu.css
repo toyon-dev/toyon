@@ -7,12 +7,12 @@
     z-index: 40;
     background: var(--surface1);
     border: 1px solid var(--border1);
-    border-radius: var(--r-md);
+    border-radius: var(--radius-md);
     /* the rows reach both edges, so the box is what keeps the corners round: the same reason
      .overlay-box.picker clips its own. The padding is vertical only, for the same reason. */
     overflow: hidden;
     padding: 4px 0;
-    box-shadow: var(--elev-float);
+    box-shadow: var(--elevation-float);
     display: flex;
     flex-direction: column;
     /* width is set by Menu.tsx, which needs the number for its off-screen clamp */

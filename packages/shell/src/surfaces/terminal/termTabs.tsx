@@ -13,15 +13,15 @@ export function useTermTabs({
   worktreeId,
   procs,
   stream,
-  exit,
+  exited,
   onRestart,
 }: {
   worktreeId: string;
   procs: ProcState[];
   /** the open tab */
   stream: string;
-  /** the open stream's exit code, once it has one */
-  exit: number | null;
+  /** the open stream has exited, so its restart stays out */
+  exited: boolean;
   onRestart: (stream: string) => void;
 }): TabItem<string>[] {
   const sock = useSock();
@@ -35,7 +35,7 @@ export function useTermTabs({
       tip: tip("A shell in this worktree"),
       menu: () => shellItems(worktreeId, deps),
       trail: trail(SHELL_STREAM, "Restart the shell"),
-      alert: stream === SHELL_STREAM && exit !== null,
+      alert: stream === SHELL_STREAM && exited,
     },
     ...procs.map((p) => ({
       id: p.name,
@@ -44,7 +44,7 @@ export function useTermTabs({
       tip: tip(`${p.command}\n${p.status} on :${p.port}`),
       menu: () => procItems(p, worktreeId, deps),
       trail: trail(p.name, `Restart ${p.name}`),
-      alert: stream === p.name && exit !== null,
+      alert: stream === p.name && exited,
     })),
   ];
 }

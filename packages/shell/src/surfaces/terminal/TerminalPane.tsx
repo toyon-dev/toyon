@@ -30,7 +30,9 @@ export function TerminalPane({
   const active = useActive();
   const procs = active?.procs ?? [];
   const stream = useLocalField(worktreeId, "termStream");
-  const [exit, setExit] = useState<number | null>(null);
+  // the open stream has exited. A snapshot of a stream that was already dead carries no code, so
+  // the card says only what it knows.
+  const [exit, setExit] = useState<{ code?: number } | null>(null);
   // a proc that leaves the config (a profile switch) would strand the tab on a stream nobody runs
   useEffect(() => {
     if (stream !== SHELL_STREAM && !procs.some((p) => p.name === stream)) {
@@ -59,9 +61,9 @@ export function TerminalPane({
       setGen((g) => g + 1);
       return;
     }
-    setExit(code ?? 0);
+    setExit({ code });
   };
-  const tabs = useTermTabs({ worktreeId, procs, stream, exit, onRestart: restart });
+  const tabs = useTermTabs({ worktreeId, procs, stream, exited: exit !== null, onRestart: restart });
   return (
     <Pane
       className="term-pane"
@@ -92,7 +94,7 @@ export function TerminalPane({
         <CrashCard
           pane
           title={stream === SHELL_STREAM ? "the shell exited" : `${stream} exited`}
-          body={`exit code ${exit}`}
+          body={exit.code === undefined ? undefined : `exit code ${exit.code}`}
           action={
             <Button variant="outline" onClick={() => restart(stream)}>
               restart

@@ -4,11 +4,25 @@
 // than part of the component - the two differ in where the query lives and who holds focus, not
 // in how the list behaves.
 
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useRef, useState } from "react";
+import { useOnChange } from "./hooks.ts";
 
 /** ↑↓ with wrap-around */
 export function step(i: number, delta: number, n: number): number {
   return n === 0 ? 0 : (i + delta + n) % n;
+}
+
+/** typeahead: the next row after `from` whose label starts with `ch`, wrapping, so pressing the
+ * same letter again walks the rows that share it; -1 when none does. `from` may be -1 for "no row
+ * yet", which is where a menu opened with the mouse starts. */
+export function jumpTo(labels: string[], from: number, ch: string): number {
+  const n = labels.length;
+  const c = ch.toLowerCase();
+  for (let k = 1; k <= n; k++) {
+    const j = (Math.max(from, -1) + k) % n;
+    if (labels[j]?.trim().toLowerCase().startsWith(c)) return j;
+  }
+  return -1;
 }
 
 /** the tail of what the active row would complete `q` to, or null. A case-insensitive match must
@@ -54,12 +68,12 @@ export function useListNav<T>(opts: {
   const activeKey = results[idx] ? keyOf(results[idx]!) : null;
   const onActiveRef = useRef(onActive);
   onActiveRef.current = onActive;
-  useEffect(() => {
+  useOnChange([activeKey], () => {
     listRef.current
       ?.querySelector<HTMLElement>('.picker-item[data-state~="cursor"]')
       ?.scrollIntoView({ block: "nearest" });
     onActiveRef.current?.(results[idx] ?? null);
-  }, [activeKey]);
+  });
 
   const clamped = Math.min(idx, Math.max(0, results.length - 1));
   const active = results[clamped] ?? null;

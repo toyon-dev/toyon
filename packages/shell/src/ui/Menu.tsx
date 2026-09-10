@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { step } from "./listNav.ts";
+import { jumpTo, step } from "./listNav.ts";
 import "./menu.css";
 import { cx } from "./cx.ts";
 import { rowState } from "./rowState.ts";
@@ -10,14 +10,18 @@ const WIDTH = 180;
 
 /**
  * The context menu. Positioned at a point (right-click) or under an anchor's rect; clamped to the
- * viewport. Closes on any click, unhandled key, or window blur; the last one matters because clicks
+ * viewport. Closes on any click, a chord, or window blur; the last one matters because clicks
  * inside the preview iframe never bubble here but do steal focus.
  *
  * Its rows are .row like every other list in the app, and it navigates like one: arrows move a
- * highlight, enter runs it, and hovering sets the same index so there is only ever one highlight.
- * Nothing is highlighted until a key arrives, so opening a menu with the mouse does not paint a
- * choice you have not made yet.
+ * highlight, enter runs it, a letter jumps to the next row that starts with it, and hovering sets
+ * the same index so there is only ever one highlight. Nothing is highlighted until a key arrives,
+ * so opening a menu with the mouse does not paint a choice you have not made yet.
  */
+
+/** a modifier on its own: shift for a screenshot chord, cmd held while deciding. Not a key meant
+ * for the menu or for anything behind it, so it neither moves the highlight nor closes anything. */
+const MODIFIERS = new Set(["Shift", "Meta", "Control", "Alt", "CapsLock", "Fn"]);
 export function Menu({
   at,
   anchor,
@@ -37,6 +41,8 @@ export function Menu({
   // the listener is bound once, so what it reads has to be a ref: items are rebuilt every render
   const live = useRef({ idx, items });
   live.current = { idx, items };
+  // typeahead reads the rows off the DOM: a label is a ReactNode, and the text is what you see
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // the click that opened the menu is still bubbling when this mounts: ignore events older than us
     const openedAt = performance.now();
@@ -51,6 +57,7 @@ export function Menu({
     // not in the store.
     const onKeyDown = (e: KeyboardEvent) => {
       const { idx: i, items: its } = live.current;
+      if (MODIFIERS.has(e.key)) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         e.stopPropagation();
@@ -59,7 +66,7 @@ export function Menu({
         setIdx(i < 0 ? (d === 1 ? 0 : its.length - 1) : step(i, d, its.length));
         return;
       }
-      if (e.key === "Enter" && i >= 0 && its[i]) {
+      if ((e.key === "Enter" || e.key === " ") && i >= 0 && its[i]) {
         e.preventDefault();
         e.stopPropagation();
         its[i].onClick();
@@ -71,8 +78,19 @@ export function Menu({
         onClose();
         return;
       }
-      // anything else closes the menu and is still let through, so a chord reaches the app: hitting
-      // one is a way of saying you are done here, not a key the menu has a use for
+      // a bare letter jumps to the next row starting with it, the way the OS menus do. One with no
+      // match still ends here: with a menu up, a letter is a choice you are trying to make, not a
+      // shortcut for the app behind it.
+      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const rows = Array.from(box.current?.querySelectorAll("button") ?? [], (b) => b.textContent ?? "");
+        const j = jumpTo(rows, i, e.key);
+        if (j >= 0) setIdx(j);
+        return;
+      }
+      // anything else (a chord, tab, a function key) closes the menu and is still let through, so
+      // the chord reaches the app: hitting one is a way of saying you are done here
       onClose();
     };
     window.addEventListener("click", onClick);
@@ -95,9 +113,10 @@ export function Menu({
   return (
     // the width is set here rather than in the stylesheet because the clamp above depends on it,
     // and a menu that is one width in CSS and another in the maths lands off screen at the edges
-    <div className="menu" style={{ position: "fixed", left, top, width: WIDTH }}>
+    <div className="menu" ref={box} style={{ position: "fixed", left, top, width: WIDTH }}>
       {items.map((it, i) => (
         <button
+          // biome-ignore lint/suspicious/noArrayIndexKey: a menu's items have no identity but their position, and the list is built whole each time it opens
           key={i}
           className={cx("row", it.danger && "danger")}
           data-state={rowState({ cursor: i === idx })}

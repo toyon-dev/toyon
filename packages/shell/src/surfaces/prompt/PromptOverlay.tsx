@@ -43,7 +43,11 @@ export function PromptOverlay() {
   // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing
   const menuOpen = cmd !== null && cmd.from !== dismissed && !batch;
   // keyed on the query, not the trigger: triggerAt rebuilds that object on every keystroke
-  const rows = useMemo(() => (cmd ? filterCommands(commands, cmd.query).slice(0, 8) : []), [cmd?.query, commands]);
+  const query = cmd?.query;
+  const rows = useMemo(
+    () => (query === undefined ? [] : filterCommands(commands, query).slice(0, 8)),
+    [query, commands],
+  );
 
   const nav = useListNav<AgentCommand>({
     results: rows,

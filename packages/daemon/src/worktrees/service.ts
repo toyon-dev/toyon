@@ -201,7 +201,7 @@ export class WorktreeService {
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
         this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, { context, pick, images, pastes });
-        this.scheduleNaming(claimed, prompt, repo, variant);
+        this.scheduleNaming(claimed, prompt, variant);
         return claimed;
       }
     }
@@ -227,7 +227,7 @@ export class WorktreeService {
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, base?.path ?? repo.path);
     this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context, pick, images, pastes });
-    this.scheduleNaming(wt, prompt, repo, variant);
+    this.scheduleNaming(wt, prompt, variant);
     return wt;
   }
 
@@ -391,7 +391,7 @@ export class WorktreeService {
 
   /** Async pretty-naming: solo worktrees rename directly; variant groups rename together
    * (index 1 runs the Haiku call, then every sibling becomes <name>-v<index>). */
-  private scheduleNaming(wt: WorktreeInfo, prompt: string, repo: RepoInfo, variant?: Variant) {
+  private scheduleNaming(wt: WorktreeInfo, prompt: string, variant?: Variant) {
     if (!variant) {
       fireAndForget(
         wt.id,
@@ -673,6 +673,10 @@ export class WorktreeService {
     // touches the main checkout: serialize with spare refresh / worktree add on the same repo
     const result = await withRepoLock(repo.path, () => mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch));
     if (!result.ok) return { result };
+    // main moved, so every row of this repo counts against it now. The ref watcher clears this
+    // too, but on the fs event's schedule, and the frame setLanded pushes must not carry the old
+    // ahead
+    this.invalidateCounts();
     this.setLanded(wt.id, true);
     let removeIds: string[];
     if (wt.variant) {
@@ -695,11 +699,7 @@ export class WorktreeService {
     if (r.locked) throw new UserError(`${r.name} is held by another tool`);
     const repo = this.d.state.requireRepo(r.repoId);
     const result = await withRepoLock(repo.path, () => syncFromMain(r.path, repo.defaultBranch));
-    if (result.ok) {
-      // the behind badge should drop with the merge, not ten seconds later
-      this.countsCache.delete(worktreeId);
-      this.d.hub.emit("worktreesChanged");
-    }
+    if (result.ok) this.headMoved(worktreeId);
     return { result, defaultBranch: repo.defaultBranch };
   }
 
@@ -707,7 +707,17 @@ export class WorktreeService {
     const wt = this.d.state.requireWorktree(worktreeId);
     const m = message.trim();
     if (!m) throw new UserError("commit message required");
-    return commitWorktree(wt.path, m);
+    const result = await commitWorktree(wt.path, m);
+    if (result.ok) this.headMoved(wt.id);
+    return result;
+  }
+
+  /** this worktree's own HEAD moved (a sync or a commit): its cached ahead/behind describe the
+   * old one, and nothing watches a worktree's branch the way the repo watcher watches main, so
+   * the rail would keep the old badge until the TTL lapsed and something unrelated pushed a frame */
+  private headMoved(worktreeId: string) {
+    this.countsCache.delete(worktreeId);
+    this.d.hub.emit("worktreesChanged");
   }
 
   // ---- queries ----

@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { IconButton } from "./Button.tsx";
-import { tip } from "./Tooltip.tsx";
 import "./pane.css";
 
 /** a bottom pane of the preview column (editor, terminal): drag handle, header row, close button.

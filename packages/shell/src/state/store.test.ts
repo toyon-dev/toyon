@@ -958,3 +958,44 @@ describe("removing a worktree", () => {
     expect(reducer(s, { a: "remove-worktrees", ids: ["a", "nope"] })).toBe(s);
   });
 });
+
+describe("a landing op in flight", () => {
+  const three = () => hello(wt("main", "main"), wt("a"), wt("b"));
+  const sync = (id: string): Action => ({ a: "shipping", id, op: "sync-main" });
+  const shipped = (id: string, ok = true): Action =>
+    server({ t: "shipped", worktreeId: id, ok, message: ok ? "synced" : "conflicts" });
+
+  test("marks the worktree until its own shipped frame, ok or not", () => {
+    let s = run([three(), sync("a")]);
+    expect(s.shipping).toEqual({ a: "sync-main" });
+    s = reducer(s, shipped("b"));
+    expect(s.shipping).toEqual({ a: "sync-main" });
+    s = reducer(s, shipped("a", false));
+    expect(s.shipping).toEqual({});
+  });
+
+  test("a second press while one is out is ignored, as is an unknown worktree", () => {
+    const s = run([three(), sync("a")]);
+    expect(reducer(s, sync("a"))).toBe(s);
+    expect(reducer(s, { a: "shipping", id: "a", op: "commit" })).toBe(s);
+    expect(reducer(s, sync("nope"))).toBe(s);
+  });
+
+  test("a snapshot that still lists the row keeps it in flight, and the same object", () => {
+    const before = run([three(), sync("a")]);
+    const s = reducer(before, worktrees(wt("main", "main"), wt("a"), wt("b")));
+    expect(s.shipping).toBe(before.shipping);
+  });
+
+  test("an error frame carries no id, so every op comes to rest", () => {
+    const s = run([three(), sync("a"), sync("b"), server({ t: "error", message: "sync from a worktree, not main" })]);
+    expect(s.shipping).toEqual({});
+  });
+
+  test("a merge whose worktree is then removed, and a reconnect, both retire it", () => {
+    let s = run([three(), { a: "shipping", id: "a", op: "merge-main" }, worktrees(wt("main", "main"), wt("b"))]);
+    expect(s.shipping).toEqual({});
+    s = run([three(), sync("a"), three()]);
+    expect(s.shipping).toEqual({});
+  });
+});

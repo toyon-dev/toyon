@@ -47,7 +47,7 @@ export class BridgeScript {
     if (this.cache && stamp === this.stamp) return this.cache;
     this.stamp = stamp;
     const origins = [...this.origins, ...this.learned];
-    this.cache = `window.__toyonShellOrigins=${JSON.stringify(origins)};\n` + readFileSync(this.path, "utf8");
+    this.cache = `window.__toyonShellOrigins=${JSON.stringify(origins)};\n${readFileSync(this.path, "utf8")}`;
     return this.cache;
   }
 }

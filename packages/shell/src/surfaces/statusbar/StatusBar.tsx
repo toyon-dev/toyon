@@ -135,7 +135,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
   const [editing, setEditing] = useState(false);
   useEffect(() => {
     if (!editing) setVal(path);
-  }, [path, id, editing]);
+  }, [path, editing]);
   const go = (p: string) => {
     if (!id) return;
     const t = p.trim();

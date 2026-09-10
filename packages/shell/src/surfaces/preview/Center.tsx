@@ -40,6 +40,7 @@ import { DiscoveredPane } from "./DiscoveredPane.tsx";
 import { ImportPane } from "./ImportPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 import "./preview.css";
+import { useOnChange } from "../../ui/hooks.ts";
 
 /** the preview column: one persistent iframe per visited worktree (switching is a display toggle,
  * so each preview keeps its app state + HMR socket while hidden), the editor pane, and the overlays */
@@ -174,7 +175,8 @@ export function Center() {
   // backend --watch/--reload restarts settle first)
   // per worktree: two agents finishing within 1.2s must both reload their own preview
   const reloadTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  useEffect(() => {
+  // keyed on the request's counter: the same worktree asking again is a new request
+  useOnChange([reloadReq?.id, reloadReq?.n], () => {
     if (!reloadReq) return;
     const { id } = reloadReq;
     clearTimeout(reloadTimers.current.get(id));
@@ -185,7 +187,7 @@ export function Center() {
         previewBus.post(id, { type: "reload" });
       }, 1200),
     );
-  }, [reloadReq?.n]);
+  });
 
   // a worktree toyon did not make: its own pane, and a shell in the terminal below it
   const activeRow = useActiveRow();
@@ -193,7 +195,7 @@ export function Center() {
   const activeReady = !!active && active.procs.length > 0 && active.procs.some((p) => p.status !== "stopped");
   useEffect(() => {
     if (activeId && activeReady && !mounted.includes(activeId)) setMounted((m) => [...m, activeId]);
-  }, [activeId, activeReady]);
+  }, [activeId, activeReady, mounted]);
   const frames = rows.filter(isOwned).filter((w) => mounted.includes(w.id));
 
   // editor pane: draggable height + full-height toggle, persisted

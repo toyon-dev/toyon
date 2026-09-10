@@ -237,6 +237,14 @@ export interface State {
    * longer carries an id retires it here, an error frame brings every pending row back, and a
    * hello starts clean because a daemon that restarted mid-remove may still list it. */
   removing: string[];
+  /** the landing op (sync, merge, ship, commit) this tab has sent for a worktree and the daemon
+   * has not answered. Not optimistic, unlike `removing`: a remove's outcome is known and its
+   * failure rare, while these end in ordinary results (a conflict, a hook rejecting the message,
+   * nothing to commit) that are not errors to roll back from. So the row shows it working and
+   * the shipped frame says what happened. That frame retires the worktree's entry, an error
+   * frame (which carries no id) retires all of them, a snapshot without the worktree retires it
+   * (a merge can end in a remove), and a hello starts clean. */
+  shipping: Record<string, ShipOp>;
   /** the active repo's rows toyon did not create, materialised here for the same reason as
    * `visible` */
   visibleDiscovered: WorktreeStatus[];
@@ -347,6 +355,7 @@ export function initialState(opts: InitialOpts): State {
     activeRepoId: null,
     visible: [],
     removing: [],
+    shipping: {},
     visibleDiscovered: [],
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
     refs: {},
@@ -443,6 +452,18 @@ function landingIn(s: State, repoId: string | null, rows = s.rows): string | nul
   return live.find((w) => w.repoId === repoId)?.id ?? null;
 }
 
+/** the four client messages that end in a `shipped` frame: the daemon's word for them */
+export type ShipOp = "sync-main" | "merge-main" | "ship" | "commit";
+
+/** `shipping` minus the entries `done` says are over, the same object when none are, so a
+ * selector on it stays stable across the proc events that push most snapshots */
+function retireShipping(shipping: Record<string, ShipOp>, done: (id: string) => boolean): Record<string, ShipOp> {
+  const entries = Object.entries(shipping);
+  const keep = entries.filter(([id]) => !done(id));
+  if (keep.length === entries.length) return shipping;
+  return Object.fromEntries(keep);
+}
+
 /** select a worktree, and with it its repo (a chord or a rail click never leaves you scoped to
  * a project that is not the one on screen) */
 function activate(s: State, id: string | null): State {
@@ -468,6 +489,8 @@ export type Action =
   | { a: "activate-repo"; id: string }
   /** remove-worktree frames went out for these: hide the rows now, move the selection off them */
   | { a: "remove-worktrees"; ids: string[] }
+  /** a landing op went out for this worktree: show it working until the shipped frame */
+  | { a: "shipping"; id: string; op: ShipOp }
   /** an "open project" request went to the daemon: adopt the repo it adds */
   | { a: "open-repo" }
   /** show a clone's progress in the preview area (null stops watching) */
@@ -569,6 +592,13 @@ function reduce(s: State, action: Action): State {
       const hidden = { ...s, removing: [...s.removing, ...ids] };
       // the selection leaves with the row, the way the daemon's own snapshot would move it
       return s.activeId && ids.includes(s.activeId) ? activate(hidden, landingIn(hidden, s.activeRepoId)) : hidden;
+    }
+    case "shipping": {
+      // one op per worktree at a time: the daemon serializes them under the repo lock anyway,
+      // and a second press before the answer is the double-click this state exists to absorb
+      // any row: a found worktree can be synced, and its dot shows the op the same way
+      if (s.shipping[action.id] || !rowById(s, action.id)) return s;
+      return { ...s, shipping: { ...s.shipping, [action.id]: action.op } };
     }
     case "activate-repo": {
       if (action.id === s.activeRepoId || !repoById(s, action.id)) return s;
@@ -722,6 +752,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeId,
         activeRepoId: wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
         removing: s.removing.length ? [] : s.removing,
+        shipping: retireShipping(s.shipping, () => true),
         local: pruneLocal(s.local, msg.rows),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
@@ -801,6 +832,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
           ...s,
           rows: msg.rows,
           removing: removing.length === s.removing.length ? s.removing : removing,
+          shipping: retireShipping(s.shipping, (id) => !msg.rows.some((w) => w.id === id)),
           local: pruneLocal(s.local, msg.rows),
         },
         activeId,
@@ -885,6 +917,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         : s;
       return {
         ...next,
+        shipping: retireShipping(next.shipping, (id) => id === msg.worktreeId),
         toast: {
           ok: msg.ok,
           message: msg.message,
@@ -916,9 +949,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
         commitFiles: { ...l.commitFiles, [msg.sha]: msg.files },
       }));
     case "error":
-      // the frame carries no worktree id, so every pending remove comes back: the daemon's next
-      // snapshot re-hides any that did in fact go through
-      return { ...s, toast: { ok: false, message: msg.message }, removing: s.removing.length ? [] : s.removing };
+      // the frame carries no worktree id, so every pending remove comes back (the daemon's next
+      // snapshot re-hides any that did in fact go through) and every landing op comes to rest
+      return {
+        ...s,
+        toast: { ok: false, message: msg.message },
+        removing: s.removing.length ? [] : s.removing,
+        shipping: retireShipping(s.shipping, () => true),
+      };
     default: {
       // exhaustive at compile time, but a daemon one version ahead can still send a `t` this
       // build has never heard of, and returning undefined here blanks the tab on the next read

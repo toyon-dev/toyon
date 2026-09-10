@@ -274,7 +274,7 @@ function computedFrom(el: Element | null, props: string[]): Array<[string, strin
 /** A type token is either a stack (`--face-mono`) or a whole `font` shorthand (`--type-mono`). A
  * shorthand is not a valid font-family, so setting it as one fell back to the pane's own face and
  * every sample rendered identical sans. */
-const isFontShorthand = (v: string) => /^[1-9]00\s/.test(v.trim());
+const _isFontShorthand = (v: string) => /^[1-9]00\s/.test(v.trim());
 const firstFamily = (list: string) => (list.split(",")[0] ?? list).replace(/["']/g, "").trim();
 
 /** What the sample says, in the face it says it in: `-apple-system 13/19.5`. A ratio is multiplied

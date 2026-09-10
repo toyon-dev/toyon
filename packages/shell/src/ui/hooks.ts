@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type EffectCallback, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /** The overlays only scrim the preview column, so a click on a dock or the rail wouldn't reach a
  * backdrop — dismiss on any mousedown outside the box instead. A button that toggles its own box
@@ -133,4 +133,18 @@ export function useReveal(scroller: string) {
   return (el: HTMLElement | null) => {
     armed.current = el;
   };
+}
+
+/** Run `fn` when `deps` change (and once on mount), reading whatever is current at that moment.
+ * An effect keyed on the signal it answers, which the exhaustive-dependencies rule cannot express:
+ * listing everything the body reads would run it on updates it does not answer to. The commit box
+ * clears its draft when the worktree changes, not when that worktree's status ticks; the picker
+ * reports its active row when the row's key changes, not when the parent rebuilds the results
+ * array. The one exemption from that rule lives here, so a call site says `useOnChange([wt.id],
+ * …)` and the rule holds everywhere else. `fn` may return a cleanup, as an effect's may. */
+export function useOnChange(deps: readonly unknown[], fn: EffectCallback) {
+  const latest = useRef(fn);
+  latest.current = fn;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on `deps` by design, see above
+  useEffect(() => latest.current(), deps);
 }

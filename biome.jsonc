@@ -1,0 +1,57 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["packages/**", "!**/node_modules", "!**/dist", "!**/test/fixtures", "!packages/shell/public"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "noNonNullAssertion": "off",
+        // The shell's cascade is three @layers plus deliberate order within a file: a row's picked
+        // state is written after its hover on purpose (surfaces/rail/rail.css says so). This rule
+        // reads that ordering as a mistake, and it fired 23 times on nothing but the idiom.
+        "noDescendingSpecificity": "off"
+      },
+      "a11y": {
+        "noAutofocus": "off",
+        "useButtonType": "off",
+        // It counts a hover mirror (the chip and the design pane outline what they name) and a
+        // <summary> as interactions on static elements. The case that matters, a click with no
+        // keyboard path, is useKeyWithClickEvents, which stays on.
+        "noStaticElementInteractions": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // a test asserts the literal text a template produced, `${PORT}` included, and reaches into
+      // a fake with `any`; both are the test's business
+      "includes": ["**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noTemplateCurlyInString": "off",
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    }
+  ]
+}

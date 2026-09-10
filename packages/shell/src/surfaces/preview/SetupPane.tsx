@@ -7,7 +7,11 @@ import { FormRow } from "../../ui/FormRow.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
-type Proc = { name: string; cmd: string };
+type Proc = { id: number; name: string; cmd: string };
+
+/** rows are added and removed while the form is open, so each carries an identity of its own */
+let nextProcId = 1;
+const proc = (name: string, cmd: string): Proc => ({ id: nextProcId++, name, cmd });
 
 /** shown in place of the preview while a repo's detected config is unconfirmed: nothing is
  * spawned for its worktrees until the person says how the project installs and starts */
@@ -21,8 +25,8 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   const [procs, setProcs] = useState<Proc[]>(() => {
-    const detected = Object.entries(repo.config.procs).map(([name, cmd]) => ({ name, cmd }));
-    return detected.length > 0 ? detected : [{ name: "web", cmd: "" }];
+    const detected = Object.entries(repo.config.procs).map(([name, cmd]) => proc(name, cmd));
+    return detected.length > 0 ? detected : [proc("web", "")];
   });
   const [install, setInstall] = useState(() => (repo.config.setup ?? []).join("\n"));
   const multi = procs.length > 1;
@@ -73,7 +77,7 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
       </FormRow>
 
       {procs.map((p, i) => (
-        <div className="form-row" key={i}>
+        <div className="form-row" key={p.id}>
           <span className="form-label">{i === 0 ? "start" : ""}</span>
           <div className="form-control">
             <div className="setup-proc">
@@ -109,7 +113,7 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
 
       <div className="form-row">
         <span className="form-label" />
-        <Button className="setup-add" onClick={() => setProcs([...procs, { name: "", cmd: "" }])}>
+        <Button className="setup-add" onClick={() => setProcs([...procs, proc("", "")])}>
           + another process (an api, a worker…)
         </Button>
       </div>

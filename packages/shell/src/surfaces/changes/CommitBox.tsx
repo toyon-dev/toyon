@@ -1,10 +1,12 @@
 import { canSync, isOwned, canLand as landable, type WorktreeStatus } from "@toyon/shared";
-import { useEffect, useState } from "react";
-import { useSock } from "../../state/context.tsx";
+import { useState } from "react";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { TextArea } from "../../ui/Field.tsx";
+import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { shipOp } from "../rail/worktreeActions.ts";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
  * where you are on the left and what you can do on the right. Committing and landing never apply at
@@ -25,14 +27,18 @@ export function CommitBox({
   dirty: boolean;
 }) {
   const sock = useSock();
+  const dispatch = useDispatch();
   const owned = isOwned(active) ? active.worktree : null;
   const id = active.id;
+  // the op out for this worktree, if any: its button shows busy and the others wait, since the
+  // daemon runs them one at a time under the repo lock anyway
+  const op = useStore((s) => s.shipping[id]);
   const [msg, setMsg] = useState("");
-  useEffect(() => setMsg(""), [id]);
+  useOnChange([id], () => setMsg(""));
 
   const commit = () => {
-    if (!msg.trim()) return;
-    sock?.send({ t: "commit", worktreeId: id, message: msg.trim() });
+    if (!msg.trim() || op) return;
+    shipOp(sock, dispatch, { t: "commit", worktreeId: id, message: msg.trim() });
     setMsg("");
   };
   const canLand = !!owned && landable(owned) && !dirty;
@@ -84,7 +90,8 @@ export function CommitBox({
             <Button
               variant="outline"
               tone="primary"
-              disabled={!msg.trim()}
+              busy={op === "commit"}
+              disabled={!msg.trim() || !!op}
               onClick={commit}
               {...tip("git add -A && git commit", "⌘⏎")}
             >
@@ -96,8 +103,10 @@ export function CommitBox({
                 <Button
                   variant="outline"
                   tone="primary"
+                  busy={op === "sync-main"}
+                  disabled={!!op}
                   data-tip={`Pull ${behind} commit(s) from main into this worktree`}
-                  onClick={() => sock?.send({ t: "sync-main", worktreeId: id })}
+                  onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
                 >
                   sync <Icon name="pull" className="icon-inline" />
                 </Button>
@@ -107,12 +116,14 @@ export function CommitBox({
                   <Button
                     variant="outline"
                     tone="primary"
+                    busy={op === "merge-main"}
+                    disabled={!!op}
                     data-tip={
                       owned.prUrl
                         ? "Merge locally: the open PR will show as merged once main is pushed"
                         : "Merge into main locally (no push)"
                     }
-                    onClick={() => sock?.send({ t: "merge-main", worktreeId: id })}
+                    onClick={() => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id })}
                   >
                     merge
                   </Button>
@@ -129,8 +140,10 @@ export function CommitBox({
                     <Button
                       variant="outline"
                       tone="primary"
+                      busy={op === "ship"}
+                      disabled={!!op}
                       data-tip="Push and open a PR"
-                      onClick={() => sock?.send({ t: "ship", worktreeId: id })}
+                      onClick={() => shipOp(sock, dispatch, { t: "ship", worktreeId: id })}
                     >
                       pr <Icon name="external" className="icon-inline" />
                     </Button>

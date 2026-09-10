@@ -1,11 +1,13 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cx } from "./cx.ts";
 import { Icon, type IconName } from "./Icon.tsx";
+import { Spinner } from "./Spinner.tsx";
 import { tip } from "./Tooltip.tsx";
 import "./button.css";
 
 /**
- * Every pressable control in the app, across five closed axes: variant, size, tone, `on`, `mono`.
+ * Every pressable control in the app, across five closed axes: variant, size, tone, `on`, `mono`,
+ * and one more state, `busy`, for the moment between a press and its answer.
  *
  * Each of the five is small because each was counted rather than chosen from a list other design
  * systems publish. At rest exactly two things ever varied the treatment, so there are three
@@ -78,12 +80,45 @@ type Shared = {
 type Props = ButtonHTMLAttributes<HTMLButtonElement> &
   Shared & {
     size?: ButtonSize;
+    /**
+     * The press went out and the answer is not back. Disabled, so a second press cannot send it
+     * again, and a spinner sits over the label in a box that keeps the label's size, so the
+     * control you pressed is the one that answers you and nothing beside it moves. A state and
+     * not a tone: it says nothing about what the button means, only that it is mid-flight.
+     */
+    busy?: boolean;
     children: ReactNode;
   };
 
-export function Button({ variant = "ghost", size = "sm", tone, on, mono, className, type = "button", ...rest }: Props) {
-  const cls = cx("btn", VARIANT[variant], SIZE[size], tone && TONE[tone], on && "on", mono && "btn-mono", className);
-  return <button className={cls} type={type} {...rest} />;
+export function Button({
+  variant = "ghost",
+  size = "sm",
+  tone,
+  on,
+  mono,
+  busy,
+  className,
+  type = "button",
+  disabled,
+  children,
+  ...rest
+}: Props) {
+  const cls = cx(
+    "btn",
+    VARIANT[variant],
+    SIZE[size],
+    tone && TONE[tone],
+    on && "on",
+    mono && "btn-mono",
+    busy && "btn-busy",
+    className,
+  );
+  return (
+    <button className={cls} type={type} disabled={busy || disabled} aria-busy={busy || undefined} {...rest}>
+      {busy && <Spinner />}
+      {children}
+    </button>
+  );
 }
 
 type IconProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "aria-label"> &

@@ -13,6 +13,7 @@ import { CommitRow } from "./CommitRow.tsx";
 import { GitFileRow } from "./GitFileRow.tsx";
 import "./changes.css";
 import { cx } from "../../ui/cx.ts";
+import { useOnChange } from "../../ui/hooks.ts";
 
 /** one array, so a worktree the daemon has not reported on yet does not hand the row list a fresh
  * identity on every render and re-render every row with it */
@@ -106,7 +107,7 @@ export function LeftDock({ width }: { width: number }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState(0);
   const [focused, setFocused] = useState(false);
-  useEffect(() => setSel(0), [activeId, tab]);
+  useOnChange([activeId, tab], () => setSel(0));
 
   // the log is pulled, not pushed: reading it costs a git process, so a worktree nobody is
   // reviewing never pays for one. HEAD moving under an open tab (the agent committed) re-reads it.
@@ -128,11 +129,11 @@ export function LeftDock({ width }: { width: number }) {
     [activeId, filesBySha, sock],
   );
   // a moved selection has to come into view, and it is the row that scrolls, not the list
-  useEffect(() => {
+  useOnChange([sel, focused], () => {
     // a file row or a commit row: both carry the cursor state, and only one of them ever has it
     if (focused)
       listRef.current?.querySelector<HTMLElement>('[data-state~="cursor"]')?.scrollIntoView({ block: "nearest" });
-  }, [sel, focused]);
+  });
   // ⌘B on a panel that is already open and unfocused lands the keyboard here (the chord itself is
   // in app/keys.ts). Next frame: the dock may be re-appearing in this same commit. The arrows pick
   // up from the file already in the editor, so the first one moves off what you are looking at

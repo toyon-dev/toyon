@@ -8,10 +8,9 @@ import { useLocalField } from "../../state/selectors.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
-import { Icon } from "../../ui/Icon.tsx";
+import { useOnChange } from "../../ui/hooks.ts";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
-import { tip } from "../../ui/Tooltip.tsx";
 import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
@@ -89,23 +88,26 @@ export function Composer({ active }: { active: OwnedWorktree | null }) {
   const trigger = id ? triggerAt(text, caret) : null;
   // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing
   const menuOpen = trigger !== null && trigger.from !== dismissed;
+  // keyed on the query and the kind, not the trigger: triggerAt rebuilds that object on every keystroke
+  const triggerKind = trigger?.kind;
+  const triggerQuery = trigger?.query;
   const rows = useMemo((): Row[] => {
-    if (!trigger) return [];
-    if (trigger.kind === "command") return filterCommands(commands, trigger.query).slice(0, 8).map(cmdRow);
+    if (triggerQuery === undefined) return [];
+    if (triggerKind === "command") return filterCommands(commands, triggerQuery).slice(0, 8).map(cmdRow);
     const out: Row[] = [];
     // "review @changes" is the common ask and should not need one chip per file
     const changed = git?.files.length ?? 0;
-    if (changed > 0 && "changes".startsWith(trigger.query.toLowerCase())) out.push({ kind: "changes", n: changed });
-    for (const r of rankFiles(files ?? [], git?.files ?? [], trigger.query, 8).rows)
+    if (changed > 0 && "changes".startsWith(triggerQuery.toLowerCase())) out.push({ kind: "changes", n: changed });
+    for (const r of rankFiles(files ?? [], git?.files ?? [], triggerQuery, 8).rows)
       out.push({ kind: "file", path: r.path, status: r.status });
     return out;
-  }, [trigger?.kind, trigger?.query, files, git, commands]);
+  }, [triggerKind, triggerQuery, files, git, commands]);
 
   // spawn-a-worktree default: on for main (protect the working copy), off on worktrees (continue
   // that conversation); user can override per tab
   const isMain = active?.worktree.kind === "main";
   const [spawnNew, setSpawnNew] = useState(isMain);
-  useEffect(() => setSpawnNew(active?.worktree.kind === "main"), [id]);
+  useOnChange([id], () => setSpawnNew(active?.worktree.kind === "main"));
 
   // picking happens inside the iframe, which takes focus; hand it back to the composer so the
   // user can type about the element straight away (next frame: the dock may be re-appearing)

@@ -1,8 +1,16 @@
-import { canRemove, canRename, type OwnedWorktree } from "@toyon/shared";
-import type { Action } from "../../state/store.ts";
+import { type ClientMsg, canRemove, canRename, type OwnedWorktree } from "@toyon/shared";
+import type { Action, ShipOp } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 
 type Dispatch = (a: Action) => void;
+
+/** send a landing op (sync, merge, ship, commit) and mark the worktree in flight in the same
+ * breath, so no sender can send without the rail's dot and the changes panel's button showing
+ * it working. The shipped frame brings it to rest; see `shipping` in the store. */
+export function shipOp(sock: DaemonSocket | null, dispatch: Dispatch, msg: Extract<ClientMsg, { t: ShipOp }>) {
+  dispatch({ a: "shipping", id: msg.worktreeId, op: msg.t });
+  sock?.send(msg);
+}
 
 /** send the removes and take the rows off screen in the same breath: the daemon confirms by
  * dropping them from its next snapshot, or an error frame puts them back with a toast */

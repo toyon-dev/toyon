@@ -17,7 +17,7 @@ export type Verdict =
 const NON_WRITE_KINDS = new Set(["execute", "read", "search", "fetch", "think"]);
 
 /** every path the request names: ACP locations first, then the raw tool input's usual keys */
-export function requestedPaths(req: RequestPermissionRequest, cwd: string): string[] {
+export function requestedPaths(req: RequestPermissionRequest): string[] {
   const raw: string[] = [];
   for (const loc of req.toolCall.locations ?? []) if (typeof loc.path === "string") raw.push(loc.path);
   const input = req.toolCall.rawInput;
@@ -31,7 +31,7 @@ export function requestedPaths(req: RequestPermissionRequest, cwd: string): stri
 
 export function decide(req: RequestPermissionRequest, bounds: Bounds, cwd: string): Verdict {
   const tool = req.toolCall.name ?? req.toolCall.title ?? "tool";
-  const paths = requestedPaths(req, cwd);
+  const paths = requestedPaths(req);
   const kind = req.toolCall.kind;
   // Claude's ExitPlanMode arrives here: a plan to read and a set of "yes, and…" options. Allowing
   // it would approve the plan and start the edits without anyone having seen it, so it is the one

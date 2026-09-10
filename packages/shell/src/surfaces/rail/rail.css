@@ -325,6 +325,8 @@
     }
     & .rail-item .dot,
     & .rail-disc-item .dot,
+    & .rail-item .spinner,
+    & .rail-disc-item .spinner,
     & .rail-glyph {
       margin-left: 12px;
     }

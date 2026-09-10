@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test";
-import { ghostOf, step } from "./listNav.ts";
+import { ghostOf, jumpTo, step } from "./listNav.ts";
+
+test("a letter jumps to the next row starting with it, wrapping, and repeats walk the matches", () => {
+  const rows = ["take over", "open a shell here", "reveal in Finder", "copy path", "Remove…"];
+  expect(jumpTo(rows, -1, "t")).toBe(0);
+  expect(jumpTo(rows, -1, "r")).toBe(2);
+  expect(jumpTo(rows, 2, "r")).toBe(4);
+  expect(jumpTo(rows, 4, "r")).toBe(2);
+  expect(jumpTo(rows, 0, "T")).toBe(0);
+  expect(jumpTo(rows, 1, "z")).toBe(-1);
+  expect(jumpTo([], -1, "a")).toBe(-1);
+});
 
 test("↑↓ wrap at both ends", () => {
   expect(step(0, 1, 3)).toBe(1);

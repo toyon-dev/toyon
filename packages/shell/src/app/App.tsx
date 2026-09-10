@@ -11,8 +11,8 @@ import { removeWorktrees } from "../surfaces/rail/worktreeActions.ts";
 import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
 import { clampW } from "../surfaces/util.ts";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "../theme.ts";
-import { Button } from "../ui/Button.tsx";
-import { useDragResize, usePersisted } from "../ui/hooks.ts";
+import { Button, IconButton } from "../ui/Button.tsx";
+import { useDragResize, useOnChange, usePersisted } from "../ui/hooks.ts";
 import { Tooltips } from "../ui/Tooltip.tsx";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
@@ -75,7 +75,7 @@ export function App() {
   // window/app title follows the active row
   useEffect(() => {
     document.title = activeRow ? `${activeRow.name} · toyon` : "toyon";
-  }, [activeRow?.name]);
+  }, [activeRow]);
 
   // Selecting a worktree clears the rail's unseen ring: whichever way you got here (a rail click,
   // ⌘1-9, the palette), you are looking at it now. Focus is the one condition kept, and it is what
@@ -159,7 +159,7 @@ export function App() {
   // route follows you across variant siblings: comparing the same screen is the whole point of
   // variants, so switching carries the current path over
   const prevActiveRef = useRef<string | null>(null);
-  useEffect(() => {
+  useOnChange([activeId], () => {
     const prevId = prevActiveRef.current;
     prevActiveRef.current = activeId;
     if (!prevId || !activeId || prevId === activeId) return;
@@ -178,7 +178,7 @@ export function App() {
     };
     const from = pathOf(prevId);
     if (from !== pathOf(activeId)) previewBus.post(activeId, { type: "navigate", path: from });
-  }, [activeId]);
+  });
 
   // resizable docks, widths persisted per browser; the nav cluster stays centered over the preview
   const [leftW, setLeftW] = usePersisted(STORAGE.leftWidth, 220, (raw) => (raw ? clampW(Number(raw), 220) : undefined));
@@ -204,8 +204,15 @@ export function App() {
         <WtRail />
       </div>
       {toast && (
-        <div className={cx("toast", !toast.ok && "err")} onClick={() => dispatch({ a: "dismiss-toast" })}>
+        <div className={cx("toast", !toast.ok && "err")} role="status">
           {toast.message}
+          <IconButton
+            icon="close"
+            label="Dismiss"
+            tone="quiet"
+            className="toast-dismiss"
+            onClick={() => dispatch({ a: "dismiss-toast" })}
+          />
           {toast.removeIds && toast.removeIds.length > 0 && (
             <Button
               variant="outline"

@@ -18,17 +18,7 @@ import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
-import {
-  AUTO_OPEN,
-  callPath,
-  diffLines,
-  firstLine,
-  type OutputBlock,
-  parseToolOutput,
-  relPath,
-  toolBlocks,
-  toolLabel,
-} from "./toolCall.ts";
+import { AUTO_OPEN, callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
 // so it is coloured by the same seven. marked hands the block over before it escapes it, and
@@ -290,26 +280,28 @@ function Fold({
 
 /** The agent's reasoning, folded like a call: it is addressed to nobody, and the message after it
  * says whatever in it mattered, so a paragraph of it in the flow read as an answer that had lost
- * its colour. The line is its first sentence, which is usually the plan; open while it streams,
- * since a thought arriving is the only sign the agent is working, and closed by whatever comes
- * next. The body goes through the tool-output parser, so a fence inside a thought is a block. */
+ * its colour. The line is one word, the way a call's is a path: its first sentence was a sentence
+ * of prose in a column of file names, and the wrong tier of thing to be ellipsised. Open while it
+ * streams, since a thought arriving is the only sign the agent is working, and closed by whatever
+ * comes next. The body is the message's markdown, not a call's mono: it is prose. */
 export const ThoughtRow = memo(function ThoughtRow({ item, live }: { item: ThinkingItem; live?: boolean }) {
-  const blocks = useMemo(() => paintBlocks(parseToolOutput(item.text), ""), [item.text]);
-  const line = firstLine(item.text);
+  const html = useThrottledMarkdown(item.text);
+  const word = live ? "thinking" : "thought";
   return (
     <Fold
       className="tool-row"
       auto={!!live}
-      label={line ? `thought, ${line}` : "thought"}
+      label={word}
       summary={
         <>
-          {live ? <span className="spinner">●</span> : <Icon name="spark" className="tool-icon" />}
-          <span className="tool-hint">{line}</span>
+          {live ? <span className="spinner">●</span> : <Icon name="bulb" className="tool-icon" />}
+          <span className="tool-name">{word}</span>
         </>
       }
     >
       <div className="tool-part">
-        <ToolOut blocks={blocks} path="" />
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output */}
+        <div className="tool-out thought-out md" dangerouslySetInnerHTML={{ __html: html }} />
       </div>
     </Fold>
   );

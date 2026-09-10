@@ -33,7 +33,7 @@ export type IconName =
   | "move"
   | "search"
   | "run"
-  | "spark"
+  | "bulb"
   | "globe"
   | "swap"
   | "palette"
@@ -95,8 +95,9 @@ const ICON_PATHS: Record<IconName, string> = {
   // a bare prompt: the chevron and cursor of `terminal` without the pane, so a run row and the
   // terminal button do not read as the same control
   run: "M3.4 4.2 7.6 8l-4.2 3.8 M9 11.8h4",
-  // four-point sparkle for a thought: no other icon here has curves this wide
-  spark: "M8 2.6c0 2.6 1.4 4.6 4.6 5.4-3.2.8-4.6 2.8-4.6 5.4 0-2.6-1.4-4.6-4.6-5.4 3.2-.8 4.6-2.8 4.6-5.4z",
+  // a bulb for a thought: the glass as one arc over two shoulders, the base as one line under
+  // it. At 13px a filament or a second base line is a smudge, so there is neither.
+  bulb: "M4.8 8.8a4 4 0 1 1 6.4 0L9.5 10.6v1.4H6.5v-1.4z M6.7 13.8h2.6",
   // one equator and one meridian: a second latitude line filled the circle in at 13px
   globe: "M8 2.2a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 1 0 0-11.6z M2.2 8h11.6 M8 2.2c-3 3.4-3 8.2 0 11.6 3-3.4 3-8.2 0-11.6z",
   // the rail's own rows: a status dot and a name, three deep. The panel toggles name what is in

@@ -39,14 +39,14 @@
     gap: 24px;
     min-height: var(--row-height);
   }
-  /* a row with nothing to change reads as a value, not a control: :hover still fires on a disabled
-   button, so the hover state has to be overridden too */
+  /* a shortcut row is a line in a reference table, not a control you aim at, so it sits on the
+   smaller row token: the chips nearly fill it and the eye reads the column as a list */
   .keys-row {
     display: grid;
     grid-template-columns: 76px 1fr;
     gap: 16px;
     align-items: center;
-    min-height: var(--row-height);
+    min-height: var(--row-height-sm);
   }
   .keys-d {
     color: var(--text1);

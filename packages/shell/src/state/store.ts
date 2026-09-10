@@ -49,6 +49,8 @@ import {
   toyonDark,
 } from "@toyon/shared";
 
+export type UsageFigures = { used: number; size: number; cost?: number };
+
 export type ChatItem =
   | { kind: "user"; text: string; pick?: PickMeta; images?: ImageRef[]; pastes?: PasteRef[] }
   | { kind: "assistant"; text: string }
@@ -68,9 +70,6 @@ export type ChatItem =
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
-  /** the figures after a reply: `turn` is what that reply cost (the agent's cumulative `cost`
-   * less the previous row's), absent when the agent prices nothing */
-  | { kind: "usage"; used: number; size: number; cost?: number; turn?: number }
   /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
    * credential and the provider refused it, so the error above this card says what went wrong */
   | {
@@ -143,6 +142,9 @@ export interface WorktreeLocal {
   /** the model and effort the agent reported running here, from the last session-info; absent
    * until one */
   model?: string;
+  /** the agent's last figures here: context in use of the window, and the session's spend when
+   * the agent prices itself. Drawn as the ring by the composer; never a row in the chat. */
+  usage?: UsageFigures;
   effort?: string;
 }
 
@@ -998,12 +1000,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // what actually ran, for the model and effort chips: the agent's word, not the record's
         const model = ev.type === "session-info" && ev.model ? ev.model : l.model;
         const effort = ev.type === "session-info" && ev.effort ? ev.effort : l.effort;
+        const usage = ev.type === "usage" ? figuresOf(ev) : l.usage;
         return {
           ...l,
           chat,
           turn,
           ...(model !== l.model ? { model } : {}),
           ...(effort !== l.effort ? { effort } : {}),
+          ...(usage !== l.usage ? { usage } : {}),
         };
       });
       if (ev.type === "turn-end") {
@@ -1016,8 +1020,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "backfill": {
       let chat: ChatItem[] = [];
-      for (const { event } of msg.events) chat = applyEvent(chat, event);
-      return withLocal(s, msg.worktreeId, (l) => ({ ...l, chat, log: msg.log ?? l.log }));
+      let usage: UsageFigures | undefined;
+      for (const { event } of msg.events) {
+        chat = applyEvent(chat, event);
+        if (event.type === "usage") usage = figuresOf(event);
+      }
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, chat, log: msg.log ?? l.log, ...(usage ? { usage } : {}) }));
     }
     case "git-status": {
       // session opened on a clean main: nothing to show — close the changes panel once
@@ -1124,7 +1132,12 @@ function upsertProc(procs: WorktreeStatus["procs"], p: WorktreeStatus["procs"][n
   return next;
 }
 
-export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
+export /** the agent's figures as the store keeps them: cost only when it reported one */
+function figuresOf(ev: Extract<AgentEvent, { type: "usage" }>): UsageFigures {
+  return { used: ev.used, size: ev.size, ...(ev.cost !== undefined ? { cost: ev.cost } : {}) };
+}
+
+function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
   const last = items[items.length - 1];
   switch (event.type) {
     case "user-message":
@@ -1185,26 +1198,6 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":
       return [...items, { kind: "grafted", title: event.title, branch: event.branch }];
-    case "usage": {
-      // the agent's cost is the session's running total; the row shows what this reply added.
-      // A second figure with nothing said in between (a rate-limit notice, a late correction)
-      // updates the row rather than stacking one under it.
-      const last = items.at(-1);
-      const before = items.findLast((i) => i.kind === "usage" && i !== last && i.cost !== undefined) as
-        | Extract<ChatItem, { kind: "usage" }>
-        | undefined;
-      const prior = last?.kind === "usage" ? before : (items.findLast((i) => i.kind === "usage") as typeof before);
-      const row: ChatItem = {
-        kind: "usage",
-        used: event.used,
-        size: event.size,
-        // to the hundredth of a cent: a difference of two floats is otherwise 0.24999999999999997
-        ...(event.cost !== undefined
-          ? { cost: event.cost, turn: Math.max(0, Math.round((event.cost - (prior?.cost ?? 0)) * 10_000) / 10_000) }
-          : {}),
-      };
-      return last?.kind === "usage" ? [...items.slice(0, -1), row] : [...items, row];
-    }
     case "agent-auth-required":
       return [
         ...items,

@@ -1107,7 +1107,7 @@ describe("a landing op in flight", () => {
 });
 
 describe("usage", () => {
-  test("a usage event becomes a row costing the difference from the last priced one", () => {
+  test("the last figures ride on the worktree, live and from a backfill, and never in the chat", () => {
     const usage = (cost: number | undefined, used = 1000): AgentEvent => ({
       type: "usage",
       used,
@@ -1116,19 +1116,27 @@ describe("usage", () => {
       ts: 0,
     });
     let s = run([hello(wt("a")), agent("a", usage(0.1)), agent("a", { type: "text-delta", text: "hi" })]);
-    s = run([agent("a", usage(0.35, 2000))], s);
-    expect(s.local.a?.chat).toEqual([
-      { kind: "usage", used: 1000, size: 4000, cost: 0.1, turn: 0.1 },
-      { kind: "assistant", text: "hi" },
-      { kind: "usage", used: 2000, size: 4000, cost: 0.35, turn: 0.25 },
-    ]);
-    // a second figure with nothing said between updates the row instead of stacking; without a
-    // cost it keeps no turn figure
+    expect(s.local.a?.usage).toEqual({ used: 1000, size: 4000, cost: 0.1 });
+    expect(s.local.a?.chat).toEqual([{ kind: "assistant", text: "hi" }]);
     s = run([agent("a", usage(undefined, 2100))], s);
-    expect(s.local.a?.chat.at(-1)).toEqual({ kind: "usage", used: 2100, size: 4000 });
-    s = run([agent("a", usage(0.4, 2100))], s);
-    expect(s.local.a?.chat.at(-1)).toEqual({ kind: "usage", used: 2100, size: 4000, cost: 0.4, turn: 0.3 });
-    expect(s.local.a?.chat.length).toBe(3);
+    expect(s.local.a?.usage).toEqual({ used: 2100, size: 4000 });
+    s = run(
+      [
+        server({
+          t: "backfill",
+          worktreeId: "a",
+          events: [
+            { seq: 0, event: usage(0.2) },
+            { seq: 1, event: { type: "text-delta", text: "later" } },
+            { seq: 2, event: usage(0.5, 3000) },
+          ],
+          log: [],
+        }),
+      ],
+      s,
+    );
+    expect(s.local.a?.usage).toEqual({ used: 3000, size: 4000, cost: 0.5 });
+    expect(s.local.a?.chat).toEqual([{ kind: "assistant", text: "later" }]);
   });
 });
 

@@ -31,7 +31,10 @@ import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
 
-type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
+type MenuState = { at: { x: number; y: number }; id: string };
+
+/** a count in its 3ch column; past three digits the exact number stops meaning anything here */
+const count = (n: number) => (n > 999 ? "1k+" : String(n));
 
 /** far-right worktree rail: 40px dot strip, hover peeks the full panel; shift-click / "fold into…"
  * enters a multi-select for folding worktrees into one, bulk sync and bulk remove */
@@ -118,15 +121,21 @@ export function WtRail() {
     });
     return items;
   };
-  const menuItems = (w: OwnedWorktree, land: boolean | undefined): MenuItem[] => {
+  const menuItems = (w: OwnedWorktree): MenuItem[] => {
     const id = w.worktree.id;
     const merge: MenuItem = {
       label: "merge into main",
       onClick: () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }),
     };
     const ship: MenuItem = { label: "push + PR", onClick: () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }) };
-    if (land) return [merge, ship];
     const items: MenuItem[] = [];
+    // the count on the row is read, not pressed, so the sync it used to offer lives here
+    if (canSync(w) && (w.behind ?? 0) > 0) {
+      items.push({
+        label: `sync from main (${w.behind} behind)`,
+        onClick: () => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
+      });
+    }
     if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !leftOpen) {
       items.push({
         label: `view changes${(w.dirty ?? 0) > 0 ? ` (${w.dirty})` : ""}`,
@@ -169,22 +178,35 @@ export function WtRail() {
     return items;
   };
 
+  /* The count columns are reserved list-wide, so a row with no dirty files still leaves the dirty
+   * column empty and every number sits under the one above it. A column nobody uses is not drawn,
+   * and the name takes its width. */
+  const all = [...worktrees, ...discovered];
+  const cols = {
+    dirty: all.some((w) => (w.dirty ?? 0) > 0),
+    behind: all.some((w) => (w.behind ?? 0) > 0),
+    ahead: all.some((w) => (w.ahead ?? 0) > 0),
+  };
+
   /** One row for both sections. Ownership decides what the row can do, not what it looks like: a
-   * found worktree wears the same badges, since its counts are as real as anyone's, but its
-   * dirty count opens the dock rather than a commit box, its behind count does not sync yet,
-   * its ahead count has nowhere to land, and its menu is the short one. The dot is hollow, which
-   * is the one place the row says whose it is. */
+   * found worktree wears the same counts, since they are as real as anyone's, and its menu is the
+   * short one. The dot is hollow, which is the one place the row says whose it is.
+   *
+   * Nothing on the right end of the row does anything but switch. In the strip the pointer lands on
+   * the dot, the panel unfurls leftward under it, and a small drift while it opens used to land on
+   * the kebab or on a count's verb; the counts are read now and the kebab sits in the control
+   * column at the far left, the column the plus and the caret already share. */
   const railRow = (w: WorktreeStatus) => {
     const owned = isOwned(w) ? w : null;
     const id = w.id;
     const menuOpen = owned ? menu?.id === id : discMenu?.id === id;
-    const openMenu = (at: { x: number; y: number }, land?: boolean) =>
-      owned ? setMenu({ at, id, land }) : setDiscMenu({ at, id });
-    const badgeAt = (e: MouseEvent<HTMLElement>, back: number) => {
+    const openMenu = (at: { x: number; y: number }) => (owned ? setMenu({ at, id }) : setDiscMenu({ at, id }));
+    const under = (e: MouseEvent<HTMLElement>) => {
       e.stopPropagation();
-      const r = (e.target as HTMLElement).getBoundingClientRect();
-      return { x: r.left - back, y: r.bottom + 4 };
+      const r = e.currentTarget.getBoundingClientRect();
+      return { x: r.left, y: r.bottom + 4 };
     };
+    const showCheck = owned && foldMode && canFold(owned.worktree) && id !== activeId;
     return (
       <button
         key={id}
@@ -209,9 +231,18 @@ export function WtRail() {
           openMenu({ x: e.clientX, y: e.clientY });
         }}
       >
-        {owned && foldMode && canFold(owned.worktree) && id !== activeId && (
-          <input type="checkbox" className="rail-fold-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
-        )}
+        <span className="rail-gut">
+          {showCheck ? (
+            <input type="checkbox" className="rail-fold-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
+          ) : (
+            !foldMode && (
+              // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
+              <span className="rail-more row-dim" {...tip("Actions")} onClick={(e) => openMenu(under(e))}>
+                <Icon name="more" className="icon-inline" />
+              </span>
+            )
+          )}
+        </span>
         <span className="branch">{w.name}</span>
         {owned?.worktree.mode && owned.worktree.mode !== "auto" && (
           // auto is the default and says nothing; ask and plan change what happens when you look away
@@ -246,73 +277,31 @@ export function WtRail() {
             <span className="act">pick</span>
           </span>
         )}
-        {(w.dirty ?? 0) > 0 && (
-          // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
-          <span
-            className="rail-badge badge-dirty clickable"
-            data-tip="View changes"
-            onClick={(e) => {
-              e.stopPropagation();
-              dispatch({ a: "activate", id });
-              if (!leftOpen) dispatch({ a: "toggle-left" });
-            }}
-          >
-            <span className="num">~{w.dirty}</span>
-            <span className="act">view</span>
-          </span>
-        )}
-        {(w.behind ?? 0) > 0 &&
-          (canSync(w) ? (
-            // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
-            <span
-              className={cx("rail-badge badge-behind", !shipping[id] && "clickable")}
-              data-tip={
-                shipping[id] === "sync-main"
-                  ? "Syncing from main"
-                  : owned
-                    ? "Sync from main"
-                    : "Sync from main (only while its tree is clean)"
-              }
-              onClick={(e) => {
-                e.stopPropagation();
-                // the count stays until the daemon's frame replaces it: the dot is what says
-                // the sync is running, and a second click while it does has nothing to send
-                if (!shipping[id]) shipOp(sock, dispatch, { t: "sync-main", worktreeId: id });
-              }}
-            >
-              <span className="num">↓{w.behind}</span>
-              <span className="act">sync</span>
+        {/* dirty and ahead in colour: they are the two you act on. Behind is nearly always there and
+            nearly always in the hundreds, so as a number it only says "stale", and it says that
+            from the quiet tier. The columns say which count is which, so no glyph does. */}
+        <span className="rail-counts">
+          {cols.dirty && (
+            <span className="rail-count badge-dirty" data-tip={w.dirty ? `${w.dirty} uncommitted` : undefined}>
+              {w.dirty ? `~${count(w.dirty)}` : ""}
             </span>
-          ) : (
-            <span className="rail-badge badge-behind" data-tip={`${w.behind} behind main`}>
-              <span className="num">↓{w.behind}</span>
+          )}
+          {cols.behind && (
+            <span className="rail-count row-dim" data-tip={w.behind ? `${w.behind} behind main` : undefined}>
+              {w.behind ? count(w.behind) : ""}
             </span>
-          ))}
-        {(w.ahead ?? 0) > 0 &&
-          (owned && canLand(owned.worktree) ? (
-            // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
-            <span
-              className="rail-badge badge-ahead clickable"
-              data-tip="Land"
-              onClick={(e) => openMenu(badgeAt(e, 100), true)}
-            >
-              <span className="num">↑{w.ahead}</span>
-              <span className="act">land</span>
+          )}
+          {cols.ahead && (
+            <span className="rail-count badge-ahead" data-tip={w.ahead ? `${w.ahead} ahead of main` : undefined}>
+              {w.ahead ? `+${count(w.ahead)}` : ""}
             </span>
-          ) : (
-            <span className="rail-badge badge-ahead" data-tip={`${w.ahead} ahead of main`}>
-              <span className="num">↑{w.ahead}</span>
-            </span>
-          ))}
+          )}
+        </span>
         {w.locked && (
           <span className="rail-disc-lock row-dim">
             <Icon name="lock" className="icon-inline" />
           </span>
         )}
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row) */}
-        <span className="rail-more row-dim" {...tip("Actions")} onClick={(e) => openMenu(badgeAt(e, 140))}>
-          <Icon name="more" className="icon-inline" />
-        </span>
         {(() => {
           // a landing op is out: the dot's slot shows it working, since the op was started from
           // this row and the control that started it may be off screen in the strip. `waiting`
@@ -443,7 +432,9 @@ export function WtRail() {
               data-tip-key={chord("new")}
               onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
             >
-              <Icon name="plus" className="icon-inline rail-new-plus" />
+              <span className="rail-gut">
+                <Icon name="plus" className="icon-inline" />
+              </span>
               <span className="rail-label">new worktree</span>
               <Kbd k={chord("new")} className="rail-new-kbd" />
               {/* the strip has no left edge to show a plus on, so a second one waits in the dot
@@ -467,7 +458,9 @@ export function WtRail() {
                 )}
                 onClick={() => dispatch({ a: "toggle-discovered" })}
               >
-                <Icon name="caret" className={`icon-inline rail-disc-caret ${discOpen ? "" : "shut"}`} />
+                <span className="rail-gut">
+                  <Icon name="caret" className={cx("icon-inline rail-disc-caret", !discOpen && "shut")} />
+                </span>
                 <span className="rail-label">discovered · {discovered.length}</span>
               </button>
               {discOpen && discovered.map(railRow)}
@@ -483,7 +476,7 @@ export function WtRail() {
             onClick={() => dispatch({ a: "toggle-rail" })}
           />
         </div>
-        {menu && menuWt && <Menu at={menu.at} onClose={closeMenu} items={menuItems(menuWt, menu.land)} />}
+        {menu && menuWt && <Menu at={menu.at} onClose={closeMenu} items={menuItems(menuWt)} />}
         {discMenu && discMenuRow && (
           <Menu at={discMenu.at} onClose={closeDiscMenu} items={discMenuItems(discMenuRow)} />
         )}

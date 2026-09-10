@@ -5,6 +5,7 @@ import { existsSync, statSync } from "node:fs";
 import { WS_CLOSE_UNAUTHORIZED } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { alive, base, health, home, logFile, port, readPid, readToken, tokenFile } from "./daemon.ts";
+import { missingSandboxTools, sandboxAdvice } from "./sandboxDeps.ts";
 
 type Line = { ok: boolean; label: string; detail: string };
 
@@ -52,6 +53,15 @@ export async function doctor(): Promise<number> {
 
   const git = await toolVersion("git", ["--version"]);
   lines.push(git ? line(true, "git", git) : line(false, "git", "not found on PATH; toyon needs git 2.x"));
+
+  if (process.platform === "linux") {
+    const missing = missingSandboxTools();
+    lines.push(
+      missing.length === 0
+        ? line(true, "sandbox", "bubblewrap and socat found; Claude Code's sandbox can run")
+        : line(false, "sandbox", sandboxAdvice(missing)),
+    );
+  }
 
   const h = await health();
   if (!h) {

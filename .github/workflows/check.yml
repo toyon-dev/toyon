@@ -29,3 +29,41 @@ jobs:
       - run: bun install --frozen-lockfile
       # typecheck + biome + tests + bridge size gate; the daemon tests run real git in temp repos
       - run: bun run check
+
+  # The package a stranger installs, driven the way they drive it: node and npm, no bun on PATH,
+  # the tarball from `npm pack`, every verb through the shim. The Linux column is the only Linux
+  # run toyon gets until someone sits at a Linux machine (notes/MVP.md, "P0, second pass" item 1);
+  # it reports rather than blocks until it has been green once.
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # what Claude Code's sandbox needs on Linux; `toyon doctor` fails without them, on purpose
+      - if: runner.os == 'Linux'
+        run: sudo apt-get install -y --no-install-recommends bubblewrap socat
+      - run: bun install --frozen-lockfile
+      - run: bun run pack
+      - run: cd packages/cli && npm pack --pack-destination "$RUNNER_TEMP"
+      - name: install the tarball into an empty project and drive it with bun off PATH
+        run: |
+          set -eu
+          mkdir "$RUNNER_TEMP/app" && cd "$RUNNER_TEMP/app"
+          npm init -y >/dev/null
+          npm i "$RUNNER_TEMP"/toyon-*.tgz
+          export PATH="/usr/bin:/bin:$(dirname "$(which node)")"
+          npx toyon --version
+          npx toyon
+          npx toyon doctor
+          npx toyon stop
+          npx toyon logs -n 40

@@ -150,6 +150,27 @@
     font: var(--type-mono);
   }
 
+  /* busy: the spinner sits over the label, and the box stays the size the label gave it. Adding
+   the spinner beside the text grew a text-only button by 17px on the click, which pushes its
+   neighbours (measured: merge went from 55 to 72). The label goes transparent rather than hidden
+   so the border, the padding and the inline icon's space all stay; currentColor takes the icon's
+   strokes with it. The spinner's colour is :disabled's, which busy also sets: a control you cannot
+   press right now reads the same whether that is because of you or because it is already working. */
+  .btn-busy {
+    position: relative;
+    /* busy always disables, and every :disabled rule above names a colour at this specificity, so
+     the transparent one has to be a :disabled rule too, after them */
+    &:disabled {
+      color: transparent;
+    }
+    & > .spinner {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      color: var(--text2);
+    }
+  }
+
   /* the one hover colour a surface class still names: the editor deep link, a bordered chip whose
      hover is the link blue because following it leaves the app. It is here rather than a tone
      because it is one control in three places (the diff header, the file menu, the design pane),

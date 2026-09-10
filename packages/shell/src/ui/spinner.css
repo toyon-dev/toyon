@@ -1,0 +1,41 @@
+/* Spinner: the one drawn "in progress" mark. See Spinner.tsx for where it sits. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* a ring with one quarter lit, turning. Drawn with borders rather than an SVG arc so it takes
+   currentColor the way an Icon does and needs no path at two sizes; the quiet three quarters are
+   the same colour at a quarter strength, so the ring reads as a whole shape and not a comma. */
+  .spinner {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 13px;
+    height: 13px;
+    vertical-align: -2px;
+    border-radius: 50%;
+    border: 1.3px solid color-mix(in srgb, currentColor 25%, transparent);
+    border-top-color: currentColor;
+    animation: spin 0.8s linear infinite;
+  }
+  /* the dot's own box, for the rail's status slot: 8px so the row does not shift when a sync
+   starts, and the discovered dot's 1.5px ring, since a thinner line at this size is a smudge.
+   text1 rather than a state colour: the dot's colours say what the worktree is doing over time,
+   and this is a git op you started that finishes on its own. */
+  .spinner-dot {
+    width: 8px;
+    height: 8px;
+    vertical-align: 0;
+    border-width: 1.5px;
+    color: var(--text1);
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  /* no rotation: a full ring that breathes, borrowing the working dot's pulse */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner {
+      border-color: currentColor;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+  }
+}

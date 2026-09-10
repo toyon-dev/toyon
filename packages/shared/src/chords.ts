@@ -19,6 +19,8 @@ export type ChordId =
   | "design"
   | "term-tab"
   | "worktree"
+  | "wt-prev"
+  | "wt-next"
   | "project"
   | "refs";
 
@@ -37,6 +39,10 @@ export interface Chord {
    * cycles windows), where every editor settled on the ⌃ form. ⌘ still counts when it does arrive
    * (an installed app window with nothing to cycle to). */
   ctrl?: true;
+  /** bound and advertised as ⌥ with no ⌘: only for the arrow rows. ⌥ with a letter is how macOS
+   * types a symbol and ⌥ with ⌘ is Monaco's cursor family, but an arrow types nothing, so ⌥↑/↓ can
+   * be the next-and-previous pair the way it is in Slack. */
+  alt?: true;
   /** other keys that fire the same chord. ⌘⇧E for the palette because Firefox owns ⌘⇧P; ⌘N for
    * new-worktree because it is the muscle-memory key, though only an installed PWA lets the page
    * see it (Chrome tabs, Safari and Firefox all take ⌘N as new window before the page). */
@@ -78,6 +84,10 @@ export const CHORDS: readonly Chord[] = [
     aliases: ["n"],
   },
   { id: "worktree", key: "1-9" },
+  // ⌥↑/↓ walk the rail the way ⌥↑/↓ walk Slack's channels; ⌘1-9 jumps by position. The one
+  // place they stand down is a focused Monaco, where ⌥↑/↓ is move-line (app/keys.ts).
+  { id: "wt-prev", key: "ArrowUp", alt: true },
+  { id: "wt-next", key: "ArrowDown", alt: true },
   // ⌘⇧O: Zed's recent-projects key is ⌘⌥O, but ⌥ is how macOS types symbols and matchChord
   // refuses it; ⇧O is free in every browser we run in
   { id: "project", key: "o", shift: true },
@@ -89,8 +99,8 @@ export const CHORDS: readonly Chord[] = [
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };
 
 /** Normalised chord detection for a keydown: ⌘ (no ⌃/⌥) for most rows, ⌃ alone for the rows that
- * ask for it; letters case-insensitive so a browser that reports "F" for ⌘⇧F and one that reports
- * "f" agree; shift must match the table exactly (⌘⇧B is not ⌘B). */
+ * ask for it, ⌥ alone for the arrow rows; letters case-insensitive so a browser that reports "F"
+ * for ⌘⇧F and one that reports "f" agree; shift must match the table exactly (⌘⇧B is not ⌘B). */
 export function matchChord(e: {
   key: string;
   metaKey: boolean;
@@ -98,11 +108,16 @@ export function matchChord(e: {
   ctrlKey?: boolean;
   altKey?: boolean;
 }): ChordMatch | null {
-  if (e.altKey || !!e.ctrlKey === e.metaKey) return null;
+  if (e.altKey) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey) return null;
+    const c = CHORDS.find((c) => c.alt && c.key === e.key);
+    return c && c.id !== "worktree" ? { id: c.id } : null;
+  }
+  if (!!e.ctrlKey === e.metaKey) return null;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (e.metaKey && !e.shiftKey && key >= "1" && key <= "9") return { id: "worktree", digit: Number(key) };
   for (const c of CHORDS) {
-    if (c.id === "worktree") continue;
+    if (c.id === "worktree" || c.alt) continue;
     // a ⌘ row never fires on ⌃; a ⌃ row fires on either
     if ((e.ctrlKey && !c.ctrl) || !!c.shift !== e.shiftKey) continue;
     if (c.key === key || c.aliases?.includes(key)) return { id: c.id };

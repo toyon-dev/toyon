@@ -88,7 +88,7 @@ window.addEventListener(
     } else if (!chord) return;
     e.preventDefault();
     e.stopPropagation();
-    post({ type: "key", key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, shift: e.shiftKey });
+    post({ type: "key", key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
   },
   true,
 );

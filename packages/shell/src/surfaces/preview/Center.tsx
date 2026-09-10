@@ -125,7 +125,13 @@ export function Center() {
           case "key":
             // bridge chord forwarding: replay as a real keydown so the app's handler sees it
             window.dispatchEvent(
-              new KeyboardEvent("keydown", { key: d.key, metaKey: d.meta, ctrlKey: !!d.ctrl, shiftKey: !!d.shift }),
+              new KeyboardEvent("keydown", {
+                key: d.key,
+                metaKey: d.meta,
+                ctrlKey: !!d.ctrl,
+                shiftKey: !!d.shift,
+                altKey: !!d.alt,
+              }),
             );
             break;
           case "hmr":

@@ -27,6 +27,7 @@ import { chord, dotClass, procTrouble, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
+import { step } from "../../ui/listNav.ts";
 import { rowState } from "../../ui/rowState.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
@@ -141,6 +142,19 @@ export function WtRail() {
           : w.locked
             ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, { placement: "left", detail: wtDirLabel(w) })
             : tip(wtDirLabel(w), undefined, { placement: "left" }))}
+        data-wt={id}
+        // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
+        // is picked and takes the focus, so the next press keeps walking. Owned rows only; the
+        // found list below is its own section. ⌥↑/↓ does the same from anywhere (app/keys.ts).
+        onKeyDown={(e) => {
+          if (!owned || graftMode || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+          e.preventDefault();
+          const at = worktrees.findIndex((w) => w.id === id);
+          const next = worktrees[step(at, e.key === "ArrowDown" ? 1 : -1, worktrees.length)];
+          if (!next) return;
+          dispatch({ a: "activate", id: next.id });
+          e.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-wt="${next.id}"]`)?.focus();
+        }}
         onClick={(e) => {
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
           // and has nothing to check; every other graftable row is a source to check or uncheck.

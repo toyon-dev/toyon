@@ -322,7 +322,7 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
               className="design-face-head row-edge"
               onMouseEnter={(e) => hover(e, false, face ? face.token.name : family)}
               onMouseLeave={clear}
-              {...(face ? tip(`${face.token.name}\n${face.actual}`, undefined, "follow") : {})}
+              {...(face ? tip(`${face.token.name}\n${face.actual}`, undefined, { placement: "follow" }) : {})}
             >
               {/* the whole stack, not the first name in it: `ui-monospace` on its own resolves to
                   nothing here and falls back to the default serif, so the mono heading rendered in
@@ -341,7 +341,7 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
                 className="design-face row-edge"
                 onMouseEnter={(e) => hover(e, true, r.token.name)}
                 onMouseLeave={clear}
-                {...tip(`${r.token.name}\n${r.actual}`, undefined, "follow")}
+                {...tip(`${r.token.name}\n${r.actual}`, undefined, { placement: "follow" })}
               >
                 <span className="design-face-sample" style={{ font: r.actual }}>
                   {`${r.family} ${r.size}${r.lead === null ? "" : `/${r.lead}`}`}

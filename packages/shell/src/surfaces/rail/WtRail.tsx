@@ -222,19 +222,18 @@ export function WtRail() {
         // crosses the panel.
         // Badges and the crashed dot keep their own, since those are what a hover over them is
         // asking about. A found row has no state to name, so the path is its text, unless
-        // something holds it. The main checkout is named, not located: its path is the project's
-        // and says nothing.
+        // something holds it. The main checkout is named ahead of its state: its path alone reads
+        // as one more worktree.
         {...(owned
-          ? tip(
-              stateLabel(w, repoOf(owned)?.needsSetup),
-              undefined,
-              "left",
-              isMain(owned.worktree) ? "main" : wtDirLabel(w),
-              dotClass(w),
-            )
+          ? tip(stateLabel(w, repoOf(owned)?.needsSetup), undefined, {
+              placement: "left",
+              detail: wtDirLabel(w),
+              dot: dotClass(w),
+              lead: isMain(owned.worktree) ? "main" : undefined,
+            })
           : w.locked
-            ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, "left", wtDirLabel(w))
-            : tip(wtDirLabel(w), undefined, "left"))}
+            ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, { placement: "left", detail: wtDirLabel(w) })
+            : tip(wtDirLabel(w), undefined, { placement: "left" }))}
         onClick={(e) => {
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
           // and has nothing to check; every other graftable row is a source to check or uncheck.
@@ -472,7 +471,7 @@ export function WtRail() {
                 {...tip(
                   `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that toyon did not make`,
                   undefined,
-                  "left",
+                  { placement: "left" },
                 )}
                 onClick={() => dispatch({ a: "toggle-discovered" })}
               >

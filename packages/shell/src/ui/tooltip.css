@@ -46,6 +46,11 @@
     margin-left: 12px;
     color: var(--text1);
   }
+  /* the word ahead of the text, set apart the way the key is after it */
+  .tooltip-lead {
+    margin-right: 12px;
+    color: var(--text1);
+  }
   /* the line under the text, a tier under it: the key's tier, since both are the aside */
   .tooltip-detail {
     color: var(--text1);

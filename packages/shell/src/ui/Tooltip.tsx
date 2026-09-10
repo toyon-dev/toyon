@@ -22,21 +22,32 @@ import "./tooltip.css";
 export type TipPlacement = "follow" | "top" | "bottom" | "left" | "right";
 type Side = Exclude<TipPlacement, "follow">;
 
-/** `detail` is a second line under the text in the quiet tier, for the where or the which under
- * the what: a worktree's state, then its path. The text is what you asked, so it comes first; a
- * middot between the two on one line read as a phrase, and the path ahead of the state put the
- * answer last.
- * `dot` is a status dot class (`running`, `waiting`, see base.css) drawn just before the text:
- * for a tip that names a dot's state, so the colour and the word sit together even when the dot
- * itself is at the other end of the row. */
-export function tip(text: string, key?: string, placement?: TipPlacement, detail?: string, dot?: string) {
-  const label = detail ? `${text}, ${detail}` : text;
+export type TipOptions = {
+  placement?: TipPlacement;
+  /** a second line under the text in the quiet tier, for the where or the which under the what:
+   * a worktree's state, then its path. The text is what you asked, so it comes first; a middot
+   * between the two on one line read as a phrase, and the path ahead of the state put the answer
+   * last. */
+  detail?: string;
+  /** a status dot class (`running`, `waiting`, see base.css) drawn just before the text: for a
+   * tip that names a dot's state, so the colour and the word sit together even when the dot
+   * itself is at the other end of the row. */
+  dot?: string;
+  /** a word ahead of the text on its line, in the quiet tier: which thing this is, before what
+   * it is doing. The main checkout says `main` here, with its path on the line under. */
+  lead?: string;
+};
+
+export function tip(text: string, key?: string, { placement, detail, dot, lead }: TipOptions = {}) {
+  const line = lead ? `${lead} ${text}` : text;
+  const label = detail ? `${line}, ${detail}` : line;
   return {
     "data-tip": text,
     "data-tip-key": key,
     "data-tip-placement": placement,
     "data-tip-detail": detail,
     "data-tip-dot": dot,
+    "data-tip-lead": lead,
     "aria-label": key ? `${label} (${key})` : label,
   } as const;
 }
@@ -64,6 +75,7 @@ export type Anchor = {
   key?: string;
   detail?: string;
   dot?: string;
+  lead?: string;
   placement: TipPlacement;
 };
 type Point = { x: number; y: number };
@@ -157,6 +169,7 @@ export function Tooltips() {
         key: el.dataset.tipKey,
         detail: el.dataset.tipDetail,
         dot: el.dataset.tipDot,
+        lead: el.dataset.tipLead,
         placement,
       });
     };
@@ -246,6 +259,7 @@ export function Tooltips() {
   if (!anchor) return null;
   return createPortal(
     <div ref={box} className="tooltip" role="tooltip">
+      {anchor.lead && <span className="tooltip-lead">{anchor.lead}</span>}
       {anchor.dot && <span className={`dot ${anchor.dot} tooltip-dot`} />}
       {anchor.text}
       {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}

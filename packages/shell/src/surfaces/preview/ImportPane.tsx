@@ -25,37 +25,39 @@ export function ImportPane({ pending }: { pending: PendingRepo }) {
 
   return (
     <div className="setup-pane import-pane">
-      <h2>
-        {failed ? "could not import" : "importing"} {pending.name}
-      </h2>
       <p className="setup-lead">
-        from <code>{pending.url}</code> into <code>{pending.parent}</code>
+        {failed ? "could not import" : "importing"} {pending.name}
       </p>
-      {failed ? (
-        <p className="setup-lead import-error">{pending.error}</p>
-      ) : (
-        <p className="setup-lead setup-aside">
-          the whole history is cloned, so worktrees, land and graft all work on it straight away.
+      <div className="setup-card">
+        <p>
+          from <code>{pending.url}</code> into <code>{pending.parent}</code>
         </p>
-      )}
-
-      <div className="import-log" ref={tail}>
-        {pending.lines.length === 0 && !failed ? (
-          <span className="import-idle">starting git…</span>
+        {failed ? (
+          <p className="import-error">{pending.error}</p>
         ) : (
-          pending.lines.map((line, i) => (
-            // git's progress lines have no id of their own, and the list is append-only and capped
-            // biome-ignore lint/suspicious/noArrayIndexKey: position is the only identity a progress line has
-            <div key={i}>{line}</div>
-          ))
+          <p className="hint">
+            the whole history is cloned, so worktrees, land and graft all work on it straight away.
+          </p>
         )}
-      </div>
 
-      <div className="form-actions">
-        <span className="form-dest" />
-        <Button variant="outline" size="lg" onClick={cancel}>
-          {failed ? "dismiss" : "stop"}
-        </Button>
+        <div className="import-log" ref={tail}>
+          {pending.lines.length === 0 && !failed ? (
+            <span className="import-idle">starting git…</span>
+          ) : (
+            pending.lines.map((line, i) => (
+              // git's progress lines have no id of their own, and the list is append-only and capped
+              // biome-ignore lint/suspicious/noArrayIndexKey: position is the only identity a progress line has
+              <div key={i}>{line}</div>
+            ))
+          )}
+        </div>
+
+        <div className="form-actions">
+          <span className="form-dest" />
+          <Button variant="outline" size="lg" onClick={cancel}>
+            {failed ? "dismiss" : "stop"}
+          </Button>
+        </div>
       </div>
     </div>
   );

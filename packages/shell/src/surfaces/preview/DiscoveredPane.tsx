@@ -13,29 +13,36 @@ export function DiscoveredPane({ row }: { row: WorktreeStatus }) {
 
   return (
     <div className="setup-pane">
-      <h2>{row.name}</h2>
-      <p className="setup-lead">
-        This worktree exists in git, but toyon did not make it and is not running it: no dev servers, no preview, no
-        agent. Its changes and history are on the left, and a shell at <code>{dir}</code> opens below.
-      </p>
-      {row.locked ? (
-        <p className="setup-lead">
-          Another tool is holding it{row.lockReason ? `: ${row.lockReason}` : ""}. Taking it over would put toyon's dev
-          servers in a directory something else is working in, so that stays off until the lock goes.
+      <p className="setup-lead">{row.name}</p>
+      <div className="setup-card">
+        <p>
+          This worktree exists in git, but toyon did not make it and is not running it: no dev servers, no preview, no
+          agent. A shell at <code>{dir}</code> opens below.
         </p>
-      ) : (
-        <>
-          <p className="setup-lead">
-            Taking it over gives it a port, starts the processes from <code>toyon.json</code> and lists it with your
-            other worktrees. Your files are left alone: the install and setup commands do not re-run.
+        {row.locked ? (
+          <p>
+            Another tool is holding it{row.lockReason ? `: ${row.lockReason}` : ""}. Taking it over would put toyon's
+            dev servers in a directory something else is working in, so that stays off until the lock goes.
           </p>
-          <div>
-            <Button variant="outline" onClick={() => sock?.send({ t: "adopt-worktree", worktreeId: row.id, clientId })}>
-              take over
-            </Button>
-          </div>
-        </>
-      )}
+        ) : (
+          <>
+            <p>
+              Taking it over gives it a port, starts the processes from <code>toyon.json</code> and lists it with your
+              other worktrees. Your files are left alone: the install and setup commands do not re-run.
+            </p>
+            <div className="form-actions">
+              <span className="form-dest">{dir}</span>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => sock?.send({ t: "adopt-worktree", worktreeId: row.id, clientId })}
+              >
+                take over
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

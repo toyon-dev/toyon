@@ -47,7 +47,7 @@
     height: 100%;
     overflow: auto;
     padding: 48px 24px;
-    width: min(640px, 100%);
+    width: min(560px, 100%);
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -74,7 +74,11 @@
     min-height: 120px;
   }
 
-  /* ---- repo setup pane (replaces the preview while a repo's config is unconfirmed) ---- */
+  /* ---- repo setup pane (replaces the preview while a repo's config is unconfirmed) ----
+   The greenfield pane's column, since the two are read one after the other: a lead line at the
+   arrival size and one box under it. Top anchored where greenfield centres, because this box grows
+   as processes are added and a box that bobs is a box you cannot aim at. The import and
+   discovered panes borrow the same frame: same slot, same shape of waiting. */
   .setup-pane {
     height: 100%;
     overflow: auto;
@@ -86,20 +90,25 @@
     gap: 12px;
     color: var(--text0);
     font: var(--type-ui);
-    & h2 {
-      margin: 0;
-      font: var(--type-ui-lg);
-      font-weight: var(--weight-title);
-    }
   }
   .setup-lead {
-    margin: 0 0 12px;
+    margin: 0;
+    font: var(--type-ui-lg);
     color: var(--text1);
-    line-height: 1.5;
   }
-  .setup-aside {
-    margin-top: -6px;
-    color: var(--text2);
+  /* the settings card's box without its elevation: this one sits in the slot, not over it */
+  .setup-card {
+    background: var(--surface1);
+    border: 1px solid var(--border0);
+    border-radius: var(--radius-lg);
+    padding: 12px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    & > p {
+      margin: 0;
+      color: var(--text1);
+    }
   }
   .setup-proc {
     display: flex;
@@ -114,14 +123,8 @@
     flex: 1;
     min-width: 0;
   }
-  .setup-add {
-    padding: 2px 0;
-  }
-  /* the import pane borrows the setup pane's frame: same slot, same shape of waiting */
-
   .import-pane {
     & .import-log {
-      margin-top: 12px;
       max-height: 220px;
       overflow-y: auto;
       background: var(--sunken);
@@ -137,12 +140,6 @@
   .import-idle,
   .import-error {
     color: var(--text2);
-  }
-
-  .setup-actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 12px;
   }
 }
 @layer surfaces {

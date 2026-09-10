@@ -13,7 +13,7 @@ export function AgentPicker() {
     <ListPicker
       items={agents}
       filter={(as, q) => as.filter((a) => byName(q, a.name, a.id))}
-      rowClass={(a) => (a.available ? "cmd-item" : "cmd-item dim")}
+      rowClass={(a) => (a.available ? "picker-row" : "picker-row dim")}
       keyOf={(a) => a.id}
       initialIndex={(as) =>
         Math.max(

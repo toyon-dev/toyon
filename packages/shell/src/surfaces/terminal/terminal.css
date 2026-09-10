@@ -5,7 +5,7 @@
     min-height: 140px;
     display: flex;
     flex-direction: column;
-    & .file-head {
+    & .pane-head {
       padding: 4px 12px;
     }
   }

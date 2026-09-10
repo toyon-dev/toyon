@@ -16,7 +16,7 @@
     }
   }
 
-  .variants-row {
+  .prompt-variants {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -29,7 +29,7 @@
     /* the repo chip's picker positions against the row rather than the chip: see .repo-chip-wrap */
     position: relative;
   }
-  .variants-right {
+  .prompt-variants-right {
     margin-left: auto;
     display: flex;
     align-items: center;
@@ -38,7 +38,7 @@
      "batch variants" closes up into one phrase. This is the floor under that. */
     padding-left: 14px;
   }
-  .variants-row {
+  .prompt-variants {
     & label {
       display: flex;
       align-items: center;
@@ -49,7 +49,7 @@
       accent-color: var(--accent);
     }
   }
-  .agent-chips {
+  .prompt-agents {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -76,15 +76,15 @@
     display: flex;
     align-items: center;
   }
-  /* The picker opens *over* the chip the way it opens over the pill in the top bar: its own lp-chip
+  /* The picker opens *over* the chip the way it opens over the pill in the top bar: its own picker-chip
    lands on the name, so it reads as the chip expanding into a field rather than a menu dropping out
    of one. Two things differ from the pill. It spans the row instead of taking the pill's 460px,
    because at that width its right edge cut through the variant chips and left half a `1` beside it;
    the field then sits where the composer's does and hides the controls it covers, which is what the
    bar does too. And it positions against the row, so the horizontal is the pill's own -9px plus the
    2px a .btn-outline's border adds over a bare .btn, which is what holds the name still. */
-  .variants-row {
-    & > .repo-chip-wrap > .prompt-box.anchored {
+  .prompt-variants {
+    & > .repo-chip-wrap > .overlay-box.anchored {
       /* the row centres its items, so the panel's chip is centred too: 16px is the panel's border, the
      field strip's padding and half that chip, and it holds whatever the row is tall enough for */
       top: calc(50% - 16px);
@@ -96,22 +96,22 @@
   /* the same room for the name as the chip it lands on, so a long one truncates in the same place:
    140px of button less its border and padding, put back inside a box that has padding only */
   .repo-chip-wrap {
-    & .lp-chip {
+    & .picker-chip {
       max-width: 138px;
     }
     /* a shorter list than the pill's: this one hangs inside a box that is already most of the way down
    the screen, and the pill's 340px would put its last rows off the bottom */
-    & .prompt-box .qo-list {
+    & .overlay-box .picker-list {
       max-height: min(240px, 34vh);
     }
   }
-  .variant-chip {
+  .prompt-variant-chip {
     &:disabled {
       opacity: 0.45;
       cursor: not-allowed;
     }
   }
-  .prompt-box {
+  .overlay-box {
     & textarea {
       width: 100%;
       min-height: 80px;

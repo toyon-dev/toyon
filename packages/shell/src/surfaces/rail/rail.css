@@ -3,7 +3,7 @@
 @layer tokens, base, surfaces;
 
 @layer surfaces {
-  .wt-item {
+  .rail-item {
     /* the active/graft marker rides the panel's left edge rather than the row's, because the row's
      own left edge is off screen while the rail is collapsed */
     --row-edge-x: var(--rail-edge, 0px);
@@ -13,14 +13,14 @@
     }
   }
 
-  .wt-rail {
-    &:hover .wt-item::before {
+  .rail {
+    &:hover .rail-item::before {
       transition: left 0.12s ease 50ms;
     }
   }
   /* --dot-gap follows the row's own background so the unseen ring keeps a clean gap instead of a
    grey band once the row is hovered or selected */
-  .wt-item {
+  .rail-item {
     &:hover {
       --dot-gap: var(--element0);
     }
@@ -36,8 +36,8 @@
       background: var(--element1);
     }
   }
-  .wt-item .branch,
-  .disc-item .branch {
+  .rail-item .branch,
+  .rail-disc-item .branch {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -47,7 +47,7 @@
 
   /* these are <button>s that never picked up .btn, so each chose its own rest colour and all of them
    chose text2. An idle control is an idle control: same tier as .btn and .btn-icon. */
-  .new-wt {
+  .rail-new {
     color: var(--text1);
     padding: 6px 12px;
     text-align: left;
@@ -57,70 +57,70 @@
     &:hover {
       color: var(--accent);
     }
-    & .kbd-hint {
+    & .rail-new-kbd {
       margin-left: auto;
       color: var(--text2);
       opacity: 0;
       transition: opacity 0.1s;
     }
-    &:hover .kbd-hint {
+    &:hover .rail-new-kbd {
       opacity: 0.7;
     }
   }
-  .graft-row {
+  .rail-graft {
     display: flex;
     border-top: 1px solid var(--border0);
     align-items: center;
     padding: 4px 6px;
     gap: 2px;
   }
-  .graft-check {
+  .rail-graft-check {
     accent-color: var(--accent);
     pointer-events: none;
     margin: 0;
   }
-  .wt-item {
-    & .row-badge {
+  .rail-item {
+    & .rail-badge {
       /* ahead/behind/dirty tick live; `font` above reset the variant */
       font: var(--type-mono);
       font-variant-numeric: tabular-nums;
       flex-shrink: 0;
     }
-    & .row-badge.clickable {
+    & .rail-badge.clickable {
       padding: 1px 4px;
       border-radius: var(--r-xs);
     }
-    & .row-badge.clickable:hover {
+    & .rail-badge.clickable:hover {
       background: var(--element0);
     }
-    & .row-badge .act {
+    & .rail-badge .act {
       display: none;
     }
-    & .row-badge.clickable:hover .num {
+    & .rail-badge.clickable:hover .num {
       display: none;
     }
-    & .row-badge.clickable:hover .act {
+    & .rail-badge.clickable:hover .act {
       display: inline;
     }
-    & .wt-more {
+    & .rail-more {
       visibility: hidden;
       padding: 0 2px;
       border-radius: var(--r-xs);
       flex-shrink: 0;
     }
-    &:hover .wt-more {
+    &:hover .rail-more {
       visibility: visible;
     }
     &.menu-open {
       background: var(--element1);
       --dot-gap: var(--element1);
     }
-    &.menu-open .wt-more {
+    &.menu-open .rail-more {
       visibility: visible;
       color: var(--text0);
       background: var(--element1);
     }
-    & .wt-more:hover {
+    & .rail-more:hover {
       color: var(--text0);
       background: var(--element0);
     }
@@ -128,7 +128,7 @@
 
   /* ---- far-right worktree rail: 40px dot strip, hover peeks the full panel
    as an overlay (no reflow), pin (« ») keeps it wide ---- */
-  .wt-rail {
+  .rail {
     --rail-w: 232px;
     /* the list sits inside the panel's 1px left border, so both states line up on the same pixel */
     --rail-inner: calc(var(--rail-w) - 1px);
@@ -165,7 +165,7 @@
       width 0.12s ease 120ms,
       box-shadow 0.12s ease 120ms;
   }
-  .wt-rail {
+  .rail {
     &:hover .rail-panel,
     &.hold .rail-panel {
       width: var(--rail-w);
@@ -218,7 +218,7 @@
     pointer-events: none;
     transition: opacity 0.12s ease 120ms;
   }
-  .wt-rail {
+  .rail {
     &:hover .rail-foot,
     &.hold .rail-foot,
     &.open .rail-foot {
@@ -233,16 +233,16 @@
    worth the pixels it would take. This is the one place the rail lays out differently in the two
    states, and it is safe where the rail-list comment above is not: everything here sits below
    "new worktree", so nothing anyone aims at moves when it appears.
-   Marked by type and colour alone, like .dock-section-title: a rule across the rail read as a
+   Marked by type and colour alone, like .section-title: a rule across the rail read as a
    divider between two peers, and these rows are not main's peers. */
-  .disc-head,
-  .disc-item {
+  .rail-disc-head,
+  .rail-disc-item {
     display: none;
   }
-  .wt-rail {
-    &:hover .disc-head,
-    &.hold .disc-head,
-    &.open .disc-head {
+  .rail {
+    &:hover .rail-disc-head,
+    &.hold .rail-disc-head,
+    &.open .rail-disc-head {
       height: var(--row-h-sm);
       width: 100%;
       display: flex;
@@ -255,24 +255,24 @@
       text-align: left;
     }
   }
-  .disc-head {
+  .rail-disc-head {
     &:hover {
       color: var(--text1);
     }
   }
   /* the caret points down when open and right when shut, the way every disclosure does */
-  .disc-caret {
+  .rail-disc-caret {
     transition: transform 0.12s ease;
     &.shut {
       transform: rotate(-90deg);
     }
   }
-  .wt-rail {
-    &:hover .disc-item,
-    &.hold .disc-item,
-    &.open .disc-item {
+  .rail {
+    &:hover .rail-disc-item,
+    &.hold .rail-disc-item,
+    &.open .rail-disc-item {
       display: flex;
-      /* the same padding and edge-marker anchoring as .wt-item: these rows sit in the same column and
+      /* the same padding and edge-marker anchoring as .rail-item: these rows sit in the same column and
      their dots have to land on the same centre line. Height and the rest come from .row. */
       padding: 0 16px 0 12px;
       --row-edge-x: var(--rail-edge, 0px);
@@ -280,7 +280,7 @@
   }
   /* selected the same way a worktree row is: it is the same selection, and the pane beside it is
    showing this row */
-  .disc-item {
+  .rail-disc-item {
     &.active {
       --row-edge-color: var(--accent);
       color: var(--text0);
@@ -290,29 +290,29 @@
       background: var(--element1);
     }
   }
-  .wt-rail {
-    & .disc-item .dot {
+  .rail {
+    & .rail-disc-item .dot {
       margin-left: 12px;
     }
   }
-  .disc-lock {
+  .rail-disc-lock {
     display: flex;
   }
   /* the socket is down: every row is stale and nothing you click will answer. Fading them read as
    "still loading", so they take the fault colour instead and hovering the rail says what happened.
    The dots go with them: what they were reporting is exactly what we have stopped hearing. */
-  .wt-rail {
-    &.offline .wt-item,
-    &.offline .disc-item {
+  .rail {
+    &.offline .rail-item,
+    &.offline .rail-disc-item {
       color: var(--orange);
     }
-    &.offline .wt-item .dot {
+    &.offline .rail-item .dot {
       background: var(--orange);
       animation: none;
       box-shadow: none;
     }
     /* the hollow dot keeps its shape offline; it is a ring, so blanking box-shadow would erase it */
-    &.offline .disc-item .dot.discovered {
+    &.offline .rail-disc-item .dot.discovered {
       background: none;
       box-shadow: inset 0 0 0 1px var(--orange);
     }
@@ -320,12 +320,12 @@
    centre of the collapsed strip. The peek then unfurls leftward from under the pointer that opened
    it, so the pointer is still resting on the row and not on the "…" that used to slide under it.
    Everything clickable stays left of the strip: 12px of margin plus the row's 8px gap. */
-    & .wt-item {
+    & .rail-item {
       height: var(--row-h);
       /* the dot keeps its x: 20px from the right edge, the centre of the collapsed strip */
       padding: 0 16px 0 12px;
     }
-    & .wt-item .dot,
+    & .rail-item .dot,
     & .rail-glyph {
       margin-left: 12px;
     }
@@ -333,7 +333,7 @@
   /* the crashed dot is the one dot you can press, so it needs a target bigger than its eight pixels;
    the ring grows outside the layout box and the ::after hit area does the same, so nothing in the
    row shifts when a proc dies. */
-  .wt-item {
+  .rail-item {
     & .dot.clickable {
       position: relative;
       cursor: pointer;
@@ -347,8 +347,8 @@
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 35%, transparent);
     }
   }
-  .wt-rail {
-    & .new-wt {
+  .rail {
+    & .rail-new {
       height: var(--row-h);
       padding: 0 12px;
       display: flex;
@@ -360,40 +360,31 @@
     flex: 1;
     text-align: left;
   }
-  .new-wt {
-    & .nw-plus {
+  .rail-new {
+    & .rail-new-plus {
       margin-right: 8px;
     }
   }
   /* 4px in from the row's own padding, which lands the hint on the dots' right edge */
-  .wt-rail {
-    & .new-wt .kbd-hint {
+  .rail {
+    & .rail-new .rail-new-kbd {
       margin-right: 4px;
     }
   }
   /* the strip's plus fades out as the one beside the label comes into view */
-  .nw-strip {
+  .rail-new-strip {
     transition: opacity 0.12s ease 120ms;
   }
-  .wt-rail {
-    &:hover .nw-strip,
-    &.hold .nw-strip,
-    &.open .nw-strip {
+  .rail {
+    &:hover .rail-new-strip,
+    &.hold .rail-new-strip,
+    &.open .rail-new-strip {
       opacity: 0;
       transition: opacity 0.12s ease 50ms;
     }
 
-    & .wt-item .branch {
+    & .rail-item .branch {
       white-space: nowrap;
     }
-  }
-  .dirty-badge {
-    color: var(--yellow);
-  }
-  .variant-badge {
-    color: var(--purple);
-  }
-  .profile-badge {
-    color: var(--blue);
   }
 }

@@ -321,7 +321,9 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         <InlinePicker
           results={rows}
           keyOf={(r) => (r.kind === "cmd" ? `c:${r.c.name}` : r.kind === "changes" ? "changes" : `f:${r.path}`)}
-          rowClass={(r) => (r.kind === "file" ? "qo-file" : r.kind === "changes" ? "cmd-item" : "cmd-item ip-cmd")}
+          rowClass={(r) =>
+            r.kind === "file" ? "qo-file" : r.kind === "changes" ? "picker-row" : "picker-row picker-cmd"
+          }
           nav={nav}
           listRef={listRef}
           empty={emptyMenu(trigger.kind, files, commands.length)}
@@ -396,7 +398,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         />
         {ghost && (
           <div className="composer-ghost" aria-hidden="true">
-            <span className="lp-typed">{text}</span>
+            <span className="picker-typed">{text}</span>
             {ghost}
           </div>
         )}
@@ -421,7 +423,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar */}
           <button
-            className={`btn-icon tone-chrome term-btn ${termOpen ? "on" : ""}`}
+            className={`btn-icon tone-chrome composer-term ${termOpen ? "on" : ""}`}
             disabled={!active}
             {...tip(trouble ? trouble.tip : "Terminal", chord("terminal"))}
             onClick={() => {
@@ -432,7 +434,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             }}
           >
             <Icon name="terminal" />
-            {trouble && <span className="term-badge" />}
+            {trouble && <span className="composer-term-dot" />}
           </button>
           <IconButton
             icon="pick"

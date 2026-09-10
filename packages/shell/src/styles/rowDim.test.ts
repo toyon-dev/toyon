@@ -24,14 +24,14 @@ const ROW_AT_REST = [
   ".row-quiet",
   ".tool-row",
   ".design-tail > summary",
-  ".wt-rail:hover .disc-head",
-  ".wt-rail.hold .disc-head",
-  ".wt-rail.open .disc-head",
+  ".rail:hover .rail-disc-head",
+  ".rail.hold .rail-disc-head",
+  ".rail.open .rail-disc-head",
 ];
 
 /** a child that lifts, but to a tier of its own: the transcript reads its hint up to text0, and a
  * search hit's location goes with the code line it labels, which is the thing you are reading */
-const LIFTS_ELSEWHERE = [".tool-row .tool-name", ".tool-row .tool-icon", ".tool-row .tool-hint", ".sr-loc"];
+const LIFTS_ELSEWHERE = [".tool-row .tool-name", ".tool-row .tool-icon", ".tool-row .tool-hint", ".search-loc"];
 
 /** the token as a colour rather than as a tier. A status dot that shifted under the pointer would
  * read as the proc changing state, so these three must not ride the seat */
@@ -63,26 +63,25 @@ const NEVER_LIFTS = [
   ".design-note",
   ".design-tag",
   ".design-variant",
-  ".dock-empty",
-  ".dock-section-title",
+  ".empty",
+  ".section-title",
   ".form-hint",
   ".import-error",
   ".import-idle",
-  ".keys-h",
-  ".lp-ghost",
-  ".lp-keys",
+  ".picker-ghost",
+  ".key-hints",
   ".msg-thinking",
-  ".new-wt .kbd-hint",
-  ".np-dest",
+  ".rail-new .rail-new-kbd",
+  ".new-project-dest",
   ".pick-chip .pick-file",
   ".pick-chip button",
-  ".prompt-box .title",
+  ".overlay-title",
   ".setup-aside",
   ".status-bar",
   ".tool-row .dl.meta",
   ".tool-row .dl.more",
-  ".variants-row",
-  ".zen-title",
+  ".prompt-variants",
+  ".bar-zen-title",
 ];
 
 const ALLOWED = new Set([".row-dim", ...ROW_AT_REST, ...LIFTS_ELSEWHERE, ...NOT_A_TIER, ...NEVER_LIFTS]);

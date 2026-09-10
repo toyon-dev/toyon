@@ -1,0 +1,22 @@
+/* KeyHints: the key row under a list, saying what enter and the arrows do in this one. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* Outside the list so it stays put while the rows scroll. It reads the picker's bleed and pad
+     because it is usually the last band of one and has to reach the same edges as the rows; the
+     ask card sets the same two variables so its key strip lands the same way. */
+  .key-hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-inline: var(--picker-bleed, 0);
+    padding: 7px var(--picker-pad, 10px);
+    color: var(--text2);
+    font: var(--type-ui-sm);
+    border-top: 1px solid var(--border0);
+  }
+  .key-hint {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+}

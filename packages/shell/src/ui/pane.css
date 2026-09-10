@@ -6,31 +6,31 @@
     border-top: 1px solid var(--border0);
     background: var(--surface0);
     flex-shrink: 0;
-    & .file-head {
+    & .pane-head {
       display: flex;
       gap: 12px;
       padding: 6px 16px;
       align-items: center;
     }
-    & .file-path {
+    & .pane-title {
       flex: 1;
       font: var(--type-mono);
       color: var(--text1);
     }
   }
-  .row-resize {
+  .pane-resize {
     position: absolute;
     top: -3px;
     left: 0;
     right: 0;
     height: 6px;
-    cursor: row-resize;
+    cursor: pane-resize;
     z-index: 5;
     &:hover {
       background: var(--element0);
     }
   }
-  body.resizing .row-resize {
+  body.resizing .pane-resize {
     background: var(--element0);
   }
 }

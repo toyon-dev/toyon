@@ -3,7 +3,7 @@
 @layer base {
   /* ---- overlay: scrim over the preview column + a box anchored near the top (a palette's height
    changes as you type, and a centered box would bob with it — editor/launcher convention) ---- */
-  .prompt-overlay {
+  .overlay {
     position: absolute;
     inset: 0;
     background: var(--scrim);
@@ -13,17 +13,13 @@
     padding-top: clamp(72px, 18vh, 220px);
     z-index: 10;
   }
-  .prompt-box {
+  .overlay-box {
     width: min(560px, 90%);
     background: var(--surface1);
     box-shadow: var(--elev-overlay);
     border: 1px solid var(--border0);
     border-radius: var(--r-lg);
     padding: 14px;
-    & .title {
-      color: var(--text2);
-      margin-bottom: 8px;
-    }
     /* anchored variant: no scrim, hanging under whatever opened it (the caller's wrapper is the
    offset parent). Sits above the rail panel and the toast, under the tooltip. */
     &.anchored {
@@ -35,5 +31,10 @@
       /* anchored drops the scrim (see Overlay.tsx), so the box has to separate itself again */
       box-shadow: var(--elev-float);
     }
+  }
+  /* the line above a prompt's field saying what the box is for */
+  .overlay-title {
+    color: var(--text2);
+    margin-bottom: 8px;
   }
 }

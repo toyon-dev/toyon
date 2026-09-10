@@ -9,7 +9,7 @@ import { cssRules, shellCss } from "./cssRules.ts";
  * day, with "a semantic class adds color only" already written down as the rule, because prose in a
  * markdown file is not something a diff runs into.
  *
- * The silent part was worse than the count. An AskCard option was `btn btn-outline qo-item ask-opt`
+ * The silent part was worse than the count. An AskCard option was `btn btn-outline picker-item ask-opt`
  * and three of those four declare padding at equal specificity, so the winner was whichever sat
  * lowest in a 2400-line stylesheet, and the button quietly took a list row's min-height with it.
  *
@@ -22,7 +22,7 @@ import { cssRules, shellCss } from "./cssRules.ts";
  * So a class reaching a button may set neither the box nor a resting colour. State rules (:hover,
  * .on, :disabled) may still name a colour where one is genuinely unique, as .deep-link's blue
  * hover is. The one-offs below are real and each costs a deliberate line here rather than being
- * something you can do by accident. A chip that is not pressable (.pick-chip, .lp-chip: a div and a
+ * something you can do by accident. A chip that is not pressable (.pick-chip, .picker-chip: a div and a
  * span) is not a button and never reaches this test.
  */
 
@@ -48,9 +48,9 @@ const PRIMITIVES = new Set([
  * Controls that are deliberately not one of the three sizes, each for a reason:
  * - .setup-add is a bare text link in a form, no horizontal box at all
  * - .jump-down is a floating pill over the transcript, sized to clear the composer
- * - .new-wt and .disc-head are full-width rail rows that happen to be buttons
+ * - .rail-new and .rail-disc-head are full-width rail rows that happen to be buttons
  */
-const ONE_OFFS = new Set([".setup-add", ".jump-down", ".new-wt", ".disc-head"]);
+const ONE_OFFS = new Set([".setup-add", ".jump-down", ".rail-new", ".rail-disc-head"]);
 
 /** `<Button className={...}>`, `<IconButton …>`, and a raw `<button>` still wearing a primitive */
 function classesReachingAButton(src: string): string[] {

@@ -25,7 +25,7 @@ export function CommandPalette() {
     <ListPicker
       items={commands}
       filter={filterCommands}
-      rowClass={() => "cmd-item"}
+      rowClass={() => "picker-row"}
       keyOf={(c) => c.id}
       onPick={(c, q) => {
         // a sub-picker command remembers the query so esc there comes back here

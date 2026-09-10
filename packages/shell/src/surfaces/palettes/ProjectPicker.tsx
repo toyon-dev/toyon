@@ -119,7 +119,7 @@ export function ProjectPicker({
       // dialog is a path browser and nothing in it is scoped to the open project
       lead={
         dialog ? undefined : (
-          <span className="lp-chip">{repos.find((r) => r.id === current)?.name ?? "no project"}</span>
+          <span className="picker-chip">{repos.find((r) => r.id === current)?.name ?? "no project"}</span>
         )
       }
       trailing={
@@ -146,7 +146,7 @@ export function ProjectPicker({
                   ? `clone:${r.url}`
                   : `new:${r.parent ?? ""}/${r.name}`
       }
-      rowClass={() => "cmd-item"}
+      rowClass={() => "picker-row"}
       onQuery={onQuery}
       // a folder completes to itself with a trailing slash, so tab keeps walking down the tree
       completionOf={(r) => (r.kind === "dir" ? (r.entry.isRepo ? r.entry.path : `${r.entry.path}/`) : null)}

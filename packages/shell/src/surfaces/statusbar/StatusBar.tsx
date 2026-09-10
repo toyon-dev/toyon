@@ -29,7 +29,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const ready = !!active && active.procs.some((p) => p.status === "running" || p.status === "starting");
   return (
     <div className="status-bar top-bar">
-      {zen && <span className="zen-title">{active?.worktree.title ?? "toyon"}</span>}
+      {zen && <span className="bar-zen-title">{active?.worktree.title ?? "toyon"}</span>}
       <IconButton
         icon="branch"
         label="Changes panel"
@@ -49,7 +49,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           <Icon name="download" className="icon-inline" /> install app
         </Button>
       )}
-      <span className="grow" />
+      <span className="bar-grow" />
       {/* right cluster: settings · chat · zen (zen last — it hides everything, so it sits at the edge).
           the terminal toggle lives in the composer: one shell per worktree, not app chrome. */}
       <span className="bar-tools">
@@ -100,16 +100,16 @@ function ProjectPill() {
   const open = useStore((s) => s.overlay?.kind === "projects" && !s.overlay.dialog);
   const busyElsewhere = useStore((s) => s.worktrees.some((w) => isBusy(w) && w.worktree.repoId !== s.activeRepoId));
   return (
-    <span className="pp-wrap">
+    <span className="bar-project">
       <Button
         tone="chrome"
-        className="project-pill"
+        className="bar-pill"
         on={open}
         {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
         onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
       >
-        <span className="pp-name">{repo?.name ?? "open project"}</span>
-        {busyElsewhere && <span className="pp-dot" {...tip("An agent is working in another project")} />}
+        <span className="bar-project-name">{repo?.name ?? "open project"}</span>
+        {busyElsewhere && <span className="bar-project-dot" {...tip("An agent is working in another project")} />}
       </Button>
       {open && <ProjectPicker />}
     </span>
@@ -144,7 +144,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
     setEditing(false);
   };
   return (
-    <div className="rb-center" style={{ left }}>
+    <div className="bar-center" style={{ left }}>
       <IconButton
         icon="back"
         label="Back"
@@ -164,7 +164,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
         onClick={() => id && previewBus.post(id, { type: "reload" })}
       />
       <input
-        className="field rb-path"
+        className="field bar-path"
         value={ready ? val : ""}
         disabled={!ready}
         placeholder={ready ? "/" : ""}

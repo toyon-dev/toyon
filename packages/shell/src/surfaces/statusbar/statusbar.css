@@ -3,7 +3,7 @@
 @layer tokens, base, surfaces;
 
 @layer surfaces {
-  .rb-path {
+  .bar-path {
     flex: 1;
     min-width: 0;
     color: var(--text1);
@@ -48,8 +48,8 @@
     }
     .status-bar.top-bar button,
     .status-bar.top-bar input,
-    .status-bar.top-bar .prompt-box.anchored,
-    .status-bar.top-bar .rb-center {
+    .status-bar.top-bar .overlay-box.anchored,
+    .status-bar.top-bar .bar-center {
       -webkit-app-region: no-drag;
       app-region: no-drag;
     }
@@ -63,21 +63,21 @@
       display: flex;
       justify-content: center;
     }
-    .app.zen .status-bar.top-bar > :not(.zen-title) {
+    .app.zen .status-bar.top-bar > :not(.bar-zen-title) {
       display: none;
     }
-    .app.zen .status-bar.top-bar .zen-title {
+    .app.zen .status-bar.top-bar .bar-zen-title {
       display: block;
     }
   }
   /* only the window-controls-overlay zen strip shows this */
-  .zen-title {
+  .bar-zen-title {
     display: none;
     color: var(--text2);
   }
   /* Safari-style: nav+path anchored to the window center — never moves when
    docks collapse/resize (chrome that shifts underfoot reads as breakage) */
-  .rb-center {
+  .bar-center {
     position: absolute;
     transform: translateX(-50%);
     display: flex;
@@ -97,12 +97,12 @@
   /* top-left project pill: it names what the shell is scoped to, so at rest it is a label and
    nothing more — .btn already gives the hover background and .on the open one, which is the
    whole visual vocabulary here */
-  .pp-wrap {
+  .bar-project {
     position: relative;
     display: flex;
     align-items: center;
   }
-  .project-pill {
+  .bar-pill {
     flex: none;
   }
   /* The panel opens over the pill rather than under it, the way an address bar expands in place.
@@ -110,23 +110,23 @@
    the pill's box and the project name does not move at all; the 38px bar leaves 3px of itself
    above the panel, which is what makes the top edge readable. The pill stays under it, holding
    the bar's layout. */
-  .pp-wrap {
-    & .prompt-box.anchored {
+  .bar-project {
+    & .overlay-box.anchored {
       top: -6px;
       left: -9px;
     }
     /* half the viewport is a centred palette's budget; hanging off the bar, that would bury the app */
-    & .prompt-box .qo-list {
+    & .overlay-box .picker-list {
       max-height: min(340px, 50vh);
     }
   }
-  .pp-name {
+  .bar-project-name {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 160px;
   }
   /* an agent is working in a project that is not on screen: the only reason to look away from here */
-  .pp-dot {
+  .bar-project-dot {
     width: 5px;
     height: 5px;
     border-radius: 50%;
@@ -134,10 +134,7 @@
     flex: none;
   }
   .status-bar {
-    & .branch {
-      color: var(--accent);
-    }
-    & .grow {
+    & .bar-grow {
       flex: 1;
     }
     /* columns: zen centers over the 40px rail (bar pad 10 + 20px box → center 20px); with the

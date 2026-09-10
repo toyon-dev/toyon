@@ -25,9 +25,9 @@ export function Overlay({
   const ref = useRef<HTMLDivElement>(null);
   useDismissOutside(ref, () => onClose?.());
   const box = (
-    <div className={`${bare ? "" : "prompt-box"} ${anchored ? "anchored" : ""} ${boxClass}`} ref={ref}>
+    <div className={`${bare ? "" : "overlay-box"} ${anchored ? "anchored" : ""} ${boxClass}`} ref={ref}>
       {children}
     </div>
   );
-  return anchored ? box : <div className="prompt-overlay">{box}</div>;
+  return anchored ? box : <div className="overlay">{box}</div>;
 }

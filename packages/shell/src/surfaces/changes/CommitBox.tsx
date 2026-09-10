@@ -56,17 +56,17 @@ export function CommitBox({
           <Icon name="branch" className="icon-inline" />
           <span className="branch-name">{wt.branch}</span>
           {behind > 0 && (
-            <span className="behind-badge" data-tip={`${behind} commit(s) behind main`}>
+            <span className="badge-behind" data-tip={`${behind} commit(s) behind main`}>
               {behind} behind
             </span>
           )}
           {ahead > 0 && (
-            <span className="ahead-badge" data-tip={`${ahead} commit(s) ahead of main`}>
+            <span className="badge-ahead" data-tip={`${ahead} commit(s) ahead of main`}>
               {ahead} ahead
             </span>
           )}
           {wt.landed && (
-            <span className="landed-badge" data-tip="Merged into main">
+            <span className="badge-landed" data-tip="Merged into main">
               <Icon name="check" className="icon-inline" /> landed
             </span>
           )}

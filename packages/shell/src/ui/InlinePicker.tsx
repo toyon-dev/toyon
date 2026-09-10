@@ -28,11 +28,11 @@ export function InlinePicker<T>({
 }) {
   return (
     <div className="inline-picker">
-      <div className="qo-list" ref={listRef}>
+      <div className="picker-list" ref={listRef}>
         {results.map((t, i) => (
           <button
             key={keyOf(t)}
-            className={`qo-item ${rowClass?.(t) ?? ""} ${i === nav.index ? "active" : ""}`}
+            className={`picker-item ${rowClass?.(t) ?? ""} ${i === nav.index ? "active" : ""}`}
             // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal
             // the highlight
             onMouseMove={() => i !== nav.index && nav.setIndex(i)}
@@ -43,7 +43,7 @@ export function InlinePicker<T>({
             {row(t, i === nav.index)}
           </button>
         ))}
-        {results.length === 0 && <div className="dock-empty">{empty}</div>}
+        {results.length === 0 && <div className="empty">{empty}</div>}
       </div>
       <KeyHints
         hints={[

@@ -1,4 +1,5 @@
 import { Kbd } from "./Kbd.tsx";
+import "./key-hints.css";
 
 /**
  * The key row under a list: what ↑↓ and enter do in this one. Each hint is a cell rather than words
@@ -8,9 +9,9 @@ import { Kbd } from "./Kbd.tsx";
  */
 export function KeyHints({ hints, className = "" }: { hints: Array<[string, string]>; className?: string }) {
   return (
-    <div className={`lp-keys ${className}`.trim()}>
+    <div className={`key-hints ${className}`.trim()}>
       {hints.map(([k, verb]) => (
-        <span className="lp-key" key={k}>
+        <span className="key-hint" key={k}>
           <Kbd k={k} />
           {verb}
         </span>

@@ -28,14 +28,14 @@
 
   /* the panel's two lists are alternatives, not sections, so they get the tab strip the terminal
    pane already uses rather than a second section title */
-  .dock-tabs {
+  .changes-tabs {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
     padding: 8px 12px 2px;
   }
-  .dock-tab {
+  .changes-tab {
     font: var(--type-ui-sm);
     flex-shrink: 0;
   }
@@ -74,11 +74,7 @@
     }
   }
 
-  .dock-section-title {
-    /* a section title is smaller than the rows under it, and marked by colour rather than by caps
-     and tracking: it was the loudest line in the dock and the least important one in it */
-    font: var(--type-ui-sm);
-    color: var(--text2);
+  .changes-list .section-title {
     padding: 10px 12px 4px;
   }
 
@@ -182,15 +178,6 @@
     }
   }
 
-  .ahead-badge {
-    color: var(--aqua);
-  }
-  .behind-badge {
-    color: var(--yellow);
-  }
-  .landed-badge {
-    color: var(--aqua);
-  }
   /* the message box only appears when there is something to commit, so on a clean tree this is the
    knobs row alone: where you are, and the one move that is left */
   .commit-box {

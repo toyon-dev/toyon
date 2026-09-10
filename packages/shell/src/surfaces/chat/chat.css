@@ -569,10 +569,10 @@
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
   /* a crashed proc in this worktree, badged on the terminal button: the only status this row shows,
    and only because the tab that explains it is one click away */
-  .term-btn {
+  .composer-term {
     position: relative;
   }
-  .term-badge {
+  .composer-term-dot {
     position: absolute;
     top: 1px;
     right: 1px;
@@ -583,9 +583,9 @@
     /* ringed in the surface behind it so the dot stays round against the icon's strokes */
     box-shadow: 0 0 0 1.5px var(--surface0);
   }
-  .term-btn {
-    &:hover .term-badge,
-    &.on .term-badge {
+  .composer-term {
+    &:hover .composer-term-dot,
+    &.on .composer-term-dot {
       box-shadow: 0 0 0 1.5px var(--border0);
     }
   }
@@ -741,11 +741,11 @@
     border-radius: var(--r-lg);
     background: var(--surface0);
     outline: none;
-    /* the options are a picker's rows, so the card is the box they bleed out of: --lp-bleed undoes
-     this padding for the row bands and the key strip, --lp-pad puts it back inside the row, and
+    /* the options are a picker's rows, so the card is the box they bleed out of: --picker-bleed undoes
+     this padding for the row bands and the key strip, --picker-pad puts it back inside the row, and
      the labels stay in the same column as the question above them */
-    --lp-bleed: -12px;
-    --lp-pad: 12px;
+    --picker-bleed: -12px;
+    --picker-pad: 12px;
     overflow: hidden;
     &.done {
       border-left-color: var(--border0);
@@ -781,12 +781,12 @@
     margin-bottom: 6px;
   }
   /* An answer is picked out of a list, so the options are the app's list rows: the same band, the
-   same highlight and the same edge as the command palette and the @ menu, wearing .qo-item and the
+   same highlight and the same edge as the command palette and the @ menu, wearing .picker-item and the
    command row's name/description columns. They were chips in a padded box for a while, which read
    as four controls to press rather than one choice to make, and .btn's nowrap meant a description
    could not wrap and ran off the card instead. */
   .ask-options {
-    margin: 6px var(--lp-bleed) 0;
+    margin: 6px var(--picker-bleed) 0;
   }
   /* Prose, not a path: the palette rows are mono because they hold literals you also type, and an
    option's label and description are neither. And prose that is the reason to pick this row, so it
@@ -802,7 +802,7 @@
     align-items: baseline;
     white-space: normal;
     --row-edge-x: 6px;
-    & .ip-desc {
+    & .picker-desc {
       white-space: normal;
       overflow: visible;
     }
@@ -821,7 +821,7 @@
     }
     /* saying no to the agent stops something mid-flight, which is what the danger tone is for. It sits
    on the name rather than the row, so the seat still lifts under the pointer like any other row. */
-    &.deny .ip-name {
+    &.deny .picker-name {
       color: var(--red);
     }
   }

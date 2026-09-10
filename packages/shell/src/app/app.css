@@ -17,7 +17,7 @@
     &.zen .status-bar,
     &.zen .left-dock,
     &.zen .right-dock,
-    &.zen .wt-rail,
+    &.zen .rail,
     &.zen .dock-resize {
       display: none;
     }
@@ -86,7 +86,7 @@
     display: block;
     margin-top: 8px;
   }
-  body.resizing .rb-center {
+  body.resizing .bar-center {
     transition: none;
   }
 }

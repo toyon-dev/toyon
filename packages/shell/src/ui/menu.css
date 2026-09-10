@@ -9,7 +9,7 @@
     border: 1px solid var(--border1);
     border-radius: var(--r-md);
     /* the rows reach both edges, so the box is what keeps the corners round: the same reason
-     .prompt-box.quick-open clips its own. The padding is vertical only, for the same reason. */
+     .overlay-box.picker clips its own. The padding is vertical only, for the same reason. */
     overflow: hidden;
     padding: 4px 0;
     box-shadow: var(--elev-float);

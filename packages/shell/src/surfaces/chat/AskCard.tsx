@@ -173,7 +173,7 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
                 <button
                   key={o.value}
                   type="button"
-                  className={`qo-item cmd-item ask-opt row-edge ${at === nav.index ? "active" : ""} ${on ? "on" : ""}`}
+                  className={`picker-item picker-row ask-opt row-edge ${at === nav.index ? "active" : ""} ${on ? "on" : ""}`}
                   // mousemove, not mouseenter, for the same reason the picker gives: a row arriving
                   // under a stationary pointer must not steal the highlight the keyboard is on
                   onMouseMove={() => at !== nav.index && nav.setIndex(at)}
@@ -184,8 +184,8 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
                   }}
                 >
                   <Kbd k={String(oi + 1)} className="ask-num row-dim" />
-                  <span className="ip-name">{o.label}</span>
-                  {o.description && <span className="ip-desc row-dim">{o.description}</span>}
+                  <span className="picker-name">{o.label}</span>
+                  {o.description && <span className="picker-desc row-dim">{o.description}</span>}
                 </button>
               );
             })}
@@ -277,11 +277,11 @@ function PermissionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { k
             <button
               key={c.id}
               type="button"
-              className={`qo-item cmd-item ask-opt row-edge ${c.kind.startsWith("reject") ? "deny" : ""}`}
+              className={`picker-item picker-row ask-opt row-edge ${c.kind.startsWith("reject") ? "deny" : ""}`}
               onClick={() => decide(c.id)}
             >
               <Kbd k={String(i + 1)} className="ask-num row-dim" />
-              <span className="ip-name">{c.name}</span>
+              <span className="picker-name">{c.name}</span>
             </button>
           ))}
         </div>

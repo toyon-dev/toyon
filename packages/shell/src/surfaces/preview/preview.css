@@ -85,13 +85,13 @@
   }
   /* the new-project form: the destination sits opposite the buttons, so what is about to be made on
    disk is readable in the same glance as the button that makes it */
-  .np-actions {
+  .new-project-actions {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-top: 12px;
   }
-  .np-dest {
+  .new-project-dest {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -100,7 +100,7 @@
     font: var(--type-mono);
     color: var(--text2);
   }
-  .np-url {
+  .new-project-url {
     font: var(--type-mono);
     color: var(--text1);
     overflow-wrap: anywhere;

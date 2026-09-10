@@ -40,7 +40,7 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
       items={NONE}
       filter={filter}
       keyOf={(r) => (r.kind === "cmd" ? `c:${r.c.id}` : `f:${r.path}`)}
-      rowClass={(r) => (r.kind === "cmd" ? "cmd-item" : "qo-file")}
+      rowClass={(r) => (r.kind === "cmd" ? "picker-row" : "qo-file")}
       onPick={(r, q) => {
         if (r.kind === "cmd") {
           if (r.c.sub) dispatch({ a: "palette-return", v: { mode: "quick-open", q } });

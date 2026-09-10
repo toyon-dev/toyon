@@ -105,7 +105,7 @@ export function PromptOverlay() {
 
   return (
     <Overlay onClose={() => dispatch({ a: "close" })}>
-      <div className="title">
+      <div className="overlay-title">
         {batch
           ? "batch: an agent splits this into separate worktrees, one per task"
           : "new worktree: describe the change; an agent starts on it immediately"}
@@ -155,7 +155,7 @@ export function PromptOverlay() {
           <InlinePicker
             results={rows}
             keyOf={(c) => c.name}
-            rowClass={() => "cmd-item ip-cmd"}
+            rowClass={() => "picker-row picker-cmd"}
             nav={nav}
             listRef={listRef}
             empty={
@@ -169,16 +169,16 @@ export function PromptOverlay() {
           />
         )}
       </div>
-      <div className="variants-row">
+      <div className="prompt-variants">
         {/* the picker takes focus while it is up, so put the caret back when it closes */}
         <RepoChip onClose={() => field.current?.focus()} />
         {agents.length > 1 && (
-          <span className="agent-chips">
+          <span className="prompt-agents">
             {agents.map((a) => (
               <Button
                 key={a.id}
                 variant="outline"
-                className="variant-chip"
+                className="prompt-variant-chip"
                 on={agent === a.id}
                 disabled={!a.available}
                 data-tip={
@@ -201,13 +201,13 @@ export function PromptOverlay() {
           <span>batch</span>
         </label>
         {!batch && (
-          <span className="variants-right">
+          <span className="prompt-variants-right">
             <span data-tip="Run the same prompt in N parallel worktrees, keep the best">variants</span>
             {[1, 2, 3].map((n) => (
               <Button
                 key={n}
                 variant="outline"
-                className="variant-chip"
+                className="prompt-variant-chip"
                 on={variants === n}
                 onClick={() => setVariants(n)}
               >

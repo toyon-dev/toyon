@@ -116,9 +116,9 @@ export function ListPicker<T>({
   if (verbs?.pick) hints.push(["enter", verbs.pick]);
   if (verbs?.back) hints.push(["esc", verbs.back]);
   const inputEl = (
-    <div className="lp-input">
+    <div className="picker-input">
       {lead}
-      <div className="lp-caret">
+      <div className="picker-caret">
         <input
           className="field field-lg"
           ref={inputRef}
@@ -131,8 +131,8 @@ export function ListPicker<T>({
           placeholder={placeholder}
         />
         {ghost && (
-          <div className="lp-ghost" aria-hidden="true">
-            <span className="lp-typed">{q}</span>
+          <div className="picker-ghost" aria-hidden="true">
+            <span className="picker-typed">{q}</span>
             {ghost}
           </div>
         )}
@@ -141,11 +141,11 @@ export function ListPicker<T>({
     </div>
   );
   const listEl = (
-    <div className="qo-list" ref={listRef}>
+    <div className="picker-list" ref={listRef}>
       {results.map((t, i) => (
         <button
           key={keyOf(t)}
-          className={`qo-item ${rowClass?.(t) ?? ""} ${i === clamped ? "active" : ""}`}
+          className={`picker-item ${rowClass?.(t) ?? ""} ${i === clamped ? "active" : ""}`}
           title={rowTitle?.(t)}
           // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
           onMouseMove={() => i !== clamped && nav.setIndex(i)}
@@ -154,13 +154,13 @@ export function ListPicker<T>({
           {row(t, i === clamped, q)}
         </button>
       ))}
-      {results.length === 0 && <div className="dock-empty">{typeof empty === "function" ? empty(q) : empty}</div>}
+      {results.length === 0 && <div className="empty">{typeof empty === "function" ? empty(q) : empty}</div>}
       {footer?.(q, results)}
     </div>
   );
   const keysEl = hints.length > 0 && <KeyHints hints={hints} />;
   return (
-    <Overlay onClose={onBack} boxClass="quick-open" anchored={anchored}>
+    <Overlay onClose={onBack} boxClass="picker" anchored={anchored}>
       {inputEl}
       {listEl}
       {keysEl}

@@ -38,7 +38,7 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
       <ListPicker
         items={slotThemes}
         filter={(ts, q) => ts.filter((t) => byName(q, t.name, t.id))}
-        rowClass={() => "cmd-item"}
+        rowClass={() => "picker-row"}
         keyOf={(t) => t.id}
         initialIndex={(ts) => ts.findIndex((t) => t.id === selectedId)}
         onActive={preview}
@@ -59,7 +59,7 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
     <ListPicker
       items={families}
       filter={(fs, q) => fs.filter((f) => byName(q, f.name, f.dark?.name, f.light?.name))}
-      rowClass={() => "cmd-item"}
+      rowClass={() => "picker-row"}
       keyOf={(f) => f.name + (f.dark?.id ?? f.light?.id)}
       initialIndex={(fs) => fs.findIndex((f) => f.dark?.id === selectedId || f.light?.id === selectedId)}
       onActive={setActive}

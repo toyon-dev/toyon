@@ -49,11 +49,11 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
 
   return (
     <Overlay onClose={() => dispatch({ a: "close" })}>
-      <div className="title">{clone ? "clone a project into a new folder" : "new project"}</div>
+      <div className="overlay-title">{clone ? "clone a project into a new folder" : "new project"}</div>
 
       {clone && (
         <FormRow label="from" hint="cloned with the credentials git already uses on this machine">
-          <span className="np-url">{overlay.url}</span>
+          <span className="new-project-url">{overlay.url}</span>
         </FormRow>
       )}
 
@@ -79,8 +79,8 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
         />
       </FormRow>
 
-      <div className="np-actions">
-        <span className="np-dest">{ready ? destination(parent, name) : ""}</span>
+      <div className="new-project-actions">
+        <span className="new-project-dest">{ready ? destination(parent, name) : ""}</span>
         <Button onClick={() => dispatch({ a: "close" })}>cancel</Button>
         <Button variant="outline" size="lg" disabled={!ready} onClick={submit}>
           {clone ? "clone" : "create"}

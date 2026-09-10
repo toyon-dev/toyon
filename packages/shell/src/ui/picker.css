@@ -19,14 +19,14 @@
     box-shadow: var(--elev-float);
     padding: 4px;
     overflow: hidden;
-    --lp-bleed: -4px;
-    --lp-pad: 8px;
-    /* .qo-list is half the viewport for a centred palette; anchored here that would bury the chat */
-    & .qo-list {
+    --picker-bleed: -4px;
+    --picker-pad: 8px;
+    /* .picker-list is half the viewport for a centred palette; anchored here that would bury the chat */
+    & .picker-list {
       max-height: min(280px, 40vh);
       margin-top: 0;
     }
-    & .lp-keys {
+    & .key-hints {
       border-top: 1px solid var(--border0);
       margin-top: 4px;
       padding-top: 6px;
@@ -34,56 +34,56 @@
   }
   /* A command row: the name holds its width, the description gives way. The name is the part that
    gets typed, so it must never be the thing that ellipsises. */
-  .ip-cmd {
+  .picker-cmd {
     gap: 8px;
   }
-  .ip-name {
+  .picker-name {
     flex: 0 0 auto;
     color: var(--text0);
   }
-  .ip-desc {
+  .picker-desc {
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .cmd-item {
-    &.dim .cmd-label {
+  .picker-row {
+    &.dim .picker-label {
       color: var(--text1);
     }
   }
   /* A picker's rows are bands across the panel, not chips inside it: everywhere else in the app a
    list you run down with the keyboard (the worktree panel, the transcript's tool rows) is full
-   bleed, and a rounded pill inset in a padded box reads as a control you press. --lp-bleed undoes
-   the box's padding for the list and the key row; --lp-pad puts it back inside the row, so the
+   bleed, and a rounded pill inset in a padded box reads as a control you press. --picker-bleed undoes
+   the box's padding for the list and the key row; --picker-pad puts it back inside the row, so the
    row's text still sits under the caret while its fill reaches both edges. */
-  .prompt-box {
-    &.quick-open {
+  .overlay-box {
+    &.picker {
       padding: 8px;
-      --lp-bleed: -8px;
-      --lp-pad: 18px;
+      --picker-bleed: -8px;
+      --picker-pad: 18px;
       /* the rows reach the box's edge, so the box has to be the thing that keeps its corners round */
       overflow: hidden;
     }
-    &.quick-open input {
+    &.picker input {
       width: 100%;
       font: var(--type-mono);
     }
     /* Anchored, the field is the top of the panel and borrows the composer's treatment: the field's
    background carried by the whole strip and no inset box, so the panel reads as the bar it drops
-   out of rather than a control floating in a menu. -8px undoes .quick-open's padding. */
+   out of rather than a control floating in a menu. -8px undoes .picker's padding. */
     &.anchored {
-      --lp-pad: 8px;
+      --picker-pad: 8px;
     }
-    &.anchored .lp-input {
+    &.anchored .picker-input {
       margin: -8px -8px 0;
       padding: 5px 8px;
       background: var(--sunken);
       border-bottom: 1px solid var(--border0);
       border-radius: var(--r-lg) var(--r-lg) 0 0;
     }
-    &.anchored .lp-input input {
+    &.anchored .picker-input input {
       background: none;
       border: none;
       border-radius: 0;
@@ -92,7 +92,7 @@
       font: var(--type-mono);
     }
     /* the ghost tracks the caret, so it loses the same border and padding the input just did */
-    &.anchored .lp-ghost {
+    &.anchored .picker-ghost {
       inset: 0;
       padding: 0;
       font: var(--type-mono);
@@ -100,7 +100,7 @@
   }
   /* what the query is scoped to, in the pill's own box so the project name does not move when the
    panel opens over it */
-  .lp-chip {
+  .picker-chip {
     padding: 1px 8px;
     flex: none;
     display: inline-flex;
@@ -115,27 +115,9 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  /* the keyboard row under a picker's rows: what enter and the arrows do here. Outside .qo-list so
-   it stays put while the rows scroll. */
-  .lp-keys {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    margin-inline: var(--lp-bleed, 0);
-    padding: 7px var(--lp-pad, 10px);
-    color: var(--text2);
-    font: var(--type-ui-sm);
-    border-top: 1px solid var(--border0);
-  }
-  .lp-key {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 4px;
-  }
-
   /* ghost completion: the typed part is hidden but still laid out, so the suffix lands exactly
    where the caret is. Metrics must match .field/.field-lg or the tail drifts. */
-  .lp-input {
+  .picker-input {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -144,13 +126,13 @@
     }
   }
   /* the ghost is absolute over the input alone, not the row: a chip before the caret would shift it */
-  .lp-caret {
+  .picker-caret {
     position: relative;
     display: flex;
     flex: 1;
     min-width: 0;
   }
-  .lp-ghost {
+  .picker-ghost {
     position: absolute;
     inset: 1px;
     padding: 8px 10px;
@@ -160,22 +142,22 @@
     overflow: hidden;
     pointer-events: none;
   }
-  .lp-typed {
+  .picker-typed {
     visibility: hidden;
   }
-  .qo-list {
+  .picker-list {
     max-height: 50vh;
     overflow-y: auto;
-    margin: 6px var(--lp-bleed, 0) 0;
+    margin: 6px var(--picker-bleed, 0) 0;
     /* the empty line and the footer are rows of the same list, so they sit on the rows' text column */
-    & .dock-empty {
-      padding-inline: var(--lp-pad, 10px);
+    & .empty {
+      padding-inline: var(--picker-pad, 10px);
     }
   }
   /* selection, one idiom everywhere: a 2px bar down the leading edge and a seat that stays neutral.
    The accent never colours the content, so a marked row, an open panel's button and a picked value
    all say the same thing and none of them borrows the shape of an error. */
-  .qo-item {
+  .picker-item {
     position: relative;
     display: block;
     width: 100%;
@@ -186,28 +168,28 @@
      the button itself, and a search hit stacks two lines inside it. It takes the height token so it
      tracks the others; true centring arrives when the label gets its own span. */
     min-height: var(--row-h-sm);
-    padding: 4px var(--lp-pad, 10px);
+    padding: 4px var(--picker-pad, 10px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .cmd-item {
+  .picker-row {
     display: flex;
     align-items: center;
     gap: 12px;
   }
-  .cmd-label {
+  .picker-label {
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .cmd-hint {
+  .picker-hint {
     flex-shrink: 0;
   }
-  .qo-item {
-    &.active .sr-loc,
-    &.active .sr-text {
+  .picker-item {
+    &.active .search-loc,
+    &.active .search-text {
       color: var(--text0);
     }
     /* the matched characters take the accent, so they are the same colour as the bar marking the row

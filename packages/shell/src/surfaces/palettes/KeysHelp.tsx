@@ -31,21 +31,21 @@ export function KeysHelp() {
   };
   return (
     <Overlay bare boxClass="keys-stack" onClose={() => dispatch({ a: "close" })}>
-      <div className="keys-card settings-card">
-        <div className="keys-h">Settings</div>
-        <div className="set-row">
+      <div className="keys-card keys-settings">
+        <div className="section-title keys-h">Settings</div>
+        <div className="keys-setting">
           <span className="keys-d">theme</span>
           <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
             {resolveTheme(prefs, themes, systemDark).name}
           </Button>
         </div>
-        <div className="set-row">
+        <div className="keys-setting">
           <span className="keys-d">light/dark mode</span>
           <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}>
             {appearanceLabel[prefs.mode]}
           </Button>
         </div>
-        <div className="set-row">
+        <div className="keys-setting">
           <span className="keys-d">default agent</span>
           <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "agent" } })}>
             {agents.find((a) => a.id === defaultAgent)?.name ?? defaultAgent}
@@ -59,7 +59,7 @@ export function KeysHelp() {
         {/* the current project only: how it installs and starts (toyon.json); the pane replaces
             the preview. Other projects are a switch away (⌘⇧O), not rows here. */}
         {repo && (
-          <div className="set-row">
+          <div className="keys-setting">
             <span className="keys-d">{repo.name}</span>
             <Button
               variant="field"
@@ -74,8 +74,8 @@ export function KeysHelp() {
       </div>
       <div className="keys-card">
         {KEY_SECTIONS.map((sec) => (
-          <div className="keys-section" key={sec.title}>
-            <div className="keys-h">{sec.title}</div>
+          <div key={sec.title}>
+            <div className="section-title keys-h">{sec.title}</div>
             {sec.rows.map(([k, d]) => (
               <div className="keys-row" key={k}>
                 <Kbd k={k} chip />
@@ -119,7 +119,7 @@ function AgentRow({ agent }: { agent: AgentInfo }) {
   if (!agent.available && !agent.installing)
     items.push({ label: "install again", onClick: () => sock?.send({ t: "install-agent", agent: agent.id }) });
   return (
-    <div className="set-row">
+    <div className="keys-setting">
       <span className="keys-d">{agent.name}</span>
       <Button
         variant="field"

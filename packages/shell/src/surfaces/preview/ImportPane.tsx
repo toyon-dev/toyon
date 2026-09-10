@@ -54,8 +54,8 @@ export function ImportPane({ pending }: { pending: PendingRepo }) {
         )}
       </div>
 
-      <div className="np-actions">
-        <span className="np-dest" />
+      <div className="new-project-actions">
+        <span className="new-project-dest" />
         <Button variant="outline" size="lg" onClick={cancel}>
           {failed ? "dismiss" : "stop"}
         </Button>

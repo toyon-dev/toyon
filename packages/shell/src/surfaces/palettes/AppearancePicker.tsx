@@ -20,7 +20,7 @@ export function AppearancePicker() {
     <ListPicker
       items={MODES}
       filter={(ms, q) => ms.filter((m) => byName(q, appearanceLabel[m]))}
-      rowClass={() => "cmd-item"}
+      rowClass={() => "picker-row"}
       keyOf={(m) => m}
       initialIndex={(ms) => ms.indexOf(prefs.mode)}
       onActive={(m) =>

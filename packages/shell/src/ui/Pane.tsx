@@ -29,9 +29,9 @@ export function Pane({
 }) {
   return (
     <div className={`pane ${className}`} style={height === undefined ? undefined : { height }}>
-      {resizable && <div className="row-resize" onPointerDown={onDragStart} />}
-      <div className="file-head">
-        <span className="file-path">{title}</span>
+      {resizable && <div className="pane-resize" onPointerDown={onDragStart} />}
+      <div className="pane-head">
+        <span className="pane-title">{title}</span>
         {actions}
         <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />
       </div>

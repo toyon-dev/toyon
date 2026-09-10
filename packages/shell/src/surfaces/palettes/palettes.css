@@ -24,12 +24,12 @@
     width: min(560px, 90%);
   }
   .keys-card {
-    &.settings-card {
+    &.keys-settings {
       display: block;
       padding: 12px 24px 12px;
     }
   }
-  .set-row {
+  .keys-setting {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -49,8 +49,6 @@
     color: var(--text1);
   }
   .keys-h {
-    font: var(--type-ui-sm);
-    color: var(--text2);
     padding: 0 0 4px 2px;
   }
   /* theme picker: dark / light chips; the one being previewed on the highlighted row lights up */
@@ -71,21 +69,21 @@
     }
   }
   /* search hits: location on top, matched line beneath */
-  .sr-item {
+  .search-hit {
     white-space: normal;
-    padding: 5px var(--lp-pad, 10px);
+    padding: 5px var(--picker-pad, 10px);
   }
-  .sr-loc {
+  .search-loc {
     display: block;
     color: var(--text2);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .sr-line {
+  .search-line {
     color: var(--accent);
   }
-  .sr-text {
+  .search-text {
     display: block;
     color: var(--text1);
     overflow: hidden;

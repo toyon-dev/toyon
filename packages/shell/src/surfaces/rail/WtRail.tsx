@@ -151,7 +151,7 @@ export function WtRail() {
 
   return (
     <div
-      className={`wt-rail ${graftMode || menu || discMenu ? "hold" : ""} ${railOpen ? "open" : ""} ${offline ? "offline" : ""}`}
+      className={`rail ${graftMode || menu || discMenu ? "hold" : ""} ${railOpen ? "open" : ""} ${offline ? "offline" : ""}`}
     >
       {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
           tip of its own, and the tooltip walks up to the nearest one */}
@@ -160,7 +160,7 @@ export function WtRail() {
           {worktrees.map((w) => (
             <button
               key={w.worktree.id}
-              className={`row wt-item row-edge ${w.worktree.id === activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""} ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
+              className={`row rail-item row-edge ${w.worktree.id === activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""} ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
               onClick={(e) => {
                 if (graftMode || e.shiftKey) toggleSel(w);
                 else dispatch({ a: "activate", id: w.worktree.id });
@@ -173,7 +173,7 @@ export function WtRail() {
               {graftMode && w.worktree.kind !== "main" && (
                 <input
                   type="checkbox"
-                  className="graft-check"
+                  className="rail-graft-check"
                   checked={sel.includes(w.worktree.id)}
                   readOnly
                   tabIndex={-1}
@@ -188,14 +188,14 @@ export function WtRail() {
                 const repo = repoOf(w);
                 const p = profileOf(w.worktree, repo);
                 return p && p !== repo?.config.defaultProfile ? (
-                  <span className="row-badge profile-badge" data-tip={`runs the ${p} profile`}>
+                  <span className="rail-badge badge-profile" data-tip={`runs the ${p} profile`}>
                     {p}
                   </span>
                 ) : null;
               })()}
               {w.worktree.variant && (
                 <span
-                  className="row-badge variant-badge clickable"
+                  className="rail-badge badge-variant clickable"
                   data-tip="Keep this variant, remove the others"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -210,7 +210,7 @@ export function WtRail() {
               )}
               {(w.dirty ?? 0) > 0 && (
                 <span
-                  className="row-badge dirty-badge clickable"
+                  className="rail-badge badge-dirty clickable"
                   data-tip="View changes"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -224,7 +224,7 @@ export function WtRail() {
               )}
               {(w.behind ?? 0) > 0 && (
                 <span
-                  className="row-badge behind-badge clickable"
+                  className="rail-badge badge-behind clickable"
                   data-tip="Sync from main"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -237,7 +237,7 @@ export function WtRail() {
               )}
               {(w.ahead ?? 0) > 0 && (
                 <span
-                  className="row-badge ahead-badge clickable"
+                  className="rail-badge badge-ahead clickable"
                   data-tip="Land"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -250,7 +250,7 @@ export function WtRail() {
                 </span>
               )}
               <span
-                className="wt-more row-dim"
+                className="rail-more row-dim"
                 {...tip("Actions")}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -283,7 +283,7 @@ export function WtRail() {
             </button>
           ))}
           {graftMode && (
-            <div className="graft-row">
+            <div className="rail-graft">
               <Button
                 size="md"
                 tone="primary"
@@ -333,35 +333,35 @@ export function WtRail() {
           )}
           {!graftMode && (
             <button
-              className="new-wt"
+              className="rail-new"
               data-tip="New worktree"
               data-tip-key={chord("new")}
               onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
             >
-              <Icon name="plus" className="icon-inline nw-plus" />
+              <Icon name="plus" className="icon-inline rail-new-plus" />
               <span className="rail-label">new worktree</span>
-              <Kbd k={chord("new")} className="kbd-hint" />
+              <Kbd k={chord("new")} className="rail-new-kbd" />
               {/* the strip has no left edge to show a plus on, so a second one waits in the dot
                   column and hands off to the one above as the panel opens */}
-              <span className="rail-glyph nw-strip">
+              <span className="rail-glyph rail-new-strip">
                 <Icon name="plus" />
               </span>
             </button>
           )}
           {/* Below "new worktree", not above it: the whole section is hidden in the strip (see
               surfaces.css), so what appears when the panel opens pushes nothing anyone is aiming
-              at. The rows are divs, not .wt-item buttons, so a shift-click never drags one into
+              at. The rows are divs, not .rail-item buttons, so a shift-click never drags one into
               the graft selection. */}
           {!graftMode && discovered.length > 0 && (
             <>
               <button
-                className={`disc-head ${discOpen ? "open" : ""}`}
+                className={`rail-disc-head ${discOpen ? "open" : ""}`}
                 {...tip(
                   `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that toyon did not make`,
                 )}
                 onClick={() => dispatch({ a: "toggle-discovered" })}
               >
-                <Icon name="caret" className={`icon-inline disc-caret ${discOpen ? "" : "shut"}`} />
+                <Icon name="caret" className={`icon-inline rail-disc-caret ${discOpen ? "" : "shut"}`} />
                 <span className="rail-label">discovered · {discovered.length}</span>
               </button>
               {discOpen &&
@@ -369,7 +369,7 @@ export function WtRail() {
                   <button
                     key={d.path}
                     type="button"
-                    className={`row row-quiet disc-item row-edge ${d.id === activeId ? "active" : ""} ${discMenu?.path === d.path ? "menu-open" : ""}`}
+                    className={`row row-quiet rail-disc-item row-edge ${d.id === activeId ? "active" : ""} ${discMenu?.path === d.path ? "menu-open" : ""}`}
                     {...tip(d.locked ? `${wtDirLabel(d)} · held by ${d.lockReason ?? "another tool"}` : wtDirLabel(d))}
                     onClick={() => dispatch({ a: "activate", id: d.id })}
                     onContextMenu={(e) => {
@@ -381,7 +381,7 @@ export function WtRail() {
                     {/* no inline "take over": the row opens a pane that explains what it would do
                         and offers it there, and a button inside this button would be invalid */}
                     {d.locked && (
-                      <span className="disc-lock row-dim">
+                      <span className="rail-disc-lock row-dim">
                         <Icon name="lock" className="icon-inline" />
                       </span>
                     )}

@@ -86,11 +86,6 @@
     color: var(--syntax-variable);
   }
 
-  .dock-empty {
-    padding: 4px 12px;
-    color: var(--text2);
-  }
-
   /* ---- rows ----
    Every full-bleed list row: changed files, commits, worktrees, picker results, menu items. A band
    you point at, not a chip you press, which is the whole difference from .btn and why there is no
@@ -241,5 +236,45 @@
   /* command palette rows: label left, chord hint right */
   .row-current {
     --row-edge-color: var(--accent);
+  }
+
+  /* ---- text roles ----
+     Three names for the three kinds of quiet text a surface writes, so a heading in the changes
+     panel and one in the shortcuts card are the same heading. A surface adds only the spacing
+     its column needs. */
+  /* a section title is smaller than the rows under it, and marked by colour rather than by caps
+     and tracking: it was the loudest line in the dock and the least important one in it */
+  .section-title {
+    font: var(--type-ui-sm);
+    color: var(--text2);
+  }
+  /* an empty list, on the rows' own text column */
+  .empty {
+    padding: 4px 12px;
+    color: var(--text2);
+  }
+
+  /* ---- badges ----
+     A badge is a coloured word or count beside a name, and is never pressed: ahead and behind on
+     a worktree row and under the commit box, the profile and variant marks on the rail. One colour
+     per meaning, wherever the word sits, so the aqua that says "landed" in the rail is the aqua
+     that says it in the changes panel. A chip is the other thing: a bounded token you act on. */
+  .badge-ahead {
+    color: var(--aqua);
+  }
+  .badge-behind {
+    color: var(--yellow);
+  }
+  .badge-landed {
+    color: var(--aqua);
+  }
+  .badge-dirty {
+    color: var(--yellow);
+  }
+  .badge-variant {
+    color: var(--purple);
+  }
+  .badge-profile {
+    color: var(--blue);
   }
 }

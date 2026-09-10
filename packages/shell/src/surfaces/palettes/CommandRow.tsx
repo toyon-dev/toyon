@@ -9,8 +9,8 @@ export function CommandRow({ c, query }: { c: AgentCommand; query: string }) {
   const needle = query.trim();
   return (
     <>
-      <span className="ip-name">/{markHits(c.name, needle ? commandHits(c.name, needle) : null, 0)}</span>
-      <span className="ip-desc row-dim">{c.description}</span>
+      <span className="picker-name">/{markHits(c.name, needle ? commandHits(c.name, needle) : null, 0)}</span>
+      <span className="picker-desc row-dim">{c.description}</span>
     </>
   );
 }

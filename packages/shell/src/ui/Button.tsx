@@ -16,9 +16,9 @@ import "./button.css";
  * What the axes replaced, in order of how quietly it went wrong:
  *
  * The box. Ten semantic classes had each written their own padding on .btn's 1px 8px, four of them
- * near-misses of the same 4px 8px. An AskCard option was `btn btn-outline qo-item ask-opt`, three
+ * near-misses of the same 4px 8px. An AskCard option was `btn btn-outline picker-item ask-opt`, three
  * of which declare padding at equal specificity, so the winner was their line numbers in a
- * 2400-line stylesheet; qo-item won and dragged a list row's width and min-height onto a chip.
+ * 2400-line stylesheet; picker-item won and dragged a list row's width and min-height onto a chip.
  *
  * The `on` state. base.css had .btn-icon.on and no .btn.on, so six surfaces each wrote
  * `color: var(--accent)` for their own. They agreed, which is luck rather than a system, and the

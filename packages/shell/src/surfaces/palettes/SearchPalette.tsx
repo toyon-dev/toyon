@@ -30,7 +30,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       filter={filter}
       onQuery={onQuery}
       keyOf={(h) => `${h.path}:${h.line}`}
-      rowClass={() => "sr-item"}
+      rowClass={() => "search-hit"}
       rowTitle={(h) => `${h.path}:${h.line}`}
       onPick={(hit) => {
         dispatch({ a: "goto-line", v: { worktreeId, path: hit.path, line: hit.line } });
@@ -44,16 +44,16 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       empty={(q) => (q.trim().length < MIN ? "type at least two characters" : isStale(q) ? "searching…" : "no matches")}
       footer={(q, rows) =>
         results?.truncated && !isStale(q) && rows.length > 0 ? (
-          <div className="dock-empty">showing the first {rows.length}; narrow the search</div>
+          <div className="empty">showing the first {rows.length}; narrow the search</div>
         ) : null
       }
       row={(h) => (
         <>
-          <span className="sr-loc">
+          <span className="search-loc">
             {h.path}
-            <span className="sr-line">:{h.line}</span>
+            <span className="search-line">:{h.line}</span>
           </span>
-          <span className="sr-text">{h.text}</span>
+          <span className="search-text">{h.text}</span>
         </>
       )}
     />

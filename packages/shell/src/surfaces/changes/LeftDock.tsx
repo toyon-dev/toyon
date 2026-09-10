@@ -237,13 +237,13 @@ export function LeftDock({ width }: { width: number }) {
 
   return (
     <div className={`left-dock ${leftOpen ? "" : "collapsed"}`} style={{ width }}>
-      <div className="dock-tabs" role="tablist">
+      <div className="changes-tabs" role="tablist">
         {(["changes", "history"] as const).map((t) => (
           <Button
             key={t}
             role="tab"
             variant="outline"
-            className="dock-tab"
+            className="changes-tab"
             on={tab === t}
             aria-selected={tab === t}
             onClick={() => setTab(t)}
@@ -266,7 +266,7 @@ export function LeftDock({ width }: { width: number }) {
       >
         {tab === "changes" && files.length > 0 && (
           <>
-            <div className="dock-section-title">uncommitted · {files.length}</div>
+            <div className="section-title">uncommitted · {files.length}</div>
             {files.map((f, i) => (
               <GitFileRow
                 key={f.path}
@@ -282,7 +282,7 @@ export function LeftDock({ width }: { width: number }) {
         )}
         {tab === "changes" && committed.length > 0 && (
           <>
-            <div className="dock-section-title" data-tip="Committed on this branch, not yet on main">
+            <div className="section-title" data-tip="Committed on this branch, not yet on main">
               committed · {committed.length}
             </div>
             {committed.map((f, i) => (
@@ -298,12 +298,12 @@ export function LeftDock({ width }: { width: number }) {
             ))}
           </>
         )}
-        {tab === "changes" && clean && committed.length === 0 && <div className="dock-empty">clean</div>}
+        {tab === "changes" && clean && committed.length === 0 && <div className="empty">clean</div>}
         {tab === "history" &&
           histRows.map((r, i) => (
             <Fragment key={r.file ? `${r.commit.sha}:${r.file.path}` : r.commit.sha}>
-              {aheadCount > 0 && i === 0 && <div className="dock-section-title">on this branch · {aheadCount}</div>}
-              {aheadCount > 0 && i === firstLanded && <div className="dock-section-title">{defaultBranch}</div>}
+              {aheadCount > 0 && i === 0 && <div className="section-title">on this branch · {aheadCount}</div>}
+              {aheadCount > 0 && i === firstLanded && <div className="section-title">{defaultBranch}</div>}
               {r.file ? (
                 <GitFileRow
                   f={r.file}
@@ -323,8 +323,8 @@ export function LeftDock({ width }: { width: number }) {
               )}
             </Fragment>
           ))}
-        {tab === "history" && commits === undefined && <div className="dock-empty">reading history…</div>}
-        {tab === "history" && commits?.length === 0 && <div className="dock-empty">no commits yet</div>}
+        {tab === "history" && commits === undefined && <div className="empty">reading history…</div>}
+        {tab === "history" && commits?.length === 0 && <div className="empty">no commits yet</div>}
       </div>
       {active && <CommitBox active={active} ahead={gitInfo?.ahead ?? 0} behind={gitInfo?.behind ?? 0} dirty={!clean} />}
       {fileMenu && active && (

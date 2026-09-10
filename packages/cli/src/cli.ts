@@ -15,6 +15,13 @@ import { logs } from "./logs.ts";
 import { stop } from "./stop.ts";
 import { uninstall } from "./uninstall.ts";
 
+/** the platform's URL opener; the URL is printed first, so a machine with no opener loses nothing */
+function openUrl(url: string): void {
+  const child = spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore" });
+  child.on("error", () => {}); // the URL is on the terminal; a headless box has nothing to open it with
+  child.unref();
+}
+
 async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   // an explicit path is registered whatever it is (the daemon says if it is not a repo); a bare
   // `toyon` registers the cwd only when it is one, and otherwise just opens the shell, whose
@@ -22,6 +29,11 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   const explicit = cmd.path !== null;
   const target = resolve(cmd.path ?? process.cwd());
   const register = explicit || existsSync(join(target, ".git"));
+
+  // the package installs on Linux and nobody has run it there yet; say so before the first gap does
+  if (process.platform === "linux") {
+    console.log("toyon on Linux is untested: macOS today, Linux next. Expect gaps, and say so in an issue.");
+  }
 
   if (!(await health())) {
     console.log("starting toyon daemon…");
@@ -61,11 +73,11 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     console.log(`toyon: app window (${appUrl.split("#")[0]})`);
     if (!openAppWindow(appUrl)) {
       console.log("no Chromium browser found; opening in default browser");
-      spawn("open", [url], { stdio: "ignore" }).unref();
+      openUrl(url);
     }
   } else {
     console.log(`toyon: ${url}`);
-    spawn("open", [url], { stdio: "ignore" }).unref();
+    openUrl(url);
   }
   return 0;
 }

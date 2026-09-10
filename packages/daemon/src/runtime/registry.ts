@@ -288,9 +288,11 @@ export class RuntimeRegistry {
 
     // start non-preview procs first so the preview proc can get their URLs. Every proc gets the
     // profile env; a `$API_URL` in it resolves against whatever siblings are already up, so the
-    // api proc itself sees it unexpanded and the preview proc sees the address
+    // api proc itself sees it unexpanded and the preview proc sees the address. The worktree id
+    // rides along so a proc can name a database or a compose project of its own; the profile env
+    // may reference it the same way it references a sibling's URL
     const envFor = () => {
-      const urls = procUrlEnv(procs.states(), previewName);
+      const urls = { ...procUrlEnv(procs.states(), previewName), TOYON_WORKTREE: wt.id };
       return { ...urls, ...expandEnv(run.env, urls) };
     };
     for (const [name, cmd] of Object.entries(run.procs)) {

@@ -36,4 +36,10 @@ describe("runSetup", () => {
     await runSetup("pwd", dir, (l) => seen.push(l));
     expect(seen[0]).toBe(dir);
   });
+
+  test("the extra env reaches the command, so a setup step can name its worktree", async () => {
+    const seen: string[] = [];
+    await runSetup("echo db_$TOYON_WORKTREE", process.cwd(), (l) => seen.push(l), { TOYON_WORKTREE: "w1" });
+    expect(seen[0]).toBe("db_w1");
+  });
 });

@@ -663,7 +663,9 @@ export class WorktreeService {
     // `bun install` and friends can take a minute: async, so every preview and agent stream keeps
     // flowing while a new worktree warms up
     for (const cmd of setupCommands ? (repo.config.setup ?? []) : []) {
-      const code = await runSetup(cmd, wt.path, (line) => this.d.hub.emit("log", wt.id, "setup", line));
+      const code = await runSetup(cmd, wt.path, (line) => this.d.hub.emit("log", wt.id, "setup", line), {
+        TOYON_WORKTREE: wt.id,
+      });
       if (code !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed (exit ${code}): ${cmd}`);
     }
     await this.d.runtime.start(wt, repo);

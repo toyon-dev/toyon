@@ -2,7 +2,7 @@
 
 One chat per git worktree, every worktree running live in the browser. Run several agents on the same repo at once, watch each one's app as it builds, and land the one you like.
 
-**Status: pre-alpha, building in the open.** macOS today; Linux next. Expect rough edges, and say so in an issue.
+**Status: pre-alpha, building in the open.** macOS today; Linux next, and Windows through WSL2 after that. Expect rough edges, and say so in an issue.
 
 ## Install
 
@@ -43,6 +43,8 @@ Worktrees start when you open them, not when the daemon boots. `toyon stop` stop
 - It is not an editor. There is no file tree, no tabs, no multi-file editing, no debugger, no extensions, no inline completion. The diff is editable and there is a one-keystroke jump to the editor you already use.
 - It does not commit, push or open pull requests on its own. Landing is a button you press, and the agent is told not to push or delete branches.
 - It is for git repos. The nouns are git's nouns on purpose.
+- It does not share anything between worktrees. Each runs your setup and your procs on its own, so a database or a compose stack they all point at is shared, migrations included. `TOYON_WORKTREE` is in the env of every proc, setup command and terminal so a repo can keep them apart: `app_$TOYON_WORKTREE` as the database name, `COMPOSE_PROJECT_NAME=$TOYON_WORKTREE`.
+- It does not carry a login between worktrees. Each preview has its own cookies, so a new worktree starts signed out, and an OAuth provider cannot redirect into a preview at all.
 
 ## Disk
 

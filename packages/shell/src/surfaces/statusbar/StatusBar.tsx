@@ -32,15 +32,18 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   return (
     <div className="status-bar top-bar">
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "toyon"}</span>}
-      <IconButton
-        icon="branch"
-        label="Changes panel"
-        hint={chord("left")}
-        tone="chrome"
-        on={leftOpen && !greenfield}
-        disabled={greenfield}
-        onClick={() => dispatch({ a: "toggle-left" })}
-      />
+      {/* the panel toggles leave the bar on an empty project: their panes are hidden there, and a
+          disabled button still lights and explains itself on hover as if it might do something */}
+      {!greenfield && (
+        <IconButton
+          icon="branch"
+          label="Changes panel"
+          hint={chord("left")}
+          tone="chrome"
+          on={leftOpen}
+          onClick={() => dispatch({ a: "toggle-left" })}
+        />
+      )}
       <ProjectPill />
       <RouteBar worktreeId={id} ready={ready} left={navCenter} />
       {installEvt && (
@@ -64,24 +67,26 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           on={keysOpen}
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
         />
-        <IconButton
-          icon="palette"
-          label="Design system"
-          hint={chord("design")}
-          tone="chrome"
-          on={designOpen && !greenfield}
-          disabled={greenfield}
-          onClick={() => dispatch({ a: "toggle-design" })}
-        />
-        <IconButton
-          icon="chat"
-          label="Chat panel"
-          hint={chord("right")}
-          tone="chrome"
-          on={rightOpen && !greenfield}
-          disabled={greenfield}
-          onClick={() => dispatch({ a: "toggle-right" })}
-        />
+        {!greenfield && (
+          <IconButton
+            icon="palette"
+            label="Design system"
+            hint={chord("design")}
+            tone="chrome"
+            on={designOpen}
+            onClick={() => dispatch({ a: "toggle-design" })}
+          />
+        )}
+        {!greenfield && (
+          <IconButton
+            icon="chat"
+            label="Chat panel"
+            hint={chord("right")}
+            tone="chrome"
+            on={rightOpen}
+            onClick={() => dispatch({ a: "toggle-right" })}
+          />
+        )}
         <IconButton
           icon="zen"
           label="Full-bleed preview"

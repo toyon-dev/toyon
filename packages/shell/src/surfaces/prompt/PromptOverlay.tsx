@@ -9,6 +9,7 @@ import { Overlay } from "../../ui/Overlay.tsx";
 import { filterCommands, insertAt, triggerAt } from "../chat/mentions.ts";
 import { CommandRow } from "../palettes/CommandRow.tsx";
 import { commandSource } from "../util.ts";
+import { ModeChip, useNewWorktreeMode } from "./ModeChip.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
 import { RepoChip } from "./RepoChip.tsx";
 import "./prompt.css";
@@ -28,6 +29,7 @@ export function PromptOverlay() {
   const [batch, setBatch] = useState(false);
   const [agent, setAgent] = useState(defaultAgent);
   const [profile, setProfile] = useNewWorktreeProfile(repo);
+  const [mode, setMode] = useNewWorktreeMode(repo);
   const field = useRef<HTMLTextAreaElement>(null);
 
   // the `/` menu. A command dispatches on a worktree's first prompt like any other, so it is worth
@@ -98,10 +100,11 @@ export function PromptOverlay() {
           variant: { group, index: i + 1, of: variants },
           agent,
           profile,
+          mode,
         });
       }
     } else {
-      sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt, agent, profile });
+      sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt, agent, profile, mode });
     }
     dispatch({ a: "close" });
     // the agent starts talking in the chat panel — make sure it's on screen
@@ -201,6 +204,7 @@ export function PromptOverlay() {
           </span>
         )}
         {!batch && <ProfileChip repo={repo} value={profile} onChange={setProfile} />}
+        {!batch && <ModeChip value={mode} onChange={setMode} />}
         <label data-tip="An agent decomposes the request into independent tasks and starts a worktree for each">
           <input type="checkbox" checked={batch} onChange={(e) => setBatch(e.target.checked)} />
           <span>batch</span>

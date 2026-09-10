@@ -253,8 +253,12 @@ describe("handlers", () => {
     const { services, ctx, broadcasts, repo } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
-    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "x", agent: "codex" }, ctx, services);
-    expect(services.state.worktrees.find((x) => x.kind === "worktree")?.agent).toBe("codex");
+    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "x", agent: "codex", mode: "ask" }, ctx, services);
+    const made = services.state.worktrees.find((x) => x.kind === "worktree")!;
+    expect(made.agent).toBe("codex");
+    expect(made.mode).toBe("ask");
+    await dispatch({ t: "set-worktree-mode", worktreeId: made.id, mode: "plan" }, ctx, services);
+    expect(services.state.worktree(made.id)?.mode).toBe("plan");
     await expect(dispatch({ t: "set-default-agent", agent: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
     await dispatch({ t: "set-default-agent", agent: "codex" }, ctx, services);
     expect(services.state.defaultAgent).toBe("codex");

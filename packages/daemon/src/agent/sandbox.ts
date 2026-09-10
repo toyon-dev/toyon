@@ -72,7 +72,10 @@ export function claudeLocalSettings(b: Bounds): {
     sandbox: {
       enabled: true,
       failIfUnavailable: true,
-      autoAllowBashIfSandboxed: true,
+      // off, so a sandboxed command still asks and the ask reaches the policy: in `auto` the policy
+      // allows it at once, in `ask` it is a card. On, Claude would run it without telling anyone,
+      // and the worktree's mode would mean nothing for commands.
+      autoAllowBashIfSandboxed: false,
       filesystem: { allowWrite: b.allowWrite, denyWrite: b.denyWrite },
       network: { allowLocalBinding: true },
     },

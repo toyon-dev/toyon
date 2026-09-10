@@ -2,7 +2,7 @@
 // setup has run, its process group and preview proxy.
 
 import type { LogLine, ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
-import { SHELL_STREAM } from "@toyon/shared";
+import { DEFAULT_PERMISSION_MODE, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
@@ -122,6 +122,15 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
     seedCommands: () => d.state.cachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId),
     onCommandsLearned: (commands) =>
       d.state.setCachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId, commands),
+    // the record, read fresh: the composer changes it between turns and a plan approval sets it
+    mode: () => d.state.requireWorktree(wt.id).mode ?? DEFAULT_PERMISSION_MODE,
+    setMode: (mode) => {
+      const w = d.state.requireWorktree(wt.id);
+      if (w.mode === mode) return;
+      w.mode = mode;
+      d.state.save();
+      d.hub.emit("worktreesChanged");
+    },
   });
   agent.onQueueChange = () => d.hub.emit("queue", wt.id, agent.queueItems);
   agent.onCommandsChange = (commands) => d.hub.emit("agentCommands", wt.id, commands);

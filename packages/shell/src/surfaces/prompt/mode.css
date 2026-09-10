@@ -1,0 +1,17 @@
+/* The permission-mode chip and its menu rows: the composer and ⌘K both show it. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  /* a mode that holds the agent for a person (ask, plan) reads in the rail badge's colour */
+  .mode-chip.mode-held {
+    color: var(--yellow);
+  }
+  .mode-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    /* the colour is .row-dim's, so it lifts with the row; only the size is this row's own */
+    & .mode-desc {
+      font: var(--type-ui-sm);
+    }
+  }
+}

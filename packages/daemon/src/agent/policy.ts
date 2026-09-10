@@ -1,10 +1,13 @@
-// Answers an agent's session/request_permission: file writes are allowed inside the worktree's
-// bounds and rejected outside them (the agent is told why), and everything else is allowed
-// because the OS sandbox already confines it. One request goes to a person instead, `switch_mode`
-// (Claude's ExitPlanMode), because approving a plan nobody read is not a decision toyon can make.
+// Answers an agent's session/request_permission. The bounds come first in every mode: a write
+// outside the worktree is rejected and the agent is told why. Inside them the worktree's mode
+// decides: `auto` allows writes and sandboxed commands, `ask` (and `plan`, should a write arrive
+// in it) turns each into a card for a person. A plan approval, `switch_mode` (Claude's
+// ExitPlanMode, Codex's plan review), is a card in every mode: approving a plan nobody read is not
+// a decision toyon can make.
 
 import { isAbsolute, resolve } from "node:path";
 import type { PermissionOption, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
+import type { PermissionMode } from "@toyon/shared";
 import { canonical, within } from "./bounds.ts";
 import type { Bounds } from "./sandbox.ts";
 
@@ -29,15 +32,24 @@ export function requestedPaths(req: RequestPermissionRequest): string[] {
   return [...new Set(raw)];
 }
 
-export function decide(req: RequestPermissionRequest, bounds: Bounds, cwd: string): Verdict {
+export function decide(
+  req: RequestPermissionRequest,
+  bounds: Bounds,
+  cwd: string,
+  mode: PermissionMode = "auto",
+): Verdict {
   const tool = req.toolCall.name ?? req.toolCall.title ?? "tool";
   const paths = requestedPaths(req);
   const kind = req.toolCall.kind;
   // Claude's ExitPlanMode arrives here: a plan to read and a set of "yes, and…" options. Allowing
   // it would approve the plan and start the edits without anyone having seen it, so it is the one
-  // request a person answers.
+  // request a person answers in every mode.
   if (kind === "switch_mode") return { kind: "prompt" };
+  // in ask, what is inside the bounds is still a person's call; the bounds are checked first so an
+  // outside write is a refusal with a reason, never a card offering to allow it
+  const asks = mode !== "auto";
   if (paths.length === 0) {
+    if (kind === "execute") return asks ? { kind: "prompt" } : { kind: "allow" };
     if (kind && NON_WRITE_KINDS.has(kind)) return { kind: "allow" };
     if (kind === "edit" || kind === "delete" || kind === "move") {
       return {
@@ -68,7 +80,9 @@ export function decide(req: RequestPermissionRequest, bounds: Bounds, cwd: strin
       };
     }
   }
-  return { kind: "allow" };
+  // a read that names a path (Claude's Read, a search scoped to a directory) is never a card
+  if (kind && NON_WRITE_KINDS.has(kind) && kind !== "execute") return { kind: "allow" };
+  return asks ? { kind: "prompt" } : { kind: "allow" };
 }
 
 /** the option that carries the verdict: allow_once (never allow_always, which would persist a

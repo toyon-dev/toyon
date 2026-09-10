@@ -76,6 +76,21 @@ export interface PendingRepo {
 
 export type WorktreeKind = "main" | "worktree" | "spare";
 
+/** How much the agent may do in a worktree without a person in the loop. Agent-neutral: the
+ * daemon maps each onto the agent's own session mode and its permission policy.
+ * - `auto`: the default. Every write inside the worktree and every sandboxed command runs; a
+ *   write outside is refused; a plan is the one thing that waits for approval.
+ * - `ask`: every write and every shell command is a card in the chat before it runs.
+ * - `plan`: the agent reads and proposes only; the plan is a card, and approving it decides the
+ *   mode the work is done in. */
+export type PermissionMode = "auto" | "ask" | "plan";
+export const PERMISSION_MODES: ReadonlyArray<{ id: PermissionMode; name: string; description: string }> = [
+  { id: "auto", name: "auto", description: "edits and sandboxed commands run; a plan still asks" },
+  { id: "ask", name: "ask", description: "every edit and command is a card before it runs" },
+  { id: "plan", name: "plan", description: "read and propose only; approving the plan starts the work" },
+];
+export const DEFAULT_PERMISSION_MODE: PermissionMode = "auto";
+
 export interface WorktreeInfo {
   id: string;
   repoId: string;
@@ -106,6 +121,8 @@ export interface WorktreeInfo {
   agent?: string;
   /** which of the repo's profiles this worktree runs (the repo's defaultProfile when absent) */
   profile?: string;
+  /** what the agent may do here without asking; DEFAULT_PERMISSION_MODE when absent */
+  mode?: PermissionMode;
   /** when the agent last finished a turn here. Absent until one has run. */
   lastTurnAt?: number;
   /** when someone last looked at this worktree in a shell. Absent until it has been looked at

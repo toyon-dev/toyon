@@ -298,4 +298,7 @@
   .badge-profile {
     color: var(--blue);
   }
+  .badge-mode {
+    color: var(--yellow);
+  }
 }

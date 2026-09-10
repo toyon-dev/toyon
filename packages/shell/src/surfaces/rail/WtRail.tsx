@@ -213,6 +213,12 @@ export function WtRail() {
           <input type="checkbox" className="rail-fold-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
         )}
         <span className="branch">{w.name}</span>
+        {owned?.worktree.mode && owned.worktree.mode !== "auto" && (
+          // auto is the default and says nothing; ask and plan change what happens when you look away
+          <span className="rail-badge badge-mode" data-tip={`${owned.worktree.mode} mode: the agent waits for you`}>
+            {owned.worktree.mode}
+          </span>
+        )}
         {owned &&
           (() => {
             // only the non-default profile is worth a tag: it is the one you need to notice

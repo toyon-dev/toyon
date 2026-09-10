@@ -1160,3 +1160,130 @@ describe("AcpSession ask cards", () => {
     await w.session.close();
   });
 });
+
+// The worktree's permission mode: `ask` holds the agent's own requests as cards, `plan` puts the
+// agent in its read-only mode before a prompt, and approving a plan decides the mode after it.
+describe("AcpSession permission modes", () => {
+  const editRequest = (p: acp.PromptRequest, path: string): acp.RequestPermissionRequest => ({
+    sessionId: p.sessionId,
+    toolCall: {
+      toolCallId: "t-edit",
+      title: "Edit a.ts",
+      kind: "edit",
+      locations: [{ path }],
+      content: [{ type: "diff", path, oldText: "a", newText: "b\nc" }],
+    },
+    options: [
+      { optionId: "allow-once", name: "Allow", kind: "allow_once" },
+      { optionId: "allow-with-updates", name: "Always", kind: "allow_always" },
+      { optionId: "reject", name: "Reject", kind: "reject_once" },
+    ],
+  });
+
+  test("ask: an inside edit is a card without the always option, and the answer reaches the agent", async () => {
+    const fake = fakeAgent(async (p, client) => {
+      const r = await client.request(acp.methods.client.session.requestPermission, editRequest(p, join(wt, "a.ts")));
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: p.sessionId,
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify(r) } },
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, { mode: () => "ask" });
+    w.session.send("edit");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    expect(card.title).toBe("Edit a.ts");
+    expect(card.choices.map((c) => c.id)).toEqual(["allow-once", "reject"]);
+    expect(card.detail).toContain("b\nc");
+    expect(w.session.status).toBe("waiting");
+    w.session.answer(card.id, { kind: "choice", choiceId: "allow-once" });
+    await w.idle();
+    expect(saidBack(w.events)).toEqual({ outcome: { outcome: "selected", optionId: "allow-once" } });
+    await w.session.close();
+  });
+
+  test("auto: the same edit is allowed by policy with no card", async () => {
+    const fake = fakeAgent(async (p, client) => {
+      const r = await client.request(acp.methods.client.session.requestPermission, editRequest(p, join(wt, "a.ts")));
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: p.sessionId,
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify(r) } },
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, { mode: () => "auto" });
+    w.session.send("edit");
+    await w.idle();
+    expect(w.types()).not.toContain("agent-permission");
+    expect(saidBack(w.events)).toEqual({ outcome: { outcome: "selected", optionId: "allow-once" } });
+    await w.session.close();
+  });
+
+  test("plan: the agent's read-only mode is set before the prompt; approving the plan sets the worktree's mode", async () => {
+    let mode: "auto" | "ask" | "plan" = "plan";
+    const setModes: string[] = [];
+    const fake = fakeAgent(
+      async (p, client) => {
+        if (fake.prompts.length > 1) return { stopReason: "end_turn" };
+        await client.request(acp.methods.client.session.requestPermission, {
+          sessionId: p.sessionId,
+          toolCall: { toolCallId: "t9", title: "Approve Plan", kind: "switch_mode" },
+          options: [
+            { optionId: "auto", name: "Yes, and auto-accept edits", kind: "allow_once" },
+            { optionId: "manual", name: "Yes, manually approve edits", kind: "allow_once" },
+            { optionId: "cancel", name: "No, keep planning", kind: "reject_once" },
+          ],
+        });
+        return { stopReason: "end_turn" };
+      },
+      { withModes: true, currentMode: "agent" },
+    );
+    // started in the agent's write mode, so plan needs a set_mode to read-only
+    const w = world(fake, codexSpec, 60_000, undefined, {
+      mode: () => mode,
+      setMode: (m) => {
+        setModes.push(m);
+        mode = m;
+      },
+    });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    expect(fake.modes).toEqual(["read-only"]);
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    w.session.answer(card.id, { kind: "choice", choiceId: "manual" });
+    await w.idle();
+    expect(setModes).toEqual(["ask"]);
+    // the next turn runs in the write mode ask maps to
+    w.session.send("build it");
+    await w.idle();
+    expect(fake.modes).toEqual(["read-only", "agent"]);
+    await w.session.close();
+  });
+
+  test("a mode the agent changed on its own is remembered, so the next turn corrects it", async () => {
+    const fake = fakeAgent(
+      async (p, client) => {
+        if (fake.prompts.length === 1) {
+          await client.notify(acp.methods.client.session.update, {
+            sessionId: p.sessionId,
+            update: { sessionUpdate: "current_mode_update", currentModeId: "read-only" },
+          });
+        }
+        return { stopReason: "end_turn" };
+      },
+      { withModes: true, currentMode: "agent" },
+    );
+    const w = world(fake, codexSpec, 60_000, undefined, {
+      mode: () => "auto",
+    });
+    w.session.send("one");
+    await w.idle();
+    // already in agent mode: nothing to set
+    expect(fake.modes).toEqual([]);
+    w.session.send("two");
+    await w.idle();
+    expect(fake.modes).toEqual(["agent"]);
+    await w.session.close();
+  });
+});

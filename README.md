@@ -54,6 +54,8 @@ The daemon listens on loopback only, refuses any other peer and any non-loopback
 
 Agents run confined. Everything Bash spawns is inside an OS sandbox (Seatbelt on macOS, bubblewrap on Linux) that allows writes to the worktree, its git metadata, `/tmp` and package-manager caches, and nothing else. File tools bypass Bash, so a permission policy applies the same boundary to every write they ask for, and refusals show up in the transcript. The agent cannot widen its own sandbox: `.claude/` in the worktree is deny-listed.
 
+Each worktree has a permission mode, shown next to the prompt. **auto**, the default, lets edits and sandboxed commands run and asks only when the agent proposes a plan. **ask** turns every edit and every command into a card in the chat before it runs. **plan** puts the agent in its read-only mode; the plan comes back as a card, and approving it chooses whether the work runs in auto or ask. The mode is per worktree, so three variants can run in auto while the one touching your database runs in ask.
+
 One honest limit: a linked worktree's commits write into the main repo's shared `.git`, so that directory has to be writable, and the sandbox cannot tell a commit from a push. For Claude Code, `git push`, branch deletion, `git worktree` and `gh pr` are on a deny list in the settings toyon writes, which Claude Code checks before the sandbox's auto-allow. That is a command filter, not a wall: it matches what the model types, and Codex has no equivalent list. Both agents are also told not to push. If your credentials are on the machine, a determined agent could still find a spelling that pushes.
 
 ## Development

@@ -17,13 +17,16 @@ import type {
   AuthMethodInfo,
   ImageInput,
   PasteInput,
+  PermissionMode,
   PickMeta,
 } from "@toyon/shared";
+import { DEFAULT_PERMISSION_MODE } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AuthObservation } from "../accounts.ts";
 import type { AgentAdapter, AskReply, AuthOutcome, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, StoredImage, StoredPaste } from "../attachments.ts";
+import { agentModeFor, modeAfterPlan } from "../modes.ts";
 import { decide, pickOption } from "../policy.ts";
 import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
@@ -65,6 +68,10 @@ export interface AcpSessionDeps {
   idleMs?: number;
   /** the worktree's write bounds, and the settings file that makes Claude Code enforce them */
   prepare?: (cwd: string, spec: AgentSpec) => Promise<Bounds>;
+  /** what the agent may do here without asking; read before every turn and every permission */
+  mode?: () => PermissionMode;
+  /** a plan approval decided the mode for the work that follows */
+  setMode?: (mode: PermissionMode) => void;
 }
 
 const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
@@ -104,6 +111,10 @@ interface Live {
   /** SYSTEM_APPEND still owed to the first prompt (agents without a system-prompt override) */
   prefixPending: boolean;
   tools: ToolMemos;
+  /** the mode ids the agent advertised for this session; null when it has no modes */
+  modeIds: string[] | null;
+  /** the agent's current mode as last told to us (set_mode, or its own current_mode_update) */
+  modeId: string | null;
 }
 
 /** the attachments written and the bubble emitted: what a message needs before it can go out on
@@ -499,6 +510,7 @@ export class AcpSession implements AgentAdapter {
     item.recorded ??= await this.record(item);
     this.emit({ type: "turn-start", ts: Date.now() });
     const live = await this.ensureLive();
+    await this.applyMode(live);
     const carried = this.carriedImages(live, item.recorded.images);
     const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
     live.prefixPending = false;
@@ -624,21 +636,39 @@ export class AcpSession implements AgentAdapter {
       sessionId: sessionId!,
       ...(model && model.type === "select" ? { model: String(model.currentValue) } : {}),
     });
-    const mode = conn.spec.mode;
-    if (mode && modes && modes.currentModeId !== mode && modes.availableModes.some((m) => m.id === mode)) {
-      await conn.ctx.request(acp.methods.agent.session.setMode, { sessionId: sessionId!, modeId: mode });
-    }
     this.live = {
       conn,
       sessionId: sessionId!,
       prefixPending: !resumed && conn.spec.systemPrompt === "prompt-prefix",
       tools: new Map(),
+      modeIds: modes ? modes.availableModes.map((m) => m.id) : null,
+      modeId: modes?.currentModeId ?? null,
     };
+    // the worktree's mode, applied now so a resumed session in plan mode does not answer its
+    // first prompt in whatever mode the agent remembered
+    await this.applyMode(this.live);
     // the push that landed while session/new was in flight, now that the id is known. Only when
     // there is one: an agent that does not re-push on resume keeps the list it already had.
     const pushed = conn.commands.get(sessionId!);
     if (pushed) this.setCommands(pushed);
     return this.live;
+  }
+
+  /** the worktree's mode is the record's, read fresh: a switch in the composer between two
+   * turns, or a plan approval, must hold for the next prompt without a restart */
+  private mode(): PermissionMode {
+    return this.d.mode?.() ?? DEFAULT_PERMISSION_MODE;
+  }
+
+  /** put the agent in the session mode that toyon's mode maps to, when it differs and the agent
+   * has one. An agent with no fitting mode (no read-only mode for `plan`) just runs, and the policy
+   * still holds every write for a person, so plan degrades to ask rather than to auto. */
+  private async applyMode(live: Live): Promise<void> {
+    if (!live.modeIds) return;
+    const wanted = agentModeFor(live.conn.spec, this.mode(), live.modeIds);
+    if (!wanted || wanted === live.modeId) return;
+    await live.conn.ctx.request(acp.methods.agent.session.setMode, { sessionId: live.sessionId, modeId: wanted });
+    live.modeId = wanted;
   }
 
   private onUpdate(
@@ -667,6 +697,12 @@ export class AcpSession implements AgentAdapter {
     if (!live || params.sessionId !== live.sessionId) {
       return log.debug(this.d.worktreeId, `acp: update for another session ${params.sessionId} dropped`);
     }
+    // the agent left plan mode on its own (an approved ExitPlanMode does): remember, so the next
+    // turn's applyMode compares against what it is in, not what we last asked for
+    if (params.update.sessionUpdate === "current_mode_update") {
+      live.modeId = params.update.currentModeId;
+      return;
+    }
     for (const ev of mapUpdate(params.update, live.tools, this.d.worktreeId)) {
       // the mapper does not know the session id; the transcript wants the real one
       this.emit(ev.type === "session-info" ? { ...ev, sessionId: live.sessionId } : ev);
@@ -677,7 +713,7 @@ export class AcpSession implements AgentAdapter {
     params: acp.RequestPermissionRequest,
     bounds: Bounds,
   ): acp.RequestPermissionResponse | Promise<acp.RequestPermissionResponse> {
-    const verdict = decide(params, bounds, this.d.cwd);
+    const verdict = decide(params, bounds, this.d.cwd, this.mode());
     if (verdict.kind === "prompt") return this.askPermission(params);
     if (verdict.kind === "reject") {
       this.emit({
@@ -694,31 +730,32 @@ export class AcpSession implements AgentAdapter {
   /** a decision toyon will not make for the person: draw the agent's own options as a card and
    * hold its request open until one is clicked */
   private askPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
-    const choices: AskChoice[] = params.options.map((o) => ({ id: o.optionId, name: o.name, kind: o.kind }));
-    // the two agents put the plan in different places: Claude's ExitPlanMode renders it as a text
-    // content block, Codex's plan review sends only rawInput.plan. Without the fallback the card
-    // would show Codex a title and no plan to decide on.
-    const fromContent = params.toolCall.content
-      ?.map((c) => (c.type === "content" && c.content.type === "text" ? c.content.text : ""))
-      .filter(Boolean)
-      .join("\n\n");
-    const raw = (params.toolCall.rawInput as { plan?: unknown } | undefined)?.plan;
-    const detail = fromContent || (typeof raw === "string" ? raw : "");
+    const plan = params.toolCall.kind === "switch_mode";
+    // a plan's options are all one-time answers. An edit's or a command's include the agent's
+    // "always allow", which would write a rule into its settings and take every later request of
+    // that shape away from this policy; the card offers only what keeps the mode meaning something
+    const offered = plan ? params.options : params.options.filter((o) => o.kind !== "allow_always");
+    const choices: AskChoice[] = offered.map((o) => ({ id: o.optionId, name: o.name, kind: o.kind }));
     return this.openAsk<acp.RequestPermissionResponse>(
       (id) => ({
         type: "agent-permission",
         id,
         title: params.toolCall.title ?? params.toolCall.name ?? "the agent needs a decision",
-        ...(detail ? { detail } : {}),
+        ...(permissionDetail(params) ? { detail: permissionDetail(params) } : {}),
         choices,
         ...(params.toolCall.toolCallId ? { toolId: params.toolCall.toolCallId } : {}),
         ts: Date.now(),
       }),
       (_outcome, reply) => {
         const picked = reply?.kind === "choice" ? reply.choiceId : undefined;
-        return picked && choices.some((c) => c.id === picked)
-          ? { outcome: { outcome: "selected", optionId: picked } }
-          : { outcome: { outcome: "cancelled" } };
+        const choice = picked ? choices.find((c) => c.id === picked) : undefined;
+        if (!choice) return { outcome: { outcome: "cancelled" } };
+        // approving a plan is also choosing how the work after it runs: Claude's options say
+        // whether edits are auto-accepted or approved one by one, and the worktree's mode follows
+        if (plan && (choice.kind === "allow_once" || choice.kind === "allow_always")) {
+          this.d.setMode?.(modeAfterPlan(choice.name));
+        }
+        return { outcome: { outcome: "selected", optionId: choice.id } };
       },
     );
   }
@@ -844,6 +881,31 @@ export class AcpSession implements AgentAdapter {
 
 function isAuthRequired(e: unknown): boolean {
   return e instanceof acp.RequestError && e.code === -32000;
+}
+
+/** how many lines of a proposed file the card shows before it cuts */
+const DETAIL_LINES = 80;
+
+/** What the card shows under its title: a plan's markdown, an edit's diff, a command's line. The
+ * two agents put the plan in different places (Claude's ExitPlanMode renders it as a text content
+ * block, Codex's plan review sends only rawInput.plan), and an edit arrives as a diff block whose
+ * new text is what a person has to read to say yes. */
+export function permissionDetail(params: acp.RequestPermissionRequest): string {
+  const parts: string[] = [];
+  for (const c of params.toolCall.content ?? []) {
+    if (c.type === "content" && c.content.type === "text") parts.push(c.content.text);
+    else if (c.type === "diff") {
+      const lines = c.newText.split("\n");
+      const shown = lines.slice(0, DETAIL_LINES).join("\n");
+      const more = lines.length > DETAIL_LINES ? `\n… ${lines.length - DETAIL_LINES} more lines` : "";
+      parts.push(`\`${c.path}\`\n\n\`\`\`\n${shown}${more}\n\`\`\``);
+    }
+  }
+  if (parts.length > 0) return parts.join("\n\n");
+  const raw = params.toolCall.rawInput as { plan?: unknown; command?: unknown } | undefined;
+  if (typeof raw?.plan === "string") return raw.plan;
+  if (typeof raw?.command === "string") return `\`\`\`sh\n${raw.command}\n\`\`\``;
+  return "";
 }
 
 /** ACP's auth_required code means "no credential"; a credential the provider rejected has no code

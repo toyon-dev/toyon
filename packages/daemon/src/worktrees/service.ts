@@ -17,6 +17,7 @@ import {
   type ImageInput,
   isMain,
   type PasteInput,
+  type PermissionMode,
   type PickMeta,
   type RefKind,
   type RepoInfo,
@@ -106,6 +107,8 @@ export interface CreateOpts {
   pick?: PickMeta;
   /** one of the repo's profiles; the repo's default when absent */
   profile?: string;
+  /** what the agent may do without asking; the default mode when absent */
+  mode?: PermissionMode;
   images?: ImageInput[];
   pastes?: PasteInput[];
 }
@@ -222,6 +225,7 @@ export class WorktreeService {
       ...(variant ? { variant } : {}),
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
       ...(profile !== undefined ? { profile } : {}),
+      ...(opts.mode ? { mode: opts.mode } : {}),
     };
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, base?.path ?? repo.path);
@@ -386,6 +390,17 @@ export class WorktreeService {
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
     this.restartProcs(wt, repo);
+  }
+
+  /** what the agent may do here without asking. Nothing restarts: the session reads the record
+   * before its next turn and every permission request, so it holds from the next prompt on. */
+  setMode(worktreeId: string, mode: PermissionMode) {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    if (wt.kind === "spare") throw new UserError("no mode for a spare worktree");
+    if (wt.mode === mode) return;
+    wt.mode = mode;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
   }
 
   /** Async pretty-naming: solo worktrees rename directly; variant groups rename together

@@ -32,8 +32,11 @@ export interface AgentSpec {
   confinement: Confinement;
   /** `_meta.systemPrompt` on session/new, or SYSTEM_APPEND prepended to a session's first prompt */
   systemPrompt: "meta-append" | "prompt-prefix";
-  /** session/set_mode after new/load when the agent advertises modes */
+  /** session/set_mode after new/load when the agent advertises modes; the write mode */
   mode?: string;
+  /** the agent's ids for toyon's plan and build modes (agent/modes.ts); guessed from the
+   * advertised list when absent */
+  modes?: { plan?: string; build?: string };
   /** what the person reads when the agent answers a prompt with "not logged in" and offers no way in */
   loginHint: string;
 }
@@ -46,6 +49,9 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     run: { kind: "npm-bin", pkg: "@agentclientprotocol/claude-agent-acp", version: "0.75.1", bin: "claude-agent-acp" },
     confinement: "claude-settings",
     systemPrompt: "meta-append",
+    // "default" is Claude's ask-before-changes mode: every write and command reaches the policy,
+    // which is what lets toyon decide. Its own "auto" would decide without us.
+    modes: { plan: "plan", build: "default" },
     loginHint: "Claude is not logged in",
   },
   {
@@ -59,6 +65,7 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     confinement: "adapter-sandbox",
     systemPrompt: "prompt-prefix",
     mode: "agent",
+    modes: { plan: "read-only", build: "agent" },
     loginHint: "Codex is not logged in",
   },
 ];
@@ -275,6 +282,7 @@ export function parseCustomAgents(raw: string): AgentSpec[] {
       confinement: (e.confinement as Confinement | undefined) ?? "none",
       systemPrompt: "prompt-prefix",
       ...(str("mode") ? { mode: str("mode") } : {}),
+      ...(str("planMode") ? { modes: { plan: str("planMode"), build: str("mode") } } : {}),
       loginHint: str("loginHint") ?? `${str("name") ?? id} is not logged in`,
     });
   }

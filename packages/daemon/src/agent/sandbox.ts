@@ -48,8 +48,26 @@ export async function worktreeBounds(cwd: string): Promise<Bounds> {
 
 export const SETTINGS_REL = join(".claude", "settings.local.json");
 
+/** Shell commands Claude Code refuses outright, on top of the sandbox. Shipping is the shell's
+ * (push, PRs), and the worktree list is the daemon's (branch deletion, `git worktree`). Deny rules
+ * win over every allow in every settings scope and are checked even when the sandbox auto-allows
+ * Bash; a compound command is split and each part matched. They are prefix matches on the text
+ * the model writes, so `git -C dir push` slips past: a filter for the honest case, not a wall. */
+export const DENIED_COMMANDS = [
+  "Bash(git push:*)",
+  "Bash(git branch -D:*)",
+  "Bash(git branch -d:*)",
+  "Bash(git branch --delete:*)",
+  "Bash(git worktree:*)",
+  "Bash(gh pr create:*)",
+  "Bash(gh pr merge:*)",
+];
+
 /** the settings toyon owns; anything else in the file is the user's and left alone */
-export function claudeLocalSettings(b: Bounds): { sandbox: unknown; permissions: { defaultMode: string } } {
+export function claudeLocalSettings(b: Bounds): {
+  sandbox: unknown;
+  permissions: { defaultMode: string; deny: string[] };
+} {
   return {
     sandbox: {
       enabled: true,
@@ -59,7 +77,7 @@ export function claudeLocalSettings(b: Bounds): { sandbox: unknown; permissions:
       network: { allowLocalBinding: true },
     },
     // "default" so every Edit/Write reaches the permission policy; bypass would skip it
-    permissions: { defaultMode: "default" },
+    permissions: { defaultMode: "default", deny: DENIED_COMMANDS },
   };
 }
 
@@ -83,7 +101,10 @@ export async function writeClaudeLocalSettings(cwd: string, b: Bounds): Promise<
   const perms = (
     existing.permissions && typeof existing.permissions === "object" ? existing.permissions : {}
   ) as Record<string, unknown>;
-  const next = { ...existing, sandbox: ours.sandbox, permissions: { ...perms, ...ours.permissions } };
+  // the user's own deny list stays, ours is added to it; a rewrite never duplicates a rule
+  const theirs = Array.isArray(perms.deny) ? (perms.deny as unknown[]).filter((r) => typeof r === "string") : [];
+  const deny = uniq([...(theirs as string[]), ...ours.permissions.deny]);
+  const next = { ...existing, sandbox: ours.sandbox, permissions: { ...perms, ...ours.permissions, deny } };
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
   renameSync(tmp, file);

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useStore } from "../../state/context.tsx";
-import { useActive, useActiveRepo, useLocalField } from "../../state/selectors.ts";
+import { useActive, useActiveRepo, useGreenfield, useLocalField } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -23,6 +23,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
+  const greenfield = useGreenfield();
   const designOpen = useStore((s) => s.designOpen);
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
@@ -75,7 +76,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           label="Chat panel"
           hint={chord("right")}
           tone="chrome"
-          on={rightOpen}
+          on={rightOpen && !greenfield}
           onClick={() => dispatch({ a: "toggle-right" })}
         />
         <IconButton

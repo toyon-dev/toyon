@@ -15,6 +15,7 @@ import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
+import { greenfieldContext, type StackPreset } from "../preview/stacks.ts";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
 import { chord, pickLabel, procTrouble, relFile } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
@@ -51,7 +52,15 @@ function insertionFor(r: Row): string {
 
 /** the message box: draft (kept per worktree), picked-element and image attachments, spawn-a-worktree
  * toggle, and the per-worktree tools (terminal, element picker) */
-export function Composer({ active }: { active: OwnedWorktree | null }) {
+export function Composer({
+  active,
+  greenfield,
+}: {
+  active: OwnedWorktree | null;
+  /** rendered in the centre of an empty project: the chosen stack rides with the first message,
+   * and the knobs that assume a preview or a second worktree stay out of the way */
+  greenfield?: { preset: StackPreset };
+}) {
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
@@ -104,10 +113,12 @@ export function Composer({ active }: { active: OwnedWorktree | null }) {
   }, [triggerKind, triggerQuery, files, git, commands]);
 
   // spawn-a-worktree default: on for main (protect the working copy), off on worktrees (continue
-  // that conversation); user can override per tab
+  // that conversation); user can override per tab. Off on a main with no confirmed config too:
+  // there is no running app to protect yet, and the conversation there is the one scaffolding it.
   const isMain = active?.worktree.kind === "main";
-  const [spawnNew, setSpawnNew] = useState(isMain);
-  useOnChange([id], () => setSpawnNew(active?.worktree.kind === "main"));
+  const spawnDefault = () => active?.worktree.kind === "main" && !repo?.needsSetup;
+  const [spawnNew, setSpawnNew] = useState(spawnDefault);
+  useOnChange([id], () => setSpawnNew(spawnDefault()));
 
   // picking happens inside the iframe, which takes focus; hand it back to the composer so the
   // user can type about the element straight away (next frame: the dock may be re-appearing)
@@ -198,6 +209,7 @@ export function Composer({ active }: { active: OwnedWorktree | null }) {
       );
     }
     const blocks: string[] = [];
+    if (greenfield) blocks.push(greenfieldContext(active.worktree.title, greenfield.preset));
     if (parts.length > 0)
       blocks.push(
         `[Live preview context, attached automatically. This is what the user is looking at right now:\n${parts.join("\n")}]`,
@@ -255,6 +267,8 @@ export function Composer({ active }: { active: OwnedWorktree | null }) {
     if (images.length) dispatch({ a: "clear-images", id });
     if (pastes.length) dispatch({ a: "clear-pastes", id });
     setText("");
+    // the reply lands in the dock, so the dock comes back with the message that started it
+    if (greenfield) dispatch({ a: "show-right" });
   };
 
   // backspace in an empty box removes the last attachment, newest kind first
@@ -396,9 +410,11 @@ export function Composer({ active }: { active: OwnedWorktree | null }) {
           placeholder={
             !active
               ? "no worktree selected"
-              : spawnNew
-                ? "describe a change; starts an agent in a new worktree…"
-                : `message agent on ${active.worktree.title}; / for a command, ! for a shell command`
+              : greenfield
+                ? "describe the app; the agent scaffolds it here"
+                : spawnNew
+                  ? "describe a change; starts an agent in a new worktree…"
+                  : `message agent on ${active.worktree.title}; / for a command, ! for a shell command`
           }
           disabled={!active}
         />
@@ -411,18 +427,20 @@ export function Composer({ active }: { active: OwnedWorktree | null }) {
       </div>
       <div className="hint spawn-row">
         <span className="spawn-left">
-          <label
-            data-tip={
-              isMain
-                ? "Unchecked: the agent edits your main working copy directly"
-                : "Checked: fork a new worktree from this one instead of continuing here"
-            }
-          >
-            <input type="checkbox" checked={spawnNew} onChange={(e) => setSpawnNew(e.target.checked)} />
-            <span>
-              new worktree from <b>{active?.worktree.title ?? "untitled"}</b>
-            </span>
-          </label>
+          {!greenfield && (
+            <label
+              data-tip={
+                isMain
+                  ? "Unchecked: the agent edits your main working copy directly"
+                  : "Checked: fork a new worktree from this one instead of continuing here"
+              }
+            >
+              <input type="checkbox" checked={spawnNew} onChange={(e) => setSpawnNew(e.target.checked)} />
+              <span>
+                new worktree from <b>{active?.worktree.title ?? "untitled"}</b>
+              </span>
+            </label>
+          )}
           {spawnNew && <ProfileChip repo={repo} value={profile} onChange={setProfile} />}
         </span>
         <span className="spawn-tools">
@@ -444,14 +462,16 @@ export function Composer({ active }: { active: OwnedWorktree | null }) {
               else dispatch({ a: "toggle-terminal" });
             }}
           />
-          <IconButton
-            icon="pick"
-            label="Pick an element on the page to attach"
-            hint={chord("pick")}
-            on={picking}
-            disabled={!active}
-            onClick={() => id && togglePick(id, picking, dispatch)}
-          />
+          {!greenfield && (
+            <IconButton
+              icon="pick"
+              label="Pick an element on the page to attach"
+              hint={chord("pick")}
+              on={picking}
+              disabled={!active}
+              onClick={() => id && togglePick(id, picking, dispatch)}
+            />
+          )}
         </span>
       </div>
     </div>

@@ -14,6 +14,7 @@ import { profileNames, profileOf } from "../../state/profiles.ts";
 import {
   useActiveId,
   useDiscoveredOpen,
+  useGreenfield,
   useOffline,
   useVisibleDiscovered,
   useVisibleWorktrees,
@@ -39,6 +40,7 @@ export function WtRail() {
   const dispatch = useDispatch();
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
+  const greenfield = useGreenfield();
   const discovered = useVisibleDiscovered();
   const discOpen = useDiscoveredOpen();
   const clientId = useStore((s) => s.clientId);
@@ -413,7 +415,9 @@ export function WtRail() {
               <IconButton icon="close" label="Cancel" hint="esc" onClick={cancelGraft} />
             </div>
           )}
-          {!graftMode && (
+          {/* not on an empty project: a worktree off the root commit would take the scaffold to a
+              branch while main stayed blank, and the row comes back with the first message */}
+          {!graftMode && !greenfield && (
             <button
               className="rail-new"
               data-tip="New worktree"

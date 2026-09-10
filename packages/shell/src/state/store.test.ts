@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
-import { type Action, EMPTY_LOCAL, initialState, localOf, reducer, type State, type StoreServerMsg } from "./store.ts";
+import {
+  type Action,
+  EMPTY_LOCAL,
+  initialState,
+  isGreenfield,
+  localOf,
+  reducer,
+  type State,
+  type StoreServerMsg,
+} from "./store.ts";
 
 // The reducer's rules the UI depends on and nothing else documents: which worktree becomes active,
 // how agent events fold into chat items, when a preview reload is requested, overlay exclusivity,
@@ -130,6 +139,23 @@ describe("per-worktree records", () => {
     ]);
     expect(s.local.a?.changedRanges).toEqual({});
     expect(s.local.b?.changedRanges["y.ts"]).toEqual({ ranges: [[5, 5]], offset: 0 });
+  });
+  test("greenfield holds on an empty, unconfigured main until the first message lands", () => {
+    const fresh = { ...repo("r"), needsSetup: true };
+    const main = wt("main", "main");
+    const empty = server({ t: "git-status", worktreeId: "main", files: [], empty: true });
+    const s = run([helloIn([fresh], main), { a: "activate", id: "main" }, empty]);
+    expect(isGreenfield(s)).toBe(true);
+    // a repo with history, a configured repo, and a busy agent are each not greenfield
+    expect(isGreenfield(run([server({ t: "git-status", worktreeId: "main", files: [] })], s))).toBe(false);
+    expect(isGreenfield(run([repos(repo("r"))], s))).toBe(false);
+    expect(isGreenfield(run([worktrees({ ...main, agent: "working" })], s))).toBe(false);
+    // the daemon echoes the message back, and that ends it for good
+    const spoken = run([agent("main", { type: "user-message", text: "make a site", ts: 0 })], s);
+    expect(isGreenfield(spoken)).toBe(false);
+    // hiding the dock leaves no trace: show-right opens it, and only that is remembered
+    expect(s.rightOpen).toBe(true);
+    expect(reducer({ ...s, rightOpen: false }, { a: "show-right" }).rightOpen).toBe(true);
   });
   test("git-status carries whether main's tree is empty", () => {
     const s = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [], empty: true })]);

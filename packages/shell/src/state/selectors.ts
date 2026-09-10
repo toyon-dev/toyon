@@ -4,7 +4,7 @@
 import type { OwnedWorktree, RepoInfo, WorktreeStatus } from "@toyon/shared";
 import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
-import { currentTheme, localOf, repoById, rowById, type WorktreeLocal, worktreeById } from "./store.ts";
+import { currentTheme, isGreenfield, localOf, repoById, rowById, type WorktreeLocal, worktreeById } from "./store.ts";
 
 export const useActiveId = () => useStore((s) => s.activeId);
 
@@ -48,6 +48,9 @@ export const useOverlay = () => useStore((s) => s.overlay);
 
 /** the theme to paint right now (an element of the themes array, so its identity is stable) */
 export const useTheme = () => useStore(currentTheme);
+
+/** an empty project nobody has spoken to yet: the composer sits in the centre, the chat dock is hidden */
+export const useGreenfield = (): boolean => useStore(isGreenfield);
 
 /** the active worktree's repo while its detected config is still unconfirmed (an element of the repos array) */
 export const useActiveRepoNeedingSetup = () =>

@@ -40,6 +40,38 @@
   }
   /* anchored near the top, not centered: a palette's height changes as you type, and a centered
    box would bob with it — the input stays put this way (editor/launcher convention) */
+  /* ---- greenfield (an empty project: the composer in the centre, nothing else) ---- */
+  .greenfield-pane {
+    height: 100%;
+    overflow: auto;
+    padding: 48px 24px;
+    width: min(640px, 100%);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text0);
+    font: var(--type-ui);
+  }
+  .greenfield-lead {
+    margin: 0;
+    font: var(--type-ui-lg);
+    color: var(--text1);
+  }
+  .greenfield-stacks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  /* the dock's composer fills the panel below the transcript; here it is a box on a page, so it
+   takes a frame of its own and a height that reads as a box rather than a panel */
+  .greenfield-pane .composer {
+    border: 1px solid var(--border0);
+    border-radius: var(--radius-md);
+    min-height: 120px;
+  }
+
   /* ---- repo setup pane (replaces the preview while a repo's config is unconfirmed) ---- */
   .setup-pane {
     height: 100%;

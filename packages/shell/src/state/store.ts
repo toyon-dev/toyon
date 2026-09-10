@@ -424,6 +424,17 @@ export function worktreeById(s: State, id: string | null | undefined): OwnedWork
   return row && isOwned(row) ? row : null;
 }
 
+/** A project with nothing in it and nothing said yet: main's tree is empty, the repo has no
+ * confirmed config, and the transcript is blank. The composer moves to the centre for exactly as
+ * long as this holds; the first message ends it on its own, since the daemon echoes it back. */
+export function isGreenfield(s: State): boolean {
+  const wt = worktreeById(s, s.activeId);
+  if (!wt || !isMain(wt.worktree) || wt.agent !== "idle") return false;
+  const repo = repoById(s, wt.repoId);
+  const l = localOf(s, wt.id);
+  return !!repo?.needsSetup && l.git?.empty === true && l.chat.length === 0;
+}
+
 export function repoById(s: State, id: string | null | undefined): RepoInfo | null {
   return (id && s.repos.find((r) => r.id === id)) || null;
 }
@@ -523,6 +534,8 @@ export type Action =
   /** open the changes panel if it is shut, and ask it for the keyboard either way */
   | { a: "focus-left" }
   | { a: "toggle-right" }
+  /** the first greenfield message was sent: the chat goes back to its dock */
+  | { a: "show-right" }
   | { a: "toggle-rail" }
   /** open or close the active project's discovered section */
   | { a: "toggle-discovered" }
@@ -679,6 +692,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, leftOpen: true, leftAuto: false, focusLeft: s.focusLeft + 1 };
     case "toggle-right":
       return { ...s, rightOpen: !s.rightOpen };
+    case "show-right":
+      return s.rightOpen ? s : { ...s, rightOpen: true };
     case "toggle-rail":
       return { ...s, railOpen: !s.railOpen };
     case "toggle-discovered": {

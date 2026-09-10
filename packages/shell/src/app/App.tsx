@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
-import { useActive, useActiveId, useActiveRow, useRows, useTheme } from "../state/selectors.ts";
+import { useActive, useActiveId, useActiveRow, useGreenfield, useRows, useTheme } from "../state/selectors.ts";
 import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
 import { RightDock } from "../surfaces/chat/RightDock.tsx";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
@@ -37,7 +37,9 @@ export function App() {
   const connected = useStore((s) => s.connected);
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
-  const rightOpen = useStore((s) => s.rightOpen);
+  const greenfield = useGreenfield();
+  // the dock is hidden, not closed, while the composer sits in the centre
+  const rightOpen = useStore((s) => s.rightOpen) && !greenfield;
   const railOpen = useStore((s) => s.railOpen);
   const panels = useStore((s) => s.panels);
   const lastActive = useStore((s) => s.lastActive);

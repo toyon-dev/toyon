@@ -9,6 +9,7 @@ import {
   useActiveId,
   useActiveRepoNeedingSetup,
   useActiveRow,
+  useGreenfield,
   useLocalField,
   useRows,
   useTheme,
@@ -37,6 +38,7 @@ import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, previewUrl, relFile, wtDir } from "../util.ts";
 import { DiscoveredPane } from "./DiscoveredPane.tsx";
+import { GreenfieldPane } from "./GreenfieldPane.tsx";
 import { ImportPane } from "./ImportPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 import "./preview.css";
@@ -73,6 +75,8 @@ export function Center() {
       : null,
   );
   const setupRepo = needsSetup ?? reopened;
+  // an empty project asks what to build before it asks how to start
+  const greenfield = useGreenfield();
   // a clone being watched takes the preview slot too: same reason as the setup pane, in that the
   // project it belongs to cannot show one yet
   const watching = useStore((s) => s.pending.find((p) => p.id === s.activeImportId) ?? null);
@@ -266,11 +270,14 @@ export function Center() {
               }}
               src={previewUrl(w.worktree.id, w.worktree.proxyPort)}
               title={w.worktree.title}
-              style={{ display: w.worktree.id === activeId && !setupRepo && !watching ? "block" : "none" }}
+              style={{
+                display: w.worktree.id === activeId && !setupRepo && !watching && !greenfield ? "block" : "none",
+              }}
             />
           ))}
           {watching && <ImportPane key={watching.id} pending={watching} />}
-          {setupRepo && !watching && (
+          {greenfield && active && !watching && <GreenfieldPane key={active.worktree.id} active={active} />}
+          {setupRepo && !watching && !greenfield && (
             <SetupPane
               key={setupRepo.id}
               repo={setupRepo}
@@ -278,7 +285,7 @@ export function Center() {
             />
           )}
           {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
-          {!activeReady && !activeDiscovered && !setupRepo && !watching && (
+          {!activeReady && !activeDiscovered && !setupRepo && !watching && !greenfield && (
             <div className="empty">
               {incompatible
                 ? "toyon was updated: reload this page"

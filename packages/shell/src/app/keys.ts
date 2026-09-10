@@ -2,6 +2,7 @@ import { matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import { isSubPicker, localOf, previewIdOf } from "../state/store.ts";
+import { step } from "../ui/listNav.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
@@ -18,15 +19,30 @@ export function useChords() {
       // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
       // picker holds shell focus, so those keep the full ladder or there is no way back out.
       if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
-      // ⌘D and ⌘K are Monaco's (add cursor, chord prefix) while it has the keyboard; taking them
-      // from a focused editor made a design scan out of a second cursor
-      if ((chord?.id === "design" || chord?.id === "new") && document.activeElement?.closest(".monaco-editor")) return;
+      // ⌘D and ⌘K are Monaco's (add cursor, chord prefix) while it has the keyboard, and so are
+      // ⌥↑/↓ (move line); taking them from a focused editor made a design scan out of a second
+      // cursor, and would make a worktree switch out of a line move
+      const monaco = !!document.activeElement?.closest(".monaco-editor");
+      if (
+        monaco &&
+        (chord?.id === "design" || chord?.id === "new" || chord?.id === "wt-prev" || chord?.id === "wt-next")
+      )
+        return;
       if (chord) {
         e.preventDefault();
         switch (chord.id) {
           case "worktree": {
             const i = worktreeIndex(chord.digit, s.visible.length);
             const wt = i === null ? undefined : s.visible[i];
+            if (wt) dispatch({ a: "activate", id: wt.id });
+            break;
+          }
+          case "wt-prev":
+          case "wt-next": {
+            // the rail's order, wrapping at the ends the way every list here does. From a draft
+            // the base row counts as where you are, since that is the row the draft branches from.
+            const at = s.visible.findIndex((w) => w.id === s.activeId);
+            const wt = s.visible[step(at, chord.id === "wt-next" ? 1 : -1, s.visible.length)];
             if (wt) dispatch({ a: "activate", id: wt.id });
             break;
           }

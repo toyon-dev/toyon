@@ -48,6 +48,16 @@ describe("matchChord", () => {
     expect(matchChord(ev("`", { meta: false, ctrl: true, shift: true }))).toEqual({ id: "term-tab" });
     expect(matchChord(ev("1", { meta: false, ctrl: true }))).toBeNull();
   });
+  test("⌥ alone matches the arrow rows and nothing else", () => {
+    expect(matchChord(ev("ArrowUp", { meta: false, alt: true }))).toEqual({ id: "wt-prev" });
+    expect(matchChord(ev("ArrowDown", { meta: false, alt: true }))).toEqual({ id: "wt-next" });
+    // ⌥⌘↑ is Monaco's add-cursor and ⌥⇧↑ is a text selection: neither is ours
+    expect(matchChord(ev("ArrowUp", { alt: true }))).toBeNull();
+    expect(matchChord(ev("ArrowUp", { meta: false, alt: true, shift: true }))).toBeNull();
+    // the arrows without ⌥ are the focused list's own
+    expect(matchChord(ev("ArrowUp", { meta: false }))).toBeNull();
+    expect(matchChord(ev("ArrowUp"))).toBeNull();
+  });
   test("keys the table doesn't own pass through", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find
     expect(matchChord(ev("w"))).toBeNull();
@@ -64,7 +74,9 @@ describe("matchChord", () => {
   test("every table entry round-trips through the matcher", () => {
     for (const c of CHORDS) {
       if (c.id === "worktree") continue;
-      expect(matchChord(ev(c.key, { shift: !!c.shift, ctrl: !!c.ctrl, meta: !c.ctrl }))).toEqual({ id: c.id });
+      expect(
+        matchChord(ev(c.key, { shift: !!c.shift, ctrl: !!c.ctrl, alt: !!c.alt, meta: !c.ctrl && !c.alt })),
+      ).toEqual({ id: c.id });
     }
   });
 });
@@ -81,6 +93,8 @@ describe("labels", () => {
     expect(chordLabel("zen")).toBe("⌘.");
     expect(chordLabel("terminal")).toBe("⌃`");
     expect(chordLabel("worktree")).toBe("⌘1-9");
+    expect(chordLabel("wt-prev")).toBe("⌥↑");
+    expect(chordLabel("wt-next")).toBe("⌥↓");
   });
   test("worktreeChord / worktreeIndex agree: ⌘9 is always the last", () => {
     expect(worktreeChord(0, 3)).toBe("⌘1");

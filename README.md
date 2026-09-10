@@ -58,6 +58,19 @@ Each worktree has a permission mode, shown next to the prompt. **auto**, the def
 
 One honest limit: a linked worktree's commits write into the main repo's shared `.git`, so that directory has to be writable, and the sandbox cannot tell a commit from a push. For Claude Code, `git push`, branch deletion, `git worktree` and `gh pr` are on a deny list in the settings toyon writes, which Claude Code checks before the sandbox's auto-allow. That is a command filter, not a wall: it matches what the model types, and Codex has no equivalent list. Both agents are also told not to push. If your credentials are on the machine, a determined agent could still find a spelling that pushes.
 
+## Uninstall
+
+```sh
+toyon uninstall
+npm uninstall -g toyon
+```
+
+The first command lists what it will remove and asks before doing it: the daemon, everything under `~/.toyon` (state, transcripts, the agent adapters, and the worktree directories, removed through git so each repo's worktree list stays clean), and `~/Applications/Toyon.app` if you installed it. It keeps your repos, every branch toyon made under `toyon/`, and the `toyon.json` in each repo. `--yes` skips the question.
+
+## Telemetry
+
+None. Toyon makes no network calls of its own. The only traffic is to the agents you sign into, to npm on first start to fetch the two agent adapters, and to whatever your own dev servers and `git push` talk to.
+
 ## Development
 
 ```sh

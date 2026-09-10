@@ -6,6 +6,8 @@ export const DAEMON_FILES = {
   token: "token",
   /** the daemon's own pid, written after the server binds and removed on a clean exit */
   pid: "daemon.pid",
+  /** the persisted repos and worktrees; `toyon uninstall` reads it to clean up through git */
+  state: "state.json",
   /** where the CLI points the detached daemon's stdout and stderr */
   log: "daemon.log",
 } as const;

@@ -26,7 +26,7 @@ export interface Paths {
 export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toyon")): Paths {
   return {
     home,
-    stateFile: join(home, "state.json"),
+    stateFile: join(home, DAEMON_FILES.state),
     tokenFile: join(home, DAEMON_FILES.token),
     pidFile: join(home, DAEMON_FILES.pid),
     transcriptsDir: join(home, "transcripts"),

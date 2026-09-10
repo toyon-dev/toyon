@@ -42,3 +42,12 @@ describe("parseArgs", () => {
     expect(parseArgs(["./stop"])).toMatchObject({ kind: "open", path: "./stop" });
   });
 });
+
+describe("parseArgs uninstall", () => {
+  test("asks unless told yes, and takes nothing else", () => {
+    expect(parseArgs(["uninstall"])).toEqual({ kind: "uninstall", yes: false });
+    expect(parseArgs(["uninstall", "--yes"])).toEqual({ kind: "uninstall", yes: true });
+    expect(parseArgs(["uninstall", "-y"])).toEqual({ kind: "uninstall", yes: true });
+    expect(parseArgs(["uninstall", "now"]).kind).toBe("error");
+  });
+});

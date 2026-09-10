@@ -13,6 +13,7 @@ import { base, health, logFile, port, readToken, shellUrl, startDaemon } from ".
 import { doctor } from "./doctor.ts";
 import { logs } from "./logs.ts";
 import { stop } from "./stop.ts";
+import { uninstall } from "./uninstall.ts";
 
 async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   // an explicit path is registered whatever it is (the daemon says if it is not a repo); a bare
@@ -89,6 +90,8 @@ async function run(cmd: Command): Promise<number> {
       return doctor();
     case "logs":
       return logs(cmd);
+    case "uninstall":
+      return uninstall(cmd);
     case "open":
       return open(cmd);
   }

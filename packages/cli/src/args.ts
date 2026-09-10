@@ -7,10 +7,11 @@ export type Command =
   | { kind: "doctor" }
   | { kind: "logs"; follow: boolean; lines: number }
   | { kind: "version" }
+  | { kind: "uninstall"; yes: boolean }
   | { kind: "help" }
   | { kind: "error"; message: string };
 
-const VERBS = new Set(["stop", "doctor", "logs", "version", "help"]);
+const VERBS = new Set(["stop", "doctor", "logs", "version", "uninstall", "help"]);
 const DEFAULT_LOG_LINES = 100;
 
 export function parseArgs(argv: string[]): Command {
@@ -28,6 +29,11 @@ export function parseArgs(argv: string[]): Command {
         return { kind: first };
       case "logs":
         return parseLogs(rest);
+      case "uninstall": {
+        const extra = rest.filter((a) => a !== "--yes" && a !== "-y");
+        if (extra.length > 0) return { kind: "error", message: `unknown option ${extra[0]}` };
+        return { kind: "uninstall", yes: rest.length > 0 };
+      }
     }
   }
 
@@ -68,6 +74,8 @@ usage
   toyon doctor            check the daemon, the token, the shell build and the tools toyon needs
   toyon logs [-f] [-n N]  print the daemon log; -f keeps following it, -n sets how many lines
   toyon version           print the CLI version, and the daemon's if one is running
+  toyon uninstall [--yes] stop the daemon and remove everything toyon put on this machine;
+                          your repos and the branches toyon made stay
 
 options for toyon [path]
   --app                   open a Chromium app window (the installed Toyon app when there is one)

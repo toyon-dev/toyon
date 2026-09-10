@@ -27,7 +27,6 @@ import { chord, dotClass, procTrouble, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
-import { step } from "../../ui/listNav.ts";
 import { rowState } from "../../ui/rowState.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
@@ -144,16 +143,22 @@ export function WtRail() {
             : tip(wtDirLabel(w), undefined, { placement: "left" }))}
         data-wt={id}
         // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
-        // is picked and takes the focus, so the next press keeps walking. Owned rows only; the
-        // found list below is its own section. ⌥↑/↓ does the same from anywhere (app/keys.ts).
+        // is picked and takes the focus, so the next press keeps walking. Down from the last row
+        // is the new-worktree row, the ends stop rather than wrap, and the found list below is
+        // its own section. ⌥↑/↓ does the same from anywhere (app/keys.ts).
         onKeyDown={(e) => {
           if (!owned || graftMode || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
           e.preventDefault();
+          const list = e.currentTarget.parentElement;
           const at = worktrees.findIndex((w) => w.id === id);
-          const next = worktrees[step(at, e.key === "ArrowDown" ? 1 : -1, worktrees.length)];
-          if (!next) return;
-          dispatch({ a: "activate", id: next.id });
-          e.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-wt="${next.id}"]`)?.focus();
+          const next = worktrees[at + (e.key === "ArrowDown" ? 1 : -1)];
+          if (next) {
+            dispatch({ a: "activate", id: next.id });
+            list?.querySelector<HTMLElement>(`[data-wt="${next.id}"]`)?.focus();
+          } else if (e.key === "ArrowDown" && !draftOpen) {
+            // the draft hands the keyboard to the composer, which is what it is for; ⌥↑ comes back
+            dispatch({ a: "open-draft" });
+          }
         }}
         onClick={(e) => {
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
@@ -384,6 +389,15 @@ export function WtRail() {
               data-tip-key={draftOpen ? undefined : chord("new")}
               data-tip-placement="left"
               onClick={() => dispatch({ a: "open-draft" })}
+              // the last stop on the walk: up is the last worktree, and down is the end
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+                e.preventDefault();
+                const last = worktrees[worktrees.length - 1];
+                if (e.key !== "ArrowUp" || !last) return;
+                dispatch({ a: "activate", id: last.id });
+                e.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-wt="${last.id}"]`)?.focus();
+              }}
             >
               <span className="rail-gut">
                 <Icon name="plus" className="icon-inline" />

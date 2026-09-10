@@ -134,8 +134,9 @@
     /* z-index is a ladder, written here rather than tokenised because every rung is one rule and
      nothing reads it from two places: the dock's resize handle 1, a pane header's floating actions
      2, a pane's resize handle and the composer's inline picker 5, the palette scrim 10, the rail's
-     peek 25, the toast 30, a context menu and an anchored picker 40, the tooltip 100. A new layer
-     names its rung in this sentence before it takes one. */
+     peek 25, the toast 30, an anchored picker 40, the context menu 50 (it can open from a row
+     inside that picker), the tooltip 100. A new layer names its rung in this sentence before it
+     takes one. */
     /* Four prefixes, one per kind, and the prefix is what tells you which kind you have:
    *
    *   --face-*    a font stack. Raw material: it belongs inside a --type-* value, and no rule sets

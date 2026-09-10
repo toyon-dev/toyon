@@ -47,7 +47,7 @@ export function TerminalPane({
       className="term-pane"
       height={height}
       onDragStart={onDragStart}
-      title={<TabStrip procs={procs} active={stream} onPick={pick} />}
+      title={<TabStrip worktreeId={worktreeId} procs={procs} active={stream} onPick={pick} />}
       onClose={() => dispatch({ a: "toggle-terminal" })}
       actions={
         <>

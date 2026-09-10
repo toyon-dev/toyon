@@ -4,13 +4,15 @@ import { marked } from "marked";
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
-import type { ChatItem } from "../../state/store.ts";
+import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
 import { useReveal } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { useContextMenu } from "../../ui/menu.ts";
 import { attachmentUrl } from "../../ws.ts";
+import { wtDir } from "../util.ts";
 import { AskCard } from "./AskCard.tsx";
 import { sameTools, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
@@ -19,6 +21,7 @@ import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
 import { AUTO_OPEN, callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
+import { toolRowItems } from "./toolRowItems.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
 // so it is coloured by the same seven. marked hands the block over before it escapes it, and
@@ -261,11 +264,26 @@ export const ToolRow = memo(
     const { label, name, icon, hint } = toolLabel(head, roots);
     const running = !tools.at(-1)?.done;
     const what = [label, hint].filter(Boolean).join(" ");
+    const cm = useContextMenu("chat");
+    const store = useStoreInstance();
+    const sock = useSock();
+    const rowMenu = () => {
+      const w = worktreeById(store.getState(), worktreeId);
+      const wt = w ? { id: w.worktree.id, dir: wtDir(w.worktree) } : null;
+      return toolRowItems(
+        tools,
+        roots ?? [],
+        wt,
+        { sock, dispatch: store.dispatch },
+        { open, toggle: () => setPinned(!open) },
+      );
+    };
     return (
       <details
         ref={card}
         className={cx("tool-row", tools.some((t) => t.isError) && "error")}
         open={open}
+        {...cm.contextMenu(rowMenu)}
         // clicking the output selects text and leaves focus on the body, so the card takes it: that is
         // what makes Escape close the row you are reading, not only the one whose chip you clicked
         tabIndex={-1}

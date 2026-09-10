@@ -11,12 +11,16 @@
 import type { DesignClass, DesignComponent, DesignIndex, DesignToken } from "@toyon/shared";
 import { useEffect } from "react";
 import { previewBus } from "../../app/previewBus.ts";
+import { designRowItems } from "../../state/actions/design.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useActive } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
+import { useContextMenu } from "../../ui/menu.ts";
 import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { wtDir } from "../util.ts";
 import { contrastRatio, parseHex } from "./contrast.ts";
 import "./design.css";
 import { cx } from "../../ui/cx.ts";
@@ -616,6 +620,11 @@ function Row({
   onOpen: () => void;
   children?: React.ReactNode;
 }) {
+  // the pane is the active worktree's (Center mounts it so), which is where the source file is
+  const active = useActive();
+  const sock = useSock();
+  const dispatch = useDispatch();
+  const cm = useContextMenu("design");
   return (
     <li>
       <button
@@ -627,6 +636,11 @@ function Row({
         onBlur={onLeave}
         onClick={onOpen}
         disabled={!path}
+        {...cm.contextMenu(() =>
+          active
+            ? designRowItems({ id: active.worktree.id, dir: wtDir(active.worktree) }, path, { sock, dispatch }, onOpen)
+            : [],
+        )}
       >
         <span className="design-count row-dim">{count}</span>
         <span className="design-name">{name}</span>

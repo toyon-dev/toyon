@@ -1,12 +1,14 @@
 import type { CommitEntry, GitFileStatus } from "@toyon/shared";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { useSock, useStore } from "../../state/context.tsx";
+import { commitItems } from "../../state/actions/commit.ts";
+import { fileItems } from "../../state/actions/file.ts";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive, useActiveId, useActiveRow, useGreenfield, useLocalField } from "../../state/selectors.ts";
 import { repoById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { step } from "../../ui/listNav.ts";
-import { editorItems, Menu } from "../../ui/Menu.tsx";
+import { type MenuItem, useContextMenu } from "../../ui/menu.ts";
 import { shiftRanges, wtDir } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
@@ -28,6 +30,7 @@ type HistRow = { commit: CommitEntry; file?: GitFileStatus };
 /** the changes panel: the working tree over a commit box, or the branch's history */
 export function LeftDock({ width }: { width: number }) {
   const sock = useSock();
+  const dispatch = useDispatch();
   const activeId = useActiveId();
   const active = useActive();
   const leftOpen = useStore((s) => s.leftOpen);
@@ -55,9 +58,6 @@ export function LeftDock({ width }: { width: number }) {
   const [openSha, setOpenSha] = useState<string | null>(null);
   const openShaRef = useRef<string | null>(null);
   openShaRef.current = openSha;
-
-  const [fileMenu, setFileMenu] = useState<{ x: number; y: number; path: string; canDiscard: boolean } | null>(null);
-  const closeMenu = useCallback(() => setFileMenu(null), []);
 
   // hovering a changed file highlights only its changed lines' elements
   const hoverPathRef = useRef<string | null>(null);
@@ -211,14 +211,28 @@ export function LeftDock({ width }: { width: number }) {
     }
   };
 
-  const ctxUncommitted = useCallback((e: React.MouseEvent, path: string) => {
-    e.preventDefault();
-    setFileMenu({ x: e.clientX, y: e.clientY, path, canDiscard: true });
-  }, []);
-  const ctxCommitted = useCallback((e: React.MouseEvent, path: string) => {
-    e.preventDefault();
-    setFileMenu({ x: e.clientX, y: e.clientY, path, canDiscard: false });
-  }, []);
+  // the rows are memoized on their props, so what they are handed to build a menu from is stable
+  const wtId = active?.worktree.id;
+  const dir = active ? wtDir(active.worktree) : "";
+  const menuUncommitted = useCallback(
+    (path: string): MenuItem[] => (wtId ? fileItems({ id: wtId, dir }, path, true, { sock, dispatch }) : []),
+    [wtId, dir, sock, dispatch],
+  );
+  const menuCommitted = useCallback(
+    (path: string): MenuItem[] => (wtId ? fileItems({ id: wtId, dir }, path, false, { sock, dispatch }) : []),
+    [wtId, dir, sock, dispatch],
+  );
+  // the list has the keyboard, so shift+F10 lands here rather than on the highlighted row: answer
+  // for that row. A right-click reaches a row first and never gets here with a pointer.
+  const cm = useContextMenu("changes");
+  const selectedMenu = (): MenuItem[] => {
+    if (tab === "changes") {
+      const f = rows[sel];
+      return f ? (sel < files.length ? menuUncommitted : menuCommitted)(f.path) : [];
+    }
+    const r = histRows[sel];
+    return r ? (r.file ? menuCommitted(r.file.path) : commitItems(r.commit)) : [];
+  };
   const clickRow = useCallback(
     (path: string) => {
       setSel(rows.findIndex((f) => f.path === path));
@@ -271,6 +285,7 @@ export function LeftDock({ width }: { width: number }) {
         // clicking one row and then another passes through here; only focus actually leaving the
         // list should put the selection band away
         onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocused(false)}
+        {...cm.contextMenu((from) => (from === "keyboard" ? selectedMenu() : []))}
       >
         {tab === "changes" && files.length > 0 && (
           <>
@@ -282,7 +297,7 @@ export function LeftDock({ width }: { width: number }) {
                 active={!openRef && f.path === openPath}
                 selected={focused && sel === i}
                 onOpen={clickRow}
-                onContext={ctxUncommitted}
+                menu={menuUncommitted}
                 onHover={hoverFile}
               />
             ))}
@@ -304,7 +319,7 @@ export function LeftDock({ width }: { width: number }) {
                 active={!openRef && f.path === openPath}
                 selected={focused && sel === files.length + i}
                 onOpen={clickRow}
-                onContext={ctxCommitted}
+                menu={menuCommitted}
                 onHover={hoverFile}
               />
             ))}
@@ -322,7 +337,7 @@ export function LeftDock({ width }: { width: number }) {
                   active={openRef === r.commit.sha && r.file.path === openPath}
                   selected={focused && sel === i}
                   onOpen={clickHistFile}
-                  onContext={ctxCommitted}
+                  menu={menuCommitted}
                   onHover={noHover}
                 />
               ) : (
@@ -340,30 +355,6 @@ export function LeftDock({ width }: { width: number }) {
       </div>
       {activeRow && (
         <CommitBox active={activeRow} ahead={gitInfo?.ahead ?? 0} behind={gitInfo?.behind ?? 0} dirty={!clean} />
-      )}
-      {fileMenu && active && (
-        <Menu
-          at={fileMenu}
-          onClose={closeMenu}
-          items={[
-            ...editorItems(`${wtDir(active.worktree)}/${fileMenu.path}`, () =>
-              sock?.send({ t: "reveal", worktreeId: active.worktree.id, path: fileMenu.path }),
-            ),
-            ...(fileMenu.canDiscard
-              ? [
-                  {
-                    label: "discard changes…",
-                    danger: true,
-                    onClick: () => {
-                      if (window.confirm(`Discard uncommitted changes to ${fileMenu.path}?`)) {
-                        sock?.send({ t: "discard-file", worktreeId: active.worktree.id, path: fileMenu.path });
-                      }
-                    },
-                  },
-                ]
-              : []),
-          ]}
-        />
       )}
     </div>
   );

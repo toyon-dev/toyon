@@ -1,11 +1,11 @@
 import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveTheme } from "@toyon/shared";
-import { useCallback, useState } from "react";
+import { agentItems } from "../../state/actions/agent.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
-import { Menu, type MenuItem } from "../../ui/Menu.tsx";
+import { useContextMenu } from "../../ui/menu.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { chord } from "../util.ts";
 import { appearanceLabel } from "./commands.ts";
@@ -107,17 +107,9 @@ function authTip(a: AgentInfo): string {
  * where the auth card can also run a method that needs the worktree's terminal. */
 function AgentRow({ agent }: { agent: AgentInfo }) {
   const sock = useSock();
-  const [menu, setMenu] = useState<DOMRect | null>(null);
-  const closeMenu = useCallback(() => setMenu(null), []);
-  const items: MenuItem[] = [];
-  if (agent.canLogout && agent.auth?.kind !== "none")
-    items.push({
-      label: "log out",
-      danger: true,
-      onClick: () => sock?.send({ t: "agent-logout", agent: agent.id }),
-    });
-  if (!agent.available && !agent.installing)
-    items.push({ label: "install again", onClick: () => sock?.send({ t: "install-agent", agent: agent.id }) });
+  const dispatch = useDispatch();
+  const cm = useContextMenu("keys");
+  const items = agentItems(agent, { sock, dispatch });
   return (
     <div className="keys-setting">
       <span className="keys-d">{agent.name}</span>
@@ -126,11 +118,10 @@ function AgentRow({ agent }: { agent: AgentInfo }) {
         mono
         data-tip={authTip(agent)}
         disabled={items.length === 0}
-        onClick={(e) => setMenu(e.currentTarget.getBoundingClientRect())}
+        {...cm.dropdown(() => items, "right")}
       >
         {authLabel(agent)}
       </Button>
-      {menu && <Menu anchor={menu} align="right" items={items} onClose={closeMenu} />}
     </div>
   );
 }

@@ -1,0 +1,99 @@
+import { describe, expect, test } from "bun:test";
+import type { OwnedWorktree, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
+import { discoveredItems, worktreeItems } from "./worktree.ts";
+
+const info: WorktreeInfo = {
+  id: "w1",
+  repoId: "r",
+  title: "feature",
+  branch: "toyon/feature",
+  path: "/r/wt/feature",
+  kind: "worktree",
+  proxyPort: 1,
+  createdAt: 0,
+};
+
+const owned = (over: Partial<OwnedWorktree> = {}): OwnedWorktree =>
+  ({
+    id: "w1",
+    repoId: "r",
+    name: "feature",
+    branch: "feature",
+    path: "/r/wt/feature",
+    worktree: info,
+    procs: [],
+    agent: "idle",
+    dirty: 0,
+    ahead: 0,
+    behind: 0,
+    ...over,
+  }) as OwnedWorktree;
+
+const deps = { sock: null, dispatch: () => {} };
+const labels = (items: Array<{ label: string }>) => items.map((i) => i.label);
+
+describe("a worktree's actions", () => {
+  test("read the same in the menu and the palette: one list, gated by state", () => {
+    const quiet = worktreeItems(owned(), null, { leftOpen: true, termOpen: true, shipping: {} }, deps);
+    expect(labels(quiet)).toEqual([
+      "open terminal",
+      "reveal in Finder",
+      "rename…",
+      "merge into main",
+      "push + PR",
+      "remove…",
+    ]);
+    const busy = worktreeItems(
+      owned({ agent: "working", dirty: 2, behind: 3 }),
+      null,
+      { leftOpen: false, termOpen: false, shipping: {} },
+      deps,
+      { graft: () => {} },
+    );
+    expect(labels(busy)).toEqual([
+      "stop agent",
+      "sync from main (3 behind)",
+      "view changes (2)",
+      "open terminal",
+      "reveal in Finder",
+      "rename…",
+      "graft with…",
+      "merge into main",
+      "push + PR",
+      "remove…",
+    ]);
+  });
+
+  test("a landing op in flight takes the other landing ops off the list until it answers", () => {
+    const items = worktreeItems(
+      owned({ behind: 3 }),
+      null,
+      { leftOpen: true, termOpen: true, shipping: { w1: "ship" } },
+      deps,
+    );
+    expect(labels(items)).not.toContain("merge into main");
+    expect(labels(items)).not.toContain("sync from main (3 behind)");
+  });
+
+  test("a found worktree has the short list and never a remove", () => {
+    const found = {
+      id: "d1",
+      repoId: "r",
+      name: "stray",
+      path: "/r/stray",
+      branch: "stray",
+      agent: "idle",
+      behind: 1,
+    } as WorktreeStatus;
+    const items = discoveredItems(found, { termOpen: true, clientId: "c" }, deps);
+    expect(labels(items)).toEqual([
+      "take over",
+      "sync from main (1 behind)",
+      "open a shell here",
+      "reveal in Finder",
+      "copy path",
+    ]);
+    const held = discoveredItems({ ...found, locked: true, behind: 0 }, { termOpen: true, clientId: "c" }, deps);
+    expect(labels(held)).toEqual(["open a shell here", "reveal in Finder", "copy path"]);
+  });
+});

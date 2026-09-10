@@ -1,0 +1,190 @@
+import {
+  type ClientMsg,
+  canGraft,
+  canLand,
+  canRemove,
+  canRename,
+  canSync,
+  type OwnedWorktree,
+  type RepoInfo,
+  type WorktreeStatus,
+} from "@toyon/shared";
+import { isBusy } from "../../surfaces/util.ts";
+import type { MenuItem } from "../../ui/menu.ts";
+import type { DaemonSocket } from "../../ws.ts";
+import { profileNames, profileOf } from "../profiles.ts";
+import type { Action, ShipOp, State } from "../store.ts";
+import { copyText, type Deps } from "./deps.ts";
+
+type Dispatch = (a: Action) => void;
+
+/** send a landing op (sync, merge, ship, commit) and mark the worktree in flight in the same
+ * breath, so no sender can send without the rail's dot and the changes panel's button showing
+ * it working. The shipped frame brings it to rest; see `shipping` in the store. */
+export function shipOp(sock: DaemonSocket | null, dispatch: Dispatch, msg: Extract<ClientMsg, { t: ShipOp }>) {
+  dispatch({ a: "shipping", id: msg.worktreeId, op: msg.t });
+  sock?.send(msg);
+}
+
+/** send the removes and take the rows off screen in the same breath: the daemon confirms by
+ * dropping them from its next snapshot, or an error frame puts them back with a toast */
+export function removeWorktrees(sock: DaemonSocket | null, dispatch: Dispatch, ids: string[]) {
+  if (ids.length === 0) return;
+  dispatch({ a: "remove-worktrees", ids });
+  for (const id of ids) sock?.send({ t: "remove-worktree", worktreeId: id });
+}
+
+/** confirm-then-send worktree actions: the rail's badges reach these directly, the menu and the
+ * palette through `worktreeItems` */
+export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
+  return {
+    rename(w: OwnedWorktree) {
+      if (!canRename(w.worktree)) return;
+      const title = window.prompt("Rename worktree (also renames its branch):", w.worktree.title);
+      if (title?.trim()) sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
+    },
+    pickVariant(w: OwnedWorktree) {
+      const v = w.worktree.variant;
+      if (!v) return;
+      const others = v.of - 1;
+      if (
+        window.confirm(
+          `Keep "${w.worktree.title}" and remove ${others} sibling variant(s)? Their branches and changes are deleted.`,
+        )
+      ) {
+        sock?.send({ t: "pick-variant", worktreeId: w.worktree.id });
+      }
+    },
+    /** run under another profile: only its procs restart, so no confirm */
+    setProfile(w: OwnedWorktree, profile: string) {
+      sock?.send({ t: "set-worktree-profile", worktreeId: w.worktree.id, profile });
+    },
+    remove(w: OwnedWorktree) {
+      if (!canRemove(w.worktree)) return;
+      const ok = window.confirm(
+        `Remove worktree "${w.worktree.title}"?\n\nThis deletes its directory and branch (${w.worktree.branch}). Unmerged changes are lost.`,
+      );
+      if (ok) removeWorktrees(sock, dispatch, [w.worktree.id]);
+    },
+  };
+}
+
+export type WorktreeItemState = Pick<State, "leftOpen" | "termOpen" | "shipping">;
+
+/** Everything a worktree of ours can do, in the order the rail's menu shows it; the palette reads
+ * the same list with the title appended. `graft` is the rail's own multi-select, so only the rail
+ * passes it and the palette has no graft line. */
+export function worktreeItems(
+  w: OwnedWorktree,
+  repo: RepoInfo | null,
+  s: WorktreeItemState,
+  { sock, dispatch }: Deps,
+  ui: { graft?: (id: string) => void } = {},
+): MenuItem[] {
+  const id = w.worktree.id;
+  const acts = worktreeActions(sock, dispatch);
+  const items: MenuItem[] = [];
+  // stop stays offered while an ask card is open: that is the way out of a question you do not
+  // want to answer
+  if (isBusy(w))
+    items.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
+  // a landing op already out for this worktree takes the others off the list until it answers
+  const idle = !s.shipping[id];
+  // the count on the row is read, not pressed, so the sync it used to offer lives here
+  if (canSync(w) && (w.behind ?? 0) > 0 && idle) {
+    items.push({
+      id: "sync",
+      label: `sync from main (${w.behind} behind)`,
+      onClick: () => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
+    });
+  }
+  if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !s.leftOpen) {
+    items.push({
+      id: "changes",
+      label: `view changes${(w.dirty ?? 0) > 0 ? ` (${w.dirty})` : ""}`,
+      onClick: () => {
+        dispatch({ a: "activate", id });
+        if (!s.leftOpen) dispatch({ a: "toggle-left" });
+      },
+    });
+  }
+  if (w.worktree.kind !== "spare") {
+    items.push({
+      id: "terminal",
+      label: "open terminal",
+      onClick: () => {
+        dispatch({ a: "activate", id });
+        if (!s.termOpen) dispatch({ a: "toggle-terminal" });
+      },
+    });
+  }
+  items.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
+  // main runs procs too, and is where switching is wanted most; flat items, the menu has no submenus
+  const current = profileOf(w.worktree, repo);
+  for (const name of profileNames(repo)) {
+    if (name !== current)
+      items.push({ id: `profile:${name}`, label: `run with ${name}`, onClick: () => acts.setProfile(w, name) });
+  }
+  if (canRename(w.worktree)) items.push({ id: "rename", label: "rename…", onClick: () => acts.rename(w) });
+  if (w.worktree.variant) items.push({ id: "keep", label: "keep this variant…", onClick: () => acts.pickVariant(w) });
+  if (ui.graft && canGraft(w.worktree)) {
+    const graft = ui.graft;
+    items.push({ id: "graft", label: "graft with…", onClick: () => graft(id) });
+  }
+  if (canLand(w.worktree) && idle) {
+    items.push({
+      id: "merge",
+      label: "merge into main",
+      onClick: () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }),
+    });
+    items.push({
+      id: "ship",
+      label: "push + PR",
+      onClick: () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }),
+    });
+  }
+  if (canRemove(w.worktree))
+    items.push({ id: "remove", label: "remove…", danger: true, onClick: () => acts.remove(w) });
+  return items;
+}
+
+/** A discovered worktree is a directory toyon does not own, so this stays short on purpose.
+ * "open a shell here" is a real pty at that path with no runtime behind it, which is why it is
+ * phrased as a shell rather than as this worktree's terminal: there are no proc tabs to go with
+ * it, because nothing is running.
+ * No "remove": the person made this directory outside toyon, and deleting it is the one thing
+ * here that cannot be undone. Nothing in the daemon can delete a discovered worktree at all,
+ * which is what keeps that true. `git worktree remove` is where it belongs. */
+export function discoveredItems(
+  d: WorktreeStatus,
+  s: Pick<State, "termOpen" | "clientId">,
+  { sock, dispatch }: Deps,
+): MenuItem[] {
+  const items: MenuItem[] = [];
+  if (!d.locked) {
+    items.push({
+      id: "adopt",
+      label: "take over",
+      onClick: () => sock?.send({ t: "adopt-worktree", worktreeId: d.id, clientId: s.clientId }),
+    });
+  }
+  // the one write without take-over: the daemon refuses unless the tree is clean
+  if (canSync(d) && (d.behind ?? 0) > 0) {
+    items.push({
+      id: "sync",
+      label: `sync from main (${d.behind} behind)`,
+      onClick: () => sock?.send({ t: "sync-main", worktreeId: d.id }),
+    });
+  }
+  items.push({
+    id: "shell",
+    label: "open a shell here",
+    onClick: () => {
+      dispatch({ a: "activate", id: d.id });
+      if (!s.termOpen) dispatch({ a: "toggle-terminal" });
+    },
+  });
+  items.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: d.id }) });
+  items.push({ id: "copy-path", label: "copy path", onClick: () => copyText(d.path) });
+  return items;
+}

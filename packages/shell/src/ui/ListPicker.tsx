@@ -4,6 +4,7 @@ import { Field } from "./Field.tsx";
 import { useFocusOnMount } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
 import { useListNav } from "./listNav.ts";
+import { type MenuItem, useContextMenu } from "./menu.ts";
 import { Overlay } from "./Overlay.tsx";
 import "./picker.css";
 import { rowState } from "./rowState.ts";
@@ -42,6 +43,7 @@ export function ListPicker<T>({
   empty = "no matches",
   footer,
   keys,
+  rowMenu,
 }: {
   items: T[];
   /** narrow the list for a query (empty query → everything) */
@@ -85,7 +87,11 @@ export function ListPicker<T>({
   lead?: ReactNode;
   /** at the right end of the input row: one escape hatch out of the picker */
   trailing?: ReactNode;
+  /** what a right-click on a row offers, for a picker whose rows are things and not only choices
+   * (a project has a setup and a forget); a row with nothing gets the app's menu like any chrome */
+  rowMenu?: (t: T) => MenuItem[];
 }) {
+  const cm = useContextMenu("picker");
   const [q, setQ] = useState(initialQuery);
   const results = useMemo(() => filter(items, q), [items, q, filter]);
   const listRef = useRef<HTMLDivElement>(null);
@@ -156,6 +162,7 @@ export function ListPicker<T>({
           // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
           onMouseMove={() => i !== clamped && nav.setIndex(i)}
           onClick={() => nav.pick(t)}
+          {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
         >
           {row(t, i === clamped, q)}
         </button>

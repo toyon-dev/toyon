@@ -1,60 +1,85 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useStoreInstance } from "../state/context.tsx";
 import { jumpTo, step } from "./listNav.ts";
 import "./menu.css";
 import { cx } from "./cx.ts";
+import { type MenuItem, type MenuSpec, menuBox, menuStore, useMenu } from "./menu.ts";
 import { rowState } from "./rowState.ts";
-
-export type MenuItem = { label: ReactNode; onClick: () => void; danger?: boolean };
 
 const WIDTH = 180;
 
+/** a modifier on its own: shift for a screenshot chord, cmd held while deciding. Not a key meant
+ * for the menu or for anything behind it, so it neither moves the highlight nor closes anything. */
+const MODIFIERS = new Set(["Shift", "Meta", "Control", "Alt", "CapsLock", "Fn"]);
+
 /**
- * The context menu. Positioned at a point (right-click) or under an anchor's rect; clamped to the
- * viewport. Closes on any click, a chord, or window blur; the last one matters because clicks
- * inside the preview iframe never bubble here but do steal focus.
+ * The one menu, mounted once at the root like Tooltips and drawn from the slot in menu.ts. A
+ * portal to body, so the box sits in its own rung rather than in whichever surface opened it:
+ * the rail's panel clips and stacks, a picker's overlay scrims, and a menu inside either was
+ * under something.
  *
+ * Everything that closes a menu is here, once: a pointerdown anywhere but the box and the thing
+ * the menu is about (a right-click on another row, or into the terminal, whose own menu must
+ * not open over ours), a click outside the box, a chord, Escape, window blur (a click inside the
+ * preview iframe never reaches this document but does steal focus), a scroll or a resize under a
+ * fixed box, and the target leaving the DOM while its menu is up.
+ */
+export function Menus() {
+  const spec = useMenu();
+  const store = useStoreInstance();
+  // the row was removed while its menu was open (a remove from the palette, a snapshot that
+  // dropped it): the DOM says so, and the store's tick is what makes React remove it
+  useEffect(() => {
+    if (!spec) return;
+    const check = () => {
+      if (!spec.target.isConnected) menuStore.close();
+    };
+    const mo = new MutationObserver(check);
+    mo.observe(document.body, { childList: true, subtree: true });
+    const unsub = store.subscribe(check);
+    return () => {
+      mo.disconnect();
+      unsub();
+    };
+  }, [spec, store]);
+  if (!spec) return null;
+  return createPortal(<Menu spec={spec} />, document.body);
+}
+
+/**
  * Its rows are .row like every other list in the app, and it navigates like one: arrows move a
  * highlight, enter runs it, a letter jumps to the next row that starts with it, and hovering sets
  * the same index so there is only ever one highlight. Nothing is highlighted until a key arrives,
  * so opening a menu with the mouse does not paint a choice you have not made yet.
  */
-
-/** a modifier on its own: shift for a screenshot chord, cmd held while deciding. Not a key meant
- * for the menu or for anything behind it, so it neither moves the highlight nor closes anything. */
-const MODIFIERS = new Set(["Shift", "Meta", "Control", "Alt", "CapsLock", "Fn"]);
-export function Menu({
-  at,
-  anchor,
-  align = "left",
-  items,
-  onClose,
-}: {
-  at?: { x: number; y: number };
-  /** open under this element; `align` says which edge lines up */
-  anchor?: DOMRect;
-  align?: "left" | "right";
-  items: MenuItem[];
-  onClose: () => void;
-}) {
+function Menu({ spec }: { spec: MenuSpec }) {
+  const { items } = spec;
   // -1 is "no row yet", which is why this is not 0: see the note above about opening with the mouse
   const [idx, setIdx] = useState(-1);
-  // the listener is bound once, so what it reads has to be a ref: items are rebuilt every render
+  // the listeners are bound once per spec, so what they read has to be a ref
   const live = useRef({ idx, items });
   live.current = { idx, items };
-  // typeahead reads the rows off the DOM: a label is a ReactNode, and the text is what you see
+  // typeahead reads the labels off the DOM, which is also what you see
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    // the click that opened the menu is still bubbling when this mounts: ignore events older than us
+    const close = () => menuStore.close();
+    const inside = (t: EventTarget | null) => t instanceof Node && box.current?.contains(t);
+    // the click that opened the menu may still be bubbling when this mounts: ignore events older than us
     const openedAt = performance.now();
     const onClick = (e: MouseEvent) => {
-      if (e.timeStamp > openedAt) onClose();
+      if (e.timeStamp > openedAt && !inside(e.target)) close();
     };
-    // Capture, and the third argument is the whole point: app/keys.ts holds its own keydown on
-    // window for the Escape ladder, and it cannot know a menu is open because a menu is local state
-    // in the surface that opened it. Bubbling, both handlers ran, so Escape shut the menu and then
-    // the diff pane behind it. Capture reaches the menu first and stopPropagation ends the key
-    // there, which is what "the topmost thing owns Escape" has to mean when the topmost thing is
-    // not in the store.
+    const onPointerDown = (e: PointerEvent) => {
+      if (inside(e.target)) return;
+      // on the trigger itself: a dropdown's second click toggles, and a row re-opening its own
+      // menu at a new point is a replace, not a dismiss followed by nothing
+      if (e.target instanceof Node && spec.target.contains(e.target)) return;
+      close();
+    };
+    // Capture, because the menu is the topmost thing and the only one: app/keys.ts holds the
+    // Escape ladder on a bubbling window keydown, and a focused listbox has its own arrows.
+    // Taking the key first and ending it here is what "the topmost thing owns the key" means.
     const onKeyDown = (e: KeyboardEvent) => {
       const { idx: i, items: its } = live.current;
       if (MODIFIERS.has(e.key)) return;
@@ -70,12 +95,12 @@ export function Menu({
         e.preventDefault();
         e.stopPropagation();
         its[i].onClick();
-        onClose();
+        close();
         return;
       }
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        close();
         return;
       }
       // a bare letter jumps to the next row starting with it, the way the OS menus do. One with no
@@ -84,70 +109,69 @@ export function Menu({
       if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         e.stopPropagation();
-        const rows = Array.from(box.current?.querySelectorAll("button") ?? [], (b) => b.textContent ?? "");
+        const rows = Array.from(box.current?.querySelectorAll(".menu-label") ?? [], (b) => b.textContent ?? "");
         const j = jumpTo(rows, i, e.key);
         if (j >= 0) setIdx(j);
         return;
       }
       // anything else (a chord, tab, a function key) closes the menu and is still let through, so
       // the chord reaches the app: hitting one is a way of saying you are done here
-      onClose();
+      close();
     };
+    // a scroll under a fixed box leaves it over the wrong row; the box itself never scrolls
+    document.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("click", onClick);
     window.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("blur", onClose);
+    window.addEventListener("blur", close);
+    window.addEventListener("resize", close);
+    document.addEventListener("scroll", close, true);
     return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("click", onClick);
       window.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("blur", onClose);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("scroll", close, true);
     };
-  }, [onClose]);
-  const x = anchor ? (align === "right" ? anchor.right - WIDTH : anchor.left) : (at?.x ?? 0);
-  const y = anchor ? anchor.bottom + 4 : (at?.y ?? 0);
-  const left = Math.max(4, Math.min(x, window.innerWidth - WIDTH - 4));
-  // keep the whole menu on screen when opened near the bottom. The row height is a token, so it is
+  }, [spec]);
+  // keep the whole menu on screen when opened near an edge. The row height is a token, so it is
   // read off the root rather than written here twice: MonacoDiff and XTerm read --face-mono the
   // same way, for the same reason.
   const rowH = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-height")) || 32;
-  const top = Math.max(4, Math.min(y, window.innerHeight - items.length * rowH - 12));
+  const { x: left, y: top } = menuBox(spec, WIDTH, items.length * rowH + 8, window.innerWidth, window.innerHeight);
   return (
     // the width is set here rather than in the stylesheet because the clamp above depends on it,
     // and a menu that is one width in CSS and another in the maths lands off screen at the edges
-    <div className="menu" ref={box} style={{ position: "fixed", left, top, width: WIDTH }}>
+    <div
+      className="menu"
+      ref={box}
+      style={{ position: "fixed", left, top, width: WIDTH }}
+      // a right-click on the menu itself is not a request for another one
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {items.map((it, i) => (
-        <button
-          // biome-ignore lint/suspicious/noArrayIndexKey: a menu's items have no identity but their position, and the list is built whole each time it opens
-          key={i}
-          className={cx("row", it.danger && "danger")}
-          data-state={rowState({ cursor: i === idx })}
-          // the pointer and the arrows drive one highlight, not two
-          onMouseEnter={() => setIdx(i)}
-          onClick={() => {
-            it.onClick();
-            onClose();
-          }}
-        >
-          <span className="menu-label">{it.label}</span>
-        </button>
+        <MenuRow key={it.id} item={it} cursor={i === idx} onEnter={() => setIdx(i)} />
       ))}
     </div>
   );
 }
 
-const EDITORS: Array<{ label: string; scheme: string }> = [
-  { label: "Zed", scheme: "zed" },
-  { label: "VS Code", scheme: "vscode" },
-  { label: "Cursor", scheme: "cursor" },
-];
-
-/** the "open in <editor>" rows plus a Finder reveal, shared by the file menu and the diff header */
-export function editorItems(absPath: string, onReveal?: () => void): MenuItem[] {
-  const items: MenuItem[] = EDITORS.map((ed) => ({
-    label: `open in ${ed.label}`,
-    onClick: () => {
-      window.location.href = `${ed.scheme}://file${absPath}`;
-    },
-  }));
-  if (onReveal) items.push({ label: "reveal in Finder", onClick: onReveal });
-  return items;
+function MenuRow({ item, cursor, onEnter }: { item: MenuItem; cursor: boolean; onEnter: () => void }) {
+  return (
+    <button
+      className={cx("row", item.danger && "danger", item.detail !== undefined && "row-tall")}
+      data-state={rowState({ cursor })}
+      // the pointer and the arrows drive one highlight, not two
+      onMouseEnter={onEnter}
+      onClick={() => {
+        item.onClick();
+        menuStore.close();
+      }}
+    >
+      <span className="menu-text">
+        <span className="menu-label">{item.label}</span>
+        {item.detail !== undefined && <span className="menu-detail row-dim">{item.detail}</span>}
+      </span>
+    </button>
+  );
 }

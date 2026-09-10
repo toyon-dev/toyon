@@ -9,7 +9,9 @@ export function useDismissOutside(box: RefObject<HTMLElement | null>, onOutside:
   useEffect(() => {
     const h = (e: MouseEvent) => {
       const t = e.target as Element | null;
-      if (t?.closest?.(".keys-btn, .bar-pill, .repo-chip")) return;
+      // and so is the context menu: it is a portal, so a row's menu inside a picker is outside
+      // the picker's box, and choosing from it must not take the picker down first
+      if (t?.closest?.(".keys-btn, .bar-pill, .repo-chip, .menu")) return;
       if (box.current && !box.current.contains(t as Node)) cb.current();
     };
     // a click in the preview iframe never reaches this document, but it does move focus into the

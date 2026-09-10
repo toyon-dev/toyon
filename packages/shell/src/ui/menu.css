@@ -1,10 +1,10 @@
-/* Menu: the context menu and its rows. */
+/* Menu: the one context menu and its rows. */
 @layer tokens, base, surfaces;
 @layer base {
-  /* ---- menu (context menus, "open in") ---- */
   .menu {
     position: fixed;
-    z-index: 40;
+    /* above the anchored picker it can open from (a project row in the bar's dropdown) */
+    z-index: 50;
     background: var(--surface1);
     border: 1px solid var(--border1);
     border-radius: var(--radius-md);
@@ -21,11 +21,27 @@
     & button {
       color: var(--text0);
     }
-    & .menu-label {
+    /* a row with a detail line is two lines tall; the row idiom's height is a minimum, not a fit */
+    & button.row-tall {
+      height: auto;
+      padding-top: 4px;
+      padding-bottom: 4px;
+    }
+    & .menu-text {
       min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    & .menu-label,
+    & .menu-detail {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    /* the colour is .row-dim's, so it lifts with the row; only the size is the detail's own */
+    & .menu-detail {
+      font: var(--type-ui-sm);
     }
     /* the arrows and the pointer set the same index, so this is one highlight with two ways in */
     & button:hover,

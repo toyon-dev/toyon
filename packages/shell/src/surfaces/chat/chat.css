@@ -599,7 +599,9 @@
   .draft-intro {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
+    /* never a scroll box: it is one row, and a scroll container would clip the panel a chip in
+     that row opens over itself */
+    overflow: visible;
     padding: 12px;
     display: flex;
     flex-direction: column;

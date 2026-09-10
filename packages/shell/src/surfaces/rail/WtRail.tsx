@@ -159,7 +159,8 @@ export function WtRail() {
         label: "fold into…",
         onClick: () => {
           setFoldMode(true);
-          setSel((s) => (s.includes(id) ? s : [...s, id]));
+          // on the row you are on it means "fold others into this": nothing to check yet
+          setSel((s) => (id === activeId || s.includes(id) ? s : [...s, id]));
         },
       });
     }
@@ -195,15 +196,20 @@ export function WtRail() {
           ? {}
           : tip(w.locked ? `${wtDirLabel(w)} · held by ${w.lockReason ?? "another tool"}` : wtDirLabel(w)))}
         onClick={(e) => {
-          if (owned && (foldMode || e.shiftKey)) toggleSel(owned);
-          else dispatch({ a: "activate", id });
+          // in fold mode the row you are on is the destination, marked by its edge, and has
+          // nothing to check; every other foldable row is a source to check or uncheck. A
+          // shift-click on it opens the mode with nothing checked yet.
+          if (owned && (foldMode || e.shiftKey)) {
+            if (id === activeId) setFoldMode(true);
+            else toggleSel(owned);
+          } else dispatch({ a: "activate", id });
         }}
         onContextMenu={(e) => {
           e.preventDefault();
           openMenu({ x: e.clientX, y: e.clientY });
         }}
       >
-        {owned && foldMode && canFold(owned.worktree) && (
+        {owned && foldMode && canFold(owned.worktree) && id !== activeId && (
           <input type="checkbox" className="rail-fold-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
         )}
         <span className="branch">{w.name}</span>
@@ -350,30 +356,42 @@ export function WtRail() {
                   .map((id) => worktrees.find((w) => w.worktree.id === id)?.worktree.title ?? id)
                   .join(", ");
                 return (
-                  <Button
-                    size="md"
-                    tone="primary"
-                    disabled={!target || sources.length === 0}
-                    data-tip={
-                      target
-                        ? `Merge the checked worktrees into ${target.worktree.title} and remove them`
-                        : "Select a worktree to fold into"
-                    }
-                    onClick={() => {
-                      if (!target) return;
-                      if (
-                        window.confirm(
-                          `Fold ${names} into ${target.worktree.title}?\n\nTheir branches are merged in, then their directories and branches are removed.`,
-                        )
-                      ) {
-                        sock?.send({ t: "fold", targetId: target.worktree.id, sourceIds: sources });
-                        cancelFold();
+                  <>
+                    {/* the destination on a line of its own, in full: the buttons under it stay
+                        one word each, which is what keeps them on one line at the rail's width */}
+                    <div className="rail-fold-into">
+                      {target ? (
+                        <>
+                          into <b>{target.worktree.title}</b>
+                        </>
+                      ) : (
+                        "select a worktree to fold into"
+                      )}
+                    </div>
+                    <Button
+                      size="md"
+                      tone="primary"
+                      disabled={!target || sources.length === 0}
+                      data-tip={
+                        target
+                          ? `Merge the checked worktrees into ${target.worktree.title} and remove them`
+                          : "Select a worktree to fold into"
                       }
-                    }}
-                  >
-                    <Icon name="layers" className="icon-inline" /> fold {sources.length} into{" "}
-                    {target?.worktree.title ?? "…"}
-                  </Button>
+                      onClick={() => {
+                        if (!target) return;
+                        if (
+                          window.confirm(
+                            `Fold ${names} into ${target.worktree.title}?\n\nTheir branches are merged in, then their directories and branches are removed.`,
+                          )
+                        ) {
+                          sock?.send({ t: "fold", targetId: target.worktree.id, sourceIds: sources });
+                          cancelFold();
+                        }
+                      }}
+                    >
+                      fold {sources.length}
+                    </Button>
+                  </>
                 );
               })()}
               <Button

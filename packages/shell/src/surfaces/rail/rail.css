@@ -68,10 +68,28 @@
   }
   .rail-fold {
     display: flex;
+    flex-wrap: wrap;
     border-top: 1px solid var(--border0);
     align-items: center;
     padding: 4px 6px;
     gap: 2px;
+  }
+  /* the destination takes the whole first line, so the fold, sync and remove buttons keep to one
+   word each on the second and fit the rail's 232px; "fold 1 into dark-mode-toggle" as one button
+   pushed remove and cancel off the edge */
+  .rail-fold-into {
+    flex-basis: 100%;
+    padding: 0 6px 4px;
+    font: var(--type-ui-sm);
+    color: var(--text2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    & b {
+      /* the branch name in mono, the same case as the composer's "new worktree from" line */
+      font: var(--type-mono-sm);
+      color: var(--text1);
+    }
   }
   .rail-fold-check {
     accent-color: var(--accent);

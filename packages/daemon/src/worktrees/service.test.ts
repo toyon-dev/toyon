@@ -322,6 +322,40 @@ describe("config reload", () => {
   });
 });
 
+describe("empty tree", () => {
+  test("main says whether the tree is empty; a task worktree never does", async () => {
+    const repoId = await registered();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    expect((await w.worktrees.gitStatus(main.id))?.empty).toBe(false);
+    const wt = await w.worktrees.create(repoId, "task");
+    expect((await w.worktrees.gitStatus(wt.id))?.empty).toBeUndefined();
+  });
+
+  test("a project made from the picker is empty until something lands in it", async () => {
+    const dir = join(dirname(w.repo), "fresh");
+    sh(dirname(w.repo), "git", "init", "-q", "-b", "main", dir);
+    sh(
+      dir,
+      "git",
+      "-c",
+      "user.email=t@t",
+      "-c",
+      "user.name=t",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--allow-empty",
+      "-qm",
+      "initial commit",
+    );
+    const repo = await w.repos.register(dir);
+    const main = w.state.worktrees.find((x) => x.repoId === repo.id && x.kind === "main")!;
+    expect((await w.worktrees.gitStatus(main.id))?.empty).toBe(true);
+    writeFileSync(join(dir, "index.html"), "<h1>hi</h1>\n");
+    expect((await w.worktrees.gitStatus(main.id))?.empty).toBeUndefined();
+  });
+});
+
 describe("landing", () => {
   test("commit then merge lands on main, marks landed, and offers the worktree for cleanup", async () => {
     const repoId = await registered();

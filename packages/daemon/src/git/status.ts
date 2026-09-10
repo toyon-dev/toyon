@@ -127,6 +127,15 @@ export async function changedRanges(
   return ranges;
 }
 
+/** nothing tracked at HEAD. Asked only after `git status` came back empty, so this is the one
+ * call that separates a clean tree from a repo with nothing in it yet. Non-recursive on purpose:
+ * a real project lists its top level and stops there. An unborn HEAD fails the call, and that
+ * repo is empty too. */
+export async function treeEmpty(worktreePath: string): Promise<boolean> {
+  const r = await git(worktreePath, "ls-tree", "--name-only", "HEAD");
+  return !r.ok || r.out === "";
+}
+
 export async function aheadBehind(worktreePath: string, defaultBr: string): Promise<{ ahead: number; behind: number }> {
   const [a, b] = await Promise.all([
     git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`),

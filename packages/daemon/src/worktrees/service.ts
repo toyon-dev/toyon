@@ -37,7 +37,7 @@ import { GIT, git, gitOrThrow, NO_PROMPT, run } from "../git/exec.ts";
 import { commitWorktree, mergeToMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
-import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts } from "../git/status.ts";
+import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts, treeEmpty } from "../git/status.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
@@ -93,6 +93,8 @@ export interface GitInfo {
   behind?: number;
   /** HEAD's sha, so the history tab knows when its log went stale */
   head?: string;
+  /** main only: nothing tracked and nothing untracked. The shell's first-run state keys on it. */
+  empty?: boolean;
 }
 
 export interface CreateOpts {
@@ -829,8 +831,10 @@ export class WorktreeService {
       ]);
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
       const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.defaultBranch) : undefined;
+      // a task worktree of an empty repo is not the greenfield surface, so only main answers
+      const empty = isMain && files.length === 0 ? await treeEmpty(r.path) : undefined;
       if (r.wt?.landed && (files.length > 0 || ahead > 0)) this.setLanded(r.wt.id, false);
-      return { files, committed, head: head.ok ? head.out : undefined, ...counts };
+      return { files, committed, head: head.ok ? head.out : undefined, empty, ...counts };
     } catch (e) {
       log.warn(worktreeId, "git status failed", e);
       return null;

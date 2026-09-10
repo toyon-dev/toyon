@@ -131,6 +131,10 @@ describe("per-worktree records", () => {
     expect(s.local.a?.changedRanges).toEqual({});
     expect(s.local.b?.changedRanges["y.ts"]).toEqual({ ranges: [[5, 5]], offset: 0 });
   });
+  test("git-status carries whether main's tree is empty", () => {
+    const s = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [], empty: true })]);
+    expect(s.local.main?.git?.empty).toBe(true);
+  });
   test("page errors keep the last three and reset on a fresh load", () => {
     const s = run([hello(wt("a")), ...["e1", "e2", "e3", "e4"].map((e): Action => ({ a: "page", id: "a", error: e }))]);
     expect(s.local.a?.page.errors).toEqual(["e2", "e3", "e4"]);

@@ -83,6 +83,9 @@ export type ServerMsg =
       behind?: number;
       /** HEAD's sha: the history tab re-reads its log when this moves (the agent committed) */
       head?: string;
+      /** main only: nothing tracked and nothing untracked, which is what a project made from the
+       * picker looks like until something is scaffolded into it */
+      empty?: boolean;
     }
   /** the worktree's branch history, newest first (ahead-of-main commits are flagged, not sorted) */
   | { t: "git-log"; worktreeId: string; commits: CommitEntry[] }

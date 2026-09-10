@@ -96,6 +96,8 @@ export interface GitInfo {
   behind?: number;
   /** HEAD's sha; the history tab re-reads its log when this moves */
   head?: string;
+  /** main only: nothing in the tree yet; the greenfield state keys on it */
+  empty?: boolean;
 }
 
 /** everything the shell tracks for one worktree; dropped when the worktree disappears */
@@ -884,7 +886,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // ranges go stale whenever the worktree's git state moves
       const next = withLocal(s, msg.worktreeId, (l) => ({
         ...l,
-        git: { files: msg.files, committed: msg.committed, ahead: msg.ahead, behind: msg.behind, head: msg.head },
+        git: {
+          files: msg.files,
+          committed: msg.committed,
+          ahead: msg.ahead,
+          behind: msg.behind,
+          head: msg.head,
+          empty: msg.empty,
+        },
         changedRanges: {},
       }));
       return { ...next, leftOpen, leftAuto };

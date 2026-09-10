@@ -118,8 +118,8 @@ function ProjectPill() {
   const sock = useSock();
   const repo = useActiveRepo();
   const repos = useStore((s) => s.repos);
-  // the pill opens the switcher, so one level in is the switch itself and the open project's own
-  // verbs, the ones its row in the switcher carries
+  // the pill opens the switcher, so one level in is the switch itself, the roomier form the
+  // switcher's folder button opens, and the open project's own verbs, the ones its row carries
   const cm = useContextMenu("bar");
   const pillMenu = () =>
     grouped([
@@ -129,6 +129,11 @@ function ProjectPill() {
           label: repos.length > 1 ? "switch project…" : "open project…",
           key: chord("project"),
           onClick: () => dispatch({ a: "open", overlay: { kind: "projects" } }),
+        },
+        {
+          id: "project-disk",
+          label: "find a project on disk…",
+          onClick: () => dispatch({ a: "open", overlay: { kind: "projects", dialog: true } }),
         },
       ],
       repo ? projectItems(repo, repo.id, { sock, dispatch }) : [],

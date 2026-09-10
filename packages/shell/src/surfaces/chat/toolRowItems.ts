@@ -4,9 +4,10 @@ import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { ToolItem } from "./group.ts";
 import { callPath, relPath, toolLabel } from "./toolCall.ts";
 
-/** what a tool row in the transcript offers: the file it named, opened elsewhere; what it ran
- * and what came back, as text; and the fold. A call on something outside the worktree has no
- * file for the editors, so it starts at the copies. */
+/** what a tool row in the transcript offers: the file it named, in the diff pane and elsewhere;
+ * what it ran and what came back, as text; and the fold. The pane and the fold are different
+ * verbs: the fold shows the row's own receipt inline, the pane shows the whole file below the
+ * preview. A call on something outside the worktree has no file, so it starts at the copies. */
 export function toolRowItems(
   tools: ToolItem[],
   roots: string[],
@@ -19,6 +20,12 @@ export function toolRowItems(
   const open: MenuItem[] = [];
   const rel = relPath(callPath(head), roots);
   if (rel && !rel.startsWith("/") && wt) {
+    // a read or a search has nothing to diff, so the pane is just the file for those
+    open.push({
+      id: "open-diff",
+      label: head.toolKind === "edit" ? "open diff" : "open file",
+      onClick: () => sock?.send({ t: "file-diff", worktreeId: wt.id, path: rel }),
+    });
     open.push(...editorItems(`${wt.dir}/${rel}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel })));
   }
   const copies: MenuItem[] = [];

@@ -21,6 +21,7 @@ export default defineConfig({
     proxy: {
       "/ws": { ...target, ws: true },
       "/health": target,
+      "/bootstrap": target,
       // chat image thumbnails; the daemon serves them, so dev has to forward them like /ws
       "/attachments": target,
     },

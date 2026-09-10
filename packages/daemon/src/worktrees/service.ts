@@ -94,8 +94,6 @@ export interface GitInfo {
   behind?: number;
   /** HEAD's sha, so the history tab knows when its log went stale */
   head?: string;
-  /** main only: nothing tracked and nothing untracked. The shell's first-run state keys on it. */
-  empty?: boolean;
 }
 
 export interface CreateOpts {
@@ -733,6 +731,14 @@ export class WorktreeService {
     return result;
   }
 
+  /** stored, not cached: the first frame of a page load reads it before git has been asked */
+  private setEmpty(wt: WorktreeInfo, empty: boolean) {
+    if (wt.empty === empty) return;
+    wt.empty = empty;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+  }
+
   /** this worktree's own HEAD moved (a sync or a commit): its cached ahead/behind describe the
    * old one, and nothing watches a worktree's branch the way the repo watcher watches main, so
    * the rail would keep the old badge until the TTL lapsed and something unrelated pushed a frame */
@@ -765,6 +771,16 @@ export class WorktreeService {
       if (found) return found;
     }
     return null;
+  }
+
+  /** the last found rows per repo whatever their age; a repo never listed counts as a miss */
+  private discoveredQuick(quick: { missed: boolean }): FoundWorktree[] {
+    return this.d.state.repos.flatMap((repo) => {
+      const cached = this.discoverCache.get(repo.id);
+      if (cached) return cached.rows;
+      quick.missed = true;
+      return [];
+    });
   }
 
   /** Worktrees git knows about that toyon does not, across every registered repo.
@@ -854,10 +870,11 @@ export class WorktreeService {
       ]);
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
       const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.defaultBranch) : undefined;
-      // a task worktree of an empty repo is not the greenfield surface, so only main answers
-      const empty = isMain && files.length === 0 ? await treeEmpty(r.path) : undefined;
       if (r.wt?.landed && (files.length > 0 || ahead > 0)) this.setLanded(r.wt.id, false);
-      return { files, committed, head: head.ok ? head.out : undefined, empty, ...counts };
+      // the empty-tree fact lives on main's record, so the rows frame carries it without git: a
+      // task worktree of an empty repo is not the greenfield surface, so only main keeps it
+      if (r.wt && isMain) this.setEmpty(r.wt, files.length === 0 ? await treeEmpty(r.path) : false);
+      return { files, committed, head: head.ok ? head.out : undefined, ...counts };
     } catch (e) {
       log.warn(worktreeId, "git status failed", e);
       return null;
@@ -891,20 +908,37 @@ export class WorktreeService {
 
   /** every row the rail shows: toyon's own worktrees in state order, then the ones git knows
    * about that toyon did not create. Both halves are awaited before either is returned, so a
-   * frame never shows a taken-over worktree twice or not at all. */
-  async rows(): Promise<WorktreeStatus[]> {
-    const [owned, found] = await Promise.all([this.ownedRows(), this.foundRows()]);
+   * frame never shows a taken-over worktree twice or not at all.
+   *
+   * `quick` answers from what is already known and never shells out: the counts and the found
+   * rows come from their caches whatever their age, or are left off. It is the first frame of a
+   * page load, which should paint the project before git has been asked about it; when anything
+   * was missing the normal pass is queued behind it and its frame follows. */
+  async rows(opts: { quick?: boolean } = {}): Promise<WorktreeStatus[]> {
+    const quick = opts.quick ? { missed: false } : null;
+    const [owned, found] = await Promise.all([this.ownedRows(quick), this.foundRows(quick)]);
+    if (quick?.missed) setTimeout(() => this.d.hub.emit("worktreesChanged"), 0);
     return [...owned, ...found];
   }
 
-  private async ownedRows(): Promise<WorktreeStatus[]> {
+  /** the cached counts for a row whatever their age, noting a miss for the quick pass */
+  private countsQuick(id: string, quick: { missed: boolean }): { ahead?: number; behind?: number; dirty?: number } {
+    const c = this.countsCache.get(id);
+    if (c) return c;
+    quick.missed = true;
+    return {};
+  }
+
+  private async ownedRows(quick: { missed: boolean } | null): Promise<WorktreeStatus[]> {
     return Promise.all(
       this.d.state.worktrees
         .filter((wt) => wt.kind !== "spare")
         .map(async (wt) => {
           const rt = this.d.runtime.get(wt.id);
           const { defaultBranch } = this.d.state.requireRepo(wt.repoId);
-          const { ahead, behind, dirty } = await this.counts(wt.id, wt.path, defaultBranch, !isMain(wt));
+          const { ahead, behind, dirty } = quick
+            ? this.countsQuick(wt.id, quick)
+            : await this.counts(wt.id, wt.path, defaultBranch, !isMain(wt));
           return {
             id: wt.id,
             repoId: wt.repoId,
@@ -924,12 +958,16 @@ export class WorktreeService {
     );
   }
 
-  private async foundRows(): Promise<WorktreeStatus[]> {
-    const found = await this.discovered();
+  private async foundRows(quick: { missed: boolean } | null): Promise<WorktreeStatus[]> {
+    const found = quick ? this.discoveredQuick(quick) : await this.discovered();
     return Promise.all(
       found.map(async (f) => {
         const repo = this.d.state.repo(f.repoId);
-        const { ahead, behind, dirty } = repo ? await this.counts(f.id, f.path, repo.defaultBranch, !!f.branch) : {};
+        const { ahead, behind, dirty } = !repo
+          ? {}
+          : quick
+            ? this.countsQuick(f.id, quick)
+            : await this.counts(f.id, f.path, repo.defaultBranch, !!f.branch);
         return { ...f, procs: [], agent: "idle" as const, ahead, behind, dirty };
       }),
     );

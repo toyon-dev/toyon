@@ -33,12 +33,26 @@ const fetch = createFetch({
   branded: () => false,
   metrics: () => ({ lag: 0 }),
   noteShellOrigin: (o) => learnedOrigins.push(o),
+  bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
 });
 const req = (path: string, init: RequestInit & { host?: string } = {}) =>
   new Request(`http://${init.host ?? "localhost"}${path}`, {
     ...init,
     headers: { host: init.host ?? "localhost", ...(init.headers as Record<string, string>) },
   });
+
+describe("bootstrap", () => {
+  test("the hello frame, for the token, never cached", async () => {
+    const r = await fetch(req("/bootstrap?token=secret"), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("cache-control")).toContain("no-store");
+    expect(await r?.json()).toEqual({ t: "hello", repos: [{ id: "r1" }] });
+  });
+  test("refused without the token", async () => {
+    expect((await fetch(req("/bootstrap"), srv()))?.status).toBe(401);
+    expect((await fetch(req("/bootstrap?token=wrong"), srv()))?.status).toBe(401);
+  });
+});
 
 describe("guards", () => {
   test("a remote peer is refused even with the token", async () => {
@@ -157,6 +171,7 @@ describe("static shell", () => {
     branded: () => false,
     noteShellOrigin: () => {},
     metrics: () => ({ lag: 0 }),
+    bootstrap: async () => ({}),
   });
 
   test("a route falls back to index.html so the SPA can handle it", async () => {

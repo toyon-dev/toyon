@@ -109,6 +109,9 @@ function ProjectPill() {
   // the dialog form draws over the preview instead; this is only the panel that drops out of here
   const open = useStore((s) => s.overlay?.kind === "projects" && !s.overlay.dialog);
   const busyElsewhere = useStore((s) => s.rows.some((w) => isBusy(w) && w.repoId !== s.activeRepoId));
+  // "open project" is what an empty daemon deserves, not what a page that has not heard from its
+  // daemon should guess: until hello the pill keeps its box and says nothing
+  const heard = useStore((s) => s.heard);
   return (
     <span className="bar-project">
       <Button
@@ -118,7 +121,7 @@ function ProjectPill() {
         {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
         onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
       >
-        <span className="bar-project-name">{repo?.name ?? "open project"}</span>
+        <span className="bar-project-name">{repo?.name ?? (heard ? "open project" : "")}</span>
         {busyElsewhere && <span className="bar-project-dot" {...tip("An agent is working in another project")} />}
       </Button>
       {open && <ProjectPicker />}

@@ -126,13 +126,6 @@ export function App() {
       localStorage.setItem(STORAGE.rail, railOpen ? "1" : "0");
     } catch {}
   }, [railOpen]);
-  // the empty project, if that is what is on screen: the next paint starts without the docks
-  // instead of showing them for the moment before hello and git-status arrive
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE.greenfield, greenfield && activeRepoId ? activeRepoId : "");
-    } catch {}
-  }, [greenfield, activeRepoId]);
   // the panel layout is per project: a reload comes back to the one this project was left in
   useEffect(() => {
     try {

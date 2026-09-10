@@ -224,6 +224,24 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
 
+  // What a page learns first, over the socket or over the bootstrap fetch that precedes it. Quick
+  // rows: the frame goes out from what is known and the counts follow, rather than every page
+  // load waiting on a git pass across every worktree.
+  const helloFrame = async () =>
+    ({
+      t: "hello",
+      version,
+      protocol: PROTOCOL_VERSION,
+      repos: s.state.repos,
+      rows: await s.worktrees.rows({ quick: true }),
+      themes: s.themes.themes,
+      themePrefs: s.themes.prefs,
+      agents: agentInfos(),
+      defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
+      home: homedir(),
+      pending: s.repos.pending,
+    }) satisfies ServerMsg;
+
   let branded = false;
   const serverConfig = {
     hostname: cloud.bindHost,
@@ -236,6 +254,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       branded: () => branded,
       metrics,
       noteShellOrigin: opts.noteShellOrigin,
+      bootstrap: helloFrame,
     }),
     websocket: {
       // a chat frame can carry IMAGES_PER_MESSAGE images of IMAGE_MAX_BYTES each, base64; Bun's
@@ -247,19 +266,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           return;
         }
         sockets.add(ws);
-        send(ws, {
-          t: "hello",
-          version,
-          protocol: PROTOCOL_VERSION,
-          repos: s.state.repos,
-          rows: await s.worktrees.rows(),
-          themes: s.themes.themes,
-          themePrefs: s.themes.prefs,
-          agents: agentInfos(),
-          defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
-          home: homedir(),
-          pending: s.repos.pending,
-        });
+        send(ws, await helloFrame());
       },
       close(ws: ServerWebSocket<WsData>) {
         sockets.delete(ws);

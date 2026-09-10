@@ -45,15 +45,24 @@
     text-align: left;
   }
 
-  /* The control column. Every label in the panel starts one gap after it, and what sits in it says
+  /* The control column. Every label in the panel starts at its right edge, and what sits in it says
    what the row is: the plus on "new worktree", the caret on "discovered", the kebab on a worktree
    row while the pointer is on it, the checkbox while a graft is being picked. It is also as far as
    the row gets from the dot, which matters: the peek unfurls from under a pointer resting on the
-   dot, and this is where a control can sit without a small drift landing on it. */
+   dot, and this is where a control can sit without a small drift landing on it.
+   It is the row's left padding with the glyph laid over it, not a flex item: as an item the row's
+   gap sat between it and the label, and a glyph centred in the item read as pushed left, since
+   the space to its right was the gap on top of the column's own. The column's right edge is the
+   text, so the glyph is centred between the panel edge and the text. */
+  .rail {
+    --rail-gut: 30px;
+  }
   .rail-gut {
-    width: 30px;
-    flex-shrink: 0;
-    align-self: stretch;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--rail-gut);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -133,7 +142,7 @@
       visibility: hidden;
       padding: 2px;
       border-radius: var(--radius-xs);
-      /* the 13px glyph in a 17px box, so its dots sit on the column's centre line with the plus */
+      /* a box around the glyph, so its dots sit on the column's centre line with the plus */
       display: flex;
     }
     &:hover .rail-more {
@@ -277,8 +286,9 @@
       width: 100%;
       display: flex;
       align-items: center;
+      position: relative;
       gap: 8px;
-      padding: 0 16px 0 0;
+      padding: 0 16px 0 var(--rail-gut);
       /* a section's worth of air above it, not a row's: at 6px it read as one more row under
        "new worktree" */
       margin-top: 14px;
@@ -307,7 +317,7 @@
       /* the same padding and edge-marker anchoring as .rail-item: these rows sit in the same column and
      their dots have to land on the same centre line. A rung down in height as well as colour,
      because these are not main's peers and nine of them should not outweigh one of yours. */
-      padding: 0 16px 0 0;
+      padding: 0 16px 0 var(--rail-gut);
       min-height: var(--row-height-sm);
       --row-edge-x: var(--rail-edge, 0px);
     }
@@ -353,7 +363,7 @@
     & .rail-item {
       height: var(--row-height);
       /* the dot keeps its x: 20px from the right edge, the centre of the collapsed strip */
-      padding: 0 16px 0 0;
+      padding: 0 16px 0 var(--rail-gut);
     }
     & .rail-item .dot,
     & .rail-disc-item .dot,
@@ -383,10 +393,10 @@
   .rail {
     & .rail-new {
       height: var(--row-height);
-      padding: 0 12px 0 0;
+      position: relative;
+      padding: 0 12px 0 var(--rail-gut);
       display: flex;
       align-items: center;
-      /* the row idiom's gap, so the label starts where the worktree names do */
       gap: 8px;
     }
   }

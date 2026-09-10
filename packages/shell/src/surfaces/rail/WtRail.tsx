@@ -240,9 +240,12 @@ export function WtRail() {
             <input type="checkbox" className="rail-graft-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
           ) : (
             !graftMode && (
+              // not .row-dim: it is only there while the row is lifted, and its three dots are the
+              // thinnest mark in the column, so it takes the row's own colour rather than a tier
+              // under it. Full size for the same reason: at the inline size the dots go hairline.
               // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
-              <span className="rail-more row-dim" {...tip("Actions")} onClick={(e) => openMenu(under(e))}>
-                <Icon name="more" className="icon-inline" />
+              <span className="rail-more" {...tip("Actions")} onClick={(e) => openMenu(under(e))}>
+                <Icon name="more" />
               </span>
             )
           )}

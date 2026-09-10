@@ -65,8 +65,10 @@ const ICON_PATHS: Record<IconName, string> = {
   // a pane with a divider (split) and the same pane without one (full height)
   split: "M2.5 2.5h11v11h-11z M2.5 8h11",
   full: "M2.5 2.5h11v11h-11z",
-  // zero-length segments: round caps draw them as dots
-  more: "M4 8h0.01 M8 8h0.01 M12 8h0.01",
+  // three tiny rings, each closed by the stroke into a 2.5px dot. As zero-length segments the round
+  // caps drew them at the stroke's own 1.3px, the thinnest mark in any row, and they went faint on
+  // every tier
+  more: "M3.4 8a.6 .6 0 1 0 1.2 0a.6 .6 0 1 0-1.2 0z M7.4 8a.6 .6 0 1 0 1.2 0a.6 .6 0 1 0-1.2 0z M11.4 8a.6 .6 0 1 0 1.2 0a.6 .6 0 1 0-1.2 0z",
   caret: "M4.5 6.5 8 10l3.5-3.5",
   stop: "M4.5 4.5h7v7h-7z",
   // arrow leaving a pane, for a link that opens outside the app

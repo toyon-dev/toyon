@@ -18,6 +18,9 @@ export function useChords() {
       // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
       // picker holds shell focus, so those keep the full ladder or there is no way back out.
       if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
+      // ⌘D and ⌘K are Monaco's (add cursor, chord prefix) while it has the keyboard; taking them
+      // from a focused editor made a design scan out of a second cursor
+      if ((chord?.id === "design" || chord?.id === "new") && document.activeElement?.closest(".monaco-editor")) return;
       if (chord) {
         e.preventDefault();
         switch (chord.id) {

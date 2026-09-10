@@ -127,6 +127,15 @@ const sock = new DaemonSocket(
 // to undefined and crash inside React.lazy anyway.
 window.addEventListener("vite:preloadError", markStaleBuild);
 
+// ⌘W is the browser's, in a tab and in the installed app alike: the page never sees the key, and
+// this dialog is the only hook. Nothing is lost when the window goes (the daemon keeps every
+// agent and process, and the shell reopens where it was), so it asks only while an agent is
+// mid-turn or waiting on an answer, when closing reads as walking out on it.
+window.addEventListener("beforeunload", (e) => {
+  const busy = store.getState().rows.some((r) => r.agent === "working" || r.agent === "waiting");
+  if (busy) e.preventDefault();
+});
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>

@@ -52,7 +52,7 @@
     align-items: center;
     min-height: var(--row-height-sm);
     & .kbd {
-      justify-self: end;
+      justify-self: start;
       color: var(--text0);
     }
   }

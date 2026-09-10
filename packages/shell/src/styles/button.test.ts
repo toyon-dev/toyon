@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { cssRules, shellCss } from "./cssRules.ts";
 
 /**
  * The drift this exists to stop, which the written rule did not:
@@ -13,11 +14,10 @@ import { describe, expect, test } from "bun:test";
  * lowest in a 2400-line stylesheet, and the button quietly took a list row's min-height with it.
  *
  * Colour went the same way once the box was fixed. Twenty classes held seven colour values between
- * them; .rb-btn set the text1 that .btn-icon already sets, and .toggle restated .btn-icon.on. Both
- * were classes that did nothing, which is what an open escape hatch produces. So Button owns colour
- * through a closed `tone`, and `className` is left for how a button sits in its parent: a
- * max-width, a flex-shrink, a margin. That is genuinely the surface's business; the button's own
- * appearance is not.
+ * them, two of which restated what .btn-icon already set and so did nothing at all, which is what
+ * an open escape hatch produces. So Button owns colour through a closed `tone`, and `className` is
+ * left for how a button sits in its parent: a max-width, a flex-shrink, a margin. That is genuinely
+ * the surface's business; the button's own appearance is not.
  *
  * So a class reaching a button may set neither the box nor a resting colour. State rules (:hover,
  * .on, :disabled) may still name a colour where one is genuinely unique, as .deep-link's blue
@@ -78,11 +78,6 @@ function classesReachingAButton(src: string): string[] {
 
 describe("a button's box and its resting colour", () => {
   test("belong to Button, so a surface class is left with how it sits in its parent", async () => {
-    const files = await Promise.all(
-      ["base.css", "surfaces.css"].map((f) => Bun.file(new URL(f, import.meta.url)).text()),
-    );
-    const css = files.join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
-
     const onAButton = new Set<string>();
     for (const file of new Bun.Glob("**/*.tsx").scanSync({ cwd: new URL("..", import.meta.url).pathname })) {
       if (file.endsWith("ui/Button.tsx")) continue;
@@ -91,18 +86,14 @@ describe("a button's box and its resting colour", () => {
     }
 
     const offenders: string[] = [];
-    for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const body = rule[2] ?? "";
-      const named = BOX.filter((p) => new RegExp(`(?:^|;|\\n)\\s*${p}\\s*:`).test(body));
-      if (/(?:^|;|\n)\s*color\s*:/.test(body)) named.push("a resting colour");
+    for (const rule of cssRules(await shellCss())) {
+      const named = BOX.filter((p) => rule.decls.has(p));
+      if (rule.decls.has("color")) named.push("a resting colour");
       if (named.length === 0) continue;
-      for (const part of (rule[1] ?? "").split(",")) {
+      for (const sel of rule.selectors) {
         // a bare single-class rule only: `.foo { … }`. A state or descendant rule is scoped, and
         // a unique hover colour is still the surface's to name.
-        const m = part
-          .trim()
-          .replace(/\s+/g, " ")
-          .match(/^\.([a-z][\w-]*)$/);
+        const m = sel.match(/^\.([a-z][\w-]*)$/);
         if (!m) continue;
         const cls = `.${m[1]}`;
         if (PRIMITIVES.has(cls) || ONE_OFFS.has(cls) || !onAButton.has(cls)) continue;

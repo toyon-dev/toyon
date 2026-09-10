@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { cssRules, shellCss } from "./cssRules.ts";
 
 /**
  * The bug this exists to stop, which landed three separate times before anyone caught it:
@@ -88,19 +89,10 @@ const ALLOWED = new Set([".row-dim", ...ROW_AT_REST, ...LIFTS_ELSEWHERE, ...NOT_
 
 describe("the skip tier inside a row", () => {
   test("is spelled .row-dim, so it lifts when the seat under it does", async () => {
-    const files = await Promise.all(
-      ["base.css", "surfaces.css"].map((f) => Bun.file(new URL(f, import.meta.url)).text()),
-    );
-    const css = files.join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
     const offenders: string[] = [];
-    for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const selector = rule[1] ?? "";
-      const body = rule[2] ?? "";
-      if (!/(?<![-\w])color:\s*var\(--text2\)/.test(body)) continue;
-      for (const part of selector.split(",")) {
-        const sel = part.trim().replace(/\s+/g, " ");
-        if (sel && !ALLOWED.has(sel)) offenders.push(sel);
-      }
+    for (const rule of cssRules(await shellCss())) {
+      if (rule.decls.get("color") !== "var(--text2)") continue;
+      for (const sel of rule.selectors) if (!ALLOWED.has(sel)) offenders.push(sel);
     }
     expect(offenders).toEqual([]);
   });

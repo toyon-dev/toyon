@@ -2,7 +2,6 @@ import { matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import { isSubPicker, localOf, previewIdOf } from "../state/store.ts";
-import { step } from "../ui/listNav.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
@@ -39,11 +38,18 @@ export function useChords() {
           }
           case "wt-prev":
           case "wt-next": {
-            // the rail's order, wrapping at the ends the way every list here does. From a draft
-            // the base row counts as where you are, since that is the row the draft branches from.
+            // the rail's order, top to bottom, with the new-worktree row as the last stop: down
+            // from the last worktree opens the draft, up from the draft is the last worktree, and
+            // the ends stop rather than wrap. The found list below is not on the walk.
+            const last = s.visible[s.visible.length - 1];
+            if (s.draft) {
+              if (chord.id === "wt-prev" && last) dispatch({ a: "activate", id: last.id });
+              break;
+            }
             const at = s.visible.findIndex((w) => w.id === s.activeId);
-            const wt = s.visible[step(at, chord.id === "wt-next" ? 1 : -1, s.visible.length)];
+            const wt = s.visible[at + (chord.id === "wt-next" ? 1 : -1)];
             if (wt) dispatch({ a: "activate", id: wt.id });
+            else if (chord.id === "wt-next" && at >= 0) dispatch({ a: "open-draft" });
             break;
           }
           case "new":

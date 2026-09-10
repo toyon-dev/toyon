@@ -20,8 +20,7 @@ const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
  * settings live here as well as in the palette; esc from a picker opened here comes back. The
  * settings card is the shortcut card's grid: sections in two columns, so the two read as one
  * shape, and a row means what its section says (a row under Agents is an agent, not a
- * preference). The project is top left, appearance top right, and the agents span the card
- * under them. */
+ * preference). The project and its agents are the left column, appearance the right. */
 export function KeysHelp() {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -60,6 +59,15 @@ export function KeysHelp() {
               </div>
             </>
           )}
+          {/* the agents under the project, in its column: one row each, who it is logged in as, so
+              a refused or stale credential is fixable here rather than only in the terminal that
+              wrote it. Spanning the card put the chips a column away from their names. No default
+              row: which agent, mode and model a new worktree gets is chosen in the box that starts
+              it, and the box remembers. */}
+          <div className="section-title keys-h">Agents</div>
+          {agents.map((a) => (
+            <AgentRow key={a.id} agent={a} />
+          ))}
         </div>
         <div>
           <div className="section-title keys-h">Appearance</div>
@@ -77,16 +85,6 @@ export function KeysHelp() {
               {resolveTheme(prefs, themes, systemDark).name}
             </Button>
           </div>
-        </div>
-        {/* the agents, across the card under the two: one row each, who it is logged in as, so a
-            refused or stale credential is fixable here rather than only in the terminal that
-            wrote it. No default row: which agent, mode and model a new worktree gets is chosen in
-            the box that starts it, and the box remembers. */}
-        <div className="keys-span">
-          <div className="section-title keys-h">Agents</div>
-          {agents.map((a) => (
-            <AgentRow key={a.id} agent={a} />
-          ))}
         </div>
       </div>
       <div className="keys-card">

@@ -10,7 +10,9 @@ import { chordOf } from "./chords.ts";
 
 export type ChordSection = "Find" | "Panels" | "Preview" | "Worktrees";
 
-export const CHORD_SECTIONS: readonly ChordSection[] = ["Find", "Panels", "Preview", "Worktrees"];
+/** the card's two-column grid fills in this order: the two short sections share the top row and
+ * the two long ones the bottom, so neither column carries a hole beside a tall neighbour */
+export const CHORD_SECTIONS: readonly ChordSection[] = ["Find", "Preview", "Panels", "Worktrees"];
 
 export interface ChordLabel {
   label: string;

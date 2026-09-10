@@ -456,7 +456,7 @@ export const ChatItemView = memo(function ChatItemView({
       return <AskCard item={item} />;
     case "blocked":
       return (
-        <div className="blocked-row" data-tip={item.reason}>
+        <div className="blocked-row" data-tip={item.reason} data-tip-placement="follow">
           <span className="blocked-tag">blocked</span>
           <span className="tool-name">{item.tool}</span>
           <span className="tool-hint">{item.path}</span>
@@ -464,7 +464,11 @@ export const ChatItemView = memo(function ChatItemView({
       );
     case "grafted":
       return (
-        <div className="graft-row" data-tip={`what follows was said in ${item.title} before it was merged in here`}>
+        <div
+          className="graft-row"
+          data-tip={`what follows was said in ${item.title} before it was merged in here`}
+          data-tip-placement="follow"
+        >
           <span className="graft-tag">grafted</span>
           <span className="tool-name">{item.title}</span>
           <span className="tool-hint">{item.branch}</span>

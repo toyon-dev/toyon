@@ -21,25 +21,44 @@
     box-shadow: var(--elevation-float);
     white-space: pre-line;
     overflow-wrap: anywhere;
-    animation: tooltip-in 90ms ease-out;
-    &[data-side="above"] {
-      animation-name: tooltip-in-above;
+    /* the box eases in from its anchor, so the nudge runs along the axis it was placed on */
+    animation: tooltip-in-bottom 90ms ease-out;
+    &[data-side="top"] {
+      animation-name: tooltip-in-top;
+    }
+    &[data-side="left"] {
+      animation-name: tooltip-in-left;
+    }
+    &[data-side="right"] {
+      animation-name: tooltip-in-right;
     }
   }
   .tooltip-key {
     margin-left: 12px;
     color: var(--text1);
   }
-  @keyframes tooltip-in {
+  @keyframes tooltip-in-bottom {
     from {
       opacity: 0;
       transform: translateY(-2px);
     }
   }
-  @keyframes tooltip-in-above {
+  @keyframes tooltip-in-top {
     from {
       opacity: 0;
       transform: translateY(2px);
+    }
+  }
+  @keyframes tooltip-in-left {
+    from {
+      opacity: 0;
+      transform: translateX(2px);
+    }
+  }
+  @keyframes tooltip-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(-2px);
     }
   }
 }

@@ -219,8 +219,12 @@ export function WtRail() {
         // per element would swap fifty times as the mouse crosses the panel. Badges and the crashed
         // dot keep their own, since those are what a hover over them is asking about.
         {...(owned
-          ? tip(`${stateLabel(w, repoOf(owned)?.needsSetup)} · ${wtDirLabel(w)}`)
-          : tip(w.locked ? `${wtDirLabel(w)} · held by ${w.lockReason ?? "another tool"}` : wtDirLabel(w)))}
+          ? tip(`${stateLabel(w, repoOf(owned)?.needsSetup)} · ${wtDirLabel(w)}`, undefined, "left")
+          : tip(
+              w.locked ? `${wtDirLabel(w)} · held by ${w.lockReason ?? "another tool"}` : wtDirLabel(w),
+              undefined,
+              "left",
+            ))}
         onClick={(e) => {
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
           // and has nothing to check; every other graftable row is a source to check or uncheck.
@@ -344,7 +348,11 @@ export function WtRail() {
     <div className={cx("rail", (graftMode || menu || discMenu) && "hold", railOpen && "pinned", offline && "offline")}>
       {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
           tip of its own, and the tooltip walks up to the nearest one */}
-      <div className="rail-panel" data-tip={offline ? "Lost the daemon; retrying" : undefined}>
+      <div
+        className="rail-panel"
+        data-tip={offline ? "Lost the daemon; retrying" : undefined}
+        data-tip-placement="follow"
+      >
         <div className="rail-list">
           {worktrees.map(railRow)}
           {graftMode && (
@@ -452,6 +460,8 @@ export function WtRail() {
                 aria-expanded={discOpen}
                 {...tip(
                   `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that toyon did not make`,
+                  undefined,
+                  "follow",
                 )}
                 onClick={() => dispatch({ a: "toggle-discovered" })}
               >

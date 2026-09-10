@@ -290,7 +290,11 @@ export function LeftDock({ width }: { width: number }) {
         )}
         {tab === "changes" && committed.length > 0 && (
           <>
-            <div className="section-title" data-tip="Committed on this branch, not yet on main">
+            <div
+              className="section-title"
+              data-tip="Committed on this branch, not yet on main"
+              data-tip-placement="follow"
+            >
               committed · {committed.length}
             </div>
             {committed.map((f, i) => (

@@ -17,6 +17,7 @@ import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass, procTrouble } from "../util.ts";
 import { worktreeActions } from "./worktreeActions.ts";
 import "./rail.css";
+import { rowState } from "../../ui/rowState.ts";
 
 type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
 
@@ -151,7 +152,7 @@ export function WtRail() {
 
   return (
     <div
-      className={`rail ${graftMode || menu || discMenu ? "hold" : ""} ${railOpen ? "open" : ""} ${offline ? "offline" : ""}`}
+      className={`rail ${graftMode || menu || discMenu ? "hold" : ""} ${railOpen ? "pinned" : ""} ${offline ? "offline" : ""}`}
     >
       {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
           tip of its own, and the tooltip walks up to the nearest one */}
@@ -160,7 +161,8 @@ export function WtRail() {
           {worktrees.map((w) => (
             <button
               key={w.worktree.id}
-              className={`row rail-item row-edge ${w.worktree.id === activeId ? "active" : ""} ${sel.includes(w.worktree.id) ? "sel" : ""} ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
+              className={`row rail-item row-edge ${menu?.id === w.worktree.id ? "menu-open" : ""}`}
+              data-state={rowState({ current: w.worktree.id === activeId, checked: sel.includes(w.worktree.id) })}
               onClick={(e) => {
                 if (graftMode || e.shiftKey) toggleSel(w);
                 else dispatch({ a: "activate", id: w.worktree.id });
@@ -355,7 +357,8 @@ export function WtRail() {
           {!graftMode && discovered.length > 0 && (
             <>
               <button
-                className={`rail-disc-head ${discOpen ? "open" : ""}`}
+                className="rail-disc-head"
+                aria-expanded={discOpen}
                 {...tip(
                   `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that toyon did not make`,
                 )}
@@ -369,7 +372,8 @@ export function WtRail() {
                   <button
                     key={d.path}
                     type="button"
-                    className={`row row-quiet rail-disc-item row-edge ${d.id === activeId ? "active" : ""} ${discMenu?.path === d.path ? "menu-open" : ""}`}
+                    className={`row row-quiet rail-disc-item row-edge ${discMenu?.path === d.path ? "menu-open" : ""}`}
+                    data-state={rowState({ current: d.id === activeId })}
                     {...tip(d.locked ? `${wtDirLabel(d)} · held by ${d.lockReason ?? "another tool"}` : wtDirLabel(d))}
                     onClick={() => dispatch({ a: "activate", id: d.id })}
                     onContextMenu={(e) => {

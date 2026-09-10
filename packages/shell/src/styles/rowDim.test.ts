@@ -26,7 +26,7 @@ const ROW_AT_REST = [
   ".design-tail > summary",
   ".rail:hover .rail-disc-head",
   ".rail.hold .rail-disc-head",
-  ".rail.open .rail-disc-head",
+  ".rail.pinned .rail-disc-head",
 ];
 
 /** a child that lifts, but to a tier of its own: the transcript reads its hint up to text0, and a

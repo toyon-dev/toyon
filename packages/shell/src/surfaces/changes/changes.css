@@ -44,12 +44,12 @@
   /* expanded, so its files are the rows underneath: the same picked pair a file open in the editor
    takes, because it is the same idea one level up */
   .log-row {
-    &.open {
+    &[data-state~="current"] {
       background: var(--element1);
       color: var(--text0);
     }
-    &.open,
-    &.sel {
+    &[data-state~="current"],
+    &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
     }
     & .subject {
@@ -82,15 +82,15 @@
    worktree and the open tool call carry. */
 
   .git-file {
-    &.active {
+    &[data-state~="current"] {
       background: var(--element1);
       color: var(--text0);
     }
     /* where the keyboard is. Moving the cursor also opens the file, so the cursor and the open file
    are the same row nearly always; it takes the same edge rather than a ring stacked on top of the
    band, which hid the band and read as a second, unrelated kind of selection. */
-    &.active,
-    &.sel {
+    &[data-state~="current"],
+    &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
     }
     & .xy {

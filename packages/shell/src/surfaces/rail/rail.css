@@ -24,14 +24,14 @@
     &:hover {
       --dot-gap: var(--element0);
     }
-    &.active {
+    &[data-state~="current"] {
       --row-edge-color: var(--accent);
       color: var(--text0);
       background: var(--element1);
       --dot-gap: var(--element1);
     }
-    /* after .active on purpose: while a graft is being picked, a row that is both shows the graft */
-    &.sel {
+    /* after current on purpose: while a graft is being picked, a row that is both shows the graft */
+    &[data-state~="checked"] {
       --row-edge-color: var(--aqua);
       background: var(--element1);
     }
@@ -140,7 +140,7 @@
     overflow: visible;
     &:hover,
     &.hold,
-    &.open {
+    &.pinned {
       --rail-edge: 0px;
     }
   }
@@ -179,10 +179,10 @@
     }
     /* kept open: the rail is a column of its own, so it takes the width out of the layout and drops the
    shadow with it. Nothing overlaps, nothing to lift off the page. */
-    &.open {
+    &.pinned {
       width: var(--rail-w);
     }
-    &.open .rail-panel {
+    &.pinned .rail-panel {
       box-shadow: none;
     }
   }
@@ -221,7 +221,7 @@
   .rail {
     &:hover .rail-foot,
     &.hold .rail-foot,
-    &.open .rail-foot {
+    &.pinned .rail-foot {
       opacity: 1;
       pointer-events: auto;
       transition: opacity 0.12s ease 50ms;
@@ -242,7 +242,7 @@
   .rail {
     &:hover .rail-disc-head,
     &.hold .rail-disc-head,
-    &.open .rail-disc-head {
+    &.pinned .rail-disc-head {
       height: var(--row-h-sm);
       width: 100%;
       display: flex;
@@ -270,7 +270,7 @@
   .rail {
     &:hover .rail-disc-item,
     &.hold .rail-disc-item,
-    &.open .rail-disc-item {
+    &.pinned .rail-disc-item {
       display: flex;
       /* the same padding and edge-marker anchoring as .rail-item: these rows sit in the same column and
      their dots have to land on the same centre line. Height and the rest come from .row. */
@@ -281,7 +281,7 @@
   /* selected the same way a worktree row is: it is the same selection, and the pane beside it is
    showing this row */
   .rail-disc-item {
-    &.active {
+    &[data-state~="current"] {
       --row-edge-color: var(--accent);
       color: var(--text0);
       background: var(--element1);
@@ -378,7 +378,7 @@
   .rail {
     &:hover .rail-new-strip,
     &.hold .rail-new-strip,
-    &.open .rail-new-strip {
+    &.pinned .rail-new-strip {
       opacity: 0;
       transition: opacity 0.12s ease 50ms;
     }

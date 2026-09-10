@@ -64,7 +64,7 @@
       border-radius: var(--r-sm);
       padding: 0;
     }
-    & .kind.on {
+    & .kind[data-state~="current"] {
       color: var(--accent);
     }
   }

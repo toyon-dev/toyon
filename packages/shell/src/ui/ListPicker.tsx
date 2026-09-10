@@ -4,6 +4,7 @@ import { KeyHints } from "./KeyHints.tsx";
 import { useListNav } from "./listNav.ts";
 import { Overlay } from "./Overlay.tsx";
 import "./picker.css";
+import { rowState } from "./rowState.ts";
 
 export { step } from "./listNav.ts";
 
@@ -145,7 +146,8 @@ export function ListPicker<T>({
       {results.map((t, i) => (
         <button
           key={keyOf(t)}
-          className={`picker-item ${rowClass?.(t) ?? ""} ${i === clamped ? "active" : ""}`}
+          className={`picker-item ${rowClass?.(t) ?? ""}`}
+          data-state={rowState({ cursor: i === clamped })}
           title={rowTitle?.(t)}
           // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
           onMouseMove={() => i !== clamped && nav.setIndex(i)}

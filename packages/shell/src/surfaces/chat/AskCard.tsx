@@ -17,6 +17,7 @@ import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { KeyHints } from "../../ui/KeyHints.tsx";
 import { useListNav } from "../../ui/listNav.ts";
+import { rowState } from "../../ui/rowState.ts";
 import {
   activeQuestion,
   answerText,
@@ -173,7 +174,8 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
                 <button
                   key={o.value}
                   type="button"
-                  className={`picker-item picker-row ask-opt row-edge ${at === nav.index ? "active" : ""} ${on ? "on" : ""}`}
+                  className="picker-item picker-row ask-opt row-edge"
+                  data-state={rowState({ cursor: at === nav.index, checked: on })}
                   // mousemove, not mouseenter, for the same reason the picker gives: a row arriving
                   // under a stationary pointer must not steal the highlight the keyboard is on
                   onMouseMove={() => at !== nav.index && nav.setIndex(at)}

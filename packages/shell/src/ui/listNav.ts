@@ -55,7 +55,9 @@ export function useListNav<T>(opts: {
   const onActiveRef = useRef(onActive);
   onActiveRef.current = onActive;
   useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(".picker-item.active")?.scrollIntoView({ block: "nearest" });
+    listRef.current
+      ?.querySelector<HTMLElement>('.picker-item[data-state~="cursor"]')
+      ?.scrollIntoView({ block: "nearest" });
     onActiveRef.current?.(results[idx] ?? null);
   }, [activeKey]);
 

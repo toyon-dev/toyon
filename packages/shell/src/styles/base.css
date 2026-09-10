@@ -131,12 +131,11 @@
   /* a lifted seat lifts its dim child too, and picked lifts further than hover: text2 on element1 is
    1.06:1, which is not a quiet tier but an invisible one. text1 rather than text0, because at text0
    a filename and its directory read as one string instead of a name with a location after it. The
-   picked states are still each surface's own class until they are one name; .sel is deliberately
-   not here, since on a file or a commit it is the keyboard cursor and moves no background. */
+   states are data-state words (ui/rowState.ts): current lifts the seat, cursor deliberately does
+   not, since on a file or a commit it is the keyboard cursor and moves no background. */
   .row {
     &:hover,
-    &.active,
-    &.open,
+    &[data-state~="current"],
     &.menu-open {
       --row-dim-color: var(--text1);
     }

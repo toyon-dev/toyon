@@ -816,7 +816,7 @@
   }
   /* your answer, marked the one way this app marks a selection */
   .ask-opt {
-    &.on {
+    &[data-state~="checked"] {
       --row-edge-color: var(--accent);
     }
     /* saying no to the agent stops something mid-flight, which is what the danger tone is for. It sits

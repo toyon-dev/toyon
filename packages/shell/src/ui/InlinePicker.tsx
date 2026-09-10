@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from "react";
 import { KeyHints } from "./KeyHints.tsx";
 import type { ListNav } from "./listNav.ts";
 import "./picker.css";
+import { rowState } from "./rowState.ts";
 
 /**
  * A list anchored to an input the caret is already in, rather than an overlay that takes focus.
@@ -32,7 +33,8 @@ export function InlinePicker<T>({
         {results.map((t, i) => (
           <button
             key={keyOf(t)}
-            className={`picker-item ${rowClass?.(t) ?? ""} ${i === nav.index ? "active" : ""}`}
+            className={`picker-item ${rowClass?.(t) ?? ""}`}
+            data-state={rowState({ cursor: i === nav.index })}
             // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal
             // the highlight
             onMouseMove={() => i !== nav.index && nav.setIndex(i)}

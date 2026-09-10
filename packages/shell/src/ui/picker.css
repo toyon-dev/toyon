@@ -188,8 +188,8 @@
     flex-shrink: 0;
   }
   .picker-item {
-    &.active .search-loc,
-    &.active .search-text {
+    &[data-state~="cursor"] .search-loc,
+    &[data-state~="cursor"] .search-text {
       color: var(--text0);
     }
     /* the matched characters take the accent, so they are the same colour as the bar marking the row
@@ -215,7 +215,7 @@
    (the active worktree, the open tool call); on a picker row it read as a choice already made,
    when the row under the cursor is only the row the pointer or ↑↓ happens to be over. Hover sets
    the same index, so this is the one highlight either way. */
-    &.active {
+    &[data-state~="cursor"] {
       background: var(--element1);
       color: var(--text0);
       --row-dim-color: var(--text1);

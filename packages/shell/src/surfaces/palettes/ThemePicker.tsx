@@ -3,6 +3,7 @@ import { effectiveKind, pickFamily, type ThemeFamily, themeFamilies } from "@toy
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
+import { rowState } from "../../ui/rowState.ts";
 import { byName } from "./commands.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 
@@ -85,8 +86,10 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
             hint={
               <span className="theme-kinds">
                 {src && <span>{src}</span>}
-                <span className={`kind ${isActive && shown?.kind === "dark" ? "on" : ""}`}>{f.dark ? "dark" : ""}</span>
-                <span className={`kind ${isActive && shown?.kind === "light" ? "on" : ""}`}>
+                <span className="kind" data-state={rowState({ current: isActive && shown?.kind === "dark" })}>
+                  {f.dark ? "dark" : ""}
+                </span>
+                <span className="kind" data-state={rowState({ current: isActive && shown?.kind === "light" })}>
                   {f.light ? "light" : ""}
                 </span>
               </span>

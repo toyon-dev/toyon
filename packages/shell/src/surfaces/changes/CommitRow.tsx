@@ -1,5 +1,6 @@
 import type { CommitEntry } from "@toyon/shared";
 import { memo } from "react";
+import { rowState } from "../../ui/rowState.ts";
 
 /** Coarse on purpose: the question a history row answers is "how long ago", and a row this narrow
  * has no space for a date the reader would have to parse anyway. */
@@ -38,7 +39,8 @@ export const CommitRow = memo(function CommitRow({
 }) {
   return (
     <button
-      className={`row row-sm log-row row-edge ${open ? "open" : ""} ${selected ? "sel" : ""}`}
+      className="row row-sm log-row row-edge"
+      data-state={rowState({ current: open, cursor: selected })}
       role="option"
       aria-selected={selected}
       // the list owns the keyboard, the same way the changed-files list does

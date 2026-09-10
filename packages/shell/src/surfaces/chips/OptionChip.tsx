@@ -1,4 +1,4 @@
-import type { ModelChoice } from "@toyon/shared";
+import { agentDefault, type ModelChoice } from "@toyon/shared";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import "./chips.css";
 
@@ -8,7 +8,10 @@ export const DEFAULT_OPTION = "";
 /** One of an agent's advertised select options (its model, its effort level), shown where the
  * prompt is typed so what will answer is never hidden. The list is what the agent advertised the
  * last time one of its sessions opened, so nothing shows until it has run once; `current` is
- * what the running session reported, which is the truth when the record names nothing. */
+ * what the running session reported, which is the truth when the record names nothing.
+ *
+ * An agent that lists its own default row is taken at its word: that row stands in for the
+ * empty option and no second "default" is drawn beside it. */
 export function OptionChip({
   choices,
   value,
@@ -36,10 +39,11 @@ export function OptionChip({
   onClose?: () => void;
 }) {
   if (choices.length === 0) return null;
-  const shown = value || current || DEFAULT_OPTION;
+  const own = agentDefault(choices);
+  const shown = value || current || own?.id || DEFAULT_OPTION;
   const known = choices.some((c) => c.id === shown);
   const options = [
-    { id: DEFAULT_OPTION, label: defaultLabel, description: defaultDescription },
+    ...(own ? [] : [{ id: DEFAULT_OPTION, label: defaultLabel, description: defaultDescription }]),
     ...choices.map((c) => ({ id: c.id, label: c.name, description: c.description })),
     // the session reported something the list does not carry: show it rather than lie
     ...(shown && !known ? [{ id: shown, label: shown }] : []),

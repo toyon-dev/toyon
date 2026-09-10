@@ -97,7 +97,7 @@ export async function cloneInto(
   opts: { onLine?: (line: string) => void; signal?: AbortSignal } = {},
 ): Promise<void> {
   if (!url) throw new UserError("a clone needs a url");
-  // No --depth: a shallow clone cannot be branched from usefully, and land, sync and fold all
+  // No --depth: a shallow clone cannot be branched from usefully, and land, sync and graft all
   // assume real history. NO_PROMPT is what stops a credential-less URL hanging forever.
   // --progress because git only draws it when stderr is a terminal, and here it never is.
   const r = await runLive(GIT, ["clone", "--progress", "--", url, name], plan.parent, {

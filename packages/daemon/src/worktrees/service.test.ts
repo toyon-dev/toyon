@@ -437,7 +437,7 @@ describe("open a ref", () => {
   });
 });
 
-describe("fold into", () => {
+describe("graft", () => {
   const commitIn = (path: string, file: string) => {
     writeFileSync(join(path, file), `${file}\n`);
     sh(path, "git", "add", "-A");
@@ -453,9 +453,9 @@ describe("fold into", () => {
     commitIn(b.path, "b.txt");
     w.agents.get(b.id)!.note({ type: "user-message", text: "in beta", ts: 1 });
     const portBefore = a.proxyPort;
-    const { target, folded } = await w.worktrees.fold(a.id, [b.id]);
+    const { target, grafted } = await w.worktrees.graft(a.id, [b.id]);
     expect(target.id).toBe(a.id);
-    expect(folded).toEqual([b.title]);
+    expect(grafted).toEqual([b.title]);
     expect(existsSync(join(a.path, "b.txt"))).toBe(true);
     expect(w.state.worktree(b.id)).toBeUndefined();
     expect(existsSync(b.path)).toBe(false);
@@ -465,8 +465,8 @@ describe("fold into", () => {
     expect(w.state.worktree(a.id)?.kind).toBe("worktree");
     // beta's history is now alpha's, behind a marker saying where it came from
     const recorded = w.agents.get(a.id)!.recorded;
-    expect(recorded.map((e) => e.type)).toEqual(["folded", "user-message"]);
-    expect(recorded[0]).toMatchObject({ type: "folded", title: b.title, branch: b.branch });
+    expect(recorded.map((e) => e.type)).toEqual(["grafted", "user-message"]);
+    expect(recorded[0]).toMatchObject({ type: "grafted", title: b.title, branch: b.branch });
   });
 
   test("a dirty source is refused and nothing is touched", async () => {
@@ -477,7 +477,7 @@ describe("fold into", () => {
     commitIn(b.path, "b.txt");
     writeFileSync(join(b.path, "wip.txt"), "not committed\n");
     const head = (await git(a.path, "rev-parse", "HEAD")).out;
-    await expect(w.worktrees.fold(a.id, [b.id])).rejects.toThrow(`commit or discard the changes in ${b.title}`);
+    await expect(w.worktrees.graft(a.id, [b.id])).rejects.toThrow(`commit or discard the changes in ${b.title}`);
     expect(w.state.worktree(b.id)).toBeDefined();
     expect((await git(a.path, "rev-parse", "HEAD")).out).toBe(head);
     expect(existsSync(join(b.path, "wip.txt"))).toBe(true);
@@ -492,7 +492,7 @@ describe("fold into", () => {
     sh(a.path, "git", "commit", "-qam", "a");
     writeFileSync(join(b.path, "README.md"), "from b\n");
     sh(b.path, "git", "commit", "-qam", "b");
-    await expect(w.worktrees.fold(a.id, [b.id])).rejects.toBeInstanceOf(UserError);
+    await expect(w.worktrees.graft(a.id, [b.id])).rejects.toBeInstanceOf(UserError);
     expect(w.state.worktree(b.id)).toBeDefined();
     expect(existsSync(join(a.path, ".git", "MERGE_HEAD")) || existsSync(join(a.path, "MERGE_HEAD"))).toBe(false);
     expect((await git(a.path, "status", "--porcelain")).out).toBe("");
@@ -507,11 +507,11 @@ describe("fold into", () => {
     await settle();
     commitIn(b.path, "b.txt");
     w.agents.get(b.id)!.status = "working";
-    await expect(w.worktrees.fold(a.id, [b.id])).rejects.toThrow(/mid-turn/);
+    await expect(w.worktrees.graft(a.id, [b.id])).rejects.toThrow(/mid-turn/);
     w.agents.get(b.id)!.status = "idle";
-    await expect(w.worktrees.fold(main.id, [b.id])).rejects.toBeInstanceOf(UserError);
-    await expect(w.worktrees.fold(a.id, [main.id])).rejects.toBeInstanceOf(UserError);
-    await expect(w.worktrees.fold(a.id, [a.id])).rejects.toBeInstanceOf(UserError);
+    await expect(w.worktrees.graft(main.id, [b.id])).rejects.toBeInstanceOf(UserError);
+    await expect(w.worktrees.graft(a.id, [main.id])).rejects.toBeInstanceOf(UserError);
+    await expect(w.worktrees.graft(a.id, [a.id])).rejects.toBeInstanceOf(UserError);
     expect(w.state.worktree(b.id)).toBeDefined();
   });
 });

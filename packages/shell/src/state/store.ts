@@ -64,8 +64,8 @@ export type ChatItem =
     }
   | { kind: "error"; text: string }
   | { kind: "blocked"; tool: string; path: string; reason: string }
-  /** a divider: what follows was said in another worktree, folded in here */
-  | { kind: "folded"; title: string; branch: string }
+  /** a divider: what follows was said in another worktree, grafted in here */
+  | { kind: "grafted"; title: string; branch: string }
   /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
    * credential and the provider refused it, so the error above this card says what went wrong */
   | {
@@ -1034,8 +1034,8 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
       return [...items, { kind: "error", text: event.message }];
     case "agent-blocked":
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
-    case "folded":
-      return [...items, { kind: "folded", title: event.title, branch: event.branch }];
+    case "grafted":
+      return [...items, { kind: "grafted", title: event.title, branch: event.branch }];
     case "agent-auth-required":
       return [
         ...items,

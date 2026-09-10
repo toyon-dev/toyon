@@ -4,7 +4,7 @@
 
 @layer surfaces {
   .rail-item {
-    /* the active/fold marker rides the panel's left edge rather than the row's, because the row's
+    /* the active/graft marker rides the panel's left edge rather than the row's, because the row's
      own left edge is off screen while the rail is collapsed */
     --row-edge-x: var(--rail-edge, 0px);
     /* it travels on the same curve and the same delay as the panel width, so the two move as one */
@@ -30,7 +30,7 @@
       background: var(--element1);
       --dot-gap: var(--element1);
     }
-    /* after current on purpose: while a fold is being picked, a row that is both shows the fold */
+    /* after current on purpose: while a graft is being picked, a row that is both shows the graft */
     &[data-state~="checked"] {
       --row-edge-color: var(--aqua);
       background: var(--element1);
@@ -66,32 +66,14 @@
       opacity: 0.7;
     }
   }
-  .rail-fold {
+  .rail-graft {
     display: flex;
-    flex-wrap: wrap;
     border-top: 1px solid var(--border0);
     align-items: center;
     padding: 4px 6px;
     gap: 2px;
   }
-  /* the destination takes the whole first line, so the fold, sync and remove buttons keep to one
-   word each on the second and fit the rail's 232px; "fold 1 into dark-mode-toggle" as one button
-   pushed remove and cancel off the edge */
-  .rail-fold-into {
-    flex-basis: 100%;
-    padding: 0 6px 4px;
-    font: var(--type-ui-sm);
-    color: var(--text2);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    & b {
-      /* the branch name in mono, the same case as the composer's "new worktree from" line */
-      font: var(--type-mono-sm);
-      color: var(--text1);
-    }
-  }
-  .rail-fold-check {
+  .rail-graft-check {
     accent-color: var(--accent);
     pointer-events: none;
     margin: 0;

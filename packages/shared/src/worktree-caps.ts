@@ -1,7 +1,7 @@
 // What may be done to a worktree, as questions with names. `kind` says what a worktree is (git's
 // main checkout, a linked one, a pre-warmed spare); these say what an action may do to it, and the
 // two are not the same question. "Not main" stood in for can-remove, can-rename, can-land and
-// can-fold at a dozen sites, and they only agreed because every non-main record was a task toyon
+// can-graft at a dozen sites, and they only agreed because every non-main record was a task toyon
 // had made. An adopted worktree broke rename, which would have moved the person's branch under a
 // toyon/ name, and a pulled-in PR breaks land, since landing a review means something else.
 
@@ -35,8 +35,8 @@ export function canLand(wt: Wt): boolean {
   return wt.kind === "worktree" && wt.from?.kind !== "pr";
 }
 
-/** may be a fold's target or one of its sources */
-export function canFold(wt: Pick<WorktreeInfo, "kind">): boolean {
+/** may be a graft's target or one of its sources */
+export function canGraft(wt: Pick<WorktreeInfo, "kind">): boolean {
   return wt.kind === "worktree";
 }
 

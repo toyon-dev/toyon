@@ -35,7 +35,7 @@ export function ImportPane({ pending }: { pending: PendingRepo }) {
         <p className="setup-lead import-error">{pending.error}</p>
       ) : (
         <p className="setup-lead setup-aside">
-          the whole history is cloned, so worktrees, land and fold all work on it straight away.
+          the whole history is cloned, so worktrees, land and graft all work on it straight away.
         </p>
       )}
 

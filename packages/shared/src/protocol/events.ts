@@ -153,9 +153,9 @@ export type AgentEvent =
     }
   | { type: "agent-auth-ok"; ts: number }
   | { type: "agent-blocked"; tool: string; path: string; reason: string; ts: number }
-  /** a fold appended another worktree's transcript here: what follows, up to the next marker or
+  /** a graft appended another worktree's transcript here: what follows, up to the next marker or
    * the next message someone types, was said in that worktree before it was merged in and removed */
-  | { type: "folded"; title: string; branch: string; ts: number }
+  | { type: "grafted"; title: string; branch: string; ts: number }
   /** the agent asked something and its turn is blocked until the answer goes back. `toolId` ties
    * the card to the tool row the agent emitted just before it, which the card then replaces.
    * Always followed by an agent-ask-end. */

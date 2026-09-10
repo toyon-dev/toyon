@@ -52,8 +52,6 @@ const NEVER_LIFTS = [
   ".btn-busy > .spinner",
   ".center .empty",
   ".composer-ghost",
-  /* the fold bar's destination line: a caption on the panel under the rows, never a seat */
-  ".rail-fold-into",
   ".crash-body",
   ".design-cell-note",
   '.design-cell[data-kind="color"] .design-cell-value',

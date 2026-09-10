@@ -6,7 +6,7 @@
  *             active worktree, the theme kind being previewed
  *   cursor    where the keyboard is, and nothing more: the highlighted picker row, the menu row
  *             the arrows reached
- *   checked   a member of a multi-select: a worktree picked for a fold, an answer chosen
+ *   checked   a member of a multi-select: a worktree picked for a graft, an answer chosen
  *
  * A stylesheet reads one with `[data-state~="current"]`, so a row can hold several at once. `on`
  * stays what it is on a Button, a toggle, and never marks a row.

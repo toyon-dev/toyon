@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "./model.ts";
-import { canFold, canLand, canRemove, canRename, canSync, isMain } from "./worktree-caps.ts";
+import { canGraft, canLand, canRemove, canRename, canSync, isMain } from "./worktree-caps.ts";
 
 const wt = (over: Partial<WorktreeInfo> = {}): WorktreeInfo => ({
   id: "w",
@@ -21,13 +21,13 @@ describe("worktree capabilities", () => {
     expect(canRemove(main)).toBe(false);
     expect(canRename(main)).toBe(false);
     expect(canLand(main)).toBe(false);
-    expect(canFold(main)).toBe(false);
+    expect(canGraft(main)).toBe(false);
   });
 
   test("a spare belongs to the pool, not to a person", () => {
     const spare = wt({ kind: "spare" });
     expect(canRemove(spare)).toBe(false);
-    expect(canFold(spare)).toBe(false);
+    expect(canGraft(spare)).toBe(false);
     expect(canLand(spare)).toBe(false);
   });
 
@@ -36,7 +36,7 @@ describe("worktree capabilities", () => {
     expect(canRemove(task)).toBe(true);
     expect(canRename(task)).toBe(true);
     expect(canLand(task)).toBe(true);
-    expect(canFold(task)).toBe(true);
+    expect(canGraft(task)).toBe(true);
   });
 
   test("an adopted worktree keeps the person's branch name, and everything else", () => {
@@ -44,7 +44,7 @@ describe("worktree capabilities", () => {
     expect(canRename(adopted)).toBe(false);
     expect(canRemove(adopted)).toBe(true);
     expect(canLand(adopted)).toBe(true);
-    expect(canFold(adopted)).toBe(true);
+    expect(canGraft(adopted)).toBe(true);
   });
 
   test("sync needs a branch nobody else holds, and never main", () => {

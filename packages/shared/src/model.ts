@@ -254,6 +254,14 @@ export interface ModelChoice {
   description?: string;
 }
 
+/** The choice an agent marks as its own default, if it lists one. ACP does not flag it, so this
+ * is the id the adapters that have one use (Claude's model and effort selects both lead with a
+ * `default` entry). Setting it is a real request the agent honours, unlike the empty option,
+ * which sends nothing and leaves the agent where it is. */
+export function agentDefault(choices: ModelChoice[]): ModelChoice | undefined {
+  return choices.find((c) => c.id === "default");
+}
+
 /** The pre-warmed worktree a repo's next task will claim. Never a rail row: nobody works in it,
  * and the rail's ⌘1-9 must not count it. Its preview is what a draft tab shows while the prompt
  * is still being typed, since it is the code the task starts from; on claim the same id becomes

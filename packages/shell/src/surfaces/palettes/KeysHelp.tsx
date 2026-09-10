@@ -20,7 +20,7 @@ const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
  * settings live here as well as in the palette; esc from a picker opened here comes back. The
  * settings card is the shortcut card's grid: sections in two columns, so the two read as one
  * shape, and a row means what its section says (a row under Agents is an agent, not a
- * preference). Agents sit top left because that is what a new person checks first. */
+ * preference). The project leads the left column, then its agents; appearance is the right. */
 export function KeysHelp() {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -39,6 +39,27 @@ export function KeysHelp() {
     <Overlay bare boxClass="keys-stack" onClose={() => dispatch({ a: "close" })}>
       <div className="keys-card">
         <div>
+          {/* the current project first, as its own section: how it installs and starts
+              (toyon.json); the pane replaces the preview. Other projects are a switch away
+              (⌘⇧O), not rows here. A long process list truncates rather than widening the column. */}
+          {repo && (
+            <>
+              <div className="section-title keys-h">{repo.name}</div>
+              <div className="keys-setting">
+                <span className="keys-d">processes</span>
+                <Button
+                  variant="field"
+                  mono
+                  className="keys-chip"
+                  data-tip={`edit the install + start commands in ${repo.name}'s toyon.json`}
+                  onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
+                  {...cm.contextMenu(() => projectItems(repo, repo.id, { sock, dispatch }))}
+                >
+                  <span className="keys-v">{Object.keys(repo.config.procs).join(" + ") || "not set up"}</span>
+                </Button>
+              </div>
+            </>
+          )}
           <div className="section-title keys-h">Agents</div>
           <div className="keys-setting">
             <span className="keys-d">default</span>
@@ -68,27 +89,6 @@ export function KeysHelp() {
               {resolveTheme(prefs, themes, systemDark).name}
             </Button>
           </div>
-          {/* the current project only, as its own section: how it installs and starts
-              (toyon.json); the pane replaces the preview. Other projects are a switch away
-              (⌘⇧O), not rows here. A long process list truncates rather than widening the column. */}
-          {repo && (
-            <>
-              <div className="section-title keys-h">{repo.name}</div>
-              <div className="keys-setting">
-                <span className="keys-d">processes</span>
-                <Button
-                  variant="field"
-                  mono
-                  className="keys-chip"
-                  data-tip={`edit the install + start commands in ${repo.name}'s toyon.json`}
-                  onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
-                  {...cm.contextMenu(() => projectItems(repo, repo.id, { sock, dispatch }))}
-                >
-                  <span className="keys-v">{Object.keys(repo.config.procs).join(" + ") || "not set up"}</span>
-                </Button>
-              </div>
-            </>
-          )}
         </div>
       </div>
       <div className="keys-card">

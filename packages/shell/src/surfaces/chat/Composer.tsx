@@ -15,7 +15,7 @@ import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
-import { greenfieldContext, type StackPreset } from "../preview/stacks.ts";
+import { greenfieldContext, type Kind } from "../preview/kinds.ts";
 import { ModeChip, useNewWorktreeMode } from "../prompt/ModeChip.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
 import { chord, pickLabel, procTrouble, relFile } from "../util.ts";
@@ -58,9 +58,9 @@ export function Composer({
   greenfield,
 }: {
   active: OwnedWorktree | null;
-  /** rendered in the centre of an empty project: the chosen stack rides with the first message,
-   * and the knobs that assume a preview or a second worktree stay out of the way */
-  greenfield?: { preset: StackPreset };
+  /** rendered in the centre of an empty project: the chosen kind of thing rides with the first
+   * message, and the knobs that assume a preview or a second worktree stay out of the way */
+  greenfield?: { kind: Kind | null };
 }) {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -213,7 +213,7 @@ export function Composer({
       );
     }
     const blocks: string[] = [];
-    if (greenfield) blocks.push(greenfieldContext(active.worktree.title, greenfield.preset));
+    if (greenfield) blocks.push(greenfieldContext(active.worktree.title, greenfield.kind));
     if (parts.length > 0)
       blocks.push(
         `[Live preview context, attached automatically. This is what the user is looking at right now:\n${parts.join("\n")}]`,

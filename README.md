@@ -13,7 +13,7 @@ npx toyon
 
 Needs git and Node 18 or newer. bun comes with the package. `npm i -g toyon` puts `toyon` on your PATH for good, after which `toyon`, `toyon .` and `toyon ~/projects/app` all open a project. `toyon --help` lists the rest: `stop`, `doctor`, `logs`, `version`.
 
-Agents: Claude Code and Codex, each through its own login. Toyon installs the adapters on first start and asks you to sign in from the chat when one is needed.
+Agents: Claude Code and Codex, each through its own login. Toyon installs the adapters on first start and asks you to sign in from the chat when one is needed. Your existing setup comes along: Claude Code loads your user, project and local settings, so permission rules, hooks, slash commands, plugins and MCP servers (from `.mcp.json` and your user settings) work as they do in the terminal, and Codex reads its own config file. MCP servers run as Claude Code runs them, outside toyon's sandbox.
 
 ## What you get
 

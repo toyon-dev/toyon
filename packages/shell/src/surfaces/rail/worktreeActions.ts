@@ -1,4 +1,4 @@
-import type { WorktreeStatus } from "@toyon/shared";
+import { canRemove, canRename, type WorktreeStatus } from "@toyon/shared";
 import type { Action } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 
@@ -16,7 +16,7 @@ export function removeWorktrees(sock: DaemonSocket | null, dispatch: Dispatch, i
 export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
   return {
     rename(w: WorktreeStatus) {
-      if (w.worktree.kind === "main") return;
+      if (!canRename(w.worktree)) return;
       const title = window.prompt("Rename worktree (also renames its branch):", w.worktree.title);
       if (title?.trim()) sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
     },
@@ -37,7 +37,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
       sock?.send({ t: "set-worktree-profile", worktreeId: w.worktree.id, profile });
     },
     remove(w: WorktreeStatus) {
-      if (w.worktree.kind === "main") return;
+      if (!canRemove(w.worktree)) return;
       const ok = window.confirm(
         `Remove worktree "${w.worktree.title}"?\n\nThis deletes its directory and branch (${w.worktree.branch}). Unmerged changes are lost.`,
       );

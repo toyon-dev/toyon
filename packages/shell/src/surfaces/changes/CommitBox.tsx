@@ -1,4 +1,4 @@
-import type { WorktreeStatus } from "@toyon/shared";
+import { canLand as landable, type WorktreeStatus } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
@@ -30,7 +30,7 @@ export function CommitBox({
     sock?.send({ t: "commit", worktreeId: wt.id, message: msg.trim() });
     setMsg("");
   };
-  const canLand = wt.kind !== "main" && !dirty;
+  const canLand = landable(wt) && !dirty;
 
   return (
     <div className="composer commit-box">

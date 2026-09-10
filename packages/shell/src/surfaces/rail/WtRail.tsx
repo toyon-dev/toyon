@@ -1,4 +1,4 @@
-import type { DiscoveredWorktree, WorktreeStatus } from "@toyon/shared";
+import { canGraft, canLand, canRemove, canRename, type DiscoveredWorktree, type WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
@@ -51,7 +51,7 @@ export function WtRail() {
   const [sel, setSel] = useState<string[]>([]);
 
   const toggleSel = (w: WorktreeStatus) => {
-    if (w.worktree.kind === "main") return;
+    if (!canGraft(w.worktree)) return;
     setGraftMode(true);
     setSel((s) => (s.includes(w.worktree.id) ? s.filter((x) => x !== w.worktree.id) : [...s, w.worktree.id]));
   };
@@ -136,9 +136,9 @@ export function WtRail() {
     for (const name of profileNames(repo)) {
       if (name !== current) items.push({ label: `run with ${name}`, onClick: () => acts.setProfile(w, name) });
     }
-    if (w.worktree.kind !== "main") {
-      items.push({ label: "rename…", onClick: () => acts.rename(w) });
-      if (w.worktree.variant) items.push({ label: "keep this variant…", onClick: () => acts.pickVariant(w) });
+    if (canRename(w.worktree)) items.push({ label: "rename…", onClick: () => acts.rename(w) });
+    if (w.worktree.variant) items.push({ label: "keep this variant…", onClick: () => acts.pickVariant(w) });
+    if (canGraft(w.worktree)) {
       items.push({
         label: "graft with…",
         onClick: () => {
@@ -146,8 +146,9 @@ export function WtRail() {
           setSel((s) => (s.includes(id) ? s : [...s, id]));
         },
       });
-      items.push(merge, ship, { label: "remove…", danger: true, onClick: () => acts.remove(w) });
     }
+    if (canLand(w.worktree)) items.push(merge, ship);
+    if (canRemove(w.worktree)) items.push({ label: "remove…", danger: true, onClick: () => acts.remove(w) });
     return items;
   };
 
@@ -171,7 +172,7 @@ export function WtRail() {
                 setMenu({ at: { x: e.clientX, y: e.clientY }, id: w.worktree.id });
               }}
             >
-              {graftMode && w.worktree.kind !== "main" && (
+              {graftMode && canGraft(w.worktree) && (
                 <input
                   type="checkbox"
                   className="rail-graft-check"
@@ -285,7 +286,7 @@ export function WtRail() {
               {(() => {
                 // the row you are on takes the others: it keeps its agent, procs and port, and
                 // the checked ones are merged into it and removed
-                const target = worktrees.find((w) => w.worktree.id === activeId && w.worktree.kind !== "main");
+                const target = worktrees.find((w) => w.worktree.id === activeId && canGraft(w.worktree));
                 const sources = sel.filter((id) => id !== target?.worktree.id);
                 const names = sources
                   .map((id) => worktrees.find((w) => w.worktree.id === id)?.worktree.title ?? id)

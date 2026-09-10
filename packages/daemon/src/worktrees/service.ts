@@ -8,10 +8,15 @@ import {
   type AgentEvent,
   type AgentStatus,
   type CommitEntry,
+  canGraft,
+  canLand,
+  canRemove,
+  canRename,
   type DiscoveredWorktree,
   type GitFileStatus,
   hasOwnBranch,
   type ImageInput,
+  isMain,
   type PasteInput,
   type PickMeta,
   type RepoInfo,
@@ -67,7 +72,14 @@ function withoutAttachments(event: AgentEvent): AgentEvent {
  * the counts are zero by definition. */
 export interface ReadableWorktree {
   id: string;
+  repoId: string;
   path: string;
+  /** the title of a worktree toyon runs, the branch or directory name of one it found */
+  name: string;
+  /** absent when detached */
+  branch?: string;
+  /** another tool holds it (a live agent session); nothing here may write to it */
+  locked?: boolean;
   defaultBranch: string;
   /** absent for a discovered worktree: there is nothing to mutate and nothing that owns it */
   wt?: WorktreeInfo;
@@ -345,7 +357,8 @@ export class WorktreeService {
 
   async remove(worktreeId: string, allowSpare = false): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
-    if (!wt || wt.kind === "main" || (wt.kind === "spare" && !allowSpare)) return;
+    // a spare is the pool's to remove, never a person's
+    if (!wt || !(canRemove(wt) || (allowSpare && wt.kind === "spare"))) return;
     const repo = this.d.state.requireRepo(wt.repoId);
     // the agent first (inside runtime.stop): it may be mid-turn in the directory about to be
     // deleted, and its session-info callback would re-add the session entry removed below
@@ -375,7 +388,10 @@ export class WorktreeService {
 
   async rename(worktreeId: string, title: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
-    if (!wt || wt.kind === "main") return;
+    if (!wt) return;
+    // the branch moves with the title, and only a toyon/ branch is toyon's to move: an adopted
+    // worktree's branch is the person's, and used to get renamed under them
+    if (!canRename(wt)) throw new UserError(`${wt.title} keeps its own branch; rename it in git`);
     const repo = this.d.state.requireRepo(wt.repoId);
     const clean = cleanTitle(title);
     if (!clean) return;
@@ -467,8 +483,8 @@ export class WorktreeService {
     if (sources.length === 0) throw new UserError("pick at least one worktree to graft in");
     const all = [target, ...sources];
     for (const w of all) {
-      if (w.kind === "main") throw new UserError("graft between worktrees, not into or out of main");
-      if (w.kind === "spare") throw new UserError("that worktree is a spare");
+      if (isMain(w)) throw new UserError("graft between worktrees, not into or out of main");
+      if (!canGraft(w)) throw new UserError(`${w.title} cannot be grafted`);
       if (w.repoId !== target.repoId) throw new UserError("worktrees must belong to one repo");
       // a merge under an editing agent races its file tools, and a removal under one loses its
       // turn; refusing beats stopping someone's turn from a rail button
@@ -575,7 +591,8 @@ export class WorktreeService {
 
   private landable(worktreeId: string, verb: string): { wt: WorktreeInfo; repo: RepoInfo } {
     const pair = this.d.state.requireWorktreeWithRepo(worktreeId);
-    if (pair.wt.kind === "main") throw new UserError(`${verb} from a worktree, not main`);
+    if (isMain(pair.wt)) throw new UserError(`${verb} from a worktree, not main`);
+    if (!canLand(pair.wt)) throw new UserError(`${pair.wt.title} is a PR under review; it lands upstream, not here`);
     return pair;
   }
 
@@ -694,12 +711,21 @@ export class WorktreeService {
     const wt = this.d.state.worktree(id);
     if (wt) {
       if (wt.kind === "spare") return null;
-      return { id, path: wt.path, defaultBranch: this.d.state.requireRepo(wt.repoId).defaultBranch, wt };
+      const { defaultBranch } = this.d.state.requireRepo(wt.repoId);
+      return { id, repoId: wt.repoId, path: wt.path, name: wt.title, branch: wt.branch, defaultBranch, wt };
     }
     const disc = this.discoveredById(id);
     const repo = disc && this.d.state.repo(disc.repoId);
     if (!disc || !repo) return null;
-    return { id, path: disc.path, defaultBranch: repo.defaultBranch };
+    return {
+      id,
+      repoId: disc.repoId,
+      path: disc.path,
+      name: disc.name,
+      branch: disc.branch,
+      locked: disc.locked,
+      defaultBranch: repo.defaultBranch,
+    };
   }
 
   async gitStatus(worktreeId: string): Promise<GitInfo | null> {
@@ -740,7 +766,9 @@ export class WorktreeService {
 
   /** someone is looking at this worktree right now: clear its unseen ring */
   markSeen(worktreeId: string) {
-    const wt = this.d.state.requireWorktree(worktreeId);
+    const wt = this.d.state.worktree(worktreeId);
+    // a discovered worktree has no turns, so nothing to have missed
+    if (!wt) return;
     if (wt.seenAt != null && wt.lastTurnAt != null && wt.seenAt >= wt.lastTurnAt) return;
     wt.seenAt = Date.now();
     this.d.state.save();

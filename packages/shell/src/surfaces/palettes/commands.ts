@@ -2,7 +2,7 @@
 // The ⌘⇧P palette and ⌘P's `>` mode share this list and its matcher, so highlight and score can't drift.
 
 import type { RepoInfo, ThemePrefs, WorktreeStatus } from "@toyon/shared";
-import { resolveTheme, worktreeChord } from "@toyon/shared";
+import { canLand, canRemove, canRename, resolveTheme, worktreeChord } from "@toyon/shared";
 import { useMemo } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
@@ -168,13 +168,13 @@ export function buildCommands(
     }
     if ((wt.behind ?? 0) > 0)
       add("sync", `sync main into ${t} (${wt.behind} behind)`, () => sock?.send({ t: "sync-main", worktreeId: id }));
-    if (wt.worktree.kind !== "main") {
-      add("rename", `rename worktree · ${t}…`, () => acts.rename(wt));
-      if (wt.worktree.variant) add("keep", `keep this variant · ${t}…`, () => acts.pickVariant(wt));
+    if (canRename(wt.worktree)) add("rename", `rename worktree · ${t}…`, () => acts.rename(wt));
+    if (wt.worktree.variant) add("keep", `keep this variant · ${t}…`, () => acts.pickVariant(wt));
+    if (canLand(wt.worktree)) {
       add("merge", `merge ${t} into main`, () => sock?.send({ t: "merge-main", worktreeId: id }));
       add("ship", `push + PR · ${t}`, () => sock?.send({ t: "ship", worktreeId: id }));
-      add("remove", `remove worktree · ${t}…`, () => acts.remove(wt));
     }
+    if (canRemove(wt.worktree)) add("remove", `remove worktree · ${t}…`, () => acts.remove(wt));
   }
   state.visible.forEach((w, i) => {
     if (w.worktree.id === id) return;

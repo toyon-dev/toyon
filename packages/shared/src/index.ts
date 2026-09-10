@@ -17,3 +17,4 @@ export * from "./protocol/pick.ts";
 export * from "./protocol/ws.ts";
 export * from "./themes.ts";
 export * from "./vscode-theme.ts";
+export * from "./worktree-caps.ts";

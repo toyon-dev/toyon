@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { clientMsgSchema, type ServerMsg, SHELL_STREAM, streamKey } from "@toyon/shared";
 import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
-import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
+import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
@@ -135,6 +135,20 @@ describe("handlers", () => {
     expect([...subs]).toEqual([main.id]);
     await dispatch({ t: "unsubscribe", worktreeId: main.id }, ctx, services);
     expect(subs.size).toBe(0);
+  });
+
+  test("subscribe to a discovered worktree streams its git status and starts nothing", async () => {
+    const { services, ctx, replies, repo, agents } = make();
+    await services.repos.register(repo);
+    sh(repo, "git", "worktree", "add", "-q", "-b", "their-branch", join(dirname(repo), "theirs"), "main");
+    services.worktrees.invalidateDiscovered();
+    const found = (await services.worktrees.discovered())[0]!;
+    await dispatch({ t: "subscribe", worktreeId: found.id }, ctx, services);
+    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands", "git-status"]);
+    expect(replies[0]).toMatchObject({ t: "backfill", events: [], log: [] });
+    expect(services.runtime.get(found.id)).toBeUndefined();
+    expect(agents.get(found.id)).toBeUndefined();
+    await expect(dispatch({ t: "subscribe", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
   });
 
   test("chat hands the text and pick to the agent", async () => {

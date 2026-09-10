@@ -198,10 +198,14 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     if (info) sendTo(worktreeId, { t: "git-status", worktreeId, ...info });
   };
   s.hub.on("repoTick", (repoId) => {
-    // main moved: refresh badges + git status for every subscribed worktree of the repo
+    // main moved: refresh badges + git status for every subscribed worktree of the repo,
+    // discovered ones included, since their behind count moved with it
     worktreesChanged();
-    for (const wt of s.state.worktrees.filter((w) => w.repoId === repoId)) {
-      fireAndForget(wt.id, pushGitStatus(wt.id), "git status on ref tick");
+    const subscribed = new Set<string>();
+    for (const ws of sockets) for (const id of ws.data.subs) subscribed.add(id);
+    for (const id of subscribed) {
+      if (s.worktrees.readable(id)?.repoId !== repoId) continue;
+      fireAndForget(id, pushGitStatus(id), "git status on ref tick");
     }
   });
   const themesChanged = () => {

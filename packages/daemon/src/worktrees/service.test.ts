@@ -644,6 +644,15 @@ describe("adopt", () => {
     expect(w.agents.get(wt.id)?.sent ?? []).toEqual([]);
   });
 
+  test("an adopted worktree keeps its branch name: rename refuses rather than moving it under toyon/", async () => {
+    const repoId = await registered();
+    await settle();
+    const wt = await w.worktrees.adopt(repoId, foreignWorktree("theirs", "their-branch"));
+    await expect(w.worktrees.rename(wt.id, "mine now")).rejects.toBeInstanceOf(UserError);
+    expect(wt.branch).toBe("their-branch");
+    expect(wt.title).toBe("their-branch");
+  });
+
   test("it does not run the repo's setup commands in a directory someone is using", async () => {
     const repoId = await registered();
     const repo = w.state.requireRepo(repoId);

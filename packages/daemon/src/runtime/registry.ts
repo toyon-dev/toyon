@@ -132,6 +132,13 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
       d.state.save();
       d.hub.emit("worktreesChanged");
     },
+    model: () => d.state.requireWorktree(wt.id).model,
+    // kept per agent, not per worktree: the picker on a worktree whose session has not opened
+    // yet shows what this agent offered last time
+    onModelsLearned: (models) => {
+      const agentId = d.state.requireWorktree(wt.id).agent ?? "";
+      if (d.state.setCachedModels(agentId, models)) d.hub.emit("agentsChanged");
+    },
   });
   agent.onQueueChange = () => d.hub.emit("queue", wt.id, agent.queueItems);
   agent.onCommandsChange = (commands) => d.hub.emit("agentCommands", wt.id, commands);

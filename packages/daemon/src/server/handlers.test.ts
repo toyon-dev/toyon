@@ -259,6 +259,10 @@ describe("handlers", () => {
     expect(made.mode).toBe("ask");
     await dispatch({ t: "set-worktree-mode", worktreeId: made.id, mode: "plan" }, ctx, services);
     expect(services.state.worktree(made.id)?.mode).toBe("plan");
+    await dispatch({ t: "set-worktree-model", worktreeId: made.id, model: "big" }, ctx, services);
+    expect(services.state.worktree(made.id)?.model).toBe("big");
+    await dispatch({ t: "set-worktree-model", worktreeId: made.id, model: "" }, ctx, services);
+    expect(services.state.worktree(made.id)?.model).toBeUndefined();
     await expect(dispatch({ t: "set-default-agent", agent: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
     await dispatch({ t: "set-default-agent", agent: "codex" }, ctx, services);
     expect(services.state.defaultAgent).toBe("codex");

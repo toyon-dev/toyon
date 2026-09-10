@@ -123,6 +123,9 @@ export interface WorktreeInfo {
   profile?: string;
   /** what the agent may do here without asking; DEFAULT_PERMISSION_MODE when absent */
   mode?: PermissionMode;
+  /** the model id the agent is asked to run here (one of its advertised choices); its own default
+   * when absent. What actually ran is the session-info event in the transcript. */
+  model?: string;
   /** when the agent last finished a turn here. Absent until one has run. */
   lastTurnAt?: number;
   /** when someone last looked at this worktree in a shell. Absent until it has been looked at
@@ -209,6 +212,15 @@ export interface AgentInfo {
   auth?: AuthStatus;
   /** it advertised ACP's logout method, so settings can offer to sign it out */
   canLogout?: boolean;
+  /** the models it advertised the last time a session opened; absent until one has */
+  models?: ModelChoice[];
+}
+
+/** one of an agent's advertised models, as ACP's model config option lists them */
+export interface ModelChoice {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 /** One row of the rail: a worktree toyon runs, or one git knows about that toyon did not create

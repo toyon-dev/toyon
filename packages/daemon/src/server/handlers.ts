@@ -149,6 +149,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       agent: msg.agent,
       profile: msg.profile,
       mode: msg.mode,
+      model: msg.model,
     });
   },
 
@@ -158,6 +159,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "set-worktree-mode"(msg, _ctx, s) {
     s.worktrees.setMode(msg.worktreeId, msg.mode);
+  },
+
+  "set-worktree-model"(msg, _ctx, s) {
+    s.worktrees.setModel(msg.worktreeId, msg.model);
   },
 
   "batch-worktrees"(msg, ctx, s) {

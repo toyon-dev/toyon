@@ -16,6 +16,7 @@ import type {
   AskOutcome,
   AuthMethodInfo,
   ImageInput,
+  ModelChoice,
   PasteInput,
   PermissionMode,
   PickMeta,
@@ -72,6 +73,10 @@ export interface AcpSessionDeps {
   mode?: () => PermissionMode;
   /** a plan approval decided the mode for the work that follows */
   setMode?: (mode: PermissionMode) => void;
+  /** the model id the worktree asks for; undefined leaves the agent on its own default */
+  model?: () => string | undefined;
+  /** the models the agent advertised when a session opened, for the picker */
+  onModelsLearned?: (models: ModelChoice[]) => void;
 }
 
 const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
@@ -115,6 +120,9 @@ interface Live {
   modeIds: string[] | null;
   /** the agent's current mode as last told to us (set_mode, or its own current_mode_update) */
   modeId: string | null;
+  /** the config option that selects the model, when the agent has one, with its choices and
+   * the current value as last told to us */
+  modelOption: { id: string; ids: string[]; current: string } | null;
 }
 
 /** the attachments written and the bubble emitted: what a message needs before it can go out on
@@ -511,6 +519,7 @@ export class AcpSession implements AgentAdapter {
     this.emit({ type: "turn-start", ts: Date.now() });
     const live = await this.ensureLive();
     await this.applyMode(live);
+    await this.applyModel(live);
     const carried = this.carriedImages(live, item.recorded.images);
     const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
     live.prefixPending = false;
@@ -631,11 +640,22 @@ export class AcpSession implements AgentAdapter {
       if (!this.stopped) this.d.setSessionId(sessionId);
     }
     const model = configOptions?.find((o) => o.category === "model");
+    const select = model && model.type === "select" ? model : null;
     this.emit({
       type: "session-info",
       sessionId: sessionId!,
-      ...(model && model.type === "select" ? { model: String(model.currentValue) } : {}),
+      ...(select ? { model: String(select.currentValue) } : {}),
     });
+    const choices = select ? flattenSelect(select.options) : [];
+    if (select) {
+      this.d.onModelsLearned?.(
+        choices.map((o) => ({
+          id: String(o.value),
+          name: o.name,
+          ...(o.description ? { description: o.description } : {}),
+        })),
+      );
+    }
     this.live = {
       conn,
       sessionId: sessionId!,
@@ -643,10 +663,14 @@ export class AcpSession implements AgentAdapter {
       tools: new Map(),
       modeIds: modes ? modes.availableModes.map((m) => m.id) : null,
       modeId: modes?.currentModeId ?? null,
+      modelOption: select
+        ? { id: select.id, ids: choices.map((o) => String(o.value)), current: String(select.currentValue) }
+        : null,
     };
-    // the worktree's mode, applied now so a resumed session in plan mode does not answer its
-    // first prompt in whatever mode the agent remembered
+    // the worktree's mode and model, applied now so a resumed session does not answer its first
+    // prompt with whatever the agent remembered
     await this.applyMode(this.live);
+    await this.applyModel(this.live);
     // the push that landed while session/new was in flight, now that the id is known. Only when
     // there is one: an agent that does not re-push on resume keeps the list it already had.
     const pushed = conn.commands.get(sessionId!);
@@ -669,6 +693,23 @@ export class AcpSession implements AgentAdapter {
     if (!wanted || wanted === live.modeId) return;
     await live.conn.ctx.request(acp.methods.agent.session.setMode, { sessionId: live.sessionId, modeId: wanted });
     live.modeId = wanted;
+  }
+
+  /** ask for the worktree's model when it names one the agent offers and is not already on. The
+   * agent's reply carries every option's current value, so what it settled on is what is kept,
+   * and the transcript gets the session-info that says so. */
+  private async applyModel(live: Live): Promise<void> {
+    const opt = live.modelOption;
+    const wanted = this.d.model?.();
+    if (!opt || !wanted || wanted === opt.current || !opt.ids.includes(wanted)) return;
+    const r = await live.conn.ctx.request(acp.methods.agent.session.setConfigOption, {
+      sessionId: live.sessionId,
+      configId: opt.id,
+      value: wanted,
+    });
+    const now = r.configOptions.find((o) => o.id === opt.id);
+    opt.current = now && now.type === "select" ? String(now.currentValue) : wanted;
+    this.emit({ type: "session-info", sessionId: live.sessionId, model: opt.current });
   }
 
   private onUpdate(
@@ -702,6 +743,11 @@ export class AcpSession implements AgentAdapter {
     if (params.update.sessionUpdate === "current_mode_update") {
       live.modeId = params.update.currentModeId;
       return;
+    }
+    // the agent changed its own model (a slash command can): keep the comparison honest
+    if (params.update.sessionUpdate === "config_option_update" && live.modelOption) {
+      const now = params.update.configOptions?.find((o) => o.id === live.modelOption?.id);
+      if (now && now.type === "select") live.modelOption.current = String(now.currentValue);
     }
     for (const ev of mapUpdate(params.update, live.tools, this.d.worktreeId)) {
       // the mapper does not know the session id; the transcript wants the real one
@@ -877,6 +923,16 @@ export class AcpSession implements AgentAdapter {
     conn.link.conn.close();
     await conn.link.kill();
   }
+}
+
+/** a select's options come flat or in named groups; the picker wants them flat */
+function flattenSelect(options: acp.SessionConfigSelectOptions): acp.SessionConfigSelectOption[] {
+  const out: acp.SessionConfigSelectOption[] = [];
+  for (const o of options) {
+    if ("options" in o) out.push(...o.options);
+    else out.push(o);
+  }
+  return out;
 }
 
 function isAuthRequired(e: unknown): boolean {

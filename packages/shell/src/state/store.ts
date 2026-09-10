@@ -135,6 +135,8 @@ export interface WorktreeLocal {
    * Per worktree so switching back lands on the tab you left, and in the store so the rail can
    * open a crashed proc's tab. */
   termStream: string;
+  /** the model the agent reported running here, from the last session-info; absent until one */
+  model?: string;
 }
 
 export interface PendingImage extends ImageInput {
@@ -875,7 +877,9 @@ function onServer(s: State, msg: StoreServerMsg): State {
         let turn = l.turn;
         if (ev.type === "turn-start") turn = { edits: false, hmr: false };
         else if (ev.type === "tool-start" && isEditTool(ev)) turn = { ...turn, edits: true };
-        return { ...l, chat, turn };
+        // what actually ran, for the model chip: the agent's word, not the record's request
+        const model = ev.type === "session-info" && ev.model ? ev.model : l.model;
+        return { ...l, chat, turn, ...(model !== l.model ? { model } : {}) };
       });
       if (ev.type === "turn-end") {
         // edits happened but nothing hot-updated: the change is outside HMR's reach

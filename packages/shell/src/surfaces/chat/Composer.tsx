@@ -1,4 +1,4 @@
-import type { AgentCommand, GitFileStatus, OwnedWorktree } from "@toyon/shared";
+import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, pickMetaOf } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
@@ -17,6 +17,7 @@ import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
 import { greenfieldContext, type Kind } from "../preview/kinds.ts";
 import { ModeChip, useNewWorktreeMode } from "../prompt/ModeChip.tsx";
+import { ModelChip, useNewWorktreeModel } from "../prompt/ModelChip.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "../prompt/ProfileChip.tsx";
 import { chord, pickLabel, procTrouble, relFile } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
@@ -26,6 +27,9 @@ import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { shellCommandOf, shellContext, shellHistory } from "./shellMode.ts";
 import { useComposerPaste } from "./useIntake.ts";
+
+/** a frozen empty list, so a selector returning it does not read as a change every render */
+const NO_MODELS: ModelChoice[] = [];
 
 /** what the inline `@` / `/` menu can offer */
 type Row =
@@ -77,6 +81,10 @@ export function Composer({
   const setText = (t: string) => id && dispatch({ a: "set-draft", id, text: t });
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
+  // the model chip lists what this worktree's agent advertised; a stacked worktree keeps the agent
+  const agentModels = useStore((s) => s.agents.find((a) => a.id === active?.worktree.agent)?.models ?? NO_MODELS);
+  const [newModel, setNewModel] = useNewWorktreeModel(active?.worktree.agent);
+  const currentModel = useLocalField(id, "model");
   const [profile, setProfile] = useNewWorktreeProfile(repo);
   // one chip, two meanings: the mode a new worktree starts in, or the active worktree's own
   const [newMode, setNewMode] = useNewWorktreeMode(repo);
@@ -257,6 +265,7 @@ export function Composer({
         agent: active.worktree.agent,
         profile,
         mode: newMode,
+        ...(newModel ? { model: newModel } : {}),
       });
     } else {
       sock?.send({
@@ -456,6 +465,19 @@ export function Composer({
               <ModeChip
                 value={activeMode}
                 onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
+                onClose={refocus}
+              />
+            )
+          )}
+          {spawnNew ? (
+            <ModelChip models={agentModels} value={newModel} onChange={setNewModel} onClose={refocus} />
+          ) : (
+            active && (
+              <ModelChip
+                models={agentModels}
+                value={active.worktree.model ?? ""}
+                current={currentModel}
+                onChange={(model) => sock?.send({ t: "set-worktree-model", worktreeId: active.worktree.id, model })}
                 onClose={refocus}
               />
             )

@@ -54,6 +54,8 @@ interface FakeAgent {
   steerOutcome: "injected" | "promptRequired" | "startedNewTurn";
   steerError: boolean;
   modes: string[];
+  /** set_config_option calls as `<id>=<value>` */
+  configs: string[];
   script: PromptScript;
   loadSession: boolean;
   failLoad: boolean;
@@ -84,6 +86,7 @@ function fakeAgent(
     steerOutcome: "injected",
     steerError: false,
     modes: [],
+    configs: [],
     script,
     loadSession: opts.loadSession ?? true,
     failLoad: false,
@@ -143,7 +146,17 @@ function fakeAgent(
         sessionId: id,
         modes,
         configOptions: [
-          { id: "model", name: "m", category: "model", type: "select", currentValue: "test-model", options: [] },
+          {
+            id: "model",
+            name: "m",
+            category: "model",
+            type: "select",
+            currentValue: "test-model",
+            options: [
+              { value: "test-model", name: "Test Model" },
+              { value: "big-model", name: "Big Model", description: "slower" },
+            ],
+          },
         ],
       };
     })
@@ -160,6 +173,24 @@ function fakeAgent(
     .onRequest(acp.methods.agent.session.setMode, (c) => {
       f.modes.push(c.params.modeId);
       return {};
+    })
+    .onRequest(acp.methods.agent.session.setConfigOption, (c) => {
+      f.configs.push(`${c.params.configId}=${String(c.params.value)}`);
+      return {
+        configOptions: [
+          {
+            id: "model",
+            name: "m",
+            category: "model",
+            type: "select",
+            currentValue: String(c.params.value),
+            options: [
+              { value: "test-model", name: "Test Model" },
+              { value: "big-model", name: "Big Model" },
+            ],
+          },
+        ],
+      };
     })
     .onRequest(acp.methods.agent.session.prompt, (c) => {
       f.prompts.push(c.params);
@@ -1284,6 +1315,45 @@ describe("AcpSession permission modes", () => {
     w.session.send("two");
     await w.idle();
     expect(fake.modes).toEqual(["agent"]);
+    await w.session.close();
+  });
+});
+
+// The model: the agent's advertised choices reach the picker, and a worktree that asks for one
+// gets it set before the prompt, once, with the agent's answer kept as the truth.
+describe("AcpSession model", () => {
+  test("the choices are learned when the session opens, and the record's model is applied before the prompt", async () => {
+    let learned: Array<{ id: string; name: string }> = [];
+    let model: string | undefined = "big-model";
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      model: () => model,
+      onModelsLearned: (m) => {
+        learned = m;
+      },
+    });
+    w.session.send("one");
+    await w.idle();
+    expect(learned.map((m) => m.id)).toEqual(["test-model", "big-model"]);
+    expect(fake.configs).toEqual(["model=big-model"]);
+    // the switch is visible in the transcript, and not asked for again while it holds
+    expect(w.events.filter((e) => e.type === "session-info").map((e) => (e as { model?: string }).model)).toEqual([
+      "test-model",
+      "big-model",
+    ]);
+    w.session.send("two");
+    await w.idle();
+    expect(fake.configs).toEqual(["model=big-model"]);
+    // back to the default: nothing is sent, the agent keeps what it has until a model is named
+    model = undefined;
+    w.session.send("three");
+    await w.idle();
+    expect(fake.configs).toEqual(["model=big-model"]);
+    // a model the agent does not offer is ignored rather than sent
+    model = "nope";
+    w.session.send("four");
+    await w.idle();
+    expect(fake.configs).toEqual(["model=big-model"]);
     await w.session.close();
   });
 });

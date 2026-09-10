@@ -1030,3 +1030,13 @@ describe("a landing op in flight", () => {
     expect(s.shipping).toEqual({});
   });
 });
+
+describe("model", () => {
+  test("session-info records what the agent reported running, per worktree", () => {
+    const s = run([hello(wt("a"), wt("b")), agent("a", { type: "session-info", sessionId: "s1", model: "big" })]);
+    expect(s.local.a?.model).toBe("big");
+    expect(s.local.b?.model).toBeUndefined();
+    // a session-info without a model (a resume that says nothing) keeps the last one
+    expect(run([agent("a", { type: "session-info", sessionId: "s1" })], s).local.a?.model).toBe("big");
+  });
+});

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import type { AgentCommand, RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
+import type { AgentCommand, ModelChoice, RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -15,6 +15,9 @@ export interface PersistedState {
    * function of the repo's .claude/ plus the user's settings, so the last one is a good guess and
    * beats an empty menu on every worktree until the first prompt. */
   commandCache?: Record<string, AgentCommand[]>;
+  /** the models each agent advertised the last time one of its sessions opened, keyed by agent
+   * id, so the picker has a list before a worktree's own session exists */
+  modelCache?: Record<string, ModelChoice[]>;
   /** shell theme selection (shared by every browser that connects) */
   theme?: ThemePrefs;
   /** registry id new worktrees get when the prompt does not pick one */
@@ -165,6 +168,18 @@ export class StateStore {
     this.state.commandCache ??= {};
     this.state.commandCache[`${agentId}:${repoId}`] = commands;
     this.save();
+  }
+
+  cachedModels(agentId: string): ModelChoice[] {
+    return this.state.modelCache?.[agentId] ?? [];
+  }
+  /** returns whether the list changed, so the caller can skip a broadcast that says nothing new */
+  setCachedModels(agentId: string, models: ModelChoice[]): boolean {
+    if (JSON.stringify(this.cachedModels(agentId)) === JSON.stringify(models)) return false;
+    this.state.modelCache ??= {};
+    this.state.modelCache[agentId] = models;
+    this.save();
+    return true;
   }
 
   get defaultAgent(): string | undefined {

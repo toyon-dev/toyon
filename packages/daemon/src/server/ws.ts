@@ -215,7 +215,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("themesChanged", themesChanged);
   themesChanged();
   // the registry knows what is installed, accounts knows who each one is logged in as
-  const agentInfos = () => s.accounts.describe(s.agents.infos());
+  const agentInfos = () =>
+    s.accounts.describe(s.agents.infos()).map((a) => {
+      const models = s.state.cachedModels(a.id);
+      return models.length > 0 ? { ...a, models } : a;
+    });
   const agentsMsg = () =>
     ({
       t: "agents",

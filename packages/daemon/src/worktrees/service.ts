@@ -109,6 +109,8 @@ export interface CreateOpts {
   profile?: string;
   /** what the agent may do without asking; the default mode when absent */
   mode?: PermissionMode;
+  /** one of the agent's advertised model ids; its default when absent */
+  model?: string;
   images?: ImageInput[];
   pastes?: PasteInput[];
 }
@@ -234,6 +236,7 @@ export class WorktreeService {
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
       ...(profile !== undefined ? { profile } : {}),
       ...(opts.mode ? { mode: opts.mode } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
     };
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, base?.path ?? repo.path);
@@ -407,6 +410,20 @@ export class WorktreeService {
     if (wt.kind === "spare") throw new UserError("no mode for a spare worktree");
     if (wt.mode === mode) return;
     wt.mode = mode;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+  }
+
+  /** which of its models the agent runs here, from the next turn on. An empty id means its own
+   * default. Not checked against the list: the agent is the authority and ignores an id it has
+   * not got, and the session-info in the transcript says what actually ran. */
+  setModel(worktreeId: string, model: string) {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    if (wt.kind === "spare") throw new UserError("no model for a spare worktree");
+    const next = model || undefined;
+    if (wt.model === next) return;
+    if (next) wt.model = next;
+    else delete wt.model;
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
   }

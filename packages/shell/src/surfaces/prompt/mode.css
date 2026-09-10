@@ -6,3 +6,12 @@
     color: var(--yellow);
   }
 }
+@layer surfaces {
+  /* a model id can be a long slug; the chip keeps the row's height and cuts the tail instead */
+  .model-chip {
+    max-width: 16em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

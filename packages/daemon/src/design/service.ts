@@ -6,8 +6,9 @@
 
 import { join } from "node:path";
 import type { DesignClass, DesignComponent, DesignIndex, DesignToken } from "@toyon/shared";
-import type { StateStore } from "../core/state.ts";
+import { UserError } from "../core/errors.ts";
 import { git } from "../git/exec.ts";
+import type { ReadableWorktree } from "../worktrees/service.ts";
 import {
   appliedClasses,
   cssClasses,
@@ -35,10 +36,13 @@ const COMPONENT_EXT = /\.(tsx|jsx|mjs|cjs|mts|vue|svelte|astro)$/;
 const CSS_EXT = /\.(css|scss|sass|less|styl)$/;
 
 export class DesignService {
-  constructor(private state: StateStore) {}
+  /** id -> directory. Injected rather than reached for, because a scan is a read, and the reads
+   * answer for a worktree toyon only found as readily as one it runs. */
+  constructor(private readable: (id: string) => ReadableWorktree | null) {}
 
   async scan(worktreeId: string): Promise<DesignIndex> {
-    const wt = this.state.requireWorktree(worktreeId);
+    const wt = this.readable(worktreeId);
+    if (!wt) throw new UserError("unknown worktree");
     const listed = await git(wt.path, "ls-files", "-co", "--exclude-standard");
     const paths = listed.out.split("\n").filter(Boolean);
 

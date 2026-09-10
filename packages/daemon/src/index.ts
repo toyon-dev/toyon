@@ -66,7 +66,7 @@ const runtime = new RuntimeRegistry({
 });
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
 const files = new FileService(state, runtime, (id) => worktrees.readable(id));
-const design = new DesignService(state);
+const design = new DesignService((id) => worktrees.readable(id));
 const exec = new ExecService({ state, runtime });
 const refs = new RefSearch({ state });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees });

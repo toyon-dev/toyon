@@ -58,7 +58,7 @@ function make() {
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
   const files = new FileService(state, runtime, (id) => worktrees.readable(id));
-  const design = new DesignService(state);
+  const design = new DesignService((id) => worktrees.readable(id));
   const exec = new ExecService({ state, runtime });
   // a PR list that throws: gh is absent on most machines that run this, and its absence must be a
   // repo without PRs rather than a failed search
@@ -159,6 +159,25 @@ describe("handlers", () => {
     expect(services.runtime.get(found.id)).toBeUndefined();
     expect(agents.get(found.id)).toBeUndefined();
     await expect(dispatch({ t: "subscribe", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("a discovered worktree scans its design system, and its agent actions say to take it over", async () => {
+    const { services, ctx, replies, repo } = make();
+    await services.repos.register(repo);
+    const theirs = join(dirname(repo), "theirs");
+    sh(repo, "git", "worktree", "add", "-q", "-b", "their-branch", theirs, "main");
+    await Bun.write(`${theirs}/src/styles.css`, ":root { --accent: #6fae5f }");
+    services.worktrees.invalidateDiscovered();
+    const found = (await services.worktrees.discovered())[0]!;
+    await dispatch({ t: "design-scan", worktreeId: found.id }, ctx, services);
+    const reply = replies.at(-1);
+    if (reply?.t !== "design-index") throw new Error("expected a design-index reply");
+    expect(reply.index.tokens.map((t) => t.name)).toEqual(["--accent"]);
+    // the pane it opens with is the same one the running worktrees get, so the refusal it can
+    // reach from there names the way out rather than calling the worktree unknown
+    await expect(dispatch({ t: "chat", worktreeId: found.id, text: "hi" }, ctx, services)).rejects.toThrow(
+      /take it over/,
+    );
   });
 
   test("search-refs lists the repo's open branches even when the PR list fails, and open-ref makes a row", async () => {

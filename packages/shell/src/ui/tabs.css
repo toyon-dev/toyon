@@ -4,10 +4,13 @@
   /* the strip is the recess the tabs sit in. The rule under it is an inset shadow rather than a
    border, because a shadow paints under the children: the open tab's own background covers it,
    and the rule breaks there without a second rule to keep in step. */
+  /* the dense tier: the strip's text is the small tier, and the rows it heads (changed files, the
+   terminal's lines) are on the same rung, so the taller row token read as a header for a list of
+   something bigger */
   .tabs {
     display: flex;
     align-items: stretch;
-    min-height: var(--row-height);
+    min-height: var(--row-height-sm);
     flex-shrink: 0;
     min-width: 0;
     background: var(--sunken);

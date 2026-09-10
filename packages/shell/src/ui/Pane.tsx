@@ -30,7 +30,7 @@ export function Pane({
   onDragStart: (e: React.PointerEvent) => void;
   title?: ReactNode;
   /** a strip of alternatives as the header instead of a title: the terminal's streams. The strip
-   * is the row height, the same as the head, so the pane's geometry is the same either way. */
+   * is the head's height, so the pane's geometry is the same either way. */
   tabs?: Omit<TabsProps<string>, "end">;
   actions?: ReactNode;
   /** what a right-click on the header offers: the thing the pane is showing, as its actions */

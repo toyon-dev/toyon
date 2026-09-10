@@ -46,7 +46,8 @@ export type TabsProps<Id extends string> = {
  * pressed button. The others sit on the sunken tone. That is the whole mark: no accent, no seat,
  * because the tab metaphor already says which one you are on.
  *
- * The strip is the row height, so a strip standing in for a pane's header changes no geometry.
+ * The strip is the dense row height, the pane head's, so a strip standing in for a pane's header
+ * changes no geometry.
  * Current is `data-state` on the tab, the same word a row uses; `aria-selected` on the button is
  * for the reader. A tab never takes Button's `on`: that is a toggle's accent.
  */

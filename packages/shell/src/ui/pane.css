@@ -11,13 +11,14 @@
        shrinks to fit, each pane holding its own min-height, rather than pushing the lowest one
        off the bottom of the page with its close button */
     flex-shrink: 1;
-    /* one row tall whether it holds a title or a tab strip, so the crash card and the strip take
-       the height from the token rather than measuring it */
+    /* one dense row tall whether it holds a title or a tab strip, so the crash card and the strip
+       take the height from the token rather than measuring it; a 20px icon box sits in it with
+       2px of seat, the way it does in the bar's clusters */
     & .pane-head {
       display: flex;
       gap: 12px;
       padding: 0 16px;
-      min-height: var(--row-height);
+      min-height: var(--row-height-sm);
       align-items: center;
     }
     /* a strip is the whole head: it brings its own inset and its own gap */

@@ -8,6 +8,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../palettes/ProjectPicker.tsx";
 import { chord, isBusy, isInstalledApp } from "../util.ts";
+import "./statusbar.css";
 
 /** the top bar: dock toggles, the route bar centered over the preview, tools (proc health badges the
  * composer's terminal button; a dead socket colours the worktree rail) */

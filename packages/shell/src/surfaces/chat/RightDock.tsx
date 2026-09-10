@@ -3,6 +3,7 @@ import { useActive } from "../../state/selectors.ts";
 import { ChatLog } from "./ChatLog.tsx";
 import { Composer } from "./Composer.tsx";
 import { chatPanel } from "./useIntake.ts";
+import "./chat.css";
 
 /** the chat panel: transcript above, composer below */
 export function RightDock({ width }: { width: number }) {

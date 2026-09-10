@@ -1,9 +1,20 @@
 /* Theme tokens. The colors are the Toyon Dark defaults (no-JS fallback); theme.ts
    overwrites every color on the root element from the selected Theme (see @toyon/shared
    themes.ts for the contract). Radii and sizes are the shell's own scale. */
-:root {
-  color-scheme: dark;
-  /* Four families, numbered only within themselves. The numbering orders; the family says which
+
+/* Three cascade layers, and this statement is repeated at the top of every stylesheet on purpose.
+   Each component imports its own CSS, so the order the files reach the page is the order the
+   modules evaluate in, which is not something to build a cascade on; the first layer statement
+   the browser meets fixes the order, and restating it everywhere means it does not matter which
+   file that is. base is the ui/ components and the idioms in base.css, surfaces is everything a
+   surface adds on top, and a surface rule beats a base rule by being in the later layer rather
+   than by out-specifying it or by sitting lower in a longer file. */
+@layer tokens, base, surfaces;
+
+@layer tokens {
+  :root {
+    color-scheme: dark;
+    /* Four families, numbered only within themselves. The numbering orders; the family says which
    * question you are answering, and every bug this system has had was a rule answering the wrong
    * one: borders living in the surface ramp, a surface value painting text, a hover tint and a
    * chat bubble sharing a slot with no way to move either.
@@ -18,51 +29,51 @@
    * A tier is measured against the surface under it, so when a seat lifts, the text on it lifts
    * too (see .tool-row summary:hover). That idiom is why there is no "text1 on element0" token,
    * which is the tax VS Code and Dropbox both pay and an editor this size does not need. */
-  --surface0: #32302d;
-  --surface1: #3d3835;
-  --surface2: #504943;
-  --element0: #504943;
-  --element1: #675c55;
-  --border0: #504943;
-  --border1: #675c55;
-  --text0: #e6dcb6;
-  --text1: #9e927e;
-  --text2: #6a6055;
-  --green: #78c945;
-  --red: #ff4929;
-  --yellow: #fcbe03;
-  --blue: #69a9e8;
-  --aqua: #4dc7a7;
-  --orange: #fa891e;
-  --purple: #ca94ca;
-  --diff-add: #6fae5f29;
-  --diff-del: #c07f6a29;
-  /* the same tints at the weight a changed word carries inside a changed line. Derived rather than
+    --surface0: #32302d;
+    --surface1: #3d3835;
+    --surface2: #504943;
+    --element0: #504943;
+    --element1: #675c55;
+    --border0: #504943;
+    --border1: #675c55;
+    --text0: #e6dcb6;
+    --text1: #9e927e;
+    --text2: #6a6055;
+    --green: #78c945;
+    --red: #ff4929;
+    --yellow: #fcbe03;
+    --blue: #69a9e8;
+    --aqua: #4dc7a7;
+    --orange: #fa891e;
+    --purple: #ca94ca;
+    --diff-add: #6fae5f29;
+    --diff-del: #c07f6a29;
+    /* the same tints at the weight a changed word carries inside a changed line. Derived rather than
      authored (themes.ts, wordTint): a theme names the line tint and both weights follow, and the
      chat log and the diff pane read the one value. */
-  --diff-add-word: #6fae5f17;
-  --diff-del-word: #c07f6a17;
-  /* The text ladder is text0 > text1 > text2, each step quieter than the last, and the numbers are
+    --diff-add-word: #6fae5f17;
+    --diff-del-word: #c07f6a17;
+    /* The text ladder is text0 > text1 > text2, each step quieter than the last, and the numbers are
      the whole point: "muted" and "dim" did not tell you which was which, and disabled kept landing
      on the tier above it because nobody could see the order. text0 is what you read, text1 is what
      you scan (labels, filenames, controls at rest), text2 is what you skip (hints, comments, the
      tool log, and anything switched off). Three is enough: a fourth tier lived here for about an
      hour and turned out to be covering for a control that was resting on the wrong rung. */
 
-  /* what "you are on this one" is painted in: the active worktree, the open tool call, an `on`
+    /* what "you are on this one" is painted in: the active worktree, the open tool call, an `on`
      tab, a checked box. One hue for all of them, so a theme changes the whole idea of selected by
      pointing this somewhere else. Toyon selects in its berry, a coral rather than a scarlet, which
      is the difference between the mark reading as the plant and reading as a fault. The color is
      the theme's to name (Theme.accent, orange unless it says otherwise) and applyTheme
      overwrites this, so every other theme keeps selecting in orange. */
-  --accent: var(--red);
-  /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
-  /* where you type: four L* under the chrome it sits in, darker in both halves. Not a ramp
+    --accent: var(--red);
+    /* overlay backdrop + box-shadow color: alpha hex so light themes can soften them */
+    /* where you type: four L* under the chrome it sits in, darker in both halves. Not a ramp
      position, because the surface ramp reverses direction between them and a recess does not. */
-  --sunken: #342f2d;
-  --scrim: #32302db3;
-  --shadow: #00000066;
-  /* code sits on a wash of the text color instead of a background step: surface0 and surface1 are
+    --sunken: #342f2d;
+    --scrim: #32302db3;
+    --shadow: #00000066;
+    /* code sits on a wash of the text color instead of a background step: surface0 and surface1 are
      the same color in several themes (Rose Pine, Nord), so a chip painted in one of them would disappear
      into the column it sits on. Mixed at use time, so it follows the theme like everything else.
      This is the only mix left in the shell, and it is the case where a mix does not invent a
@@ -71,34 +82,34 @@
      a colour at 35% of something is a colour that appears in no swatch and reads as a new hue
      rather than as the same one doing a different job. It was two tokens, code-bg for the inline
      chip and code-panel for the block, 6% and 4%: 1.3 L* apart, which is two names for one colour. */
-  --code: color-mix(in srgb, var(--text0) 6%, transparent);
-  /* the seven a theme names for code (themes.ts, syntaxOf, which fills in any it left out); both
+    --code: color-mix(in srgb, var(--text0) 6%, transparent);
+    /* the seven a theme names for code (themes.ts, syntaxOf, which fills in any it left out); both
      the chat log and the diff pane colour from these, so a file reads the same in either */
-  --syntax-comment: #6a6055;
-  --syntax-keyword: #fa891e;
-  --syntax-string: #78c945;
-  --syntax-number: #ca94ca;
-  --syntax-type: #fcbe03;
-  --syntax-function: #4dc7a7;
-  --syntax-variable: #69a9e8;
-  /* radii: xs chips/badges, sm controls, md boxes, lg cards */
-  --r-xs: 3px;
-  --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 8px;
-  --r-pill: 999px;
+    --syntax-comment: #6a6055;
+    --syntax-keyword: #fa891e;
+    --syntax-string: #78c945;
+    --syntax-number: #ca94ca;
+    --syntax-type: #fcbe03;
+    --syntax-function: #4dc7a7;
+    --syntax-variable: #69a9e8;
+    /* radii: xs chips/badges, sm controls, md boxes, lg cards */
+    --r-xs: 3px;
+    --r-sm: 4px;
+    --r-md: 6px;
+    --r-lg: 8px;
+    --r-pill: 999px;
 
-  /* Row heights. Two tiers, because a list is either dense enough to scan or comfortable enough to
+    /* Row heights. Two tiers, because a list is either dense enough to scan or comfortable enough to
      point at and there is no third thing; the app had five, none of them named, and the worktree
      row alone asserted its height in three places. The -sm tier is mono: changed files, commits,
      picker results, the tool log. The bare one is ui: worktrees, menu items. 22 is where the
      tool log had already landed on its own, and it is the height at which a 12px mono row stops
      reading as a paragraph and starts reading as rows. */
-  --row-h-sm: 24px;
-  --row-h: 32px;
-  --row-pad-x: 12px;
+    --row-h-sm: 24px;
+    --row-h: 32px;
+    --row-pad-x: 12px;
 
-  /* Elevation. Two tiers, and the question each answers is what the thing is doing rather than how
+    /* Elevation. Two tiers, and the question each answers is what the thing is doing rather than how
    * far off the page it looks:
    *
    *   float     it appears over chrome you can still see and use, so it has to separate itself:
@@ -112,14 +123,14 @@
    *
    * Two things deliberately stay off this: the worktree rail's peek, whose negative spread is a
    * seam rather than a lift, and the jump-down pill, which is a control and not a surface. */
-  --elev-float: 0 6px 20px var(--shadow);
-  --elev-overlay: 0 10px 36px var(--shadow);
-  /* z-index is a ladder, written here rather than tokenised because every rung is one rule and
+    --elev-float: 0 6px 20px var(--shadow);
+    --elev-overlay: 0 10px 36px var(--shadow);
+    /* z-index is a ladder, written here rather than tokenised because every rung is one rule and
      nothing reads it from two places: the dock's resize handle 1, a pane header's floating actions
      2, a pane's resize handle and the composer's inline picker 5, the palette scrim 10, the rail's
      peek 25, the toast 30, a context menu and an anchored picker 40, the tooltip 100. A new layer
      names its rung in this sentence before it takes one. */
-  /* Four prefixes, one per kind, and the prefix is what tells you which kind you have:
+    /* Four prefixes, one per kind, and the prefix is what tells you which kind you have:
    *
    *   --face-*    a font stack. Raw material: it belongs inside a --type-* value, and no rule sets
    *               font-family on its own. Shared by several sets, which is why it is not a suffix.
@@ -133,10 +144,10 @@
    * MonacoDiff.tsx and XTerm.tsx read --face-mono off the root because their editors want a string.
    * -apple-system already resolves optical sizing on Apple platforms; naming "SF Pro Text"
    * explicitly pins the Text cut and defeats the switch to Display at larger sizes. */
-  --face-ui: -apple-system, "Segoe UI", sans-serif;
-  --face-mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+    --face-ui: -apple-system, "Segoe UI", sans-serif;
+    --face-mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
 
-  /* Type is two families by two tiers, plus one rung above for the things that arrive. Each token
+    /* Type is two families by two tiers, plus one rung above for the things that arrive. Each token
    * is a whole `font` shorthand, so family, weight, size and leading move together and cannot be
    * half-applied; the shell already wrote `font:` shorthands everywhere, so this is fewer
    * declarations than naming the parts, not more.
@@ -158,22 +169,23 @@
  * The one trap: `font` resets every font-variant-* longhand, so a rule using one of these has to
    * re-declare font-variant-numeric: tabular-nums after it. Everything with a number that changes
    * under you depends on that. */
-  --type-ui-sm: 400 11px / 1.4 var(--face-ui);
-  --type-ui: 400 13px / 1.5 var(--face-ui);
-  --type-ui-lg: 400 20px / 28px var(--face-ui);
-  --type-mono-sm: 400 var(--size-mono-sm) var(--face-mono);
-  --type-mono: 400 var(--size-mono) var(--face-mono);
+    --type-ui-sm: 400 11px / 1.4 var(--face-ui);
+    --type-ui: 400 13px / 1.5 var(--face-ui);
+    --type-ui-lg: 400 20px / 28px var(--face-ui);
+    --type-mono-sm: 400 var(--size-mono-sm) var(--face-mono);
+    --type-mono: 400 var(--size-mono) var(--face-mono);
 
-  /* The two sizes above, on their own. Monaco and xterm parseFloat these, because a `font`
+    /* The two sizes above, on their own. Monaco and xterm parseFloat these, because a `font`
      shorthand is not parseable and both editors want a number. They sit outside --type-* on
      purpose: everything under that prefix is a complete set, and a suffix on it is always a tier,
      so --type-mono-px would have read as a sibling of --type-mono-sm and it is not one. */
-  --size-mono: 12px;
-  --size-mono-sm: 11px;
+    --size-mono: 12px;
+    --size-mono-sm: 11px;
 
-  /* 500 marks the one word in a row you would read first; 600 is for --type-ui-lg. Never 700:
+    /* 500 marks the one word in a row you would read first; 600 is for --type-ui-lg. Never 700:
      light text on a dark ground blooms, and mono bold at 12px on surface0 smears. These are applied
      after a --type-* shorthand, which is why they are values rather than part of one. */
-  --weight-strong: 500;
-  --weight-title: 600;
+    --weight-strong: 500;
+    --weight-title: 600;
+  }
 }

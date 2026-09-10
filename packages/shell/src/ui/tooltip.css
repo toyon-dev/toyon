@@ -1,0 +1,45 @@
+/* Tooltip: the one instance, delegated via data-tip. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* ---- tooltip (one instance, delegated via data-tip; see Tooltip.tsx) ---- */
+  .tooltip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    pointer-events: none;
+    max-width: 320px;
+    padding: 4px 8px;
+    font: var(--type-ui);
+    color: var(--text0);
+    /* the same box the menu is: a thing floating over the app reads as one treatment or as several
+     accidents, and this one was painting itself in the canvas colour, darker than the chrome it
+     was floating above. r-sm is a control's radius and a tooltip is a box. */
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-radius: var(--r-md);
+    box-shadow: var(--elev-float);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    animation: tooltip-in 90ms ease-out;
+    &[data-side="above"] {
+      animation-name: tooltip-in-above;
+    }
+  }
+  .tooltip-key {
+    margin-left: 12px;
+    color: var(--text1);
+  }
+  @keyframes tooltip-in {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+  }
+  @keyframes tooltip-in-above {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+  }
+}

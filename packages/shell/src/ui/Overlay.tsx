@@ -1,5 +1,6 @@
 import { type ReactNode, useRef } from "react";
 import { useDismissOutside } from "./hooks.ts";
+import "./overlay.css";
 
 /** The palette/prompt frame: scrim over the preview column + a box. Every overlay dismisses the
  * same way (mousedown outside the box, incl. on the docks and rail). `anchored` drops the scrim

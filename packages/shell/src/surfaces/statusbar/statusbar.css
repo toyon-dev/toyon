@@ -1,0 +1,151 @@
+/* The top bar: the project pill, the centred path, the tools. */
+
+@layer tokens, base, surfaces;
+
+@layer surfaces {
+  .rb-path {
+    flex: 1;
+    min-width: 0;
+    color: var(--text1);
+    padding: 3px 10px;
+    &:focus {
+      color: var(--text0);
+    }
+  }
+
+  /* ---- status bar ---- */
+  .status-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface1);
+    border-bottom: 1px solid var(--border0);
+    padding: 4px 10px;
+    /* the frame tier: both bars describe state rather than hold content, so they sit one
+     step under the app they frame. Numbers here tick live, hence the tabular re-declare:
+     the `font` shorthand above resets every font-variant-* longhand. */
+    font: var(--type-mono-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--text2);
+    /* 38, not the 32 this used to be: a 20px control in a 32px bar leaves 6px above it, and the
+     project panel that opens over the pill needs that space for its own top edge. The bar in the
+     installed app is already this tall (the OS title bar sets it), so the two now match. */
+    min-height: 38px;
+  }
+  /* installed PWA with window-controls-overlay: the browser drops its title bar and only the
+   traffic lights float top-left, so the top bar becomes the title bar — draggable, inset past
+   the controls (env(titlebar-area-*) comes from the OS), controls themselves stay clickable */
+  @media (display-mode: window-controls-overlay) {
+    .status-bar.top-bar {
+      -webkit-app-region: drag;
+      app-region: drag;
+      padding-left: calc(env(titlebar-area-x, 0px) + 10px);
+      padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 10px);
+      /* +1px: Chrome paints the control boxes over the full titlebar-area height, so a bar
+       that ends exactly there has its bottom border hidden under the traffic lights */
+      min-height: calc(max(38px, env(titlebar-area-height, 38px)) + 1px);
+    }
+    .status-bar.top-bar button,
+    .status-bar.top-bar input,
+    .status-bar.top-bar .prompt-box.anchored,
+    .status-bar.top-bar .rb-center {
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+    }
+    /* zen keeps a bare title strip here: the top bar *is* the window's title bar (drag region,
+     traffic lights, ⌄ ⋮ overlay), so dropping it would leave the preview under the controls
+     and the window undraggable. Worktree name centered, nothing else; preview fills below. */
+    .app.zen {
+      grid-template-rows: auto 1fr;
+    }
+    .app.zen .status-bar.top-bar {
+      display: flex;
+      justify-content: center;
+    }
+    .app.zen .status-bar.top-bar > :not(.zen-title) {
+      display: none;
+    }
+    .app.zen .status-bar.top-bar .zen-title {
+      display: block;
+    }
+  }
+  /* only the window-controls-overlay zen strip shows this */
+  .zen-title {
+    display: none;
+    color: var(--text2);
+  }
+  /* Safari-style: nav+path anchored to the window center — never moves when
+   docks collapse/resize (chrome that shifts underfoot reads as breakage) */
+  .rb-center {
+    position: absolute;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: min(520px, 40vw);
+    transition: left 0.15s ease;
+  }
+  /* .btn is 11px/1.4 text in 1px padding (~17px) while .btn-icon is a fixed 20px square, so a bar
+   mixing them looks ragged; in here they share the icon box's height */
+  .status-bar {
+    & .btn {
+      min-height: 20px;
+    }
+  }
+
+  /* top-left project pill: it names what the shell is scoped to, so at rest it is a label and
+   nothing more — .btn already gives the hover background and .on the open one, which is the
+   whole visual vocabulary here */
+  .pp-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .project-pill {
+    flex: none;
+  }
+  /* The panel opens over the pill rather than under it, the way an address bar expands in place.
+   -6px/-9px are the panel's border plus the field strip's padding, so the chip lands exactly on
+   the pill's box and the project name does not move at all; the 38px bar leaves 3px of itself
+   above the panel, which is what makes the top edge readable. The pill stays under it, holding
+   the bar's layout. */
+  .pp-wrap {
+    & .prompt-box.anchored {
+      top: -6px;
+      left: -9px;
+    }
+    /* half the viewport is a centred palette's budget; hanging off the bar, that would bury the app */
+    & .prompt-box .qo-list {
+      max-height: min(340px, 50vh);
+    }
+  }
+  .pp-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+  }
+  /* an agent is working in a project that is not on screen: the only reason to look away from here */
+  .pp-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--yellow);
+    flex: none;
+  }
+  .status-bar {
+    & .branch {
+      color: var(--accent);
+    }
+    & .grow {
+      flex: 1;
+    }
+    /* columns: zen centers over the 40px rail (bar pad 10 + 20px box → center 20px); with the
+   20px gap the chat toggle's center lands at 60px = rail 40 + dock pad 10 + picker half 10 */
+    & .bar-tools {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+  }
+}

@@ -1,0 +1,30 @@
+/* The input primitive: .field for identifiers, .field-lg for prose. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* ---- fields ---- */
+  .field {
+    background: var(--sunken);
+    border: 1px solid var(--border0);
+    border-radius: var(--r-sm);
+    color: var(--text0);
+    /* identifier and filter inputs: a path, a URL, a branch, a command. Prose you write is
+     .field-lg, which the commit box and the composer already take. */
+    font: var(--type-mono);
+    padding: 3px 8px;
+    outline: none;
+    &:focus {
+      border-color: var(--border1);
+    }
+  }
+  /* multi-line / palette inputs */
+  .field-lg {
+    border-radius: var(--r-md);
+    font: var(--type-ui);
+    padding: 8px 10px;
+    /* the composer once its draft leads with `!`: what follows is a command, and the face changing
+   under the caret is what says the box has changed contract before anything runs */
+    &.field-shell {
+      font: var(--type-mono);
+    }
+  }
+}

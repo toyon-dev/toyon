@@ -11,6 +11,7 @@ import { shiftRanges, wtDir } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
 import { GitFileRow } from "./GitFileRow.tsx";
+import "./changes.css";
 
 /** one array, so a worktree the daemon has not reported on yet does not hand the row list a fresh
  * identity on every render and re-render every row with it */

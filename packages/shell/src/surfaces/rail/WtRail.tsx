@@ -16,6 +16,7 @@ import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass, procTrouble } from "../util.ts";
 import { worktreeActions } from "./worktreeActions.ts";
+import "./rail.css";
 
 type MenuState = { at: { x: number; y: number }; id: string; land?: boolean };
 

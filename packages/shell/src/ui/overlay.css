@@ -1,0 +1,39 @@
+/* Overlay: the scrim and the box a palette or prompt sits in. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* ---- overlay: scrim over the preview column + a box anchored near the top (a palette's height
+   changes as you type, and a centered box would bob with it — editor/launcher convention) ---- */
+  .prompt-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    padding-top: clamp(72px, 18vh, 220px);
+    z-index: 10;
+  }
+  .prompt-box {
+    width: min(560px, 90%);
+    background: var(--surface1);
+    box-shadow: var(--elev-overlay);
+    border: 1px solid var(--border0);
+    border-radius: var(--r-lg);
+    padding: 14px;
+    & .title {
+      color: var(--text2);
+      margin-bottom: 8px;
+    }
+    /* anchored variant: no scrim, hanging under whatever opened it (the caller's wrapper is the
+   offset parent). Sits above the rail panel and the toast, under the tooltip. */
+    &.anchored {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      width: min(460px, calc(100vw - 60px));
+      z-index: 40;
+      /* anchored drops the scrim (see Overlay.tsx), so the box has to separate itself again */
+      box-shadow: var(--elev-float);
+    }
+  }
+}

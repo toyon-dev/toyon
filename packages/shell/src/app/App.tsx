@@ -15,6 +15,7 @@ import { useDragResize, usePersisted } from "../ui/hooks.ts";
 import { Tooltips } from "../ui/Tooltip.tsx";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
+import "./app.css";
 
 /** the worktree rail: the strip it keeps when it peeks, and the column it takes when kept open
  *  (both also in surfaces.css, as the rail's width and --rail-w) */

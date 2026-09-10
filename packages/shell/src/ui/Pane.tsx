@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { IconButton } from "./Button.tsx";
 import { tip } from "./Tooltip.tsx";
+import "./pane.css";
 
 /** a bottom pane of the preview column (editor, terminal): drag handle, header row, close button.
  * Esc closes them in order from app/keys.ts, which owns the ladder. */
@@ -13,7 +14,6 @@ export function Pane({
   actions,
   onClose,
   closeHint = "esc",
-  floating = false,
   children,
 }: {
   className: string;
@@ -25,15 +25,12 @@ export function Pane({
   actions?: ReactNode;
   onClose: () => void;
   closeHint?: string;
-  /** the header floats over the top-right corner instead of taking a row (the terminal: its
-   * first line is the title) */
-  floating?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className={`pane ${className}`} style={height === undefined ? undefined : { height }}>
       {resizable && <div className="row-resize" onPointerDown={onDragStart} />}
-      <div className={`file-head ${floating ? "floating" : ""}`}>
+      <div className="file-head">
         <span className="file-path">{title}</span>
         {actions}
         <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />

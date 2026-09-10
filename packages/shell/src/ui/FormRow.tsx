@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./form-row.css";
 
 /** One labeled row of a form: a label on the left, the control and its explanation on the right.
  * Shared by the setup pane and the new-project form on purpose. Those two are back to back in one

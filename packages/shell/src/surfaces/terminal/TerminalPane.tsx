@@ -8,6 +8,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { TabStrip } from "./TabStrip.tsx";
+import "./terminal.css";
 
 const XTerm = lazy(() => import("./XTerm.tsx"));
 

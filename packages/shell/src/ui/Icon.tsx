@@ -1,3 +1,4 @@
+import "./icon.css";
 /* every drawn glyph in the UI comes from here: same 16px box, drawn to fill a 12px square, same
    1.3 stroke, so a row of them reads as one family. Font glyphs each brought their own weight and
    optical size, and a glyph drawn to 11px sits visibly smaller next to one drawn to 12.

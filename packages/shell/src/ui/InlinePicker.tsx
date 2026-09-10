@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject } from "react";
 import { KeyHints } from "./KeyHints.tsx";
 import type { ListNav } from "./listNav.ts";
+import "./picker.css";
 
 /**
  * A list anchored to an input the caret is already in, rather than an overlay that takes focus.

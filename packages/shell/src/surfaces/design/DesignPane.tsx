@@ -18,6 +18,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { contrastRatio, parseHex } from "./contrast.ts";
+import "./design.css";
 
 export function DesignPane({
   worktreeId,

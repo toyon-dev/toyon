@@ -1,0 +1,152 @@
+/* Button and IconButton: the box, the variants, the tones. See Button.tsx for the axes. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* ---- buttons ---- */
+  /* .btn: ghost text button. .btn-outline: bordered pill (border takes the text color on hover).
+   .btn-icon: 20px square glyph box. `.on` marks an active toggle. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    line-height: 1.4;
+    color: var(--text1);
+    border-radius: var(--r-sm);
+    padding: 1px 8px;
+    white-space: nowrap;
+  }
+  /* three sizes, because the ten hand-written paddings collapsed to three once they were laid out
+   next to each other: the compact default, a chip you aim at, and the action a panel is asking
+   for. The four near-misses (2px 8px, 3px 7px, 2px 10px, 1px 7px) were nobody's decision. */
+  .btn-md {
+    padding: 4px 8px;
+  }
+  .btn-lg {
+    padding: 4px 16px;
+  }
+  .btn {
+    &:hover {
+      color: var(--text0);
+      background: var(--element0);
+    }
+    &:disabled {
+      color: var(--text2);
+      cursor: default;
+      background: none;
+    }
+  }
+  .btn-outline {
+    border: 1px solid var(--border1);
+    &:hover {
+      background: none;
+      color: inherit;
+      border-color: currentColor;
+    }
+    &:disabled {
+      color: var(--text2);
+      border-color: var(--border0);
+    }
+  }
+  .btn-icon {
+    width: 20px;
+    height: 20px;
+    padding: 2px;
+    display: grid;
+    place-items: center;
+    /* the same rest tier as .btn: an idle control is an idle control, and these two disagreed by a
+     whole tier, 4.3:1 for a text button against 2.1:1 for an icon one. There is a reading where
+     chrome should be quieter than an action, but nothing wrote it down and .btn-outline was a
+     third case again, so they are one rule now. */
+    color: var(--text1);
+    border-radius: var(--r-sm);
+    line-height: 1;
+    &:hover {
+      color: var(--text0);
+      background: var(--element0);
+    }
+    /* text2, the same tier every other :disabled rule already used. This briefly had a fourth tier of
+   its own, because disabled used to be a surface step that sits 1.4 L* off text2, so a dead toolbar
+   icon and a live one were the same colour. The real fault was that an icon button at rest was on
+   text2 at all; once rest moved up to text1 with every other control, 4.3:1 against 2.1:1 says
+   disabled perfectly well and the extra tier had nothing left to do. */
+    &:disabled {
+      color: var(--text2);
+      cursor: default;
+      background: none;
+    }
+  }
+
+  /* ---- the two other closed axes: variant (the treatment) and tone (what the colour means) ----
+
+   Both are small because both were counted rather than invented. At rest exactly two things ever
+   varied the treatment: .btn-outline's border and .set-v's sunken fill. So there are three
+   variants and no `solid`, `link` or `transparent`, which are names other systems have and this
+   app does not.
+
+   Tone is what the twenty semantic classes turned out to be holding: seven colour values, and
+   only four meanings once `on` was pulled out of them as a state. Six surfaces had each written
+   `color: var(--accent)` for their own `.on`, because .btn-icon.on existed and .btn.on did not;
+   they agreed by luck, so .btn.on says it once instead. */
+
+  /* variant: field is a button drawn as a form field, which is what a settings value is: it shows
+   the current one and you click it to change it */
+  .btn-field {
+    color: var(--text0);
+    background: var(--sunken);
+    border-color: var(--border0);
+    &:hover {
+      color: var(--accent);
+      background: var(--sunken);
+      border-color: var(--accent);
+    }
+    &:disabled,
+    &:disabled:hover {
+      background: var(--sunken);
+      border-color: var(--border0);
+    }
+  }
+
+  /* tone: colour only, never the box. Each is the resting colour; `on` is handled below. */
+  .tone-primary {
+    color: var(--accent);
+  }
+  .tone-quiet {
+    color: var(--text2);
+  }
+  .tone-danger {
+    color: var(--red);
+  }
+
+  /* on: a text button's accent, and a toolbar switch's seat. The seat is the older of the two rules
+   (.btn-icon.on) and the reason it stays a seat is written there. `chrome` is that same switch
+   behaviour named, so a text button can ask for it (the project pill) and an icon button can
+   decline it (the composer's picker is a mode, not a panel, so it takes tone-primary). */
+  .btn.on,
+  .btn-icon.on {
+    color: var(--accent);
+  }
+  /* on is not hover, and it is not selection either. A toolbar switch says so the way a switch does:
+   the seat gets deeper, element0 under the pointer and element1 when it is on, and the glyph never
+   changes colour. The accent is for picking one thing out of a set; spending it here painted a
+   branch icon red, which reads as a merge conflict rather than as an open panel, and a 2px accent
+   bar across the bottom of a 24px rounded square is a graphic fighting a shape. This used to be
+   keyed on .btn-icon, which made it a fact about the element instead of about the control: the
+   project pill is a text button that wants the seat, and the composer's picker is an icon button
+   that wants the accent, and both had to override it to say so. Declared after :hover so a hovered
+   switch that is on still reads as on. */
+  .tone-chrome {
+    &.on {
+      color: var(--text0);
+      background: var(--element1);
+    }
+    &:hover {
+      color: var(--text0);
+    }
+  }
+
+  /* typography: five controls set the mono face (a branch name, a path, a proc name, a theme name),
+   because what they hold is a literal the person also types somewhere else */
+  .btn-mono {
+    font: var(--type-mono);
+  }
+}

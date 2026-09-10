@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { Icon, type IconName } from "./Icon.tsx";
 import { tip } from "./Tooltip.tsx";
+import "./button.css";
 
 /**
  * Every pressable control in the app, across five closed axes: variant, size, tone, `on`, `mono`.

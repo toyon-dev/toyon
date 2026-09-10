@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Kbd } from "./Kbd.tsx";
+import "./tooltip.css";
 
 /**
  * One tooltip for the whole app. Put `data-tip="…"` on any element (or spread

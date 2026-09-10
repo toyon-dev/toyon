@@ -1,0 +1,25 @@
+/* Kbd: every keyboard shortcut on screen. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* ---- keyboard shortcuts (Kbd.tsx): the same glyphs, font and spacing wherever a chord shows ---- */
+  .kbd {
+    display: inline-flex;
+    align-items: baseline;
+    white-space: nowrap;
+    font: var(--type-ui-sm);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+  /* the mac menu convention: modifiers sit tight against the key, a hair of air between */
+  .kbd-mod {
+    margin-right: 1px;
+  }
+  .kbd-chip {
+    justify-content: center;
+    padding: 3px 6px;
+    color: var(--text0);
+    background: var(--sunken);
+    border: 1px solid var(--border0);
+    border-radius: var(--r-sm);
+  }
+}

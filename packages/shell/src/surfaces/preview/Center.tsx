@@ -39,6 +39,7 @@ import { chord, previewUrl, relFile, wtDir } from "../util.ts";
 import { DiscoveredPane } from "./DiscoveredPane.tsx";
 import { ImportPane } from "./ImportPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
+import "./preview.css";
 
 /** the preview column: one persistent iframe per visited worktree (switching is a display toggle,
  * so each preview keeps its app state + HMR socket while hidden), the editor pane, and the overlays */

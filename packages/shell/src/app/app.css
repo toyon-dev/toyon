@@ -1,0 +1,92 @@
+/* The workbench frame: the grid, zen, the dock resize handles, the toast. */
+
+@layer tokens, base, surfaces;
+
+@layer surfaces {
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100%;
+
+    /* zen: full-bleed preview, all chrome hidden (⌘. exits; esc belongs to the page) */
+    /* hiding the bar removes a grid child — collapse to one full-height row so
+   .docks doesn't re-slot into the auto track (grid re-slotting, round two) */
+    &.zen {
+      grid-template-rows: 1fr;
+    }
+    &.zen .status-bar,
+    &.zen .left-dock,
+    &.zen .right-dock,
+    &.zen .wt-rail,
+    &.zen .dock-resize {
+      display: none;
+    }
+  }
+
+  .docks {
+    display: flex;
+    min-height: 0;
+  }
+
+  /* zero-width in layout: the dock's own 1px border is the only seam you see.
+   The grab strip lives inside the panel and only shows on hover / while dragging */
+  .dock-resize {
+    position: relative;
+    width: 0;
+    flex-shrink: 0;
+    z-index: 1;
+    &::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      cursor: col-resize;
+      background: transparent;
+      transition: background 0.1s;
+    }
+    &.left::after {
+      right: 0;
+    }
+    &.right::after {
+      left: 0;
+    }
+    &:hover::after,
+    &.active::after {
+      background: var(--element1);
+    }
+  }
+  body.resizing {
+    cursor: col-resize;
+    user-select: none;
+  }
+  body.resizing iframe {
+    pointer-events: none;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 38px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 480px;
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-left: 3px solid var(--aqua);
+    border-radius: var(--r-md);
+    padding: 10px 14px;
+    cursor: pointer;
+    z-index: 30;
+    box-shadow: var(--elev-float);
+    &.err {
+      border-left-color: var(--red);
+    }
+  }
+  .toast-action {
+    display: block;
+    margin-top: 8px;
+  }
+  body.resizing .rb-center {
+    transition: none;
+  }
+}

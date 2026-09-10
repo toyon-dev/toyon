@@ -3,6 +3,7 @@ import { useFocusOnMount } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
 import { useListNav } from "./listNav.ts";
 import { Overlay } from "./Overlay.tsx";
+import "./picker.css";
 
 export { step } from "./listNav.ts";
 

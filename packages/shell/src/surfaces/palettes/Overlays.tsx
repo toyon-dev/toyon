@@ -9,6 +9,7 @@ import { ProjectPicker } from "./ProjectPicker.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import { SearchPalette } from "./SearchPalette.tsx";
 import { ThemePicker } from "./ThemePicker.tsx";
+import "./palettes.css";
 
 /** whichever overlay is open (they are mutually exclusive). The project picker is here only in
  * its dialog form: normally it hangs off its pill in the top bar, where the click already is. */

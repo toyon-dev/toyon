@@ -11,6 +11,7 @@ import { CommandRow } from "../palettes/CommandRow.tsx";
 import { commandSource } from "../util.ts";
 import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
 import { RepoChip } from "./RepoChip.tsx";
+import "./prompt.css";
 
 /** ⌘K: describe a change → an agent starts on it in a new worktree (or N variants, or a batch) */
 export function PromptOverlay() {

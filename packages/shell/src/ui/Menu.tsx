@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { step } from "./listNav.ts";
+import "./menu.css";
 
 export type MenuItem = { label: ReactNode; onClick: () => void; danger?: boolean };
 

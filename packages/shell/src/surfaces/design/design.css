@@ -1,0 +1,356 @@
+/* The design pane: the token grid, the faces, the inventory rows. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  /* ---- design pane ----
+   Flat and tight, like the file rows and the diff beside it. An earlier pass gave every group a
+   rounded card on a raised plate and it read as a different product bolted to the side of this
+   one; the shell's own idiom is hairlines, one surface step, and small type. The only shape here
+   is the swatch grid, and it earns it: a colour has to be shown at a size you can judge. */
+  .design-pane {
+    height: 55%;
+    min-height: 160px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    &.full {
+      flex: 1;
+      min-height: 0;
+      height: auto;
+    }
+  }
+  /* min-width guards the flex column it sits in: a long path or a wide grid inside a pane should
+   scroll here, never push the docks beside it */
+  .design-body {
+    min-width: 0;
+    overflow: auto;
+    padding: 28px 20px 80px;
+    color: var(--text0);
+    font: var(--type-ui);
+  }
+  .design-section {
+    margin-bottom: 52px;
+  }
+  .design-h {
+    font: var(--type-ui-lg);
+    font-weight: var(--weight-title);
+    color: var(--text0);
+    margin: 0 0 16px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .design-note {
+    font: var(--type-ui-sm);
+    color: var(--text2);
+    font-weight: 400;
+  }
+  .design-gap {
+    margin: 0;
+    padding: 8px 10px;
+    background: var(--sunken);
+    color: var(--text2);
+    font: var(--type-ui-sm);
+    line-height: 1.5;
+  }
+
+  /* the mark on a row the scan has something to say about. A tag, not an alarm: it is an
+   observation about the class, and the row it sits on is the evidence. */
+  .design-tag {
+    padding: 0 5px;
+    background: var(--sunken);
+    color: var(--text2);
+    font: var(--type-mono);
+    margin-left: auto;
+  }
+
+  /* the long tail of a component list: real, uninteresting, and not a problem, so it sits at the
+   end of the list it belongs to rather than being reported above as though something were wrong */
+  /* the tail is the next row of the list it ends, not a footnote under it: same gutter, same
+   baseline, so the count lines up with the counts above it */
+  .design-tail {
+    & > summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: calc(100% + 40px);
+      margin-left: -40px;
+      min-height: var(--row-h-sm);
+      /* the same two pixels the rows above it keep, so the counts stay in one column */
+      padding: 0 10px 0 2px;
+      cursor: pointer;
+      color: var(--text2);
+      font: var(--type-ui);
+      list-style: none;
+    }
+    & > summary:hover {
+      background: var(--element0);
+      color: var(--text1);
+      --row-dim-color: var(--text1);
+    }
+    & > summary::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  /* token grid: one per kind, cells sharing their edges so a scale reads as one object */
+  .design-group {
+    margin-bottom: 30px;
+  }
+  .design-group-name {
+    display: block;
+    font: var(--type-mono);
+    color: var(--text1);
+    margin-bottom: 9px;
+  }
+  /* The lattice is drawn by the cells, not by a coloured ground showing through 1px gaps. The ground
+   version filled the tail of a short last row with a slab of border colour, so a group of two
+   tokens came with a long grey bar beside it saying nothing. */
+  /* No border on the container. Its top and left edges ran the full width of the grid box, so a
+   group of two cells came with a hairline stretching across the empty space beside them. Every
+   line here is drawn by a cell, which is the only way one cannot outlive its cells. */
+  /*
+ * Fixed tracks, collapsed when empty. `auto-fill` with `1fr` tracks keeps every track it can fit
+ * and stretches the filled ones, which left a short group's cells against the left of a wide box
+ * with empty tracks beside them; `auto-fit` drops those.
+ *
+ * A group wide enough to leave the column centres and breaks out of it evenly on both sides. A
+ * group that fits inside the column starts at its left edge like any other element, under its own
+ * label. Centring that one too put a single cell out in the middle of the pane with its label
+ * stranded at the margin.
+ */
+  .design-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, var(--ds-cell));
+    justify-content: start;
+  }
+
+  /* Width and offset are set on the element, in whole cells: the row is as wide as its own chips and
+   its left edge is the column's, pulled back a cell for every two it has outgrown the column by.
+   See breakout() in DesignPane, which explains why that arithmetic cannot live here. */
+  .design-breakout {
+    min-width: 0;
+  }
+
+  /* Every cell carries all four edges and overlaps its neighbour by the width of one, so the shared
+   lines land on the same pixel and read as 1px rather than 2. Drawing only the right and bottom
+   left the first row and the first column open, which is what made a group look like its border
+   had slipped; drawing them on the container instead made the line outlive the cells whenever a
+   row was short. */
+  .design-cell {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--border0);
+    margin: 0 -1px -1px 0;
+  }
+  /* tall enough that a colour reads as a swatch rather than a bar; at the widths this grid lands
+   on, a cell is then about three to two */
+  .design-sample {
+    height: 96px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--sunken);
+  }
+  .design-fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  /* Grouped by face, large to small inside it, each row rendered in itself. The face heads its own
+   block in the same quiet label the other groups use, because that is what a face token is: the
+   thing the sizes under it are cut from. No rules between rows; the token name on each already
+   separates them. */
+  .design-faces {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .design-face-group {
+    display: flex;
+    flex-direction: column;
+  }
+  /* a group heading, in the same treatment `color` and `size & radius` get: the sizes under it are
+   the specimens, and a heading that was also one competed with them */
+  .design-face-family {
+    font: var(--type-mono);
+    color: var(--text1);
+  }
+  /* the same armed state a component row gets, for the same reason: hovering it outlines the thing in
+   the running app, so it has to look like it did something. The band bleeds 40px left the way that
+   row does, and the padding puts the content back on the column: a component row spends that 40 on
+   its count gutter and a token row has nothing to put there. */
+  .design-face,
+  .design-face-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    width: calc(100% + 40px);
+    margin-left: -40px;
+    /* 40px lands the content on the column exactly. It used to be 40 plus the marker's own border,
+     which put every token name two pixels right of the column it was meant to sit on. */
+    padding: 2px 10px 2px 40px;
+  }
+  .design-face:hover,
+  .design-face-head:hover {
+    background: var(--element0);
+    --row-edge-color: var(--accent);
+    --row-dim-color: var(--text1);
+  }
+  .design-face-head {
+    margin-bottom: 2px;
+  }
+  .design-face-sample {
+    color: var(--text0);
+    white-space: nowrap;
+  }
+  .design-face-name {
+    font: var(--type-mono-sm);
+    white-space: nowrap;
+  }
+  .design-plate {
+    display: flex;
+    flex-direction: column;
+    padding: 5px 7px 6px;
+  }
+  /* the token's own name, as you would type it: these are custom properties, so they read as code */
+  .design-cell-name {
+    font: var(--type-mono);
+    color: var(--text0);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* value and ratio share a line: the value takes the room and gives way, the ratio never moves */
+  .design-cell-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .design-cell-value {
+    font-variant-numeric: tabular-nums;
+    flex: 1;
+    min-width: 0;
+  }
+  .design-cell-note {
+    flex-shrink: 0;
+  }
+  /* for a colour the swatch is the information and the hex is a footnote; for everything else the
+   value is the whole point, so it is read at the tier you actually read */
+  .design-cell[data-kind="color"] .design-cell-value,
+  .design-cell-note {
+    color: var(--text2);
+  }
+  .design-cell-value,
+  .design-cell-note {
+    font: var(--type-mono);
+    color: var(--text1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* a size drawn against the largest in its own group: absolute widths made every small radius the
+   same invisible speck, and a scale is about the steps between its rungs */
+  .design-scale {
+    display: block;
+    height: 3px;
+    margin-top: 5px;
+    background: var(--border1);
+  }
+
+  /* inventory rows: the shell's band idiom, a 2px accent edge on hover and a neutral seat */
+  .design-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  /* The name starts on the column's own left edge and the count hangs out into the gutter beside it,
+   rather than the count taking a slot inside the column and pushing every name in by forty pixels.
+   The row is pulled left by exactly that gutter, so the band under it still covers the count. */
+  .design-row {
+    display: flex;
+    /* the count, the name and the path are all one mono size, so centring and baseline land within a
+     pixel of each other and centring is what puts the text in the middle of the height token */
+    align-items: center;
+    gap: 10px;
+    width: calc(100% + 40px);
+    margin-left: -40px;
+    min-height: var(--row-h-sm);
+    text-align: left;
+    /* the 2px was the marker's border, which was load bearing: it plus the 28px count and the 10px
+     gap are what put the name on the column. .row-edge draws the marker out of flow, so the gutter
+     has to keep those two pixels itself. */
+    padding: 0 10px 0 2px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    &:disabled {
+      cursor: default;
+    }
+    /* hovering a row outlines the thing in the running app, so the row has to look armed */
+    &:hover:not(:disabled),
+    &:focus-visible {
+      background: var(--element0);
+      --row-edge-color: var(--accent);
+      --row-dim-color: var(--text1);
+      outline: none;
+    }
+  }
+  .design-count {
+    width: 28px;
+    flex-shrink: 0;
+    text-align: right;
+    font: var(--type-mono);
+  }
+  .design-name {
+    color: var(--text0);
+    font: var(--type-mono);
+    flex-shrink: 0;
+  }
+  .design-path {
+    font: var(--type-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .design-variants {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .design-variant {
+    padding: 0 5px;
+    background: var(--sunken);
+    color: var(--text2);
+    font: var(--type-mono);
+  }
+
+  /* Text holds a centred measure and the grids break out of it to the full width of the pane, the
+   way a wide table sits outside the column in a document. Placed last because the `margin`
+   shorthands above reset the inline axis. */
+  /*
+ * One centre line. Everything sits on it, and a grid too wide for the column grows out of the
+ * column symmetrically rather than sliding off to one side.
+ *
+ * Every element here is centred in the same 1500px section, so their midpoints coincide whatever
+ * their widths. Text and a grid small enough to fit are held to the 720 measure; a grid that wants
+ * more takes up to the full 1500 and the extra appears equally on both sides.
+ */
+  .design-section {
+    max-width: 1500px;
+    margin-inline: auto;
+  }
+  .design-h,
+  .design-group-name,
+  .design-rows,
+  .design-faces,
+  .design-gap,
+  .design-tail {
+    max-width: var(--ds-col);
+    margin-inline: auto;
+  }
+}

@@ -1,384 +1,97 @@
-/* Base layer: the reset and the primitives every surface composes. A button's box and its resting
-   colour belong here and to Button's props; a surface class is left with how the control sits in
-   its parent (.repo-chip's max-width, .term-tab's flex-shrink). styles/button.test.ts enforces
-   that, and it is why .ship-btn, .rb-btn and .toggle are gone: the first held a colour a tone now
-   names, and the other two held colours their primitive already set. Hover and disabled states are
-   defined here, once. */
+/* The reset and the idioms every surface composes: rows, dots, code, the text roles. */
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-html,
-body,
-#root {
-  height: 100%;
-  background: var(--surface0);
-  color: var(--text0);
-  font: var(--type-ui);
-}
-html,
-body {
-  overflow: hidden;
-  overscroll-behavior: none;
-}
+@layer tokens, base, surfaces;
 
-/* Scrollbars are the platform's; color-scheme: dark on :root is what makes them dark. Do not style
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+    background: var(--surface0);
+    color: var(--text0);
+    font: var(--type-ui);
+  }
+  html,
+  body {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  /* Scrollbars are the platform's; color-scheme: dark on :root is what makes them dark. Do not style
    ::-webkit-scrollbar to theme them: matching any of those pseudo-elements swaps the platform
    scrollbar for a custom one, and a custom scrollbar is never the overlay kind, so it reserves a
    gutter for good and the macOS "show scroll bars" setting stops reaching the app. (.term-tabs
    uses it to hide its scrollbar outright, which costs no gutter because there is no bar left.) */
-button {
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
+  button {
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
 
-/* ---- buttons ---- */
-/* .btn: ghost text button. .btn-outline: bordered pill (border takes the text color on hover).
-   .btn-icon: 20px square glyph box. `.on` marks an active toggle. */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  line-height: 1.4;
-  color: var(--text1);
-  border-radius: var(--r-sm);
-  padding: 1px 8px;
-  white-space: nowrap;
-}
-/* three sizes, because the ten hand-written paddings collapsed to three once they were laid out
-   next to each other: the compact default, a chip you aim at, and the action a panel is asking
-   for. The four near-misses (2px 8px, 3px 7px, 2px 10px, 1px 7px) were nobody's decision. */
-.btn-md {
-  padding: 4px 8px;
-}
-.btn-lg {
-  padding: 4px 16px;
-}
-.btn:hover {
-  color: var(--text0);
-  background: var(--element0);
-}
-.btn:disabled {
-  color: var(--text2);
-  cursor: default;
-  background: none;
-}
-.btn-outline {
-  border: 1px solid var(--border1);
-}
-.btn-outline:hover {
-  background: none;
-  color: inherit;
-  border-color: currentColor;
-}
-.btn-outline:disabled {
-  color: var(--text2);
-  border-color: var(--border0);
-}
-.btn-icon {
-  width: 20px;
-  height: 20px;
-  padding: 2px;
-  display: grid;
-  place-items: center;
-  /* the same rest tier as .btn: an idle control is an idle control, and these two disagreed by a
-     whole tier, 4.3:1 for a text button against 2.1:1 for an icon one. There is a reading where
-     chrome should be quieter than an action, but nothing wrote it down and .btn-outline was a
-     third case again, so they are one rule now. */
-  color: var(--text1);
-  border-radius: var(--r-sm);
-  line-height: 1;
-}
-.btn-icon:hover {
-  color: var(--text0);
-  background: var(--element0);
-}
-/* text2, the same tier every other :disabled rule already used. This briefly had a fourth tier of
-   its own, because disabled used to be a surface step that sits 1.4 L* off text2, so a dead toolbar
-   icon and a live one were the same colour. The real fault was that an icon button at rest was on
-   text2 at all; once rest moved up to text1 with every other control, 4.3:1 against 2.1:1 says
-   disabled perfectly well and the extra tier had nothing left to do. */
-.btn-icon:disabled {
-  color: var(--text2);
-  cursor: default;
-  background: none;
-}
-
-/* ---- the two other closed axes: variant (the treatment) and tone (what the colour means) ----
-
-   Both are small because both were counted rather than invented. At rest exactly two things ever
-   varied the treatment: .btn-outline's border and .set-v's sunken fill. So there are three
-   variants and no `solid`, `link` or `transparent`, which are names other systems have and this
-   app does not.
-
-   Tone is what the twenty semantic classes turned out to be holding: seven colour values, and
-   only four meanings once `on` was pulled out of them as a state. Six surfaces had each written
-   `color: var(--accent)` for their own `.on`, because .btn-icon.on existed and .btn.on did not;
-   they agreed by luck, so .btn.on says it once instead. */
-
-/* variant: field is a button drawn as a form field, which is what a settings value is: it shows
-   the current one and you click it to change it */
-.btn-field {
-  color: var(--text0);
-  background: var(--sunken);
-  border-color: var(--border0);
-}
-.btn-field:hover {
-  color: var(--accent);
-  background: var(--sunken);
-  border-color: var(--accent);
-}
-.btn-field:disabled,
-.btn-field:disabled:hover {
-  background: var(--sunken);
-  border-color: var(--border0);
-}
-
-/* tone: colour only, never the box. Each is the resting colour; `on` is handled below. */
-.tone-primary {
-  color: var(--accent);
-}
-.tone-quiet {
-  color: var(--text2);
-}
-.tone-danger {
-  color: var(--red);
-}
-
-/* on: a text button's accent, and a toolbar switch's seat. The seat is the older of the two rules
-   (.btn-icon.on) and the reason it stays a seat is written there. `chrome` is that same switch
-   behaviour named, so a text button can ask for it (the project pill) and an icon button can
-   decline it (the composer's picker is a mode, not a panel, so it takes tone-primary). */
-.btn.on,
-.btn-icon.on {
-  color: var(--accent);
-}
-/* on is not hover, and it is not selection either. A toolbar switch says so the way a switch does:
-   the seat gets deeper, element0 under the pointer and element1 when it is on, and the glyph never
-   changes colour. The accent is for picking one thing out of a set; spending it here painted a
-   branch icon red, which reads as a merge conflict rather than as an open panel, and a 2px accent
-   bar across the bottom of a 24px rounded square is a graphic fighting a shape. This used to be
-   keyed on .btn-icon, which made it a fact about the element instead of about the control: the
-   project pill is a text button that wants the seat, and the composer's picker is an icon button
-   that wants the accent, and both had to override it to say so. Declared after :hover so a hovered
-   switch that is on still reads as on. */
-.tone-chrome.on {
-  color: var(--text0);
-  background: var(--element1);
-}
-.tone-chrome:hover {
-  color: var(--text0);
-}
-
-/* typography: five controls set the mono face (a branch name, a path, a proc name, a theme name),
-   because what they hold is a literal the person also types somewhere else */
-.btn-mono {
-  font: var(--type-mono);
-}
-
-/* an Icon set inline with text: the 16px box is drawn for a 20px button, so next to 12px type it
-   needs the smaller optical size and a nudge onto the text's baseline */
-.icon-inline {
-  width: 13px;
-  height: 13px;
-  vertical-align: -2px;
-}
-
-/* ---- inline code ---- */
-/* a backticked word is marked text, not a control: the mono face and a wash of the ink set it
+  /* ---- inline code ---- */
+  /* a backticked word is marked text, not a control: the mono face and a wash of the ink set it
    apart, so a sentence naming six paths reads as a sentence and not as a row of boxes. The size is
    relative because mono runs small beside the UI face at the same pixel size, and because the same
    word has to hold its proportion inside a heading or a table cell. The padding is optically
    square: 5px of side bearing against the ~5px the line-height leaves above the caps. */
-code {
-  font: var(--type-mono);
-  padding: 1px 5px;
-  border-radius: var(--r-xs);
-  background: var(--code);
-  /* a chip that wraps mid-sentence keeps its padding and corners on both halves */
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-  /* a path longer than the column breaks instead of pushing the panel sideways */
-  overflow-wrap: anywhere;
-}
-/* code inside a link is part of the link, and takes its color */
-a code {
-  color: inherit;
-}
+  code {
+    font: var(--type-mono);
+    padding: 1px 5px;
+    border-radius: var(--r-xs);
+    background: var(--code);
+    /* a chip that wraps mid-sentence keeps its padding and corners on both halves */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    /* a path longer than the column breaks instead of pushing the panel sideways */
+    overflow-wrap: anywhere;
+  }
+  /* code inside a link is part of the link, and takes its color */
+  a code {
+    color: inherit;
+  }
 
-/* ---- syntax ---- */
-/* The seven colours a theme names for code, as the classes the chat log paints with. The diff pane
+  /* ---- syntax ---- */
+  /* The seven colours a theme names for code, as the classes the chat log paints with. The diff pane
    builds the same seven into its Monaco theme (syntaxOf), so a file is the same file in both, and a
    token the theme said nothing about is body text rather than a colour from somewhere else.
    Comments are italic here for the same reason they are there: it is the one distinction the log
    can carry that does not cost a hue. */
-.sy-comment {
-  color: var(--syntax-comment);
-  font-style: italic;
-}
-.sy-keyword {
-  color: var(--syntax-keyword);
-}
-.sy-string {
-  color: var(--syntax-string);
-}
-.sy-number {
-  color: var(--syntax-number);
-}
-.sy-type {
-  color: var(--syntax-type);
-}
-.sy-function {
-  color: var(--syntax-function);
-}
-.sy-variable {
-  color: var(--syntax-variable);
-}
+  .sy-comment {
+    color: var(--syntax-comment);
+    font-style: italic;
+  }
+  .sy-keyword {
+    color: var(--syntax-keyword);
+  }
+  .sy-string {
+    color: var(--syntax-string);
+  }
+  .sy-number {
+    color: var(--syntax-number);
+  }
+  .sy-type {
+    color: var(--syntax-type);
+  }
+  .sy-function {
+    color: var(--syntax-function);
+  }
+  .sy-variable {
+    color: var(--syntax-variable);
+  }
 
-/* ---- fields ---- */
-.field {
-  background: var(--sunken);
-  border: 1px solid var(--border0);
-  border-radius: var(--r-sm);
-  color: var(--text0);
-  /* identifier and filter inputs: a path, a URL, a branch, a command. Prose you write is
-     .field-lg, which the commit box and the composer already take. */
-  font: var(--type-mono);
-  padding: 3px 8px;
-  outline: none;
-}
-.field:focus {
-  border-color: var(--border1);
-}
-/* multi-line / palette inputs */
-.field-lg {
-  border-radius: var(--r-md);
-  font: var(--type-ui);
-  padding: 8px 10px;
-}
-/* the composer once its draft leads with `!`: what follows is a command, and the face changing
-   under the caret is what says the box has changed contract before anything runs */
-.field-lg.field-shell {
-  font: var(--type-mono);
-}
+  .dock-empty {
+    padding: 4px 12px;
+    color: var(--text2);
+  }
 
-/* ---- form rows (FormRow: the setup pane and the new-project form) ---- */
-.form-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.form-label {
-  width: 56px;
-  flex-shrink: 0;
-  padding-top: 5px;
-  color: var(--text1);
-}
-.form-control {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.form-control .field {
-  padding: 5px 8px;
-  line-height: 1.6;
-}
-.form-control > .field {
-  width: 100%;
-}
-.form-control textarea.field {
-  resize: none;
-}
-.form-hint {
-  color: var(--text2);
-}
-
-/* ---- menu (context menus, "open in") ---- */
-.menu {
-  position: fixed;
-  z-index: 40;
-  background: var(--surface1);
-  border: 1px solid var(--border1);
-  border-radius: var(--r-md);
-  /* the rows reach both edges, so the box is what keeps the corners round: the same reason
-     .prompt-box.quick-open clips its own. The padding is vertical only, for the same reason. */
-  overflow: hidden;
-  padding: 4px 0;
-  box-shadow: var(--elev-float);
-  display: flex;
-  flex-direction: column;
-  /* width is set by Menu.tsx, which needs the number for its off-screen clamp */
-}
-/* the geometry is .row's. A menu row rests a tier above a list row because every one of them is an
-   action you are about to take, not a thing you are scanning past. */
-.menu button {
-  color: var(--text0);
-}
-.menu .menu-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* the arrows and the pointer set the same index, so this is one highlight with two ways in */
-.menu button:hover,
-.menu button.active {
-  background: var(--element0);
-}
-.menu button.danger {
-  color: var(--red);
-}
-
-/* ---- overlay: scrim over the preview column + a box anchored near the top (a palette's height
-   changes as you type, and a centered box would bob with it — editor/launcher convention) ---- */
-.prompt-overlay {
-  position: absolute;
-  inset: 0;
-  background: var(--scrim);
-  display: grid;
-  justify-items: center;
-  align-content: start;
-  padding-top: clamp(72px, 18vh, 220px);
-  z-index: 10;
-}
-.prompt-box {
-  width: min(560px, 90%);
-  background: var(--surface1);
-  box-shadow: var(--elev-overlay);
-  border: 1px solid var(--border0);
-  border-radius: var(--r-lg);
-  padding: 14px;
-}
-.prompt-box .title {
-  color: var(--text2);
-  margin-bottom: 8px;
-}
-/* anchored variant: no scrim, hanging under whatever opened it (the caller's wrapper is the
-   offset parent). Sits above the rail panel and the toast, under the tooltip. */
-.prompt-box.anchored {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  width: min(460px, calc(100vw - 60px));
-  z-index: 40;
-  /* anchored drops the scrim (see Overlay.tsx), so the box has to separate itself again */
-  box-shadow: var(--elev-float);
-}
-
-.dock-empty {
-  padding: 4px 12px;
-  color: var(--text2);
-}
-
-/* ---- rows ----
+  /* ---- rows ----
    Every full-bleed list row: changed files, commits, worktrees, picker results, menu items. A band
    you point at, not a chip you press, which is the whole difference from .btn and why there is no
    radius and no inset here: the row reaches both edges of whatever holds it. A surface adds only
@@ -390,53 +103,57 @@ a code {
    up with it; .row-quiet is a whole row a rung down, for the discovered list and collapsed tool
    calls. Status colours are exempt on purpose: a green dot that shifts under the pointer reads as
    the proc changing state. */
-.row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: var(--row-h);
-  padding: 0 var(--row-pad-x);
-  text-align: left;
-  color: var(--text1);
-  position: relative;
-}
-.row-sm {
-  min-height: var(--row-h-sm);
-  font: var(--type-mono);
-}
-.row:hover {
-  background: var(--element0);
-  color: var(--text0);
-}
-/* A child that sits one rung below the row it is in. It reads its tier off a variable rather than
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: var(--row-h);
+    padding: 0 var(--row-pad-x);
+    text-align: left;
+    color: var(--text1);
+    position: relative;
+  }
+  .row-sm {
+    min-height: var(--row-h-sm);
+    font: var(--type-mono);
+  }
+  .row {
+    &:hover {
+      background: var(--element0);
+      color: var(--text0);
+    }
+  }
+  /* A child that sits one rung below the row it is in. It reads its tier off a variable rather than
    being selected through the row, the way --row-edge-color and --dot-gap already work here, so a
    row type that is not .row (the picker's, which stays display:block for its ellipsis) opts in with
    one declaration instead of a copy of the rule below per child. Those copies are exactly what went
    wrong: the pickers had four and the file row's directory was the fifth nobody wrote, so it went
    invisible the moment the row was picked. */
-.row-dim {
-  color: var(--row-dim-color, var(--text2));
-}
-/* a lifted seat lifts its dim child too, and picked lifts further than hover: text2 on element1 is
+  .row-dim {
+    color: var(--row-dim-color, var(--text2));
+  }
+  /* a lifted seat lifts its dim child too, and picked lifts further than hover: text2 on element1 is
    1.06:1, which is not a quiet tier but an invisible one. text1 rather than text0, because at text0
    a filename and its directory read as one string instead of a name with a location after it. The
    picked states are still each surface's own class until they are one name; .sel is deliberately
    not here, since on a file or a commit it is the keyboard cursor and moves no background. */
-.row:hover,
-.row.active,
-.row.open,
-.row.menu-open {
-  --row-dim-color: var(--text1);
-}
-.row-quiet {
-  color: var(--text2);
-}
-.row-quiet:hover {
-  color: var(--text1);
-}
+  .row {
+    &:hover,
+    &.active,
+    &.open,
+    &.menu-open {
+      --row-dim-color: var(--text1);
+    }
+  }
+  .row-quiet {
+    color: var(--text2);
+    &:hover {
+      color: var(--text1);
+    }
+  }
 
-/* ---- the selected-row edge ----
+  /* ---- the selected-row edge ----
    A 2px bar down a row's leading edge: the app's one mark for "this is the one you are on". A row
    type that can carry it takes .row-edge, which reserves the bar permanently and leaves it
    transparent; each state then names its color with --row-edge-color, so turning the mark on
@@ -446,170 +163,83 @@ a code {
 
    --row-edge-x moves the bar off the row's own left edge, for the worktree rail, whose rows start
    off screen while it is collapsed. */
-.row-edge {
-  position: relative;
-}
-.row-edge::before {
-  content: "";
-}
-.row-edge::before,
-.row-current {
-  position: absolute;
-  left: var(--row-edge-x, 0);
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--row-edge-color, transparent);
-}
+  .row-edge {
+    position: relative;
+    &::before {
+      content: "";
+    }
+  }
+  .row-edge::before,
+  .row-current {
+    position: absolute;
+    left: var(--row-edge-x, 0);
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--row-edge-color, transparent);
+  }
 
-/* ---- status dots ---- */
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-/* full green, the same value the +N counts use. It was mixed toward the surface for a while on the
+  /* ---- status dots ---- */
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    /* full green, the same value the +N counts use. It was mixed toward the surface for a while on the
    argument that running is the steady state and so shouldn't carry the second-most chroma in the
    palette; in practice a status dot that is not plainly green is not doing its job, and the eight
    pixels it occupies are not what makes a window loud. */
-.dot.running {
-  background: var(--green);
-}
-.dot.starting {
-  background: var(--text2);
-}
-.dot.working {
-  background: var(--yellow);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-/* blocked on you, not on the model. Steady rather than pulsing: working's motion means "leave it
+    &.running {
+      background: var(--green);
+    }
+    &.starting {
+      background: var(--text2);
+    }
+    &.working {
+      background: var(--yellow);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    /* blocked on you, not on the model. Steady rather than pulsing: working's motion means "leave it
    alone", and this one means the opposite. */
-.dot.waiting {
-  background: var(--accent);
-}
-.dot.crashed {
-  background: var(--red);
-}
-.dot.idle {
-  background: var(--surface2);
-}
-.dot.landed {
-  background: var(--aqua);
-}
-/* git knows about this worktree, toyon did not make it and does not run it. Hollow rather than a
+    &.waiting {
+      background: var(--accent);
+    }
+    &.crashed {
+      background: var(--red);
+    }
+    &.idle {
+      background: var(--surface2);
+    }
+    &.landed {
+      background: var(--aqua);
+    }
+    /* git knows about this worktree, toyon did not make it and does not run it. Hollow rather than a
    colour of its own: the palette's dots all say what a worktree is *doing*, and this one is not
    doing anything. It cannot borrow `unseen`'s ring either, because that ring sits outside a filled
    dot and means "a turn finished here"; this is the absence of a fill, not a ring around one. */
-.dot.discovered {
-  background: none;
-  /* 1.5px, not 1: at eight pixels across, a hairline ring on a dark surface reads as a smudge
+    &.discovered {
+      background: none;
+      /* 1.5px, not 1: at eight pixels across, a hairline ring on a dark surface reads as a smudge
      rather than as a dot with nothing in it, which is the whole message */
-  box-shadow: inset 0 0 0 1.5px var(--text2);
-}
-/* a turn finished here and nobody has looked yet. A modifier rather than a colour of its own: the
+      box-shadow: inset 0 0 0 1.5px var(--text2);
+    }
+    /* a turn finished here and nobody has looked yet. A modifier rather than a colour of its own: the
    dot underneath still says what the worktree is, and the ring says you have not seen it. Drawn as
    box-shadow so it grows outside the layout box and a finishing worktree never nudges its row.
    The gap is painted in whatever surface the row sits on, so a selected row keeps a clean ring. */
-.dot.unseen {
-  box-shadow:
-    0 0 0 1px var(--dot-gap, var(--surface1)),
-    0 0 0 2.5px var(--text2);
-}
-@keyframes pulse {
-  50% {
-    opacity: 0.3;
+    &.unseen {
+      box-shadow:
+        0 0 0 1px var(--dot-gap, var(--surface1)),
+        0 0 0 2.5px var(--text2);
+    }
   }
-}
-
-/* ---- keyboard shortcuts (Kbd.tsx): the same glyphs, font and spacing wherever a chord shows ---- */
-.kbd {
-  display: inline-flex;
-  align-items: baseline;
-  white-space: nowrap;
-  font: var(--type-ui-sm);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-}
-/* the mac menu convention: modifiers sit tight against the key, a hair of air between */
-.kbd-mod {
-  margin-right: 1px;
-}
-.kbd-chip {
-  justify-content: center;
-  padding: 3px 6px;
-  color: var(--text0);
-  background: var(--sunken);
-  border: 1px solid var(--border0);
-  border-radius: var(--r-sm);
-}
-
-/* ---- tooltip (one instance, delegated via data-tip; see Tooltip.tsx) ---- */
-.tooltip {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 100;
-  pointer-events: none;
-  max-width: 320px;
-  padding: 4px 8px;
-  font: var(--type-ui);
-  color: var(--text0);
-  /* the same box the menu is: a thing floating over the app reads as one treatment or as several
-     accidents, and this one was painting itself in the canvas colour, darker than the chrome it
-     was floating above. r-sm is a control's radius and a tooltip is a box. */
-  background: var(--surface1);
-  border: 1px solid var(--border1);
-  border-radius: var(--r-md);
-  box-shadow: var(--elev-float);
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-  animation: tooltip-in 90ms ease-out;
-}
-.tooltip[data-side="above"] {
-  animation-name: tooltip-in-above;
-}
-.tooltip-key {
-  margin-left: 12px;
-  color: var(--text1);
-}
-@keyframes tooltip-in {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
+  @keyframes pulse {
+    50% {
+      opacity: 0.3;
+    }
   }
-}
-@keyframes tooltip-in-above {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
+  /* command palette rows: label left, chord hint right */
+  .row-current {
+    --row-edge-color: var(--accent);
   }
-}
-
-/* ---- crash screen (see ui/ErrorBoundary.tsx) ---- */
-.crash {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 24px;
-  text-align: center;
-  background: var(--surface0);
-}
-/* inside a Pane: clear of its title bar, matching the editor's own inset */
-.crash.in-pane {
-  position: absolute;
-  inset: 33px 0 0 0;
-}
-.crash-title {
-  font: var(--type-ui);
-  color: var(--text0);
-}
-.crash-body {
-  max-width: 520px;
-  font: var(--type-mono);
-  color: var(--text2);
-  overflow-wrap: anywhere;
 }

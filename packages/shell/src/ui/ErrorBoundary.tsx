@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "./Button.tsx";
+import "./crash.css";
 
 /** Vite could not load a chunk. A rebuilt shell rotates every hashed filename, so a tab that has
  * been open across a rebuild asks the daemon for code that no longer exists. React.lazy caches the

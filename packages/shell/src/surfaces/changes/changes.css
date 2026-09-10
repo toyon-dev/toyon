@@ -1,0 +1,221 @@
+/* The changes panel: file rows, the history, the commit box, the diff pane. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  /* ---- left dock ---- */
+  .left-dock {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface1);
+    border-right: 1px solid var(--border0);
+    display: flex;
+    flex-direction: column;
+    /* the list scrolls, not the panel: the commit box stays put at the foot however long the
+     list gets, the way the chat composer does */
+    overflow: hidden;
+  }
+  .changes-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    /* the list holds focus for the whole panel, and the selected row is what says so; a ring
+     around the column as well would be two answers to one question */
+    outline: none;
+  }
+  .left-dock.collapsed,
+  .right-dock.collapsed {
+    display: none;
+  }
+
+  /* the panel's two lists are alternatives, not sections, so they get the tab strip the terminal
+   pane already uses rather than a second section title */
+  .dock-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 8px 12px 2px;
+  }
+  .dock-tab {
+    font: var(--type-ui-sm);
+    flex-shrink: 0;
+  }
+
+  /* one commit: the subject takes the row, the age ends it where a file row ends with its counts */
+  /* expanded, so its files are the rows underneath: the same picked pair a file open in the editor
+   takes, because it is the same idea one level up */
+  .log-row {
+    &.open {
+      background: var(--element1);
+      color: var(--text0);
+    }
+    &.open,
+    &.sel {
+      --row-edge-color: var(--accent);
+    }
+    & .subject {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .at {
+      font: var(--type-mono-sm);
+      margin-left: auto;
+      padding-left: 8px;
+      flex-shrink: 0;
+    }
+  }
+  /* in the history list every file row belongs to the commit above it, so the indent is the list's
+   to give rather than something the row has to know about itself */
+  .changes-list {
+    &.history .git-file {
+      padding-left: 28px;
+    }
+  }
+
+  .dock-section-title {
+    /* a section title is smaller than the rows under it, and marked by colour rather than by caps
+     and tracking: it was the loudest line in the dock and the least important one in it */
+    font: var(--type-ui-sm);
+    color: var(--text2);
+    padding: 10px 12px 4px;
+  }
+
+  /* the file open in the editor: picked, so element1 and the accent edge, the same pair the active
+   worktree and the open tool call carry. */
+
+  .git-file {
+    &.active {
+      background: var(--element1);
+      color: var(--text0);
+    }
+    /* where the keyboard is. Moving the cursor also opens the file, so the cursor and the open file
+   are the same row nearly always; it takes the same edge rather than a ring stacked on top of the
+   band, which hid the band and read as a second, unrelated kind of selection. */
+    &.active,
+    &.sel {
+      --row-edge-color: var(--accent);
+    }
+    & .xy {
+      color: var(--yellow);
+      width: 18px;
+      flex-shrink: 0;
+    }
+  }
+
+  .xy {
+    &.added {
+      color: var(--green);
+    }
+    &.deleted {
+      color: var(--red);
+    }
+  }
+  /* name first, then the directory it sits in. The name is what the eye is looking for, and it
+   leaves the part that can be cut at the end, where cutting it is free. (This column used to be
+   the whole path under `direction: rtl` to ellipsize from the left; bidi reorders the neutral
+   characters at each end of the run, which is how `.claude/` came out as `/claude.`) */
+  .git-file {
+    & .path {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+    & .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .dir {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      /* both can shrink, but the directory gives way first: a truncated folder still reads, a
+     truncated filename does not */
+      flex-shrink: 999;
+    }
+  }
+  .counts {
+    font: var(--type-mono-sm);
+    margin-left: auto;
+    padding-left: 8px;
+    flex-shrink: 0;
+    display: inline-flex;
+    gap: 5px;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+    & .add {
+      color: var(--green);
+    }
+    & .del {
+      color: var(--red);
+    }
+  }
+  /* the three bottom panes add only their own height and layout: the border, ground, position and
+   the title's face are .pane's, and each pane restating them was three copies to keep in step */
+  .diff-pane {
+    height: 45%;
+    min-height: 120px;
+    &.full {
+      flex: 1;
+      min-height: 0;
+      height: auto;
+    }
+    /* monaco sets the collapsed-region band in its own 13px; the pane's chrome is the shell's, so the
+   "N hidden lines" line matches the file path above it rather than the editor it came with */
+    & .monaco-editor .diff-hidden-lines .center {
+      font: var(--type-ui-sm);
+    }
+  }
+
+  /* ---- commit box / land buttons / toast ---- */
+
+  .deep-link {
+    border-color: var(--border0);
+    align-self: center;
+    &:hover {
+      color: var(--blue);
+      border-color: var(--border1);
+    }
+  }
+
+  .ahead-badge {
+    color: var(--aqua);
+  }
+  .behind-badge {
+    color: var(--yellow);
+  }
+  .landed-badge {
+    color: var(--aqua);
+  }
+  /* the message box only appears when there is something to commit, so on a clean tree this is the
+   knobs row alone: where you are, and the one move that is left */
+  .commit-box {
+    flex-shrink: 0;
+    & textarea {
+      min-height: 56px;
+    }
+  }
+  .commit-where {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .branch-name {
+    color: var(--text1);
+    font: var(--type-mono-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .commit-acts {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+}

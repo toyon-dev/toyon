@@ -1,0 +1,118 @@
+/* The palettes' own rows and the settings and shortcuts cards. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  /* ---- keyboard shortcuts help ---- */
+  .keys-card {
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-radius: var(--r-lg);
+    padding: 18px 24px 20px;
+    box-shadow: var(--elev-overlay);
+    font: var(--type-ui);
+    color: var(--text0);
+    /* two columns of sections: Find | Preview over Panels | Worktrees */
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 40px;
+    row-gap: 18px;
+    align-items: start;
+  }
+  /* settings card stacked above the shortcut card, same width */
+  .keys-stack {
+    display: grid;
+    gap: 12px;
+    width: min(560px, 90%);
+  }
+  .keys-card {
+    &.settings-card {
+      display: block;
+      padding: 12px 24px 12px;
+    }
+  }
+  .set-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 3px 0;
+  }
+  /* a row with nothing to change reads as a value, not a control: :hover still fires on a disabled
+   button, so the hover state has to be overridden too */
+  .keys-row {
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    gap: 16px;
+    align-items: center;
+    padding: 3px 0;
+  }
+  .keys-d {
+    color: var(--text1);
+  }
+  .keys-h {
+    font: var(--type-ui-sm);
+    color: var(--text2);
+    padding: 0 0 4px 2px;
+  }
+  /* theme picker: dark / light chips; the one being previewed on the highlighted row lights up */
+  .theme-kinds {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    /* fixed columns: a family without one variant leaves the slot empty so rows stay aligned */
+    & .kind {
+      width: 44px;
+      text-align: center;
+      border: 1px solid transparent;
+      border-radius: var(--r-sm);
+      padding: 0;
+    }
+    & .kind.on {
+      color: var(--accent);
+    }
+  }
+  /* search hits: location on top, matched line beneath */
+  .sr-item {
+    white-space: normal;
+    padding: 5px var(--lp-pad, 10px);
+  }
+  .sr-loc {
+    display: block;
+    color: var(--text2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sr-line {
+    color: var(--accent);
+  }
+  .sr-text {
+    display: block;
+    color: var(--text1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* ⌘P file rows: marker | filename | dim directory | line counts */
+  .qo-file {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    & .xy {
+      width: 12px;
+      flex-shrink: 0;
+      color: var(--yellow);
+    }
+    & .name {
+      color: var(--text0);
+      flex-shrink: 0;
+    }
+    & .dir {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      direction: rtl;
+      text-align: left;
+    }
+  }
+}

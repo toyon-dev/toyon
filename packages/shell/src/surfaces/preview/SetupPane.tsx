@@ -144,19 +144,6 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
               the repo is named in the lead, so the path is only the file */}
           <span className="form-dest">toyon.json</span>
           {onClose && <Button onClick={onClose}>cancel</Button>}
-          {askable && main && (
-            <Button
-              variant={agentLeads ? "outline" : undefined}
-              size={agentLeads ? "lg" : undefined}
-              disabled={main.agent !== "idle"}
-              {...tip(
-                "The agent reads the repo and writes toyon.json; the daemon picks the file up as soon as it lands",
-              )}
-              onClick={askAgent}
-            >
-              let the agent work it out
-            </Button>
-          )}
           {/* the third answer, only where it is one: beside a guessed start command it read as a
               verdict on the repo. A repo the detector could not read gets it, and so does the
               reopened pane, which is where a preview is turned off. */}
@@ -168,17 +155,34 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
               no dev server
             </Button>
           )}
-          <Button
-            variant={agentLeads ? undefined : "outline"}
-            size={agentLeads ? undefined : "lg"}
-            disabled={!canStart}
-            {...(onClose
-              ? tip("Restarts every worktree of this repo. Profiles and other keys in the file are kept.")
-              : {})}
-            onClick={start}
-          >
-            {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
-          </Button>
+          {/* one primary, and it is the one that fits the form: the agent while the form is blank,
+              start once there is a command in it. A swap rather than a third ghost, since a
+              disabled start beside the agent was a button with nothing to say. */}
+          {agentLeads && main ? (
+            <Button
+              variant="outline"
+              size="lg"
+              disabled={main.agent !== "idle"}
+              {...tip(
+                "The agent reads the repo and writes toyon.json; the daemon picks the file up as soon as it lands",
+              )}
+              onClick={askAgent}
+            >
+              let the agent work it out
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="lg"
+              disabled={!canStart}
+              {...(onClose
+                ? tip("Restarts every worktree of this repo. Profiles and other keys in the file are kept.")
+                : {})}
+              onClick={start}
+            >
+              {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

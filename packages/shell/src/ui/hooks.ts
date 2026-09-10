@@ -110,32 +110,27 @@ export function useWindowWidth(): number {
   return w;
 }
 
-/** Keep an element where it is on screen while a click changes its height. A short transcript sits
- * on the composer rather than the top of the pane, so the free space is above the rows: a row that
- * opens has nowhere to grow but upward, and the header walks out from under the pointer, which
- * makes a second click land on the output instead of closing what it just opened. Freezing that
- * leading space at the size it already has gives the row somewhere to grow, so the rows below it
- * move down instead; the scroll correction holds the line where freezing is not what moved it.
- * Call `hold(el)` in the handler, before the state change. The scroller opts in by reading
- * `--hold-lead` where it would otherwise leave the space to `auto`, and clears the property once
- * the content has moved on. */
-export function useHoldInPlace(scroller: string) {
-  const held = useRef<{ el: HTMLElement; top: number } | null>(null);
+/** Scroll a row's output into view once it opens. A row grows wherever the layout has room: up
+ * while the transcript is short enough to sit on the composer, down once it scrolls. Either way the
+ * output can land below the pane, so after the open commits the scroller moves down far enough to
+ * show it, and no further than the header reaching the top: the header is the one thing that must
+ * stay on the page. Call `reveal(el)` in the handler, before the state change. */
+export function useReveal(scroller: string) {
+  const armed = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
-    const h = held.current;
-    if (!h) return;
-    held.current = null;
-    const box = h.el.closest(scroller);
+    const el = armed.current;
+    if (!el) return;
+    armed.current = null;
+    const box = el.closest<HTMLElement>(scroller);
     if (!box) return;
-    const drift = h.el.getBoundingClientRect().top - h.top;
-    if (drift) box.scrollTop += drift;
+    const b = box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const below = r.bottom - b.bottom;
+    if (below <= 0) return;
+    const pad = parseFloat(getComputedStyle(box).paddingTop) || 0;
+    box.scrollTop += Math.min(below, Math.max(0, r.top - b.top - pad));
   });
   return (el: HTMLElement | null) => {
-    held.current = el ? { el, top: el.getBoundingClientRect().top } : null;
-    const box = el?.closest<HTMLElement>(scroller);
-    const first = box?.firstElementChild;
-    // only while the content is short enough to leave any: once it overflows there is none to hold
-    const lead = first ? parseFloat(getComputedStyle(first).marginTop) : 0;
-    if (box && lead > 0) box.style.setProperty("--hold-lead", `${lead}px`);
+    armed.current = el;
   };
 }

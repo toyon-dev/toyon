@@ -809,15 +809,14 @@ body.resizing .row-resize {
 /* a short transcript sits on the composer instead of the top of the pane; once the
    content overflows there is no free space left and the margin collapses to nothing.
    justify-content: flex-end would do the same but makes the overflowing top unreachable.
-   A row that opens is the one thing that must not spend this space: it would grow upward
-   and take its own header out from under the pointer, so useHoldInPlace freezes the gap
-   at the size it had and ChatLog drops it again on the next message.
+   A row that opens grows into this space, so its header moves up; once the log scrolls it
+   grows down instead, and useReveal scrolls the output into view either way.
    The open tool row is named too: `.tool-row[open]` sets its own top margin at the same
    specificity and later in this file, so without it a `!` command that starts a chat opened at
    the top of the pane and dropped to the composer when closed. */
 .chat-log > *:first-child,
 .chat-log > .tool-row[open]:first-child {
-  margin-top: var(--hold-lead, auto);
+  margin-top: auto;
 }
 
 .jump-down {

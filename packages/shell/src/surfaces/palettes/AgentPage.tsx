@@ -36,13 +36,13 @@ export function AgentPage({ agentId }: { agentId: string }) {
   return (
     <Overlay bare boxClass="keys-stack" onClose={back}>
       <div className="keys-card keys-settings">
-        <div className="keys-setting agent-page-head">
+        <div className="agent-page-back">
           {/* the way back, for the hand on the mouse; Escape does the same */}
           <Button tone="quiet" size="sm" onClick={back} {...tip("back to settings", "esc")}>
             <Icon name="back" className="icon-inline" /> settings
           </Button>
-          <span className="section-title">{agent.name}</span>
         </div>
+        <div className="agent-page-title">{agent.name}</div>
         <div className="keys-setting">
           <span className="keys-d">signed in</span>
           {/* the chip carries the actions on the identity when there are any; a bare value otherwise */}

@@ -12,14 +12,17 @@
     line-height: 1.4;
     color: var(--text1);
     border-radius: var(--radius);
-    padding: 1px 8px;
+    /* named so a surface that wants a ghost button flush with a text gutter can pull it back by
+     exactly this much instead of guessing */
+    --btn-pad-x: 8px;
+    padding: 1px var(--btn-pad-x);
     white-space: nowrap;
   }
   /* three sizes, because the ten hand-written paddings collapsed to three once they were laid out
    next to each other: the compact default, a chip you aim at, and the action a panel is asking
    for. The four near-misses (2px 8px, 3px 7px, 2px 10px, 1px 7px) were nobody's decision. */
   .btn-md {
-    padding: 4px 8px;
+    padding: 4px var(--btn-pad-x);
   }
   .btn-lg {
     padding: 4px 16px;

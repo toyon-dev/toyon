@@ -157,6 +157,18 @@ describe("per-worktree records", () => {
     expect(s.rightOpen).toBe(true);
     expect(reducer({ ...s, rightOpen: false }, { a: "show-right" }).rightOpen).toBe(true);
   });
+  test("a reload of an empty project starts greenfield and stays so until git-status says otherwise", () => {
+    const fresh = { ...repo("r"), needsSetup: true };
+    const main = wt("main", "main");
+    const remembered = initialState({ clientId: ME, storedRepo: "r", storedActive: "main", storedGreenfield: "r" });
+    expect(isGreenfield(remembered)).toBe(true);
+    const said = run([helloIn([fresh], main)], remembered);
+    expect(isGreenfield(said)).toBe(true);
+    expect(isGreenfield(run([server({ t: "git-status", worktreeId: "main", files: [] })], said))).toBe(false);
+    // a hint for another project, or no hint, paints the docks as usual
+    expect(isGreenfield(initialState({ clientId: ME, storedRepo: "r", storedGreenfield: "other" }))).toBe(false);
+    expect(isGreenfield(run([helloIn([fresh], main)]))).toBe(false);
+  });
   test("git-status carries whether main's tree is empty", () => {
     const s = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [], empty: true })]);
     expect(s.local.main?.git?.empty).toBe(true);

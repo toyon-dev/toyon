@@ -460,23 +460,26 @@ export function Composer({
         </span>
         <span className="spawn-tools">
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
-              actions rather than in the app's top bar */}
-          <IconButton
-            icon="terminal"
-            tone="chrome"
-            on={termOpen}
-            className="composer-term"
-            disabled={!active}
-            label={trouble ? trouble.tip : "Terminal"}
-            hint={chord("terminal")}
-            badge={trouble && <span className="composer-term-dot" />}
-            onClick={() => {
-              // opening onto the badge's own tab: the dot is the only thing that says a proc died,
-              // so following it should land on the crash, not on whichever tab you left open
-              if (trouble && !termOpen && id) dispatch({ a: "term-stream", id, stream: trouble.stream });
-              else dispatch({ a: "toggle-terminal" });
-            }}
-          />
+              actions rather than in the app's top bar. Not on an empty project: the pane is hidden
+              there, and a button that flips a hidden pane is a dead button. */}
+          {!greenfield && (
+            <IconButton
+              icon="terminal"
+              tone="chrome"
+              on={termOpen}
+              className="composer-term"
+              disabled={!active}
+              label={trouble ? trouble.tip : "Terminal"}
+              hint={chord("terminal")}
+              badge={trouble && <span className="composer-term-dot" />}
+              onClick={() => {
+                // opening onto the badge's own tab: the dot is the only thing that says a proc died,
+                // so following it should land on the crash, not on whichever tab you left open
+                if (trouble && !termOpen && id) dispatch({ a: "term-stream", id, stream: trouble.stream });
+                else dispatch({ a: "toggle-terminal" });
+              }}
+            />
+          )}
           {!greenfield && (
             <IconButton
               icon="pick"

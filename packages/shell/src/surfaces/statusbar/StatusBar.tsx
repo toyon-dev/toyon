@@ -37,7 +37,8 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
         label="Changes panel"
         hint={chord("left")}
         tone="chrome"
-        on={leftOpen}
+        on={leftOpen && !greenfield}
+        disabled={greenfield}
         onClick={() => dispatch({ a: "toggle-left" })}
       />
       <ProjectPill />
@@ -68,7 +69,8 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           label="Design system"
           hint={chord("design")}
           tone="chrome"
-          on={designOpen}
+          on={designOpen && !greenfield}
+          disabled={greenfield}
           onClick={() => dispatch({ a: "toggle-design" })}
         />
         <IconButton
@@ -77,6 +79,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           hint={chord("right")}
           tone="chrome"
           on={rightOpen && !greenfield}
+          disabled={greenfield}
           onClick={() => dispatch({ a: "toggle-right" })}
         />
         <IconButton

@@ -12,6 +12,8 @@
     "daemon": "bun run packages/daemon/src/index.ts",
     "shell:dev": "bun run --cwd packages/shell dev",
     "build": "bun run --cwd packages/shell build && bun run --cwd packages/bridge build",
+    "pack": "bun scripts/pack.ts",
+    "version": "bun scripts/version.ts",
     "typecheck": "tsc --noEmit -p .",
     "lint": "biome check .",
     "format": "biome format --write .",

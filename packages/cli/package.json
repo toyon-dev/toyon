@@ -1,13 +1,47 @@
 {
   "name": "toyon",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Browser-first workbench for parallel AI coding agents: one chat per git worktree, every worktree running live.",
   "license": "MIT",
   "type": "module",
+  "homepage": "https://toyon.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kyleshay/toyon.git"
+  },
+  "bugs": "https://github.com/kyleshay/toyon/issues",
+  "keywords": [
+    "ai",
+    "agents",
+    "claude-code",
+    "codex",
+    "git",
+    "worktree",
+    "preview",
+    "dev-server"
+  ],
   "bin": {
-    "toyon": "src/cli.ts"
+    "toyon": "bin/toyon.js"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "scripts": {
+    "prepublishOnly": "bun ../../scripts/pack.ts"
   },
   "dependencies": {
+    "bun": "1.4.2",
+    "bun-pty": "0.4.10"
+  },
+  "devDependencies": {
     "@toyon/shared": "workspace:*"
   }
 }

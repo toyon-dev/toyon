@@ -4,9 +4,9 @@
 import { spawn } from "node:child_process";
 import { existsSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { DAEMON_DEFAULT_PORT, DAEMON_FILES } from "@toyon/shared";
+import { daemonEntry } from "./layout.ts";
 
 export const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
 export const base = `http://127.0.0.1:${port}`;
@@ -14,9 +14,6 @@ export const home = process.env.TOYON_HOME ?? join(homedir(), ".toyon");
 export const tokenFile = join(home, DAEMON_FILES.token);
 export const pidFile = join(home, DAEMON_FILES.pid);
 export const logFile = join(home, DAEMON_FILES.log);
-export const here = dirname(fileURLToPath(import.meta.url));
-/** the source tree's entry; the npm and binary layouts replace this (notes/MVP.md, packaging) */
-export const daemonEntry = join(here, "../../daemon/src/index.ts");
 
 export interface Health {
   ok: boolean;
@@ -63,7 +60,8 @@ export function alive(pid: number): boolean {
 /** spawns a detached daemon logging to the log file and waits for it to answer; false on timeout */
 export async function startDaemon(): Promise<boolean> {
   const logFd = openSync(logFile, "a");
-  const child = spawn("bun", ["run", daemonEntry], {
+  // the bun running this CLI, not whatever `bun` is on PATH: under npx that is the bundled one
+  const child = spawn(process.execPath, ["run", daemonEntry], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env },

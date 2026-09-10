@@ -11,6 +11,7 @@ import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { makePlanner } from "./agent/tasks.ts";
+import { locateAssets } from "./core/assets.ts";
 import { cloud } from "./core/cloud.ts";
 import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
@@ -34,8 +35,7 @@ process.on("unhandledRejection", (e) => log.error("daemon", "unhandled rejection
 process.on("uncaughtException", (e) => log.error("daemon", "uncaught exception", e));
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SHELL_DIST = join(here, "../../shell/dist");
-const BRIDGE_JS = join(here, "../../bridge/dist/bridge.js");
+const { shellDist: SHELL_DIST, bridgeJs: BRIDGE_JS } = locateAssets(here);
 
 const paths = makePaths();
 ensureDirs(paths);

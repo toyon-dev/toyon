@@ -1,0 +1,47 @@
+#!/usr/bin/env bun
+// Assemble the npm package in packages/cli: the shell and bridge built, the daemon and the CLI
+// each bundled to one file with bun as the target, and everything laid out under dist/ the way
+// core/assets.ts and cli/src/layout.ts expect to find it. `npm publish` in packages/cli runs
+// this through prepublishOnly, so a publish can never ship a stale build.
+
+import { cpSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { $ } from "bun";
+
+const root = resolve(import.meta.dir, "..");
+const pkgs = join(root, "packages");
+const out = join(pkgs, "cli", "dist");
+
+$.cwd(root);
+await $`bun run --cwd packages/shell build`;
+await $`bun run --cwd packages/bridge build`;
+
+rmSync(out, { recursive: true, force: true });
+mkdirSync(out, { recursive: true });
+
+async function bundle(entry: string, name: string, external: string[] = []) {
+  const r = await Bun.build({
+    entrypoints: [entry],
+    outdir: out,
+    target: "bun",
+    naming: name,
+    external,
+    minify: false,
+  });
+  if (!r.success) {
+    for (const m of r.logs) console.error(m);
+    throw new Error(`bundle failed: ${name}`);
+  }
+}
+
+// bun-pty finds its native library beside its own source, so it stays a real dependency
+await bundle(join(pkgs, "daemon", "src", "index.ts"), "daemon.js", ["bun-pty"]);
+await bundle(join(pkgs, "cli", "src", "cli.ts"), "cli.js");
+cpSync(join(pkgs, "shell", "dist"), join(out, "shell"), { recursive: true });
+cpSync(join(pkgs, "bridge", "dist", "bridge.js"), join(out, "bridge.js"));
+
+for (const f of ["daemon.js", "cli.js", "bridge.js", "shell/index.html"]) {
+  const p = join(out, f);
+  if (!existsSync(p)) throw new Error(`missing after pack: ${f}`);
+  console.log(`${f.padEnd(18)} ${(statSync(p).size / 1024).toFixed(0).padStart(6)} KB`);
+}

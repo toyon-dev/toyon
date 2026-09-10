@@ -5,7 +5,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { daemonEntry, here, home, port } from "./daemon.ts";
+import { home, port } from "./daemon.ts";
+import { daemonEntry, iconSvg } from "./layout.ts";
 
 const CHROMIUMS = ["Google Chrome", "Arc", "Brave Browser", "Microsoft Edge", "Chromium"];
 // each browser's profile root under ~/Library/Application Support
@@ -190,7 +191,7 @@ int main(int argc, char **argv) {
 
   // best-effort icon: rasterize the shell's SVG -> iconset -> icns
   try {
-    const svg = join(here, "../../shell/public/icon.svg");
+    const svg = iconSvg;
     const tmp = join(home, "iconset.tmp");
     const iconset = join(tmp, "AppIcon.iconset");
     mkdirSync(iconset, { recursive: true });

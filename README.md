@@ -6,6 +6,15 @@ Toyon is a browser-first workbench for parallel AI coding agents: `npx toyon` in
 
 **Status: pre-alpha, building in the open.** macOS today; Linux next. Expect rough edges, and say so in an issue.
 
+## Install
+
+```sh
+cd your-repo
+npx toyon
+```
+
+Needs git and Node 18 or newer; bun comes with the package. `npm i -g toyon` puts `toyon` on your PATH for good, after which `toyon`, `toyon .` and `toyon ~/projects/app` all open a project. `toyon --help` lists the rest: `stop`, `doctor`, `logs`, `version`.
+
 ## How it works
 
 ```

@@ -351,6 +351,11 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("term-restart"), worktreeId: id, stream: streamName }),
   /** the tab went away: stop streaming to this socket (the stream keeps running) */
   z.object({ t: z.literal("term-close"), worktreeId: id, stream: streamName }),
+  /** run one command in the worktree (a `!` message from the composer): no reply frame, the result
+   * arrives on the agent stream as a tool-start / tool-end pair under SHELL_TOOL */
+  z.object({ t: z.literal("exec"), worktreeId: id, command: shellCommand.min(1) }),
+  /** kill whatever `exec` is still running in the worktree */
+  z.object({ t: z.literal("exec-stop"), worktreeId: id }),
 ]);
 
 export type ClientMsg = z.infer<typeof clientMsgSchema>;

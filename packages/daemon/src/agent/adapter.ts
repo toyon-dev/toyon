@@ -40,6 +40,9 @@ export interface AgentAdapter {
   stop(): void;
   unqueue(index: number): void;
   transcript(): Array<{ seq: number; event: AgentEvent }>;
+  /** put an event the daemon produced itself (a command the person ran from the composer) on the
+   * worktree's transcript and stream, in sequence with what the agent is saying */
+  note(event: AgentEvent): void;
   /** one question on a side session (no tools, its own system prompt): the reply text, or null.
    * Spawns the agent if it is not running; never touches the worktree's transcript. */
   ask(system: string, prompt: string): Promise<string | null>;

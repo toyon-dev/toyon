@@ -247,6 +247,10 @@ export class AcpSession implements AgentAdapter {
     return this.log.entries;
   }
 
+  note(event: AgentEvent) {
+    this.emit(event);
+  }
+
   private emit(event: AgentEvent) {
     const entry = this.log.append(event);
     this.d.onEvent(event, entry.seq);

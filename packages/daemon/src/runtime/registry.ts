@@ -320,7 +320,7 @@ export class RuntimeRegistry {
       const cwd = wt.linkPath ?? wt.path;
       const opts: PtyOpts = {
         cwd,
-        env: { ...terminalEnv(process.env, wt, procUrlEnv(rt.procs?.states() ?? [], rt.previewName)), PWD: cwd },
+        env: { ...this.shellEnv(wt), PWD: cwd },
         cols,
         rows,
         file: process.env.SHELL || "sh",
@@ -359,6 +359,14 @@ export class RuntimeRegistry {
     if (!pty) return { snapshot: "", alive: false };
     if (pty.cols !== cols || pty.rows !== rows) procs?.resize(stream, cols, rows);
     return { snapshot: pty.snapshot(), alive: pty.alive };
+  }
+
+  /** what a shell run on the worktree's behalf sees: the daemon's environment plus the sibling
+   * URLs of whatever procs are up. The shell tab and a `!` command from the composer get the
+   * same one, so `curl $API_URL` means the same thing typed in either. */
+  shellEnv(wt: WorktreeInfo): Record<string, string> {
+    const rt = this.runtimes.get(wt.id);
+    return terminalEnv(process.env, wt, procUrlEnv(rt?.procs?.states() ?? [], rt?.previewName));
   }
 
   /** type a command into the worktree's shell: now if a pane has one open, else when one opens */

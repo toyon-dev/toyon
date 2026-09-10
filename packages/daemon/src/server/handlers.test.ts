@@ -9,6 +9,7 @@ import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
 import { DesignService } from "../design/service.ts";
+import { ExecService } from "../exec/service.ts";
 import { FileService } from "../files/service.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
@@ -57,6 +58,7 @@ function make() {
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
   const files = new FileService(state, runtime, (id) => worktrees.readable(id));
   const design = new DesignService(state);
+  const exec = new ExecService({ state, runtime });
   const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, t.paths.themesDir);
   const planned: string[][] = [];
   const services: Services = {
@@ -67,6 +69,7 @@ function make() {
     files,
     design,
     runtime,
+    exec,
     themes,
     agents,
     accounts,
@@ -278,6 +281,52 @@ describe("handlers", () => {
     await expect(
       dispatch({ t: "term-open", worktreeId: "nope", stream: SHELL_STREAM, cols: 1, rows: 1 }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("exec runs the command in the worktree and records it on the transcript as a shell tool call", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    const agent = agents.get(main.id)!;
+    await dispatch({ t: "exec", worktreeId: main.id, command: "printf hi; pwd -P" }, ctx, services);
+    expect(agent.recorded[0]).toMatchObject({
+      type: "tool-start",
+      name: "shell",
+      kind: "execute",
+      input: { command: "printf hi; pwd -P" },
+    });
+    await until(() => agent.recorded.length === 2);
+    const end = agent.recorded[1]!;
+    if (end.type !== "tool-end") throw new Error("expected a tool-end");
+    expect(end.isError).toBe(false);
+    // fenced, so the transcript draws it as a block; the cwd is the worktree
+    expect(end.output).toBe(`\`\`\`\nhi${require("node:fs").realpathSync(main.path)}\n\`\`\``);
+    expect(end.toolId).toBe((agent.recorded[0] as { toolId: string }).toolId);
+    // a failing command says so under its output rather than in the output
+    await dispatch({ t: "exec", worktreeId: main.id, command: "echo nope >&2; exit 3" }, ctx, services);
+    await until(() => agent.recorded.length === 4);
+    expect(agent.recorded[3]).toMatchObject({ type: "tool-end", isError: true, output: "```\nnope\n```\nexit 3" });
+    await expect(dispatch({ t: "exec", worktreeId: "nope", command: "ls" }, ctx, services)).rejects.toBeInstanceOf(
+      UserError,
+    );
+  });
+
+  test("exec-stop kills what is running and the row ends as killed", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    const agent = agents.get(main.id)!;
+    await dispatch({ t: "exec", worktreeId: main.id, command: "echo started; sleep 30" }, ctx, services);
+    // let the shell get as far as the sleep, so the kill lands on a running command
+    await Bun.sleep(300);
+    await dispatch({ t: "exec-stop", worktreeId: main.id }, ctx, services);
+    await until(() => agent.recorded.length === 2);
+    const end = agent.recorded[1]!;
+    if (end.type !== "tool-end") throw new Error("expected a tool-end");
+    expect(end.isError).toBe(true);
+    // zsh execs the last command of a -c string, so the signal can land on the sleep itself and
+    // come back as its status rather than as the shell's signal
+    expect(end.output).toMatch(/^```\nstarted\n```\n(killed \(SIGTERM\)|exit 143)$/);
   });
 
   test("register-repo opens a repo and toasts; forget-repo refuses while task worktrees remain", async () => {

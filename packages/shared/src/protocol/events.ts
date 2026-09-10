@@ -1,6 +1,11 @@
 // Agent stream events: the daemon's ACP session maps session/update notifications onto these, and
 // the transcript JSONL stores them, so the shape is the ACP one with the fields the shell renders.
 
+/** the tool name on a command the person ran from the composer (`!ls`): the daemon records it on
+ * the transcript as a tool call so it renders where the agent's own commands do, and the shell
+ * keys on the name to open the row, since its output is the reason it was run */
+export const SHELL_TOOL = "shell";
+
 /** ACP's tool categories; what the shell keys "did this turn edit anything" on */
 export type ToolKind =
   | "read"

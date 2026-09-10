@@ -12,6 +12,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { DesignService } from "../design/service.ts";
+import type { ExecService } from "../exec/service.ts";
 import type { FileService } from "../files/service.ts";
 import { browsePath } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
@@ -28,6 +29,8 @@ export interface Services {
   /** the worktree's own design system, scanned from its source */
   design: DesignService;
   runtime: RuntimeRegistry;
+  /** one-off commands from the composer's `!` mode */
+  exec: ExecService;
   themes: ThemeStore;
   agents: AgentRegistry;
   /** per-agent login state, and the one write on it (sign out) */
@@ -420,6 +423,15 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "term-close"(msg, ctx) {
     ctx.unwatchTerminal(msg.worktreeId, msg.stream);
+  },
+
+  exec(msg, _ctx, s) {
+    s.exec.run(msg.worktreeId, msg.command);
+  },
+
+  "exec-stop"(msg, _ctx, s) {
+    s.state.requireWorktree(msg.worktreeId);
+    s.exec.stop(msg.worktreeId);
   },
 };
 

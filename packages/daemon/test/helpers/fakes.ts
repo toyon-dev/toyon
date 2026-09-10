@@ -58,8 +58,14 @@ export class FakeAgent implements AgentAdapter {
     this.retries++;
   }
   unqueue() {}
+  /** what the daemon put on the transcript itself (exec results); an agent's own events never
+   * reach a fake */
+  recorded: AgentEvent[] = [];
+  note(event: AgentEvent) {
+    this.recorded.push(event);
+  }
   transcript(): Array<{ seq: number; event: AgentEvent }> {
-    return [];
+    return this.recorded.map((event, seq) => ({ seq, event }));
   }
 }
 

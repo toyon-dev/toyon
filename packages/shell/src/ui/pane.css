@@ -5,15 +5,28 @@
     position: relative;
     border-top: 1px solid var(--border0);
     background: var(--surface0);
+    /* the open tab of a strip in the head is painted in this ground, so it joins the body under it */
+    --tabs-ground: var(--surface0);
     /* panes stack, and the defaults of two of them already add up to the column: the stack
        shrinks to fit, each pane holding its own min-height, rather than pushing the lowest one
        off the bottom of the page with its close button */
     flex-shrink: 1;
+    /* one row tall whether it holds a title or a tab strip, so the crash card and the strip take
+       the height from the token rather than measuring it */
     & .pane-head {
       display: flex;
       gap: 12px;
-      padding: 6px 16px;
+      padding: 0 16px;
+      min-height: var(--row-height);
       align-items: center;
+    }
+    /* a strip is the whole head: it brings its own inset and its own gap */
+    & .pane-head-tabs {
+      padding: 0;
+      gap: 0;
+      & .tabs {
+        flex: 1;
+      }
     }
     & .pane-title {
       flex: 1;

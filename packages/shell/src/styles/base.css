@@ -25,7 +25,7 @@
   /* Scrollbars are the platform's; color-scheme: dark on :root is what makes them dark. Do not style
    ::-webkit-scrollbar to theme them: matching any of those pseudo-elements swaps the platform
    scrollbar for a custom one, and a custom scrollbar is never the overlay kind, so it reserves a
-   gutter for good and the macOS "show scroll bars" setting stops reaching the app. (.term-tabs
+   gutter for good and the macOS "show scroll bars" setting stops reaching the app. (The tab strip
    uses it to hide its scrollbar outright, which costs no gutter because there is no bar left.) */
   button {
     background: none;

@@ -60,8 +60,8 @@
      tool log, and anything switched off). Three is enough: a fourth tier lived here for about an
      hour and turned out to be covering for a control that was resting on the wrong rung. */
 
-    /* what "you are on this one" is painted in: the active worktree, the open tool call, an `on`
-     tab, a checked box. One hue for all of them, so a theme changes the whole idea of selected by
+    /* what "you are on this one" is painted in: the active worktree, the open tool call, a checked
+     box. One hue for all of them, so a theme changes the whole idea of selected by
      pointing this somewhere else. Toyon selects in its berry, a coral rather than a scarlet, which
      is the difference between the mark reading as the plant and reading as a fault. The color is
      the theme's to name (Theme.accent, orange unless it says otherwise) and applyTheme

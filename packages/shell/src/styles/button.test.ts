@@ -51,7 +51,9 @@ const ONE_OFFS = new Set([".setup-add", ".jump-down", ".rail-new", ".rail-disc-h
 /**
  * A raw <button> is a row, or one of three inline controls that are text rather than a chip:
  * .pick-open is a link inside a chip's sentence, .dl.more the last line of a diff block, and the
- * rail's two full-width rows are above. Anything else pressable is a Button or an IconButton.
+ * rail's two full-width rows are above. A tab (.tab-btn) is a band in a strip, and its box is the
+ * strip's the way a picker row's is the list's. Anything else pressable is a Button or an
+ * IconButton.
  */
 const RAW_BUTTON_OK = new Set([
   "row",
@@ -62,6 +64,7 @@ const RAW_BUTTON_OK = new Set([
   "jump-down",
   "pick-open",
   "dl",
+  "tab-btn",
 ]);
 
 type Tag = { kind: string; words: string[]; text: string };

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ProcState, WorktreeStatus } from "@toyon/shared";
-import { commandSource, procTrouble, splitPath } from "./util.ts";
+import { commandSource, procTrouble, splitPath, stateLabel } from "./util.ts";
 
 const proc = (name: string, status: ProcState["status"], port = 3000): ProcState => ({
   name,
@@ -18,6 +18,24 @@ describe("splitPath", () => {
   });
   test("a dotted directory keeps its dot on the front", () => {
     expect(splitPath(".claude/settings.json")).toEqual({ name: "settings.json", dir: ".claude" });
+  });
+});
+
+describe("stateLabel", () => {
+  const status = (agent: WorktreeStatus["agent"], ...procs: ProcState[]): WorktreeStatus =>
+    ({ id: "a", repoId: "r", path: "/p", name: "a", agent, procs }) as unknown as WorktreeStatus;
+
+  test("the agent outranks the procs, and a crash outranks a running sibling", () => {
+    expect(stateLabel(status("waiting", proc("web", "running")))).toBe("Waiting for you");
+    expect(stateLabel(status("working"))).toBe("Agent working");
+    expect(stateLabel(status("idle", proc("web", "running"), proc("api", "crashed")))).toBe("Crashed");
+    expect(stateLabel(status("idle", proc("web", "running")))).toBe("Running");
+  });
+
+  test("idle on a repo with no confirmed config says why nothing runs", () => {
+    expect(stateLabel(status("idle"))).toBe("Idle");
+    expect(stateLabel(status("idle"), true)).toBe("Not set up");
+    expect(stateLabel(status("idle", proc("web", "running")), true)).toBe("Running");
   });
 });
 

@@ -55,7 +55,9 @@ export function isBusy(w: WorktreeStatus): boolean {
   return w.agent === "working" || w.agent === "waiting";
 }
 
-export function dotClass(w: WorktreeStatus): string {
+export type DotState = "waiting" | "working" | "landed" | "crashed" | "running" | "starting" | "idle";
+
+export function dotClass(w: WorktreeStatus): DotState {
   // a worktree that needs you outranks one that is merely busy
   if (w.agent === "waiting") return "waiting";
   if (w.agent === "working") return "working";
@@ -64,6 +66,23 @@ export function dotClass(w: WorktreeStatus): string {
   if (w.procs.some((p) => p.status === "running")) return "running";
   if (w.procs.some((p) => p.status === "starting")) return "starting";
   return "idle";
+}
+
+const DOT_LABEL: Record<DotState, string> = {
+  waiting: "Waiting for you",
+  working: "Agent working",
+  landed: "Landed",
+  crashed: "Crashed",
+  running: "Running",
+  starting: "Starting",
+  idle: "Idle",
+};
+
+/** the dot in words, for the row's tooltip. An idle dot on a repo that has no confirmed config is
+ * the one state the colour cannot explain: nothing runs there because nothing was told to. */
+export function stateLabel(w: WorktreeStatus, needsSetup = false): string {
+  const d = dotClass(w);
+  return d === "idle" && needsSetup ? "Not set up" : DOT_LABEL[d];
 }
 
 /** what the composer's terminal badge says. Only "crashed" counts as trouble: "stopped" is a

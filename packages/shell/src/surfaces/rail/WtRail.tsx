@@ -24,7 +24,7 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
-import { chord, dotClass, procTrouble } from "../util.ts";
+import { chord, dotClass, procTrouble, stateLabel } from "../util.ts";
 import { removeWorktrees, shipOp, worktreeActions } from "./worktreeActions.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
@@ -190,9 +190,11 @@ export function WtRail() {
         type="button"
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
         data-state={rowState({ current: id === activeId, checked: sel.includes(id) })}
-        // the daemon sends absolute paths; a found row's tip is where it is, since nothing else says
+        // one tip per row, on the row: the dot's state in words and where the worktree is. A tip
+        // per element would swap fifty times as the mouse crosses the panel. Badges and the crashed
+        // dot keep their own, since those are what a hover over them is asking about.
         {...(owned
-          ? {}
+          ? tip(`${stateLabel(w, repoOf(owned)?.needsSetup)} · ${wtDirLabel(w)}`)
           : tip(w.locked ? `${wtDirLabel(w)} · held by ${w.lockReason ?? "another tool"}` : wtDirLabel(w)))}
         onClick={(e) => {
           if (owned && (graftMode || e.shiftKey)) toggleSel(owned);

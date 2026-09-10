@@ -46,7 +46,7 @@ export const GitFileRow = memo(function GitFileRow({
       onMouseLeave={() => onHover(f.path, false)}
     >
       <span className={`xy ${xyClass(f.xy)}`}>{xyLetter(f.xy)}</span>
-      <span className="path" data-tip={dir ? f.path : undefined}>
+      <span className="path" data-tip={dir ? f.path : undefined} data-tip-placement="follow">
         <span className="name">{name}</span>
         {dir && <span className="dir row-dim">{dir}</span>}
       </span>

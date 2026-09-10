@@ -47,6 +47,7 @@ export const CommitRow = memo(function CommitRow({
       tabIndex={-1}
       onClick={() => onToggle(c.sha)}
       data-tip={`${c.subject}\n${c.short} · ${c.author}`}
+      data-tip-placement="follow"
     >
       <span className="subject">{c.subject}</span>
       <span className="at row-dim">{ago(c.at)}</span>

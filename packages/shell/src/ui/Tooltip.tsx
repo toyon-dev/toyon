@@ -10,17 +10,28 @@ import "./tooltip.css";
  * mount `<Tooltips />` once at the root. Delegated: no wrappers, no per-element
  * state, works for elements rendered later. Shows on hover (after a short
  * delay) and on keyboard focus (immediately); hides on click, key, or scroll.
+ *
+ * `data-tip-placement` / the third arg says where the box goes: `top`, `bottom`,
+ * `left` or `right` of the anchor, or `follow` to trail the pointer. Without it
+ * the box sits below. A side is a preference: the box flips to the opposite side
+ * when that one has no room, and is clamped to the viewport either way. Anchors
+ * wider than a couple of hundred pixels want `follow`: centred below a full-width
+ * row, the box lands over the next row and far from the pointer.
  */
 
-export function tip(text: string, key?: string) {
-  return { "data-tip": text, "data-tip-key": key, "aria-label": key ? `${text} (${key})` : text } as const;
+export type TipPlacement = "follow" | "top" | "bottom" | "left" | "right";
+type Side = Exclude<TipPlacement, "follow">;
+
+export function tip(text: string, key?: string, placement?: TipPlacement) {
+  return {
+    "data-tip": text,
+    "data-tip-key": key,
+    "data-tip-placement": placement,
+    "aria-label": key ? `${text} (${key})` : text,
+  } as const;
 }
 
 const SHOW_DELAY = 120;
-/** An anchor wider than this puts its own centre a long way from the pointer, so the tip follows
- * the pointer instead. Below it the two are within a few pixels of each other and anchoring is
- * steadier, which is what every icon button in the app wants. */
-const FOLLOW_MIN_W = 120;
 // after leaving a visible tooltip, the next one within this window shows
 // instantly (sweeping a toolbar shouldn't re-wait on every button)
 const WARM_MS = 600;
@@ -37,31 +48,62 @@ const CURSOR_GAP = 18;
 const CURSOR_NUDGE = 12;
 const MARGIN = 8;
 
-type Anchor = { el: HTMLElement; text: string; key?: string; follow: boolean };
+export type Anchor = { el: HTMLElement; text: string; key?: string; placement: TipPlacement };
 type Point = { x: number; y: number };
 
-/** Place the box under its anchor, or under the pointer for a wide one. Flips above when there is
- * no room below and clamps to the viewport either way. */
-function place(box: HTMLDivElement, anchor: Anchor, pointer: Point) {
+/** The element's own placement; below when it names none. Nothing is guessed from the anchor's
+ * size, so where a tip lands is readable off the markup. */
+function placementOf(el: HTMLElement): TipPlacement {
+  const p = el.dataset.tipPlacement;
+  if (p === "follow" || p === "top" || p === "bottom" || p === "left" || p === "right") return p;
+  return "bottom";
+}
+
+/** The preferred side if it has room, else the other side if that one does; when neither fits the
+ * preference stands and the clamp below does what it can. */
+function pick(want: Side, other: Side, wantFits: boolean, otherFits: boolean): Side {
+  return wantFits || !otherFits ? want : other;
+}
+
+/** Place the box beside its anchor on the placed side, or off the pointer for a following one.
+ * Flips to the opposite side when there is no room and clamps to the viewport either way. */
+export function place(box: HTMLDivElement, anchor: Anchor, pointer: Point) {
   const r = anchor.el.getBoundingClientRect();
   const w = box.offsetWidth;
   const h = box.offsetHeight;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  const p = anchor.placement;
 
-  const below = anchor.follow ? pointer.y + CURSOR_GAP : r.bottom + GAP;
-  const above = anchor.follow ? pointer.y - CURSOR_GAP - h : r.top - GAP - h;
-  const flip = below + h > vh - MARGIN && above >= MARGIN;
+  let side: Side;
+  let top: number;
+  let left: number;
+  if (p === "left" || p === "right") {
+    const leftOf = r.left - GAP - w;
+    const rightOf = r.right + GAP;
+    const fitsLeft = leftOf >= MARGIN;
+    const fitsRight = rightOf + w <= vw - MARGIN;
+    side = p === "left" ? pick("left", "right", fitsLeft, fitsRight) : pick("right", "left", fitsRight, fitsLeft);
+    left = side === "left" ? leftOf : rightOf;
+    top = r.top + r.height / 2 - h / 2;
+  } else {
+    const follow = p === "follow";
+    const below = follow ? pointer.y + CURSOR_GAP : r.bottom + GAP;
+    const above = follow ? pointer.y - CURSOR_GAP - h : r.top - GAP - h;
+    const fitsBelow = below + h <= vh - MARGIN;
+    const fitsAbove = above >= MARGIN;
+    side = p === "top" ? pick("top", "bottom", fitsAbove, fitsBelow) : pick("bottom", "top", fitsBelow, fitsAbove);
+    top = side === "top" ? above : below;
+    // A following tip hangs off the pointer's lower right, the way a cursor tip always has, and
+    // swaps to its left when the right runs out. Centring it on the pointer put the arrow over the
+    // middle of a box that can be three hundred pixels wide, with the text going both ways from it.
+    left = follow ? pointer.x + CURSOR_NUDGE : r.left + r.width / 2 - w / 2;
+    if (follow && left + w > vw - MARGIN) left = pointer.x - CURSOR_NUDGE - w;
+  }
 
-  // A following tip hangs off the pointer's lower right, the way a cursor tip always has, and
-  // swaps to its left when the right runs out. Centring it on the pointer put the arrow over the
-  // middle of a box that can be three hundred pixels wide, with the text going both ways from it.
-  let left = anchor.follow ? pointer.x + CURSOR_NUDGE : r.left + r.width / 2 - w / 2;
-  if (anchor.follow && left + w > vw - MARGIN) left = pointer.x - CURSOR_NUDGE - w;
-
-  box.style.top = `${Math.round(flip ? above : below)}px`;
+  box.style.top = `${Math.round(Math.min(Math.max(MARGIN, top), vh - MARGIN - h))}px`;
   box.style.left = `${Math.round(Math.min(Math.max(MARGIN, left), vw - MARGIN - w))}px`;
-  box.dataset.side = flip ? "above" : "below";
+  box.dataset.side = side;
 }
 
 export function Tooltips() {
@@ -87,12 +129,12 @@ export function Tooltips() {
       current = null;
       setAnchor(null);
     };
-    const show = (el: HTMLElement, follow: boolean) => {
+    const show = (el: HTMLElement, placement: TipPlacement) => {
       const text = el.dataset.tip;
       if (!text) return hide();
       stopTimers();
       visible = true;
-      setAnchor({ el, text, key: el.dataset.tipKey, follow });
+      setAnchor({ el, text, key: el.dataset.tipKey, placement });
     };
     const target = (e: Event) => {
       const t = e.target;
@@ -109,10 +151,10 @@ export function Tooltips() {
         if (visible) hideTimer = window.setTimeout(hide, HIDE_GRACE);
         return;
       }
-      const follow = el.getBoundingClientRect().width > FOLLOW_MIN_W;
+      const placement = placementOf(el);
       // one box already up: move it rather than tear it down and animate a new one in
-      if (visible || Date.now() - lastHidden < WARM_MS) return show(el, follow);
-      showTimer = window.setTimeout(() => show(el, follow), SHOW_DELAY);
+      if (visible || Date.now() - lastHidden < WARM_MS) return show(el, placement);
+      showTimer = window.setTimeout(() => show(el, placement), SHOW_DELAY);
     };
     const onOut = (e: MouseEvent) => {
       // left the window entirely
@@ -123,8 +165,9 @@ export function Tooltips() {
       if (el?.matches(":focus-visible")) {
         stopTimers();
         current = el;
-        // reached by keyboard: there is no pointer to sit near, so anchor it
-        show(el, false);
+        // reached by keyboard: there is no pointer to sit near, so a following tip anchors instead
+        const placement = placementOf(el);
+        show(el, placement === "follow" ? "bottom" : placement);
       }
     };
     const onBlur = () => hide();
@@ -167,7 +210,7 @@ export function Tooltips() {
   // a following tip is repositioned straight on the node: going through state would re-render the
   // whole tooltip on every mouse move
   useEffect(() => {
-    if (!anchor?.follow) return;
+    if (anchor?.placement !== "follow") return;
     const onMove = (e: MouseEvent) => {
       pointer.current = { x: e.clientX, y: e.clientY };
       if (box.current) place(box.current, anchor, pointer.current);

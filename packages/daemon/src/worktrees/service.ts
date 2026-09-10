@@ -158,6 +158,14 @@ export class WorktreeService {
       if (!wt) return;
       wt.lastTurnAt = Date.now();
       d.state.save();
+      // A proc that crashed or never answered gets another go once the agent has had a turn: the
+      // boot pane's "ask the agent to fix it" ends here, and a fix nobody restarts after is not a
+      // fix. A proc that is fine, or one you stopped yourself, is left alone.
+      for (const p of d.runtime.get(worktreeId)?.procs?.states() ?? []) {
+        if (p.status !== "crashed" && p.status !== "unreachable") continue;
+        d.hub.emit("log", worktreeId, p.name, "restarting after the agent's turn");
+        fireAndForget(worktreeId, d.runtime.restartStream(worktreeId, p.name), "restart after turn");
+      }
     });
   }
 

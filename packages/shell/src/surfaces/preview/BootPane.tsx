@@ -2,6 +2,7 @@ import type { LogLine, OwnedWorktree, ProcState } from "@toyon/shared";
 import { useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
+import { procFixPrompt } from "./fixPrompt.ts";
 
 /** how much of the tail the pane shows: enough to read a stack trace, not a scrollback */
 const TAIL = 30;
@@ -14,6 +15,10 @@ export function BootPane({ worktree, log }: { worktree: OwnedWorktree; log: LogL
   const sock = useSock();
   const procs = worktree.procs;
   const restart = (p: ProcState) => sock?.send({ t: "term-restart", worktreeId: worktree.id, stream: p.name });
+  const bad = procs.some((p) => p.status === "crashed" || p.status === "unreachable");
+  // the diagnosis is specific enough to hand over: the agent gets it, the command, the tail and
+  // the rule, and the daemon restarts the proc when its turn ends
+  const askAgent = () => sock?.send({ t: "chat", worktreeId: worktree.id, text: procFixPrompt(worktree, log) });
   return (
     <div className="boot-pane">
       {procs.length === 0 ? (
@@ -36,6 +41,13 @@ export function BootPane({ worktree, log }: { worktree: OwnedWorktree; log: LogL
             </li>
           ))}
         </ul>
+      )}
+      {bad && worktree.agent === "idle" && (
+        <div className="boot-actions">
+          <Button variant="outline" size="lg" onClick={askAgent}>
+            ask the agent to fix it
+          </Button>
+        </div>
       )}
       {log.length > 0 && (
         <pre className="boot-tail">

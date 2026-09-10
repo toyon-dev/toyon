@@ -1,11 +1,12 @@
-import type { RepoInfo } from "@toyon/shared";
+import { isOwned, type RepoInfo } from "@toyon/shared";
 import { useEffect, useState } from "react";
-import { useSock } from "../../state/context.tsx";
+import { useSock, useStore } from "../../state/context.tsx";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { setupFixPrompt } from "./fixPrompt.ts";
 
 type Proc = { id: number; name: string; cmd: string };
 
@@ -17,6 +18,10 @@ const proc = (name: string, cmd: string): Proc => ({ id: nextProcId++, name, cmd
  * spawned for its worktrees until the person says how the project installs and starts */
 export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => void }) {
   const sock = useSock();
+  // the repo's main worktree is where the agent writes toyon.json: the daemon watches that copy
+  const main = useStore(
+    (s) => s.rows.find((r) => isOwned(r) && r.repoId === repo.id && r.worktree.kind === "main") ?? null,
+  );
   // reopened for a configured repo: esc leaves it, the way every other overlay does
   useEffect(() => {
     if (!onClose) return;
@@ -120,6 +125,16 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
 
       <div className="setup-actions">
         {onClose && <Button onClick={onClose}>cancel</Button>}
+        {main && !onClose && (
+          <Button
+            size="lg"
+            disabled={main.agent !== "idle"}
+            {...tip("The agent reads the repo and writes toyon.json; the daemon picks the file up as soon as it lands")}
+            onClick={() => sock?.send({ t: "chat", worktreeId: main.id, text: setupFixPrompt(repo) })}
+          >
+            let the agent work it out
+          </Button>
+        )}
         <Button variant="outline" size="lg" disabled={!canStart} onClick={start}>
           {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
         </Button>

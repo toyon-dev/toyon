@@ -184,6 +184,10 @@
       color: var(--red);
     }
   }
+  .boot-actions {
+    display: flex;
+    gap: 8px;
+  }
   .boot-tail {
     margin: 0;
     max-height: 40vh;

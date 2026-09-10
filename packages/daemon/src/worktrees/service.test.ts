@@ -709,6 +709,25 @@ describe("unseen", () => {
     expect(await unseenOf(main.id)).toBeUndefined();
   });
 
+  test("a turn ending restarts a proc that crashed or never answered, and only those", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "fix it");
+    await settle();
+    const procs = w.procs.get(wt.id)!;
+    const web = procs.states()[0]!;
+    // the fake keeps live records under states(); flip one to what the supervisor would report
+    (procs as unknown as { states_: (typeof web)[] }).states_[0]!.status = "unreachable";
+    await procs.start("api", "true");
+    w.hub.emit("agentStatus", wt.id, "working");
+    w.hub.emit("agentStatus", wt.id, "idle");
+    await settle();
+    expect(procs.restarts).toEqual([web.name]);
+    // an idle report with no turn before it restarts nothing
+    w.hub.emit("agentStatus", wt.id, "idle");
+    await settle();
+    expect(procs.restarts).toEqual([web.name]);
+  });
+
   test("a turn that ends after you looked rings it again", async () => {
     await registered();
     const main = w.state.worktrees.find((x) => x.kind === "main")!;

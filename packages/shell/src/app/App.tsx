@@ -1,4 +1,3 @@
-import { isOwned } from "@toyon/shared";
 import { useEffect, useRef } from "react";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
@@ -35,7 +34,6 @@ export function App() {
   const activeRepoId = useStore((s) => s.activeRepoId);
   const active = useActive();
   const activeRow = useActiveRow();
-  const activeDiscovered = activeRow && !isOwned(activeRow) ? activeRow : null;
   const connected = useStore((s) => s.connected);
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
@@ -54,15 +52,15 @@ export function App() {
   // the oldest beyond that. A reconnect re-subscribes the whole set.
   const subsRef = useRef<string[]>([]);
   useEffect(() => {
-    // a discovered worktree has nothing to stream: no agent transcript, no procs, no logs, and the
-    // daemon's subscribe requires a record it does not have
-    if (!sock || !connected || !activeId || activeDiscovered) return;
+    // any row, owned or found: a found worktree streams nothing but its git status, and that is
+    // what its badges and the changes panel read
+    if (!sock || !connected || !activeId) return;
     const mru = [activeId, ...subsRef.current.filter((id) => id !== activeId)];
     for (const gone of mru.splice(MRU_SUBSCRIPTIONS)) sock.send({ t: "unsubscribe", worktreeId: gone });
     // only the newcomer needs a subscribe (and its backfill); the others have been streaming all along
     if (!subsRef.current.includes(activeId)) sock.send({ t: "subscribe", worktreeId: activeId });
     subsRef.current = mru;
-  }, [activeId, activeDiscovered, connected, sock]);
+  }, [activeId, connected, sock]);
   // a reconnect is a new socket: it knows nothing, so re-assert the whole set
   useEffect(() => {
     if (!sock || !connected) return;

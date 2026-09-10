@@ -838,6 +838,16 @@ describe("discovered worktrees", () => {
     expect(run([helloR(wt("main", "main"))], { ...s, activeId: null, storedActive: s.activeId }).activeId).toBe("main");
   });
 
+  test("git status for one fills its record and never closes the changes panel: only main does", () => {
+    const from = { ...run([helloR(wt("main", "main")), withFound(found("/w/stray"))]), leftOpen: true, leftAuto: true };
+    const s = run(
+      [{ a: "activate", id: "disc-/w/stray" }, server({ t: "git-status", worktreeId: "disc-/w/stray", files: [] })],
+      from,
+    );
+    expect(localOf(s, "disc-/w/stray").git?.files).toEqual([]);
+    expect(s.leftOpen).toBe(true);
+  });
+
   test("they are narrowed to the active project, like worktrees are", () => {
     const m1 = wt("m1", "main", undefined, "r1");
     const m2 = wt("m2", "main", undefined, "r2");

@@ -16,7 +16,7 @@ export function DiscoveredPane({ row }: { row: WorktreeStatus }) {
       <h2>{row.name}</h2>
       <p className="setup-lead">
         This worktree exists in git, but toyon did not make it and is not running it: no dev servers, no preview, no
-        agent. Its shell is open below, at <code>{dir}</code>.
+        agent. Its changes and history are on the left, and a shell at <code>{dir}</code> opens below.
       </p>
       {row.locked ? (
         <p className="setup-lead">

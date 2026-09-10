@@ -2,7 +2,7 @@ import type { CommitEntry, GitFileStatus } from "@toyon/shared";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useSock, useStore } from "../../state/context.tsx";
-import { useActive, useActiveId, useLocalField } from "../../state/selectors.ts";
+import { useActive, useActiveId, useActiveRow, useLocalField } from "../../state/selectors.ts";
 import { repoById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { step } from "../../ui/listNav.ts";
@@ -40,8 +40,10 @@ export function LeftDock({ width }: { width: number }) {
   const clean = files.length === 0;
 
   const [tab, setTab] = useState<Tab>("changes");
-  // names the second half of the history: the commits this branch inherited rather than made
-  const defaultBranch = useStore((s) => repoById(s, active?.worktree.repoId)?.defaultBranch ?? "main");
+  // names the second half of the history: the commits this branch inherited rather than made. Any
+  // row has one: a found worktree's history reads the same way, it just has no commit box under it.
+  const activeRow = useActiveRow();
+  const defaultBranch = useStore((s) => repoById(s, activeRow?.repoId)?.defaultBranch ?? "main");
   const commits = useLocalField(activeId, "commits");
   const filesBySha = useLocalField(activeId, "commitFiles");
   // only one commit is expanded at a time, which is also what lets a file row below it be opened

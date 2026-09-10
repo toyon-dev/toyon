@@ -1,5 +1,13 @@
-import { canGraft, canLand, canRemove, canRename, type OwnedWorktree, type WorktreeStatus } from "@toyon/shared";
-import { useCallback, useEffect, useState } from "react";
+import {
+  canGraft,
+  canLand,
+  canRemove,
+  canRename,
+  isOwned,
+  type OwnedWorktree,
+  type WorktreeStatus,
+} from "@toyon/shared";
+import { type MouseEvent, useCallback, useEffect, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
 import {
@@ -149,135 +157,159 @@ export function WtRail() {
     return items;
   };
 
+  /** One row for both sections. Ownership decides what the row can do, not what it looks like: a
+   * found worktree wears the same badges, since its counts are as real as anyone's, but its
+   * dirty count opens the dock rather than a commit box, its behind count does not sync yet,
+   * its ahead count has nowhere to land, and its menu is the short one. The dot is hollow, which
+   * is the one place the row says whose it is. */
+  const railRow = (w: WorktreeStatus) => {
+    const owned = isOwned(w) ? w : null;
+    const id = w.id;
+    const menuOpen = owned ? menu?.id === id : discMenu?.id === id;
+    const openMenu = (at: { x: number; y: number }, land?: boolean) =>
+      owned ? setMenu({ at, id, land }) : setDiscMenu({ at, id });
+    const badgeAt = (e: MouseEvent<HTMLElement>, back: number) => {
+      e.stopPropagation();
+      const r = (e.target as HTMLElement).getBoundingClientRect();
+      return { x: r.left - back, y: r.bottom + 4 };
+    };
+    return (
+      <button
+        key={id}
+        type="button"
+        className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
+        data-state={rowState({ current: id === activeId, checked: sel.includes(id) })}
+        // the daemon sends absolute paths; a found row's tip is where it is, since nothing else says
+        {...(owned
+          ? {}
+          : tip(w.locked ? `${wtDirLabel(w)} · held by ${w.lockReason ?? "another tool"}` : wtDirLabel(w)))}
+        onClick={(e) => {
+          if (owned && (graftMode || e.shiftKey)) toggleSel(owned);
+          else dispatch({ a: "activate", id });
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        {owned && graftMode && canGraft(owned.worktree) && (
+          <input type="checkbox" className="rail-graft-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
+        )}
+        <span className="branch">{w.name}</span>
+        {owned &&
+          (() => {
+            // only the non-default profile is worth a tag: it is the one you need to notice
+            const repo = repoOf(owned);
+            const p = profileOf(owned.worktree, repo);
+            return p && p !== repo?.config.defaultProfile ? (
+              <span className="rail-badge badge-profile" data-tip={`runs the ${p} profile`}>
+                {p}
+              </span>
+            ) : null;
+          })()}
+        {owned?.worktree.variant && (
+          <span
+            className="rail-badge badge-variant clickable"
+            data-tip="Keep this variant, remove the others"
+            onClick={(e) => {
+              e.stopPropagation();
+              acts.pickVariant(owned);
+            }}
+          >
+            <span className="num">
+              v{owned.worktree.variant.index}/{owned.worktree.variant.of}
+            </span>
+            <span className="act">pick</span>
+          </span>
+        )}
+        {(w.dirty ?? 0) > 0 && (
+          <span
+            className="rail-badge badge-dirty clickable"
+            data-tip="View changes"
+            onClick={(e) => {
+              e.stopPropagation();
+              dispatch({ a: "activate", id });
+              if (!leftOpen) dispatch({ a: "toggle-left" });
+            }}
+          >
+            <span className="num">~{w.dirty}</span>
+            <span className="act">view</span>
+          </span>
+        )}
+        {(w.behind ?? 0) > 0 &&
+          (owned ? (
+            <span
+              className="rail-badge badge-behind clickable"
+              data-tip="Sync from main"
+              onClick={(e) => {
+                e.stopPropagation();
+                sock?.send({ t: "sync-main", worktreeId: id });
+              }}
+            >
+              <span className="num">↓{w.behind}</span>
+              <span className="act">sync</span>
+            </span>
+          ) : (
+            <span className="rail-badge badge-behind" data-tip={`${w.behind} behind main`}>
+              <span className="num">↓{w.behind}</span>
+            </span>
+          ))}
+        {(w.ahead ?? 0) > 0 &&
+          (owned && canLand(owned.worktree) ? (
+            <span
+              className="rail-badge badge-ahead clickable"
+              data-tip="Land"
+              onClick={(e) => openMenu(badgeAt(e, 100), true)}
+            >
+              <span className="num">↑{w.ahead}</span>
+              <span className="act">land</span>
+            </span>
+          ) : (
+            <span className="rail-badge badge-ahead" data-tip={`${w.ahead} ahead of main`}>
+              <span className="num">↑{w.ahead}</span>
+            </span>
+          ))}
+        {w.locked && (
+          <span className="rail-disc-lock row-dim">
+            <Icon name="lock" className="icon-inline" />
+          </span>
+        )}
+        <span className="rail-more row-dim" {...tip("Actions")} onClick={(e) => openMenu(badgeAt(e, 140))}>
+          <Icon name="more" className="icon-inline" />
+        </span>
+        {(() => {
+          // hollow: git knows about it, toyon does not run it, so there is no activity to colour
+          if (!owned) return <span className="dot discovered" />;
+          // a red dot means a proc died, and the only thing anyone wants next is its log. The
+          // dot is the click target because in the collapsed strip it is the whole row you
+          // can see; offline the colour is the socket's, not the proc's, so it stays inert.
+          const trouble = graftMode || offline ? null : procTrouble(w.procs);
+          // the ring is a modifier, not a state: it rides on whatever the dot already says
+          const unseen = w.unseen ? " unseen" : "";
+          if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}${unseen}`} />;
+          return (
+            <span
+              className={`dot crashed clickable${unseen}`}
+              {...tip(trouble.tip)}
+              onClick={(e) => {
+                e.stopPropagation();
+                dispatch({ a: "activate", id });
+                dispatch({ a: "term-stream", id, stream: trouble.stream });
+              }}
+            />
+          );
+        })()}
+      </button>
+    );
+  };
+
   return (
     <div className={cx("rail", (graftMode || menu || discMenu) && "hold", railOpen && "pinned", offline && "offline")}>
       {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
           tip of its own, and the tooltip walks up to the nearest one */}
       <div className="rail-panel" data-tip={offline ? "Lost the daemon; retrying" : undefined}>
         <div className="rail-list">
-          {worktrees.map((w) => (
-            <button
-              key={w.worktree.id}
-              className={cx("row rail-item row-edge", menu?.id === w.worktree.id && "menu-open")}
-              data-state={rowState({ current: w.worktree.id === activeId, checked: sel.includes(w.worktree.id) })}
-              onClick={(e) => {
-                if (graftMode || e.shiftKey) toggleSel(w);
-                else dispatch({ a: "activate", id: w.worktree.id });
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setMenu({ at: { x: e.clientX, y: e.clientY }, id: w.worktree.id });
-              }}
-            >
-              {graftMode && canGraft(w.worktree) && (
-                <input
-                  type="checkbox"
-                  className="rail-graft-check"
-                  checked={sel.includes(w.worktree.id)}
-                  readOnly
-                  tabIndex={-1}
-                />
-              )}
-              <span className="branch">{w.worktree.title}</span>
-              {(() => {
-                // only the non-default profile is worth a tag: it is the one you need to notice
-                const repo = repoOf(w);
-                const p = profileOf(w.worktree, repo);
-                return p && p !== repo?.config.defaultProfile ? (
-                  <span className="rail-badge badge-profile" data-tip={`runs the ${p} profile`}>
-                    {p}
-                  </span>
-                ) : null;
-              })()}
-              {w.worktree.variant && (
-                <span
-                  className="rail-badge badge-variant clickable"
-                  data-tip="Keep this variant, remove the others"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    acts.pickVariant(w);
-                  }}
-                >
-                  <span className="num">
-                    v{w.worktree.variant.index}/{w.worktree.variant.of}
-                  </span>
-                  <span className="act">pick</span>
-                </span>
-              )}
-              {(w.dirty ?? 0) > 0 && (
-                <span
-                  className="rail-badge badge-dirty clickable"
-                  data-tip="View changes"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    dispatch({ a: "activate", id: w.worktree.id });
-                    if (!leftOpen) dispatch({ a: "toggle-left" });
-                  }}
-                >
-                  <span className="num">~{w.dirty}</span>
-                  <span className="act">view</span>
-                </span>
-              )}
-              {(w.behind ?? 0) > 0 && (
-                <span
-                  className="rail-badge badge-behind clickable"
-                  data-tip="Sync from main"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    sock?.send({ t: "sync-main", worktreeId: w.worktree.id });
-                  }}
-                >
-                  <span className="num">↓{w.behind}</span>
-                  <span className="act">sync</span>
-                </span>
-              )}
-              {(w.ahead ?? 0) > 0 && (
-                <span
-                  className="rail-badge badge-ahead clickable"
-                  data-tip="Land"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const r = (e.target as HTMLElement).getBoundingClientRect();
-                    setMenu({ at: { x: r.left - 100, y: r.bottom + 4 }, id: w.worktree.id, land: true });
-                  }}
-                >
-                  <span className="num">↑{w.ahead}</span>
-                  <span className="act">land</span>
-                </span>
-              )}
-              <span
-                className="rail-more row-dim"
-                {...tip("Actions")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const r = (e.target as HTMLElement).getBoundingClientRect();
-                  setMenu({ at: { x: r.left - 140, y: r.bottom + 4 }, id: w.worktree.id });
-                }}
-              >
-                <Icon name="more" className="icon-inline" />
-              </span>
-              {(() => {
-                // a red dot means a proc died, and the only thing anyone wants next is its log. The
-                // dot is the click target because in the collapsed strip it is the whole row you
-                // can see; offline the colour is the socket's, not the proc's, so it stays inert.
-                const trouble = graftMode || offline ? null : procTrouble(w.procs);
-                // the ring is a modifier, not a state: it rides on whatever the dot already says
-                const unseen = w.unseen ? " unseen" : "";
-                if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}${unseen}`} />;
-                return (
-                  <span
-                    className={`dot crashed clickable${unseen}`}
-                    {...tip(trouble.tip)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      dispatch({ a: "activate", id: w.worktree.id });
-                      dispatch({ a: "term-stream", id: w.worktree.id, stream: trouble.stream });
-                    }}
-                  />
-                );
-              })()}
-            </button>
-          ))}
+          {worktrees.map(railRow)}
           {graftMode && (
             <div className="rail-graft">
               {(() => {
@@ -384,31 +416,7 @@ export function WtRail() {
                 <Icon name="caret" className={`icon-inline rail-disc-caret ${discOpen ? "" : "shut"}`} />
                 <span className="rail-label">discovered · {discovered.length}</span>
               </button>
-              {discOpen &&
-                discovered.map((d) => (
-                  <button
-                    key={d.id}
-                    type="button"
-                    className={cx("row row-quiet rail-disc-item row-edge", discMenu?.id === d.id && "menu-open")}
-                    data-state={rowState({ current: d.id === activeId })}
-                    {...tip(d.locked ? `${wtDirLabel(d)} · held by ${d.lockReason ?? "another tool"}` : wtDirLabel(d))}
-                    onClick={() => dispatch({ a: "activate", id: d.id })}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setDiscMenu({ at: { x: e.clientX, y: e.clientY }, id: d.id });
-                    }}
-                  >
-                    <span className="branch">{d.name}</span>
-                    {/* no inline "take over": the row opens a pane that explains what it would do
-                        and offers it there, and a button inside this button would be invalid */}
-                    {d.locked && (
-                      <span className="rail-disc-lock row-dim">
-                        <Icon name="lock" className="icon-inline" />
-                      </span>
-                    )}
-                    <span className="dot discovered" />
-                  </button>
-                ))}
+              {discOpen && discovered.map(railRow)}
             </>
           )}
         </div>

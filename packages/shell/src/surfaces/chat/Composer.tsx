@@ -13,9 +13,10 @@ import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
+import { Kbd } from "../../ui/Kbd.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
-import { BASE_NOTE_TIP, baseNote, behindNote, originNote } from "../chips/baseNote.ts";
+import { baseNote, behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { ModelChip, useNewWorktreeModel } from "../chips/ModelChip.tsx";
@@ -250,6 +251,26 @@ export function Composer({
       ? ` a command to run in ${active.worktree.title}; its output goes on the transcript`
       : null;
   const ghost = argGhost ?? shellGhost;
+  // the placeholder, and the quieter line under it while the box is empty: what the base leaves
+  // behind when there is something, else, on main's own fast path, what the draft tab adds
+  const title = active?.worktree.title ?? "untitled";
+  const placeholderText = !active
+    ? "no worktree selected"
+    : greenfield
+      ? "describe the app; the agent scaffolds it here"
+      : drafting
+        ? "describe a change; an agent starts on it in a new worktree"
+        : spawning
+          ? `describe a change; starts an agent in a new worktree from ${title}`
+          : `message agent on ${title}; / for a command, ! for a shell command`;
+  const subline =
+    text !== "" || ghost || !active
+      ? null
+      : note
+        ? note
+        : spawning && onMain && !drafting
+          ? [<Kbd key="k" k={chord("new")} />, " drafts one with variants, batch, agent and profile"]
+          : null;
 
   // On open: the file listing is cached and never invalidated, so refresh it (the agent may have
   // written a file this turn); cached rows render meanwhile so the menu never looks empty. An
@@ -392,7 +413,6 @@ export function Composer({
     return false;
   };
 
-  const title = active?.worktree.title ?? "untitled";
   return (
     <div className="composer chat-input">
       {boxId &&
@@ -509,23 +529,21 @@ export function Composer({
               e.preventDefault();
             }
           }}
-          placeholder={
-            !active
-              ? "no worktree selected"
-              : greenfield
-                ? "describe the app; the agent scaffolds it here"
-                : drafting
-                  ? "describe a change; an agent starts on it in a new worktree"
-                  : spawning
-                    ? `describe a change; starts an agent in a new worktree from ${title}`
-                    : `message agent on ${title}; / for a command, ! for a shell command`
-          }
+          // the ghost draws the placeholder itself when it has a line to put under it
+          placeholder={subline ? "" : placeholderText}
           disabled={!active}
         />
         {ghost && (
           <div className="composer-ghost" aria-hidden="true">
             <span className="picker-typed">{text}</span>
             {ghost}
+          </div>
+        )}
+        {subline && (
+          <div className="composer-ghost" aria-hidden="true">
+            <span className="composer-placeholder">{placeholderText}</span>
+            {"\n"}
+            <span className="composer-subline">{subline}</span>
           </div>
         )}
       </div>
@@ -619,12 +637,9 @@ export function Composer({
           )}
         </span>
       </div>
-      {/* a sentence about the base or the branch: its own line, so the row above keeps its shape */}
-      {note && (
-        <div className="hint spawn-note" data-tip={BASE_NOTE_TIP} data-tip-placement="follow">
-          {note}
-        </div>
-      )}
+      {/* main against origin, and how far a branch trails main, each with its button: their own
+          lines, so the row above keeps its shape (the base note sits in the box, under the
+          placeholder, since it has nothing to press) */}
       {origin && mainRow && (
         <div className="hint spawn-note">
           <span>{origin}</span>

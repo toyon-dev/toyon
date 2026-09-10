@@ -566,6 +566,15 @@
       font: var(--type-mono);
     }
   }
+  /* an empty box with something to say under its placeholder draws both itself: the placeholder
+   line on the quiet tier, the line under it a step quieter still, since it is an aside to the
+   prompt rather than the prompt */
+  .composer-placeholder {
+    color: var(--text1);
+  }
+  .composer-subline {
+    opacity: 0.8;
+  }
   /* chips ride on that same tone, so they take the panel's to stay raised */
   .chat-input {
     & .pick-chip {

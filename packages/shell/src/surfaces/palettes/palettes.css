@@ -14,7 +14,9 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 40px;
-    row-gap: 18px;
+    /* the section titles carry their own slot now, so the gap between sections is theirs to
+     make; a gap here on top of it was what read as spread */
+    row-gap: 0;
     align-items: start;
   }
   /* settings card stacked above the shortcut card, same width */
@@ -39,14 +41,14 @@
     gap: 24px;
     min-height: var(--row-height);
   }
-  /* a shortcut row is a line in a reference table, not a control you aim at, so it sits on the
-   smaller row token: the chips nearly fill it and the eye reads the column as a list */
+  /* the same slot as the settings rows above it: the two cards are one stack and read as one
+   rhythm, and the smaller token put the chips shoulder to shoulder */
   .keys-row {
     display: grid;
     grid-template-columns: 76px 1fr;
-    gap: 16px;
+    gap: 12px;
     align-items: center;
-    min-height: var(--row-height-sm);
+    min-height: var(--row-height);
   }
   .keys-d {
     color: var(--text1);

@@ -1,16 +1,22 @@
 /* FormRow: one labelled row of a form. */
 @layer tokens, base, surfaces;
 @layer base {
-  /* ---- form rows (FormRow: the setup pane and the new-project form) ---- */
+  /* ---- form rows (FormRow: the setup pane and the new-project form) ----
+     A row sits on the app's row height, the slot a settings row uses, and grows downward from its
+     top when the control carries a hint or a second line. The label centres on that first slot
+     rather than on the whole row, so it stays level with the field it names. */
   .form-row {
     display: flex;
     gap: 12px;
     align-items: flex-start;
+    min-height: var(--row-height);
   }
   .form-label {
     width: 56px;
     flex-shrink: 0;
-    padding-top: 5px;
+    min-height: var(--row-height);
+    display: flex;
+    align-items: center;
     color: var(--text1);
   }
   .form-control {
@@ -28,7 +34,7 @@
   }
   /* the row that ends a form: the buttons, with the path they will act on opposite them, so what is
      about to be made on disk is readable in the same glance as the button that makes it. The
-     new-project form and the import pane both end this way. */
+     new-project form, the import pane and the setup pane all end this way. */
   .form-actions {
     display: flex;
     align-items: center;

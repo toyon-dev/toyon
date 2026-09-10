@@ -15,7 +15,12 @@ let nextProcId = 1;
 const proc = (name: string, cmd: string): Proc => ({ id: nextProcId++, name, cmd });
 
 /** shown in place of the preview while a repo's detected config is unconfirmed: nothing is
- * spawned for its worktrees until the person says how the project installs and starts */
+ * spawned for its worktrees until the person says how the project installs and starts.
+ *
+ * One line and a card, the shape the greenfield pane before it and the settings card after it
+ * both take. The detector has usually filled the form already, so the pane's job is to show the
+ * guess and make the next move the only thing drawn as a button: `start` when there is something
+ * to start, and the agent when the detector found nothing and nothing has been typed yet. */
 export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => void }) {
   const sock = useSock();
   // the repo's main worktree is where the agent writes toyon.json: the daemon watches that copy
@@ -29,6 +34,8 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+  // read once: the form remounts on a fresh guess (see Center), so mount is the guess
+  const [guessed] = useState(() => Object.keys(repo.config.procs).length > 0);
   const [procs, setProcs] = useState<Proc[]>(() => {
     const detected = Object.entries(repo.config.procs).map(([name, cmd]) => proc(name, cmd));
     return detected.length > 0 ? detected : [proc("web", "")];
@@ -36,6 +43,10 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
   const [install, setInstall] = useState(() => (repo.config.setup ?? []).join("\n"));
   const multi = procs.length > 1;
   const canStart = procs.some((p) => p.name.trim() && p.cmd.trim());
+  // the agent's button exists for a repo the detector could not read; it leads while the form is
+  // still empty, and steps back to a ghost the moment there is something to start
+  const askable = !!main && !onClose && !guessed;
+  const agentLeads = askable && !canStart;
 
   const edit = (i: number, patch: Partial<Proc>) => setProcs(procs.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
@@ -65,94 +76,105 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
     sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...repo.config, procs: {}, setup: setupLines() } });
     onClose?.();
   };
+  const askAgent = () => main && sock?.send({ t: "chat", worktreeId: main.id, text: setupFixPrompt(repo) });
+
+  const procRow = (p: Proc, i: number) => (
+    <div className="setup-proc" key={p.id}>
+      {multi && (
+        <Field
+          size="md"
+          className="setup-name"
+          value={p.name}
+          placeholder="name"
+          {...tip("Process name, shown in the status bar")}
+          onChange={(e) => edit(i, { name: e.target.value })}
+        />
+      )}
+      <Field
+        size="md"
+        className="setup-cmd"
+        value={p.cmd}
+        placeholder="npm run dev"
+        onChange={(e) => edit(i, { cmd: e.target.value })}
+      />
+      {multi && <IconButton icon="close" label="Remove" onClick={() => setProcs(procs.filter((_, j) => j !== i))} />}
+    </div>
+  );
 
   return (
     <div className="setup-pane">
-      <h2>set up {repo.name}</h2>
-      <p className="setup-lead">
-        toyon runs every worktree of this repo side by side, each on its own port. Tell it how the project installs and
-        starts; the answer is saved as <code>toyon.json</code>.
-      </p>
-      <p className="setup-lead setup-aside">
-        {onClose
-          ? "Saving restarts every worktree of this repo. Profiles and other keys in the file are kept."
-          : "You can already edit, chat and commit here; this only powers the live preview."}
-      </p>
+      <p className="setup-lead">how does {repo.name} start?</p>
+      <div className="setup-card">
+        <FormRow label="install" hint="once per new worktree; one command per line">
+          <TextArea
+            size="md"
+            rows={Math.max(1, install.split("\n").length)}
+            value={install}
+            placeholder="bun install"
+            onChange={(e) => setInstall(e.target.value)}
+          />
+        </FormRow>
 
-      <FormRow label="install" hint="runs once in each new worktree; one command per line">
-        <TextArea
-          size="md"
-          rows={Math.max(1, install.split("\n").length)}
-          value={install}
-          placeholder="bun install"
-          onChange={(e) => setInstall(e.target.value)}
-        />
-      </FormRow>
-
-      {procs.map((p, i) => (
-        <div className="form-row" key={p.id}>
-          <span className="form-label">{i === 0 ? "start" : ""}</span>
-          <div className="form-control">
-            <div className="setup-proc">
-              {multi && (
-                <Field
-                  size="md"
-                  className="setup-name"
-                  value={p.name}
-                  placeholder="name"
-                  {...tip("Process name, shown in the status bar")}
-                  onChange={(e) => edit(i, { name: e.target.value })}
-                />
-              )}
-              <Field
-                size="md"
-                className="setup-cmd"
-                value={p.cmd}
-                placeholder="npm run dev"
-                onChange={(e) => edit(i, { cmd: e.target.value })}
-              />
-              {multi && (
-                <IconButton icon="close" label="Remove" onClick={() => setProcs(procs.filter((_, j) => j !== i))} />
-              )}
-            </div>
-            {i === 0 && (
-              <span className="hint">
-                the server must listen on <code>$PORT</code>; toyon sets it differently for each worktree
-              </span>
-            )}
-          </div>
-        </div>
-      ))}
-
-      <div className="form-row">
-        <span className="form-label" />
-        <Button className="setup-add" onClick={() => setProcs([...procs, proc("", "")])}>
-          + another process (an api, a worker…)
-        </Button>
-      </div>
-
-      <div className="setup-actions">
-        {onClose && <Button onClick={onClose}>cancel</Button>}
-        {main && !onClose && (
-          <Button
-            size="lg"
-            disabled={main.agent !== "idle"}
-            {...tip("The agent reads the repo and writes toyon.json; the daemon picks the file up as soon as it lands")}
-            onClick={() => sock?.send({ t: "chat", worktreeId: main.id, text: setupFixPrompt(repo) })}
-          >
-            let the agent work it out
-          </Button>
-        )}
-        <Button
-          size="lg"
-          {...tip("This project has no dev server: chat, changes and the terminal work, the preview stays empty")}
-          onClick={nothingToRun}
+        <FormRow
+          label="start"
+          hint={
+            <>
+              must listen on <code {...tip("toyon sets a different port for each worktree")}>$PORT</code>
+            </>
+          }
         >
-          nothing to run here
-        </Button>
-        <Button variant="outline" size="lg" disabled={!canStart} onClick={start}>
-          {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
-        </Button>
+          {/* never empty: a row is only removable while there are two, so the guard is for the type */}
+          {procs[0] && procRow(procs[0], 0)}
+        </FormRow>
+        {procs.slice(1).map((p, i) => (
+          <div className="form-row" key={p.id}>
+            <span className="form-label" />
+            <div className="form-control">{procRow(p, i + 1)}</div>
+          </div>
+        ))}
+        <div className="form-row">
+          <span className="form-label" />
+          <Button tone="quiet" onClick={() => setProcs([...procs, proc("", "")])}>
+            <Icon name="plus" className="icon-inline" /> another process
+          </Button>
+        </div>
+
+        <div className="form-actions">
+          {/* the file the button writes, the way the new-project form shows the folder it makes;
+              the repo is named in the lead, so the path is only the file */}
+          <span className="form-dest">toyon.json</span>
+          {onClose && <Button onClick={onClose}>cancel</Button>}
+          {askable && main && (
+            <Button
+              variant={agentLeads ? "outline" : undefined}
+              size={agentLeads ? "lg" : undefined}
+              disabled={main.agent !== "idle"}
+              {...tip(
+                "The agent reads the repo and writes toyon.json; the daemon picks the file up as soon as it lands",
+              )}
+              onClick={askAgent}
+            >
+              let the agent work it out
+            </Button>
+          )}
+          <Button
+            {...tip("This project has no dev server: chat, changes and the terminal work, the preview stays empty")}
+            onClick={nothingToRun}
+          >
+            nothing to run here
+          </Button>
+          <Button
+            variant={agentLeads ? undefined : "outline"}
+            size={agentLeads ? undefined : "lg"}
+            disabled={!canStart}
+            {...(onClose
+              ? tip("Restarts every worktree of this repo. Profiles and other keys in the file are kept.")
+              : {})}
+            onClick={start}
+          >
+            {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
+          </Button>
+        </div>
       </div>
     </div>
   );

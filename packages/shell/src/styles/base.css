@@ -262,6 +262,11 @@ a code {
   font: var(--type-ui);
   padding: 8px 10px;
 }
+/* the composer once its draft leads with `!`: what follows is a command, and the face changing
+   under the caret is what says the box has changed contract before anything runs */
+.field-lg.field-shell {
+  font: var(--type-mono);
+}
 
 /* ---- form rows (FormRow: the setup pane and the new-project form) ---- */
 .form-row {

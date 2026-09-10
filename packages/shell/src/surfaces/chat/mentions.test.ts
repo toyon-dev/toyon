@@ -54,6 +54,13 @@ describe("triggerAt: slash commands", () => {
   });
 });
 
+describe("triggerAt: shell commands", () => {
+  test("a `!` draft offers no menu: a path or a slash inside it belongs to the shell", () => {
+    expect(at("!ls @src")).toBeNull();
+    expect(at("!/usr/bin/env")).toBeNull();
+  });
+});
+
 describe("insertAt", () => {
   test("replaces the span and reports where the caret lands", () => {
     expect(insertAt("fix @sr", { from: 4, to: 7 }, "@src/App.tsx ")).toEqual({

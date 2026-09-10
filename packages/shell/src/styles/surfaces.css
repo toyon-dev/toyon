@@ -1358,6 +1358,10 @@ body.resizing .row-resize {
   overflow: hidden;
   pointer-events: none;
 }
+/* the ghost wears whatever face the field does, or it drifts off the caret in `!` mode */
+.composer-field.shell .composer-ghost {
+  font: var(--type-mono);
+}
 /* chips ride on that same tone, so they take the panel's to stay raised */
 .chat-input .pick-chip {
   background: var(--surface1);

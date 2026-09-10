@@ -1,4 +1,4 @@
-import type { PickMeta, WorktreeStatus } from "@toyon/shared";
+import { type PickMeta, SHELL_TOOL, type WorktreeStatus } from "@toyon/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
@@ -73,6 +73,8 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
   const entries = useMemo(() => groupTools(items, roots), [items, roots]);
   // the newest call while the agent runs: that row shows its output, everything above it is a line
   const liveRow = active?.agent === "working" ? entries.findLastIndex((e) => "tools" in e) : -1;
+  // a `!` command still going: its row spins, and this is where the stop for it lives
+  const shellRunning = items.some((i) => i.kind === "tool" && i.name === SHELL_TOOL && !i.done);
 
   return (
     <div className="chat-wrap">
@@ -93,6 +95,20 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
               className="stop-btn"
               data-tip={`Stop the agent (context up to here is kept${queue.length ? "; queued messages dropped" : ""})`}
               onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
+            >
+              <Icon name="stop" className="icon-inline" /> stop
+            </Button>
+          </div>
+        )}
+        {shellRunning && active && (
+          <div className="msg-thinking working-row">
+            running…
+            <Button
+              variant="outline"
+              tone="danger"
+              className="stop-btn"
+              data-tip="Kill the command; what it printed so far stays"
+              onClick={() => sock?.send({ t: "exec-stop", worktreeId: active.worktree.id })}
             >
               <Icon name="stop" className="icon-inline" /> stop
             </Button>

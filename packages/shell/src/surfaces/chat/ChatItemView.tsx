@@ -1,4 +1,4 @@
-import type { PickMeta } from "@toyon/shared";
+import { type PickMeta, SHELL_TOOL } from "@toyon/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
@@ -253,8 +253,9 @@ export const ToolRow = memo(
     );
     // the row the agent is on opens itself, but only where its output is worth watching arrive: a
     // read or a search is a file you asked for, and having each one throw a panel open walks the
-    // message you were reading off the top of the log
-    const open = pinned ?? (!!live && AUTO_OPEN.has(head.toolKind ?? "other"));
+    // message you were reading off the top of the log. A command the person ran themselves is
+    // open from the start: what it printed is the reason they ran it.
+    const open = pinned ?? (head.name === SHELL_TOOL || (!!live && AUTO_OPEN.has(head.toolKind ?? "other")));
     const { label, name, icon, hint } = toolLabel(head, roots);
     const running = !tools.at(-1)?.done;
     const what = [label, hint].filter(Boolean).join(" ");

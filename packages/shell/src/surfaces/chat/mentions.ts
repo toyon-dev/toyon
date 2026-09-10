@@ -17,6 +17,9 @@ export interface Trigger {
 const IN_MENTION = /^[^\s]*$/;
 
 export function triggerAt(text: string, caret: number): Trigger | null {
+  // a `!` draft is a command for the shell (shellMode.ts): no menu, since an `@path` picked into
+  // one would hand the shell a literal `@`, and a slash in a command is a path
+  if (text.startsWith("!")) return null;
   // A slash command only counts at the very start of the draft, because that is the only place an
   // agent will dispatch one: offering it mid-text would insert something that silently runs as
   // prose. Everything up to the first space is the command name.

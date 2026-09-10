@@ -21,6 +21,7 @@ import { dataUrl, nextImageNumber, nextPasteNumber } from "./images.ts";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
+import { shellCommandOf, shellContext, shellHistory } from "./shellMode.ts";
 import { useComposerPaste } from "./useIntake.ts";
 
 /** what the inline `@` / `/` menu can offer */
@@ -136,9 +137,22 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
     },
   });
 
+  // `!` mode: the draft is a command for the worktree's shell, not a message. The box wears the
+  // mono face while it is one, so the change of contract shows before anything runs.
+  const shellCmd = id ? shellCommandOf(text) : null;
+  const history = useMemo(() => shellHistory(chat), [chat]);
+  /** which earlier command up-arrow has walked back to; -1 is the draft as typed */
+  const [hist, setHist] = useState(-1);
+
   // what the inserted command still expects, drawn after the caret. Only while nothing has been
   // typed after it: once the arguments are being written, the hint is in the way rather than help.
   const argGhost = inserted && text === `/${inserted.name} ` ? inserted.hint : null;
+  // the same idea for a bare `!`: what the mode is, told once, at the moment someone finds it
+  const shellGhost =
+    shellCmd === "" && active
+      ? ` a command to run in ${active.worktree.title}; its output goes on the transcript`
+      : null;
+  const ghost = argGhost ?? shellGhost;
 
   // On open: the file listing is cached and never invalidated, so refresh it (the agent may have
   // written a file this turn); cached rows render meanwhile so the menu never looks empty. An
@@ -174,12 +188,28 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
         `user-selected element (via the element picker): ${pick.component ? `<${pick.component}> component` : `<${pick.tag}>`}${where}${pick.text ? `, text "${pick.text}"` : ""}\nits HTML: ${pick.html}`,
       );
     }
-    if (parts.length === 0) return undefined;
-    return `[Live preview context, attached automatically. This is what the user is looking at right now:\n${parts.join("\n")}]`;
+    const blocks: string[] = [];
+    if (parts.length > 0)
+      blocks.push(
+        `[Live preview context, attached automatically. This is what the user is looking at right now:\n${parts.join("\n")}]`,
+      );
+    // what they ran with `!` since their last message: the output is on screen for them, and this
+    // is how it gets in front of the agent too
+    const shell = shellContext(chat);
+    if (shell) blocks.push(shell);
+    return blocks.length > 0 ? blocks.join("\n\n") : undefined;
   };
 
   const send = () => {
     if (!active || !id || !text.trim()) return;
+    if (shellCmd !== null) {
+      // a command runs where the draft was typed, whatever the new-worktree box says: attachments
+      // are for the agent and stay for the next message
+      if (shellCmd) sock?.send({ t: "exec", worktreeId: id, command: shellCmd });
+      setText("");
+      setHist(-1);
+      return;
+    }
     const context = buildContext();
     const pickMeta = pick ? pickMetaOf(pick) : undefined;
     const sent = images.length ? images.map(({ key: _key, bytes: _bytes, ...img }) => img) : undefined;
@@ -298,9 +328,9 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           }}
         />
       )}
-      <div className="composer-field">
+      <div className={`composer-field${shellCmd !== null ? " shell" : ""}`}>
         <textarea
-          className="field field-lg"
+          className={`field field-lg${shellCmd !== null ? " field-shell" : ""}`}
           ref={composerRef}
           value={text}
           onChange={(e) => {
@@ -308,6 +338,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
             setCaret(e.target.selectionStart ?? e.target.value.length);
             nav.setIndex(0);
             setDismissed(null);
+            setHist(-1);
           }}
           // arrow keys and clicks move the caret without changing the text, and the menu follows it
           onKeyUp={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
@@ -327,6 +358,21 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
               }
               if (nav.onKeyDown(e)) return;
             }
+            // up and down in a one-line `!` draft walk the commands run here, the way a shell does;
+            // a draft that has grown a second line needs the keys for moving through it
+            if (shellCmd !== null && !text.includes("\n") && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+              const next = e.key === "ArrowUp" ? Math.min(hist + 1, history.length - 1) : Math.max(hist - 1, -1);
+              if (next === hist) return;
+              e.preventDefault();
+              setHist(next);
+              const recalled = next === -1 ? "!" : `!${history[next]}`;
+              setText(recalled);
+              requestAnimationFrame(() => {
+                composerRef.current?.setSelectionRange(recalled.length, recalled.length);
+                setCaret(recalled.length);
+              });
+              return;
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               send();
@@ -339,14 +385,14 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
               ? "no worktree selected"
               : spawnNew
                 ? "describe a change; starts an agent in a new worktree…"
-                : `message agent on ${active.worktree.title}…`
+                : `message agent on ${active.worktree.title}; / for a command, ! for a shell command`
           }
           disabled={!active}
         />
-        {argGhost && (
+        {ghost && (
           <div className="composer-ghost" aria-hidden="true">
             <span className="lp-typed">{text}</span>
-            {argGhost}
+            {ghost}
           </div>
         )}
       </div>

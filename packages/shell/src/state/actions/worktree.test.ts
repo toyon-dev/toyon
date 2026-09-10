@@ -73,15 +73,34 @@ describe("a worktree's actions", () => {
     ]);
   });
 
-  test("a landing op in flight takes the other landing ops off the list until it answers", () => {
+  test("a landing op in flight keeps the other landing ops on the list, off, until it answers", () => {
     const items = worktreeItems(
       owned({ behind: 3 }),
       null,
       { leftOpen: true, termOpen: true, shipping: { w1: "ship" } },
       deps,
     );
-    expect(labels(items)).not.toContain("merge into main");
-    expect(labels(items)).not.toContain("sync from main (3 behind)");
+    const off = items.filter(isItem).filter((i) => i.disabled !== undefined);
+    expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "merge into main", "push + PR"]);
+    expect(off[0]?.disabled).toBe("waiting on the one in progress");
+  });
+
+  test("the profile running now is on the list with its check", () => {
+    const repo = {
+      id: "r",
+      path: "/r",
+      name: "r",
+      defaultBranch: "main",
+      config: {
+        procs: { web: "w" },
+        profiles: { fe: { procs: ["web"] }, full: { procs: ["web"] } },
+        defaultProfile: "fe",
+      },
+      needsSetup: false,
+    };
+    const items = worktreeItems(owned(), repo, { leftOpen: true, termOpen: true, shipping: {} }, deps);
+    const run = items.filter(isItem).filter((i) => i.id.startsWith("profile:"));
+    expect(run.map((i) => `${i.label}${i.checked ? " *" : ""}`)).toEqual(["run with fe *", "run with full"]);
   });
 
   test("a found worktree has the short list and never a remove", () => {
@@ -104,7 +123,12 @@ describe("a worktree's actions", () => {
       "|",
       "copy path",
     ]);
-    const held = discoveredItems({ ...found, locked: true, behind: 0 }, { termOpen: true, clientId: "c" }, deps);
-    expect(labels(held)).toEqual(["open a shell here", "reveal in Finder", "|", "copy path"]);
+    const held = discoveredItems(
+      { ...found, locked: true, lockReason: "zed", behind: 0 },
+      { termOpen: true, clientId: "c" },
+      deps,
+    );
+    expect(labels(held)).toEqual(["take over", "|", "open a shell here", "reveal in Finder", "|", "copy path"]);
+    expect(held.filter(isItem).find((i) => i.id === "adopt")?.disabled).toBe("held by zed");
   });
 });

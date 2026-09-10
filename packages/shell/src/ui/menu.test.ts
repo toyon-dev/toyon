@@ -1,8 +1,33 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { fromKeyboard, grouped, isItem, type MenuItem, type MenuSpec, menuBox, menuStore, SEP, tidy } from "./menu.ts";
+import {
+  fromKeyboard,
+  grouped,
+  isItem,
+  type MenuItem,
+  type MenuSpec,
+  menuBox,
+  menuStore,
+  SEP,
+  stepEnabled,
+  tidy,
+} from "./menu.ts";
 
 const item = (id: string): MenuItem => ({ id, label: id, onClick: () => {} });
 const shape = (entries: ReturnType<typeof tidy>) => entries.map((e) => (isItem(e) ? e.id : "|")).join(" ");
+
+describe("the arrows and a row that is off", () => {
+  test("walk past a disabled row in either direction, and land nowhere when every row is off", () => {
+    const off = (id: string): MenuItem => ({ ...item(id), disabled: "no" });
+    const list = [item("a"), off("b"), item("c")];
+    expect(stepEnabled(list, -1, 1)).toBe(0);
+    expect(stepEnabled(list, 0, 1)).toBe(2);
+    expect(stepEnabled(list, 2, 1)).toBe(0);
+    expect(stepEnabled(list, -1, -1)).toBe(2);
+    expect(stepEnabled(list, 2, -1)).toBe(0);
+    expect(stepEnabled([off("a"), off("b")], -1, 1)).toBe(-1);
+    expect(stepEnabled([], -1, 1)).toBe(-1);
+  });
+});
 
 describe("groups and the rules between them", () => {
   test("a rule stands only between two items", () => {

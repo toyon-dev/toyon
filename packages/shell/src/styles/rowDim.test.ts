@@ -14,7 +14,8 @@ import { cssRules, shellCss } from "./cssRules.ts";
  * meant to cost a deliberate line in a diff rather than being something you can do by accident.
  */
 
-/** the row's own resting colour: it is the seat, not a passenger on one */
+/** the row's own resting colour: it is the seat, not a passenger on one. A menu row that is off
+ * never lifts at all, so the skip tier is its only colour. */
 const ROW_AT_REST = [
   ".row-quiet",
   ".tool-row",
@@ -22,6 +23,7 @@ const ROW_AT_REST = [
   ".rail:hover .rail-disc-head",
   ".rail.hold .rail-disc-head",
   ".rail.pinned .rail-disc-head",
+  ".menu button.disabled",
 ];
 
 /** a child that lifts, but to a tier of its own: the transcript reads its hint up to text0, and a

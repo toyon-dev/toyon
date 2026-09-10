@@ -20,9 +20,24 @@ export type MenuItem = {
   key?: string;
   /** opens a picker of its own: the palette comes back to itself when that picker is escaped */
   sub?: boolean;
+  /** cannot run right now, and why: drawn dim with the reason under it, skipped by the keys. A
+   * verb that stays on the list while it cannot run is how the menu keeps its shape and teaches
+   * what exists; one that vanishes teaches nothing. */
+  disabled?: string;
+  /** the one of its group that is in effect now: a check in the gutter */
+  checked?: boolean;
   onClick: () => void;
   danger?: boolean;
 };
+
+/** the next item the arrows land on from `i` (or from nothing, when -1), skipping disabled ones */
+export function stepEnabled(items: MenuItem[], i: number, d: 1 | -1): number {
+  const n = items.length;
+  if (n === 0) return -1;
+  let j = i < 0 ? (d === 1 ? 0 : n - 1) : (i + d + n) % n;
+  for (let k = 0; k < n && items[j]?.disabled; k++) j = (j + d + n) % n;
+  return items[j]?.disabled ? -1 : j;
+}
 
 /** a rule between two groups of items */
 export type MenuSep = { sep: true };
@@ -167,6 +182,7 @@ export function useContextMenu(owner: string) {
       /** a trigger's click opens the list under it; a second click closes it */
       dropdown(build: () => MenuEntry[], align: "left" | "right" = "left") {
         return {
+          "aria-haspopup": "menu" as const,
           onClick: (e: ReactMouseEvent) => {
             // the window click that would dismiss the menu is this one; keep it here
             e.stopPropagation();

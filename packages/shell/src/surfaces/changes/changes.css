@@ -102,18 +102,23 @@
       flex: 1;
       min-width: 0;
     }
+    /* the name never shrinks: the directory gives way until nothing of it is left, and only a name
+     wider than the whole column is cut, at the column's edge. A shrink weight on the directory is
+     not enough, however large: the name still takes its share of the overflow, a fraction of a
+     pixel, and an ellipsis fires on any overflow at all, so every row whose directory was cut
+     lost the last two letters of its name too. */
     & .name {
+      flex-shrink: 0;
+      max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     & .dir {
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      /* both can shrink, but the directory gives way first: a truncated folder still reads, a
-     truncated filename does not */
-      flex-shrink: 999;
     }
   }
   .counts {

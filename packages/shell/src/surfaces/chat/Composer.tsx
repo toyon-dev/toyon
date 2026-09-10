@@ -17,7 +17,6 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
-import { tip } from "../../ui/Tooltip.tsx";
 import { baseNote, behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
@@ -605,15 +604,31 @@ export function Composer({
           )}
         </span>
         <span className="spawn-tools">
-          {usage && !spawning && (
-            <span
-              className="hint composer-ring"
-              {...tip(`${Math.round((100 * usage.used) / usage.size)}% of context`, undefined, {
-                detail: `${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}`,
-              })}
-            >
-              <Ring fraction={usage.used / usage.size} />
-            </span>
+          {usage && !spawning && id && (
+            <IconButton
+              icon={<Ring fraction={usage.used / usage.size} />}
+              tone="chrome"
+              label={`${Math.round((100 * usage.used) / usage.size)}% of context`}
+              detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}`}
+              // the one thing to do about a full context is to compact it, and the agent that
+              // can offers the command; the figures stay in the tip, a menu is for verbs
+              {...cm.dropdown(
+                () => [
+                  {
+                    id: "compact",
+                    label: "compact the context",
+                    detail: "shrink the chat to a summary",
+                    disabled: !commands.some((c) => c.name === "compact")
+                      ? "this agent offers no compact command"
+                      : active?.agent === "working" || active?.agent === "waiting"
+                        ? "wait for the turn to end"
+                        : undefined,
+                    onClick: () => sock?.send({ t: "chat", worktreeId: id, text: "/compact" }),
+                  },
+                ],
+                "right",
+              )}
+            />
           )}
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar. Not on an empty project: the pane is hidden

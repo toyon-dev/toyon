@@ -155,10 +155,13 @@
    knobs row alone: where you are, and the one move that is left */
   .commit-box {
     flex-shrink: 0;
-    /* one line at rest, growing with the draft up to a few lines and scrolling past that, so the
-     list above keeps its room. Where field-sizing is not known the box stays one line and scrolls. */
+    /* three lines at rest (the shape of a message: subject, blank, body), growing with the draft
+     and scrolling past a few lines, so the list above keeps its room. The floor is min-height,
+     not rows: field-sizing ignores rows. Where field-sizing is not known the box stays three
+     lines and scrolls. */
     & textarea {
       field-sizing: content;
+      min-height: 3lh;
       max-height: 8lh;
     }
   }

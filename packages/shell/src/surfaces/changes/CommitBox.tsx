@@ -54,7 +54,6 @@ export function CommitBox({
           <TextArea
             size="lg"
             bare
-            rows={1}
             value={msg}
             onChange={(e) => setMsg(e.target.value)}
             onKeyDown={(e) => {

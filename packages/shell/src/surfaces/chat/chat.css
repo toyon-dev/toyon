@@ -653,17 +653,27 @@
       font: var(--type-mono);
     }
   }
-  /* the two one-shot choices on one line: the word, the three numbers, then batch set apart */
+  /* the birth-time choices on one line: batch, then the three numbers with their word, then what
+   runs it at the right end */
   .draft-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .draft-variants {
     display: flex;
     align-items: center;
     gap: 2px;
     & > span {
-      margin-right: 4px;
+      margin-left: 4px;
     }
   }
-  .draft-batch {
-    margin-left: 10px;
+  .draft-runs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
   }
 
   .pick-chip {

@@ -20,12 +20,48 @@ export interface ToolMemo {
 /** per-session memory of tool calls; cleared when the session's process goes away */
 export type ToolMemos = Map<string, ToolMemo>;
 
+/** Which call spawned this one, out of the `_meta` each adapter stamps on its own updates.
+ *
+ * Neither shape is the ACP draft for subagent sessions (agent-client-protocol#1992): that one moves
+ * a subagent onto a session of its own and is negotiated at initialize, which toyon does not ask
+ * for. What is left is the fallback both adapters emit unconditionally, and the two are not the
+ * same fallback. Claude streams the subagent's own calls into the parent session stamped with the
+ * id of the Task that started them, so those rows nest. Codex streams lifecycle markers only
+ * ("Start subagent x") and never tags a child, so its rows carry the flag and stay flat: there is
+ * no tree to draw from updates that do not arrive.
+ */
+function spawnOf(meta: Record<string, unknown> | null | undefined): { parentToolId?: string; subagent?: boolean } {
+  const claude = asRecord(asRecord(meta).claudeCode);
+  const parentToolId = typeof claude.parentToolUseId === "string" ? claude.parentToolUseId : undefined;
+  // codex's marker is the thread it describes, not a flag. Reading it as one would put the mark on
+  // anything that ever lands under that key, so the shape has to be there as well as the key.
+  const codex = asRecord(asRecord(meta).codex).subagent;
+  const subagent = claude.subagent === true || Object.keys(asRecord(codex)).length > 0;
+  return { ...(parentToolId ? { parentToolId } : {}), ...(subagent ? { subagent: true } : {}) };
+}
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
 export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string): AgentEvent[] {
   switch (update.sessionUpdate) {
-    case "agent_message_chunk":
-      return textOf(update.content, tag, "message");
-    case "agent_thought_chunk":
-      return textOf(update.content, tag, "thought").map((e) => ({ ...e, type: "thinking-delta" }) as AgentEvent);
+    case "agent_message_chunk": {
+      const text = textOf(update.content, tag, "message");
+      if (text === null) return [];
+      // the adapter forwards a subagent's prose like any other chunk and only declines to count it
+      // as the turn's answer, so without this it lands in the transcript under the main agent's
+      // name: the one thing it is not
+      const { parentToolId } = spawnOf(update._meta);
+      return [parentToolId ? { type: "tool-delta", toolId: parentToolId, text } : { type: "text-delta", text }];
+    }
+    case "agent_thought_chunk": {
+      // a subagent's reasoning stays where it was thought. The row is a record of what the call
+      // produced, and unlabelled thinking folded into that panel reads as something it decided.
+      if (spawnOf(update._meta).parentToolId) return [];
+      const text = textOf(update.content, tag, "thought");
+      return text === null ? [] : [{ type: "thinking-delta", text }];
+    }
     case "tool_call": {
       const memo: ToolMemo = {
         name: update.name ?? update.title,
@@ -44,6 +80,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
           input: update.rawInput ?? { locations: update.locations ?? [] },
           ...(memo.kind ? { kind: memo.kind } : {}),
           title: memo.title,
+          ...spawnOf(update._meta),
         },
       ];
       // some agents report a one-shot tool already finished
@@ -71,6 +108,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
           input: update.rawInput ?? { locations: update.locations ?? [] },
           ...(memo.kind ? { kind: memo.kind } : {}),
           title: memo.title,
+          ...spawnOf(update._meta),
         });
       }
       const refined: Extract<AgentEvent, { type: "tool-update" }> = { type: "tool-update", toolId: update.toolCallId };
@@ -117,10 +155,10 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
   }
 }
 
-function textOf(content: { type: string; text?: string }, tag: string, what: string): AgentEvent[] {
-  if (content.type === "text" && typeof content.text === "string") return [{ type: "text-delta", text: content.text }];
+function textOf(content: { type: string; text?: string }, tag: string, what: string): string | null {
+  if (content.type === "text" && typeof content.text === "string") return content.text;
   log.debug(tag, `acp: dropping non-text ${what} block (${content.type})`);
-  return [];
+  return null;
 }
 
 function endOf(toolId: string, memo: ToolMemo, status: "completed" | "failed"): AgentEvent {

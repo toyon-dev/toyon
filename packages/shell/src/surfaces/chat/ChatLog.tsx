@@ -8,7 +8,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
-import { groupTools } from "./group.ts";
+import { groupTools, railSlots } from "./group.ts";
 
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill */
 export function ChatLog({ active }: { active: OwnedWorktree | null }) {
@@ -67,6 +67,8 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   const roots = useMemo(() => [wt?.path, wt?.linkPath].filter((p): p is string => !!p), [wt?.path, wt?.linkPath]);
   // calls that did the same thing to the same file, back to back, are one row carrying a count
   const entries = useMemo(() => groupTools(items, roots), [items, roots]);
+  // a colour per subagent, so two of them running at once are two runs and not one indented block
+  const rails = useMemo(() => railSlots(items), [items]);
   // the newest call while the agent runs: that row shows its output, everything above it is a line
   const working = active?.agent === "working";
   const liveRow = working ? entries.findLastIndex((e) => "tools" in e) : -1;
@@ -89,6 +91,7 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
               live={i === liveRow || i === newestShell}
               roots={roots}
               worktreeId={id}
+              rail={rails.get(entry.tools[0]?.parentToolId ?? "")}
             />
           ) : entry.item.kind === "thinking" ? (
             <ThoughtRow key={entry.at} item={entry.item} live={i === liveThought} />

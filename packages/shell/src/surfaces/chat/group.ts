@@ -23,11 +23,35 @@ const GROUPABLE: ReadonlySet<string> = new Set(["read", "edit"]);
 /** what two calls have to share to print as one row: the glyph, the tool behind it and the file it
  * names. The agent's own tool name is in the key even where the row does not print it, so an edit
  * and a write of one file stay apart: they read the same on the line and are not the same call. A
- * call that failed groups with nothing, since a count is how you miss it. */
+ * call that failed groups with nothing, since a count is how you miss it. The spawning call is in
+ * the key too: a subagent reading a file and the main agent reading it are at different depths, and
+ * folding them into one row would print the count on whichever depth happened to come first. */
 function groupKey(item: ToolItem, roots: string[]): string {
   if (item.isError || !item.toolKind || !GROUPABLE.has(item.toolKind)) return "";
   const { hint } = toolLabel(item, roots);
-  return hint ? `${item.toolKind}\n${item.name}\n${hint}` : "";
+  return hint ? `${item.parentToolId ?? ""}\n${item.toolKind}\n${item.name}\n${hint}` : "";
+}
+
+/** how many rails the transcript can tell apart before it starts reusing one */
+export const RAILS = 5;
+
+const NO_RAILS: ReadonlyMap<string, number> = new Map();
+
+/** which rail each spawning call draws, or nothing while there is only one of them.
+ *
+ * Subagents run at the same time and their calls interleave, so one grey rail brackets every one of
+ * them at once and says nothing about whose work a row is: the indent tells you a row belongs to
+ * some subagent, and with three running that is the part you already knew. A colour per spawning
+ * call is what separates them, and it is spent only where there is something to separate. A slot is
+ * held for the rest of the transcript once given, since a rail that changes colour partway down
+ * reads as a different subagent. */
+export function railSlots(items: ChatItem[]): ReadonlyMap<string, number> {
+  const slots = new Map<string, number>();
+  for (const item of items) {
+    if (item.kind !== "tool" || !item.parentToolId || slots.has(item.parentToolId)) continue;
+    slots.set(item.parentToolId, slots.size % RAILS);
+  }
+  return slots.size > 1 ? slots : NO_RAILS;
 }
 
 export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {

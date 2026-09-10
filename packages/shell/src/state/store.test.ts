@@ -210,6 +210,27 @@ describe("chat folding", () => {
       ["t2", false],
     ]);
   });
+  test("tool-delta streams into the spawning row, and its report supersedes what streamed", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "t1", name: "Task", input: {}, subagent: true }),
+      agent("a", { type: "tool-delta", toolId: "t1", text: "looking" }),
+      agent("a", { type: "tool-delta", toolId: "t1", text: " and found it" }),
+      agent("a", { type: "tool-delta", toolId: "gone", text: "no row" }),
+    ]);
+    const streamed = s.local.a?.chat.filter((i) => i.kind === "tool") ?? [];
+    expect(streamed.map((t) => (t.kind === "tool" ? [t.id, t.output, t.done] : null))).toEqual([
+      ["t1", "looking and found it", false],
+    ]);
+    const done = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "t1", name: "Task", input: {}, subagent: true }),
+      agent("a", { type: "tool-delta", toolId: "t1", text: "looking" }),
+      agent("a", { type: "tool-end", toolId: "t1", output: "the report" }),
+    ]);
+    const tools = done.local.a?.chat.filter((i) => i.kind === "tool") ?? [];
+    expect(tools.map((t) => (t.kind === "tool" ? [t.output, t.done] : null))).toEqual([["the report", true]]);
+  });
   test("tool-update refines a running tool row in place", () => {
     const s = run([
       hello(wt("a")),

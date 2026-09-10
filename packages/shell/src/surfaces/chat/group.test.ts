@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import { groupTools } from "./group.ts";
+import { groupTools, RAILS, railSlots } from "./group.ts";
 
 let n = 0;
 const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): ChatItem =>
@@ -97,6 +97,55 @@ describe("groupTools", () => {
     const items = [
       tool("edit", "/wt/a.ts", { toolKind: undefined }),
       tool("edit", "/wt/a.ts", { toolKind: undefined }),
+    ];
+    expect(shape(items, ["/wt"])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 1 },
+    ]);
+  });
+
+  test("the same file read at two depths is a row each, and each depth still groups", () => {
+    const items = [
+      tool("read", "/wt/a.ts"),
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+      tool("read", "/wt/a.ts"),
+    ];
+    expect(shape(items, ["/wt"])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 2 },
+      { at: 3, n: 1 },
+    ]);
+  });
+
+  test("one subagent gets no rail; from two on, each holds a slot for the whole transcript", () => {
+    const one = [tool("read", "/wt/a.ts", { parentToolId: "t1" }), tool("read", "/wt/b.ts", { parentToolId: "t1" })];
+    expect([...railSlots(one)]).toEqual([]);
+    const many = [
+      tool("read", "/wt/a.ts", { parentToolId: "t1" }),
+      tool("read", "/wt/b.ts", { parentToolId: "t2" }),
+      tool("read", "/wt/c.ts", { parentToolId: "t1" }),
+      tool("read", "/wt/d.ts"),
+    ];
+    expect([...railSlots(many)]).toEqual([
+      ["t1", 0],
+      ["t2", 1],
+    ]);
+  });
+
+  test("more subagents than rails wrap round rather than running out", () => {
+    const items = Array.from({ length: RAILS + 2 }, (_, i) => tool("read", "/wt/a.ts", { parentToolId: `t${i}` }));
+    expect([...railSlots(items)].map(([, slot]) => slot)).toEqual([
+      ...Array.from({ length: RAILS }, (_, i) => i),
+      0,
+      1,
+    ]);
+  });
+
+  test("two subagents reading one file do not fold into each other's row", () => {
+    const items = [
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+      tool("read", "/wt/a.ts", { parentToolId: "task2" }),
     ];
     expect(shape(items, ["/wt"])).toEqual([
       { at: 0, n: 1 },

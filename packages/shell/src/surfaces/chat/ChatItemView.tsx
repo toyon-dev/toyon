@@ -343,11 +343,14 @@ export const ToolRow = memo(
     live,
     roots,
     worktreeId,
+    rail,
   }: {
     tools: ToolItem[];
     live?: boolean;
     roots?: string[];
     worktreeId?: string | null;
+    /** which subagent's rail this row sits on, while more than one of them is running */
+    rail?: number;
   }) {
     // every call in a run prints the same line, so the first one is the row
     const head = tools[0]!;
@@ -373,7 +376,13 @@ export const ToolRow = memo(
     const sock = useSock();
     return (
       <Fold
-        className={cx("tool-row", tools.some((t) => t.isError) && "error")}
+        className={cx(
+          "tool-row",
+          tools.some((t) => t.isError) && "error",
+          head.parentToolId && "nested",
+          head.subagent && "spawn",
+          rail !== undefined && `rail-${rail}`,
+        )}
         auto={auto}
         label={tools.length > 1 ? `${what}, ${tools.length} calls` : what}
         menu={(fold) => {
@@ -398,7 +407,12 @@ export const ToolRow = memo(
       </Fold>
     );
   },
-  (a, b) => a.live === b.live && a.roots === b.roots && a.worktreeId === b.worktreeId && sameTools(a.tools, b.tools),
+  (a, b) =>
+    a.live === b.live &&
+    a.roots === b.roots &&
+    a.worktreeId === b.worktreeId &&
+    a.rail === b.rail &&
+    sameTools(a.tools, b.tools),
 );
 
 /** the agent asked for credentials: one button per login method it offered. A terminal method runs

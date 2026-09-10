@@ -129,6 +129,153 @@ describe("mapUpdate", () => {
       { type: "usage", used: 1, size: 2, ts: 0 },
     ]);
   });
+
+  test("a Task and the calls it spawned carry the spawn flag and the parent id", () => {
+    expect(
+      run([
+        {
+          sessionUpdate: "tool_call",
+          toolCallId: "task1",
+          title: "Task",
+          kind: "other",
+          status: "pending",
+          _meta: { claudeCode: { toolName: "Task", subagent: true } },
+        },
+        {
+          sessionUpdate: "tool_call",
+          toolCallId: "kid1",
+          title: "Read /a",
+          kind: "read",
+          status: "pending",
+          _meta: { claudeCode: { toolName: "Read", parentToolUseId: "task1" } },
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "tool-start",
+        toolId: "task1",
+        name: "Task",
+        input: { locations: [] },
+        kind: "other",
+        title: "Task",
+        subagent: true,
+      },
+      {
+        type: "tool-start",
+        toolId: "kid1",
+        name: "Read /a",
+        input: { locations: [] },
+        kind: "read",
+        title: "Read /a",
+        parentToolId: "task1",
+      },
+    ]);
+  });
+
+  test("codex marks its subagent markers but names no parent, so its rows stay flat", () => {
+    expect(
+      run([
+        {
+          sessionUpdate: "tool_call",
+          toolCallId: "c1",
+          title: "Start subagent reviewer",
+          kind: "other",
+          status: "pending",
+          _meta: { codex: { subagent: { threadId: "t1", path: "a/reviewer", activity: "started" } } },
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "tool-start",
+        toolId: "c1",
+        name: "Start subagent reviewer",
+        input: { locations: [] },
+        kind: "other",
+        title: "Start subagent reviewer",
+        subagent: true,
+      },
+    ]);
+  });
+
+  test("a bare codex key is not a subagent marker; the marker's own shape is", () => {
+    const flags = run([
+      { sessionUpdate: "tool_call", toolCallId: "a", title: "x", status: "pending", _meta: { codex: {} } },
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "b",
+        title: "y",
+        status: "pending",
+        _meta: { codex: { subagent: {} } },
+      },
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "c",
+        title: "z",
+        status: "pending",
+        _meta: { codex: { subagent: { threadId: "t1" } } },
+      },
+    ]);
+    expect(flags.map((e) => (e.type === "tool-start" ? [e.toolId, e.subagent] : null))).toEqual([
+      ["a", undefined],
+      ["b", undefined],
+      ["c", true],
+    ]);
+  });
+
+  test("an update for a call we never saw start keeps its parent", () => {
+    expect(
+      run([
+        {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "orphan",
+          title: "Grep",
+          status: "completed",
+          _meta: { claudeCode: { toolName: "Grep", parentToolUseId: "task1" } },
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "tool-start",
+        toolId: "orphan",
+        name: "Grep",
+        input: { locations: [] },
+        title: "Grep",
+        parentToolId: "task1",
+      },
+      { type: "tool-end", toolId: "orphan", output: "", isError: false },
+    ]);
+  });
+
+  test("a subagent's prose goes to the row that spawned it, and its thinking is let go", () => {
+    expect(
+      run([
+        {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "found it" },
+          _meta: { claudeCode: { parentToolUseId: "task1" } },
+        },
+        {
+          sessionUpdate: "agent_thought_chunk",
+          content: { type: "text", text: "hmm" },
+          _meta: { claudeCode: { parentToolUseId: "task1" } },
+        },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "top level" } },
+        { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "mine" } },
+      ]),
+    ).toEqual([
+      { type: "tool-delta", toolId: "task1", text: "found it" },
+      { type: "text-delta", text: "top level" },
+      { type: "thinking-delta", text: "mine" },
+    ]);
+  });
+
+  test("an agent that stamps no subagent meta gets neither field", () => {
+    expect(
+      run([{ sessionUpdate: "tool_call", toolCallId: "p", title: "Read", kind: "read", status: "pending" }]),
+    ).toEqual([
+      { type: "tool-start", toolId: "p", name: "Read", input: { locations: [] }, kind: "read", title: "Read" },
+    ]);
+  });
 });
 
 describe("summarizeToolOutput / truncate / stop reasons", () => {

@@ -25,8 +25,9 @@ const SRC = new URL("..", import.meta.url).pathname;
 const FOREIGN = [".monaco-editor", ".xterm"];
 
 /** classes built at runtime from a prefix, so no literal names them: the syntax scopes a theme
- * paints, `sy-${scope}` in ChatItemView */
-const DYNAMIC_PREFIXES = ["sy-"];
+ * paints, `sy-${scope}` in ChatItemView, and the slot a subagent's rows take, `rail-${rail}` there
+ * too */
+const DYNAMIC_PREFIXES = ["sy-", "rail-"];
 
 const tokensOf = (selector: string): string[] => [...selector.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]!);
 const mentions = (text: string, cls: string) => new RegExp(`(?<![\\w-])${cls}(?![\\w-])`).test(text);

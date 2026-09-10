@@ -110,7 +110,7 @@ export function ChipPicker<T extends string>({
             )
           }
           lead={
-            <Button tone="chrome" mono on className="chip-picker-lead" {...tip("Close")} onClick={close}>
+            <Button tone="chrome" mono on className="chip-picker-lead" onClick={close}>
               {shown}
             </Button>
           }

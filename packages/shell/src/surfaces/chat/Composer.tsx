@@ -127,6 +127,7 @@ export function Composer({
   // picking happens inside the iframe, which takes focus; hand it back to the composer so the
   // user can type about the element straight away (next frame: the dock may be re-appearing)
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const refocus = () => composerRef.current?.focus();
   useEffect(() => {
     if (!pick) return;
     const f = requestAnimationFrame(() => composerRef.current?.focus());
@@ -446,14 +447,16 @@ export function Composer({
               </span>
             </label>
           )}
-          {spawnNew && <ProfileChip repo={repo} value={profile} onChange={setProfile} />}
+          {/* a chip's panel takes focus while it is up, so put the caret back when it closes */}
+          {spawnNew && <ProfileChip repo={repo} value={profile} onChange={setProfile} onClose={refocus} />}
           {spawnNew ? (
-            <ModeChip value={newMode} onChange={setNewMode} />
+            <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
           ) : (
             active && (
               <ModeChip
                 value={activeMode}
                 onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
+                onClose={refocus}
               />
             )
           )}

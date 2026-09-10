@@ -1,9 +1,8 @@
 import type { RepoInfo } from "@toyon/shared";
 import { STORAGE } from "../../state/keys.ts";
-import { nextProfile, profileNames } from "../../state/profiles.ts";
-import { Button } from "../../ui/Button.tsx";
+import { profileNames } from "../../state/profiles.ts";
+import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { usePersisted } from "../../ui/hooks.ts";
-import { tip } from "../../ui/Tooltip.tsx";
 
 /** the profile a new worktree of this repo will run: remembered per repo in this browser, the
  * repo's default until chosen. Returns undefined when the repo has no profiles. */
@@ -19,27 +18,36 @@ export function useNewWorktreeProfile(repo: RepoInfo | null): [string | undefine
   return [value, setStored];
 }
 
-/** click cycles through the repo's profiles; renders nothing for a repo without any */
+/** which of the repo's profiles the new worktree runs, each row naming the procs it starts;
+ * renders nothing for a repo without any */
 export function ProfileChip({
   repo,
   value,
   onChange,
+  onClose,
 }: {
   repo: RepoInfo | null;
   value: string | undefined;
   onChange: (p: string) => void;
+  onClose?: () => void;
 }) {
   const names = profileNames(repo);
   if (names.length === 0 || !value) return null;
-  const next = nextProfile(names, value);
+  const profiles = repo?.config.profiles ?? {};
+  const runs = (name: string) => {
+    const procs = profiles[name]?.procs ?? [];
+    const what = procs.length > 0 ? `runs ${procs.join(", ")}` : "runs nothing";
+    return name === repo?.config.defaultProfile ? `${what}; the default in toyon.json` : what;
+  };
   return (
-    <Button
-      variant="outline"
-      mono
-      {...tip(names.length > 1 ? `run with ${next} instead` : "the only profile in toyon.json")}
-      onClick={() => next && onChange(next)}
-    >
-      {value}
-    </Button>
+    <ChipPicker
+      value={value}
+      options={names.map((n) => ({ id: n, description: runs(n) }))}
+      onChange={onChange}
+      onClose={onClose}
+      hint={names.length > 1 ? `${value}: ${runs(value)}. Click to change` : "the only profile in toyon.json"}
+      placeholder="the profile the worktree runs"
+      pickVerb="runs it"
+    />
   );
 }

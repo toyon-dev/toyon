@@ -12,10 +12,3 @@ export function profileOf(wt: Pick<WorktreeInfo, "profile">, repo: RepoInfo | nu
   if (wt.profile && names.includes(wt.profile)) return wt.profile;
   return repo?.config.defaultProfile;
 }
-
-/** the profile after `current` in file order (wrapping), for a chip that cycles on click */
-export function nextProfile(names: string[], current: string | undefined): string | undefined {
-  if (names.length === 0) return undefined;
-  const i = current ? names.indexOf(current) : -1;
-  return names[(i + 1) % names.length];
-}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoInfo } from "@toyon/shared";
-import { nextProfile, profileNames, profileOf } from "./profiles.ts";
+import { profileNames, profileOf } from "./profiles.ts";
 
 const plain: RepoInfo = {
   id: "r",
@@ -27,12 +27,5 @@ describe("profiles", () => {
     expect(profileOf({}, profiled)).toBe("fe");
     expect(profileOf({ profile: "full" }, profiled)).toBe("full");
     expect(profileOf({ profile: "gone" }, profiled)).toBe("fe");
-  });
-
-  test("nextProfile cycles in file order and starts from the first for an unknown current", () => {
-    expect(nextProfile(["fe", "full"], "fe")).toBe("full");
-    expect(nextProfile(["fe", "full"], "full")).toBe("fe");
-    expect(nextProfile(["fe", "full"], undefined)).toBe("fe");
-    expect(nextProfile([], "fe")).toBeUndefined();
   });
 });

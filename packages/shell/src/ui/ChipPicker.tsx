@@ -80,7 +80,8 @@ export function ChipPicker<T extends string>({
       }}
     >
       <Button
-        variant="outline"
+        variant="ghost"
+        tone="chrome"
         mono
         on={open !== null}
         className={cx("chip-picker-btn", className)}

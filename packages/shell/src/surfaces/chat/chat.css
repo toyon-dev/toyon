@@ -355,6 +355,13 @@
       color: var(--text1);
       white-space: pre-wrap;
     }
+    /* a thought's body is prose, so it wears the message's face and the markdown idioms rather
+     than the panel's mono, a tier under the message it precedes: it is the plan, not the answer */
+    & .thought-out {
+      font: var(--type-ui);
+      line-height: 1.6;
+      color: var(--text1);
+    }
     & .tool-block {
       font: var(--type-mono-sm);
       margin: 0;

@@ -1,12 +1,9 @@
 // The parts of the wire protocol that carry no zod: the version, the bounds, and the one guard
 // that is a comparison rather than a schema.
 //
-// Split out of ws.ts so that needing a bound does not mean importing the client-message schemas.
-// `sideEffects: false` lets a bundler drop an unused module whole, but once one binding is used
-// the module is kept, and a top-level `z.object(...)` is an opaque call it cannot shake out. The
-// shell reads eight of these constants and isTermMsg; through ws.ts that cost it all of zod.
-//
-// ws.ts imports them back, so the schemas stay the source of truth for the shapes they bound.
+// Kept off ws.ts: a top-level `z.object(...)` is a call no bundler shakes out, so a bound imported
+// through ws.ts drags all of zod into the shell. ws.ts imports them back, so the schemas stay the
+// source of truth for the shapes they bound.
 
 import type { ServerMsg, TermServerMsg } from "./ws.ts";
 

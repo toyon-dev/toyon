@@ -288,12 +288,11 @@ export interface Theme {
   kind: "dark" | "light";
   /** where it came from — shown as a hint in the picker */
   source: "builtin" | "file" | "vscode";
-  /** The authored palette, in families rather than one ramp. Surfaces, interaction states, lines
-   * and text are four different questions, and the numbering only orders within a family: a hover
-   * tint and a pane divider had no business sharing a slot, and while they did, nobody could audit
-   * or move either. The seven hues are the interchange format every colour scheme since ANSI has
-   * shipped. Only the accent, the scrim and the shadow are derived, in themeToCssVars, because
-   * those are the three a theme was never really deciding. */
+  /** The authored palette, in families: surfaces, interaction states, lines and text are four
+   * different questions, and the numbering only orders within one. The seven hues are the
+   * interchange format every colour scheme since ANSI has shipped. Only the accent, the scrim and
+   * the shadow are derived, in themeToCssVars, because those are the three a theme was never
+   * really deciding. */
   colors: {
     /** surfaces: the canvas, the chrome that sits on it, and things raised above both */
     surface0: ThemeColor;
@@ -323,8 +322,8 @@ export interface Theme {
   /** editor token colors; missing entries inherit Monaco's base theme */
   syntax?: Partial<Record<ThemeSyntaxToken, ThemeColor>>;
   /** which palette color carries "you are on this one": the active worktree, an `on` tab, a
-   * checked box. Gruvbox and the rest have always selected in orange; Toyon selects in its berry.
-   * Defaults to orange, so an imported VS Code theme behaves the way every theme did before. */
+   * checked box. Gruvbox and the rest select in orange; Toyon selects in its berry. Defaults to
+   * orange, which is what an imported VS Code theme gets. */
   accent?: ThemeColorKey;
   /** id of this theme's opposite-kind sibling (Gruvbox Dark ↔ Gruvbox Light); guessed by name when absent */
   pair?: string;
@@ -412,8 +411,8 @@ export interface DesignCoverage {
   classAttrs: number;
 }
 
-/** Everything the design pane renders, and (later) what the agent queries before it invents a
- * color. Merged from a static repo scan and a harvest off the running page; the flags and the
+/** Everything the design pane renders, and what the agent queries before it invents a color.
+ * Merged from a static repo scan and a harvest off the running page; the flags and the
  * coverage record say which halves are present, so the pane can name what is missing rather than
  * render a gap as an answer. */
 export interface DesignIndex {

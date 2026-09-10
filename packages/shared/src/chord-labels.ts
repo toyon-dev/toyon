@@ -1,11 +1,9 @@
 // How the chords are shown: the wording on the shortcuts card, which section they file under, and
 // which alias a given browser should advertise instead of the primary key.
 //
-// Split out of chords.ts because the bridge bundles that file into every preview page and only
-// ever matches keys with it. It never renders a label, and shipping ~400 bytes of shell wording to
-// the page under test bought nothing. The chord table stays the single source of truth for what
-// exists; `Record<ChordId, ...>` here makes a chord without wording a compile error, the same way
-// the daemon's handler map makes a message without a handler one.
+// Separate from chords.ts because the bridge bundles that file into every preview page and never
+// renders a label. The chord table stays the single source of truth for what exists;
+// `Record<ChordId, ...>` here makes a chord without wording a compile error.
 
 import type { ChordEnv, ChordId } from "./chords.ts";
 import { chordOf } from "./chords.ts";

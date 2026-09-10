@@ -19,10 +19,9 @@ export interface VsCodeThemeJson {
 }
 
 const workbenchKeys: Record<ThemeColorKey, string[]> = {
-  // VS Code names a colour per widget and has no ramp, so every key below lands in the family it
-  // belongs to rather than being flattened onto a ladder. That flattening is why Dark 2026 used to
-  // import with bg3 darker than bg2: one was a hover colour and the other a border, and they have
-  // no ordering relationship to assert.
+  // VS Code names a colour per widget and has no ramp: a hover colour and a border have no
+  // ordering to assert between them, so every key below lands in the family it belongs to rather
+  // than being flattened onto a ladder.
   surface0: ["editor.background"],
   surface1: ["sideBar.background", "activityBar.background", "editor.background"],
   surface2: ["menu.background", "editorWidget.background", "editorHoverWidget.background", "sideBar.background"],

@@ -20,77 +20,77 @@ import type { Theme, ThemeColorKey, ThemePrefs, ThemeSyntaxToken } from "./model
 // blooms in it, which is the whole reason the "soft" variant exists and why a near-black ground
 // hurts to read against for hours.
 //
-// The bone is tinted hard, s50 rather than the s34 it started at. Tint is what stops a light
-// foreground being a lamp; Gruvbox's cream is half saturated, which is why it reads as a material
-// the light falls on rather than as the light itself. The berry is a coral rather than a scarlet
-// for the same class of reason: at this weight it reads as the plant, where a fire-engine red
-// reads as a fault whatever it is attached to. What it cannot be is quiet: pop is chroma standing
-// clear of the ground's, and a brown ground raises that floor from Gruvbox's 1.2 to 4.5, so the
-// berry has to climb to stay the loudest thing in a window. It sits at C71 against the ground's
-// C4.5, a 16x step where the coral it replaced managed 12x, and still lands lighter and less
-// blood-coloured than Gruvbox's own red.
+// The bone is tinted hard (s50). Tint is what stops a light foreground being a lamp; Gruvbox's
+// cream is half saturated, which is why it reads as a material the light falls on rather than as
+// the light itself. The berry is a coral rather than a scarlet for the same class of reason: at
+// this weight it reads as the plant, where a fire-engine red reads as a fault whatever it is
+// attached to. What it cannot be is quiet: pop is chroma standing clear of the ground's, and a
+// brown ground raises that floor from Gruvbox's 1.2 to 4.5, so the berry has to climb to stay the
+// loudest thing in a window. It sits at C71 against the ground's C4.5, a 16x step, and still
+// lands lighter and less blood-coloured than Gruvbox's own red.
 //
 // Which is why the palette is derived in that order: red, then ground, then text. sRGB will not
 // give you a light red (pure red is L*53, pure orange L*67), so the berry's lightness is a
-// ceiling rather than a choice, and everything else is fitted underneath it. The ground sits at
-// L*13 because that is what puts the berry 47 points above it, the same step Gruvbox's orange
-// gets. The text sits at L*80 because that is what holds 9.5:1 against an L*13 ground, and the
-// two have to move together: leaving the text at L*88 over a lifted-away ground is what makes a
-// dark theme bloom. The payoff is that peak screen luminance drops from 72% to 57% for identical
-// legibility. The levels themselves are Gruvbox Dark Soft's, matched tier for tier: ground L*20,
-// body L*88, label L*64, hint L*56. That was chosen by sitting in both, not by argument. Going a
-// further seven points down bought the berry a +47 step instead of +40 and cut the light the
-// chrome emits by a third, and it was still too dark to live in. So the ordering above still
-// holds, red first and the rest fitted under it, but the ground is pinned to a level that is
-// known to survive a twenty-hour day rather than to whatever the accent would prefer.
+// ceiling rather than a choice, and everything else is fitted underneath it. The ground is pinned
+// at Gruvbox Dark Soft's L*20 rather than at whatever the accent would prefer: seven points lower
+// buys the berry a +47 step instead of +40 and cuts the light the chrome emits by a third, and is
+// still too dark to live in for a twenty-hour day. That was decided by sitting in both, not by
+// argument. Body text sits at L*88, and the two move together: dropping the ground under text
+// that stays at L*88 is what makes a dark theme bloom.
 //
-// The ground's chroma builds with its lightness, 2 at bg0 up to 6.5 at bg3, rather than sitting
-// flat. bg0 is the largest field on screen, and colour in it shifts the apparent hue of
-// everything on top by simultaneous contrast: the bone stops reading golden and neutrals pick up
-// a cool cast. Gruvbox spends almost nothing there (1.2) and saves its warmth for the surfaces
-// that catch light (6.6 at bg3), which is both why it reads clean and how a real surface behaves.
-// The brown is still present at every step, and still ahead of Gruvbox at every step; it is just
-// no longer loudest where there is most of it.
+// The ground's chroma builds with its lightness, 2 at surface0 up to 5 at surface2, rather than
+// sitting flat. surface0 is the largest field on screen, and colour in it shifts the apparent hue
+// of everything on top by simultaneous contrast: the bone stops reading golden and neutrals pick
+// up a cool cast. Gruvbox spends almost nothing there (1.2) and saves its warmth for the surfaces
+// that catch light (6.6 at its top step), which is both why it reads clean and how a real surface
+// behaves. The brown is present at every step, and ahead of Gruvbox at every step; it is just
+// quietest where there is most of it.
 //
-// The tiers take Gruvbox's top and VS Code 2026's spread underneath it. Gruvbox drops 24 L* from
-// body to label and only 8 more to hint; 2026 drops 19 then 22, so its quiet tier is genuinely
-// quiet and its loud tier stands alone. Body stays at Gruvbox's level, which is the one that
-// survives a long day, and everything under it falls away faster: 9.6 to 4.3 to 2.6 against
-// 2026's 9.9 to 5.5 to 2.5. A transcript is mostly log, and log should be skimmable at a glance
-// rather than legible word by word, and the two halves fall away by the same amount: 46 L* from
-// body to hint in each, so a light-mode transcript triages the same way a dark one does. It used
-// to be 40 in the dark and 34 in the light, which made the light half's log quietly harder to
-// skip. The tiers also warm as they dim, hue* 97 to 85 to 77, rather
-// than cooling: fg3 used to sit at 101, past pure yellow and into green, which made the faintest
-// text in the app also the only green thing in it. Gruvbox runs 92 to 81 to 73 for the same reason
-// a dim warm surface goes browner rather than greener.
+// The three text tiers take Gruvbox's top and VS Code 2026's spread underneath it, spaced on
+// those rather than on legibility scores. A secondary tier only a few L* below the primary one
+// reads as more bright area rather than as a second rank, and the eye has to sort what matters
+// instead of being told. Gruvbox drops 24 L* from body to label and only 8 more to hint; 2026
+// drops 19 then 22, so its quiet tier is genuinely quiet and its loud tier stands alone. Body
+// stays at Gruvbox's level, which is the one that survives a long day, and everything under it
+// falls away faster: 9.6 to 4.3 to 2.6 against 2026's 9.9 to 5.5 to 2.5. A transcript is mostly
+// log, and log should be skimmable at a glance rather than legible word by word, and the two
+// halves fall away by the same amount, 46 L* from body to hint in each, so a light-mode
+// transcript triages the same way a dark one does. The tiers warm as they dim, hue* 97 to 85 to
+// 77, rather than cooling: a hint past pure yellow turns green, and the faintest text in the app
+// would be the only green thing in it. Gruvbox runs 92 to 81 to 73 for the same reason a dim warm
+// surface goes browner rather than greener. The dim tier is also near-neutral on purpose: chroma
+// at low luminance does not feed the channel that carries acuity, so a colored hint is harder to
+// read than a gray one at the same weight. Both lower tiers stay on the ground's side of the
+// yellow axis, red over green, for the same reason the ground is brown and not olive: at h60 red
+// and green are equal, which against a brown ground reads as green text however neutral the
+// numbers say it is.
 //
 // The status colours sit on their own hue rather than near it. Green, yellow and red are read as
 // names, not as shades: a status has to say "green" before it says anything else, and a green
 // sixteen degrees short of green is a lime, which reads as an off yellow and makes you look twice.
-// Red was already dead on canonical at hue* 39; yellow moved from 87 to 98 and green from 120 to
-// 132, both a few degrees short of pure so they stay in a warm palette rather than turning into
-// signal lamps. Gruvbox is off by 21 and 31 in the same direction, and its lime is a signature
-// rather than an accident; this is the one place worth not copying it. The yellow is the exception
-// and it is amber on purpose. A pure yellow costs chroma twice: the sRGB ceiling at L*80 falls from
-// C83 at hue* 82 to C77 at 98, and the eye reads a low-chroma yellow as dirty rather than as pale.
-// So the M keeps a hue near Gruvbox's and takes the saturation instead, which is what was actually
-// missing when it looked dull. Same for the green: hue 132 was the right call, because Gruvbox's
-// lime sits 22 degrees from its own yellow where ours sits 47, which at 12px is the difference
-// between a +25 and an M being two colours or two shades. But moving it cost chroma it did not
-// need to, and green's gamut is wide enough to have both.
+// Red is dead on canonical at hue* 39; yellow sits at 98 and green at 132, both a few degrees
+// short of pure so they stay in a warm palette rather than turning into signal lamps. Gruvbox is
+// off by 21 and 31 in the same direction, and its lime is a signature rather than an accident;
+// this is the one place worth not copying it. The yellow is the exception and it is amber on
+// purpose. A pure yellow costs chroma twice: the sRGB ceiling at L*80 falls from C83 at hue* 82
+// to C77 at 98, and the eye reads a low-chroma yellow as dirty rather than as pale. So the M
+// keeps a hue near Gruvbox's and takes the saturation instead. Same for the green: at hue 132 it
+// sits 47 degrees from the yellow where Gruvbox's lime sits 22 from its own, which at 12px is the
+// difference between a +25 and an M being two colours or two shades, and green's gamut is wide
+// enough to hold full chroma there.
 //
 // The seven accents are meant to read as one family, which means no member sitting at a weight the
 // others do not. The warm four run C74-88 and the cool three C35-42, a deliberate split so the cool
-// side recedes on a warm ground; what is not deliberate is one warm colour dropping out of its own
-// group. Orange sat at C62 between red at 88 and yellow at 77, nineteen degrees from the yellow,
-// which is the tightest gap on the wheel: a quiet colour squeezed between two loud ones in nearly
-// the same hue does not read as its own colour, it reads as a tired version of its neighbour.
+// side recedes on a warm ground; what must not happen is one warm colour dropping out of its own
+// group. Orange is held level with the red and yellow either side of it because it sits nineteen
+// degrees from the yellow, the tightest gap on the wheel: a quiet colour squeezed between two loud
+// ones in nearly the same hue does not read as its own colour, it reads as a tired version of its
+// neighbour.
 //
-// The berry is lifted to L*62 rather than sitting at its chroma peak. It is not only a 2px bar any
-// more: it also paints the matched characters in every picker, and at 12px a colour at L*56 and
-// 3.6:1 is a squint. Five points of chroma buys nine points of contrast here, which is the right
-// side of that trade for something you read rather than glance at.
+// The berry is lifted to L*62 rather than sitting at its chroma peak. It paints the matched
+// characters in every picker as well as the 2px bar, and at 12px a colour at L*56 and 3.6:1 is a
+// squint. Five points of chroma buys nine points of contrast here, which is the right side of
+// that trade for something you read rather than glance at.
 //
 // The berry is held between hue* 34 and 40 rather than taken to the gamut edge. The edge in this
 // band sits at hue* 45, which is only twenty degrees off the dry-grass orange at hue* 66, so the
@@ -108,16 +108,6 @@ import type { Theme, ThemeColorKey, ThemePrefs, ThemeSyntaxToken } from "./model
 // saturated thing here by a distance, C83 against the accent's C38; it is still the plant's
 // colour, it just is not the cursor. Accents are at editor weight, not document weight,
 // because an `M` in the changes list has to carry at 12px.
-//
-// The three text tiers are spaced on Gruvbox's spacing, not on legibility scores. A secondary tier
-// only a few L* below the primary one reads as more bright area rather than as a second rank, and
-// the eye has to sort what matters instead of being told. Gruvbox drops 24 L* from body to label
-// and 8 more to hint; ours had dropped 16 then 15, so file paths were competing with prose. The
-// dim tier is also near-neutral on purpose: chroma at low luminance does not feed the channel
-// that carries acuity, so a colored hint is harder to read than a gray one at the same weight.
-// Both tiers stay on the ground's side of the yellow axis, red over green, for the same reason the
-// ground is brown and not olive: at h60 red and green are equal, which against a brown ground
-// reads as green text however neutral the numbers say it is.
 export const toyonDark: Theme = {
   id: "toyon-dark",
   family: "Toyon",

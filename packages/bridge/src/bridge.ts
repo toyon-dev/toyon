@@ -50,9 +50,7 @@ window.addEventListener("unhandledrejection", (e) => {
   post({ type: "page-error", message: `unhandled rejection: ${String(e.reason)}` });
 });
 
-// SPA navigation reporting: pushState/replaceState (history routers), popstate
-// (back/forward) and hashchange (hash routers, in case the browser doesn't also
-// fire popstate for fragment navigations)
+// hashchange as well as popstate: a hash router can navigate without the browser firing a popstate
 const navigated = () => post({ type: "navigated", url: location.href });
 const origPush = history.pushState.bind(history);
 history.pushState = (...args) => {
@@ -153,15 +151,12 @@ function sourceOf(fiber: Fiber | null): Source | null {
   return null;
 }
 
-/** What a picked element can say about itself: the JSX it was rendered from, the component that
- * rendered it, and where that component is written.
- *
- * The last one is the point. Clicking a control in an app with a design system finds the shared
- * component first (`<button>` lives in ui/Button.tsx), which is rarely the file being edited: the
- * interesting line is the `<Button>` in the surface, and that is the component fiber's own JSX one
- * frame up. Reading the name and the call site off the *same* fiber is what keeps them talking
- * about the same thing: children handed to a shared component are written in the outer file, so a
- * rule that just took the next file up would answer `<Button>` with a line inside Button.tsx. */
+/** Clicking a control in an app with a design system finds the shared component first (`<button>`
+ * lives in ui/Button.tsx), which is rarely the file being edited: the interesting line is the
+ * `<Button>` in the surface, and that is the component fiber's own JSX one frame up. Reading the
+ * name and the call site off the *same* fiber is what keeps them talking about the same thing:
+ * children handed to a shared component are written in the outer file, so a rule that just took
+ * the next file up would answer `<Button>` with a line inside Button.tsx. */
 function pickedAt(fiber: Fiber | null): { src: Source | null; comp: string | null; call: Source | null } {
   let src: Source | null = null;
   let comp: string | null = null;
@@ -201,11 +196,11 @@ function clearOverlay() {
   if (overlay) overlay.innerHTML = "";
 }
 
+const CHIP_H = 20;
+
 /** The fill is what separates the two things a box can mean. An outline alone is the picker's
  * default, where a click attaches the element to the chat. A filled box means source: the picker
  * with the modifier held, and the change-hover highlight arriving from the other direction. */
-const CHIP_H = 20;
-
 function drawBox(rect: DOMRect, label?: HTMLElement, fill = true) {
   const box = document.createElement("div");
   box.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;outline:2px solid ${accent};outline-offset:-1px;${fill ? `background:${accent}14;` : ""}border-radius:2px;`;
@@ -222,8 +217,6 @@ function drawBox(rect: DOMRect, label?: HTMLElement, fill = true) {
   ensureOverlay().appendChild(box);
 }
 
-/** the chip above the box, built rather than templated: the hint is a second run at its own
- * weight, and anything richer than one string is where a pinned chip would start */
 function chip(text: string, hint?: string): HTMLElement {
   const el = document.createElement("div");
   el.textContent = text;
@@ -241,8 +234,7 @@ function chip(text: string, hint?: string): HTMLElement {
 
 let picking = false;
 // what the overlay is drawing, which is also what a click acts on: the box you saw is the thing
-// you get. Pinning a pick (to read it rather than to click it) is then a matter of not calling
-// paintPick from the move handler, rather than a rewrite of either.
+// you get
 let shownEl: Element | null = null;
 // the modifiers swap where a click sends the element: the chat by default, a source file while alt
 // is held, and shift picks which of the two sources that is. Read off the mouse rather than the
@@ -483,10 +475,10 @@ window.addEventListener("message", (e) => {
     case "highlight-computed": {
       clearOverlay();
       // An inherited property is on every element whether or not it puts anything on screen: the
-      // root font matched a wrapper div as readily as the label inside it, and the first version of
-      // this boxed the entire page. Inherited only counts where text is actually painted, which is
-      // an element with a text node of its own rather than a descendant with one. Background and
-      // border do not inherit, so they count wherever they land.
+      // root font matches a wrapper div as readily as the label inside it. Inherited only counts
+      // where text is actually painted, which is an element with a text node of its own rather
+      // than a descendant with one. Background and border do not inherit, so they count wherever
+      // they land.
       const inherits = /^(color|font|line-height|letter-|text-|word-)/;
       const paints = (el: Element) => {
         // a form control draws its value and its placeholder with no child node to find, so the

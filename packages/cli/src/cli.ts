@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // `toyon [path]`: ensure the daemon is running, register the repo, open the shell. The verbs
 // (stop, doctor, logs, version) are the operator surface a stranger needs to make it go away
-// again. Runs under bun from the source tree today; the npm shim replaces this shebang.
+// again. Runs under bun from the source tree; the npm shim replaces this shebang.
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";

@@ -1,10 +1,7 @@
 // The shape of a picked element's identity, which both protocols need.
 //
-// Its own module because the two that want it sit on opposite sides of the app: ws.ts bounds it
-// on the chat frames that carry a pick, and bridge.ts extends it into what the preview posts
-// back. Either importing the other drags a wall of schemas across that line, and the shell pays
-// for it: parseBridgeMsg is a value import, so bridge.ts reaching into ws.ts put every
-// client-message schema in the browser bundle for a validator that wanted five fields.
+// Its own module so bridge.ts, whose parseBridgeMsg is a value import in the browser bundle, never
+// reaches into ws.ts and pulls every client-message schema in with it.
 
 import { z } from "zod";
 

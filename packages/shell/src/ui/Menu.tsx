@@ -209,7 +209,8 @@ function MenuRow({
         <span className="menu-label">{item.label}</span>
         {detail !== undefined && <span className="menu-detail row-dim">{detail}</span>}
       </span>
-      {item.key && <Kbd k={item.key} className="menu-key" />}
+      {/* the chord is a passenger on the row, not the verb: a tier down, lifting with the seat */}
+      {item.key && <Kbd k={item.key} className="menu-key row-dim" />}
     </button>
   );
 }

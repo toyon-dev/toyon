@@ -12,12 +12,11 @@ export type TabItem<Id extends string> = {
   label: ReactNode;
   /** before the label: the proc's status dot */
   lead?: ReactNode;
-  /** after the label, hidden until the tab is hovered or focused: the stream's restart. A sibling
-   * of the tab's own button floated over its end rather than a child, since a button cannot hold
-   * one, and the tab's button stays the whole tab. */
+  /** after the label, on the open tab only: the stream's restart. The tab grows to hold it when
+   * it opens, which is the honest shape: the control exists for the stream you are looking at. A
+   * sibling of the tab's own button floated over its end rather than a child, since a button
+   * cannot hold one, and the tab's button stays the whole tab. */
   trail?: ReactNode;
-  /** the trail stays visible: the stream has exited and its restart is the one thing to do */
-  alert?: boolean;
   tip?: ReturnType<typeof tip>;
   /** what a right-click on the tab offers */
   menu?: () => MenuEntry[];
@@ -73,7 +72,7 @@ export function Tabs<Id extends string>({ items, current, onPick, fill, font, en
           return (
             <div
               key={it.id}
-              className={cx("tab", it.alert && "tab-alert")}
+              className={cx("tab", open && !!it.trail && "tab-trailed")}
               data-state={rowState({ current: open })}
               {...(it.menu ? cm.contextMenu(it.menu) : {})}
             >
@@ -89,7 +88,7 @@ export function Tabs<Id extends string>({ items, current, onPick, fill, font, en
                 {it.lead}
                 {it.label}
               </button>
-              {it.trail && <span className="tab-trail">{it.trail}</span>}
+              {open && it.trail && <span className="tab-trail">{it.trail}</span>}
             </div>
           );
         })}

@@ -203,6 +203,29 @@ export function LeftDock({ width }: { width: number }) {
       e.preventDefault();
       if (hist) enterHist(sel);
       else select(sel);
+    } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      // ←/→ are both the tab strip's keys and a tree's, and with two tabs they can be both: the
+      // tree answers while it has something to say (expand, collapse, step to the parent) and the
+      // strip when it does not, so → from the changes list opens the history and ← on a closed
+      // commit walks back out. The history is only ever a tree one commit deep.
+      e.preventDefault();
+      const right = e.key === "ArrowRight";
+      if (!hist) {
+        if (right) setTab("history");
+        return;
+      }
+      const r = histRows[sel];
+      if (right) {
+        if (!r || r.file) return;
+        if (r.commit.sha !== openSha) toggleCommit(r.commit.sha);
+        else if (histRows[sel + 1]?.file) moveHist(sel + 1);
+      } else if (r?.file) {
+        setSel(histRows.findIndex((x) => !x.file && x.commit.sha === r.commit.sha));
+      } else if (r && r.commit.sha === openSha) {
+        toggleCommit(r.commit.sha);
+      } else {
+        setTab("changes");
+      }
     } else if (e.key === "Escape") {
       // the app-wide Escape closes the diff pane, which is the thing this list just opened: here it
       // only hands the keyboard back to the preview

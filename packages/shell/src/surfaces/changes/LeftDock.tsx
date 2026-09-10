@@ -312,6 +312,14 @@ export function LeftDock({ width }: { width: number }) {
         ref={listRef}
         onKeyDown={onKeyDown}
         onFocus={() => setFocused(true)}
+        // a click lands the keyboard on the list, never on the row it hit: a row is a button, and a
+        // focused button that a later key unmounts (closing its commit, walking ← out to the other
+        // tab) takes the focus down with it, and the panel is deaf until it is clicked again
+        onMouseDown={(e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          listRef.current?.focus();
+        }}
         // clicking one row and then another passes through here; only focus actually leaving the
         // list should put the selection band away
         onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocused(false)}

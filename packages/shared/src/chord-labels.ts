@@ -21,6 +21,9 @@ export interface ChordLabel {
    * the primary never reaches the page there, in an installed Chromium PWA because that is the one
    * place the browser gives the alias up */
   advertise?: { key: string; when: keyof ChordEnv };
+  /** worded but not listed: a chord for the hand that already knows the one beside it, kept off
+   * the card so the card stays the short list */
+  hidden?: true;
 }
 
 export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
@@ -40,6 +43,8 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   worktree: { label: "switch worktree", section: "Worktrees" },
   "wt-prev": { label: "previous worktree", section: "Worktrees" },
   "wt-next": { label: "next worktree", section: "Worktrees" },
+  "wt-unseen-prev": { label: "previous unseen worktree", section: "Worktrees", hidden: true },
+  "wt-unseen-next": { label: "next unseen worktree", section: "Worktrees", hidden: true },
   project: { label: "open project", section: "Worktrees" },
   refs: { label: "open a branch or PR", section: "Worktrees" },
 };
@@ -57,7 +62,9 @@ export function chordLabel(id: ChordId, env: ChordEnv = {}): string {
   return `${c.alt ? "⌥" : c.ctrl ? "⌃" : "⌘"}${c.shift ? "⇧" : ""}${text}`;
 }
 
-/** the shortcuts card's rows, in section order */
+/** the shortcuts card's rows, in section order; a hidden chord keeps its wording and stays off */
 export function chordsInSection(section: ChordSection): ChordId[] {
-  return (Object.keys(CHORD_LABELS) as ChordId[]).filter((id) => CHORD_LABELS[id].section === section);
+  return (Object.keys(CHORD_LABELS) as ChordId[]).filter(
+    (id) => CHORD_LABELS[id].section === section && !CHORD_LABELS[id].hidden,
+  );
 }

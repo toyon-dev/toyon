@@ -79,6 +79,8 @@ const NEVER_LIFTS = [
   ".tool-row .dl.meta",
   ".tool-row .dl.more",
   ".bar-zen-title",
+  /* a count beside a tab's label: a tab is painted in its parent's ground and never lifts a seat */
+  ".tab-count",
 ];
 
 const ALLOWED = new Set([".row-dim", ...ROW_AT_REST, ...LIFTS_ELSEWHERE, ...NOT_A_TIER, ...NEVER_LIFTS]);

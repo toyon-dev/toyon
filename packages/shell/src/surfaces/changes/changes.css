@@ -10,6 +10,9 @@
      painted in this ground so it joins the list under it, and the strip is the recess under it */
     --tabs-ground: var(--surface1);
     --tabs-strip: var(--sunken);
+    /* the strip heads the whole panel under the bar, so it takes the full row rather than the
+     pane head's dense one */
+    --tabs-height: var(--row-height);
     border-right: 1px solid var(--border0);
     display: flex;
     flex-direction: column;

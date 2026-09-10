@@ -15,12 +15,11 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
-import { AgentChip } from "../chips/AgentChip.tsx";
 import { baseNote, behindNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { ModelChip, useNewWorktreeModel } from "../chips/ModelChip.tsx";
-import { ProfileChip, useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
+import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
 import { TargetChip } from "../chips/TargetChip.tsx";
 import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
@@ -114,7 +113,6 @@ export function Composer({
   const setText = (t: string) => boxId && dispatch({ a: "set-draft", id: boxId, text: t });
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
-  const agents = useStore((s) => s.agents);
   const defaultAgent = useStore((s) => s.defaultAgent);
   const onMain = !!active && isMain(active.worktree);
 
@@ -126,10 +124,9 @@ export function Composer({
   const [spawnNew, setSpawnNew] = useState(spawnDefault);
   useOnChange([id], () => setSpawnNew(spawnDefault()));
   const spawning = drafting || (spawnNew && !greenfield);
-  // the agent a new worktree runs: chosen when it starts from main, inherited from the base
-  // otherwise (a stacked worktree continues with its parent's agent)
-  const [chosenAgent, setChosenAgent] = useState(defaultAgent);
-  const spawnAgent = onMain ? chosenAgent : (active?.worktree.agent ?? chosenAgent);
+  // the agent a new worktree runs: the draft's choice, or the daemon's default on main's own fast
+  // path; inherited from the base otherwise (a stacked worktree continues with its parent's agent)
+  const spawnAgent = onMain ? (draft?.agent ?? defaultAgent) : (active?.worktree.agent ?? defaultAgent);
   // the chips list what the agent in question advertised: the new worktree's, or this one's
   const agentInfo = useStore((s) => s.agents.find((a) => a.id === (spawning ? spawnAgent : active?.worktree.agent)));
   const agentModels = agentInfo?.models ?? NO_CHOICES;
@@ -138,7 +135,9 @@ export function Composer({
   const [newEffort, setNewEffort] = useNewWorktreeEffort(spawnAgent);
   const currentModel = useLocalField(id, "model");
   const currentEffort = useLocalField(id, "effort");
-  const [profile, setProfile] = useNewWorktreeProfile(repo);
+  // the draft's row above the box holds the profile; main's fast path takes the remembered one
+  const [remembered] = useNewWorktreeProfile(repo);
+  const profile = draft?.profile ?? remembered;
   const [newMode, setNewMode] = useNewWorktreeMode(repo);
   const activeMode = active?.worktree.mode ?? DEFAULT_PERMISSION_MODE;
   const picking = useStore((s) => s.picking);
@@ -536,10 +535,6 @@ export function Composer({
               onClose={refocus}
             />
           )}
-          {spawning && onMain && agents.length > 1 && (
-            <AgentChip agents={agents} value={chosenAgent} onChange={setChosenAgent} onClose={refocus} />
-          )}
-          {spawning && <ProfileChip repo={repo} value={profile} onChange={setProfile} onClose={refocus} />}
           {spawning ? (
             <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
           ) : (

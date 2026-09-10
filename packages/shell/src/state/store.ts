@@ -156,6 +156,11 @@ export interface Draft {
   variants: 1 | 2 | 3;
   /** an agent splits the prompt into a worktree per task instead */
   batch: boolean;
+  /** the agent that works on it: the daemon's default when the tab opens; a draft from a task
+   * inherits that task's agent whatever this says */
+  agent: string;
+  /** one of the repo's profiles; the repo's default when absent */
+  profile?: string;
 }
 
 /** the `local` record a repo's draft is written under; never a row id, and never pruned by one */
@@ -573,6 +578,8 @@ export type Action =
   | { a: "close-draft" }
   | { a: "draft-variants"; n: Draft["variants"] }
   | { a: "draft-batch"; v: boolean }
+  | { a: "draft-agent"; id: string }
+  | { a: "draft-profile"; profile: string }
   /** switch the shell to another registered repo */
   | { a: "activate-repo"; id: string }
   /** remove-worktree frames went out for these: hide the rows now, move the selection off them */
@@ -687,7 +694,7 @@ function reduce(s: State, action: Action): State {
       // chord was pressed over would sit in front of it
       return {
         ...activate(s, base),
-        draft: { base, variants: 1, batch: false },
+        draft: { base, variants: 1, batch: false, agent: s.defaultAgent },
         rightOpen: true,
         overlay: null,
         paletteReturn: null,
@@ -699,6 +706,10 @@ function reduce(s: State, action: Action): State {
       return s.draft ? { ...s, draft: { ...s.draft, variants: action.n } } : s;
     case "draft-batch":
       return s.draft ? { ...s, draft: { ...s.draft, batch: action.v } } : s;
+    case "draft-agent":
+      return s.draft ? { ...s, draft: { ...s.draft, agent: action.id } } : s;
+    case "draft-profile":
+      return s.draft ? { ...s, draft: { ...s.draft, profile: action.profile } } : s;
     case "remove-worktrees": {
       const ids = action.ids.filter((id) => !s.removing.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;

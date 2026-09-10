@@ -377,7 +377,7 @@ describe("the draft tab", () => {
 
   test("opens on the project's main, toggles on the same base, and moves to a named one", () => {
     const s = run([{ a: "activate", id: "a" }, { a: "open-draft" }], found(wt("main", "main"), wt("a")));
-    expect(s.draft).toEqual({ base: "main", variants: 1, batch: false });
+    expect(s.draft).toEqual({ base: "main", variants: 1, batch: false, agent: "claude" });
     expect(s.activeId).toBe("main");
     expect(s.rightOpen).toBe(true);
     expect(reducer(s, { a: "open-draft" }).draft).toBeNull();
@@ -411,6 +411,8 @@ describe("the draft tab", () => {
         [
           { a: "draft-variants", n: 3 },
           { a: "draft-batch", v: true },
+          { a: "draft-agent", id: "codex" },
+          { a: "draft-profile", profile: "web" },
         ],
         s,
       ).draft,
@@ -418,6 +420,8 @@ describe("the draft tab", () => {
       base: "main",
       variants: 3,
       batch: true,
+      agent: "codex",
+      profile: "web",
     });
   });
 

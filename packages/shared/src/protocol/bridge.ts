@@ -25,9 +25,10 @@ export type ShellToBridgeMsg =
   | { type: "forward" }
   | { type: "pick-start" }
   | { type: "pick-cancel" }
-  /** the modifier that swaps the picker's click verb. Forwarded because the chord that arms the
-   * picker leaves focus in the shell, where a keydown never reaches the frame at all. */
-  | { type: "pick-alt"; on: boolean }
+  /** the modifiers that steer the picker's click: alt swaps the verb from chat to source, shift
+   * swaps which source. Forwarded because the chord that arms the picker leaves focus in the
+   * shell, where a keydown never reaches the frame at all. */
+  | { type: "pick-mods"; alt: boolean; shift: boolean }
   /** ranges: changed line spans (post-offset numbering); null/absent = whole file */
   | { type: "highlight-file"; path: string; ranges?: Array<[number, number]> | null }
   | { type: "highlight-selector"; selector: string; label?: string }
@@ -65,11 +66,13 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
     source: z.string().optional(),
     line: z.number().optional(),
   }),
-  /** `verb` is where the click sends it: the chat, or the source it was rendered from. Defaulted
-   * rather than required, so a page still holding a bridge from before this field keeps working. */
+  /** `verb` is where the click sends it: the chat, or a source file. `site` is which source, and
+   * the bridge has already resolved the fallback: it names one the message actually carries.
+   * Defaulted rather than required, so a page still holding an older bridge keeps working. */
   pickedElementSchema.extend({
     type: z.literal("picked"),
     verb: z.enum(["chat", "code"]).default("chat"),
+    site: z.enum(["call", "source"]).default("source"),
   }),
   z.object({ type: z.literal("pick-cancel") }),
   z.object({
@@ -103,5 +106,13 @@ export function parseBridgeMsg(raw: unknown): BridgeToShellMsg | null {
 
 /** the chat-message subset of a picked element */
 export function pickMetaOf(p: PickedElement): PickMeta {
-  return { component: p.component, file: p.file, line: p.line, tag: p.tag, selector: p.selector };
+  return {
+    component: p.component,
+    file: p.file,
+    line: p.line,
+    callFile: p.callFile,
+    callLine: p.callLine,
+    tag: p.tag,
+    selector: p.selector,
+  };
 }

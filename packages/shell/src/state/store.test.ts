@@ -384,6 +384,8 @@ describe("overlays", () => {
           component: null,
           file: null,
           line: null,
+          callFile: null,
+          callLine: null,
           tag: "div",
           classes: "",
           text: "",

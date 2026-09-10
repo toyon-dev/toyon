@@ -141,7 +141,15 @@ describe("handlers", () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    const pick = { component: "App", file: "src/App.tsx", line: 3, tag: "div", selector: "div" };
+    const pick = {
+      component: "App",
+      file: "src/App.tsx",
+      line: 3,
+      callFile: "src/main.tsx",
+      callLine: 9,
+      tag: "div",
+      selector: "div",
+    };
     await dispatch({ t: "chat", worktreeId: main.id, text: "hi", context: "ctx", pick }, ctx, services);
     expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: "ctx", pick, images: undefined }]);
   });

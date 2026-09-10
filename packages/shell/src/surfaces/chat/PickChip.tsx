@@ -23,7 +23,22 @@ export function PickChip({
   onRemove?: () => void;
   className?: string;
 }) {
-  const file = pick.file ? relFile(pick.file, worktreePath) : null;
+  // the call site leads, because it is the file the pick is usually about: picking a control finds
+  // the shared component it is made of, and the line worth reading is the one that writes it. The
+  // component's own JSX keeps a link of its own, named by basename so two paths still fit the row.
+  const call = pick.callFile ? relFile(pick.callFile, worktreePath) : null;
+  const src = pick.file ? relFile(pick.file, worktreePath) : null;
+  const lead = call ? { path: call, line: pick.callLine } : src ? { path: src, line: pick.line } : null;
+  const behind = call && src ? { path: src, line: pick.line } : null;
+  const shown = (path: string, line: number | null) => `${path}${line ? `:${line}` : ""}`;
+  const open = (path: string, line: number | null, label: string, tip: string) =>
+    onOpen ? (
+      <button className="pick-open" data-tip={tip} onClick={() => onOpen(path, line ?? 1)}>
+        {label}
+      </button>
+    ) : (
+      label
+    );
   return (
     <div
       className={`pick-chip ${className}`}
@@ -33,17 +48,21 @@ export function PickChip({
     >
       <span className="pick-target">
         <Icon name="pick" className="icon-inline" /> {pickLabel(pick)}
-        {file && (
+        {lead && (
+          <span className="pick-file">
+            {" "}
+            · {open(lead.path, lead.line, shown(lead.path, lead.line), `Open ${shown(lead.path, lead.line)}`)}
+          </span>
+        )}
+        {behind && (
           <span className="pick-file">
             {" "}
             ·{" "}
-            {onOpen ? (
-              <button className="pick-open" data-tip="Open the source" onClick={() => onOpen(file, pick.line ?? 1)}>
-                {file}
-                {pick.line ? `:${pick.line}` : ""}
-              </button>
-            ) : (
-              `${file}${pick.line ? `:${pick.line}` : ""}`
+            {open(
+              behind.path,
+              behind.line,
+              shown(behind.path.split("/").pop() ?? behind.path, behind.line),
+              `Open the component: ${shown(behind.path, behind.line)}`,
             )}
           </span>
         )}

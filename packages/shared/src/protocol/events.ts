@@ -22,8 +22,14 @@ export type ToolKind =
 /** display metadata for a picked element attached to a message */
 export interface PickMeta {
   component: string | null;
+  /** the JSX the element itself was rendered from */
   file: string | null;
   line: number | null;
+  /** where the component holding it is written: for a `<button>` from a shared `<Button>`, `file`
+   * is ui/Button.tsx and this the surface that writes `<Button>`. Null when the element's own JSX
+   * is already in the file that renders it. */
+  callFile: string | null;
+  callLine: number | null;
   tag: string;
   selector: string;
 }

@@ -131,31 +131,59 @@ function fiberOf(el: Element): Fiber | null {
   return null;
 }
 
-function sourceOf(fiber: Fiber | null): { file: string; line?: number } | null {
-  let f = fiber;
-  while (f) {
-    if (f._debugSource?.fileName) {
-      return { file: f._debugSource.fileName, line: f._debugSource.lineNumber };
-    }
-    // React 19 dropped _debugSource; _debugStack frames carry served-module URLs
-    const stack = (f._debugStack as Error | undefined)?.stack;
-    if (stack) {
-      const m = stack.match(/https?:\/\/[^/]+(\/src\/[^)\s?]+)(?:\?[^:)\s]*)?:(\d+):\d+/);
-      if (m?.[1]) return { file: m[1], line: Number(m[2]) || undefined };
-    }
-    f = f.return;
+type Source = { file: string; line?: number };
+
+/** where this one fiber's JSX was written */
+function sourceAt(f: Fiber): Source | null {
+  if (f._debugSource?.fileName) return { file: f._debugSource.fileName, line: f._debugSource.lineNumber };
+  // React 19 dropped _debugSource; _debugStack frames carry served-module URLs
+  const stack = (f._debugStack as Error | undefined)?.stack;
+  if (stack) {
+    const m = stack.match(/https?:\/\/[^/]+(\/src\/[^)\s?]+)(?:\?[^:)\s]*)?:(\d+):\d+/);
+    if (m?.[1]) return { file: m[1], line: Number(m[2]) || undefined };
   }
   return null;
 }
 
-function componentOf(fiber: Fiber | null): string | null {
-  let f = fiber;
-  while (f) {
-    const t = f.type as { name?: string } | string | null;
-    if (typeof t === "function" && (t as { name?: string }).name) return (t as { name: string }).name;
-    f = f.return;
+function sourceOf(fiber: Fiber | null): Source | null {
+  for (let f = fiber; f; f = f.return) {
+    const s = sourceAt(f);
+    if (s) return s;
   }
   return null;
+}
+
+/** What a picked element can say about itself: the JSX it was rendered from, the component that
+ * rendered it, and where that component is written.
+ *
+ * The last one is the point. Clicking a control in an app with a design system finds the shared
+ * component first (`<button>` lives in ui/Button.tsx), which is rarely the file being edited: the
+ * interesting line is the `<Button>` in the surface, and that is the component fiber's own JSX one
+ * frame up. Reading the name and the call site off the *same* fiber is what keeps them talking
+ * about the same thing: children handed to a shared component are written in the outer file, so a
+ * rule that just took the next file up would answer `<Button>` with a line inside Button.tsx. */
+function pickedAt(fiber: Fiber | null): { src: Source | null; comp: string | null; call: Source | null } {
+  let src: Source | null = null;
+  let comp: string | null = null;
+  let call: Source | null = null;
+  for (let f = fiber; f; f = f.return) {
+    const s = sourceAt(f);
+    if (s && !src) src = s;
+    const t = f.type as { name?: string } | string | null;
+    const named = typeof t === "function" ? t.name || null : null;
+    if (!comp && named) {
+      comp = named;
+      call = s;
+      // a component boundary with no source of its own: the next one above is still its call site
+      if (call) break;
+    } else if (comp && s) {
+      call = s;
+      break;
+    }
+  }
+  // one source, named once: a plain element written where it renders has nowhere else to send you
+  if (call && src && call.file === src.file && call.line === src.line) call = null;
+  return { src, comp, call };
 }
 
 // ---- overlay (picker highlight + file highlight) ----
@@ -205,32 +233,48 @@ let picking = false;
 // you get. Pinning a pick (to read it rather than to click it) is then a matter of not calling
 // paintPick from the move handler, rather than a rewrite of either.
 let shownEl: Element | null = null;
-// the modifier swaps where a click sends the element: the chat by default, its source while held.
-// Read off the mouse rather than the keyboard, because the chord that armed the picker may have
-// left focus in the shell, where a keydown in here never arrives. Every mousemove carries it.
+// the modifiers swap where a click sends the element: the chat by default, a source file while alt
+// is held, and shift picks which of the two sources that is. Read off the mouse rather than the
+// keyboard, because the chord that armed the picker may have left focus in the shell, where a
+// keydown in here never arrives. Every mousemove carries both.
 let alt = false;
+let shift = false;
+
+/** which file alt-clicking right now would open. The call site is the default because it is the
+ * line you edit; shift asks for the JSX itself. Either falls back to the other, so a chain with
+ * one source to give still honours the click. */
+function pickTarget(src: Source | null, call: Source | null): Source | null {
+  return (shift ? (src ?? call) : (call ?? src)) ?? null;
+}
+
+const at = (s: Source) => `${shortFile(s.file)}${s.line ? `:${s.line}` : ""}`;
 
 function paintPick(el: Element) {
   shownEl = el;
   clearOverlay();
   const fiber = fiberOf(el);
-  const comp = componentOf(fiber);
-  const src = sourceOf(fiber);
-  const where = src ? `${shortFile(src.file)}${src.line ? `:${src.line}` : ""}` : "";
+  const { src, comp, call } = pickedAt(fiber);
+  const target = pickTarget(src, call);
+  // the other source is offered under shift, in both directions: it is the same key back
+  const other = target === src ? call : src;
   // the hint is drawn only when there is a file to open, so it never advertises a dead end: an
   // element with no fiber source offers the one verb it can honour and says nothing about the other
   const label =
-    alt && src
-      ? chip(`open ${where}`)
-      : chip(comp ? `<${comp}>${where ? ` · ${where}` : ""}` : el.tagName.toLowerCase(), src ? "⌥ code" : undefined);
-  drawBox(el.getBoundingClientRect(), label, alt && !!src);
+    alt && target
+      ? chip(`open ${at(target)}`, other ? `⇧ ${at(other)}` : undefined)
+      : chip(
+          comp ? `<${comp}>${target ? ` · ${at(target)}` : ""}` : el.tagName.toLowerCase(),
+          target ? "⌥ code" : undefined,
+        );
+  drawBox(el.getBoundingClientRect(), label, alt && !!target);
 }
 
 function onPickMove(e: MouseEvent) {
   const el = document.elementFromPoint(e.clientX, e.clientY);
   if (!el) return;
-  const changed = el !== shownEl || e.altKey !== alt;
+  const changed = el !== shownEl || e.altKey !== alt || e.shiftKey !== shift;
   alt = e.altKey;
+  shift = e.shiftKey;
   if (changed) paintPick(el);
 }
 
@@ -239,18 +283,25 @@ function onPickClick(e: MouseEvent) {
   e.stopPropagation();
   const el = shownEl ?? document.elementFromPoint(e.clientX, e.clientY);
   const fiber = el ? fiberOf(el) : null;
-  const src = sourceOf(fiber);
+  const { src, comp, call } = pickedAt(fiber);
+  shift = e.shiftKey;
+  const target = pickTarget(src, call);
   // opening the source is browsing, so it leaves the picker armed and the next element is one
   // click away; attaching to the chat is a commit, and ends the mode
-  const code = e.altKey && !!src;
+  const code = e.altKey && !!target;
   if (!code) stopPicking();
   if (!el) return;
   post({
     type: "picked",
     verb: code ? "code" : "chat",
-    component: componentOf(fiber),
+    // resolved here rather than in the shell: the fallback is the picker's rule, and the shell
+    // should be able to trust that the site it is told about is one the message carries
+    site: target && target === call ? "call" : "source",
+    component: comp,
     file: src?.file ?? null,
     line: src?.line ?? null,
+    callFile: call?.file ?? null,
+    callLine: call?.line ?? null,
     selector: cssPath(el),
     tag: el.tagName.toLowerCase(),
     classes: (el as HTMLElement).className?.toString?.().slice(0, 200) ?? "",
@@ -269,8 +320,9 @@ function onPickKey(e: KeyboardEvent) {
     return;
   }
   // the pointer is often still, resting on the element being decided about
-  if (e.key === "Alt" && alt !== (e.type === "keydown")) {
-    alt = e.type === "keydown";
+  if ((e.key === "Alt" || e.key === "Shift") && (alt !== e.altKey || shift !== e.shiftKey)) {
+    alt = e.altKey;
+    shift = e.shiftKey;
     if (shownEl) paintPick(shownEl);
   }
 }
@@ -280,6 +332,7 @@ function startPicking() {
   picking = true;
   shownEl = null;
   alt = false;
+  shift = false;
   document.addEventListener("mousemove", onPickMove, true);
   document.addEventListener("click", onPickClick, true);
   document.addEventListener("keydown", onPickKey, true);
@@ -291,6 +344,7 @@ function stopPicking() {
   picking = false;
   shownEl = null;
   alt = false;
+  shift = false;
   clearOverlay();
   document.removeEventListener("mousemove", onPickMove, true);
   document.removeEventListener("click", onPickClick, true);
@@ -402,9 +456,10 @@ window.addEventListener("message", (e) => {
     case "pick-start":
       startPicking();
       break;
-    case "pick-alt":
-      if (picking && alt !== d.on) {
-        alt = d.on;
+    case "pick-mods":
+      if (picking && (alt !== d.alt || shift !== d.shift)) {
+        alt = d.alt;
+        shift = d.shift;
         if (shownEl) paintPick(shownEl);
       }
       break;

@@ -181,9 +181,14 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
     if (pc.title) parts.push(`page title: ${pc.title}`);
     if (pc.errors.length) parts.push(`recent console errors:\n${pc.errors.map((e) => `- ${e}`).join("\n")}`);
     if (pick) {
-      const where = pick.file
-        ? ` defined at ${relFile(pick.file, active.worktree.path)}${pick.line ? `:${pick.line}` : ""}`
-        : "";
+      const at = (f: string, l: number | null) => `${relFile(f, active.worktree.path)}${l ? `:${l}` : ""}`;
+      // both files, and which is which: the JSX alone sends the agent into the shared component
+      // when the line to change is the one that writes it
+      const where = pick.callFile
+        ? ` used at ${at(pick.callFile, pick.callLine)}${pick.file ? `, its own JSX at ${at(pick.file, pick.line)}` : ""}`
+        : pick.file
+          ? ` defined at ${at(pick.file, pick.line)}`
+          : "";
       parts.push(
         `user-selected element (via the element picker): ${pick.component ? `<${pick.component}> component` : `<${pick.tag}>`}${where}${pick.text ? `, text "${pick.text}"` : ""}\nits HTML: ${pick.html}`,
       );

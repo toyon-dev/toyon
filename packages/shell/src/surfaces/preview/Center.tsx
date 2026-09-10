@@ -114,12 +114,15 @@ export function Center() {
             break;
           }
           case "picked": {
-            const { type: _t, verb, ...pick } = d;
+            const { type: _t, verb, site, ...pick } = d;
+            // which of the two files the click asked for; the bridge already resolved the fallback
+            const from =
+              site === "call" ? { file: pick.callFile, line: pick.callLine } : { file: pick.file, line: pick.line };
             // the source verb is navigation and nothing else: no chip, no chat, and the picker is
             // still armed in the frame, so the next element is one click away
-            if (verb === "code" && pick.file) {
+            if (verb === "code" && from.file) {
               const wt = worktreeById(store.getState(), id)?.worktree;
-              openSource(store, sock, id, relFile(pick.file, wt && wtDir(wt)), pick.line ?? 1);
+              openSource(store, sock, id, relFile(from.file, wt && wtDir(wt)), from.line ?? 1);
             } else dispatch({ a: "picked", pick: { worktreeId: id, ...pick } });
             break;
           }

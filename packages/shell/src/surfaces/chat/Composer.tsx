@@ -16,6 +16,8 @@ import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
+import { Ring } from "../../ui/Ring.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
 import { baseNote, behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
@@ -34,6 +36,7 @@ import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { shellCommandOf, shellContext, shellHistory } from "./shellMode.ts";
+import { dollars, tokens } from "./usage.ts";
 import { useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
@@ -136,6 +139,8 @@ export function Composer({
   const [newEffort, setNewEffort] = useNewWorktreeEffort(spawnAgent);
   const currentModel = useLocalField(id, "model");
   const currentEffort = useLocalField(id, "effort");
+  // how full this agent's context is: the stream's last word, else the row's (a cold worktree)
+  const usage = useLocalField(id, "usage") ?? active?.usage;
   // the draft's row above the box holds the profile; main's fast path takes the remembered one
   const [remembered] = useNewWorktreeProfile(repo);
   const profile = draft?.profile ?? remembered;
@@ -600,6 +605,16 @@ export function Composer({
           )}
         </span>
         <span className="spawn-tools">
+          {usage && !spawning && (
+            <span
+              className="hint composer-ring"
+              {...tip(`${Math.round((100 * usage.used) / usage.size)}% of context`, undefined, {
+                detail: `${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}`,
+              })}
+            >
+              <Ring fraction={usage.used / usage.size} />
+            </span>
+          )}
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar. Not on an empty project: the pane is hidden
               there, and a button that flips a hidden pane is a dead button. */}

@@ -494,20 +494,6 @@
       color: var(--accent);
     }
   }
-  /* what the reply cost and how full the context is: one quiet line at the foot of a turn, in the
-   tool rows' type so it sits with them rather than reading as a message */
-  .usage-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 2px 8px;
-    font: var(--type-mono);
-    & .usage-cost {
-      color: var(--text1);
-      font-variant-numeric: tabular-nums;
-    }
-  }
-
   /* the frame is base's (.composer): the chat's is the tall one */
   .chat-input {
     min-height: 160px;
@@ -558,6 +544,14 @@
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
   /* a crashed proc in this worktree, badged on the terminal button: the only status this row shows,
    and only because the tab that explains it is one click away */
+  /* context fill by the tools: the ring is an Icon's size in the same 20px box the buttons take,
+   so the row reads as one strip; the figures are its tip */
+  .composer-ring {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+  }
   .composer-term {
     position: relative;
   }

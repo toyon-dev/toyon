@@ -1,0 +1,24 @@
+/* Ring: a fraction drawn as an arc. See Ring.tsx for where it sits. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* the arc starts at twelve o'clock, which is where a gauge reads from; the track is the same
+   colour at a quarter strength so the ring reads as a whole shape at any fill, the way the spinner
+   does, and the fill takes currentColor like an Icon */
+  .ring {
+    display: inline-block;
+    flex-shrink: 0;
+    vertical-align: -2px;
+    transform: rotate(-90deg);
+    & circle {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.5;
+    }
+    & .ring-track {
+      opacity: 0.25;
+    }
+    & .ring-fill {
+      stroke-linecap: round;
+    }
+  }
+}

@@ -24,7 +24,6 @@ import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
 import { AUTO_OPEN, callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
-import { usageLabel } from "./usage.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
 // so it is coloured by the same seven. marked hands the block over before it escapes it, and
@@ -583,14 +582,5 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="tool-hint">{item.branch}</span>
         </div>
       );
-    case "usage": {
-      const u = usageLabel(item);
-      return (
-        <div className="hint usage-row" data-tip={u.tip} data-tip-placement="follow">
-          {u.cost && <span className="usage-cost">{u.cost}</span>}
-          <span className="tool-hint">{u.context}</span>
-        </div>
-      );
-    }
   }
 });

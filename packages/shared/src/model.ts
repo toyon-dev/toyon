@@ -111,6 +111,13 @@ export interface WorktreeInfo {
   seenAt?: number;
 }
 
+/** the branch is toyon's to manage: made by create, combine or a spare claim, so removing the
+ * worktree may delete it and a title link may be planted beside it. An adopted worktree runs on
+ * a branch the person made, in a directory they chose, and neither is toyon's to touch. */
+export function hasOwnBranch(wt: Pick<WorktreeInfo, "branch">): boolean {
+  return wt.branch.startsWith("toyon/");
+}
+
 export type ProcStatus = "starting" | "running" | "crashed" | "stopped";
 
 export interface ProcState {

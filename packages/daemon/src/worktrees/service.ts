@@ -4,17 +4,18 @@
 
 import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type {
-  AgentStatus,
-  CommitEntry,
-  DiscoveredWorktree,
-  GitFileStatus,
-  ImageInput,
-  PasteInput,
-  PickMeta,
-  RepoInfo,
-  WorktreeInfo,
-  WorktreeStatus,
+import {
+  type AgentStatus,
+  type CommitEntry,
+  type DiscoveredWorktree,
+  type GitFileStatus,
+  hasOwnBranch,
+  type ImageInput,
+  type PasteInput,
+  type PickMeta,
+  type RepoInfo,
+  type WorktreeInfo,
+  type WorktreeStatus,
 } from "@toyon/shared";
 import { attachmentsDirFor } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
@@ -340,7 +341,17 @@ export class WorktreeService {
     // the agent first (inside runtime.stop): it may be mid-turn in the directory about to be
     // deleted, and its session-info callback would re-add the session entry removed below
     await this.d.runtime.stop(worktreeId);
-    await withRepoLock(repo.path, () => gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path));
+    await withRepoLock(repo.path, async () => {
+      await gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path);
+      // the confirm promised the branch goes with the directory. Only toyon's own: an adopted
+      // worktree's branch is the person's. Forced, since unmerged work is what the confirm warned
+      // about; best effort, since the checkout is already gone and a leftover branch is the lesser
+      // surprise than a remove that reports failure after doing most of its work.
+      if (hasOwnBranch(wt)) {
+        const r = await git(repo.path, "branch", "-D", wt.branch);
+        if (!r.ok) log.warn(worktreeId, `could not delete branch ${wt.branch}: ${r.err}`);
+      }
+    });
     this.dropLink(wt);
     this.d.state.removeWorktree(worktreeId);
     try {
@@ -385,7 +396,7 @@ export class WorktreeService {
     // chose, and `desired` would put a symlink next to it under a name they never asked for
     // (adopting ~/Projects/app-editor-pane on branch `editor-pane` would create
     // ~/Projects/editor-pane, and again on every boot).
-    if (!wt.branch.startsWith("toyon/")) return;
+    if (!hasOwnBranch(wt)) return;
     // the branch tail rather than the title: titles may repeat (three tasks named alike), branches
     // never do (rename suffixes them)
     const name = wt.branch.replace(/^toyon\//, "");

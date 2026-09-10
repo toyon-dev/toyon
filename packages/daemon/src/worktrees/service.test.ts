@@ -95,18 +95,33 @@ describe("create / remove", () => {
     await expect(w.worktrees.create(repoId, "c", { agent: "nope" })).rejects.toBeInstanceOf(UserError);
   });
 
-  test("remove stops the agent and procs, deletes the directory, transcript and state row", async () => {
+  test("remove stops the agent and procs, deletes the directory, branch, transcript and state row", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "task");
     await settle();
+    // unmerged work on the branch: the confirm said it would be lost, so the delete is forced
+    writeFileSync(join(wt.path, "new.txt"), "x\n");
+    sh(wt.path, "git", "add", "new.txt");
+    sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "unmerged");
     writeFileSync(transcriptPathFor(w.paths.transcriptsDir, wt.id), "{}\n");
     await w.worktrees.remove(wt.id);
     expect(w.agents.get(wt.id)?.closes).toBe(1);
     expect(w.procs.get(wt.id)?.stopped).toBe(true);
     expect(existsSync(wt.path)).toBe(false);
+    expect(sh(w.repo, "git", "branch", "--list", wt.branch)).toBe("");
     expect(existsSync(transcriptPathFor(w.paths.transcriptsDir, wt.id))).toBe(false);
     expect(w.state.worktree(wt.id)).toBeUndefined();
     expect(w.runtime.get(wt.id)).toBeUndefined();
+  });
+
+  test("removing an adopted worktree keeps the person's branch", async () => {
+    const repoId = await registered();
+    await settle();
+    const wt = await w.worktrees.adopt(repoId, foreignWorktree("theirs", "their-branch"));
+    await settle();
+    await w.worktrees.remove(wt.id);
+    expect(existsSync(wt.path)).toBe(false);
+    expect(sh(w.repo, "git", "branch", "--list", "their-branch")).toBe("their-branch");
   });
 
   test("main cannot be removed", async () => {

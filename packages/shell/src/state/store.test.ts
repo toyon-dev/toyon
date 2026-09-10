@@ -826,3 +826,66 @@ describe("discovered worktrees", () => {
     expect(s.discoveredOpen).toEqual({ r: true });
   });
 });
+
+// A remove leaves the screen on the click. The daemon's list is untouched until its snapshot
+// says so; what the person sees is `visible`, and the selection has to move with the row.
+describe("removing a worktree", () => {
+  const three = () => hello(wt("main", "main"), wt("a"), wt("b"));
+  const ids = (s: State) => s.visible.map((w) => w.worktree.id);
+
+  test("the row is hidden at once and the daemon's list is left alone", () => {
+    const s = run([three(), { a: "remove-worktrees", ids: ["a"] }]);
+    expect(ids(s)).toEqual(["main", "b"]);
+    expect(s.worktrees.map((w) => w.worktree.id)).toEqual(["main", "a", "b"]);
+  });
+
+  test("removing the active worktree lands the selection somewhere still shown", () => {
+    const s = run([three(), { a: "activate", id: "a" }, { a: "remove-worktrees", ids: ["a"] }]);
+    expect(s.activeId).toBe("main");
+    expect(s.lastActive.r).toBe("main");
+  });
+
+  test("a snapshot that still lists the row keeps it hidden; one without it retires the pending remove", () => {
+    let s = run([three(), { a: "remove-worktrees", ids: ["a"] }]);
+    // another worktree's proc event pushes the whole list, the removed row included
+    s = reducer(s, worktrees(wt("main", "main"), wt("a"), wt("b")));
+    expect(ids(s)).toEqual(["main", "b"]);
+    expect(s.removing).toEqual(["a"]);
+    s = reducer(s, worktrees(wt("main", "main"), wt("b")));
+    expect(ids(s)).toEqual(["main", "b"]);
+    expect(s.removing).toEqual([]);
+  });
+
+  test("an error frame brings the row back beside its toast", () => {
+    const s = run([three(), { a: "remove-worktrees", ids: ["a"] }, server({ t: "error", message: "held by git" })]);
+    expect(ids(s)).toEqual(["main", "a", "b"]);
+    expect(s.toast?.message).toBe("held by git");
+  });
+
+  test("a reconnect starts clean, since the daemon may still have the row", () => {
+    const s = run([three(), { a: "remove-worktrees", ids: ["a"] }, three()]);
+    expect(ids(s)).toEqual(["main", "a", "b"]);
+  });
+
+  test("switching projects never lands on a hidden row", () => {
+    // `b` is where r2 was left; with its remove pending the landing falls through to r2's main
+    const s = run([
+      helloIn(
+        [repo("r1"), repo("r2")],
+        wt("m1", "main", undefined, "r1"),
+        wt("m2", "main", undefined, "r2"),
+        wt("b", "worktree", undefined, "r2"),
+      ),
+      { a: "activate", id: "b" },
+      { a: "activate-repo", id: "r1" },
+      { a: "remove-worktrees", ids: ["b"] },
+      { a: "activate-repo", id: "r2" },
+    ]);
+    expect(s.activeId).toBe("m2");
+  });
+
+  test("unknown or already pending ids are ignored", () => {
+    const s = run([three(), { a: "remove-worktrees", ids: ["a"] }]);
+    expect(reducer(s, { a: "remove-worktrees", ids: ["a", "nope"] })).toBe(s);
+  });
+});

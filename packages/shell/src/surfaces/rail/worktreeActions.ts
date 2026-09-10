@@ -1,8 +1,19 @@
 import type { WorktreeStatus } from "@toyon/shared";
+import type { Action } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
 
+type Dispatch = (a: Action) => void;
+
+/** send the removes and take the rows off screen in the same breath: the daemon confirms by
+ * dropping them from its next snapshot, or an error frame puts them back with a toast */
+export function removeWorktrees(sock: DaemonSocket | null, dispatch: Dispatch, ids: string[]) {
+  if (ids.length === 0) return;
+  dispatch({ a: "remove-worktrees", ids });
+  for (const id of ids) sock?.send({ t: "remove-worktree", worktreeId: id });
+}
+
 /** confirm-then-send worktree actions, shared by the rail's context menu and the ⌘⇧P palette */
-export function worktreeActions(sock: DaemonSocket | null) {
+export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
   return {
     rename(w: WorktreeStatus) {
       if (w.worktree.kind === "main") return;
@@ -30,7 +41,7 @@ export function worktreeActions(sock: DaemonSocket | null) {
       const ok = window.confirm(
         `Remove worktree "${w.worktree.title}"?\n\nThis deletes its directory and branch (${w.worktree.branch}). Unmerged changes are lost.`,
       );
-      if (ok) sock?.send({ t: "remove-worktree", worktreeId: w.worktree.id });
+      if (ok) removeWorktrees(sock, dispatch, [w.worktree.id]);
     },
   };
 }

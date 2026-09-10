@@ -151,7 +151,7 @@ export function buildCommands(
   );
 
   if (wt && id) {
-    const acts = worktreeActions(sock);
+    const acts = worktreeActions(sock, dispatch);
     const t = wt.worktree.title;
     // stop stays offered while an ask card is open: that is the way out of a question you do
     // not want to answer

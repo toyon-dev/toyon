@@ -7,6 +7,7 @@ import { RightDock } from "../surfaces/chat/RightDock.tsx";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
 import { Center } from "../surfaces/preview/Center.tsx";
 import { WtRail } from "../surfaces/rail/WtRail.tsx";
+import { removeWorktrees } from "../surfaces/rail/worktreeActions.ts";
 import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
 import { clampW } from "../surfaces/util.ts";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "../theme.ts";
@@ -217,7 +218,7 @@ export function App() {
               className="toast-action"
               onClick={(e) => {
                 e.stopPropagation();
-                for (const id of toast.removeIds ?? []) sock?.send({ t: "remove-worktree", worktreeId: id });
+                removeWorktrees(sock, dispatch, toast.removeIds ?? []);
                 dispatch({ a: "dismiss-toast" });
               }}
             >

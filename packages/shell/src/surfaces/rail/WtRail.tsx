@@ -15,7 +15,7 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass, procTrouble } from "../util.ts";
-import { worktreeActions } from "./worktreeActions.ts";
+import { removeWorktrees, worktreeActions } from "./worktreeActions.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { rowState } from "../../ui/rowState.ts";
@@ -65,7 +65,7 @@ export function WtRail() {
     return () => window.removeEventListener("keydown", onEsc);
   }, [graftMode]);
 
-  const acts = worktreeActions(sock);
+  const acts = worktreeActions(sock, dispatch);
   const menuWt = menu ? (worktrees.find((w) => w.worktree.id === menu.id) ?? null) : null;
   const discMenuRow = discMenu ? (discovered.find((d) => d.path === discMenu.path) ?? null) : null;
 
@@ -322,7 +322,7 @@ export function WtRail() {
                       `Remove ${sel.length} worktree(s)?\n\nTheir directories and branches are deleted. Unmerged changes are lost.`,
                     )
                   ) {
-                    for (const id of sel) sock?.send({ t: "remove-worktree", worktreeId: id });
+                    removeWorktrees(sock, dispatch, sel);
                     cancelGraft();
                   }
                 }}

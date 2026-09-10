@@ -4,6 +4,13 @@ import { buildPrompt, SYSTEM_APPEND } from "./prompt.ts";
 const ref = { n: 2, name: "shot.png", mimeType: "image/png", bytes: 3, width: 10, height: 5, file: "2.png" };
 const paste = { n: 1, chars: 17, lines: 2, preview: "line one", file: "1.txt" };
 
+describe("SYSTEM_APPEND", () => {
+  test("tells the agent what makes a project runnable here", () => {
+    expect(SYSTEM_APPEND).toContain("toyon.json");
+    expect(SYSTEM_APPEND).toContain("$PORT");
+  });
+});
+
 describe("buildPrompt", () => {
   test("text only, context in its own block after it", () => {
     expect(buildPrompt("hi", "[ctx]")).toEqual([

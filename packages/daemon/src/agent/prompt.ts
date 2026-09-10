@@ -12,6 +12,8 @@ export const SYSTEM_APPEND = [
   "Never run `git commit` unless the user explicitly asks you to; leave changes uncommitted for the user to review and commit themselves.",
   "Keep the scope tight: do the asked task well, then stop. Suggest follow-ups in chat instead of expanding scope.",
   "`@some/path` in a message means read that file or directory first; `@changes` means this worktree's uncommitted files, which `git status` lists.",
+  'Toyon previews the project in a browser panel by running the commands in toyon.json at the repo root, shaped like {"procs": {"web": "bun run dev --port $PORT"}, "setup": ["bun install"]}: every proc must listen on $PORT, which toyon sets differently for each worktree, and setup runs once in every new worktree.',
+  "When you scaffold a project or change how it installs or starts, finish by writing or updating toyon.json so the preview can run it.",
 ].join(" ");
 
 /** what the model reads as an image's label: its session number (how the user will refer to it

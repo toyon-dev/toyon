@@ -356,6 +356,44 @@ describe("empty tree", () => {
   });
 });
 
+describe("redetect at turn end", () => {
+  const turnEnd = (id: string) => w.hub.emit("agent", id, 0, { type: "turn-end", stopReason: "end_turn", ts: 0 });
+
+  test("a scaffold that detection recognises becomes the guess, still unconfirmed", async () => {
+    const repo = await w.repos.register(w.repo);
+    const main = w.state.worktrees.find((x) => x.repoId === repo.id && x.kind === "main")!;
+    expect(repo.needsSetup).toBe(true);
+    let repos = 0;
+    w.hub.on("reposChanged", () => repos++);
+    writeFileSync(join(w.repo, "package.json"), JSON.stringify({ scripts: { dev: "vite" } }));
+    writeFileSync(join(w.repo, "bun.lock"), "");
+    turnEnd(main.id);
+    expect(w.state.requireRepo(repo.id).config).toEqual({ procs: { web: "bun run dev" }, setup: ["bun install"] });
+    expect(w.state.requireRepo(repo.id).needsSetup).toBe(true);
+    expect(repos).toBe(1);
+    // the same tree again says nothing new
+    turnEnd(main.id);
+    expect(repos).toBe(1);
+  });
+
+  test("a toyon.json the agent wrote applies at once, like a hand-written one", async () => {
+    const repo = await w.repos.register(w.repo);
+    const main = w.state.worktrees.find((x) => x.repoId === repo.id && x.kind === "main")!;
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ procs: { web: "true" } }));
+    turnEnd(main.id);
+    expect(w.state.requireRepo(repo.id).needsSetup).toBe(false);
+    expect(w.state.requireRepo(repo.id).config.procs).toEqual({ web: "true" });
+  });
+
+  test("a confirmed repo keeps its config whatever lands in the tree", async () => {
+    const repoId = await registered();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    writeFileSync(join(w.repo, "package.json"), JSON.stringify({ scripts: { dev: "vite" } }));
+    turnEnd(main.id);
+    expect(w.state.requireRepo(repoId).config).toEqual({ procs: { web: "true" } });
+  });
+});
+
 describe("landing", () => {
   test("commit then merge lands on main, marks landed, and offers the worktree for cleanup", async () => {
     const repoId = await registered();

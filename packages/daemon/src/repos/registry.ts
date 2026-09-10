@@ -36,7 +36,14 @@ export class RepoRegistry {
   /** repos whose worktrees have been started this daemon run; the rest are cold */
   private warmed = new Set<string>();
 
-  constructor(private d: RepoRegistryDeps) {}
+  constructor(private d: RepoRegistryDeps) {
+    // A scaffold lands during a turn, and the repo it landed in was registered while empty, so
+    // the guess it carries is stale. turn-end is already an edge, and it fires before the status
+    // flips to idle, so the fresh guess reaches the shell before the frame that ends the busy state.
+    d.hub.on("agent", (worktreeId, _seq, event) => {
+      if (event.type === "turn-end") this.redetect(worktreeId);
+    });
+  }
 
   /** Recover the persisted state, reserve every port, and watch every repo. Nothing runs yet: a
    * daemon that starts a dev server for every worktree of every registered repo the moment it
@@ -290,6 +297,27 @@ export class RepoRegistry {
     if (this.warmed.has(repoId)) fireAndForget(repoId, this.d.worktrees.spare.ensure(repoId), "spare warm-up");
     this.d.hub.emit("reposChanged");
     this.d.hub.emit("worktreesChanged");
+  }
+
+  /** An unconfirmed repo re-reads its guess after every agent turn: the agent may have written
+   * toyon.json, in which case it applies like any hand-written file, or it may have scaffolded
+   * something detection recognises, in which case the setup pane comes back prefilled. Never a
+   * confirmed repo: its file is the config, and only the watcher replaces it. The guess is never
+   * confirmed here either; the person does that. Detection is a few existsSync calls on the
+   * worktree the turn ran in, which is where the scaffold is. */
+  private redetect(worktreeId: string) {
+    const wt = this.d.state.worktree(worktreeId);
+    const repo = wt && this.d.state.repo(wt.repoId);
+    if (!wt || !repo?.needsSetup) return;
+    if (readConfigFile(repo.path)?.ok) {
+      this.reloadConfig(repo.id);
+      return;
+    }
+    const detected = detectConfig(wt.path).config;
+    if (JSON.stringify(detected) === JSON.stringify(repo.config)) return;
+    repo.config = detected;
+    this.d.state.save();
+    this.d.hub.emit("reposChanged");
   }
 
   /** read the file into the repo record; true when the config actually changed */

@@ -6,9 +6,10 @@
     border-top: 1px solid var(--border0);
     background: var(--surface0);
     /* the open tab of a strip in the head is painted in this ground, so it joins the body under it;
-       the strip is the tier above, the chrome */
+       the strip is the floor's own recess, since --sunken is cut under the chrome and lands level
+       with the floor */
     --tabs-ground: var(--surface0);
-    --tabs-strip: var(--surface1);
+    --tabs-strip: var(--sunken-floor);
     /* panes stack, and the defaults of two of them already add up to the column: the stack
        shrinks to fit, each pane holding its own min-height, rather than pushing the lowest one
        off the bottom of the page with its close button */

@@ -1,11 +1,11 @@
 /* Tabs: a strip of alternatives with one open. See Tabs.tsx for the idea. */
 @layer tokens, base, surfaces;
 @layer base {
-  /* the strip is the surface tier above the ground it heads, and the open tab is that ground
-   showing through: chrome over the pane's floor, the raised tier over the dock's chrome. By tier
-   rather than by lightness, because the surface ramp runs the other way in some themes; and never
-   a step down, because the floor has none and the two strips then read as mirror images. The
-   parent names it (`--tabs-strip`) beside its ground.
+  /* the strip is a recess under the ground it heads, and the open tab is that ground showing
+   through: the lit tab is the open one, the way every tab bar has taught the eye, and the others
+   sit behind it. A recess rather than the tier above, because the tier above is lighter and that
+   put the open tab in the dark. The parent names the recess (`--tabs-strip`) beside its ground,
+   since the floor has a recess of its own (--sunken-floor) where the chrome has --sunken.
    The rule under the strip is an inset shadow rather than a border, because a shadow paints under
    the children: the open tab's own background covers it, and the rule breaks there without a
    second rule to keep in step. */
@@ -18,7 +18,7 @@
     min-height: var(--row-height-sm);
     flex-shrink: 0;
     min-width: 0;
-    background: var(--tabs-strip, var(--surface1));
+    background: var(--tabs-strip, var(--sunken));
     box-shadow: inset 0 -1px 0 var(--border0);
   }
   /* the list scrolls when the labels outgrow the strip, without a bar: there is no gutter to

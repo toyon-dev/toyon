@@ -66,7 +66,7 @@ const NEVER_LIFTS = [
   ".import-idle",
   ".picker-ghost",
   ".key-hints",
-  ".msg-thinking",
+  ".working-row",
   ".rail-new .rail-new-kbd",
   ".form-dest",
   ".pick-chip .pick-file",

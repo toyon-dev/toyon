@@ -46,6 +46,19 @@ describe("groupTools", () => {
     ]);
   });
 
+  test("a thought between two edits keeps them apart too: the rows stay in the order it happened", () => {
+    const items = [
+      tool("edit", "/wt/a.ts"),
+      { kind: "thinking", text: "The sidebar next." } as ChatItem,
+      tool("edit", "/wt/a.ts"),
+    ];
+    expect(shape(items, ["/wt"])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 0 },
+      { at: 2, n: 1 },
+    ]);
+  });
+
   test("a read and an edit of one file stay two rows", () => {
     const items = [tool("read", "/wt/a.ts"), tool("edit", "/wt/a.ts")];
     expect(shape(items, ["/wt"])).toEqual([

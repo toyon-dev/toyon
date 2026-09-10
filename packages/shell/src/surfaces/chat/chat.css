@@ -203,15 +203,14 @@
       flex: 1;
     }
   }
-  .msg-thinking {
-    color: var(--text2);
-    font-style: italic;
-    white-space: pre-wrap;
-  }
+  /* the agent's state while it has the turn, under the last thing it said: an aside in the log's
+   own voice, and the one italic in the transcript now that a thought is a row */
   .working-row {
     display: flex;
     align-items: center;
     gap: 10px;
+    color: var(--text2);
+    font-style: italic;
   }
 
   /* a collapsed row is a line of the transcript, not a card: no fill and no border, so twenty calls in

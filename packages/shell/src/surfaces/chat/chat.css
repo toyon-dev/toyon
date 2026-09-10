@@ -495,28 +495,7 @@
     }
   }
 
-  /* the composer is one big editor, not a small box inside a panel: the whole region below the
-   transcript is the typing surface, so the textarea drops the field's border and fills it, and the
-   knobs row sits at the bottom edge */
-  /* the frame both composers share: the chat's, and the commit box at the foot of the changes panel */
-  .composer {
-    display: flex;
-    flex-direction: column;
-    /* the field's own background, carried by the whole region: level with the transcript it would
-     read as a disabled box rather than somewhere to type */
-    background: var(--sunken);
-    border-top: 1px solid var(--border0);
-    padding: 10px;
-    /* the offset parent for the @ and slash menu */
-    position: relative;
-    /* the box is the panel's (Field's `bare`); this is only how the textarea fills it */
-    & textarea {
-      flex: 1;
-      width: 100%;
-      min-height: 0;
-      resize: none;
-    }
-  }
+  /* the frame is base's (.composer): the chat's is the tall one */
   .chat-input {
     min-height: 160px;
   }
@@ -532,12 +511,6 @@
   /* What a just-inserted command still expects, drawn after the caret rather than listed in the
    menu: it is only useful once the command is chosen, and in the row it competed with the
    descriptions. The metrics have to match .field-lg exactly or the ghost drifts off the caret. */
-  .composer-field {
-    position: relative;
-    display: flex;
-    flex: 1;
-    min-height: 0;
-  }
   .composer-ghost {
     position: absolute;
     inset: 0;
@@ -558,16 +531,6 @@
     & .pick-chip {
       background: var(--surface1);
     }
-  }
-  /* the knobs row under a composer's textarea: the chat's, and the commit box's */
-  .composer .hint {
-    margin-top: 4px;
-  }
-  .spawn-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
   }
   /* same 20px box as the status-bar icons, flush with the textarea's right edge
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
@@ -617,7 +580,7 @@
   .spawn-tools {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     flex-shrink: 0;
   }
   .spawn-row {

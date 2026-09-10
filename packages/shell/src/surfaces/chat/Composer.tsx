@@ -453,7 +453,7 @@ export function Composer({
           </div>
         )}
       </div>
-      <div className="hint spawn-row">
+      <div className="hint composer-knobs spawn-row">
         <span className="spawn-left">
           {!greenfield && (
             <label

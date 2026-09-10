@@ -151,8 +151,11 @@
    knobs row alone: where you are, and the one move that is left */
   .commit-box {
     flex-shrink: 0;
+    /* one line at rest, growing with the draft up to a few lines and scrolling past that, so the
+     list above keeps its room. Where field-sizing is not known the box stays one line and scrolls. */
     & textarea {
-      min-height: 56px;
+      field-sizing: content;
+      max-height: 8lh;
     }
   }
   .commit-where {
@@ -171,7 +174,7 @@
   .commit-acts {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     flex-shrink: 0;
   }
 }

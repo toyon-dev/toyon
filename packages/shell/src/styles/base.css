@@ -260,6 +260,47 @@
     color: var(--text2);
   }
 
+  /* ---- the composer ----
+     One big editor, not a small box inside a panel: the whole region below the transcript is the
+     typing surface, so the textarea drops the field's border and fills it, and the knobs row sits
+     at the bottom edge. Two surfaces render it, the chat's composer and the commit box at the foot
+     of the changes panel, which is why the frame is here and not in either. */
+  .composer {
+    display: flex;
+    flex-direction: column;
+    /* the field's own background, carried by the whole region: level with the transcript it would
+     read as a disabled box rather than somewhere to type */
+    background: var(--sunken);
+    border-top: 1px solid var(--border0);
+    padding: 10px;
+    /* the offset parent for the @ and slash menu */
+    position: relative;
+    /* the box is the panel's (Field's `bare`); this is only how the textarea fills it */
+    & textarea {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      resize: none;
+    }
+    /* an aside under the textarea sits a little off it */
+    & .hint {
+      margin-top: 4px;
+    }
+  }
+  .composer-field {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  /* the knobs row under the textarea: where you are on the left, what you can do on the right */
+  .composer-knobs {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
   /* ---- the status letter ----
      git's own letter for a file (M, A, D, R, ?) on a changed-file row and a ⌘P row alike: yellow
      for a change, and green or red where the file itself arrived or left. The width is each list's

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { IconButton } from "./Button.tsx";
+import { Button, IconButton } from "./Button.tsx";
 import "./pane.css";
 import { cx } from "./cx.ts";
+import { Icon } from "./Icon.tsx";
 import { type MenuEntry, useContextMenu } from "./menu.ts";
 import { Tabs, type TabsProps } from "./Tabs.tsx";
 
@@ -16,6 +17,8 @@ export function Pane({
   tabs,
   actions,
   menu,
+  full,
+  onToggleFull,
   onClose,
   closeHint = "esc",
   children,
@@ -32,11 +35,27 @@ export function Pane({
   actions?: ReactNode;
   /** what a right-click on the header offers: the thing the pane is showing, as its actions */
   menu?: () => MenuEntry[];
+  /** the pane can take the whole column: the toggle sits with the close, since both are about the
+   * pane's shape rather than what it shows */
+  full?: boolean;
+  onToggleFull?: () => void;
   onClose: () => void;
   closeHint?: string;
   children: ReactNode;
 }) {
   const cm = useContextMenu("pane");
+  const fullToggle = onToggleFull && (
+    <Button
+      variant="outline"
+      tone="quiet"
+      mono
+      className="deep-link"
+      onClick={onToggleFull}
+      data-tip={full ? "Split view: show the preview above" : "Full height: hide the preview"}
+    >
+      <Icon name={full ? "split" : "full"} className="icon-inline" /> {full ? "split" : "full"}
+    </Button>
+  );
   const close = <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />;
   return (
     <div className={`pane ${className}`} style={height === undefined ? undefined : { height }}>
@@ -48,6 +67,7 @@ export function Pane({
             end={
               <>
                 {actions}
+                {fullToggle}
                 {close}
               </>
             }
@@ -56,6 +76,7 @@ export function Pane({
           <>
             <span className="pane-title">{title}</span>
             {actions}
+            {fullToggle}
             {close}
           </>
         )}

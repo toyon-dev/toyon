@@ -4,10 +4,8 @@ import { fileItems } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { localOf, type State, worktreeById } from "../../state/store.ts";
-import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
-import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { wtDir } from "../util.ts";
 import { OpenInMenu } from "./OpenInMenu.tsx";
@@ -60,23 +58,13 @@ export function DiffView({
         wtPath ? fileItems({ id: diff.worktreeId, dir: wtPath }, diff.path, !history, { sock, dispatch }) : []
       }
       onClose={() => dispatch({ a: "close-diff" })}
+      full={full}
+      onToggleFull={onToggleFull}
       actions={
-        <>
-          <Button
-            variant="outline"
-            tone="quiet"
-            mono
-            className="deep-link"
-            onClick={onToggleFull}
-            data-tip={full ? "Split view: show the preview above" : "Full height: hide the preview"}
-          >
-            <Icon name={full ? "split" : "full"} className="icon-inline" /> {full ? "split" : "full"}
-          </Button>
-          <OpenInMenu
-            absPath={absPath}
-            onReveal={() => sock?.send({ t: "reveal", worktreeId: diff.worktreeId, path: diff.path })}
-          />
-        </>
+        <OpenInMenu
+          absPath={absPath}
+          onReveal={() => sock?.send({ t: "reveal", worktreeId: diff.worktreeId, path: diff.path })}
+        />
       }
     >
       <ErrorBoundary pane>

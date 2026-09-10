@@ -41,14 +41,20 @@
     gap: 24px;
     min-height: var(--row-height);
   }
-  /* the same slot as the settings rows above it: the two cards are one stack and read as one
-   rhythm, and the smaller token put the chips shoulder to shoulder */
+  /* a shortcut is read, not clicked, so it is drawn the way every other Kbd in the app is, as
+   glyphs with no tile, and the rows sit on the dense token: a legend, not a column of buttons.
+   The glyphs right-align against the label column so the ragged widths of the modifiers land on
+   the same edge. */
   .keys-row {
     display: grid;
     grid-template-columns: 76px 1fr;
     gap: 12px;
     align-items: center;
-    min-height: var(--row-height);
+    min-height: var(--row-height-sm);
+    & .kbd {
+      justify-self: end;
+      color: var(--text0);
+    }
   }
   .keys-d {
     color: var(--text1);

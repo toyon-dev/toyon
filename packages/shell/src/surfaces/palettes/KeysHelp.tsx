@@ -76,7 +76,7 @@ export function KeysHelp() {
             <div className="section-title keys-h">{sec.title}</div>
             {sec.rows.map(([k, d]) => (
               <div className="keys-row" key={k}>
-                <Kbd k={k} chip />
+                <Kbd k={k} />
                 <span className="keys-d">{d}</span>
               </div>
             ))}

@@ -7,8 +7,9 @@
     flex-shrink: 0;
     background: var(--surface1);
     /* the panel's two lists are alternatives, so they take the shared strip; its open tab is
-     painted in this ground so it joins the list under it */
+     painted in this ground so it joins the list under it, and the strip steps down from it */
     --tabs-ground: var(--surface1);
+    --tabs-strip: var(--sunken);
     border-right: 1px solid var(--border0);
     display: flex;
     flex-direction: column;

@@ -5,8 +5,11 @@
     position: relative;
     border-top: 1px solid var(--border0);
     background: var(--surface0);
-    /* the open tab of a strip in the head is painted in this ground, so it joins the body under it */
+    /* the open tab of a strip in the head is painted in this ground, so it joins the body under it.
+       The pane is on the floor, so the strip steps up to the chrome rather than down: a step down
+       from surface0 lands within a couple of values of it, and the open tab vanished. */
     --tabs-ground: var(--surface0);
+    --tabs-strip: var(--surface1);
     /* panes stack, and the defaults of two of them already add up to the column: the stack
        shrinks to fit, each pane holding its own min-height, rather than pushing the lowest one
        off the bottom of the page with its close button */

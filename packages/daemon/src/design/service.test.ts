@@ -5,24 +5,19 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
-import { StateStore } from "../core/state.ts";
+import type { ReadableWorktree } from "../worktrees/service.ts";
 import { DesignService } from "./service.ts";
 
 type World = ReturnType<typeof world>;
 function world() {
   const t = tmpRepo();
-  const state = new StateStore(t.paths);
-  state.addWorktree({
-    id: "w1",
-    repoId: "r1",
-    path: t.repo,
-    branch: "main",
-    kind: "main",
-    proxyPort: 1,
-    title: "main",
-    createdAt: 0,
-  });
-  return { ...t, state, design: new DesignService(state) };
+  // the scan only wants a directory, and it gets one for a worktree toyon runs (w1) and for one it
+  // merely found in git (found) alike: neither carries a record the scan would read
+  const readable = (id: string): ReadableWorktree | null =>
+    id === "w1" || id === "found"
+      ? { id, repoId: "r1", path: t.repo, name: id, branch: "main", defaultBranch: "main" }
+      : null;
+  return { ...t, design: new DesignService(readable) };
 }
 
 let w: World;
@@ -162,6 +157,12 @@ describe("DesignService.scan", () => {
     // tmpRepo has no node_modules, so there is no compiler to parse with
     expect(index.typed).toBe(false);
     expect(index.components.find((c) => c.name === "Button")?.variants).toEqual([]);
+  });
+
+  test("reads a worktree toyon found but does not run, the same as one it does", async () => {
+    write("src/styles.css", ":root { --accent: red }");
+    const index = await w.design.scan("found");
+    expect(index.tokens.map((t) => t.name)).toEqual(["--accent"]);
   });
 
   test("refuses a worktree it does not know", () => {

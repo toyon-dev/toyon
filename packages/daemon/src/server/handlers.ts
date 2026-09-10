@@ -2,7 +2,7 @@
 // compile error. Handlers marshal (pick fields, shape replies) and call a service; they do not
 // run git or decide policy.
 
-import type { ClientMsg, ServerMsg } from "@toyon/shared";
+import type { ClientMsg, ServerMsg, WorktreeInfo } from "@toyon/shared";
 import { pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
@@ -81,6 +81,15 @@ const notify = async (s: Services, ctx: HandlerCtx, worktreeId: string, msg: Ser
   await gitStatus(s, ctx, worktreeId);
 };
 
+/** The agent actions want a worktree toyon runs. One it merely found in git has a row and a pane
+ * like the others, so the refusal names the way out rather than calling the worktree unknown. */
+const requireRun = (s: Services, id: string): WorktreeInfo => {
+  if (!s.state.worktree(id) && s.worktrees.readable(id)) {
+    throw new UserError("toyon does not run this worktree: take it over first");
+  }
+  return s.state.requireWorktree(id);
+};
+
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async subscribe(msg, ctx, s) {
     const r = s.worktrees.readable(msg.worktreeId);
@@ -122,7 +131,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   chat(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
     agent.send(msg.text, { context: msg.context, pick: msg.pick, images: msg.images, pastes: msg.pastes });
@@ -258,7 +267,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   "list-commands"(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);
     // best effort and slow (it spawns the adapter): the reply, if any, is the agent-commands push
     if (agent) fireAndForget(msg.worktreeId, agent.warmCommands(), "warm commands");
@@ -279,7 +288,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   "stop-agent"(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.stop();
   },
 
@@ -288,7 +297,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   unqueue(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.unqueue(msg.index);
   },
 
@@ -364,7 +373,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "agent-auth"(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
     const r = await agent.authenticate(msg.methodId, msg.apiKey);
@@ -372,19 +381,19 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   "agent-retry"(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.retry();
   },
 
   // No UserError when the ask has already closed: two shells can watch one worktree, and the
   // loser of that race would get a toast about a card that is about to disappear anyway.
   "agent-answer"(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "answers", answers: msg.answers });
   },
 
   "agent-decide"(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "choice", choiceId: msg.choiceId });
   },
 
@@ -434,7 +443,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       fireAndForget("term-restart", Promise.resolve(loose.kill()));
       return;
     }
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     // the tab reopens on its own once the stream is gone; nothing waits on the restart
     fireAndForget("term-restart", s.runtime.restartStream(msg.worktreeId, msg.stream));
   },
@@ -448,7 +457,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   "exec-stop"(msg, _ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    requireRun(s, msg.worktreeId);
     s.exec.stop(msg.worktreeId);
   },
 

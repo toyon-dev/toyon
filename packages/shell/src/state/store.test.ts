@@ -1031,6 +1031,32 @@ describe("a landing op in flight", () => {
   });
 });
 
+describe("usage", () => {
+  test("a usage event becomes a row costing the difference from the last priced one", () => {
+    const usage = (cost: number | undefined, used = 1000): AgentEvent => ({
+      type: "usage",
+      used,
+      size: 4000,
+      ...(cost !== undefined ? { cost } : {}),
+      ts: 0,
+    });
+    let s = run([hello(wt("a")), agent("a", usage(0.1)), agent("a", { type: "text-delta", text: "hi" })]);
+    s = run([agent("a", usage(0.35, 2000))], s);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "usage", used: 1000, size: 4000, cost: 0.1, turn: 0.1 },
+      { kind: "assistant", text: "hi" },
+      { kind: "usage", used: 2000, size: 4000, cost: 0.35, turn: 0.25 },
+    ]);
+    // a second figure with nothing said between updates the row instead of stacking; without a
+    // cost it keeps no turn figure
+    s = run([agent("a", usage(undefined, 2100))], s);
+    expect(s.local.a?.chat.at(-1)).toEqual({ kind: "usage", used: 2100, size: 4000 });
+    s = run([agent("a", usage(0.4, 2100))], s);
+    expect(s.local.a?.chat.at(-1)).toEqual({ kind: "usage", used: 2100, size: 4000, cost: 0.4, turn: 0.3 });
+    expect(s.local.a?.chat.length).toBe(3);
+  });
+});
+
 describe("model", () => {
   test("session-info records what the agent reported running, per worktree", () => {
     const s = run([hello(wt("a"), wt("b")), agent("a", { type: "session-info", sessionId: "s1", model: "big" })]);

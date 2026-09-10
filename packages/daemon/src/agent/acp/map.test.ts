@@ -116,6 +116,19 @@ describe("mapUpdate", () => {
       ]),
     ).toEqual([{ type: "session-info", sessionId: "", model: "gpt-5" }]);
   });
+
+  test("usage_update carries the context figures, and the cost only when it is in dollars", () => {
+    const events = run([
+      { sessionUpdate: "usage_update", used: 42_300, size: 200_000, cost: { amount: 1.03, currency: "USD" } },
+      { sessionUpdate: "usage_update", used: 42_300, size: 200_000 },
+      { sessionUpdate: "usage_update", used: 1, size: 2, cost: { amount: 9, currency: "EUR" } },
+    ]);
+    expect(events.map((e) => ({ ...e, ts: 0 }))).toEqual([
+      { type: "usage", used: 42_300, size: 200_000, cost: 1.03, ts: 0 },
+      { type: "usage", used: 42_300, size: 200_000, ts: 0 },
+      { type: "usage", used: 1, size: 2, ts: 0 },
+    ]);
+  });
 });
 
 describe("summarizeToolOutput / truncate / stop reasons", () => {

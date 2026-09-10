@@ -494,6 +494,19 @@
       color: var(--accent);
     }
   }
+  /* what the reply cost and how full the context is: one quiet line at the foot of a turn, in the
+   tool rows' type so it sits with them rather than reading as a message */
+  .usage-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 8px;
+    font: var(--type-mono);
+    & .usage-cost {
+      color: var(--text1);
+      font-variant-numeric: tabular-nums;
+    }
+  }
 
   /* the composer is one big editor, not a small box inside a panel: the whole region below the
    transcript is the typing surface, so the textarea drops the field's border and fills it, and the

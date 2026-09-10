@@ -96,8 +96,22 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
         ? [{ type: "session-info", sessionId: "", model: String(model.currentValue) }]
         : [];
     }
+    case "usage_update": {
+      // only a priced session gets a cost; a foreign currency would mislead as dollars, so it is
+      // dropped rather than converted
+      const cost = update.cost && update.cost.currency === "USD" ? update.cost.amount : undefined;
+      return [
+        {
+          type: "usage",
+          used: update.used,
+          size: update.size,
+          ...(cost !== undefined ? { cost } : {}),
+          ts: Date.now(),
+        },
+      ];
+    }
     default:
-      // plans, mode/usage/compaction updates: nothing renders them yet. Slash commands
+      // plans, mode/compaction updates: nothing renders them yet. Slash commands
       // are taken by the session before they reach here, since they are not transcript content.
       log.debug(tag, `acp: ignoring ${update.sessionUpdate}`);
       return [];

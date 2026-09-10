@@ -49,6 +49,9 @@ export function useChords() {
           case "search":
             if (s.activeId) dispatch({ a: "toggle", overlay: { kind: "search" } });
             break;
+          case "refs":
+            if (s.activeRepoId) dispatch({ a: "toggle", overlay: { kind: "refs" } });
+            break;
           case "commands":
             dispatch({ a: "toggle", overlay: { kind: "commands" } });
             break;

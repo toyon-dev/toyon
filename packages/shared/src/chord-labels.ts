@@ -39,6 +39,7 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   new: { label: "new worktree", section: "Worktrees", advertise: { key: "n", when: "pwa" } },
   worktree: { label: "switch worktree", section: "Worktrees" },
   project: { label: "open project", section: "Worktrees" },
+  refs: { label: "open a branch or PR", section: "Worktrees" },
 };
 
 /** "⌘⇧P" style label, showing the chord's advertised alias when the environment calls for it

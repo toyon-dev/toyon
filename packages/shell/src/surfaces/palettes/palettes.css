@@ -90,6 +90,15 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* ⌘⇧G ref rows: the kind's icon rides inside the label, so the label is a flex line rather than
+   text; the icon says branch, remote or PR where a word would have cost the name its width */
+  .ref-row {
+    & .picker-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  }
   /* ⌘P file rows: marker | filename | dim directory | line counts */
   .qo-file {
     display: flex;

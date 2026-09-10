@@ -41,6 +41,8 @@ export function buildCommands(
   const id = wt?.worktree.id;
 
   if (repo) add("new", "new worktree…", () => dispatch({ a: "open", overlay: { kind: "prompt" } }), chord("new"));
+  if (repo)
+    add("refs", "open a branch or PR…", () => dispatch({ a: "open", overlay: { kind: "refs" } }), chord("refs"));
   add(
     "project",
     state.repos.length > 1 ? "switch project…" : "open project…",

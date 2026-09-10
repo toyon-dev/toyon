@@ -19,7 +19,8 @@ export type ChordId =
   | "design"
   | "term-tab"
   | "worktree"
-  | "project";
+  | "project"
+  | "refs";
 
 /** what the shell knows about the browser it runs in; each flag can swap an advertised key */
 export interface ChordEnv {
@@ -80,6 +81,9 @@ export const CHORDS: readonly Chord[] = [
   // ⌘⇧O: Zed's recent-projects key is ⌘⌥O, but ⌥ is how macOS types symbols and matchChord
   // refuses it; ⇧O is free in every browser we run in
   { id: "project", key: "o", shift: true },
+  // ⌘⇧G: a browser only uses it as find-previous while its find bar is open, which a page may
+  // preempt; every other ⌘⇧ letter that reads as "go" or "git" is taken before the page sees it
+  { id: "refs", key: "g", shift: true },
 ];
 
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };

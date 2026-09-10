@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStoreInstance } from "../state/context.tsx";
 import { jumpTo, step } from "./listNav.ts";
@@ -134,18 +134,23 @@ function Menu({ spec }: { spec: MenuSpec }) {
       document.removeEventListener("scroll", close, true);
     };
   }, [spec]);
-  // keep the whole menu on screen when opened near an edge. The row height is a token, so it is
-  // read off the root rather than written here twice: MonacoDiff and XTerm read --face-mono the
-  // same way, for the same reason.
-  const rowH = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-height")) || 32;
-  const { x: left, y: top } = menuBox(spec, WIDTH, items.length * rowH + 8, window.innerWidth, window.innerHeight);
+  // keep the whole menu on screen when opened near an edge: placed once it has a height, before
+  // paint, since a row with a detail line is taller than one without and a guess from the row
+  // token left a two-line menu hanging off the bottom
+  useLayoutEffect(() => {
+    const b = box.current;
+    if (!b) return;
+    const { x, y } = menuBox(spec, WIDTH, b.offsetHeight, window.innerWidth, window.innerHeight);
+    b.style.left = `${x}px`;
+    b.style.top = `${y}px`;
+  }, [spec]);
   return (
     // the width is set here rather than in the stylesheet because the clamp above depends on it,
     // and a menu that is one width in CSS and another in the maths lands off screen at the edges
     <div
       className="menu"
       ref={box}
-      style={{ position: "fixed", left, top, width: WIDTH }}
+      style={{ position: "fixed", left: 0, top: 0, width: WIDTH }}
       // a right-click on the menu itself is not a request for another one
       onContextMenu={(e) => e.preventDefault()}
     >

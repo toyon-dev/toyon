@@ -1,12 +1,12 @@
 import { canSync, isOwned, canLand as landable, type WorktreeStatus } from "@toyon/shared";
 import { useState } from "react";
+import { shipOp } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
-import { shipOp } from "../rail/worktreeActions.ts";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
  * where you are on the left and what you can do on the right. Committing and landing never apply at

@@ -2,15 +2,18 @@ import { type PickMeta, SHELL_TOOL } from "@toyon/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { copyText } from "../../state/actions/deps.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
-import type { ChatItem } from "../../state/store.ts";
+import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
 import { useReveal } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { type MenuItem, useContextMenu } from "../../ui/menu.ts";
 import { attachmentUrl } from "../../ws.ts";
+import { wtDir } from "../util.ts";
 import { AskCard } from "./AskCard.tsx";
 import { sameTools, type ThinkingItem, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
@@ -29,6 +32,7 @@ import {
   toolBlocks,
   toolLabel,
 } from "./toolCall.ts";
+import { toolRowItems } from "./toolRowItems.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
 // so it is coloured by the same seven. marked hands the block over before it escapes it, and
@@ -241,12 +245,15 @@ function Fold({
   auto,
   label,
   summary,
+  menu,
   children,
 }: {
   className: string;
   auto: boolean;
   label: string;
   summary: ReactNode;
+  /** what a right-click on the row offers; told whether the row is open, and how to fold it */
+  menu: (fold: { open: boolean; toggle: () => void }) => MenuItem[];
   children: ReactNode;
 }) {
   const [pinned, setPinned] = useState<boolean | null>(null);
@@ -254,11 +261,13 @@ function Fold({
   // output that lands below the pane is scrolled into view once the row has opened
   const reveal = useReveal(".chat-log");
   const open = pinned ?? auto;
+  const cm = useContextMenu("chat");
   return (
     <details
       ref={card}
       className={className}
       open={open}
+      {...cm.contextMenu(() => menu({ open, toggle: () => setPinned(!open) }))}
       // clicking the output selects text and leaves focus on the body, so the card takes it: that is
       // what makes Escape close the row you are reading, not only the one whose chip you clicked
       tabIndex={-1}
@@ -301,6 +310,10 @@ export const ThoughtRow = memo(function ThoughtRow({ item, live }: { item: Think
       className="tool-row"
       auto={!!live}
       label={line ? `thought, ${line}` : "thought"}
+      menu={(fold) => [
+        { id: "copy", label: "copy thought", onClick: () => copyText(item.text) },
+        { id: "fold", label: fold.open ? "collapse" : "expand", onClick: fold.toggle },
+      ]}
       summary={
         <>
           {live ? <span className="spinner">●</span> : <Icon name="spark" className="tool-icon" />}
@@ -347,11 +360,18 @@ export const ToolRow = memo(
     const { label, name, icon, hint } = toolLabel(head, roots);
     const running = !tools.at(-1)?.done;
     const what = [label, hint].filter(Boolean).join(" ");
+    const store = useStoreInstance();
+    const sock = useSock();
     return (
       <Fold
         className={cx("tool-row", tools.some((t) => t.isError) && "error")}
         auto={auto}
         label={tools.length > 1 ? `${what}, ${tools.length} calls` : what}
+        menu={(fold) => {
+          const w = worktreeById(store.getState(), worktreeId);
+          const wt = w ? { id: w.worktree.id, dir: wtDir(w.worktree) } : null;
+          return toolRowItems(tools, roots ?? [], wt, { sock, dispatch: store.dispatch }, fold);
+        }}
         summary={
           <>
             {running ? <span className="spinner">●</span> : <Icon name={icon} className="tool-icon" />}

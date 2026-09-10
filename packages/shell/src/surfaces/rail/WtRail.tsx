@@ -1,17 +1,14 @@
+import { canGraft, isMain, isOwned, type OwnedWorktree, type WorktreeStatus } from "@toyon/shared";
+import { useState } from "react";
 import {
-  canGraft,
-  canLand,
-  canRemove,
-  canRename,
-  canSync,
-  isMain,
-  isOwned,
-  type OwnedWorktree,
-  type WorktreeStatus,
-} from "@toyon/shared";
-import { type MouseEvent, useCallback, useState } from "react";
+  discoveredItems,
+  removeWorktrees,
+  shipOp,
+  worktreeActions,
+  worktreeItems,
+} from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { profileNames, profileOf } from "../../state/profiles.ts";
+import { profileOf } from "../../state/profiles.ts";
 import {
   useActiveId,
   useDiscoveredOpen,
@@ -23,17 +20,14 @@ import {
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
-import { Menu, type MenuItem } from "../../ui/Menu.tsx";
+import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass, procTrouble, stateLabel } from "../util.ts";
-import { removeWorktrees, shipOp, worktreeActions } from "./worktreeActions.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
-
-type MenuState = { at: { x: number; y: number }; id: string };
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
 const count = (n: number) => (n > 999 ? "1k+" : String(n));
@@ -57,10 +51,10 @@ export function WtRail() {
   const repos = useStore((s) => s.repos);
   const shipping = useStore((s) => s.shipping);
   const repoOf = (w: OwnedWorktree) => repos.find((r) => r.id === w.repoId) ?? null;
-  const [menu, setMenu] = useState<MenuState | null>(null);
-  const closeMenu = useCallback(() => setMenu(null), []);
-  const [discMenu, setDiscMenu] = useState<{ at: { x: number; y: number }; id: string } | null>(null);
-  const closeDiscMenu = useCallback(() => setDiscMenu(null), []);
+  const cm = useContextMenu("rail");
+  // the one menu, read here for two things: the peek stays open while the menu is the rail's, and
+  // the row it is about stays lifted while the pointer is over the menu rather than the row
+  const menu = useMenu();
   // the daemon sends absolute paths; ~ is how the person wrote it and how the picker shows it back
   const home = useStore((s) => s.home);
   const wtDirLabel = (d: WorktreeStatus) =>
@@ -84,102 +78,17 @@ export function WtRail() {
   });
 
   const acts = worktreeActions(sock, dispatch);
-  const menuWt = menu ? (worktrees.find((w) => w.worktree.id === menu.id) ?? null) : null;
-  const discMenuRow = discMenu ? (discovered.find((d) => d.id === discMenu.id) ?? null) : null;
-
-  /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.
-   * "open a shell here" is a real pty at that path with no runtime behind it, which is why it is
-   * phrased as a shell rather than as this worktree's terminal: there are no proc tabs to go with
-   * it, because nothing is running.
-   * No "remove": the person made this directory outside toyon, and deleting it is the one thing
-   * here that cannot be undone. Nothing in the daemon can delete a discovered worktree at all,
-   * which is what keeps that true. `git worktree remove` is where it belongs. */
-  const discMenuItems = (d: WorktreeStatus): MenuItem[] => {
-    const items: MenuItem[] = [];
-    if (!d.locked) {
-      items.push({
-        label: "take over",
-        onClick: () => sock?.send({ t: "adopt-worktree", worktreeId: d.id, clientId }),
-      });
-    }
-    // the one write without take-over: the daemon refuses unless the tree is clean
-    if (canSync(d) && (d.behind ?? 0) > 0) {
-      items.push({
-        label: `sync from main (${d.behind} behind)`,
-        onClick: () => sock?.send({ t: "sync-main", worktreeId: d.id }),
-      });
-    }
-    items.push({
-      label: "open a shell here",
-      onClick: () => {
-        dispatch({ a: "activate", id: d.id });
-        if (!termOpen) dispatch({ a: "toggle-terminal" });
-      },
-    });
-    items.push({ label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: d.id }) });
-    items.push({
-      label: "copy path",
-      // best effort: a denied clipboard permission is not worth a toast over a path you can read
-      onClick: () => void navigator.clipboard?.writeText(d.path).catch(() => {}),
-    });
-    return items;
+  const deps = { sock, dispatch };
+  const graftWith = (id: string) => {
+    setGraftMode(true);
+    // on the row you are on it means "graft others onto this": nothing to check yet
+    setSel((s) => (id === activeId || s.includes(id) ? s : [...s, id]));
   };
-  const menuItems = (w: OwnedWorktree): MenuItem[] => {
-    const id = w.worktree.id;
-    const merge: MenuItem = {
-      label: "merge into main",
-      onClick: () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }),
-    };
-    const ship: MenuItem = { label: "push + PR", onClick: () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }) };
-    const items: MenuItem[] = [];
-    // the count on the row is read, not pressed, so the sync it used to offer lives here
-    if (canSync(w) && (w.behind ?? 0) > 0) {
-      items.push({
-        label: `sync from main (${w.behind} behind)`,
-        onClick: () => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
-      });
-    }
-    if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !leftOpen) {
-      items.push({
-        label: `view changes${(w.dirty ?? 0) > 0 ? ` (${w.dirty})` : ""}`,
-        onClick: () => {
-          dispatch({ a: "activate", id });
-          if (!leftOpen) dispatch({ a: "toggle-left" });
-        },
-      });
-    }
-    if (w.worktree.kind !== "spare") {
-      items.push({
-        label: "open terminal",
-        onClick: () => {
-          dispatch({ a: "activate", id });
-          if (!termOpen) dispatch({ a: "toggle-terminal" });
-        },
-      });
-    }
-    items.push({ label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
-    // main runs procs too, and is where switching is wanted most; flat items — Menu has no submenus
-    const repo = repoOf(w);
-    const current = profileOf(w.worktree, repo);
-    for (const name of profileNames(repo)) {
-      if (name !== current) items.push({ label: `run with ${name}`, onClick: () => acts.setProfile(w, name) });
-    }
-    if (canRename(w.worktree)) items.push({ label: "rename…", onClick: () => acts.rename(w) });
-    if (w.worktree.variant) items.push({ label: "keep this variant…", onClick: () => acts.pickVariant(w) });
-    if (canGraft(w.worktree)) {
-      items.push({
-        label: "graft with…",
-        onClick: () => {
-          setGraftMode(true);
-          // on the row you are on it means "graft others onto this": nothing to check yet
-          setSel((s) => (id === activeId || s.includes(id) ? s : [...s, id]));
-        },
-      });
-    }
-    if (canLand(w.worktree)) items.push(merge, ship);
-    if (canRemove(w.worktree)) items.push({ label: "remove…", danger: true, onClick: () => acts.remove(w) });
-    return items;
-  };
+  /** what a row can do: the long list for ours, the short one for a found worktree */
+  const rowItems = (w: WorktreeStatus) =>
+    isOwned(w)
+      ? worktreeItems(w, repoOf(w), { leftOpen, termOpen, shipping }, deps, { graft: graftWith })
+      : discoveredItems(w, { termOpen, clientId }, deps);
 
   /* The count columns are reserved list-wide, so a row with no dirty files still leaves the dirty
    * column empty and every number sits under the one above it. A column nobody uses is not drawn,
@@ -202,13 +111,7 @@ export function WtRail() {
   const railRow = (w: WorktreeStatus) => {
     const owned = isOwned(w) ? w : null;
     const id = w.id;
-    const menuOpen = owned ? menu?.id === id : discMenu?.id === id;
-    const openMenu = (at: { x: number; y: number }) => (owned ? setMenu({ at, id }) : setDiscMenu({ at, id }));
-    const under = (e: MouseEvent<HTMLElement>) => {
-      e.stopPropagation();
-      const r = e.currentTarget.getBoundingClientRect();
-      return { x: r.left, y: r.bottom + 4 };
-    };
+    const menuOpen = menu?.owner === "rail" && menu.key === id;
     const showCheck = owned && graftMode && canGraft(owned.worktree) && id !== activeId;
     return (
       <button
@@ -243,10 +146,7 @@ export function WtRail() {
             else toggleSel(owned);
           } else dispatch({ a: "activate", id });
         }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          openMenu({ x: e.clientX, y: e.clientY });
-        }}
+        {...cm.contextMenu(() => rowItems(w), id)}
       >
         <span className="rail-gut">
           {showCheck ? (
@@ -257,7 +157,14 @@ export function WtRail() {
               // thinnest mark in the column, so it takes the row's own colour rather than a tier
               // under it. Full size for the same reason: at the inline size the dots go hairline.
               // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
-              <span className="rail-more" {...tip("Actions")} onClick={(e) => openMenu(under(e))}>
+              <span
+                className="rail-more"
+                {...tip("Actions")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cm.openUnder(e.currentTarget, () => rowItems(w), id);
+                }}
+              >
                 <Icon name="more" />
               </span>
             )
@@ -354,7 +261,14 @@ export function WtRail() {
   };
 
   return (
-    <div className={cx("rail", (graftMode || menu || discMenu) && "hold", railOpen && "pinned", offline && "offline")}>
+    <div
+      className={cx(
+        "rail",
+        (graftMode || menu?.owner === "rail") && "hold",
+        railOpen && "pinned",
+        offline && "offline",
+      )}
+    >
       {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
           tip of its own, and the tooltip walks up to the nearest one */}
       <div
@@ -493,10 +407,6 @@ export function WtRail() {
             onClick={() => dispatch({ a: "toggle-rail" })}
           />
         </div>
-        {menu && menuWt && <Menu at={menu.at} onClose={closeMenu} items={menuItems(menuWt)} />}
-        {discMenu && discMenuRow && (
-          <Menu at={discMenu.at} onClose={closeDiscMenu} items={discMenuItems(discMenuRow)} />
-        )}
       </div>
     </div>
   );

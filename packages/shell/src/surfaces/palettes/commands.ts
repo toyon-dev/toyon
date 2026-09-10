@@ -1,16 +1,22 @@
-// Everything the UI can do, as typeable commands — chords first, then the context-menu long tail.
+// Everything the UI can do, as typeable commands: chords first, then the context-menu long tail.
 // The ⌘⇧P palette and ⌘P's `>` mode share this list and its matcher, so highlight and score can't drift.
+// An entity's actions (a worktree's, a proc's, a project's, the app's own) come from the same
+// builders the context menus read, in state/actions/, so a verb exists once and reads the same
+// in both; the palette appends whose it is.
 
-import type { OwnedWorktree, RepoInfo, ThemePrefs } from "@toyon/shared";
-import { canLand, canRemove, canRename, canSync, resolveTheme, worktreeChord } from "@toyon/shared";
+import type { ChordId, OwnedWorktree, RepoInfo, ThemePrefs } from "@toyon/shared";
+import { resolveTheme, worktreeChord } from "@toyon/shared";
 import { useMemo } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
+import { appItems } from "../../state/actions/app.ts";
+import { procItems } from "../../state/actions/proc.ts";
+import { projectItems } from "../../state/actions/project.ts";
+import { worktreeItems } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { profileNames, profileOf } from "../../state/profiles.ts";
 import { type Action, repoById, type State, worktreeById } from "../../state/store.ts";
+import type { MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
-import { shipOp, worktreeActions } from "../rail/worktreeActions.ts";
-import { chord, isBusy } from "../util.ts";
+import { chord } from "../util.ts";
 
 export type Command = {
   id: string;
@@ -20,6 +26,17 @@ export type Command = {
   /** opens a sub-picker: esc there returns to the palette */
   sub?: boolean;
 };
+
+/** the app items whose id is a chord's, so the palette can show the key beside them */
+const APP_CHORDS: ReadonlySet<string> = new Set<ChordId>([
+  "left",
+  "right",
+  "rail",
+  "terminal",
+  "design",
+  "zen",
+  "keys",
+]);
 
 export const appearanceLabel: Record<ThemePrefs["mode"], string> = {
   dark: "dark",
@@ -37,6 +54,15 @@ export function buildCommands(
   const cmds: Command[] = [];
   const add = (id: string, label: string, run: () => void, hint?: string, sub?: boolean) =>
     cmds.push({ id, label, hint, run, sub });
+  /** a menu's items as commands: `whose` is appended so the line says which worktree it is about,
+   * and a string detail becomes the hint */
+  const addItems = (items: MenuItem[], whose?: string, hintOf?: (it: MenuItem) => string | undefined) => {
+    for (const it of items) {
+      const hint = hintOf?.(it) ?? (typeof it.detail === "string" ? it.detail : undefined);
+      add(it.id, whose ? `${it.label} · ${whose}` : it.label, it.onClick, hint);
+    }
+  };
+  const deps = { sock, dispatch };
   const wt = active;
   const id = wt?.worktree.id;
 
@@ -49,19 +75,8 @@ export function buildCommands(
     () => dispatch({ a: "open", overlay: { kind: "projects" } }),
     chord("project"),
   );
-  if (repo) {
-    add(`setup:${repo.id}`, `set up ${repo.name}… (install + start)`, () =>
-      dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } }),
-    );
-    add(`forget:${repo.id}`, `forget project · ${repo.name}…`, () => {
-      if (
-        window.confirm(
-          `Forget ${repo.name}?\n\nIts procs stop and it leaves the project list. The checkout is not touched; open it again any time.`,
-        )
-      )
-        sock?.send({ t: "forget-repo", repoId: repo.id });
-    });
-  }
+  // the open project's own verbs (set up, forget); the others are listed by name below
+  if (repo) addItems(projectItems(repo, repo.id, deps));
   if (id) {
     add(
       "jump",
@@ -81,33 +96,13 @@ export function buildCommands(
     );
     add("reload", "reload preview", () => previewBus.post(id, { type: "reload" }));
   }
-  add("left", `${state.leftOpen ? "hide" : "show"} changes panel`, () => dispatch({ a: "toggle-left" }), chord("left"));
-  add(
-    "right",
-    `${state.rightOpen ? "hide" : "show"} chat panel`,
-    () => dispatch({ a: "toggle-right" }),
-    chord("right"),
+  // the panels and the app's own: the same list a right-click on bare chrome shows, minus the
+  // line that opens this palette
+  addItems(
+    appItems(state, deps).filter((it) => it.id !== "commands"),
+    undefined,
+    (it) => (APP_CHORDS.has(it.id) ? chord(it.id as ChordId) : undefined),
   );
-  add(
-    "rail",
-    `${state.railOpen ? "hide" : "show"} worktree panel`,
-    () => dispatch({ a: "toggle-rail" }),
-    chord("rail"),
-  );
-  add(
-    "terminal",
-    `${state.termOpen ? "hide" : "show"} terminal`,
-    () => dispatch({ a: "toggle-terminal" }),
-    chord("terminal"),
-  );
-  add(
-    "design",
-    `${state.designOpen ? "hide" : "show"} design system`,
-    () => dispatch({ a: "toggle-design" }),
-    chord("design"),
-  );
-  add("zen", "full-bleed preview", () => dispatch({ a: "toggle-zen" }), chord("zen"));
-  add("keys", "settings & shortcuts", () => dispatch({ a: "open", overlay: { kind: "keys" } }), chord("keys"));
 
   const prefs = state.themePrefs;
   const themeName = (tid: string) => state.themes.find((t) => t.id === tid)?.name ?? tid;
@@ -153,34 +148,11 @@ export function buildCommands(
   );
 
   if (wt && id) {
-    const acts = worktreeActions(sock, dispatch);
+    // the active worktree's menu, line for line, each saying whose it is
     const t = wt.worktree.title;
-    // stop stays offered while an ask card is open: that is the way out of a question you do
-    // not want to answer
-    if (isBusy(wt)) add("stop", `stop agent · ${t}`, () => sock?.send({ t: "stop-agent", worktreeId: id }));
-    for (const p of wt.procs)
-      add(`restart:${p.name}`, `restart ${p.name} (${p.status})`, () =>
-        sock?.send({ t: "term-restart", worktreeId: id, stream: p.name }),
-      );
-    add("reveal", `reveal in Finder · ${t}`, () => sock?.send({ t: "reveal", worktreeId: id }));
     const repo = state.repos.find((r) => r.id === wt.worktree.repoId) ?? null;
-    const current = profileOf(wt.worktree, repo);
-    for (const name of profileNames(repo)) {
-      if (name !== current) add(`profile:${name}`, `run ${t} with ${name}`, () => acts.setProfile(wt, name));
-    }
-    // a landing op already out for this worktree takes the others off the list until it answers
-    const idle = !state.shipping[id];
-    if ((wt.behind ?? 0) > 0 && canSync(wt) && idle)
-      add("sync", `sync main into ${t} (${wt.behind} behind)`, () =>
-        shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
-      );
-    if (canRename(wt.worktree)) add("rename", `rename worktree · ${t}…`, () => acts.rename(wt));
-    if (wt.worktree.variant) add("keep", `keep this variant · ${t}…`, () => acts.pickVariant(wt));
-    if (canLand(wt.worktree) && idle) {
-      add("merge", `merge ${t} into main`, () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }));
-      add("ship", `push + PR · ${t}`, () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }));
-    }
-    if (canRemove(wt.worktree)) add("remove", `remove worktree · ${t}…`, () => acts.remove(wt));
+    addItems(worktreeItems(wt, repo, state, deps), t);
+    for (const p of wt.procs) addItems(procItems(p, id, deps));
   }
   state.visible.forEach((w, i) => {
     if (w.worktree.id === id) return;

@@ -1,5 +1,6 @@
 import type { GitFileStatus } from "@toyon/shared";
 import { memo } from "react";
+import { type MenuItem, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { splitPath, xyClass, xyLetter } from "../util.ts";
 
@@ -19,7 +20,7 @@ export const GitFileRow = memo(function GitFileRow({
   active,
   selected,
   onOpen,
-  onContext,
+  menu,
   onHover,
 }: {
   f: GitFileStatus;
@@ -28,9 +29,11 @@ export const GitFileRow = memo(function GitFileRow({
   /** the keyboard selection, drawn only while the list has focus */
   selected: boolean;
   onOpen: (path: string) => void;
-  onContext: (e: React.MouseEvent, path: string) => void;
+  /** what a right-click on this file offers */
+  menu: (path: string) => MenuItem[];
   onHover: (path: string, entering: boolean) => void;
 }) {
+  const cm = useContextMenu("changes");
   const { name, dir } = splitPath(f.path);
   return (
     <button
@@ -41,12 +44,12 @@ export const GitFileRow = memo(function GitFileRow({
       // the list owns the keyboard: tab reaches the panel, not each of fifty files in it
       tabIndex={-1}
       onClick={() => onOpen(f.path)}
-      onContextMenu={(e) => onContext(e, f.path)}
+      {...cm.contextMenu(() => menu(f.path))}
       onMouseEnter={() => onHover(f.path, true)}
       onMouseLeave={() => onHover(f.path, false)}
     >
       <span className={`xy ${xyClass(f.xy)}`}>{xyLetter(f.xy)}</span>
-      <span className="path" data-tip={dir ? f.path : undefined} data-tip-placement="follow">
+      <span className="path" data-tip={dir ? f.path : undefined}>
         <span className="name">{name}</span>
         {dir && <span className="dir row-dim">{dir}</span>}
       </span>

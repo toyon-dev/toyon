@@ -1,5 +1,7 @@
 import type { CommitEntry } from "@toyon/shared";
 import { memo } from "react";
+import { commitItems } from "../../state/actions/commit.ts";
+import { useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 
 /** Coarse on purpose: the question a history row answers is "how long ago", and a row this narrow
@@ -37,6 +39,7 @@ export const CommitRow = memo(function CommitRow({
   selected: boolean;
   onToggle: (sha: string) => void;
 }) {
+  const cm = useContextMenu("changes");
   return (
     <button
       className="row row-sm log-row row-edge"
@@ -46,6 +49,7 @@ export const CommitRow = memo(function CommitRow({
       // the list owns the keyboard, the same way the changed-files list does
       tabIndex={-1}
       onClick={() => onToggle(c.sha)}
+      {...cm.contextMenu(() => commitItems(c))}
       data-tip={`${c.subject}\n${c.short} · ${c.author}`}
       data-tip-placement="follow"
     >

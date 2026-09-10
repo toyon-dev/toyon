@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { appItems } from "../state/actions/app.ts";
+import { removeWorktrees } from "../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
 import { useActive, useActiveId, useActiveRow, useGreenfield, useRows, useTheme } from "../state/selectors.ts";
@@ -7,12 +9,13 @@ import { RightDock } from "../surfaces/chat/RightDock.tsx";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
 import { Center } from "../surfaces/preview/Center.tsx";
 import { WtRail } from "../surfaces/rail/WtRail.tsx";
-import { removeWorktrees } from "../surfaces/rail/worktreeActions.ts";
 import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
 import { clampW } from "../surfaces/util.ts";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "../theme.ts";
 import { Button, IconButton } from "../ui/Button.tsx";
 import { useDragResize, useOnChange, usePersisted } from "../ui/hooks.ts";
+import { Menus } from "../ui/Menu.tsx";
+import { useContextMenu } from "../ui/menu.ts";
 import { Tooltips } from "../ui/Tooltip.tsx";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
@@ -24,6 +27,11 @@ import { cx } from "../ui/cx.ts";
 const RAIL_PX = 40;
 const RAIL_OPEN_PX = 232;
 const MRU_SUBSCRIPTIONS = 3;
+
+/** Where the browser's own menu is the useful one and ours would take it away: anything typed
+ * into (spelling, paste), the terminal (paste), Monaco, and the preview, which is the person's
+ * site and not our chrome. Everything else on the page answers with the app menu. */
+const NATIVE_MENU = "input, textarea, [contenteditable], .monaco-editor, .xterm, iframe";
 
 /** layout + app-wide effects; every surface reads its own state through selectors */
 export function App() {
@@ -198,9 +206,22 @@ export function App() {
   const railPx = railOpen ? RAIL_OPEN_PX : RAIL_PX;
   const dragRight = useDragResize((ev) => clampW(window.innerWidth - railPx - ev.clientX, 380), setRightW);
 
+  // a right-click nothing else answered: bare chrome opens the app's own menu, so the gesture
+  // works everywhere and nobody learns to stop trying it. A row that answered has stopped the
+  // event already; the check on defaultPrevented is the second lock.
+  const cm = useContextMenu("app");
+  const appMenu = cm.contextMenu(() => appItems(store.getState(), { sock, dispatch }));
+
   return (
-    <div className={cx("app", zen && "zen")}>
+    <div
+      className={cx("app", zen && "zen")}
+      onContextMenu={(e) => {
+        if (e.defaultPrevented || (e.target instanceof Element && e.target.closest(NATIVE_MENU))) return;
+        appMenu.onContextMenu(e);
+      }}
+    >
       <Tooltips />
+      <Menus />
       <StatusBar leftPx={leftOpen ? leftW : 0} rightPx={(rightOpen ? rightW : 0) + railPx} />
       <div className="docks">
         <LeftDock width={leftW} />

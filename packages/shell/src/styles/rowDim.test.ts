@@ -78,7 +78,6 @@ const NEVER_LIFTS = [
   ".status-bar",
   ".tool-row .dl.meta",
   ".tool-row .dl.more",
-  ".prompt-variants",
   ".bar-zen-title",
 ];
 

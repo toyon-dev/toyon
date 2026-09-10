@@ -1,7 +1,7 @@
 import { matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
 import { useSock, useStoreInstance } from "../state/context.tsx";
-import { isSubPicker, localOf } from "../state/store.ts";
+import { isSubPicker, localOf, previewIdOf } from "../state/store.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
@@ -31,7 +31,7 @@ export function useChords() {
             break;
           }
           case "new":
-            dispatch({ a: "toggle", overlay: { kind: "prompt" } });
+            dispatch({ a: "open-draft" });
             break;
           case "project":
             // the picker hangs off the pill, and zen hides the bar it lives in: leave zen first
@@ -46,9 +46,12 @@ export function useChords() {
               dispatch({ a: "open", overlay: { kind: "quick-open" } });
             }
             break;
-          case "pick":
-            if (s.activeId) togglePick(s.activeId, s.picking, dispatch);
+          case "pick": {
+            // the frame on screen, which while drafting is the base's preview rather than the row's
+            const id = previewIdOf(s);
+            if (id) togglePick(id, s.picking, dispatch);
             break;
+          }
           case "search":
             if (s.activeId) dispatch({ a: "toggle", overlay: { kind: "search" } });
             break;
@@ -101,9 +104,13 @@ export function useChords() {
           dispatch({ a: "close", back: isSubPicker(s.overlay) });
         } else if (s.picking) {
           // (while picking, the bridge cancels on its own Escape; this covers focus in the shell)
-          if (s.activeId) previewBus.post(s.activeId, { type: "pick-cancel" });
+          const id = previewIdOf(s);
+          if (id) previewBus.post(id, { type: "pick-cancel" });
           dispatch({ a: "set-picking", v: false });
         }
+        // the draft tab: back to the row it was from. What was typed stays in its record, so the
+        // next open picks it up rather than starting over.
+        else if (s.draft) dispatch({ a: "close-draft" });
         // an import pane: stop watching it. Escape deliberately does NOT abort the clone, which
         // keeps running and stays in the switcher: it is a key people hit reflexively, and losing
         // a five-minute download to one is not a trade worth making. Stopping it is the button.

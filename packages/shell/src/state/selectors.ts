@@ -4,7 +4,17 @@
 import type { OwnedWorktree, RepoInfo, WorktreeStatus } from "@toyon/shared";
 import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
-import { currentTheme, isGreenfield, localOf, repoById, rowById, type WorktreeLocal, worktreeById } from "./store.ts";
+import {
+  currentTheme,
+  draftSpareOf,
+  isGreenfield,
+  localOf,
+  previewIdOf,
+  repoById,
+  rowById,
+  type WorktreeLocal,
+  worktreeById,
+} from "./store.ts";
 
 export const useActiveId = () => useStore((s) => s.activeId);
 
@@ -51,6 +61,16 @@ export const useTheme = () => useStore(currentTheme);
 
 /** an empty project nobody has spoken to yet: the composer sits in the centre, the chat dock is hidden */
 export const useGreenfield = (): boolean => useStore(isGreenfield);
+
+/** the new worktree being drafted, while the draft tab is open */
+export const useDraft = () => useStore((s) => s.draft);
+
+/** the spare whose preview the draft shows (an element of the spares array); null when the draft
+ * is not from main, none is ready, or there is no draft */
+export const useDraftSpare = () => useStore(draftSpareOf);
+
+/** the preview on screen: what the element picker and the page context are about */
+export const usePreviewId = () => useStore(previewIdOf);
 
 /** the active worktree's repo while its detected config is still unconfirmed (an element of the repos array) */
 export const useActiveRepoNeedingSetup = () =>

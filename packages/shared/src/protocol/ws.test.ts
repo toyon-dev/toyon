@@ -38,6 +38,8 @@ describe("parseClientMsg", () => {
         },
       },
       { t: "create-worktree", repoId: "r", prompt: "x", profile: "fe" },
+      { t: "create-worktree", repoId: "r", prompt: "x", model: "big", effort: "high" },
+      { t: "set-worktree-effort", worktreeId: "a", effort: "high" },
       { t: "chat", worktreeId: "a", text: "hi", pastes: [{ text: "a\nb" }] },
       { t: "chat", worktreeId: "a", text: "hi", pastes: [{ text: "x", name: "App.tsx" }] },
       { t: "create-worktree", repoId: "r", prompt: "x", pastes: [{ text: "x" }] },

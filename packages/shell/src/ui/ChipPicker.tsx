@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Button } from "./Button.tsx";
 import "./chip-picker.css";
 import { cx } from "./cx.ts";
-import { Icon } from "./Icon.tsx";
 import { ListPicker } from "./ListPicker.tsx";
 import { tip } from "./Tooltip.tsx";
 
@@ -12,6 +11,8 @@ export type ChipOption<T extends string> = {
   label?: string;
   /** one line saying what picking it means */
   description?: string;
+  /** listed but not pickable, with the description saying why (an agent that is not installed) */
+  disabled?: boolean;
 };
 
 /** the panel's footprint before it is on screen, for deciding which way it opens: the width is
@@ -28,6 +29,7 @@ type Placement = { up: boolean; right: boolean };
  * drops, with the value as the field's lead chip, a row per option with a line under its name
  * saying what it means, and the current one marked down its edge. A context menu is a list of
  * actions; a value you set gets the picker, so every chip with options reads as the switcher does.
+ * No caret: the panel opens over the chip, not out of it, and the pill draws none either.
  *
  * The panel lands over the chip the way the switcher lands over the pill, whichever way it opens:
  * a chip at the foot of the window (the composer's) gets the field strip at the panel's bottom and
@@ -92,7 +94,7 @@ export function ChipPicker<T extends string>({
           });
         }}
       >
-        {shown} <Icon name="caret" className="icon-inline" />
+        {shown}
       </Button>
       {open && (
         <ListPicker<ChipOption<T>>
@@ -119,13 +121,15 @@ export function ChipPicker<T extends string>({
           row={(o) => (
             <>
               {o.id === value && <span className="row-current" aria-hidden="true" />}
-              <span className="chip-option">
+              <span className={cx("chip-option", o.disabled && "chip-option-off")} aria-disabled={o.disabled}>
                 <span className="chip-option-name">{o.label ?? o.id}</span>
                 {o.description && <span className="chip-option-desc row-dim">{o.description}</span>}
               </span>
             </>
           )}
           onPick={(o) => {
+            // a row that cannot be picked stays up, with its line saying why
+            if (o.disabled) return;
             onChange(o.id);
             close();
           }}

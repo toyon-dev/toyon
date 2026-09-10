@@ -136,6 +136,12 @@ export async function treeEmpty(worktreePath: string): Promise<boolean> {
   return !r.ok || r.out === "";
 }
 
+/** how far HEAD trails its upstream as of the last fetch; null when the branch has none */
+export async function behindUpstream(worktreePath: string): Promise<number | null> {
+  const r = await git(worktreePath, "rev-list", "--count", "HEAD..@{upstream}");
+  return r.ok ? Number(r.out) || 0 : null;
+}
+
 export async function aheadBehind(worktreePath: string, defaultBr: string): Promise<{ ahead: number; behind: number }> {
   const [a, b] = await Promise.all([
     git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`),

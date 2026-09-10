@@ -293,14 +293,19 @@ export interface WorktreeStatus {
   procs: ProcState[];
   /** "idle" for a row toyon does not run */
   agent: AgentStatus;
-  /** commits ahead/behind the default branch (cached, ~10s freshness); absent on main and on a
-   * detached worktree, which have nothing to count against */
+  /** commits ahead/behind the default branch (cached, ~10s freshness); absent on a detached
+   * worktree, which has nothing to count against. On main, `behind` counts against its upstream
+   * as of the last fetch (the daemon fetches now and then while main is on screen), and `ahead`
+   * is absent: what main trails is origin, and what it leads is nobody's business here. */
   ahead?: number;
   behind?: number;
   /** uncommitted file count (cached, ~10s freshness) */
   dirty?: number;
   /** chat messages waiting behind the current turn */
   queued?: number;
+  /** the agent's last reported figures here: context in use of the window, and the session's
+   * spend when the agent prices itself. From the transcript, so a cold worktree has them too. */
+  usage?: { used: number; size: number; cost?: number };
   /** a turn finished here since the last time anyone looked at it. The rail rings the dot: green
    * alone cannot separate "just finished" from "untouched for a week". */
   unseen?: boolean;

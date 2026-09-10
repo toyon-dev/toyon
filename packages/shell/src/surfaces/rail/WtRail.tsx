@@ -23,6 +23,7 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { dollars, tokens } from "../chat/usage.ts";
 import { chord, dotClass, procTrouble, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
@@ -61,6 +62,15 @@ export function WtRail() {
   const home = useStore((s) => s.home);
   const wtDirLabel = (d: WorktreeStatus) =>
     home && d.path.startsWith(`${home}/`) ? `~${d.path.slice(home.length)}` : d.path;
+  // the tip's second line: where the worktree is, and what its agent has cost and filled so far
+  const detailOf = (d: WorktreeStatus) => {
+    const u = d.usage;
+    if (!u) return wtDirLabel(d);
+    const figures = [u.cost !== undefined ? dollars(u.cost) : null, `${tokens(u.used)} of ${tokens(u.size)}`].filter(
+      Boolean,
+    );
+    return `${wtDirLabel(d)} · ${figures.join(" · ")}`;
+  };
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
 
@@ -134,7 +144,7 @@ export function WtRail() {
         {...(owned
           ? tip(stateLabel(w, repoOf(owned)?.needsSetup), undefined, {
               placement: "left",
-              detail: wtDirLabel(w),
+              detail: detailOf(w),
               dot: dotClass(w),
               lead: isMain(owned.worktree) ? "main" : undefined,
             })
@@ -237,7 +247,12 @@ export function WtRail() {
             </span>
           )}
           {cols.behind && (
-            <span className="rail-count row-dim" data-tip={w.behind ? `${w.behind} behind main` : undefined}>
+            <span
+              className="rail-count row-dim"
+              data-tip={
+                w.behind ? `${w.behind} behind ${w.worktree && isMain(w.worktree) ? "origin" : "main"}` : undefined
+              }
+            >
               {w.behind ? count(w.behind) : ""}
             </span>
           )}
@@ -349,7 +364,11 @@ export function WtRail() {
                 onClick={() => {
                   for (const id of sel) {
                     const w = worktrees.find((x) => x.worktree.id === id);
-                    if ((w?.behind ?? 0) > 0) shipOp(sock, dispatch, { t: "sync-main", worktreeId: id });
+                    if ((w?.behind ?? 0) > 0)
+                      shipOp(sock, dispatch, {
+                        t: w && isMain(w.worktree) ? "pull-main" : "sync-main",
+                        worktreeId: id,
+                      });
                   }
                   cancelGraft();
                 }}

@@ -264,6 +264,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     );
   },
 
+  async "pull-main"(msg, ctx, s) {
+    const result = await s.worktrees.pull(msg.worktreeId);
+    await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message));
+  },
+
   async commit(msg, ctx, s) {
     const result = await s.worktrees.commit(msg.worktreeId, msg.message);
     await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message));

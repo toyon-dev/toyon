@@ -1085,3 +1085,93 @@ describe("a shell at a discovered worktree", () => {
     expect(w.terminals.get(row.id)?.[0]?.alive).toBe(false);
   });
 });
+
+describe("main against origin", () => {
+  /** a bare "origin" the repo tracks, with main one commit ahead of the checkout */
+  async function withUpstream(): Promise<string> {
+    const repoId = await registered();
+    const bare = join(dirname(w.repo), "origin.git");
+    sh(w.repo, "git", "init", "-q", "--bare", bare);
+    sh(w.repo, "git", "remote", "add", "origin", bare);
+    sh(w.repo, "git", "commit", "--allow-empty", "-qm", "upstream moves on");
+    sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
+    sh(w.repo, "git", "reset", "-q", "--hard", "HEAD~1");
+    return repoId;
+  }
+
+  test("main's row counts what it trails on origin; a worktree's row still counts against main", async () => {
+    const repoId = await withUpstream();
+    const wt = await w.worktrees.create(repoId, "feature");
+    w.worktrees.invalidateCounts();
+    const rows = await w.worktrees.rows();
+    const main = rows.find((r) => r.worktree && r.worktree.kind === "main")!;
+    expect(main.behind).toBe(1);
+    expect(main.ahead).toBeUndefined();
+    expect(rows.find((r) => r.id === wt.id)?.behind).toBe(0);
+  });
+
+  test("a main with no upstream has no count", async () => {
+    await registered();
+    const main = (await w.worktrees.rows()).find((r) => r.worktree && r.worktree.kind === "main")!;
+    expect(main.behind).toBeUndefined();
+  });
+
+  test("pull fast-forwards main and every worktree's count moves with it", async () => {
+    const repoId = await withUpstream();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    let frames = 0;
+    w.hub.on("worktreesChanged", () => frames++);
+    const result = await w.worktrees.pull(main.id);
+    expect(result).toMatchObject({ ok: true, message: "pulled 1 commit(s) from origin" });
+    expect(frames).toBe(1);
+    const rows = await w.worktrees.rows();
+    expect(rows.find((r) => r.id === main.id)?.behind).toBe(0);
+    expect(rows.find((r) => r.id === wt.id)?.behind).toBe(1);
+    expect((await w.worktrees.pull(main.id)).message).toBe("already up to date with origin");
+  });
+
+  test("pull refuses a dirty main and a worktree, and says why", async () => {
+    const repoId = await withUpstream();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    writeFileSync(join(w.repo, "wip.txt"), "x\n");
+    expect((await w.worktrees.pull(main.id)).ok).toBe(false);
+    await expect(w.worktrees.pull(wt.id)).rejects.toBeInstanceOf(UserError);
+  });
+});
+
+describe("usage on the row", () => {
+  test("the stream's last figures ride on the row, and a cold worktree's come from its transcript", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.usage).toBeUndefined();
+    w.hub.emit("agent", wt.id, 1, { type: "usage", used: 1000, size: 4000, cost: 0.2, ts: 0 });
+    expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.usage).toEqual({
+      used: 1000,
+      size: 4000,
+      cost: 0.2,
+    });
+
+    // a second service over the same state and files: the figures come from the transcript
+    const cold = await w.worktrees.create(repoId, "cold");
+    writeFileSync(
+      transcriptPathFor(w.paths.transcriptsDir, cold.id),
+      [
+        JSON.stringify({ seq: 0, event: { type: "usage", used: 500, size: 4000, cost: 0.05, ts: 0 } }),
+        JSON.stringify({ seq: 1, event: { type: "text-delta", text: "later" } }),
+        JSON.stringify({ seq: 2, event: { type: "usage", used: 900, size: 4000, ts: 0 } }),
+        "",
+      ].join("\n"),
+    );
+    const again = new WorktreeService({
+      state: w.state,
+      hub: w.hub,
+      runtime: w.runtime,
+      paths: w.paths,
+      agents: w.registry,
+      namer: async () => null,
+    });
+    expect((await again.rows()).find((r) => r.id === cold.id)?.usage).toEqual({ used: 900, size: 4000 });
+  });
+});

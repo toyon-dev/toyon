@@ -15,7 +15,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
-import { baseNote, behindNote } from "../chips/baseNote.ts";
+import { BASE_NOTE_TIP, baseNote, behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { ModelChip, useNewWorktreeModel } from "../chips/ModelChip.tsx";
@@ -158,6 +158,14 @@ export function Composer({
     !active || !repo ? null : spawning ? baseNote(onMain ? repo.defaultBranch : active.worktree.title, dirty) : null;
   const behind =
     !active || !repo || spawning || !canSync(active) ? null : behindNote(repo.defaultBranch, active.behind);
+  // main against origin: a new worktree starts from main as it is, so a main nobody has pulled
+  // today hands the agent stale code. Said whenever main is the base or the subject.
+  const mainRow = useStore(
+    (s) => s.rows.find((r) => r.repoId === repoId && r.worktree !== undefined && isMain(r.worktree)) ?? null,
+  );
+  const mainOp = useStore((s) => (mainRow ? s.shipping[mainRow.id] : undefined));
+  const origin = mainRow && (onMain || spawning) ? originNote(mainRow.behind) : null;
+  const mainDirty = (mainRow?.dirty ?? 0) > 0;
   // a draft has no session of its own to ask for commands: a worktree of this repo that runs the
   // same agent stands in, main first (commandSource says why that is sound)
   const source = useStore((s) => (drafting ? commandSource(s.rows, repoId, spawnAgent, defaultAgent) : id));
@@ -612,7 +620,29 @@ export function Composer({
         </span>
       </div>
       {/* a sentence about the base or the branch: its own line, so the row above keeps its shape */}
-      {note && <div className="hint spawn-note">{note}</div>}
+      {note && (
+        <div className="hint spawn-note" data-tip={BASE_NOTE_TIP} data-tip-placement="follow">
+          {note}
+        </div>
+      )}
+      {origin && mainRow && (
+        <div className="hint spawn-note">
+          <span>{origin}</span>
+          <Button
+            variant="outline"
+            busy={mainOp === "pull-main"}
+            disabled={!!mainOp || mainDirty}
+            data-tip={
+              mainDirty
+                ? `commit or discard the changes on ${repo?.defaultBranch} first`
+                : "Fast-forward main to origin"
+            }
+            onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: mainRow.id })}
+          >
+            pull
+          </Button>
+        </div>
+      )}
       {behind && active && id && (
         <div className="hint spawn-note">
           <span>{behind}</span>

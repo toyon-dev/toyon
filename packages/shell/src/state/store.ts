@@ -530,7 +530,7 @@ function landingIn(s: State, repoId: string | null, rows = s.rows): string | nul
 }
 
 /** the four client messages that end in a `shipped` frame: the daemon's word for them */
-export type ShipOp = "sync-main" | "merge-main" | "ship" | "commit";
+export type ShipOp = "sync-main" | "merge-main" | "ship" | "commit" | "pull-main";
 
 /** `shipping` minus the entries `done` says are over, the same object when none are, so a
  * selector on it stays stable across the proc events that push most snapshots */

@@ -2,7 +2,7 @@
 // transport layer (server/handlers.ts) calls in here and shapes replies; git/, runtime/ and the
 // spare pool do the work.
 
-import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   type AgentEvent,
@@ -37,10 +37,17 @@ import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, git, gitOrThrow, NO_PROMPT, run } from "../git/exec.ts";
-import { commitWorktree, mergeToMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
+import { commitWorktree, mergeToMain, pullMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
-import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts, treeEmpty } from "../git/status.ts";
+import {
+  aheadBehind,
+  behindUpstream,
+  committedFiles,
+  statusFiles,
+  statusFilesWithCounts,
+  treeEmpty,
+} from "../git/status.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
@@ -129,6 +136,9 @@ export interface WorktreeServiceDeps {
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
 }
 
+/** how often main's upstream is fetched while its row is being counted */
+const FETCH_EVERY_MS = 5 * 60_000;
+
 export class WorktreeService {
   readonly spare: SparePool;
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
@@ -136,6 +146,11 @@ export class WorktreeService {
   private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
   /** the agent status each worktree last reported, so a turn's end is an edge and not a level */
   private lastAgentStatus = new Map<string, AgentStatus>();
+  /** the last usage figures per worktree: live from the stream, else read once from the transcript
+   * on disk (null: read, and there were none) */
+  private usage = new Map<string, WorktreeStatus["usage"] | null>();
+  /** per repo path, when main's upstream was last fetched */
+  private lastFetch = new Map<string, number>();
 
   constructor(private d: WorktreeServiceDeps) {
     this.spare = new SparePool({
@@ -153,6 +168,11 @@ export class WorktreeService {
     // birth too, and stamping that would ring every worktree the daemon has ever started.
     // Subscribed here rather than in the ws layer because this listener has to run before the one
     // that broadcasts statuses, and services are constructed before the server.
+    d.hub.on("agent", (worktreeId, _seq, event) => {
+      if (event.type !== "usage") return;
+      const { used, size, cost } = event;
+      this.usage.set(worktreeId, { used, size, ...(cost !== undefined ? { cost } : {}) });
+    });
     d.hub.on("agentStatus", (worktreeId, status) => {
       const prev = this.lastAgentStatus.get(worktreeId) ?? "idle";
       this.lastAgentStatus.set(worktreeId, status);
@@ -759,6 +779,19 @@ export class WorktreeService {
     return { result, defaultBranch: repo.defaultBranch };
   }
 
+  /** fast-forward main to its upstream; every worktree's `behind` moves with it */
+  async pull(worktreeId: string): Promise<ShipResult> {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    if (!isMain(wt)) throw new UserError("pull on main; a worktree syncs from main instead");
+    const repo = this.d.state.requireRepo(wt.repoId);
+    const result = await withRepoLock(repo.path, () => pullMain(repo.path, repo.defaultBranch));
+    if (result.ok) {
+      this.invalidateCounts();
+      this.headMoved(worktreeId);
+    }
+    return result;
+  }
+
   async commit(worktreeId: string, message: string): Promise<ShipResult> {
     const wt = this.d.state.requireWorktree(worktreeId);
     const m = message.trim();
@@ -779,6 +812,53 @@ export class WorktreeService {
   /** this worktree's own HEAD moved (a sync or a commit): its cached ahead/behind describe the
    * old one, and nothing watches a worktree's branch the way the repo watcher watches main, so
    * the rail would keep the old badge until the TTL lapsed and something unrelated pushed a frame */
+  /** main's `behind` is against its upstream, refreshed by a fetch every few minutes while
+   * someone is looking: the count is only as good as the last fetch, and nobody runs one by hand
+   * for a tool to read. No upstream, no count and no fetch. */
+  private async mainCounts(path: string): Promise<{ behind?: number }> {
+    const behind = await behindUpstream(path);
+    if (behind === null) return {};
+    const last = this.lastFetch.get(path) ?? 0;
+    if (Date.now() - last > FETCH_EVERY_MS) {
+      this.lastFetch.set(path, Date.now());
+      fireAndForget(
+        "fetch",
+        run(GIT, ["fetch", "--quiet"], path, NO_PROMPT).then((r) => {
+          if (!r.ok) {
+            log.warn("fetch", `could not fetch ${path}: ${r.err.slice(0, 200)}`);
+            return;
+          }
+          this.invalidateCounts();
+          this.d.hub.emit("worktreesChanged");
+        }),
+      );
+    }
+    return { behind };
+  }
+
+  /** the figures for a row: what the stream said last, else what the transcript on disk ends with */
+  private usageFor(worktreeId: string): WorktreeStatus["usage"] | undefined {
+    const known = this.usage.get(worktreeId);
+    if (known !== undefined) return known ?? undefined;
+    let found: WorktreeStatus["usage"] | null = null;
+    const file = transcriptPathFor(this.d.paths.transcriptsDir, worktreeId);
+    if (existsSync(file)) {
+      const lines = readFileSync(file, "utf8").split("\n");
+      for (let i = lines.length - 1; i >= 0 && !found; i--) {
+        if (!lines[i]?.includes('"usage"')) continue;
+        try {
+          const e = JSON.parse(lines[i]!).event;
+          if (e?.type === "usage")
+            found = { used: e.used, size: e.size, ...(e.cost !== undefined ? { cost: e.cost } : {}) };
+        } catch {
+          // a torn line at the end of a transcript is the loader's problem, not this read's
+        }
+      }
+    }
+    this.usage.set(worktreeId, found);
+    return found ?? undefined;
+  }
+
   private headMoved(worktreeId: string) {
     this.countsCache.delete(worktreeId);
     this.d.hub.emit("worktreesChanged");
@@ -859,7 +939,7 @@ export class WorktreeService {
     const cached = this.countsCache.get(id);
     if (cached && Date.now() - cached.at < 10_000) return cached;
     try {
-      const ab = countable ? await aheadBehind(path, defaultBranch) : {};
+      const ab = countable ? await aheadBehind(path, defaultBranch) : await this.mainCounts(path);
       const fresh = { ...ab, dirty: (await statusFiles(path)).length, at: Date.now() };
       this.countsCache.set(id, fresh);
       return fresh;
@@ -1004,6 +1084,7 @@ export class WorktreeService {
             dirty,
             queued: rt?.agent.queueLength || undefined,
             unseen: isUnseen(wt) || undefined,
+            usage: this.usageFor(wt.id),
           };
         }),
     );

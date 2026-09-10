@@ -288,6 +288,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * target keeps its agent, procs and port */
   z.object({ t: z.literal("graft"), targetId: id, sourceIds: z.array(id).min(1).max(20) }),
   z.object({ t: z.literal("sync-main"), worktreeId: id }),
+  /** fast-forward the main checkout (`worktreeId` is main's row) to its upstream */
+  z.object({ t: z.literal("pull-main"), worktreeId: id }),
   z.object({ t: z.literal("write-file"), worktreeId: id, path: relPath, content: z.string().max(10_000_000) }),
   z.object({ t: z.literal("list-files"), worktreeId: id }),
   /** open the `/` menu on a worktree whose agent has not run yet: start it so it says what

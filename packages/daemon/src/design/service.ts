@@ -27,9 +27,8 @@ const MAX_FILE_BYTES = 400_000;
 /** a class has to beat the typical used class before "nothing is named for it" is worth saying */
 const UNWRAPPED_FLOOR = 3;
 
-/** Anything that can carry a `class` attribute. Server-rendered templates parse with the same
- * recogniser as JSX does; leaving them out of this list was the whole reason a Rails or Django
- * project reported no classes at all. */
+/** Anything that can carry a `class` attribute. Server-rendered templates carry them too, and
+ * parse with the same recogniser as JSX does. */
 const SOURCE_EXT =
   /\.(tsx|jsx|ts|js|mjs|cjs|mts|cts|vue|svelte|astro|html?|erb|ejs|hbs|handlebars|pug|jade|php|py|rb|templ|heex|eex|twig|liquid|cshtml|razor|blade)$/;
 const COMPONENT_EXT = /\.(tsx|jsx|mjs|cjs|mts|vue|svelte|astro)$/;
@@ -93,14 +92,10 @@ async function readAll(root: string, paths: string[]): Promise<SourceFile[]> {
   return out;
 }
 
-/**
- * The first declaration of a name wins, and declaration order is kept.
- *
- * Sorting by name looked tidier and threw away the only grouping anyone had actually made: a token
- * file puts `surface0..2`, then `element0..1`, then `border`, then `text`, because that is the
- * order they mean something in. Alphabetical scatters those four families through the hues. The
- * file with the most custom properties leads, since that is the one that exists to hold them.
- */
+/** The first declaration of a name wins, and declaration order is kept: a token file groups its
+ * families (`surface0..2`, then `element0..1`, then `border`, then `text`) in the order they mean
+ * something in, and alphabetical order scatters them through the hues. The file with the most
+ * custom properties leads, since that is the one that exists to hold them. */
 function collectTokens(css: SourceFile[]): DesignToken[] {
   const byDensity = [...css].sort((a, b) => cssTokens(b.text).length - cssTokens(a.text).length);
   const out = new Map<string, DesignToken>();

@@ -192,17 +192,10 @@ export class AcpSession implements AgentAdapter {
   }
   onCommandsChange: ((commands: AgentCommand[]) => void) | null = null;
 
-  /**
-   * Start the session early, purely so its command list exists.
-   *
-   * The list only arrives once the adapter is up, which is otherwise a worktree's first prompt: a
-   * `/` menu would be empty until after the thing it is meant to help write. This is the same
-   * session that first message would have created, so nothing is wasted, and the answer is cached
-   * per agent and repo, so it happens about once per repo rather than once per worktree.
-   *
-   * Best effort by design: an agent that will not start (no credentials, say) leaves the menu
-   * saying so, and the person finds out properly when they send something.
-   */
+  /** Start the session early, purely so the `/` menu has a list before the first prompt (see
+   * `commandList`); the answer is cached per agent and repo, so this runs about once per repo.
+   * Best effort: an agent that will not start leaves the menu saying so, and the person finds out
+   * properly when they send something. */
   async warmCommands(): Promise<void> {
     if (this.commandList.length > 0 || this.stopped) return;
     try {

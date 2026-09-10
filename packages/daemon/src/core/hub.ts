@@ -1,6 +1,6 @@
 // Typed, synchronous event hub. Services emit what happened; the WebSocket layer decides what to
-// push to which client. Synchronous on purpose: AgentSession.emit → hub → git status runs inline
-// today, and changing that backpressure is a later job, not this file's.
+// push to which client. Synchronous on purpose: an AcpSession emit runs the hub and then git
+// status inline today, and changing that backpressure is a later job, not this file's.
 
 import type { AgentCommand, AgentEvent, AgentStatus, ProcState } from "@toyon/shared";
 import { log } from "./log.ts";

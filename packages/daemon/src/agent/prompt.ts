@@ -27,16 +27,11 @@ export function pasteCaption(ref: PasteRef): string {
 }
 
 // An agent only dispatches a slash command when it leads the first text block, so a message that
-// opens with one goes ahead of everything the prompt would otherwise start with: image captions,
-// and SYSTEM_APPEND on a prompt-prefix agent's first turn.
-//
-// Ambient context (the live preview's route, title, console errors) is dropped outright on such a
-// message. It cannot ride along: concatenated onto the command's line it reads as that command's
-// arguments, and in a block of its own it still costs the command its dispatch, because an adapter
-// recognises some commands only in a prompt that is the command and nothing else. `/usage` is the
-// one that made this visible: with a second block the Claude adapter never runs it, and the model
-// answers in prose that /usage is a CLI command it cannot reach. Nobody loses anything real here:
-// the context describes what is on screen, and a command was not asking about the screen.
+// opens with one goes ahead of image captions and SYSTEM_APPEND. Ambient context (the preview's
+// route, title, console errors) is dropped from such a message: on the command's line it reads as
+// arguments, and in a block of its own it still costs the command its dispatch, since an adapter
+// recognises some commands only in a prompt that is the command and nothing else (the Claude
+// adapter never runs `/usage` when a second block is present).
 const LEADING_COMMAND = /^\/[A-Za-z0-9]/;
 
 /** attachments go first, each behind its caption, then the text; context (live-page state, picked

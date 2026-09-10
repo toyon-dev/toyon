@@ -17,12 +17,11 @@ function clean(raw: string): string {
   return (parts[parts.length - 1] ?? "").trimEnd();
 }
 
-/** One per stream. Buffers across chunks, since a pty read can end mid-line or mid-escape: the
- * piped reader used to split every chunk on its own and shipped torn halves as two lines. */
+/** One per stream. Buffers across chunks, since a pty read can end mid-line or mid-escape. */
 export class LineSplitter {
   private pending = "";
 
-  /** the lines this chunk completed; blank ones are dropped, as the piped reader did */
+  /** the lines this chunk completed; blank ones are dropped */
   feed(chunk: string): string[] {
     this.pending += chunk;
     const out: string[] = [];

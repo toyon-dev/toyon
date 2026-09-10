@@ -1,7 +1,5 @@
-// Worktrees git knows about that toyon did not create. `create()` used to be the only door into
-// the worktree list, so anything made in a terminal or by another agent was invisible and the
-// answer to "where's my stuff" was "you didn't create it in toyon". Here git owns the question of
-// what *exists*; state.json stays the sidecar for what toyon adds on top.
+// Worktrees git knows about that toyon did not create. Git owns the question of what *exists*;
+// state.json stays the sidecar for what toyon adds on top.
 //
 // Nothing here writes: a discovered worktree is derived on every push and never persisted, which
 // is what makes "toyon cannot delete a directory it did not create" structural rather than a rule

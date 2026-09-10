@@ -65,12 +65,11 @@ function withoutAttachments(event: AgentEvent): AgentEvent {
 
 /** Where a worktree id points, for work that only reads.
  *
- * Reading a worktree needs a directory and a branch to compare against, and nothing else:
- * `requireWorktree` was only ever how those two were fetched. That is why a worktree toyon did not
- * create could not be looked at, even though it has a path and a branch like any other. `wt` is
- * present only when there is a record, and it is what the handful of record-only behaviours key
- * off: clearing `landed`, and skipping ahead/behind on main, where HEAD is the default branch and
- * the counts are zero by definition. */
+ * Reading a worktree needs a directory and a branch to compare against, and nothing else, so a
+ * worktree toyon did not create qualifies like any other. `wt` is present only when there is a
+ * record, and it is what the handful of record-only behaviours key off: clearing `landed`, and
+ * skipping ahead/behind on main, where HEAD is the default branch and the counts are zero by
+ * definition. */
 export interface ReadableWorktree {
   id: string;
   repoId: string;
@@ -301,12 +300,6 @@ export class WorktreeService {
     return wt;
   }
 
-  /** Promote a worktree git knows about into one toyon runs.
-   *
-   * The directory already exists and someone else made it, so this allocates a port, records it and
-   * starts the procs. It deliberately does not run `toyon.json`'s setup commands (see
-   * `setupAndStart`) and does not start an agent: take-over is not a task, and the agent comes up
-   * on the first message like it does anywhere else. */
   /** The discovered row at this path as it stands right now, or a toast.
    *
    * Re-derived rather than read from the cache because the frame the person clicked can be
@@ -319,6 +312,12 @@ export class WorktreeService {
     return found;
   }
 
+  /** Promote a worktree git knows about into one toyon runs.
+   *
+   * The directory already exists and someone else made it, so this allocates a port, records it and
+   * starts the procs. It deliberately does not run `toyon.json`'s setup commands (see
+   * `setupAndStart`) and does not start an agent: take-over is not a task, and the agent comes up
+   * on the first message like it does anywhere else. */
   async adopt(worktreeId: string, createdBy?: string): Promise<WorktreeInfo> {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
@@ -452,7 +451,7 @@ export class WorktreeService {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
     // the branch moves with the title, and only a toyon/ branch is toyon's to move: an adopted
-    // worktree's branch is the person's, and used to get renamed under them
+    // worktree's branch is the person's
     if (!canRename(wt)) throw new UserError(`${wt.title} keeps its own branch; rename it in git`);
     const repo = this.d.state.requireRepo(wt.repoId);
     const clean = cleanTitle(title);
@@ -529,12 +528,9 @@ export class WorktreeService {
   /** Merge other worktrees' branches into one and remove them. A local merge, nothing pushed: the
    * target keeps its title, procs, agent session and port, and the sources' transcripts are
    * appended to its own so the reasoning behind their commits stays readable. Every check runs
-   * before anything is touched, and a conflict leaves both sides exactly as they were.
-   *
-   * It used to make a third worktree (a `combined` kind, kept apart from its sources until it
-   * landed). That cost a directory, a deps clone, a port and a cold agent with no memory of either
-   * side, for insurance the merge already provides: every commit is in the target, and a conflict
-   * never gets this far. */
+   * before anything is touched, and a conflict leaves both sides exactly as they were. No third
+   * worktree holds the result: a `combined` kind would cost a directory, a deps clone, a port and a
+   * cold agent with no memory of either side, for insurance the merge already provides. */
   async graft(targetId: string, sourceIds: string[]): Promise<{ target: WorktreeInfo; grafted: string[] }> {
     const target = this.d.state.worktree(targetId);
     if (!target) throw new UserError("that worktree is gone");
@@ -794,8 +790,6 @@ export class WorktreeService {
     }
   }
 
-  /** the working-tree state the changes panel shows (subscribe, edits, ref ticks). Also the one
-   * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
   /** Resolve an id for reading: a worktree toyon runs, or one it merely knows about. Null for a
    * spare (nobody looks at those) and for an id that is neither. */
   readable(id: string): ReadableWorktree | null {
@@ -819,6 +813,8 @@ export class WorktreeService {
     };
   }
 
+  /** the working-tree state the changes panel shows (subscribe, edits, ref ticks). Also the one
+   * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
   async gitStatus(worktreeId: string): Promise<GitInfo | null> {
     const r = this.readable(worktreeId);
     if (!r) return null;

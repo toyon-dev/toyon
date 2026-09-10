@@ -208,9 +208,7 @@ describe("resolveAliases", () => {
   });
 
   test("fills in references sitting inside a larger value", () => {
-    // the type scale is the case: a `font` shorthand names two other tokens, and leaving them
-    // unresolved sent the raw var()s to the shell, where they resolved against the shell's own
-    // tokens instead of the project's and every specimen rendered in the same face
+    // the type scale is the case: a `font` shorthand names two other tokens
     const [type] = resolveAliases([
       tok("--type-mono", "400 var(--size-mono) var(--face-mono)"),
       tok("--size-mono", "12px"),

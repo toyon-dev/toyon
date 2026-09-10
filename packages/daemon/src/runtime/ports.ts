@@ -1,6 +1,6 @@
 // Port allocation: bind port 0 to get a free port from the OS, close, hand it out.
-// Small TOCTOU race is acceptable for v0.1; allocations are tracked to avoid
-// handing the same port out twice within one daemon lifetime.
+// The small TOCTOU race is acceptable; allocations are tracked to avoid handing
+// the same port out twice within one daemon lifetime.
 //
 // Cloud mode (TOYON_PROXY_PORTS=a-b) allocates worktree proxy ports from a
 // fixed range instead, because each one must be declared as a public TLS port.

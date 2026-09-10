@@ -1,6 +1,5 @@
 // A repo's setup commands, on a pty like everything else a worktree runs. `run()` from git/exec
-// buffers to completion, so `bun install` used to print nothing until it finished and then have
-// its output thrown away: first run, when someone is watching hardest, showed one summary line.
+// buffers to completion, so on it `bun install` would print nothing until it finished.
 
 import { LineSplitter } from "./lines.ts";
 import { PtyStream } from "./pty.ts";

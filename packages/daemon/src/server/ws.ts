@@ -1,5 +1,5 @@
 // WebSocket side of the daemon: socket registry, hello, inbound validation + dispatch, and the
-// table of what gets pushed when a hub event fires. Phase 6 scopes the pushes per subscription.
+// table of what gets pushed when a hub event fires.
 
 import { homedir } from "node:os";
 import {

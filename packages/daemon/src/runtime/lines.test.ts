@@ -12,7 +12,6 @@ describe("LineSplitter", () => {
 
   test("holds a partial line until its newline arrives", () => {
     const s = new LineSplitter();
-    // the piped reader split every chunk on its own and shipped both halves as lines
     expect(s.feed("hel")).toEqual([]);
     expect(s.feed("lo wor")).toEqual([]);
     expect(s.feed("ld\n")).toEqual(["hello world"]);

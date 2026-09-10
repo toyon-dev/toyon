@@ -87,19 +87,17 @@ export class RepoRegistry {
   }
 
   /** Make a project and open it. The containment check lives here rather than in `create.ts`
-   * because it is the only part that needs daemon state, and because a blanket `isGitRepo(parent)`
-   * would be wrong: a home directory that is itself a dotfiles repo is an ordinary setup, and
-   * making a project under it is fine. What must not happen is a project nested inside a repo or
-   * worktree toyon already manages, and only these records can answer that. */
+   * because it is the only part that needs daemon state: see `refuseIfManaged`. */
   async create(opts: CreateOpts): Promise<RepoInfo> {
     const { dir } = planProject(opts);
     this.refuseIfManaged(dir);
     return this.register(await createRepoDir(opts));
   }
 
-  /** a project nested inside a repo or worktree toyon already manages is the thing to prevent. A
-   * blanket `isGitRepo(parent)` would be wrong: a home directory that is itself a dotfiles repo is
-   * an ordinary setup, and making a project under it is fine. */
+  /** A project nested inside a repo or worktree toyon already manages is the thing to prevent, and
+   * only these records can answer that. A blanket `isGitRepo(parent)` would be wrong: a home
+   * directory that is itself a dotfiles repo is an ordinary setup, and making a project under it
+   * is fine. */
   private refuseIfManaged(dir: string): void {
     const managed = [...this.d.state.repos, ...this.d.state.worktrees].some((r) => isInside(dir, r.path));
     if (managed) throw new UserError(`${dir} is inside a project toyon already manages`);
@@ -149,7 +147,6 @@ export class RepoRegistry {
   }
 
   private async runImport(pending: PendingRepo, plan: Plan, signal: AbortSignal): Promise<void> {
-    // git redraws its counter many times a second; the pane only needs to look alive
     let last = 0;
     const tick = (force: boolean) => {
       if (!force && Date.now() - last < IMPORT_TICK_MS) return;

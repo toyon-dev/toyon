@@ -201,8 +201,8 @@ function expressionClasses(expression: string, modules: Set<string>): string[] {
   for (const m of expression.matchAll(/[{,]\s*([a-zA-Z][\w-]*)\s*:/g)) out.push(m[1]!);
   for (const local of modules) {
     const esc = local.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Only the dot form. `styles["btn-wide"]` is already a quoted string, so the literals pass
-    // above has it, and matching the bracket form here as well counted it twice.
+    // Only the dot form: `styles["btn-wide"]` is a quoted string, so the literals pass above
+    // already has it.
     for (const m of expression.matchAll(new RegExp(`\\b${esc}\\.([A-Za-z_]\\w*)`, "g"))) out.push(m[1]!);
   }
   return out;
@@ -213,8 +213,7 @@ function expressionClasses(expression: string, modules: Set<string>): string[] {
  *
  * Without this a CSS Modules project reports every class as unused, because the class never appears
  * as text anywhere: the build rewrites `.btn` to `.Button_btn__x7Fq2` and the source only ever says
- * `styles.btn`. Reading the import means the authored names are what get counted, which is what
- * anyone actually wants to see; the hashes exist only in the built output and never reach here.
+ * `styles.btn`.
  */
 export function moduleImports(src: string): Set<string> {
   const out = new Set<string>();
@@ -284,9 +283,8 @@ function unionLiterals(ts: any, type: any): string[] {
  * a larger value: `400 var(--size-mono) var(--face-mono)` resolves to `400 12px ui-monospace, ...`.
  *
  * Arithmetic is still left alone entirely: a `calc()` needs the cascade and a layout, and half of
- * it filled in is not an answer either. The shell cannot do any of this itself: a `var(--red)` evaluated in the shell's
- * document resolves against the *shell's* red and paints a confident lie, which is exactly what the
- * type specimens were doing before this followed embedded references.
+ * it filled in is not an answer either. The shell cannot do any of this itself: a `var(--red)`
+ * evaluated in the shell's document resolves against the *shell's* red and paints a confident lie.
  */
 export function resolveAliases(tokens: DesignToken[]): DesignToken[] {
   const byName = new Map(tokens.map((t) => [t.name, t]));

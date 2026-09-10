@@ -1,6 +1,5 @@
 // One Runtime per worktree: its agent session (from the moment the worktree exists) plus, once
-// setup has run, its process group and preview proxy. Replaces the old runtimes + pendingAgents
-// pair, which four call sites each had to consult.
+// setup has run, its process group and preview proxy.
 
 import type { LogLine, ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { SHELL_STREAM } from "@toyon/shared";
@@ -119,8 +118,7 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
     onEvent: (event, seq) => d.hub.emit("agent", wt.id, seq, event),
     onStatus: (status) => d.hub.emit("agentStatus", wt.id, status),
     onAuth: (agentId, o) => d.accounts?.observe(agentId, o),
-    // the agent is resolved lazily (a spare is stamped when claimed), so both of these read it at
-    // call time rather than closing over a value that may not exist yet
+    // read at call time, for the same reason as `spec`
     seedCommands: () => d.state.cachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId),
     onCommandsLearned: (commands) =>
       d.state.setCachedCommands(d.state.requireWorktree(wt.id).agent ?? "", wt.repoId, commands),

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,9 +20,6 @@ import type { AcpLink } from "./transport.ts";
 const home = realpathSync(mkdtempSync(join(tmpdir(), "toyon-acp-session-")));
 const wt = join(home, "wt");
 const bounds: Bounds = { root: wt, allowWrite: [wt, "/tmp"], denyWrite: [join(wt, ".claude")], gitDir: null };
-afterEach(() => {
-  /* each test uses its own worktree id, so nothing to reset */
-});
 process.on("exit", () => rmSync(home, { recursive: true, force: true }));
 
 const claudeSpec: AgentSpec = {

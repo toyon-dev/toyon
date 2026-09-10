@@ -4,8 +4,7 @@
 // requests. Unlike `session/prompt` the message joins the turn in flight rather than queueing behind
 // it: the Claude adapter pushes it onto the same streaming input, pre-empting the current generation
 // or slotting between tool calls, and holds the running prompt open so that one turn still settles
-// once, at the real end. That is what makes a message sent mid-turn read as part of the same
-// conversation instead of a separate round trip.
+// once, at the real end.
 //
 // `idleBehavior: "promptRequired"` is the outcome we ask for when the turn settled underneath us: it
 // leaves the message ours to send as an ordinary prompt, so one place still owns the turn lifecycle.

@@ -36,9 +36,8 @@ function serialize(entries: TranscriptEntry[]): string {
 }
 
 export class Transcript {
-  /** read from disk once; from then on the in-memory copy serves backfills (a long session used
-   * to be re-parsed on every subscribe). Mutated in place on compaction: the session holds this
-   * array. */
+  /** read from disk once; from then on the in-memory copy serves backfills. Mutated in place on
+   * compaction: the session holds this array. */
   readonly entries: TranscriptEntry[];
   private seq: number;
   /** appends are chained so lines land in order without a sync write per streamed token */

@@ -81,7 +81,6 @@ export function startProxy(opts: {
         return new Response("upgrade failed", { status: 400 });
       }
 
-      // Plain HTTP forward
       const upstreamUrl = `http://${hostPart(target)}:${target.port}${url.pathname}${url.search}`;
       const headers = new Headers(req.headers);
       headers.set("host", `localhost:${target.port}`);

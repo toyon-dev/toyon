@@ -66,16 +66,20 @@ export function usePersisted<T>(key: string, fallback: T, parse: (raw: string | 
   return [value, set] as const;
 }
 
-/** Pointer-drag resize: returns an onPointerDown for the handle. `measure` maps the pointer to a
- * size; body gets `.resizing` and the handle `.active` while dragging. */
-export function useDragResize(measure: (e: PointerEvent) => number | null, onSize: (n: number) => void) {
+/** Pointer-drag resize: returns an onPointerDown for the handle. `measure` maps the pointer (and
+ * the handle, for a size taken from where its own box sits) to a size; body gets `.resizing` and
+ * the handle `.active` while dragging. */
+export function useDragResize(
+  measure: (e: PointerEvent, handle: HTMLElement) => number | null,
+  onSize: (n: number) => void,
+) {
   return (e: React.PointerEvent) => {
     e.preventDefault();
     document.body.classList.add("resizing");
-    const handle = e.currentTarget;
+    const handle = e.currentTarget as HTMLElement;
     handle.classList.add("active");
     const move = (ev: PointerEvent) => {
-      const n = measure(ev);
+      const n = measure(ev, handle);
       if (n !== null) onSize(n);
     };
     const up = () => {

@@ -12,7 +12,9 @@
   }
   .preview-area {
     flex: 1;
-    min-height: 0;
+    /* the floor a pane drag leaves it too (Center.tsx): the stack shrinks before the preview
+       vanishes, so what the panes are about stays in view */
+    min-height: 80px;
     display: flex;
     flex-direction: column;
   }

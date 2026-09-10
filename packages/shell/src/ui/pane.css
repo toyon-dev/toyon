@@ -5,7 +5,10 @@
     position: relative;
     border-top: 1px solid var(--border0);
     background: var(--surface0);
-    flex-shrink: 0;
+    /* panes stack, and the defaults of two of them already add up to the column: the stack
+       shrinks to fit, each pane holding its own min-height, rather than pushing the lowest one
+       off the bottom of the page with its close button */
+    flex-shrink: 1;
     & .pane-head {
       display: flex;
       gap: 12px;
@@ -24,7 +27,7 @@
     left: 0;
     right: 0;
     height: 6px;
-    cursor: pane-resize;
+    cursor: row-resize;
     z-index: 5;
     &:hover {
       background: var(--element0);

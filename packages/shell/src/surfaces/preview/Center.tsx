@@ -239,29 +239,24 @@ export function Center() {
     const n = Number(raw);
     return Number.isFinite(n) && n >= 140 ? n : undefined;
   });
-  const termPx = termOpen && activeId ? termH : 0;
-  const startDiffDrag = useDragResize(
-    (ev) => {
-      const rect = centerRef.current?.getBoundingClientRect();
-      // the editor pane sits above the terminal, so its bottom edge is the terminal's top
-      return rect ? Math.min(Math.max(rect.bottom - termPx - ev.clientY, 120), rect.height - termPx - 80) : null;
-    },
-    (h) => setDiffH(Math.round(h)),
-  );
-  const startDesignDrag = useDragResize(
-    (ev) => {
-      const rect = centerRef.current?.getBoundingClientRect();
-      return rect ? Math.min(Math.max(rect.bottom - termPx - ev.clientY, 160), rect.height - termPx - 80) : null;
-    },
-    (h) => setDesignH(Math.round(h)),
-  );
-  const startTermDrag = useDragResize(
-    (ev) => {
-      const rect = centerRef.current?.getBoundingClientRect();
-      return rect ? Math.min(Math.max(rect.bottom - ev.clientY, 140), rect.height - 80) : null;
-    },
-    (h) => setTermH(Math.round(h)),
-  );
+  // a pane's new height is the pointer's distance from the pane's own bottom edge, which the panes
+  // stacked below hold in place whichever of them are open. The room to grow is what the column
+  // has left once the other fixed-height panes are laid out, less the 80px the preview (or a
+  // full-height pane) keeps: the same floor as .preview-area's min-height.
+  const measurePane = (min: number) => (ev: PointerEvent, handle: HTMLElement) => {
+    const pane = handle.parentElement;
+    const center = centerRef.current;
+    if (!pane || !center) return null;
+    let fixed = 0;
+    for (const el of Array.from(center.querySelectorAll<HTMLElement>(":scope > .pane"))) {
+      if (el !== pane && !el.classList.contains("full")) fixed += el.offsetHeight;
+    }
+    const room = Math.max(center.clientHeight - fixed - 80, min);
+    return Math.min(Math.max(pane.getBoundingClientRect().bottom - ev.clientY, min), room);
+  };
+  const startDiffDrag = useDragResize(measurePane(120), (h) => setDiffH(Math.round(h)));
+  const startDesignDrag = useDragResize(measurePane(160), (h) => setDesignH(Math.round(h)));
+  const startTermDrag = useDragResize(measurePane(140), (h) => setTermH(Math.round(h)));
 
   return (
     <div className="center" ref={centerRef}>
@@ -343,9 +338,12 @@ export function Center() {
           onDragStart={startDiffDrag}
         />
       )}
+      {/* the panes remount per worktree, and they are siblings in one children array: a key both
+          share is a duplicate key to React, which then paints a second copy of one on an update
+          (the design pane, on the first pointer move of its resize) that no close removes */}
       {designOpen && activeId && (
         <DesignPane
-          key={activeId}
+          key={`design:${activeId}`}
           worktreeId={activeId}
           height={designFull ? "100%" : designH > 0 ? designH : "55%"}
           full={designFull}
@@ -354,7 +352,7 @@ export function Center() {
         />
       )}
       {termOpen && activeId && (
-        <TerminalPane key={activeId} worktreeId={activeId} height={termH} onDragStart={startTermDrag} />
+        <TerminalPane key={`term:${activeId}`} worktreeId={activeId} height={termH} onDragStart={startTermDrag} />
       )}
       <Overlays />
     </div>

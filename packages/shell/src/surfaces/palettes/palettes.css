@@ -121,10 +121,3 @@
     }
   }
 }
-@layer surfaces {
-  /* a row that says something rather than does something (a section's name on the agent page):
-   it sits in the list so the eye reads it in order, and it can be landed on but not acted on */
-  .picker-note {
-    cursor: default;
-  }
-}

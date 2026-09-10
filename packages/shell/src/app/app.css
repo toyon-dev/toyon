@@ -86,7 +86,4 @@
     display: block;
     margin-top: 8px;
   }
-  body.resizing .bar-center {
-    transition: none;
-  }
 }

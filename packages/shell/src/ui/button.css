@@ -149,4 +149,17 @@
   .btn-mono {
     font: var(--type-mono);
   }
+
+  /* the one hover colour a surface class still names: the editor deep link, a bordered chip whose
+     hover is the link blue because following it leaves the app. It is here rather than a tone
+     because it is one control in three places (the diff header, the file menu, the design pane),
+     and a tone with one user is a class with a grander name. */
+  .deep-link {
+    border-color: var(--border0);
+    align-self: center;
+    &:hover {
+      color: var(--blue);
+      border-color: var(--border1);
+    }
+  }
 }

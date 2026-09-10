@@ -94,18 +94,7 @@
       --row-edge-color: var(--accent);
     }
     & .xy {
-      color: var(--yellow);
       width: 18px;
-      flex-shrink: 0;
-    }
-  }
-
-  .xy {
-    &.added {
-      color: var(--green);
-    }
-    &.deleted {
-      color: var(--red);
     }
   }
   /* name first, then the directory it sits in. The name is what the eye is looking for, and it
@@ -167,16 +156,7 @@
     }
   }
 
-  /* ---- commit box / land buttons / toast ---- */
-
-  .deep-link {
-    border-color: var(--border0);
-    align-self: center;
-    &:hover {
-      color: var(--blue);
-      border-color: var(--border1);
-    }
-  }
+  /* ---- commit box ---- */
 
   /* the message box only appears when there is something to commit, so on a clean tree this is the
    knobs row alone: where you are, and the one move that is left */

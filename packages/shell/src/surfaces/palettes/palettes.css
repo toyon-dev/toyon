@@ -97,8 +97,6 @@
     gap: 8px;
     & .xy {
       width: 12px;
-      flex-shrink: 0;
-      color: var(--yellow);
     }
     & .name {
       color: var(--text0);

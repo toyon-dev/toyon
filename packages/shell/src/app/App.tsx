@@ -206,7 +206,7 @@ export function App() {
         <WtRail />
       </div>
       {toast && (
-        <div className={`toast ${toast.ok ? "ok" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
+        <div className={`toast ${toast.ok ? "" : "err"}`} onClick={() => dispatch({ a: "dismiss-toast" })}>
           {toast.message}
           {toast.removeIds && toast.removeIds.length > 0 && (
             <Button

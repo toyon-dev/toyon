@@ -1,8 +1,8 @@
 import { useDispatch, useStore } from "../../state/context.tsx";
+import { markHits } from "../../ui/highlight.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { type Command, commandHits, filterCommands, useCommands } from "./commands.ts";
-import { markHits } from "./highlight.tsx";
 import { PaletteRow } from "./PaletteRow.tsx";
 
 /** a command row, shared with ⌘P's `>` mode */

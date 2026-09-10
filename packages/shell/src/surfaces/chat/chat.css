@@ -555,8 +555,8 @@
       background: var(--surface1);
     }
   }
-  .chat-hint {
-    color: var(--text2);
+  /* the knobs row under a composer's textarea: the chat's, and the commit box's */
+  .composer .hint {
     margin-top: 4px;
   }
   .spawn-row {

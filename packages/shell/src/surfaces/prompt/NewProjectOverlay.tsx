@@ -79,8 +79,8 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
         />
       </FormRow>
 
-      <div className="new-project-actions">
-        <span className="new-project-dest">{ready ? destination(parent, name) : ""}</span>
+      <div className="form-actions">
+        <span className="form-dest">{ready ? destination(parent, name) : ""}</span>
         <Button onClick={() => dispatch({ a: "close" })}>cancel</Button>
         <Button variant="outline" size="lg" disabled={!ready} onClick={submit}>
           {clone ? "clone" : "create"}

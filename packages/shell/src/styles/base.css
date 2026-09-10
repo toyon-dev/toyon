@@ -253,6 +253,25 @@
     padding: 4px 12px;
     color: var(--text2);
   }
+  /* an aside under a control: what a field expects, what a knob will do */
+  .hint {
+    color: var(--text2);
+  }
+
+  /* ---- the status letter ----
+     git's own letter for a file (M, A, D, R, ?) on a changed-file row and a ⌘P row alike: yellow
+     for a change, and green or red where the file itself arrived or left. The width is each list's
+     own, since the letter sits in a different column in each. */
+  .xy {
+    color: var(--yellow);
+    flex-shrink: 0;
+    &.added {
+      color: var(--green);
+    }
+    &.deleted {
+      color: var(--red);
+    }
+  }
 
   /* ---- badges ----
      A badge is a coloured word or count beside a name, and is never pressed: ahead and behind on

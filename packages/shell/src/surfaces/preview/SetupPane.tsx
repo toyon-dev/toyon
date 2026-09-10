@@ -96,7 +96,7 @@ export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => v
               )}
             </div>
             {i === 0 && (
-              <span className="form-hint">
+              <span className="hint">
                 the server must listen on <code>$PORT</code>; toyon sets it differently for each worktree
               </span>
             )}

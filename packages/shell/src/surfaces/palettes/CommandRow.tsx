@@ -1,6 +1,6 @@
 import type { AgentCommand } from "@toyon/shared";
+import { markHits } from "../../ui/highlight.tsx";
 import { commandHits } from "./commands.ts";
-import { markHits } from "./highlight.tsx";
 
 /** One `/` row, in the composer and in ⌘K. The name is what gets typed, so it is what holds its
  * width; the description gives way and ellipsises. PaletteRow's hint slot never shrinks, which is

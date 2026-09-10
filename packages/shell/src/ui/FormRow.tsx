@@ -13,7 +13,7 @@ export function FormRow({ label, hint, children }: { label?: ReactNode; hint?: R
       <span className="form-label">{label}</span>
       <div className="form-control">
         {children}
-        {hint && <span className="form-hint">{hint}</span>}
+        {hint && <span className="hint">{hint}</span>}
       </div>
     </label>
   );

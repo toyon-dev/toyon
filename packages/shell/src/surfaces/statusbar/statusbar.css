@@ -86,6 +86,10 @@
     width: min(520px, 40vw);
     transition: left 0.15s ease;
   }
+  /* while a dock is being dragged the centre tracks the pointer, and easing there reads as lag */
+  body.resizing .bar-center {
+    transition: none;
+  }
   /* .btn is 11px/1.4 text in 1px padding (~17px) while .btn-icon is a fixed 20px square, so a bar
    mixing them looks ragged; in here they share the icon box's height */
   .status-bar {

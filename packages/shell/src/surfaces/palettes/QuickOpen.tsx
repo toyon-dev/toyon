@@ -2,12 +2,12 @@ import type { GitFileStatus } from "@toyon/shared";
 import { useCallback } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
+import { markHits } from "../../ui/highlight.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { LineCounts } from "../changes/GitFileRow.tsx";
 import { xyClass, xyLetter } from "../util.ts";
 import { commandRow } from "./CommandPalette.tsx";
 import { type Command, filterCommands, useCommands } from "./commands.ts";
-import { markHits } from "./highlight.tsx";
 import { matchPositions, rankFiles, splitPath } from "./quickOpen.ts";
 
 type Row = { kind: "file"; path: string; status?: GitFileStatus } | { kind: "cmd"; c: Command };

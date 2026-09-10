@@ -403,7 +403,7 @@ export function Composer({ active }: { active: WorktreeStatus | null }) {
           </div>
         )}
       </div>
-      <div className="chat-hint spawn-row">
+      <div className="hint spawn-row">
         <span className="spawn-left">
           <label
             data-tip={

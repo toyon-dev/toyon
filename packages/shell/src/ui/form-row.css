@@ -30,7 +30,22 @@
       resize: none;
     }
   }
-  .form-hint {
+  /* the row that ends a form: the buttons, with the path they will act on opposite them, so what is
+     about to be made on disk is readable in the same glance as the button that makes it. The
+     new-project form and the import pane both end this way. */
+  .form-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .form-dest {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: var(--type-mono);
     color: var(--text2);
   }
 }

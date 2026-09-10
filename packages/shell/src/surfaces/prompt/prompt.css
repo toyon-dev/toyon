@@ -1,6 +1,13 @@
 /* The new-worktree prompt: variants, agent and repo chips. */
 @layer tokens, base, surfaces;
 @layer surfaces {
+  /* the clone form's URL, read back as typed */
+  .new-project-url {
+    font: var(--type-mono);
+    color: var(--text1);
+    overflow-wrap: anywhere;
+    padding-top: 5px;
+  }
   /* ---- new worktree prompt overlay ---- */
   /* ⌘K's copy of the `/` menu. The composer anchors its own upward, over the transcript, so the
    rows never cover what is being typed; here there is a title above and empty scrim below, so

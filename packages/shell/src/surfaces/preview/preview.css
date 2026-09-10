@@ -83,30 +83,6 @@
   .setup-add {
     padding: 2px 0;
   }
-  /* the new-project form: the destination sits opposite the buttons, so what is about to be made on
-   disk is readable in the same glance as the button that makes it */
-  .new-project-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-  }
-  .new-project-dest {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--type-mono);
-    color: var(--text2);
-  }
-  .new-project-url {
-    font: var(--type-mono);
-    color: var(--text1);
-    overflow-wrap: anywhere;
-    padding-top: 5px;
-  }
-
   /* the import pane borrows the setup pane's frame: same slot, same shape of waiting */
 
   .import-pane {

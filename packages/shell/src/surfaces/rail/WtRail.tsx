@@ -357,12 +357,13 @@ export function WtRail() {
                   .join(", ");
                 return (
                   <>
-                    {/* the destination on a line of its own, in full: the buttons under it stay
-                        one word each, which is what keeps them on one line at the rail's width */}
+                    {/* the whole phrase on a line of its own, verb included, so the count button
+                        under it is shorthand for a sentence that is right there and "fold" never
+                        stands alone; one word per button is also what fits the rail's width */}
                     <div className="rail-fold-into">
                       {target ? (
                         <>
-                          into <b>{target.worktree.title}</b>
+                          fold into <b>{target.worktree.title}</b>
                         </>
                       ) : (
                         "select a worktree to fold into"

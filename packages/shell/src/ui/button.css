@@ -8,13 +8,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    /* both named so a surface that hangs a ghost button's icon into a text gutter can pull it
+     back by exactly the padding, the icon and the gap, instead of guessing */
+    --btn-gap: 4px;
+    --btn-pad-x: 8px;
+    gap: var(--btn-gap);
     line-height: 1.4;
     color: var(--text1);
     border-radius: var(--radius);
-    /* named so a surface that wants a ghost button flush with a text gutter can pull it back by
-     exactly this much instead of guessing */
-    --btn-pad-x: 8px;
     padding: 1px var(--btn-pad-x);
     white-space: nowrap;
   }

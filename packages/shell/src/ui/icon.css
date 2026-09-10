@@ -3,9 +3,13 @@
 @layer base {
   /* an Icon set inline with text: the 16px box is drawn for a 20px button, so next to 12px type it
    needs the smaller optical size and a nudge onto the text's baseline */
+  /* named at the root so a control that hangs its icon into a margin can measure the hang by it */
+  :root {
+    --icon-inline-size: 13px;
+  }
   .icon-inline {
-    width: 13px;
-    height: 13px;
+    width: var(--icon-inline-size);
+    height: var(--icon-inline-size);
     vertical-align: -2px;
   }
 }

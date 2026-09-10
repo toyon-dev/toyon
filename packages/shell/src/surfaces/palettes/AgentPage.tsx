@@ -42,7 +42,7 @@ export function AgentPage({ agentId }: { agentId: string }) {
             <Icon name="back" className="icon-inline" /> settings
           </Button>
         </div>
-        <div className="agent-page-title">{agent.name}</div>
+        <div className="section-title keys-h">{agent.name}</div>
         <div className="keys-setting">
           <span className="keys-d">signed in</span>
           {/* the chip carries the actions on the identity when there are any; a bare value otherwise */}

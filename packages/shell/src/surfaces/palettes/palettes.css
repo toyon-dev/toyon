@@ -48,16 +48,11 @@
   .keys-d {
     color: var(--text1);
   }
-  /* the agent page's head: the way back first, its icon on the rows' gutter (the ghost button's
-   own padding pulled back), then the agent's name on its own line, brighter than a section
-   title because it names the whole card */
+  /* the agent page's head: the way back first, its word on the rows' gutter and its icon hung
+   into the margin (the ghost button's padding, icon and gap pulled back), then the agent's name
+   as the card's section title, the way "Settings" heads the card it came from */
   .agent-page-back .btn {
-    margin-inline-start: calc(-1 * var(--btn-pad-x));
-  }
-  .agent-page-title {
-    font: var(--type-ui);
-    color: var(--text0);
-    padding: 2px 0 6px;
+    margin-inline-start: calc(-1 * (var(--btn-pad-x) + var(--icon-inline-size) + var(--btn-gap)));
   }
   .keys-h {
     padding: 0 0 4px 2px;

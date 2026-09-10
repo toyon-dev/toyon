@@ -126,6 +126,9 @@ export interface WorktreeInfo {
   /** the model id the agent is asked to run here (one of its advertised choices); its own default
    * when absent. What actually ran is the session-info event in the transcript. */
   model?: string;
+  /** the effort level the agent is asked to run at here (one of its advertised choices, which
+   * depend on the model); its own default when absent */
+  effort?: string;
   /** when the agent last finished a turn here. Absent until one has run. */
   lastTurnAt?: number;
   /** when someone last looked at this worktree in a shell. Absent until it has been looked at
@@ -214,6 +217,8 @@ export interface AgentInfo {
   canLogout?: boolean;
   /** the models it advertised the last time a session opened; absent until one has */
   models?: ModelChoice[];
+  /** the effort levels it advertised the last time a session opened on a model that has them */
+  efforts?: ModelChoice[];
 }
 
 /** what settings shows about an agent's own setup: the files it reads and the MCP servers it will
@@ -239,11 +244,24 @@ export interface McpServerInfo {
   detail: string;
 }
 
-/** one of an agent's advertised models, as ACP's model config option lists them */
+/** one choice of an agent's select config option (a model, an effort level), as ACP lists them */
 export interface ModelChoice {
   id: string;
   name: string;
   description?: string;
+}
+
+/** The pre-warmed worktree a repo's next task will claim. Never a rail row: nobody works in it,
+ * and the rail's ⌘1-9 must not count it. Its preview is what a draft tab shows while the prompt
+ * is still being typed, since it is the code the task starts from; on claim the same id becomes
+ * the task's row. */
+export interface SpareInfo {
+  repoId: string;
+  id: string;
+  proxyPort: number;
+  /** its procs and proxy are up, so the port answers (with the waiting page until the preview
+   * proc does) */
+  ready: boolean;
 }
 
 /** One row of the rail: a worktree toyon runs, or one git knows about that toyon did not create
@@ -275,14 +293,19 @@ export interface WorktreeStatus {
   procs: ProcState[];
   /** "idle" for a row toyon does not run */
   agent: AgentStatus;
-  /** commits ahead/behind the default branch (cached, ~10s freshness); absent on main and on a
-   * detached worktree, which have nothing to count against */
+  /** commits ahead/behind the default branch (cached, ~10s freshness); absent on a detached
+   * worktree, which has nothing to count against. On main, `behind` counts against its upstream
+   * as of the last fetch (the daemon fetches now and then while main is on screen), and `ahead`
+   * is absent: what main trails is origin, and what it leads is nobody's business here. */
   ahead?: number;
   behind?: number;
   /** uncommitted file count (cached, ~10s freshness) */
   dirty?: number;
   /** chat messages waiting behind the current turn */
   queued?: number;
+  /** the agent's last reported figures here: context in use of the window, and the session's
+   * spend when the agent prices itself. From the transcript, so a cold worktree has them too. */
+  usage?: { used: number; size: number; cost?: number };
   /** a turn finished here since the last time anyone looked at it. The rail rings the dot: green
    * alone cannot separate "just finished" from "untouched for a week". */
   unseen?: boolean;

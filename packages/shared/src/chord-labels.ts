@@ -10,7 +10,9 @@ import { chordOf } from "./chords.ts";
 
 export type ChordSection = "Find" | "Panels" | "Preview" | "Worktrees";
 
-export const CHORD_SECTIONS: readonly ChordSection[] = ["Find", "Panels", "Preview", "Worktrees"];
+/** the card's two-column grid fills in this order: the two short sections share the top row and
+ * the two long ones the bottom, so neither column carries a hole beside a tall neighbour */
+export const CHORD_SECTIONS: readonly ChordSection[] = ["Find", "Preview", "Panels", "Worktrees"];
 
 export interface ChordLabel {
   label: string;
@@ -36,9 +38,14 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   zen: { label: "full-bleed preview", section: "Preview" },
   new: { label: "new worktree", section: "Worktrees", advertise: { key: "n", when: "pwa" } },
   worktree: { label: "switch worktree", section: "Worktrees" },
+  "wt-prev": { label: "previous worktree", section: "Worktrees" },
+  "wt-next": { label: "next worktree", section: "Worktrees" },
   project: { label: "open project", section: "Worktrees" },
   refs: { label: "open a branch or PR", section: "Worktrees" },
 };
+
+/** the arrow rows' keys as they are drawn: KeyboardEvent.key names them in words */
+const ARROWS: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓" };
 
 /** "⌘⇧P" style label, showing the chord's advertised alias when the environment calls for it
  * (⌘⇧E on Firefox, ⌘N in an installed PWA). Other aliases stay unadvertised. */
@@ -46,8 +53,8 @@ export function chordLabel(id: ChordId, env: ChordEnv = {}): string {
   const c = chordOf(id);
   const shown = CHORD_LABELS[id];
   const key = shown.advertise && env[shown.advertise.when] ? shown.advertise.key : c.key;
-  const text = key === "1-9" ? "1-9" : key.toUpperCase();
-  return `${c.ctrl ? "⌃" : "⌘"}${c.shift ? "⇧" : ""}${text}`;
+  const text = key === "1-9" ? "1-9" : (ARROWS[key] ?? key.toUpperCase());
+  return `${c.alt ? "⌥" : c.ctrl ? "⌃" : "⌘"}${c.shift ? "⇧" : ""}${text}`;
 }
 
 /** the shortcuts card's rows, in section order */

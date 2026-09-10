@@ -1,6 +1,13 @@
-/* The palettes' own rows and the settings and shortcuts cards. */
+/* The palettes' own rows, the settings and shortcuts cards, and the new-project form. */
 @layer tokens, base, surfaces;
 @layer surfaces {
+  /* the clone form's URL, read back as typed */
+  .new-project-url {
+    font: var(--type-mono);
+    color: var(--text1);
+    overflow-wrap: anywhere;
+    padding-top: 5px;
+  }
   /* ---- keyboard shortcuts help ---- */
   .keys-card {
     background: var(--surface1);
@@ -25,11 +32,23 @@
     gap: 12px;
     width: min(560px, 90%);
   }
+  /* the agent's page is one column: a back control, then sections that stack */
   .keys-card {
     &.keys-settings {
       display: block;
       padding: 12px 24px 12px;
     }
+  }
+  /* a chip holding a list (the project's processes) gives way before its column does: the chip
+   shrinks and its label truncates, so a fourth process never widens the card */
+  .keys-chip {
+    min-width: 0;
+  }
+  .keys-v {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   /* Every row on the same height token the app's list rows sit on, with no vertical padding of
    its own: a row holding a chip and a row holding only text used to differ by the chip's box, so

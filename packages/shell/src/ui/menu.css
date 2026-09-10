@@ -9,8 +9,10 @@
     border: 1px solid var(--border1);
     border-radius: var(--radius-md);
     /* the rows reach both edges, so the box is what keeps the corners round: the same reason
-     .overlay-box.picker clips its own. The padding is vertical only, for the same reason. */
-    overflow: hidden;
+     .overlay-box.picker clips its own. The padding is vertical only, for the same reason. A list
+     taller than the window scrolls inside the box rather than running off it. */
+    overflow: hidden auto;
+    max-height: calc(100vh - 8px);
     padding: 4px 0;
     box-shadow: var(--elevation-float);
     display: flex;
@@ -43,7 +45,23 @@
     & .menu-sep {
       height: 1px;
       margin: 4px 0;
+      border: 0;
       background: var(--border0);
+    }
+    /* the check gutter, reserved on every row of a list that has one, so the labels line up */
+    & .menu-check {
+      width: 14px;
+      flex: none;
+      display: flex;
+      justify-content: center;
+    }
+    /* a row that cannot run now: dim, and no seat under the pointer, since there is nothing to press */
+    & button.disabled {
+      color: var(--text2);
+      cursor: default;
+    }
+    & button.disabled:hover {
+      background: none;
     }
     & .menu-label,
     & .menu-detail {

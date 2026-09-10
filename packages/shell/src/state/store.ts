@@ -31,6 +31,7 @@ import type {
   RepoInfo,
   SearchHit,
   ServerMsg,
+  SpareInfo,
   TermServerMsg,
   Theme,
   ThemePrefs,
@@ -67,6 +68,9 @@ export type ChatItem =
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
+  /** the figures after a reply: `turn` is what that reply cost (the agent's cumulative `cost`
+   * less the previous row's), absent when the agent prices nothing */
+  | { kind: "usage"; used: number; size: number; cost?: number; turn?: number }
   /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
    * credential and the provider refused it, so the error above this card says what went wrong */
   | {
@@ -136,9 +140,32 @@ export interface WorktreeLocal {
    * Per worktree so switching back lands on the tab you left, and in the store so the rail can
    * open a crashed proc's tab. */
   termStream: string;
-  /** the model the agent reported running here, from the last session-info; absent until one */
+  /** the model and effort the agent reported running here, from the last session-info; absent
+   * until one */
   model?: string;
+  effort?: string;
 }
+
+/** The new worktree being drafted: a tab in the rail for a worktree that does not exist yet, with
+ * the base it will branch from. While it is open the base is the active row, so the left dock,
+ * the terminal and ⌘1-9 keep meaning it; only the rail's mark, the centre frame and the chat dock
+ * read this. Its text and attachments live in `local` under `draftKey(repoId)`. */
+export interface Draft {
+  base: string;
+  /** the same prompt in N parallel worktrees, keep the best */
+  variants: 1 | 2 | 3;
+  /** an agent splits the prompt into a worktree per task instead */
+  batch: boolean;
+  /** the agent that works on it: the daemon's default when the tab opens; a draft from a task
+   * inherits that task's agent whatever this says */
+  agent: string;
+  /** one of the repo's profiles; the repo's default when absent */
+  profile?: string;
+}
+
+/** the `local` record a repo's draft is written under; never a row id, and never pruned by one */
+const DRAFT_PREFIX = "draft:";
+export const draftKey = (repoId: string) => DRAFT_PREFIX + repoId;
 
 export interface PendingImage extends ImageInput {
   key: string;
@@ -176,7 +203,6 @@ export type Overlay =
   | { kind: "search" }
   /** the ref palette: a branch or PR to open as a worktree */
   | { kind: "refs" }
-  | { kind: "prompt" }
   | { kind: "keys" }
   /** theme picker: which pref slot Enter writes */
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
@@ -333,6 +359,11 @@ export interface State {
   defaultAgent: string;
   /** what settings asked the daemon about an agent's setup, by agent id */
   agentConfigs: Record<string, AgentConfigInfo>;
+  /** the new worktree being drafted, if the draft tab is open */
+  draft: Draft | null;
+  /** every repo's warm spare, as the daemon last listed them: the preview behind a draft from
+   * main, and nothing else. Can shrink between frames (a warm-up rolled back). */
+  spares: SpareInfo[];
 }
 
 export interface InitialOpts {
@@ -407,6 +438,8 @@ export function initialState(opts: InitialOpts): State {
     agents: [],
     defaultAgent: "claude",
     agentConfigs: {},
+    draft: null,
+    spares: [],
   };
   // paint the last project's layout before the daemon's hello names it, so a reload does not
   // flash the docks open and then shut them
@@ -449,6 +482,27 @@ export function repoById(s: State, id: string | null | undefined): RepoInfo | nu
   return (id && s.repos.find((r) => r.id === id)) || null;
 }
 
+/** a repo's main row, which is what a draft branches from when nothing else is named */
+export function mainOf(s: State, repoId: string | null): OwnedWorktree | null {
+  return (repoId && s.rows.filter(isOwned).find((w) => w.repoId === repoId && isMain(w.worktree))) || null;
+}
+
+/** the spare behind the draft: the base repo's, when the draft is from main and one is ready.
+ * Its preview is the code the worktree will start from. An element of `spares`, so stable across
+ * renders that carry the same frame. */
+export function draftSpareOf(s: State): SpareInfo | null {
+  const base = s.draft ? worktreeById(s, s.draft.base) : null;
+  if (!base || !isMain(base.worktree)) return null;
+  return s.spares.find((sp) => sp.repoId === base.repoId && sp.ready) ?? null;
+}
+
+/** the preview on screen: the draft's (its spare, else its base's own), or the active worktree's.
+ * The element picker and the bridge's page context follow this one, not `activeId`. */
+export function previewIdOf(s: State): string | null {
+  if (!s.draft) return s.activeId;
+  return draftSpareOf(s)?.id ?? s.draft.base;
+}
+
 /** the active repo's owned rows; every repo's when nothing is selected (a daemon with no repos).
  * A row whose remove is in flight is already gone from the person's point of view. */
 function visibleOf(rows: WorktreeStatus[], repoId: string | null, removing: string[]): OwnedWorktree[] {
@@ -476,7 +530,7 @@ function landingIn(s: State, repoId: string | null, rows = s.rows): string | nul
 }
 
 /** the four client messages that end in a `shipped` frame: the daemon's word for them */
-export type ShipOp = "sync-main" | "merge-main" | "ship" | "commit";
+export type ShipOp = "sync-main" | "merge-main" | "ship" | "commit" | "pull-main";
 
 /** `shipping` minus the entries `done` says are over, the same object when none are, so a
  * selector on it stays stable across the proc events that push most snapshots */
@@ -496,7 +550,16 @@ function activate(s: State, id: string | null): State {
   // project and should be somewhere that still exists next time.
   const activeRepoId = row?.repoId ?? s.activeRepoId;
   const lastActive = row && isOwned(row) ? { ...s.lastActive, [row.repoId]: row.id } : s.lastActive;
-  return { ...s, activeId: id, activeRepoId, lastActive, diff: null };
+  // choosing a row is leaving the draft, the base's own row included: a snapshot that only
+  // re-asserts the selection puts the draft back itself (see the worktrees frame)
+  return { ...s, activeId: id, activeRepoId, lastActive, diff: null, draft: null };
+}
+
+/** the draft after a frame: kept while its base is still listed, dropped once the worktree it was
+ * for exists (the row this tab created lands, and the draft's text went with it) */
+function draftAfter(s: State, rows: WorktreeStatus[], created: boolean): Draft | null {
+  if (!s.draft || created) return null;
+  return rows.some((w) => w.id === s.draft?.base) ? s.draft : null;
 }
 
 export const isSubPicker = (o: Overlay) =>
@@ -509,6 +572,14 @@ export type Action =
   | { a: "server"; msg: StoreServerMsg }
   | { a: "connected"; v: boolean; failure?: ConnectFailure | null }
   | { a: "activate"; id: string }
+  /** open the draft tab: a new worktree from `base`, the active project's main when absent. The
+   * same base again closes it, so the chord toggles; another base moves it. */
+  | { a: "open-draft"; base?: string }
+  | { a: "close-draft" }
+  | { a: "draft-variants"; n: Draft["variants"] }
+  | { a: "draft-batch"; v: boolean }
+  | { a: "draft-agent"; id: string }
+  | { a: "draft-profile"; profile: string }
   /** switch the shell to another registered repo */
   | { a: "activate-repo"; id: string }
   /** remove-worktree frames went out for these: hide the rows now, move the selection off them */
@@ -612,6 +683,33 @@ function reduce(s: State, action: Action): State {
       return { ...s, connected: action.v, connectFailure: action.v ? null : (action.failure ?? s.connectFailure) };
     case "activate":
       return activate(s, action.id);
+    case "open-draft": {
+      // not on an empty project: a worktree off the root commit would take the scaffold to a
+      // branch while main stayed blank
+      if (isGreenfield(s)) return s;
+      const base = action.base ?? mainOf(s, s.activeRepoId)?.id ?? null;
+      if (!base || !worktreeById(s, base)) return s;
+      if (s.draft?.base === base) return { ...s, draft: null };
+      // the chat dock is where the draft is written, so it has to be on screen; a palette the
+      // chord was pressed over would sit in front of it
+      return {
+        ...activate(s, base),
+        draft: { base, variants: 1, batch: false, agent: s.defaultAgent },
+        rightOpen: true,
+        overlay: null,
+        paletteReturn: null,
+      };
+    }
+    case "close-draft":
+      return s.draft ? { ...s, draft: null } : s;
+    case "draft-variants":
+      return s.draft ? { ...s, draft: { ...s.draft, variants: action.n } } : s;
+    case "draft-batch":
+      return s.draft ? { ...s, draft: { ...s.draft, batch: action.v } } : s;
+    case "draft-agent":
+      return s.draft ? { ...s, draft: { ...s.draft, agent: action.id } } : s;
+    case "draft-profile":
+      return s.draft ? { ...s, draft: { ...s.draft, profile: action.profile } } : s;
     case "remove-worktrees": {
       const ids = action.ids.filter((id) => !s.removing.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;
@@ -734,11 +832,14 @@ function reduce(s: State, action: Action): State {
 }
 
 /** drop per-worktree records for rows the daemon no longer lists, found rows included: theirs
- * hold git status and history too, and a push arrives on every proc event */
-function pruneLocal(local: State["local"], rows: WorktreeStatus[]): State["local"] {
-  const keep = new Set(rows.map((w) => w.id));
-  if (Object.keys(local).every((id) => keep.has(id))) return local;
-  return Object.fromEntries(Object.entries(local).filter(([id]) => keep.has(id)));
+ * hold git status and history too, and a push arrives on every proc event. A spare's record (the
+ * page state its preview reports) lives as long as it is listed; a draft's is never a row's and
+ * stays until the draft is sent. */
+function pruneLocal(local: State["local"], rows: WorktreeStatus[], spares: SpareInfo[]): State["local"] {
+  const keep = new Set([...rows.map((w) => w.id), ...spares.map((sp) => sp.id)]);
+  const kept = (id: string) => keep.has(id) || id.startsWith(DRAFT_PREFIX);
+  if (Object.keys(local).every(kept)) return local;
+  return Object.fromEntries(Object.entries(local).filter(([id]) => kept(id)));
 }
 
 /** drop the per-project landing spots whose worktree is gone; the fallback is that project's main
@@ -780,9 +881,11 @@ function onServer(s: State, msg: StoreServerMsg): State {
         rows: msg.rows,
         activeId,
         activeRepoId: wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
+        spares: msg.spares,
+        draft: draftAfter(s, msg.rows, false),
         removing: s.removing.length ? [] : s.removing,
         shipping: retireShipping(s.shipping, () => true),
-        local: pruneLocal(s.local, msg.rows),
+        local: pruneLocal(s.local, msg.rows, msg.spares),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         refs: pruneByRepo(s.refs, msg.repos),
@@ -860,16 +963,20 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // a pending remove is done once the daemon stops listing the row; one it still lists is
       // still in flight (this frame is as likely another worktree's proc event as the reply)
       const removing = s.removing.filter((id) => msg.rows.some((w) => w.id === id));
-      return activate(
-        {
-          ...s,
-          rows: msg.rows,
-          removing: removing.length === s.removing.length ? s.removing : removing,
-          shipping: retireShipping(s.shipping, (id) => !msg.rows.some((w) => w.id === id)),
-          local: pruneLocal(s.local, msg.rows),
-        },
-        activeId,
-      );
+      return {
+        ...activate(
+          {
+            ...s,
+            rows: msg.rows,
+            spares: msg.spares,
+            removing: removing.length === s.removing.length ? s.removing : removing,
+            shipping: retireShipping(s.shipping, (id) => !msg.rows.some((w) => w.id === id)),
+            local: pruneLocal(s.local, msg.rows, msg.spares),
+          },
+          activeId,
+        ),
+        draft: draftAfter(s, msg.rows, !!fresh),
+      };
     }
     case "proc": {
       const rows = s.rows.map((w) => (w.id === msg.worktreeId ? { ...w, procs: upsertProc(w.procs, msg.proc) } : w));
@@ -888,9 +995,16 @@ function onServer(s: State, msg: StoreServerMsg): State {
         let turn = l.turn;
         if (ev.type === "turn-start") turn = { edits: false, hmr: false };
         else if (ev.type === "tool-start" && isEditTool(ev)) turn = { ...turn, edits: true };
-        // what actually ran, for the model chip: the agent's word, not the record's request
+        // what actually ran, for the model and effort chips: the agent's word, not the record's
         const model = ev.type === "session-info" && ev.model ? ev.model : l.model;
-        return { ...l, chat, turn, ...(model !== l.model ? { model } : {}) };
+        const effort = ev.type === "session-info" && ev.effort ? ev.effort : l.effort;
+        return {
+          ...l,
+          chat,
+          turn,
+          ...(model !== l.model ? { model } : {}),
+          ...(effort !== l.effort ? { effort } : {}),
+        };
       });
       if (ev.type === "turn-end") {
         // edits happened but nothing hot-updated: the change is outside HMR's reach
@@ -1071,6 +1185,26 @@ export function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];
     case "grafted":
       return [...items, { kind: "grafted", title: event.title, branch: event.branch }];
+    case "usage": {
+      // the agent's cost is the session's running total; the row shows what this reply added.
+      // A second figure with nothing said in between (a rate-limit notice, a late correction)
+      // updates the row rather than stacking one under it.
+      const last = items.at(-1);
+      const before = items.findLast((i) => i.kind === "usage" && i !== last && i.cost !== undefined) as
+        | Extract<ChatItem, { kind: "usage" }>
+        | undefined;
+      const prior = last?.kind === "usage" ? before : (items.findLast((i) => i.kind === "usage") as typeof before);
+      const row: ChatItem = {
+        kind: "usage",
+        used: event.used,
+        size: event.size,
+        // to the hundredth of a cent: a difference of two floats is otherwise 0.24999999999999997
+        ...(event.cost !== undefined
+          ? { cost: event.cost, turn: Math.max(0, Math.round((event.cost - (prior?.cost ?? 0)) * 10_000) / 10_000) }
+          : {}),
+      };
+      return last?.kind === "usage" ? [...items.slice(0, -1), row] : [...items, row];
+    }
     case "agent-auth-required":
       return [
         ...items,

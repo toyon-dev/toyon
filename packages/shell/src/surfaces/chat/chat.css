@@ -494,6 +494,19 @@
       color: var(--accent);
     }
   }
+  /* what the reply cost and how full the context is: one quiet line at the foot of a turn, in the
+   tool rows' type so it sits with them rather than reading as a message */
+  .usage-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 8px;
+    font: var(--type-mono);
+    & .usage-cost {
+      color: var(--text1);
+      font-variant-numeric: tabular-nums;
+    }
+  }
 
   /* the frame is base's (.composer): the chat's is the tall one */
   .chat-input {
@@ -556,18 +569,12 @@
       box-shadow: 0 0 0 1.5px var(--border0);
     }
   }
-  .spawn-row {
-    & label {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      cursor: pointer;
-    }
-  }
+  /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
   .spawn-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 6px;
     min-width: 0;
   }
   /* a sentence about the base or the branch, under the knobs row, with sync beside it when there is one */
@@ -583,16 +590,53 @@
     gap: 4px;
     flex-shrink: 0;
   }
-  .spawn-row {
-    & input {
-      accent-color: var(--accent);
+
+  /* ---- the draft tab's intro: where the transcript would be ----
+   Sits on the composer the way a short transcript does, so the box is where the eye lands. */
+  .draft-intro {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 6px;
+    font: var(--type-ui);
+    color: var(--text0);
+  }
+  .draft-intro {
+    & .hint {
+      margin: 0;
     }
+    /* inline mono inside a sans sentence, the same case as `code` in the transcript: the branch is
+     marked by being mono, which is what mono is for, rather than by making sans bold */
     & b {
       color: var(--text1);
-      /* inline mono inside a sans sentence, the same case as `code` in the transcript: the branch is
-     marked by being mono, which is what mono is for, rather than by making sans bold */
       font: var(--type-mono);
     }
+  }
+  /* the birth-time choices on one line: batch, then the three numbers with their word, then what
+   runs it at the right end */
+  .draft-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .draft-variants {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    & > span {
+      margin-left: 4px;
+    }
+  }
+  .draft-runs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
   }
 
   .pick-chip {

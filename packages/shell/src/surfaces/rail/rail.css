@@ -67,19 +67,12 @@
     align-items: center;
     justify-content: center;
   }
-  /* an idle control is an idle control: the same rest tier as .btn and .btn-icon */
+  /* a .row: it rests, lifts and reads as picked the way the worktree rows above it do, because the
+   draft tab it opens is a worktree row that does not exist yet. Only the chord hint is its own. */
   .rail-new {
-    color: var(--text1);
-    text-align: left;
-    width: 100%;
-    display: flex;
-    align-items: baseline;
-    &:hover {
-      color: var(--accent);
-    }
     & .rail-new-kbd {
       margin-left: auto;
-      color: var(--text2);
+      color: var(--text1);
       opacity: 0;
       transition: opacity 0.1s;
     }
@@ -334,8 +327,15 @@
       background: var(--element1);
     }
   }
-  .rail-disc-lock {
+  /* the lock stands in for the dot, so it is centred on the dot's x: the 13px glyph overhangs the
+   8px dot by 2.5px on each side, and the negative right margin keeps the row's right edge */
+  .rail-lock {
     display: flex;
+    margin-right: -2.5px;
+  }
+  .rail .rail-item .rail-lock,
+  .rail .rail-disc-item .rail-lock {
+    margin-left: 9.5px;
   }
   /* the socket is down: every row is stale and nothing you click will answer. Fading them read as
    "still loading", so they take the fault colour instead and hovering the rail says what happened.
@@ -398,6 +398,13 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      /* the draft tab is this row selected, marked the way a worktree row is: same edge, same seat */
+      --row-edge-x: var(--rail-edge, 0px);
+    }
+    & .rail-new[data-state~="current"] {
+      --row-edge-color: var(--accent);
+      color: var(--text0);
+      background: var(--element1);
     }
   }
   /* the label takes the slack, so the hint and the glyph sit against the right edge */
@@ -411,8 +418,17 @@
       margin-right: 4px;
     }
   }
-  /* the strip's plus fades out as the one beside the label comes into view */
+  /* the strip's plus fades out as the one beside the label comes into view. It sits over the dot
+   column out of the flow, so the chord hint takes the row's right edge instead of stopping short
+   of an invisible glyph. */
   .rail-new-strip {
+    position: absolute;
+    right: 12px;
+    top: 0;
+    bottom: 0;
+    margin-left: 0;
+    display: flex;
+    align-items: center;
     transition: opacity 0.12s ease 120ms;
   }
   .rail {

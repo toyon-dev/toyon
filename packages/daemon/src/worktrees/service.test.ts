@@ -149,6 +149,36 @@ describe("spare pool", () => {
     expect(wt.agent).toBe("claude");
   });
 
+  test("a claim carries the mode, model and effort the task asked for, like a cold create does", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const wt = await w.worktrees.create(repoId, "use the spare", { mode: "plan", model: "big", effort: "high" });
+    expect(wt.kind).toBe("worktree");
+    expect([wt.mode, wt.model, wt.effort]).toEqual(["plan", "big", "high"]);
+    w.worktrees.setEffort(wt.id, "");
+    expect(w.state.requireWorktree(wt.id).effort).toBeUndefined();
+    const spare = w.state.worktrees.find((x) => x.kind === "spare");
+    if (spare) expect(() => w.worktrees.setEffort(spare.id, "high")).toThrow(UserError);
+  });
+
+  test("the warm spare is listed for the draft tab's preview, and leaves the list on claim", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    expect(w.worktrees.spares()).toEqual([{ repoId, id: spare.id, proxyPort: spare.proxyPort, ready: true }]);
+    const wt = await w.worktrees.create(repoId, "use the spare");
+    expect(w.worktrees.spares().some((s) => s.id === wt.id)).toBe(false);
+    // the next one warms in the background and says so with a frame once it is ready
+    let changed = 0;
+    w.hub.on("worktreesChanged", () => changed++);
+    await settle();
+    await settle();
+    const next = w.worktrees.spares().find((s) => s.repoId === repoId);
+    expect(next?.id).not.toBe(wt.id);
+    expect(next?.ready).toBe(true);
+    expect(changed).toBeGreaterThan(0);
+  });
+
   test("a claimed spare keeps its directory but gets a title-named link that follows renames and removal", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
@@ -665,6 +695,13 @@ describe("boot", () => {
     repos2.touch(main.id);
     await settle();
     expect(runtime2.get(main.id)?.procs).toBeTruthy();
+    // the adopted spare comes back warm with the repo: procs up, so the draft tab has a preview
+    // and a claim hands over a running worktree
+    await settle();
+    await settle();
+    const adopted = state2.worktrees.find((x) => x.kind === "spare")!;
+    expect(runtime2.get(adopted.id)?.procs).toBeTruthy();
+    expect(worktrees2.spares()).toEqual([{ repoId, id: adopted.id, proxyPort: adopted.proxyPort, ready: true }]);
     await runtime2.shutdown();
     repos2.stopWatchers();
   });
@@ -1046,5 +1083,95 @@ describe("a shell at a discovered worktree", () => {
     await w.worktrees.discovered(); // the derivation that no longer lists it prunes the shell
     expect(w.runtime.looseShell(row.id)).toBeUndefined();
     expect(w.terminals.get(row.id)?.[0]?.alive).toBe(false);
+  });
+});
+
+describe("main against origin", () => {
+  /** a bare "origin" the repo tracks, with main one commit ahead of the checkout */
+  async function withUpstream(): Promise<string> {
+    const repoId = await registered();
+    const bare = join(dirname(w.repo), "origin.git");
+    sh(w.repo, "git", "init", "-q", "--bare", bare);
+    sh(w.repo, "git", "remote", "add", "origin", bare);
+    sh(w.repo, "git", "commit", "--allow-empty", "-qm", "upstream moves on");
+    sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
+    sh(w.repo, "git", "reset", "-q", "--hard", "HEAD~1");
+    return repoId;
+  }
+
+  test("main's row counts what it trails on origin; a worktree's row still counts against main", async () => {
+    const repoId = await withUpstream();
+    const wt = await w.worktrees.create(repoId, "feature");
+    w.worktrees.invalidateCounts();
+    const rows = await w.worktrees.rows();
+    const main = rows.find((r) => r.worktree && r.worktree.kind === "main")!;
+    expect(main.behind).toBe(1);
+    expect(main.ahead).toBeUndefined();
+    expect(rows.find((r) => r.id === wt.id)?.behind).toBe(0);
+  });
+
+  test("a main with no upstream has no count", async () => {
+    await registered();
+    const main = (await w.worktrees.rows()).find((r) => r.worktree && r.worktree.kind === "main")!;
+    expect(main.behind).toBeUndefined();
+  });
+
+  test("pull fast-forwards main and every worktree's count moves with it", async () => {
+    const repoId = await withUpstream();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    let frames = 0;
+    w.hub.on("worktreesChanged", () => frames++);
+    const result = await w.worktrees.pull(main.id);
+    expect(result).toMatchObject({ ok: true, message: "pulled 1 commit(s) from origin" });
+    expect(frames).toBe(1);
+    const rows = await w.worktrees.rows();
+    expect(rows.find((r) => r.id === main.id)?.behind).toBe(0);
+    expect(rows.find((r) => r.id === wt.id)?.behind).toBe(1);
+    expect((await w.worktrees.pull(main.id)).message).toBe("already up to date with origin");
+  });
+
+  test("pull refuses a dirty main and a worktree, and says why", async () => {
+    const repoId = await withUpstream();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    writeFileSync(join(w.repo, "wip.txt"), "x\n");
+    expect((await w.worktrees.pull(main.id)).ok).toBe(false);
+    await expect(w.worktrees.pull(wt.id)).rejects.toBeInstanceOf(UserError);
+  });
+});
+
+describe("usage on the row", () => {
+  test("the stream's last figures ride on the row, and a cold worktree's come from its transcript", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.usage).toBeUndefined();
+    w.hub.emit("agent", wt.id, 1, { type: "usage", used: 1000, size: 4000, cost: 0.2, ts: 0 });
+    expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.usage).toEqual({
+      used: 1000,
+      size: 4000,
+      cost: 0.2,
+    });
+
+    // a second service over the same state and files: the figures come from the transcript
+    const cold = await w.worktrees.create(repoId, "cold");
+    writeFileSync(
+      transcriptPathFor(w.paths.transcriptsDir, cold.id),
+      [
+        JSON.stringify({ seq: 0, event: { type: "usage", used: 500, size: 4000, cost: 0.05, ts: 0 } }),
+        JSON.stringify({ seq: 1, event: { type: "text-delta", text: "later" } }),
+        JSON.stringify({ seq: 2, event: { type: "usage", used: 900, size: 4000, ts: 0 } }),
+        "",
+      ].join("\n"),
+    );
+    const again = new WorktreeService({
+      state: w.state,
+      hub: w.hub,
+      runtime: w.runtime,
+      paths: w.paths,
+      agents: w.registry,
+      namer: async () => null,
+    });
+    expect((await again.rows()).find((r) => r.id === cold.id)?.usage).toEqual({ used: 900, size: 4000 });
   });
 });

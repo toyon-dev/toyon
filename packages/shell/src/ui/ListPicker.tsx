@@ -4,7 +4,7 @@ import { Field } from "./Field.tsx";
 import { useFocusOnMount } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
 import { useListNav } from "./listNav.ts";
-import { type MenuEntry, useContextMenu } from "./menu.ts";
+import { type MenuEntry, menuStore, useContextMenu } from "./menu.ts";
 import { Overlay } from "./Overlay.tsx";
 import "./picker.css";
 import { rowState } from "./rowState.ts";
@@ -138,7 +138,24 @@ export function ListPicker<T>({
             setQ(e.target.value);
             nav.setIndex(0); // typing resets the highlight; the mount keeps initialIndex
           }}
-          onKeyDown={nav.onKeyDown}
+          onKeyDown={(e) => {
+            // the menu key, with the caret in the input: the highlighted row's menu, under that row
+            if (rowMenu && nav.active && (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) {
+              const row = listRef.current?.querySelector('[data-state~="cursor"]');
+              if (row) {
+                e.preventDefault();
+                e.stopPropagation();
+                menuStore.open({
+                  items: rowMenu(nav.active),
+                  owner: "picker",
+                  target: row,
+                  anchor: row.getBoundingClientRect(),
+                });
+                return;
+              }
+            }
+            nav.onKeyDown(e);
+          }}
           placeholder={placeholder}
         />
         {ghost && (

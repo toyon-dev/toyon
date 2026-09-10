@@ -10,8 +10,10 @@ import {
   useActiveRepo,
   useActiveRepoNeedingSetup,
   useActiveRow,
+  useDraftSpare,
   useGreenfield,
   useLocalField,
+  usePreviewId,
   useRows,
   useTheme,
 } from "../../state/selectors.ts";
@@ -125,7 +127,13 @@ export function Center() {
           case "key":
             // bridge chord forwarding: replay as a real keydown so the app's handler sees it
             window.dispatchEvent(
-              new KeyboardEvent("keydown", { key: d.key, metaKey: d.meta, ctrlKey: !!d.ctrl, shiftKey: !!d.shift }),
+              new KeyboardEvent("keydown", {
+                key: d.key,
+                metaKey: d.meta,
+                ctrlKey: !!d.ctrl,
+                shiftKey: !!d.shift,
+                altKey: !!d.alt,
+              }),
             );
             break;
           case "hmr":
@@ -215,10 +223,26 @@ export function Center() {
   // the frame mounts once a server answers; until then the boot pane shows what the procs are
   // doing, because the proxy's placeholder cannot tell compiling from crashed from the wrong port
   const activeReady = !!active && active.procs.some((p) => p.status === "running");
+  // the draft tab shows its base's preview, or the warm spare's when the draft is from main: the
+  // code the worktree will start from, running since the spare warmed, so it mounts on sight
+  const spares = useStore((s) => s.spares);
+  const draftSpare = useDraftSpare();
+  const previewId = usePreviewId();
+  const previewReady = previewId !== null && (previewId === draftSpare?.id || (previewId === activeId && activeReady));
   useEffect(() => {
-    if (activeId && activeReady && !mounted.includes(activeId)) setMounted((m) => [...m, activeId]);
-  }, [activeId, activeReady, mounted]);
-  const frames = rows.filter(isOwned).filter((w) => mounted.includes(w.id));
+    if (previewId && previewReady && !mounted.includes(previewId)) setMounted((m) => [...m, previewId]);
+  }, [previewId, previewReady, mounted]);
+  const frames = [
+    ...rows
+      .filter(isOwned)
+      .filter((w) => mounted.includes(w.id))
+      .map((w) => ({ id: w.worktree.id, port: w.worktree.proxyPort, title: w.worktree.title })),
+    // a spare's frame outlives the draft: on claim the same id is a row above, and the element
+    // stays mounted under its key, so the preview the prompt was typed against becomes the task's
+    ...spares
+      .filter((sp) => mounted.includes(sp.id) && !rows.some((r) => r.id === sp.id))
+      .map((sp) => ({ id: sp.id, port: sp.proxyPort, title: "new worktree" })),
+  ];
 
   // editor pane: draggable height + full-height toggle, persisted
   const centerRef = useRef<HTMLDivElement>(null);
@@ -267,25 +291,22 @@ export function Center() {
         style={{ display: (diff && diffFull) || (designOpen && designFull) ? "none" : undefined }}
       >
         <div className="frames-wrap">
-          {frames.map((w) => (
+          {frames.map((f) => (
             <iframe
-              key={w.worktree.id}
+              key={f.id}
               ref={(el) => {
                 if (el) {
-                  frameRefs.current.set(w.worktree.id, el);
-                  originRefs.current.set(
-                    w.worktree.id,
-                    new URL(previewUrl(w.worktree.id, w.worktree.proxyPort)).origin,
-                  );
+                  frameRefs.current.set(f.id, el);
+                  originRefs.current.set(f.id, new URL(previewUrl(f.id, f.port)).origin);
                 } else {
-                  frameRefs.current.delete(w.worktree.id);
-                  originRefs.current.delete(w.worktree.id);
+                  frameRefs.current.delete(f.id);
+                  originRefs.current.delete(f.id);
                 }
               }}
-              src={previewUrl(w.worktree.id, w.worktree.proxyPort)}
-              title={w.worktree.title}
+              src={previewUrl(f.id, f.port)}
+              title={f.title}
               style={{
-                display: w.worktree.id === activeId && !setupRepo && !watching && !greenfield ? "block" : "none",
+                display: f.id === previewId && !setupRepo && !watching && !greenfield ? "block" : "none",
               }}
             />
           ))}
@@ -301,44 +322,56 @@ export function Center() {
           )}
           {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
           {/* a stale build is the same card wherever it is noticed: here, or a chunk that failed to load */}
-          {!activeReady && !activeDiscovered && !setupRepo && !watching && !greenfield && incompatible && (
-            <CrashCard
-              title={STALE_BUILD.title}
-              body={STALE_BUILD.body}
-              action={
-                <Button variant="outline" onClick={() => window.location.reload()}>
-                  reload
-                </Button>
-              }
-            />
-          )}
-          {!activeReady && !activeDiscovered && !setupRepo && !watching && !greenfield && !incompatible && (
-            <div className="empty">
-              {!connected && (!heard || connectFailure) ? (
-                // heard over the bootstrap fetch means the daemon is up and the socket is a
-                // moment away; saying "connecting" for that moment is the flash, not the truth
-                HAS_TOKEN ? (
-                  CONNECT_TEXT[connectFailure ?? "probing"]
+          {!activeReady &&
+            !draftSpare &&
+            !activeDiscovered &&
+            !setupRepo &&
+            !watching &&
+            !greenfield &&
+            incompatible && (
+              <CrashCard
+                title={STALE_BUILD.title}
+                body={STALE_BUILD.body}
+                action={
+                  <Button variant="outline" onClick={() => window.location.reload()}>
+                    reload
+                  </Button>
+                }
+              />
+            )}
+          {!activeReady &&
+            !draftSpare &&
+            !activeDiscovered &&
+            !setupRepo &&
+            !watching &&
+            !greenfield &&
+            !incompatible && (
+              <div className="empty">
+                {!connected && (!heard || connectFailure) ? (
+                  // heard over the bootstrap fetch means the daemon is up and the socket is a
+                  // moment away; saying "connecting" for that moment is the flash, not the truth
+                  HAS_TOKEN ? (
+                    CONNECT_TEXT[connectFailure ?? "probing"]
+                  ) : (
+                    "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
+                  )
+                ) : !active ? (
+                  heard ? (
+                    `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
+                  ) : (
+                    ""
+                  )
+                ) : needsSetup && busy ? (
+                  `building in ${active.worktree.title}; the preview appears once it starts`
+                ) : needsSetup && treeEmpty ? (
+                  `${active.worktree.title} is empty so far; say what to build`
+                ) : noProcs ? (
+                  <NoPreviewPane repo={noProcs} />
                 ) : (
-                  "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
-                )
-              ) : !active ? (
-                heard ? (
-                  `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
-                ) : (
-                  ""
-                )
-              ) : needsSetup && busy ? (
-                `building in ${active.worktree.title}; the preview appears once it starts`
-              ) : needsSetup && treeEmpty ? (
-                `${active.worktree.title} is empty so far; say what to build`
-              ) : noProcs ? (
-                <NoPreviewPane repo={noProcs} />
-              ) : (
-                <BootPane worktree={active} log={log} />
-              )}
-            </div>
-          )}
+                  <BootPane worktree={active} log={log} />
+                )}
+              </div>
+            )}
         </div>
       </div>
       {diff && (

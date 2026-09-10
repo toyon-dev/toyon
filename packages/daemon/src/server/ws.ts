@@ -151,7 +151,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       (async () => {
         do {
           statusesDirty = false;
-          broadcast({ t: "worktrees", rows: await s.worktrees.rows() });
+          broadcast({ t: "worktrees", rows: await s.worktrees.rows(), spares: s.worktrees.spares() });
         } while (statusesDirty);
       })().finally(() => {
         statusesInFlight = false;
@@ -217,8 +217,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   // the registry knows what is installed, accounts knows who each one is logged in as
   const agentInfos = () =>
     s.accounts.describe(s.agents.infos()).map((a) => {
-      const models = s.state.cachedModels(a.id);
-      return models.length > 0 ? { ...a, models } : a;
+      const models = s.state.cachedOptions(a.id, "model");
+      const efforts = s.state.cachedOptions(a.id, "thought_level");
+      return { ...a, ...(models.length > 0 ? { models } : {}), ...(efforts.length > 0 ? { efforts } : {}) };
     });
   const agentsMsg = () =>
     ({
@@ -238,6 +239,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       protocol: PROTOCOL_VERSION,
       repos: s.state.repos,
       rows: await s.worktrees.rows({ quick: true }),
+      spares: s.worktrees.spares(),
       themes: s.themes.themes,
       themePrefs: s.themes.prefs,
       agents: agentInfos(),

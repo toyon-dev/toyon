@@ -23,6 +23,7 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { dollars, tokens } from "../chat/usage.ts";
 import { chord, dotClass, procTrouble, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
@@ -39,6 +40,8 @@ export function WtRail() {
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
   const greenfield = useGreenfield();
+  // the draft tab: the new-worktree row is the selected one while a worktree is being drafted
+  const draftOpen = useStore((s) => s.draft !== null);
   const discovered = useVisibleDiscovered();
   const discOpen = useDiscoveredOpen();
   const clientId = useStore((s) => s.clientId);
@@ -59,6 +62,15 @@ export function WtRail() {
   const home = useStore((s) => s.home);
   const wtDirLabel = (d: WorktreeStatus) =>
     home && d.path.startsWith(`${home}/`) ? `~${d.path.slice(home.length)}` : d.path;
+  // the tip's second line: where the worktree is, and what its agent has cost and filled so far
+  const detailOf = (d: WorktreeStatus) => {
+    const u = d.usage;
+    if (!u) return wtDirLabel(d);
+    const figures = [u.cost !== undefined ? dollars(u.cost) : null, `${tokens(u.used)} of ${tokens(u.size)}`].filter(
+      Boolean,
+    );
+    return `${wtDirLabel(d)} · ${figures.join(" · ")}`;
+  };
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
 
@@ -118,7 +130,9 @@ export function WtRail() {
         key={id}
         type="button"
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
-        data-state={rowState({ current: id === activeId, checked: sel.includes(id) })}
+        // while a worktree is being drafted the draft's row is the selected one, and the base it
+        // branches from stays the active id underneath without reading as picked
+        data-state={rowState({ current: id === activeId && !draftOpen, checked: sel.includes(id) })}
         // one tip per row, on the row: the dot's state in words with the dot restated beside it,
         // since the real one is at the far end of the row from where the tip sits, and where the
         // worktree is on the line under. A tip per element would swap fifty times as the mouse
@@ -130,13 +144,32 @@ export function WtRail() {
         {...(owned
           ? tip(stateLabel(w, repoOf(owned)?.needsSetup), undefined, {
               placement: "left",
-              detail: wtDirLabel(w),
+              detail: detailOf(w),
               dot: dotClass(w),
               lead: isMain(owned.worktree) ? "main" : undefined,
             })
           : w.locked
             ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, { placement: "left", detail: wtDirLabel(w) })
             : tip(wtDirLabel(w), undefined, { placement: "left" }))}
+        data-wt={id}
+        // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
+        // is picked and takes the focus, so the next press keeps walking. Down from the last row
+        // is the new-worktree row, the ends stop rather than wrap, and the found list below is
+        // its own section. ⌥↑/↓ does the same from anywhere (app/keys.ts).
+        onKeyDown={(e) => {
+          if (!owned || graftMode || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+          e.preventDefault();
+          const list = e.currentTarget.parentElement;
+          const at = worktrees.findIndex((w) => w.id === id);
+          const next = worktrees[at + (e.key === "ArrowDown" ? 1 : -1)];
+          if (next) {
+            dispatch({ a: "activate", id: next.id });
+            list?.querySelector<HTMLElement>(`[data-wt="${next.id}"]`)?.focus();
+          } else if (e.key === "ArrowDown" && !draftOpen) {
+            // the draft hands the keyboard to the composer, which is what it is for; ⌥↑ comes back
+            dispatch({ a: "open-draft" });
+          }
+        }}
         onClick={(e) => {
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
           // and has nothing to check; every other graftable row is a source to check or uncheck.
@@ -214,7 +247,12 @@ export function WtRail() {
             </span>
           )}
           {cols.behind && (
-            <span className="rail-count row-dim" data-tip={w.behind ? `${w.behind} behind main` : undefined}>
+            <span
+              className="rail-count row-dim"
+              data-tip={
+                w.behind ? `${w.behind} behind ${w.worktree && isMain(w.worktree) ? "origin" : "main"}` : undefined
+              }
+            >
               {w.behind ? count(w.behind) : ""}
             </span>
           )}
@@ -224,16 +262,19 @@ export function WtRail() {
             </span>
           )}
         </span>
-        {w.locked && (
-          <span className="rail-disc-lock row-dim">
-            <Icon name="lock" className="icon-inline" />
-          </span>
-        )}
         {(() => {
           // a landing op is out: the dot's slot shows it working, since the op was started from
           // this row and the control that started it may be off screen in the strip. `waiting`
           // still wins: a person being needed outranks a git op that finishes on its own.
           if (shipping[id] && dotClass(w) !== "waiting") return <Spinner size="dot" />;
+          // held by another tool: that is its status, so the lock takes the dot's slot rather
+          // than adding a column, and the hover on the row says who holds it
+          if (w.locked)
+            return (
+              <span className="rail-glyph rail-lock row-dim">
+                <Icon name="lock" className="icon-inline" />
+              </span>
+            );
           // hollow: git knows about it, toyon does not run it, so there is no activity to colour
           if (!owned) return <span className="dot discovered" />;
           // a red dot means a proc died, and the only thing anyone wants next is its log. The
@@ -323,7 +364,11 @@ export function WtRail() {
                 onClick={() => {
                   for (const id of sel) {
                     const w = worktrees.find((x) => x.worktree.id === id);
-                    if ((w?.behind ?? 0) > 0) shipOp(sock, dispatch, { t: "sync-main", worktreeId: id });
+                    if ((w?.behind ?? 0) > 0)
+                      shipOp(sock, dispatch, {
+                        t: w && isMain(w.worktree) ? "pull-main" : "sync-main",
+                        worktreeId: id,
+                      });
                   }
                   cancelGraft();
                 }}
@@ -355,11 +400,23 @@ export function WtRail() {
               branch while main stayed blank, and the row comes back with the first message */}
           {!graftMode && !greenfield && (
             <button
-              className="rail-new"
-              data-tip="New worktree"
-              data-tip-key={chord("new")}
+              // a row like the worktree rows above it, since the draft tab it opens is one: the
+              // same seat under the pointer and the same edge and lift when it is the one picked
+              className="row row-edge rail-new"
+              data-state={rowState({ current: draftOpen })}
+              data-tip={draftOpen ? "The worktree being drafted; esc leaves it" : "New worktree"}
+              data-tip-key={draftOpen ? undefined : chord("new")}
               data-tip-placement="left"
-              onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
+              onClick={() => dispatch({ a: "open-draft" })}
+              // the last stop on the walk: up is the last worktree, and down is the end
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+                e.preventDefault();
+                const last = worktrees[worktrees.length - 1];
+                if (e.key !== "ArrowUp" || !last) return;
+                dispatch({ a: "activate", id: last.id });
+                e.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-wt="${last.id}"]`)?.focus();
+              }}
             >
               <span className="rail-gut">
                 <Icon name="plus" className="icon-inline" />

@@ -6,7 +6,7 @@ import { Button } from "../../ui/Button.tsx";
 import { Field } from "../../ui/Field.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
-import { destination } from "../palettes/projectPicker.ts";
+import { destination } from "./projectPicker.ts";
 
 type NewProject = Extract<OverlayState, { kind: "new-project" }>;
 

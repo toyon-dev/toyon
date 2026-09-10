@@ -95,6 +95,7 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
     meta: z.boolean(),
     ctrl: z.boolean().optional(),
     shift: z.boolean().optional(),
+    alt: z.boolean().optional(),
   }),
 ]);
 export type BridgeToShellMsg = z.infer<typeof bridgeToShellSchema>;

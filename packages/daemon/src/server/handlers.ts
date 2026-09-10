@@ -147,10 +147,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       context: msg.context,
       pick: msg.pick,
       images: msg.images,
+      pastes: msg.pastes,
       agent: msg.agent,
       profile: msg.profile,
       mode: msg.mode,
       model: msg.model,
+      effort: msg.effort,
     });
   },
 
@@ -164,6 +166,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "set-worktree-model"(msg, _ctx, s) {
     s.worktrees.setModel(msg.worktreeId, msg.model);
+  },
+
+  "set-worktree-effort"(msg, _ctx, s) {
+    s.worktrees.setEffort(msg.worktreeId, msg.effort);
   },
 
   "batch-worktrees"(msg, ctx, s) {
@@ -256,6 +262,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
           })
         : toast(msg.worktreeId, result.ok, result.message),
     );
+  },
+
+  async "pull-main"(msg, ctx, s) {
+    const result = await s.worktrees.pull(msg.worktreeId);
+    await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message));
   },
 
   async commit(msg, ctx, s) {

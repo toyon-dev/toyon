@@ -17,7 +17,10 @@ const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
 }));
 
 /** gear / ⌘,: settings card stacked over the shortcut card — the one non-worktree surface, so global
- * settings live here as well as in the palette; esc from a picker opened here comes back */
+ * settings live here as well as in the palette; esc from a picker opened here comes back. The
+ * settings card is the shortcut card's grid: sections in two columns, so the two read as one
+ * shape, and a row means what its section says (a row under Agents is an agent, not a
+ * preference). The project and its agents are the left column, appearance the right. */
 export function KeysHelp() {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -26,7 +29,6 @@ export function KeysHelp() {
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
   const agents = useStore((s) => s.agents);
-  const defaultAgent = useStore((s) => s.defaultAgent);
   const repo = useActiveRepo();
   const open = (a: Action) => {
     dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
@@ -34,47 +36,56 @@ export function KeysHelp() {
   };
   return (
     <Overlay bare boxClass="keys-stack" onClose={() => dispatch({ a: "close" })}>
-      <div className="keys-card keys-settings">
-        <div className="section-title keys-h">Settings</div>
-        <div className="keys-setting">
-          <span className="keys-d">theme</span>
-          <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
-            {resolveTheme(prefs, themes, systemDark).name}
-          </Button>
+      <div className="keys-card">
+        <div>
+          {/* the current project first, as its own section: how it installs and starts
+              (toyon.json); the pane replaces the preview. Other projects are a switch away
+              (⌘⇧O), not rows here. A long process list truncates rather than widening the column. */}
+          {repo && (
+            <>
+              <div className="section-title keys-h">{repo.name}</div>
+              <div className="keys-setting">
+                <span className="keys-d">processes</span>
+                <Button
+                  variant="field"
+                  mono
+                  className="keys-chip"
+                  data-tip={`edit the install + start commands in ${repo.name}'s toyon.json`}
+                  onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
+                  {...cm.contextMenu(() => projectItems(repo, repo.id, { sock, dispatch }))}
+                >
+                  <span className="keys-v">{Object.keys(repo.config.procs).join(" + ") || "not set up"}</span>
+                </Button>
+              </div>
+            </>
+          )}
+          {/* the agents under the project, in its column: one row each, who it is logged in as, so
+              a refused or stale credential is fixable here rather than only in the terminal that
+              wrote it. Spanning the card put the chips a column away from their names. No default
+              row: which agent, mode and model a new worktree gets is chosen in the box that starts
+              it, and the box remembers. */}
+          <div className="section-title keys-h">Agents</div>
+          {agents.map((a) => (
+            <AgentRow key={a.id} agent={a} />
+          ))}
         </div>
-        <div className="keys-setting">
-          <span className="keys-d">light/dark mode</span>
-          <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}>
-            {appearanceLabel[prefs.mode]}
-          </Button>
-        </div>
-        <div className="keys-setting">
-          <span className="keys-d">default agent</span>
-          <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "agent" } })}>
-            {agents.find((a) => a.id === defaultAgent)?.name ?? defaultAgent}
-          </Button>
-        </div>
-        {/* per agent: who it is logged in as, so a refused or stale credential is fixable here
-            rather than only in the terminal that wrote it */}
-        {agents.map((a) => (
-          <AgentRow key={a.id} agent={a} />
-        ))}
-        {/* the current project only: how it installs and starts (toyon.json); the pane replaces
-            the preview. Other projects are a switch away (⌘⇧O), not rows here. */}
-        {repo && (
+        <div>
+          <div className="section-title keys-h">Appearance</div>
+          {/* mode first: the theme row shows the theme resolved for the current mode, so mode is
+              the decision and theme follows it */}
           <div className="keys-setting">
-            <span className="keys-d">{repo.name}</span>
-            <Button
-              variant="field"
-              mono
-              data-tip={`edit the install + start commands in ${repo.name}'s toyon.json`}
-              onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
-              {...cm.contextMenu(() => projectItems(repo, repo.id, { sock, dispatch }))}
-            >
-              {Object.keys(repo.config.procs).join(" + ") || "not set up"}
+            <span className="keys-d">mode</span>
+            <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "appearance" } })}>
+              {appearanceLabel[prefs.mode]}
             </Button>
           </div>
-        )}
+          <div className="keys-setting">
+            <span className="keys-d">theme</span>
+            <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
+              {resolveTheme(prefs, themes, systemDark).name}
+            </Button>
+          </div>
+        </div>
       </div>
       <div className="keys-card">
         {KEY_SECTIONS.map((sec) => (

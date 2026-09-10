@@ -1,8 +1,8 @@
 // Landing operations: commit, merge into main, sync from main, push + PR. Each returns a
 // ShipResult the UI shows as a toast; none commits on the user's behalf except commitWorktree.
 
-import { git, run } from "./exec.ts";
-import { aheadBehind, statusFiles } from "./status.ts";
+import { GIT, git, NO_PROMPT, run } from "./exec.ts";
+import { aheadBehind, behindUpstream, statusFiles } from "./status.ts";
 
 export interface ShipResult {
   ok: boolean;
@@ -51,6 +51,26 @@ export async function mergeToMain(
   const m = await git(repoPath, "merge", "--no-edit", branch);
   if (!m.ok) return mergeFailure(repoPath, m, `merge conflicts with ${defaultBr}: sync this worktree first`);
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };
+}
+
+/** Fast-forward the main checkout to its upstream ("pull"). Never a merge: a main that has
+ * diverged from origin is a decision for a terminal, not a button. Fetches first, so the count
+ * the button showed and the commits it brings are the same ones. */
+export async function pullMain(repoPath: string, defaultBr: string): Promise<ShipResult> {
+  const cErr = await requireClean(repoPath);
+  if (cErr) return cErr;
+  const current = await git(repoPath, "branch", "--show-current");
+  if (current.out !== defaultBr) {
+    return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr}; switch it first` };
+  }
+  const f = await run(GIT, ["fetch", "--quiet"], repoPath, NO_PROMPT);
+  if (!f.ok) return { ok: false, message: `fetch failed: ${f.err.slice(0, 200)}` };
+  const behind = await behindUpstream(repoPath);
+  if (behind === null) return { ok: false, message: `${defaultBr} has no upstream to pull from` };
+  if (behind === 0) return { ok: true, message: "already up to date with origin" };
+  const m = await git(repoPath, "merge", "--ff-only", "@{upstream}");
+  if (!m.ok) return { ok: false, message: `${defaultBr} has diverged from origin; reconcile it in a terminal` };
+  return { ok: true, message: `pulled ${behind} commit(s) from origin` };
 }
 
 /** Merge main into the worktree ("sync") so it's up to date before landing. */

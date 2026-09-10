@@ -2,7 +2,7 @@
 // transport layer (server/handlers.ts) calls in here and shapes replies; git/, runtime/ and the
 // spare pool do the work.
 
-import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   type AgentEvent,
@@ -21,9 +21,11 @@ import {
   type PickMeta,
   type RefKind,
   type RepoInfo,
+  type SpareInfo,
   type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
+import type { OptionField } from "../agent/acp/options.ts";
 import { attachmentsDirFor } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
@@ -35,10 +37,17 @@ import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, git, gitOrThrow, NO_PROMPT, run } from "../git/exec.ts";
-import { commitWorktree, mergeToMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
+import { commitWorktree, mergeToMain, pullMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
-import { aheadBehind, committedFiles, statusFiles, statusFilesWithCounts, treeEmpty } from "../git/status.ts";
+import {
+  aheadBehind,
+  behindUpstream,
+  committedFiles,
+  statusFiles,
+  statusFilesWithCounts,
+  treeEmpty,
+} from "../git/status.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
@@ -111,6 +120,8 @@ export interface CreateOpts {
   mode?: PermissionMode;
   /** one of the agent's advertised model ids; its default when absent */
   model?: string;
+  /** one of the agent's advertised effort levels; its default when absent */
+  effort?: string;
   images?: ImageInput[];
   pastes?: PasteInput[];
 }
@@ -125,6 +136,9 @@ export interface WorktreeServiceDeps {
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
 }
 
+/** how often main's upstream is fetched while its row is being counted */
+const FETCH_EVERY_MS = 5 * 60_000;
+
 export class WorktreeService {
   readonly spare: SparePool;
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
@@ -132,6 +146,11 @@ export class WorktreeService {
   private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
   /** the agent status each worktree last reported, so a turn's end is an edge and not a level */
   private lastAgentStatus = new Map<string, AgentStatus>();
+  /** the last usage figures per worktree: live from the stream, else read once from the transcript
+   * on disk (null: read, and there were none) */
+  private usage = new Map<string, WorktreeStatus["usage"] | null>();
+  /** per repo path, when main's upstream was last fetched */
+  private lastFetch = new Map<string, number>();
 
   constructor(private d: WorktreeServiceDeps) {
     this.spare = new SparePool({
@@ -149,6 +168,11 @@ export class WorktreeService {
     // birth too, and stamping that would ring every worktree the daemon has ever started.
     // Subscribed here rather than in the ws layer because this listener has to run before the one
     // that broadcasts statuses, and services are constructed before the server.
+    d.hub.on("agent", (worktreeId, _seq, event) => {
+      if (event.type !== "usage") return;
+      const { used, size, cost } = event;
+      this.usage.set(worktreeId, { used, size, ...(cost !== undefined ? { cost } : {}) });
+    });
     d.hub.on("agentStatus", (worktreeId, status) => {
       const prev = this.lastAgentStatus.get(worktreeId) ?? "idle";
       this.lastAgentStatus.set(worktreeId, status);
@@ -201,8 +225,11 @@ export class WorktreeService {
       if (claimed) {
         if (variant) claimed.variant = variant;
         if (opts.createdBy) claimed.createdBy = opts.createdBy;
-        // the spare's agent has no process yet; it reads the stamp on its first prompt
+        // the spare's agent has no process yet; it reads the stamps on its first prompt
         claimed.agent = agent;
+        if (opts.mode) claimed.mode = opts.mode;
+        if (opts.model) claimed.model = opts.model;
+        if (opts.effort) claimed.effort = opts.effort;
         this.refreshLink(claimed);
         // the spare was warmed under the default profile; another one means its procs restart
         // (the agent stays, and gets the prompt now rather than after the restart)
@@ -237,6 +264,7 @@ export class WorktreeService {
       ...(profile !== undefined ? { profile } : {}),
       ...(opts.mode ? { mode: opts.mode } : {}),
       ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.effort ? { effort: opts.effort } : {}),
     };
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, base?.path ?? repo.path);
@@ -418,12 +446,22 @@ export class WorktreeService {
    * default. Not checked against the list: the agent is the authority and ignores an id it has
    * not got, and the session-info in the transcript says what actually ran. */
   setModel(worktreeId: string, model: string) {
+    this.setOption(worktreeId, "model", model);
+  }
+
+  /** the effort level, the same way; its choices depend on the model, and one the model has not
+   * got is left alone by the session rather than refused here */
+  setEffort(worktreeId: string, effort: string) {
+    this.setOption(worktreeId, "effort", effort);
+  }
+
+  private setOption(worktreeId: string, field: OptionField, value: string) {
     const wt = this.d.state.requireWorktree(worktreeId);
-    if (wt.kind === "spare") throw new UserError("no model for a spare worktree");
-    const next = model || undefined;
-    if (wt.model === next) return;
-    if (next) wt.model = next;
-    else delete wt.model;
+    if (wt.kind === "spare") throw new UserError(`no ${field} for a spare worktree`);
+    const next = value || undefined;
+    if (wt[field] === next) return;
+    if (next) wt[field] = next;
+    else delete wt[field];
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
   }
@@ -741,6 +779,19 @@ export class WorktreeService {
     return { result, defaultBranch: repo.defaultBranch };
   }
 
+  /** fast-forward main to its upstream; every worktree's `behind` moves with it */
+  async pull(worktreeId: string): Promise<ShipResult> {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    if (!isMain(wt)) throw new UserError("pull on main; a worktree syncs from main instead");
+    const repo = this.d.state.requireRepo(wt.repoId);
+    const result = await withRepoLock(repo.path, () => pullMain(repo.path, repo.defaultBranch));
+    if (result.ok) {
+      this.invalidateCounts();
+      this.headMoved(worktreeId);
+    }
+    return result;
+  }
+
   async commit(worktreeId: string, message: string): Promise<ShipResult> {
     const wt = this.d.state.requireWorktree(worktreeId);
     const m = message.trim();
@@ -761,6 +812,53 @@ export class WorktreeService {
   /** this worktree's own HEAD moved (a sync or a commit): its cached ahead/behind describe the
    * old one, and nothing watches a worktree's branch the way the repo watcher watches main, so
    * the rail would keep the old badge until the TTL lapsed and something unrelated pushed a frame */
+  /** main's `behind` is against its upstream, refreshed by a fetch every few minutes while
+   * someone is looking: the count is only as good as the last fetch, and nobody runs one by hand
+   * for a tool to read. No upstream, no count and no fetch. */
+  private async mainCounts(path: string): Promise<{ behind?: number }> {
+    const behind = await behindUpstream(path);
+    if (behind === null) return {};
+    const last = this.lastFetch.get(path) ?? 0;
+    if (Date.now() - last > FETCH_EVERY_MS) {
+      this.lastFetch.set(path, Date.now());
+      fireAndForget(
+        "fetch",
+        run(GIT, ["fetch", "--quiet"], path, NO_PROMPT).then((r) => {
+          if (!r.ok) {
+            log.warn("fetch", `could not fetch ${path}: ${r.err.slice(0, 200)}`);
+            return;
+          }
+          this.invalidateCounts();
+          this.d.hub.emit("worktreesChanged");
+        }),
+      );
+    }
+    return { behind };
+  }
+
+  /** the figures for a row: what the stream said last, else what the transcript on disk ends with */
+  private usageFor(worktreeId: string): WorktreeStatus["usage"] | undefined {
+    const known = this.usage.get(worktreeId);
+    if (known !== undefined) return known ?? undefined;
+    let found: WorktreeStatus["usage"] | null = null;
+    const file = transcriptPathFor(this.d.paths.transcriptsDir, worktreeId);
+    if (existsSync(file)) {
+      const lines = readFileSync(file, "utf8").split("\n");
+      for (let i = lines.length - 1; i >= 0 && !found; i--) {
+        if (!lines[i]?.includes('"usage"')) continue;
+        try {
+          const e = JSON.parse(lines[i]!).event;
+          if (e?.type === "usage")
+            found = { used: e.used, size: e.size, ...(e.cost !== undefined ? { cost: e.cost } : {}) };
+        } catch {
+          // a torn line at the end of a transcript is the loader's problem, not this read's
+        }
+      }
+    }
+    this.usage.set(worktreeId, found);
+    return found ?? undefined;
+  }
+
   private headMoved(worktreeId: string) {
     this.countsCache.delete(worktreeId);
     this.d.hub.emit("worktreesChanged");
@@ -841,7 +939,7 @@ export class WorktreeService {
     const cached = this.countsCache.get(id);
     if (cached && Date.now() - cached.at < 10_000) return cached;
     try {
-      const ab = countable ? await aheadBehind(path, defaultBranch) : {};
+      const ab = countable ? await aheadBehind(path, defaultBranch) : await this.mainCounts(path);
       const fresh = { ...ab, dirty: (await statusFiles(path)).length, at: Date.now() };
       this.countsCache.set(id, fresh);
       return fresh;
@@ -940,6 +1038,20 @@ export class WorktreeService {
     return [...owned, ...found];
   }
 
+  /** every repo's warm spare, for the draft tab's preview; never part of rows(). Ready once its
+   * proxy is up (a boot-adopted spare has none until the repo's procs restart) and the pool still
+   * counts it (an extra row adopt() is pruning does not). */
+  spares(): SpareInfo[] {
+    return this.d.state.worktrees
+      .filter((wt) => wt.kind === "spare")
+      .map((wt) => ({
+        repoId: wt.repoId,
+        id: wt.id,
+        proxyPort: wt.proxyPort,
+        ready: this.d.runtime.get(wt.id)?.proxy != null && this.spare.current(wt.repoId)?.worktreeId === wt.id,
+      }));
+  }
+
   /** the cached counts for a row whatever their age, noting a miss for the quick pass */
   private countsQuick(id: string, quick: { missed: boolean }): { ahead?: number; behind?: number; dirty?: number } {
     const c = this.countsCache.get(id);
@@ -972,6 +1084,7 @@ export class WorktreeService {
             dirty,
             queued: rt?.agent.queueLength || undefined,
             unseen: isUnseen(wt) || undefined,
+            usage: this.usageFor(wt.id),
           };
         }),
     );

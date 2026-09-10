@@ -1,7 +1,7 @@
 import { matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
 import { useSock, useStoreInstance } from "../state/context.tsx";
-import { isSubPicker, localOf } from "../state/store.ts";
+import { isSubPicker, localOf, previewIdOf } from "../state/store.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
@@ -18,9 +18,15 @@ export function useChords() {
       // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
       // picker holds shell focus, so those keep the full ladder or there is no way back out.
       if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
-      // ⌘D and ⌘K are Monaco's (add cursor, chord prefix) while it has the keyboard; taking them
-      // from a focused editor made a design scan out of a second cursor
-      if ((chord?.id === "design" || chord?.id === "new") && document.activeElement?.closest(".monaco-editor")) return;
+      // ⌘D and ⌘K are Monaco's (add cursor, chord prefix) while it has the keyboard, and so are
+      // ⌥↑/↓ (move line); taking them from a focused editor made a design scan out of a second
+      // cursor, and would make a worktree switch out of a line move
+      const monaco = !!document.activeElement?.closest(".monaco-editor");
+      if (
+        monaco &&
+        (chord?.id === "design" || chord?.id === "new" || chord?.id === "wt-prev" || chord?.id === "wt-next")
+      )
+        return;
       if (chord) {
         e.preventDefault();
         switch (chord.id) {
@@ -30,8 +36,24 @@ export function useChords() {
             if (wt) dispatch({ a: "activate", id: wt.id });
             break;
           }
+          case "wt-prev":
+          case "wt-next": {
+            // the rail's order, top to bottom, with the new-worktree row as the last stop: down
+            // from the last worktree opens the draft, up from the draft is the last worktree, and
+            // the ends stop rather than wrap. The found list below is not on the walk.
+            const last = s.visible[s.visible.length - 1];
+            if (s.draft) {
+              if (chord.id === "wt-prev" && last) dispatch({ a: "activate", id: last.id });
+              break;
+            }
+            const at = s.visible.findIndex((w) => w.id === s.activeId);
+            const wt = s.visible[at + (chord.id === "wt-next" ? 1 : -1)];
+            if (wt) dispatch({ a: "activate", id: wt.id });
+            else if (chord.id === "wt-next" && at >= 0) dispatch({ a: "open-draft" });
+            break;
+          }
           case "new":
-            dispatch({ a: "toggle", overlay: { kind: "prompt" } });
+            dispatch({ a: "open-draft" });
             break;
           case "project":
             // the picker hangs off the pill, and zen hides the bar it lives in: leave zen first
@@ -46,9 +68,12 @@ export function useChords() {
               dispatch({ a: "open", overlay: { kind: "quick-open" } });
             }
             break;
-          case "pick":
-            if (s.activeId) togglePick(s.activeId, s.picking, dispatch);
+          case "pick": {
+            // the frame on screen, which while drafting is the base's preview rather than the row's
+            const id = previewIdOf(s);
+            if (id) togglePick(id, s.picking, dispatch);
             break;
+          }
           case "search":
             if (s.activeId) dispatch({ a: "toggle", overlay: { kind: "search" } });
             break;
@@ -101,9 +126,13 @@ export function useChords() {
           dispatch({ a: "close", back: isSubPicker(s.overlay) });
         } else if (s.picking) {
           // (while picking, the bridge cancels on its own Escape; this covers focus in the shell)
-          if (s.activeId) previewBus.post(s.activeId, { type: "pick-cancel" });
+          const id = previewIdOf(s);
+          if (id) previewBus.post(id, { type: "pick-cancel" });
           dispatch({ a: "set-picking", v: false });
         }
+        // the draft tab: back to the row it was from. What was typed stays in its record, so the
+        // next open picks it up rather than starting over.
+        else if (s.draft) dispatch({ a: "close-draft" });
         // an import pane: stop watching it. Escape deliberately does NOT abort the clone, which
         // keeps running and stays in the switcher: it is a key people hit reflexively, and losing
         // a five-minute download to one is not a trade worth making. Stopping it is the button.

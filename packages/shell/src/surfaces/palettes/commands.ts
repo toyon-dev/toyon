@@ -2,7 +2,7 @@
 // The ⌘⇧P palette and ⌘P's `>` mode share this list and its matcher, so highlight and score can't drift.
 
 import type { OwnedWorktree, RepoInfo, ThemePrefs } from "@toyon/shared";
-import { canLand, canRemove, canRename, resolveTheme, worktreeChord } from "@toyon/shared";
+import { canLand, canRemove, canRename, canSync, resolveTheme, worktreeChord } from "@toyon/shared";
 import { useMemo } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
@@ -166,7 +166,7 @@ export function buildCommands(
     for (const name of profileNames(repo)) {
       if (name !== current) add(`profile:${name}`, `run ${t} with ${name}`, () => acts.setProfile(wt, name));
     }
-    if ((wt.behind ?? 0) > 0)
+    if ((wt.behind ?? 0) > 0 && canSync(wt))
       add("sync", `sync main into ${t} (${wt.behind} behind)`, () => sock?.send({ t: "sync-main", worktreeId: id }));
     if (canRename(wt.worktree)) add("rename", `rename worktree · ${t}…`, () => acts.rename(wt));
     if (wt.worktree.variant) add("keep", `keep this variant · ${t}…`, () => acts.pickVariant(wt));

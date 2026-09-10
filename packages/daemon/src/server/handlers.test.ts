@@ -151,6 +151,19 @@ describe("handlers", () => {
     await expect(dispatch({ t: "subscribe", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
   });
 
+  test("sync-main on a dirty tree toasts the refusal with no prompt to prefill", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "feature");
+    await Bun.write(join(wt.path, "wip.txt"), "x\n");
+    await dispatch({ t: "sync-main", worktreeId: wt.id }, ctx, services);
+    const t = replies.find((m) => m.t === "shipped");
+    expect(t).toMatchObject({ t: "shipped", ok: false });
+    expect(t && "suggestion" in t ? t.suggestion : undefined).toBeUndefined();
+    expect(lastToast(replies) ?? (t?.t === "shipped" ? t.message : "")).toContain("uncommitted");
+  });
+
   test("chat hands the text and pick to the agent", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);

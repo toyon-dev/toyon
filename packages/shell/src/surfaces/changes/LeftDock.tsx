@@ -330,7 +330,9 @@ export function LeftDock({ width }: { width: number }) {
         {tab === "history" && commits === undefined && <div className="empty">reading history…</div>}
         {tab === "history" && commits?.length === 0 && <div className="empty">no commits yet</div>}
       </div>
-      {active && <CommitBox active={active} ahead={gitInfo?.ahead ?? 0} behind={gitInfo?.behind ?? 0} dirty={!clean} />}
+      {activeRow && (
+        <CommitBox active={activeRow} ahead={gitInfo?.ahead ?? 0} behind={gitInfo?.behind ?? 0} dirty={!clean} />
+      )}
       {fileMenu && active && (
         <Menu
           at={fileMenu}

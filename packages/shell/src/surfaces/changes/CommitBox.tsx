@@ -1,4 +1,4 @@
-import { canLand as landable, type OwnedWorktree } from "@toyon/shared";
+import { canSync, isOwned, canLand as landable, type WorktreeStatus } from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
@@ -8,33 +8,39 @@ import { tip } from "../../ui/Tooltip.tsx";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
  * where you are on the left and what you can do on the right. Committing and landing never apply at
- * once (you land a clean tree), so the two share that right-hand slot rather than stacking. */
+ * once (you land a clean tree), so the two share that right-hand slot rather than stacking.
+ *
+ * Any row gets the foot. A worktree toyon does not own has no message box and nothing to land, so
+ * its foot is the branch line and, while it is clean and behind, the one write it is allowed: a
+ * sync from main. */
 export function CommitBox({
   active,
   ahead,
   behind,
   dirty,
 }: {
-  active: OwnedWorktree;
+  active: WorktreeStatus;
   ahead: number;
   behind: number;
   dirty: boolean;
 }) {
   const sock = useSock();
-  const wt = active.worktree;
+  const owned = isOwned(active) ? active.worktree : null;
+  const id = active.id;
   const [msg, setMsg] = useState("");
-  useEffect(() => setMsg(""), [wt.id]);
+  useEffect(() => setMsg(""), [id]);
 
   const commit = () => {
     if (!msg.trim()) return;
-    sock?.send({ t: "commit", worktreeId: wt.id, message: msg.trim() });
+    sock?.send({ t: "commit", worktreeId: id, message: msg.trim() });
     setMsg("");
   };
-  const canLand = landable(wt) && !dirty;
+  const canLand = !!owned && landable(owned) && !dirty;
+  const syncable = canSync(active) && !dirty && behind > 0;
 
   return (
     <div className="composer commit-box">
-      {dirty && (
+      {owned && dirty && (
         <div className="composer-field">
           <TextArea
             size="lg"
@@ -56,7 +62,7 @@ export function CommitBox({
       <div className="hint">
         <span className="commit-where">
           <Icon name="branch" className="icon-inline" />
-          <span className="branch-name">{wt.branch}</span>
+          <span className="branch-name">{active.branch ?? "detached"}</span>
           {behind > 0 && (
             <span className="badge-behind" data-tip={`${behind} commit(s) behind main`}>
               {behind} behind
@@ -67,14 +73,14 @@ export function CommitBox({
               {ahead} ahead
             </span>
           )}
-          {wt.landed && (
+          {owned?.landed && (
             <span className="badge-landed" data-tip="Merged into main">
               <Icon name="check" className="icon-inline" /> landed
             </span>
           )}
         </span>
         <span className="commit-acts">
-          {dirty ? (
+          {owned && dirty ? (
             <Button
               variant="outline"
               tone="primary"
@@ -85,55 +91,53 @@ export function CommitBox({
               commit
             </Button>
           ) : (
-            canLand && (
-              <>
-                {behind > 0 && (
+            <>
+              {syncable && (
+                <Button
+                  variant="outline"
+                  tone="primary"
+                  data-tip={`Pull ${behind} commit(s) from main into this worktree`}
+                  onClick={() => sock?.send({ t: "sync-main", worktreeId: id })}
+                >
+                  sync <Icon name="pull" className="icon-inline" />
+                </Button>
+              )}
+              {owned && canLand && ahead > 0 && (
+                <>
                   <Button
                     variant="outline"
                     tone="primary"
-                    data-tip={`Pull ${behind} commit(s) from main into this worktree`}
-                    onClick={() => sock?.send({ t: "sync-main", worktreeId: wt.id })}
+                    data-tip={
+                      owned.prUrl
+                        ? "Merge locally: the open PR will show as merged once main is pushed"
+                        : "Merge into main locally (no push)"
+                    }
+                    onClick={() => sock?.send({ t: "merge-main", worktreeId: id })}
                   >
-                    sync <Icon name="pull" className="icon-inline" />
+                    merge
                   </Button>
-                )}
-                {ahead > 0 && (
-                  <>
+                  {owned.prUrl ? (
                     <Button
                       variant="outline"
                       tone="primary"
-                      data-tip={
-                        wt.prUrl
-                          ? "Merge locally: the open PR will show as merged once main is pushed"
-                          : "Merge into main locally (no push)"
-                      }
-                      onClick={() => sock?.send({ t: "merge-main", worktreeId: wt.id })}
+                      data-tip={`PR open: click to view · ${owned.prUrl}`}
+                      onClick={() => window.open(owned.prUrl, "_blank")}
                     >
-                      merge
+                      pr open <Icon name="external" className="icon-inline" />
                     </Button>
-                    {wt.prUrl ? (
-                      <Button
-                        variant="outline"
-                        tone="primary"
-                        data-tip={`PR open: click to view · ${wt.prUrl}`}
-                        onClick={() => window.open(wt.prUrl, "_blank")}
-                      >
-                        pr open <Icon name="external" className="icon-inline" />
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        tone="primary"
-                        data-tip="Push and open a PR"
-                        onClick={() => sock?.send({ t: "ship", worktreeId: wt.id })}
-                      >
-                        pr <Icon name="external" className="icon-inline" />
-                      </Button>
-                    )}
-                  </>
-                )}
-              </>
-            )
+                  ) : (
+                    <Button
+                      variant="outline"
+                      tone="primary"
+                      data-tip="Push and open a PR"
+                      onClick={() => sock?.send({ t: "ship", worktreeId: id })}
+                    >
+                      pr <Icon name="external" className="icon-inline" />
+                    </Button>
+                  )}
+                </>
+              )}
+            </>
           )}
         </span>
       </div>

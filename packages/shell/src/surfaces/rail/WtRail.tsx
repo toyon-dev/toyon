@@ -3,6 +3,7 @@ import {
   canLand,
   canRemove,
   canRename,
+  canSync,
   isOwned,
   type OwnedWorktree,
   type WorktreeStatus,
@@ -90,6 +91,13 @@ export function WtRail() {
       items.push({
         label: "take over",
         onClick: () => sock?.send({ t: "adopt-worktree", worktreeId: d.id, clientId }),
+      });
+    }
+    // the one write without take-over: the daemon refuses unless the tree is clean
+    if (canSync(d) && (d.behind ?? 0) > 0) {
+      items.push({
+        label: `sync from main (${d.behind} behind)`,
+        onClick: () => sock?.send({ t: "sync-main", worktreeId: d.id }),
       });
     }
     items.push({
@@ -237,10 +245,10 @@ export function WtRail() {
           </span>
         )}
         {(w.behind ?? 0) > 0 &&
-          (owned ? (
+          (canSync(w) ? (
             <span
               className="rail-badge badge-behind clickable"
-              data-tip="Sync from main"
+              data-tip={owned ? "Sync from main" : "Sync from main (only while its tree is clean)"}
               onClick={(e) => {
                 e.stopPropagation();
                 sock?.send({ t: "sync-main", worktreeId: id });

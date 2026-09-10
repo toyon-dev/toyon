@@ -39,3 +39,11 @@ export function canLand(wt: Wt): boolean {
 export function canGraft(wt: Pick<WorktreeInfo, "kind">): boolean {
   return wt.kind === "worktree";
 }
+
+/** main may be merged into it: any row with a branch, owned or not. Not main, which is its own
+ * baseline; not a detached worktree, which has no branch to move; and not one another tool holds,
+ * since a merge under a live agent session is exactly what take-over refuses for. The daemon
+ * still refuses a dirty tree, which only it can see. */
+export function canSync(row: Pick<WorktreeStatus, "branch" | "locked" | "worktree">): boolean {
+  return !!row.branch && !row.locked && !(row.worktree && isMain(row.worktree));
+}

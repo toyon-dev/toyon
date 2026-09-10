@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "./model.ts";
-import { canGraft, canLand, canRemove, canRename, isMain } from "./worktree-caps.ts";
+import { canGraft, canLand, canRemove, canRename, canSync, isMain } from "./worktree-caps.ts";
 
 const wt = (over: Partial<WorktreeInfo> = {}): WorktreeInfo => ({
   id: "w",
@@ -45,6 +45,14 @@ describe("worktree capabilities", () => {
     expect(canRemove(adopted)).toBe(true);
     expect(canLand(adopted)).toBe(true);
     expect(canGraft(adopted)).toBe(true);
+  });
+
+  test("sync needs a branch nobody else holds, and never main", () => {
+    expect(canSync({ branch: "feature" })).toBe(true);
+    expect(canSync({ branch: "feature", worktree: wt({ branch: "feature" }) })).toBe(true);
+    expect(canSync({})).toBe(false);
+    expect(canSync({ branch: "feature", locked: true })).toBe(false);
+    expect(canSync({ branch: "main", worktree: wt({ kind: "main", branch: "main" }) })).toBe(false);
   });
 
   test("a worktree opened to review a PR is not landed here", () => {

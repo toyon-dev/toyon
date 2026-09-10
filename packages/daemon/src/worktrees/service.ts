@@ -618,9 +618,22 @@ export class WorktreeService {
     return { result, removeIds };
   }
 
+  /** merge main into any row with a branch, a found worktree included: the one git write allowed
+   * without take-over, because syncFromMain refuses a dirty tree before touching it and aborts a
+   * conflicted merge, so the directory is left as it was found in every case but success */
   async sync(worktreeId: string): Promise<{ result: ShipResult; defaultBranch: string }> {
-    const { wt, repo } = this.landable(worktreeId, "sync");
-    const result = await withRepoLock(repo.path, () => syncFromMain(wt.path, repo.defaultBranch));
+    const r = this.readable(worktreeId);
+    if (!r) throw new UserError("that worktree is gone");
+    if (r.wt && isMain(r.wt)) throw new UserError("sync from a worktree, not main");
+    if (!r.branch) throw new UserError(`${r.name} is detached: check out a branch in it first`);
+    if (r.locked) throw new UserError(`${r.name} is held by another tool`);
+    const repo = this.d.state.requireRepo(r.repoId);
+    const result = await withRepoLock(repo.path, () => syncFromMain(r.path, repo.defaultBranch));
+    if (result.ok) {
+      // the behind badge should drop with the merge, not ten seconds later
+      this.countsCache.delete(worktreeId);
+      this.d.hub.emit("worktreesChanged");
+    }
     return { result, defaultBranch: repo.defaultBranch };
   }
 

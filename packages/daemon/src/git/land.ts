@@ -10,6 +10,8 @@ export interface ShipResult {
   message: string;
   /** a real PR was created via gh (vs a compare-page URL) */
   prCreated?: boolean;
+  /** the merge hit conflicts and was aborted; the one failure an agent can be asked to resolve */
+  conflict?: true;
 }
 
 /** User-initiated commit of everything in the worktree, with the user's message. */
@@ -47,7 +49,7 @@ export async function mergeToMain(
     return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr}; switch it first` };
   }
   const m = await git(repoPath, "merge", "--no-edit", branch);
-  if (!m.ok) return mergeFailure(repoPath, m.err, `merge conflicts with ${defaultBr}: sync this worktree first`);
+  if (!m.ok) return mergeFailure(repoPath, m, `merge conflicts with ${defaultBr}: sync this worktree first`);
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };
 }
 
@@ -61,7 +63,7 @@ export async function syncFromMain(worktreePath: string, defaultBr: string): Pro
   if (!m.ok) {
     return mergeFailure(
       worktreePath,
-      m.err,
+      m,
       `sync conflicts with ${defaultBr}: ask the agent to merge ${defaultBr} and resolve them`,
     );
   }
@@ -69,14 +71,21 @@ export async function syncFromMain(worktreePath: string, defaultBr: string): Pro
 }
 
 /** A conflict leaves a merge in progress that must be aborted; any other failure (dirty index,
- * unrelated histories, hook) has nothing to abort and deserves its own message. */
-async function mergeFailure(cwd: string, err: string, conflictMessage: string): Promise<ShipResult> {
-  const conflict = /CONFLICT|Automatic merge failed/.test(err);
+ * unrelated histories, hook) has nothing to abort and deserves its own message. Both streams are
+ * read: git reports a conflict on stdout, and reading stderr alone left every real conflict as an
+ * empty "merge failed" with the merge still in progress. */
+async function mergeFailure(
+  cwd: string,
+  m: { out: string; err: string },
+  conflictMessage: string,
+): Promise<ShipResult> {
+  const said = [m.out, m.err].filter(Boolean).join("\n");
+  const conflict = /CONFLICT|Automatic merge failed/.test(said);
   if (conflict) {
     await git(cwd, "merge", "--abort");
-    return { ok: false, message: `${conflictMessage} (${err.slice(0, 200)})` };
+    return { ok: false, conflict: true, message: `${conflictMessage} (${said.slice(0, 200)})` };
   }
-  return { ok: false, message: `merge failed: ${err.slice(0, 300)}` };
+  return { ok: false, message: `merge failed: ${said.slice(0, 300)}` };
 }
 
 /** Commit everything, push, and open a PR (gh) or return the compare URL. */

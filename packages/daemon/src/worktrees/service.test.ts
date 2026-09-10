@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -348,6 +348,20 @@ describe("landing", () => {
     await expect(w.worktrees.merge(main.id)).rejects.toBeInstanceOf(UserError);
   });
 
+  test("a conflicted sync says so and leaves the tree as it was", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "README.md"), "theirs\n");
+    sh(wt.path, "git", "commit", "-qam", "theirs");
+    writeFileSync(join(w.repo, "README.md"), "ours\n");
+    sh(w.repo, "git", "commit", "-qam", "ours");
+    const { result } = await w.worktrees.sync(wt.id);
+    expect(result.ok).toBe(false);
+    expect(result.conflict).toBe(true);
+    expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
+    expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("theirs\n");
+  });
+
   test("commit with an empty message is a UserError", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
@@ -682,6 +696,36 @@ describe("adopt", () => {
     await expect(w.worktrees.rename(wt.id, "mine now")).rejects.toBeInstanceOf(UserError);
     expect(wt.branch).toBe("their-branch");
     expect(wt.title).toBe("their-branch");
+  });
+
+  test("a clean found worktree behind main syncs without take-over; a dirty one is refused untouched", async () => {
+    const repoId = await registered();
+    await settle();
+    const dir = foreignWorktree("behind", "their-branch");
+    const id = await foundId(dir);
+    writeFileSync(join(w.repo, "newer.txt"), "x\n");
+    sh(w.repo, "git", "add", "newer.txt");
+    sh(w.repo, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main moved");
+    expect((await w.worktrees.gitStatus(id))?.behind).toBe(1);
+    // dirty: refused before anything happens, and not as a conflict
+    writeFileSync(join(dir, "wip.txt"), "y\n");
+    const dirty = await w.worktrees.sync(id);
+    expect(dirty.result.ok).toBe(false);
+    expect(dirty.result.conflict).toBeUndefined();
+    expect(existsSync(join(dir, "newer.txt"))).toBe(false);
+    // clean: main comes in, and the row is still not toyon's
+    rmSync(join(dir, "wip.txt"));
+    const { result } = await w.worktrees.sync(id);
+    expect(result.ok).toBe(true);
+    expect(existsSync(join(dir, "newer.txt"))).toBe(true);
+    expect((await w.worktrees.gitStatus(id))?.behind).toBe(0);
+    expect(w.state.worktrees.some((x) => x.branch === "their-branch")).toBe(false);
+    // main is its own baseline, and a held worktree is someone else's
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    await expect(w.worktrees.sync(main.id)).rejects.toBeInstanceOf(UserError);
+    sh(w.repo, "git", "worktree", "lock", "--reason", "claude session (pid 1)", dir);
+    w.worktrees.invalidateDiscovered();
+    await expect(w.worktrees.sync(await foundId(dir))).rejects.toBeInstanceOf(UserError);
   });
 
   test("adopting a row toyon already owns, or an id nothing resolves, is a toast", async () => {

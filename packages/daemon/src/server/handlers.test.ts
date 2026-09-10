@@ -250,13 +250,30 @@ describe("handlers", () => {
   });
 
   test("create-worktree forwards the agent; set-default-agent validates, persists and broadcasts", async () => {
-    const { services, ctx, broadcasts, repo } = make();
+    const { services, ctx, broadcasts, repo, agents } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
-    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "x", agent: "codex", mode: "ask" }, ctx, services);
+    await dispatch(
+      {
+        t: "create-worktree",
+        repoId: r.id,
+        prompt: "x",
+        agent: "codex",
+        mode: "ask",
+        effort: "high",
+        pastes: [{ text: "p" }],
+      },
+      ctx,
+      services,
+    );
     const made = services.state.worktrees.find((x) => x.kind === "worktree")!;
     expect(made.agent).toBe("codex");
     expect(made.mode).toBe("ask");
+    expect(made.effort).toBe("high");
+    // the first message's pastes reach the agent like a chat's do
+    expect(agents.get(made.id)?.sent[0]?.pastes).toEqual([{ text: "p" }]);
+    await dispatch({ t: "set-worktree-effort", worktreeId: made.id, effort: "" }, ctx, services);
+    expect(services.state.worktree(made.id)?.effort).toBeUndefined();
     await dispatch({ t: "set-worktree-mode", worktreeId: made.id, mode: "plan" }, ctx, services);
     expect(services.state.worktree(made.id)?.mode).toBe("plan");
     await dispatch({ t: "set-worktree-model", worktreeId: made.id, model: "big" }, ctx, services);

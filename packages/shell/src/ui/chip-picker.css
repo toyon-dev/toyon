@@ -83,4 +83,9 @@
     font: var(--type-ui-sm);
     white-space: normal;
   }
+  /* listed but not pickable (an agent that is not installed): the row stays, dimmed as a whole,
+   with its line saying why */
+  .chip-option-off {
+    opacity: 0.45;
+  }
 }

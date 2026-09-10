@@ -48,6 +48,16 @@ describe("state", () => {
     expect(loadState(paths).commandCache?.["claude:nope"]).toBeUndefined();
   });
 
+  test("a model cache from before the option cache is folded in once", () => {
+    const models = [{ id: "big", name: "Big" }];
+    saveState(paths, { repos: [], worktrees: [wt("a")], sessions: {}, modelCache: { claude: models } });
+    const loaded = loadState(paths);
+    expect(loaded.optionCache).toEqual({ claude: { model: models } });
+    expect(loaded.modelCache).toBeUndefined();
+    saveState(paths, loaded);
+    expect(readFileSync(paths.stateFile, "utf8").includes("modelCache")).toBe(false);
+  });
+
   test("corrupt file is backed up, not silently discarded", () => {
     writeFileSync(paths.stateFile, '{"repos": [');
     const s = loadState(paths);

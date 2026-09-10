@@ -21,9 +21,11 @@ import {
   type PickMeta,
   type RefKind,
   type RepoInfo,
+  type SpareInfo,
   type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
+import type { OptionField } from "../agent/acp/options.ts";
 import { attachmentsDirFor } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
@@ -111,6 +113,8 @@ export interface CreateOpts {
   mode?: PermissionMode;
   /** one of the agent's advertised model ids; its default when absent */
   model?: string;
+  /** one of the agent's advertised effort levels; its default when absent */
+  effort?: string;
   images?: ImageInput[];
   pastes?: PasteInput[];
 }
@@ -201,8 +205,11 @@ export class WorktreeService {
       if (claimed) {
         if (variant) claimed.variant = variant;
         if (opts.createdBy) claimed.createdBy = opts.createdBy;
-        // the spare's agent has no process yet; it reads the stamp on its first prompt
+        // the spare's agent has no process yet; it reads the stamps on its first prompt
         claimed.agent = agent;
+        if (opts.mode) claimed.mode = opts.mode;
+        if (opts.model) claimed.model = opts.model;
+        if (opts.effort) claimed.effort = opts.effort;
         this.refreshLink(claimed);
         // the spare was warmed under the default profile; another one means its procs restart
         // (the agent stays, and gets the prompt now rather than after the restart)
@@ -237,6 +244,7 @@ export class WorktreeService {
       ...(profile !== undefined ? { profile } : {}),
       ...(opts.mode ? { mode: opts.mode } : {}),
       ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.effort ? { effort: opts.effort } : {}),
     };
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, base?.path ?? repo.path);
@@ -418,12 +426,22 @@ export class WorktreeService {
    * default. Not checked against the list: the agent is the authority and ignores an id it has
    * not got, and the session-info in the transcript says what actually ran. */
   setModel(worktreeId: string, model: string) {
+    this.setOption(worktreeId, "model", model);
+  }
+
+  /** the effort level, the same way; its choices depend on the model, and one the model has not
+   * got is left alone by the session rather than refused here */
+  setEffort(worktreeId: string, effort: string) {
+    this.setOption(worktreeId, "effort", effort);
+  }
+
+  private setOption(worktreeId: string, field: OptionField, value: string) {
     const wt = this.d.state.requireWorktree(worktreeId);
-    if (wt.kind === "spare") throw new UserError("no model for a spare worktree");
-    const next = model || undefined;
-    if (wt.model === next) return;
-    if (next) wt.model = next;
-    else delete wt.model;
+    if (wt.kind === "spare") throw new UserError(`no ${field} for a spare worktree`);
+    const next = value || undefined;
+    if (wt[field] === next) return;
+    if (next) wt[field] = next;
+    else delete wt[field];
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
   }
@@ -938,6 +956,20 @@ export class WorktreeService {
     const [owned, found] = await Promise.all([this.ownedRows(quick), this.foundRows(quick)]);
     if (quick?.missed) setTimeout(() => this.d.hub.emit("worktreesChanged"), 0);
     return [...owned, ...found];
+  }
+
+  /** every repo's warm spare, for the draft tab's preview; never part of rows(). Ready once its
+   * proxy is up (a boot-adopted spare has none until the repo's procs restart) and the pool still
+   * counts it (an extra row adopt() is pruning does not). */
+  spares(): SpareInfo[] {
+    return this.d.state.worktrees
+      .filter((wt) => wt.kind === "spare")
+      .map((wt) => ({
+        repoId: wt.repoId,
+        id: wt.id,
+        proxyPort: wt.proxyPort,
+        ready: this.d.runtime.get(wt.id)?.proxy != null && this.spare.current(wt.repoId)?.worktreeId === wt.id,
+      }));
   }
 
   /** the cached counts for a row whatever their age, noting a miss for the quick pass */

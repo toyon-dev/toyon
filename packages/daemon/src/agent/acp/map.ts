@@ -6,6 +6,7 @@ import type { AvailableCommand, SessionUpdate, StopReason, ToolCallContent, Tool
 import type { AgentCommand, AgentEvent } from "@toyon/shared";
 import { log } from "../../core/log.ts";
 import { unifiedDiff } from "./diff.ts";
+import { currentValues, readOptions } from "./options.ts";
 
 export interface ToolMemo {
   name: string;
@@ -91,13 +92,25 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
       return out;
     }
     case "config_option_update": {
-      const model = update.configOptions?.find((o) => o.category === "model");
-      return model && model.type === "select"
-        ? [{ type: "session-info", sessionId: "", model: String(model.currentValue) }]
-        : [];
+      const values = currentValues(readOptions(update.configOptions));
+      return Object.keys(values).length > 0 ? [{ type: "session-info", sessionId: "", ...values }] : [];
+    }
+    case "usage_update": {
+      // only a priced session gets a cost; a foreign currency would mislead as dollars, so it is
+      // dropped rather than converted
+      const cost = update.cost && update.cost.currency === "USD" ? update.cost.amount : undefined;
+      return [
+        {
+          type: "usage",
+          used: update.used,
+          size: update.size,
+          ...(cost !== undefined ? { cost } : {}),
+          ts: Date.now(),
+        },
+      ];
     }
     default:
-      // plans, mode/usage/compaction updates: nothing renders them yet. Slash commands
+      // plans, mode/compaction updates: nothing renders them yet. Slash commands
       // are taken by the session before they reach here, since they are not transcript content.
       log.debug(tag, `acp: ignoring ${update.sessionUpdate}`);
       return [];

@@ -39,6 +39,8 @@ export function WtRail() {
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
   const greenfield = useGreenfield();
+  // the draft tab: the new-worktree row is the selected one while a worktree is being drafted
+  const draftOpen = useStore((s) => s.draft !== null);
   const discovered = useVisibleDiscovered();
   const discOpen = useDiscoveredOpen();
   const clientId = useStore((s) => s.clientId);
@@ -224,16 +226,19 @@ export function WtRail() {
             </span>
           )}
         </span>
-        {w.locked && (
-          <span className="rail-disc-lock row-dim">
-            <Icon name="lock" className="icon-inline" />
-          </span>
-        )}
         {(() => {
           // a landing op is out: the dot's slot shows it working, since the op was started from
           // this row and the control that started it may be off screen in the strip. `waiting`
           // still wins: a person being needed outranks a git op that finishes on its own.
           if (shipping[id] && dotClass(w) !== "waiting") return <Spinner size="dot" />;
+          // held by another tool: that is its status, so the lock takes the dot's slot rather
+          // than adding a column, and the hover on the row says who holds it
+          if (w.locked)
+            return (
+              <span className="rail-glyph rail-lock row-dim">
+                <Icon name="lock" className="icon-inline" />
+              </span>
+            );
           // hollow: git knows about it, toyon does not run it, so there is no activity to colour
           if (!owned) return <span className="dot discovered" />;
           // a red dot means a proc died, and the only thing anyone wants next is its log. The
@@ -355,11 +360,12 @@ export function WtRail() {
               branch while main stayed blank, and the row comes back with the first message */}
           {!graftMode && !greenfield && (
             <button
-              className="rail-new"
-              data-tip="New worktree"
-              data-tip-key={chord("new")}
+              className="rail-new row-edge"
+              data-state={rowState({ current: draftOpen })}
+              data-tip={draftOpen ? "The worktree being drafted; esc leaves it" : "New worktree"}
+              data-tip-key={draftOpen ? undefined : chord("new")}
               data-tip-placement="left"
-              onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
+              onClick={() => dispatch({ a: "open-draft" })}
             >
               <span className="rail-gut">
                 <Icon name="plus" className="icon-inline" />

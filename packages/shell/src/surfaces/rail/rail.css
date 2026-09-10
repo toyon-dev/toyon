@@ -334,8 +334,15 @@
       background: var(--element1);
     }
   }
-  .rail-disc-lock {
+  /* the lock stands in for the dot, so it is centred on the dot's x: the 13px glyph overhangs the
+   8px dot by 2.5px on each side, and the negative right margin keeps the row's right edge */
+  .rail-lock {
     display: flex;
+    margin-right: -2.5px;
+  }
+  .rail .rail-item .rail-lock,
+  .rail .rail-disc-item .rail-lock {
+    margin-left: 9.5px;
   }
   /* the socket is down: every row is stale and nothing you click will answer. Fading them read as
    "still loading", so they take the fault colour instead and hovering the rail says what happened.
@@ -398,6 +405,13 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      /* the draft tab is this row selected, marked the way a worktree row is: same edge, same seat */
+      --row-edge-x: var(--rail-edge, 0px);
+    }
+    & .rail-new[data-state~="current"] {
+      --row-edge-color: var(--accent);
+      color: var(--text0);
+      background: var(--element1);
     }
   }
   /* the label takes the slack, so the hint and the glyph sit against the right edge */

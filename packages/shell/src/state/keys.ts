@@ -31,6 +31,8 @@ export const STORAGE = {
   modePrefix: "toyon-mode-",
   /** + agent id: the model the composer last started a worktree with, for that agent */
   modelPrefix: "toyon-model-",
+  /** + agent id: the effort level the composer last started a worktree with, for that agent */
+  effortPrefix: "toyon-effort-",
 } as const;
 
 /** the same keys under the pre-rename prefix; migrated once on load so nobody loses a token or layout */

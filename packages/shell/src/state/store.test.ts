@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
 import {
   type Action,
+  draftKey,
   EMPTY_LOCAL,
   initialState,
   isGreenfield,
   localOf,
+  previewIdOf,
   reducer,
   type State,
   type StoreServerMsg,
@@ -62,6 +64,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     protocol: PROTOCOL_VERSION,
     repos,
     rows: w,
+    spares: [],
     themes: initial.themes,
     themePrefs: initial.themePrefs,
     agents: [],
@@ -70,7 +73,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     pending: [],
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
-const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w });
+const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, spares: [] });
 const repos = (...r: RepoInfo[]): Action => server({ t: "repos", repos: r });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });
 
@@ -366,6 +369,77 @@ describe("preview reload after a turn", () => {
   });
 });
 
+// The draft tab: a worktree that does not exist yet, drafted against its base's preview. The base
+// stays the active row throughout; only the draft record says the tab is open.
+describe("the draft tab", () => {
+  const helloR = (...w: WorktreeStatus[]): Action => helloIn([repo("r")], ...w);
+  const found = (...w: WorktreeStatus[]) => run([helloR(...w)]);
+
+  test("opens on the project's main, toggles on the same base, and moves to a named one", () => {
+    const s = run([{ a: "activate", id: "a" }, { a: "open-draft" }], found(wt("main", "main"), wt("a")));
+    expect(s.draft).toEqual({ base: "main", variants: 1, batch: false });
+    expect(s.activeId).toBe("main");
+    expect(s.rightOpen).toBe(true);
+    expect(reducer(s, { a: "open-draft" }).draft).toBeNull();
+    expect(reducer(s, { a: "open-draft", base: "a" }).draft?.base).toBe("a");
+    expect(reducer(s, { a: "open-draft", base: "nope" }).draft?.base).toBe("main");
+  });
+
+  test("choosing a row closes it; a snapshot that keeps the base does not, one that drops it does", () => {
+    const s = run([{ a: "open-draft" }], found(wt("main", "main"), wt("a")));
+    expect(run([worktrees(wt("main", "main"), wt("a"))], s).draft).not.toBeNull();
+    expect(run([{ a: "activate", id: "main" }], s).draft).toBeNull();
+    expect(run([{ a: "activate", id: "a" }], s).draft).toBeNull();
+    expect(run([worktrees(wt("a"))], s).draft).toBeNull();
+  });
+
+  test("the row this tab created closes it and takes the selection", () => {
+    const s = run([{ a: "open-draft" }], found(wt("main", "main")));
+    const after = run([worktrees(wt("main", "main"), wt("b", "worktree", ME))], s);
+    expect(after.draft).toBeNull();
+    expect(after.activeId).toBe("b");
+  });
+
+  test("its text lives under the repo's key, which no snapshot prunes", () => {
+    const s = run(
+      [{ a: "open-draft" }, { a: "set-draft", id: draftKey("r"), text: "hi" }, worktrees(wt("main", "main"))],
+      found(wt("main", "main")),
+    );
+    expect(localOf(s, draftKey("r")).draft).toBe("hi");
+    expect(
+      run(
+        [
+          { a: "draft-variants", n: 3 },
+          { a: "draft-batch", v: true },
+        ],
+        s,
+      ).draft,
+    ).toEqual({
+      base: "main",
+      variants: 3,
+      batch: true,
+    });
+  });
+
+  test("the warm spare's preview stands behind a draft from main, when one is ready", () => {
+    const sp = { repoId: "r", id: "sp1", proxyPort: 9, ready: true };
+    const rows = [wt("main", "main"), wt("a")];
+    const s = run([server({ t: "worktrees", rows, spares: [sp] }), { a: "open-draft" }], found(...rows));
+    expect(previewIdOf(s)).toBe("sp1");
+    // a draft from a task shows that task; a spare that is not ready is not shown either
+    expect(previewIdOf(run([{ a: "open-draft", base: "a" }], s))).toBe("a");
+    expect(previewIdOf(run([server({ t: "worktrees", rows, spares: [{ ...sp, ready: false }] })], s))).toBe("main");
+    expect(previewIdOf(run([{ a: "close-draft" }], s))).toBe("main");
+    // the spare's own record (its page state) lives while the spare is listed
+    const paged = run(
+      [{ a: "page", id: "sp1", url: "http://x/about" }, server({ t: "worktrees", rows, spares: [sp] })],
+      s,
+    );
+    expect(localOf(paged, "sp1").page.url).toBe("http://x/about");
+    expect(localOf(run([worktrees(...rows)], paged), "sp1").page.url).toBeUndefined();
+  });
+});
+
 describe("overlays", () => {
   test("opening one replaces the other", () => {
     const s = run([
@@ -378,7 +452,7 @@ describe("overlays", () => {
     const s = run([{ a: "toggle", overlay: { kind: "keys" } }]);
     expect(s.overlay?.kind).toBe("keys");
     expect(reducer(s, { a: "toggle", overlay: { kind: "keys" } }).overlay).toBeNull();
-    expect(reducer(s, { a: "toggle", overlay: { kind: "prompt" } }).overlay?.kind).toBe("prompt");
+    expect(reducer(s, { a: "toggle", overlay: { kind: "commands" } }).overlay?.kind).toBe("commands");
   });
   test("closing a sub-picker with back returns to the palette it came from, query intact", () => {
     const s = run([
@@ -834,17 +908,14 @@ describe("discovered worktrees", () => {
     procs: [],
     agent: "idle",
   });
-  const withFound = (...d: WorktreeStatus[]): Action => server({ t: "worktrees", rows: [wt("main", "main"), ...d] });
+  const withFound = (...d: WorktreeStatus[]): Action => worktrees(wt("main", "main"), ...d);
   // the remembered-section map is keyed by repo, so these need the repo to actually exist
   const helloR = (...w: WorktreeStatus[]): Action => helloIn([repo("r")], ...w);
 
   test("they stay out of the list ⌘1-9 and the palette number over, and nothing in it moves", () => {
     const before = run([helloR(wt("main", "main"), wt("a"))]);
     expect(before.visible.map((w) => w.id)).toEqual(["main", "a"]);
-    const s = run(
-      [server({ t: "worktrees", rows: [wt("main", "main"), found("/w/stray"), wt("a"), found("/w/x")] })],
-      before,
-    );
+    const s = run([worktrees(wt("main", "main"), found("/w/stray"), wt("a"), found("/w/x"))], before);
     // the whole reason for a second view: these positions must not move
     expect(s.visible.map((w) => w.id)).toEqual(["main", "a"]);
     expect(s.visibleDiscovered.map((d) => d.path)).toEqual(["/w/stray", "/w/x"]);
@@ -858,7 +929,7 @@ describe("discovered worktrees", () => {
   test("selecting one scopes the project but is not its landing spot", () => {
     const s = run([
       helloR(wt("main", "main"), wt("a")),
-      server({ t: "worktrees", rows: [wt("main", "main"), wt("a"), found("/w/stray")] }),
+      worktrees(wt("main", "main"), wt("a"), found("/w/stray")),
       { a: "activate", id: "a" },
     ]);
     const on = run([{ a: "activate", id: "disc-/w/stray" }], s);
@@ -901,7 +972,7 @@ describe("discovered worktrees", () => {
     const s = run([
       helloIn([repo("r1"), repo("r2")], m1, m2),
       { a: "activate", id: "m2" },
-      server({ t: "worktrees", rows: [m1, m2, found("/w/one", "r1"), found("/w/two", "r2")] }),
+      worktrees(m1, m2, found("/w/one", "r1"), found("/w/two", "r2")),
     ]);
     expect(s.rows.filter((r) => !r.worktree)).toHaveLength(2);
     expect(s.visibleDiscovered.map((d) => d.path)).toEqual(["/w/two"]);
@@ -1028,6 +1099,32 @@ describe("a landing op in flight", () => {
     expect(s.shipping).toEqual({});
     s = run([three(), sync("a"), three()]);
     expect(s.shipping).toEqual({});
+  });
+});
+
+describe("usage", () => {
+  test("a usage event becomes a row costing the difference from the last priced one", () => {
+    const usage = (cost: number | undefined, used = 1000): AgentEvent => ({
+      type: "usage",
+      used,
+      size: 4000,
+      ...(cost !== undefined ? { cost } : {}),
+      ts: 0,
+    });
+    let s = run([hello(wt("a")), agent("a", usage(0.1)), agent("a", { type: "text-delta", text: "hi" })]);
+    s = run([agent("a", usage(0.35, 2000))], s);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "usage", used: 1000, size: 4000, cost: 0.1, turn: 0.1 },
+      { kind: "assistant", text: "hi" },
+      { kind: "usage", used: 2000, size: 4000, cost: 0.35, turn: 0.25 },
+    ]);
+    // a second figure with nothing said between updates the row instead of stacking; without a
+    // cost it keeps no turn figure
+    s = run([agent("a", usage(undefined, 2100))], s);
+    expect(s.local.a?.chat.at(-1)).toEqual({ kind: "usage", used: 2100, size: 4000 });
+    s = run([agent("a", usage(0.4, 2100))], s);
+    expect(s.local.a?.chat.at(-1)).toEqual({ kind: "usage", used: 2100, size: 4000, cost: 0.4, turn: 0.3 });
+    expect(s.local.a?.chat.length).toBe(3);
   });
 });
 

@@ -10,8 +10,10 @@ import {
   useActiveRepo,
   useActiveRepoNeedingSetup,
   useActiveRow,
+  useDraftSpare,
   useGreenfield,
   useLocalField,
+  usePreviewId,
   useRows,
   useTheme,
 } from "../../state/selectors.ts";
@@ -213,10 +215,26 @@ export function Center() {
   // the frame mounts once a server answers; until then the boot pane shows what the procs are
   // doing, because the proxy's placeholder cannot tell compiling from crashed from the wrong port
   const activeReady = !!active && active.procs.some((p) => p.status === "running");
+  // the draft tab shows its base's preview, or the warm spare's when the draft is from main: the
+  // code the worktree will start from, running since the spare warmed, so it mounts on sight
+  const spares = useStore((s) => s.spares);
+  const draftSpare = useDraftSpare();
+  const previewId = usePreviewId();
+  const previewReady = previewId !== null && (previewId === draftSpare?.id || (previewId === activeId && activeReady));
   useEffect(() => {
-    if (activeId && activeReady && !mounted.includes(activeId)) setMounted((m) => [...m, activeId]);
-  }, [activeId, activeReady, mounted]);
-  const frames = rows.filter(isOwned).filter((w) => mounted.includes(w.id));
+    if (previewId && previewReady && !mounted.includes(previewId)) setMounted((m) => [...m, previewId]);
+  }, [previewId, previewReady, mounted]);
+  const frames = [
+    ...rows
+      .filter(isOwned)
+      .filter((w) => mounted.includes(w.id))
+      .map((w) => ({ id: w.worktree.id, port: w.worktree.proxyPort, title: w.worktree.title })),
+    // a spare's frame outlives the draft: on claim the same id is a row above, and the element
+    // stays mounted under its key, so the preview the prompt was typed against becomes the task's
+    ...spares
+      .filter((sp) => mounted.includes(sp.id) && !rows.some((r) => r.id === sp.id))
+      .map((sp) => ({ id: sp.id, port: sp.proxyPort, title: "new worktree" })),
+  ];
 
   // editor pane: draggable height + full-height toggle, persisted
   const centerRef = useRef<HTMLDivElement>(null);
@@ -265,25 +283,22 @@ export function Center() {
         style={{ display: (diff && diffFull) || (designOpen && designFull) ? "none" : undefined }}
       >
         <div className="frames-wrap">
-          {frames.map((w) => (
+          {frames.map((f) => (
             <iframe
-              key={w.worktree.id}
+              key={f.id}
               ref={(el) => {
                 if (el) {
-                  frameRefs.current.set(w.worktree.id, el);
-                  originRefs.current.set(
-                    w.worktree.id,
-                    new URL(previewUrl(w.worktree.id, w.worktree.proxyPort)).origin,
-                  );
+                  frameRefs.current.set(f.id, el);
+                  originRefs.current.set(f.id, new URL(previewUrl(f.id, f.port)).origin);
                 } else {
-                  frameRefs.current.delete(w.worktree.id);
-                  originRefs.current.delete(w.worktree.id);
+                  frameRefs.current.delete(f.id);
+                  originRefs.current.delete(f.id);
                 }
               }}
-              src={previewUrl(w.worktree.id, w.worktree.proxyPort)}
-              title={w.worktree.title}
+              src={previewUrl(f.id, f.port)}
+              title={f.title}
               style={{
-                display: w.worktree.id === activeId && !setupRepo && !watching && !greenfield ? "block" : "none",
+                display: f.id === previewId && !setupRepo && !watching && !greenfield ? "block" : "none",
               }}
             />
           ))}
@@ -298,7 +313,7 @@ export function Center() {
             />
           )}
           {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
-          {!activeReady && !activeDiscovered && !setupRepo && !watching && !greenfield && (
+          {!activeReady && !draftSpare && !activeDiscovered && !setupRepo && !watching && !greenfield && (
             <div className="empty">
               {incompatible ? (
                 "toyon was updated: reload this page"

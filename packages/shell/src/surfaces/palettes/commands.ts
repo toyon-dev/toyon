@@ -42,7 +42,8 @@ export function buildCommands(
    * line says which worktree it is about, and the chord or a string detail becomes the hint */
   const addItems = (items: MenuEntry[], whose?: string) => {
     for (const it of items) {
-      if (!isItem(it)) continue;
+      // a rule is not a command; nor is a verb that cannot run now, or the choice already in effect
+      if (!isItem(it) || it.disabled !== undefined || it.checked) continue;
       const hint = it.key ?? (typeof it.detail === "string" ? it.detail : undefined);
       add(it.id, whose ? `${it.label} · ${whose}` : it.label, it.onClick, hint, it.sub);
     }
@@ -54,8 +55,9 @@ export function buildCommands(
   // where to go, the panels and the app's own: the same list a right-click on bare chrome shows,
   // minus the line that opens this palette
   addItems(appItems(state, deps).filter((it) => !isItem(it) || it.id !== "commands"));
-  // the open project's own verbs (set up, forget); the others are listed by name below
-  if (repo) addItems(projectItems(repo, repo.id, deps));
+  // the open project's own verbs (its toyon.json, forget), each saying which project; the others
+  // are listed by name below
+  if (repo) addItems(projectItems(repo, repo.id, deps), repo.name);
   if (id) {
     add(
       "pick",

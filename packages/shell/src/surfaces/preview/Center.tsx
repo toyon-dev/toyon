@@ -56,8 +56,11 @@ export function Center() {
   const connected = useStore((s) => s.connected);
   const connectFailure = useStore((s) => s.connectFailure);
   const diff = useStore((s) => s.diff);
-  const termOpen = useStore((s) => s.termOpen);
-  const designOpen = useStore((s) => s.designOpen);
+  // an empty project asks what to build before it asks how to start; the panes a previous project
+  // left open (a project never laid out adopts what is on screen) hide, not close, until then
+  const greenfield = useGreenfield();
+  const termOpen = useStore((s) => s.termOpen) && !greenfield;
+  const designOpen = useStore((s) => s.designOpen) && !greenfield;
   const reloadReq = useStore((s) => s.reloadReq);
   const theme = useTheme();
   const themeRef = useRef(theme);
@@ -74,10 +77,9 @@ export function Center() {
       ? (s.repos.find((r) => r.id === (s.overlay as { repoId: string }).repoId) ?? null)
       : null,
   );
-  // an empty project asks what to build before it asks how to start, and once asked it waits for
-  // the agent to put something in the tree before asking how to start it: the pane that came back
-  // mid-turn would be a form over a directory still being written. Reopened by hand is always shown.
-  const greenfield = useGreenfield();
+  // once asked, the setup pane waits for the agent to put something in the tree before asking how
+  // to start it: the pane that came back mid-turn would be a form over a directory still being
+  // written. Reopened by hand is always shown.
   const git = useLocalField(activeId, "git");
   const treeEmpty = git?.empty === true;
   const busy = !!active && isBusy(active);

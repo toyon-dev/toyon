@@ -36,9 +36,9 @@ export function App() {
   const activeRow = useActiveRow();
   const connected = useStore((s) => s.connected);
   const zen = useStore((s) => s.zen);
-  const leftOpen = useStore((s) => s.leftOpen);
   const greenfield = useGreenfield();
-  // the dock is hidden, not closed, while the composer sits in the centre
+  // both docks are hidden, not closed, while the composer sits in the centre of an empty project
+  const leftOpen = useStore((s) => s.leftOpen) && !greenfield;
   const rightOpen = useStore((s) => s.rightOpen) && !greenfield;
   const railOpen = useStore((s) => s.railOpen);
   const panels = useStore((s) => s.panels);

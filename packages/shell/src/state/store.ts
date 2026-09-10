@@ -12,6 +12,7 @@ import type {
   AskQuestion,
   AuthMethodInfo,
   CommitEntry,
+  ConnectFailure,
   DesignIndex,
   DiscoveredWorktree,
   GitFileStatus,
@@ -202,6 +203,8 @@ function applyPanels(s: State, p: Panels): State {
 
 export interface State {
   connected: boolean;
+  /** why the socket is down, once the shell has worked it out; null while connected or still probing */
+  connectFailure: ConnectFailure | null;
   repos: RepoInfo[];
   worktrees: WorktreeStatus[];
   /** the project the shell is scoped to: the rail, ⌘1–9, ⌘K and settings show only its worktrees.
@@ -314,6 +317,7 @@ export function initialState(opts: InitialOpts): State {
   const cached = opts.cached ?? toyonDark;
   const state: State = {
     connected: false,
+    connectFailure: null,
     repos: [],
     worktrees: [],
     activeRepoId: null,
@@ -419,7 +423,7 @@ export type StoreServerMsg = Exclude<ServerMsg, TermServerMsg>;
 
 export type Action =
   | { a: "server"; msg: StoreServerMsg }
-  | { a: "connected"; v: boolean }
+  | { a: "connected"; v: boolean; failure?: ConnectFailure | null }
   | { a: "activate"; id: string }
   /** switch the shell to another registered repo */
   | { a: "activate-repo"; id: string }
@@ -513,7 +517,9 @@ export function reducer(s: State, action: Action): State {
 function reduce(s: State, action: Action): State {
   switch (action.a) {
     case "connected":
-      return { ...s, connected: action.v };
+      // a retry's bare close keeps the last diagnosis: the probe that follows replaces it, and
+      // showing "connecting" in between would flicker the pane on every backoff
+      return { ...s, connected: action.v, connectFailure: action.v ? null : (action.failure ?? s.connectFailure) };
     case "activate":
       return activate(s, action.id);
     case "activate-repo": {

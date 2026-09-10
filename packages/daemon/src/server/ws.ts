@@ -2,7 +2,14 @@
 // table of what gets pushed when a hub event fires. Phase 6 scopes the pushes per subscription.
 
 import { homedir } from "node:os";
-import { PROTOCOL_VERSION, parseClientMsg, type ServerMsg, streamKey, ThemeImportError } from "@toyon/shared";
+import {
+  PROTOCOL_VERSION,
+  parseClientMsg,
+  type ServerMsg,
+  streamKey,
+  ThemeImportError,
+  WS_CLOSE_UNAUTHORIZED,
+} from "@toyon/shared";
 import type { Server, ServerWebSocket } from "bun";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
@@ -227,6 +234,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       // default (16 MB) would drop the socket mid-paste
       maxPayloadLength: 64 * 1024 * 1024,
       async open(ws: ServerWebSocket<WsData>) {
+        if (!ws.data.authed) {
+          ws.close(WS_CLOSE_UNAUTHORIZED, "unauthorized");
+          return;
+        }
         sockets.add(ws);
         send(ws, {
           t: "hello",
@@ -247,6 +258,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         sockets.delete(ws);
       },
       async message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
+        // closed in `open`; a frame that raced the close is not a client
+        if (!ws.data.authed) return;
         let json: unknown;
         try {
           json = JSON.parse(String(raw));

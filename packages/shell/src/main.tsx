@@ -119,7 +119,7 @@ const sock = new DaemonSocket(
     }
     store.dispatch({ a: "server", msg });
   },
-  (v) => store.dispatch({ a: "connected", v }),
+  (v, failure) => store.dispatch({ a: "connected", v, failure }),
 );
 
 // a rebuilt shell rotates every hashed chunk name, so a tab open across a rebuild imports a URL the

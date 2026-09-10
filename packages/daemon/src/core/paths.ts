@@ -4,11 +4,14 @@
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { DAEMON_FILES } from "@toyon/shared";
 
 export interface Paths {
   home: string;
   stateFile: string;
   tokenFile: string;
+  /** the running daemon's pid, for `toyon stop`; absent or stale when it is not running */
+  pidFile: string;
   transcriptsDir: string;
   /** images attached to chat messages, by worktree id (agent/attachments.ts) */
   attachmentsDir: string;
@@ -24,7 +27,8 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
   return {
     home,
     stateFile: join(home, "state.json"),
-    tokenFile: join(home, "token"),
+    tokenFile: join(home, DAEMON_FILES.token),
+    pidFile: join(home, DAEMON_FILES.pid),
     transcriptsDir: join(home, "transcripts"),
     attachmentsDir: join(home, "attachments"),
     // `.noindex` keeps Spotlight out of the worktrees: each one carries a CoW clone of

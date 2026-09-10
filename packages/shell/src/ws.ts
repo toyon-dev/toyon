@@ -1,4 +1,4 @@
-import type { ClientMsg, ServerMsg } from "@toyon/shared";
+import { type ClientMsg, type ConnectFailure, type ServerMsg, WS_CLOSE_UNAUTHORIZED } from "@toyon/shared";
 import { STORAGE } from "./state/keys.ts";
 
 function getToken(): string {
@@ -42,9 +42,23 @@ export class DaemonSocket {
 
   constructor(
     private onMsg: (msg: ServerMsg) => void,
-    private onStatus: (connected: boolean) => void,
+    /** `failure` names why the socket is down once that is known; null while it is being worked out */
+    private onStatus: (connected: boolean, failure?: ConnectFailure | null) => void,
   ) {
     this.connect();
+  }
+
+  /** A close with no code says nothing: a daemon that is down, a proxy that refuses upgrades and a
+   * wrong token all look the same to the browser (1006). The daemon answers the token case with its
+   * own code; the other two are told apart by whether plain HTTP still reaches it. */
+  private async diagnose(code: number): Promise<ConnectFailure> {
+    if (code === WS_CLOSE_UNAUTHORIZED) return "unauthorized";
+    try {
+      const r = await fetch("/health", { signal: AbortSignal.timeout(2000) });
+      return r.ok ? "blocked" : "down";
+    } catch {
+      return "down";
+    }
   }
 
   private connect() {
@@ -53,20 +67,29 @@ export class DaemonSocket {
     const url = `${proto}://${location.host}/ws?token=${getToken()}`;
     const ws = new WebSocket(url);
     this.ws = ws;
-    ws.onopen = () => {
-      this.attempt = 0;
-      this.onStatus(true);
-      for (const m of this.queue) ws.send(m.raw);
-      this.queue = [];
-    };
+    // connected means the daemon has spoken, not that the socket opened: a wrong token is opened
+    // and then closed with a code, and flushing the queue into that would lose it
+    let live = false;
     ws.onmessage = (ev) => {
+      if (!live) {
+        live = true;
+        this.attempt = 0;
+        this.onStatus(true);
+        for (const m of this.queue) ws.send(m.raw);
+        this.queue = [];
+      }
       try {
         this.onMsg(JSON.parse(ev.data));
       } catch {}
     };
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       this.onStatus(false);
       if (this.closed) return;
+      // the socket is retried in any case: a fresh token arrives with a reload, a daemon comes
+      // back on its own, and a proxy is the person's to fix, so the reason is a message, not a stop
+      this.diagnose(ev.code).then((failure) => {
+        if (this.ws === ws && !this.closed) this.onStatus(false, failure);
+      });
       const base = Math.min(BACKOFF_MAX, BACKOFF_MIN * 2 ** this.attempt++);
       this.timer = setTimeout(() => this.connect(), base / 2 + Math.random() * (base / 2));
     };

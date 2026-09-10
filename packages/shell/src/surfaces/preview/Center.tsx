@@ -1,4 +1,4 @@
-import { parseBridgeMsg } from "@toyon/shared";
+import { type ConnectFailure, parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
@@ -21,6 +21,15 @@ import { hasToken } from "../../ws.ts";
 /** read once at load (the token arrives in the URL fragment); calling it during render would write storage */
 const HAS_TOKEN = hasToken();
 
+/** what the empty pane says while the socket is down, by what ws.ts found out about why */
+const CONNECT_TEXT: Record<ConnectFailure | "probing", string> = {
+  probing: "connecting to daemon…",
+  down: "the daemon is not running.\nrun `toyon` in your repo to start it; `toyon doctor` says what it can see",
+  blocked:
+    "the daemon is up, but this page's websocket never connected.\na proxy, VPN or browser extension is the usual cause; `toyon doctor` checks from the terminal",
+  unauthorized: "this page's token is not the running daemon's.\nrun `toyon` again and open the link it prints",
+};
+
 import { DiffView } from "../changes/DiffView.tsx";
 import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
@@ -41,6 +50,7 @@ export function Center() {
   const activeId = useActiveId();
   const active = useActive();
   const connected = useStore((s) => s.connected);
+  const connectFailure = useStore((s) => s.connectFailure);
   const diff = useStore((s) => s.diff);
   const termOpen = useStore((s) => s.termOpen);
   const designOpen = useStore((s) => s.designOpen);
@@ -271,7 +281,7 @@ export function Center() {
                 ? "toyon was updated: reload this page"
                 : !connected
                   ? HAS_TOKEN
-                    ? "connecting to daemon…"
+                    ? CONNECT_TEXT[connectFailure ?? "probing"]
                     : "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
                   : !active
                     ? `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`

@@ -534,6 +534,12 @@ describe("streams and notices", () => {
     expect(pr.toast?.removeIds).toBeUndefined();
     expect(pr.toast?.url).toBe("u");
   });
+  test("a named connect failure survives a later bare close and clears once the socket is back", () => {
+    const down = run([{ a: "connected", v: false, failure: "down" }]);
+    expect(down.connectFailure).toBe("down");
+    expect(run([{ a: "connected", v: false }], down).connectFailure).toBe("down");
+    expect(run([{ a: "connected", v: true }], down).connectFailure).toBeNull();
+  });
   test("a protocol mismatch marks the tab incompatible and disconnected", () => {
     const s = run([{ a: "connected", v: true }, { a: "incompatible" }]);
     expect(s.incompatible).toBe(true);

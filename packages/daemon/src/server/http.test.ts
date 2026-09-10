@@ -56,14 +56,30 @@ describe("guards", () => {
 });
 
 describe("/ws", () => {
-  test("wrong token is 401", async () => {
-    expect((await fetch(req("/ws?token=nope"), srv()))?.status).toBe(401);
+  test("wrong token upgrades unauthenticated, for open() to close with a code the shell can read", async () => {
+    let data: WsData | undefined;
+    const s = srv("127.0.0.1", ((_r: Request, o: { data: WsData }) => {
+      data = o.data;
+      return true;
+    }) as never);
+    expect(await fetch(req("/ws?token=nope"), s)).toBeUndefined();
+    expect(data?.authed).toBe(false);
+  });
+  test("wrong token on a request that is not a websocket is 401", async () => {
+    expect(
+      (
+        await fetch(
+          req("/ws?token=nope"),
+          srv("127.0.0.1", () => false),
+        )
+      )?.status,
+    ).toBe(401);
   });
   test("the framing origin is learned from an authenticated handshake, never a refused one", async () => {
     learnedOrigins.length = 0;
-    await fetch(req("/ws?token=nope", { headers: { origin: "http://evil.example" } }), srv());
-    expect(learnedOrigins).toEqual([]);
     const s = srv("127.0.0.1", (() => true) as never);
+    await fetch(req("/ws?token=nope", { headers: { origin: "http://evil.example" } }), s);
+    expect(learnedOrigins).toEqual([]);
     await fetch(req("/ws?token=secret", { headers: { origin: "http://w1.toyon.localhost:5173" } }), s);
     expect(learnedOrigins).toEqual(["http://w1.toyon.localhost:5173"]);
   });

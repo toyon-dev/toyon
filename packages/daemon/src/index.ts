@@ -1,6 +1,7 @@
 // Composition root: build every service once, wire them, start the server, handle signals.
 // No logic lives here; if a line here starts making decisions it belongs in a service.
 
+import { rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared";
@@ -111,6 +112,9 @@ bridge.setShellOrigins(
       ],
 );
 
+// after the bind, so a second daemon that lost the port never overwrites the first one's pid
+writeFileSync(paths.pidFile, `${process.pid}\n`);
+
 const stopLagSampler = startLagSampler();
 if (cloud.enabled) {
   // decided, not implicit: preview proxies bind 0.0.0.0 with no auth of their own. The platform
@@ -159,6 +163,8 @@ async function shutdown(signal: string) {
   stopServer();
   const deadline = new Promise<void>((resolve) => setTimeout(resolve, 5000));
   await Promise.race([runtime.shutdown(), deadline]);
+  // a crash leaves the file behind on purpose: `toyon stop` checks the pid is alive before trusting it
+  rmSync(paths.pidFile, { force: true });
   process.exit(0);
 }
 process.on("SIGINT", () => fireAndForget("daemon", shutdown("SIGINT"), "shutdown"));

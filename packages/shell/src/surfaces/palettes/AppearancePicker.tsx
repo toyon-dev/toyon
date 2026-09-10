@@ -1,8 +1,9 @@
 import type { ThemePrefs } from "@toyon/shared";
 import { effectiveKind, resolveTheme } from "@toyon/shared";
+import { appearanceLabel } from "../../state/actions/settings.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
-import { appearanceLabel, byName } from "./commands.ts";
+import { byName } from "./commands.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 
 const MODES: ThemePrefs["mode"][] = ["dark", "light", "system"];

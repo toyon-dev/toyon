@@ -4,13 +4,14 @@
 // builders the context menus read, in state/actions/, so a verb exists once and reads the same
 // in both; the palette appends whose it is.
 
-import type { OwnedWorktree, RepoInfo, ThemePrefs } from "@toyon/shared";
-import { resolveTheme, worktreeChord } from "@toyon/shared";
+import type { OwnedWorktree, RepoInfo } from "@toyon/shared";
+import { worktreeChord } from "@toyon/shared";
 import { useMemo } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { appItems } from "../../state/actions/app.ts";
 import { procItems } from "../../state/actions/proc.ts";
 import { projectItems } from "../../state/actions/project.ts";
+import { settingsItems } from "../../state/actions/settings.ts";
 import { worktreeItems } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { type Action, repoById, type State, worktreeById } from "../../state/store.ts";
@@ -25,12 +26,6 @@ export type Command = {
   run: () => void;
   /** opens a sub-picker: esc there returns to the palette */
   sub?: boolean;
-};
-
-export const appearanceLabel: Record<ThemePrefs["mode"], string> = {
-  dark: "dark",
-  light: "light",
-  system: "follow system",
 };
 
 export function buildCommands(
@@ -49,7 +44,7 @@ export function buildCommands(
     for (const it of items) {
       if (!isItem(it)) continue;
       const hint = it.key ?? (typeof it.detail === "string" ? it.detail : undefined);
-      add(it.id, whose ? `${it.label} · ${whose}` : it.label, it.onClick, hint);
+      add(it.id, whose ? `${it.label} · ${whose}` : it.label, it.onClick, hint, it.sub);
     }
   };
   const deps = { sock, dispatch };
@@ -71,48 +66,8 @@ export function buildCommands(
     add("reload", "reload preview", () => previewBus.post(id, { type: "reload" }));
   }
 
-  const prefs = state.themePrefs;
-  const themeName = (tid: string) => state.themes.find((t) => t.id === tid)?.name ?? tid;
-  add(
-    "theme",
-    "theme…",
-    () => dispatch({ a: "open", overlay: { kind: "theme", slot: "theme" } }),
-    resolveTheme(prefs, state.themes, state.systemDark).name,
-    true,
-  );
-  add(
-    "appearance",
-    "theme: light/dark mode…",
-    () => dispatch({ a: "open", overlay: { kind: "appearance" } }),
-    appearanceLabel[prefs.mode],
-    true,
-  );
-  add(
-    "agent",
-    "default agent…",
-    () => dispatch({ a: "open", overlay: { kind: "agent" } }),
-    state.agents.find((a) => a.id === state.defaultAgent)?.name ?? state.defaultAgent,
-    true,
-  );
-  add("theme-import", "theme: import VS Code theme file…", () =>
-    pickThemeFile((name, source) => sock?.send({ t: "import-theme", name, source })),
-  );
-  add("theme-rescan", "theme: rescan installed editor themes", () => sock?.send({ t: "rescan-themes" }));
-  // per-slot overrides for mismatched pairs; the picker fills both slots by family so these sit last
-  add(
-    "theme-dark",
-    "theme: dark slot override…",
-    () => dispatch({ a: "open", overlay: { kind: "theme", slot: "dark" } }),
-    themeName(prefs.dark),
-    true,
-  );
-  add(
-    "theme-light",
-    "theme: light slot override…",
-    () => dispatch({ a: "open", overlay: { kind: "theme", slot: "light" } }),
-    themeName(prefs.light),
-    true,
-  );
+  // the settings card's choices: the same list the gear's right-click shows
+  addItems(settingsItems(state, deps));
 
   if (wt && id) {
     // the active worktree's menu, line for line, each saying whose it is
@@ -278,18 +233,6 @@ export function commandHits(label: string, needle: string): number[] | null {
     hi = found + 1;
   }
   return out;
-}
-
-/** browser file dialog → raw theme text (the daemon parses JSONC and converts) */
-export function pickThemeFile(onText: (name: string, source: string) => void) {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".json,.jsonc,application/json";
-  input.onchange = () => {
-    const f = input.files?.[0];
-    if (f) f.text().then((source) => onText(f.name, source));
-  };
-  input.click();
 }
 
 export const byName = (needle: string, ...names: Array<string | undefined>) => {

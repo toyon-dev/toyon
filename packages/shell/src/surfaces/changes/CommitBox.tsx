@@ -51,7 +51,7 @@ export function CommitBox({
           />
         </div>
       )}
-      <div className="chat-hint commit-row">
+      <div className="chat-hint">
         <span className="commit-where">
           <Icon name="branch" className="icon-inline" />
           <span className="branch-name">{wt.branch}</span>

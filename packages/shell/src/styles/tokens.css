@@ -42,12 +42,12 @@
      chat log and the diff pane read the one value. */
   --diff-add-word: #6fae5f17;
   --diff-del-word: #c07f6a17;
-  /* The text ladder is fg1 > fg2 > fg3, each step quieter than the last, and the numbers are the
-     whole point: "muted" and "dim" did not tell you which was which, and disabled kept landing on
-     the tier above it because nobody could see the order. fg1 is what you read, fg2 is what you
-     scan (labels, filenames, controls at rest), fg3 is what you skip (hints, comments, the tool
-     log, and anything switched off). Three is enough: a fourth tier lived here for about an hour
-     and turned out to be covering for a control that was resting on the wrong rung. */
+  /* The text ladder is text0 > text1 > text2, each step quieter than the last, and the numbers are
+     the whole point: "muted" and "dim" did not tell you which was which, and disabled kept landing
+     on the tier above it because nobody could see the order. text0 is what you read, text1 is what
+     you scan (labels, filenames, controls at rest), text2 is what you skip (hints, comments, the
+     tool log, and anything switched off). Three is enough: a fourth tier lived here for about an
+     hour and turned out to be covering for a control that was resting on the wrong rung. */
 
   /* what "you are on this one" is painted in: the active worktree, the open tool call, an `on`
      tab, a checked box. One hue for all of them, so a theme changes the whole idea of selected by
@@ -62,11 +62,11 @@
   --sunken: #342f2d;
   --scrim: #32302db3;
   --shadow: #00000066;
-  /* code sits on a wash of the text color instead of a background step: bg0 and bg1 are the same
-     color in several themes (Rose Pine, Nord), so a chip painted in one of them would disappear
+  /* code sits on a wash of the text color instead of a background step: surface0 and surface1 are
+     the same color in several themes (Rose Pine, Nord), so a chip painted in one of them would disappear
      into the column it sits on. Mixed at use time, so it follows the theme like everything else.
      This is the only mix left in the shell, and it is the case where a mix does not invent a
-     colour: 6% of the foreground over the ground lands on #3d3a35 here, which is bg1 to within a
+     colour: 6% of the foreground over the ground lands on #3d3a35 here, which is surface1 to within a
      couple of points. Everywhere else a state is a palette value or a step on the bg ramp, because
      a colour at 35% of something is a colour that appears in no swatch and reads as a new hue
      rather than as the same one doing a different job. It was two tokens, code-bg for the inline
@@ -114,6 +114,11 @@
    * seam rather than a lift, and the jump-down pill, which is a control and not a surface. */
   --elev-float: 0 6px 20px var(--shadow);
   --elev-overlay: 0 10px 36px var(--shadow);
+  /* z-index is a ladder, written here rather than tokenised because every rung is one rule and
+     nothing reads it from two places: the dock's resize handle 1, a pane header's floating actions
+     2, a pane's resize handle and the composer's inline picker 5, the palette scrim 10, the rail's
+     peek 25, the toast 30, a context menu and an anchored picker 40, the tooltip 100. A new layer
+     names its rung in this sentence before it takes one. */
   /* Four prefixes, one per kind, and the prefix is what tells you which kind you have:
    *
    *   --face-*    a font stack. Raw material: it belongs inside a --type-* value, and no rule sets

@@ -88,7 +88,6 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
             <Button
               variant="outline"
               tone="danger"
-              className="stop-btn"
               data-tip={`Stop the agent (context up to here is kept${queue.length ? "; queued messages dropped" : ""})`}
               onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
             >
@@ -102,7 +101,6 @@ export function ChatLog({ active }: { active: WorktreeStatus | null }) {
             <Button
               variant="outline"
               tone="danger"
-              className="stop-btn"
               data-tip="Kill the command; what it printed so far stays"
               onClick={() => sock?.send({ t: "exec-stop", worktreeId: active.worktree.id })}
             >

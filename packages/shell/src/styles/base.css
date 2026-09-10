@@ -99,11 +99,11 @@ button {
   color: var(--text0);
   background: var(--element0);
 }
-/* fg3, the same tier every other :disabled rule already used. This briefly had a fourth tier of
-   its own, because disabled used to be bg3 and bg3 sits 1.4 L* off fg3, so a dead toolbar icon and
-   a live one were the same colour. The real fault was that an icon button at rest was on fg3 at
-   all; once rest moved up to fg2 with every other control, 4.3:1 against 2.1:1 says disabled
-   perfectly well and the extra tier had nothing left to do. */
+/* text2, the same tier every other :disabled rule already used. This briefly had a fourth tier of
+   its own, because disabled used to be a surface step that sits 1.4 L* off text2, so a dead toolbar
+   icon and a live one were the same colour. The real fault was that an icon button at rest was on
+   text2 at all; once rest moved up to text1 with every other control, 4.3:1 against 2.1:1 says
+   disabled perfectly well and the extra tier had nothing left to do. */
 .btn-icon:disabled {
   color: var(--text2);
   cursor: default;
@@ -386,7 +386,7 @@ a code {
 
    Hover is a tier shift, not a colour: the seat lifts and everything on it lifts with it, because a
    tier is measured against the surface under it and text that stays put while its seat rises goes
-   illegible (fg3 on bg2 is 1.4:1). .row-dim is a child that sits one rung below its row and rides
+   illegible (text2 on element0 is 1.4:1). .row-dim is a child that sits one rung below its row and rides
    up with it; .row-quiet is a whole row a rung down, for the discovered list and collapsed tool
    calls. Status colours are exempt on purpose: a green dot that shifts under the pointer reads as
    the proc changing state. */

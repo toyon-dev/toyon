@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CHORD_LABELS, chordLabel } from "./chord-labels.ts";
+import { CHORD_LABELS, CHORD_SECTIONS, chordLabel, chordsInSection } from "./chord-labels.ts";
 import { CHORDS, chordOf, matchChord, worktreeChord, worktreeIndex } from "./chords.ts";
 
 const ev = (key: string, o: Partial<{ meta: boolean; shift: boolean; ctrl: boolean; alt: boolean }> = {}) => ({
@@ -51,9 +51,12 @@ describe("matchChord", () => {
   test("⌥ alone matches the arrow rows and nothing else", () => {
     expect(matchChord(ev("ArrowUp", { meta: false, alt: true }))).toEqual({ id: "wt-prev" });
     expect(matchChord(ev("ArrowDown", { meta: false, alt: true }))).toEqual({ id: "wt-next" });
-    // ⌥⌘↑ is Monaco's add-cursor and ⌥⇧↑ is a text selection: neither is ours
+    // ⌥⌘↑ is Monaco's add-cursor: not ours
     expect(matchChord(ev("ArrowUp", { alt: true }))).toBeNull();
-    expect(matchChord(ev("ArrowUp", { meta: false, alt: true, shift: true }))).toBeNull();
+    // ⌥⇧ is the unseen pair, Slack's next-unread
+    expect(matchChord(ev("ArrowUp", { meta: false, alt: true, shift: true }))).toEqual({ id: "wt-unseen-prev" });
+    expect(matchChord(ev("ArrowDown", { meta: false, alt: true, shift: true }))).toEqual({ id: "wt-unseen-next" });
+    expect(matchChord(ev("k", { meta: false, alt: true, shift: true }))).toBeNull();
     // the arrows without ⌥ are the focused list's own
     expect(matchChord(ev("ArrowUp", { meta: false }))).toBeNull();
     expect(matchChord(ev("ArrowUp"))).toBeNull();
@@ -95,6 +98,13 @@ describe("labels", () => {
     expect(chordLabel("worktree")).toBe("⌘1-9");
     expect(chordLabel("wt-prev")).toBe("⌥↑");
     expect(chordLabel("wt-next")).toBe("⌥↓");
+    expect(chordLabel("wt-unseen-prev")).toBe("⌥⇧↑");
+    expect(chordLabel("wt-unseen-next")).toBe("⌥⇧↓");
+  });
+  test("a hidden chord has wording but no row on the card", () => {
+    expect(chordLabel("wt-unseen-next")).toBeTruthy();
+    for (const section of CHORD_SECTIONS) expect(chordsInSection(section)).not.toContain("wt-unseen-next");
+    expect(chordsInSection("Worktrees")).toContain("wt-next");
   });
   test("worktreeChord / worktreeIndex agree: ⌘9 is always the last", () => {
     expect(worktreeChord(0, 3)).toBe("⌘1");

@@ -1,8 +1,12 @@
-import { matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
+import { type ChordId, matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import { isSubPicker, localOf, previewIdOf } from "../state/store.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
+import { unseenJump } from "./unseenJump.ts";
+
+/** the chords a focused Monaco keeps for itself (see the check in useChords) */
+const MONACO_OWNS = new Set<ChordId>(["design", "new", "wt-prev", "wt-next", "wt-unseen-prev", "wt-unseen-next"]);
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
  * the handler so the listener is installed once instead of re-subscribing on every state change. */
@@ -19,14 +23,10 @@ export function useChords() {
       // picker holds shell focus, so those keep the full ladder or there is no way back out.
       if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
       // ⌘D and ⌘K are Monaco's (add cursor, chord prefix) while it has the keyboard, and so are
-      // ⌥↑/↓ (move line); taking them from a focused editor made a design scan out of a second
-      // cursor, and would make a worktree switch out of a line move
+      // ⌥↑/↓ (move line) and ⌥⇧↑/↓ (copy line); taking them from a focused editor made a design
+      // scan out of a second cursor, and would make a worktree switch out of a line move
       const monaco = !!document.activeElement?.closest(".monaco-editor");
-      if (
-        monaco &&
-        (chord?.id === "design" || chord?.id === "new" || chord?.id === "wt-prev" || chord?.id === "wt-next")
-      )
-        return;
+      if (monaco && chord && MONACO_OWNS.has(chord.id)) return;
       if (chord) {
         e.preventDefault();
         switch (chord.id) {
@@ -50,6 +50,13 @@ export function useChords() {
             const wt = s.visible[at + (chord.id === "wt-next" ? 1 : -1)];
             if (wt) dispatch({ a: "activate", id: wt.id });
             else if (chord.id === "wt-next" && at >= 0) dispatch({ a: "open-draft" });
+            break;
+          }
+          case "wt-unseen-prev":
+          case "wt-unseen-next": {
+            const to = unseenJump(s.visible, s.activeId, !!s.draft, chord.id === "wt-unseen-next" ? 1 : -1);
+            if (to && "draft" in to) dispatch({ a: "open-draft" });
+            else if (to) dispatch({ a: "activate", id: to.activate });
             break;
           }
           case "new":

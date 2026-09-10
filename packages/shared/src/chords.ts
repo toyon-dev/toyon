@@ -21,6 +21,8 @@ export type ChordId =
   | "worktree"
   | "wt-prev"
   | "wt-next"
+  | "wt-unseen-prev"
+  | "wt-unseen-next"
   | "project"
   | "refs";
 
@@ -88,6 +90,10 @@ export const CHORDS: readonly Chord[] = [
   // place they stand down is a focused Monaco, where ⌥↑/↓ is move-line (app/keys.ts).
   { id: "wt-prev", key: "ArrowUp", alt: true },
   { id: "wt-next", key: "ArrowDown", alt: true },
+  // ⌥⇧↑/↓ is Slack's next-unread: the nearest worktree with a turn nobody has looked at, and
+  // the walk's end (main, the draft) when there is none. Off the shortcuts card on purpose.
+  { id: "wt-unseen-prev", key: "ArrowUp", alt: true, shift: true },
+  { id: "wt-unseen-next", key: "ArrowDown", alt: true, shift: true },
   // ⌘⇧O: Zed's recent-projects key is ⌘⌥O, but ⌥ is how macOS types symbols and matchChord
   // refuses it; ⇧O is free in every browser we run in
   { id: "project", key: "o", shift: true },
@@ -109,8 +115,8 @@ export function matchChord(e: {
   altKey?: boolean;
 }): ChordMatch | null {
   if (e.altKey) {
-    if (e.metaKey || e.ctrlKey || e.shiftKey) return null;
-    const c = CHORDS.find((c) => c.alt && c.key === e.key);
+    if (e.metaKey || e.ctrlKey) return null;
+    const c = CHORDS.find((c) => c.alt && c.key === e.key && !!c.shift === e.shiftKey);
     return c && c.id !== "worktree" ? { id: c.id } : null;
   }
   if (!!e.ctrlKey === e.metaKey) return null;

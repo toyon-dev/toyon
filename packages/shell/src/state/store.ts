@@ -96,8 +96,6 @@ export interface GitInfo {
   behind?: number;
   /** HEAD's sha; the history tab re-reads its log when this moves */
   head?: string;
-  /** main only: nothing in the tree yet; the greenfield state keys on it */
-  empty?: boolean;
 }
 
 /** everything the shell tracks for one worktree; dropped when the worktree disappears */
@@ -267,9 +265,9 @@ export interface State {
   /** worktree selected before the last reload, restored on hello */
   storedActive: string | null;
   storedRepo: string | null;
-  /** the project that was greenfield at the last paint: what the docks do before the daemon's
-   * hello and git-status can say so again */
-  greenfieldHint: string | null;
+  /** the daemon has said hello, over the socket or the bootstrap fetch: what the shell shows
+   * before that is nothing, not a placeholder for an empty daemon */
+  heard: boolean;
   local: Record<string, WorktreeLocal>;
   /** `ref` set means this is a commit's diff: history, so the editor opens it read-only */
   diff: { worktreeId: string; path: string; before: string; after: string; line?: number; ref?: string } | null;
@@ -339,8 +337,6 @@ export interface InitialOpts {
   storedActive?: string | null;
   /** project selected before the last reload, restored on hello */
   storedRepo?: string | null;
-  /** the project that was greenfield at the last paint, if any */
-  storedGreenfield?: string | null;
   /** the worktree panel was left open, so it starts open rather than peeking */
   storedRailOpen?: boolean;
   /** every project's remembered panel layout; the stored project's is painted before hello */
@@ -372,7 +368,7 @@ export function initialState(opts: InitialOpts): State {
     clientId: opts.clientId,
     storedActive: opts.storedActive ?? null,
     storedRepo: opts.storedRepo ?? null,
-    greenfieldHint: opts.storedGreenfield ?? null,
+    heard: false,
     local: {},
     diff: null,
     toast: null,
@@ -435,17 +431,10 @@ export function worktreeById(s: State, id: string | null | undefined): OwnedWork
  * long as this holds; the first message ends it on its own, since the daemon echoes it back. */
 export function isGreenfield(s: State): boolean {
   const wt = worktreeById(s, s.activeId);
-  // before hello: the last paint's answer, so a reload of an empty project does not paint the
-  // docks and then hide them once the daemon has spoken
-  if (!wt) return s.rows.length === 0 && s.greenfieldHint !== null && s.greenfieldHint === s.storedRepo;
-  if (!isMain(wt.worktree) || wt.agent !== "idle") return false;
+  // the empty-tree fact rides on main's record, so the first frame already answers this
+  if (!wt || !isMain(wt.worktree) || wt.agent !== "idle" || wt.worktree.empty !== true) return false;
   const repo = repoById(s, wt.repoId);
-  if (!repo?.needsSetup) return false;
-  const l = localOf(s, wt.id);
-  if (l.chat.length > 0) return false;
-  // between hello and this worktree's first git-status the tree is unknown: keep the last answer
-  const empty = l.git ? l.git.empty === true : s.greenfieldHint === repo.id;
-  return empty;
+  return !!repo?.needsSetup && localOf(s, wt.id).chat.length === 0;
 }
 
 export function repoById(s: State, id: string | null | undefined): RepoInfo | null {
@@ -777,6 +766,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const wt = msg.rows.find((w) => w.id === activeId);
       return {
         ...s,
+        heard: true,
         repos: msg.repos,
         rows: msg.rows,
         activeId,
@@ -914,14 +904,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // ranges go stale whenever the worktree's git state moves
       const next = withLocal(s, msg.worktreeId, (l) => ({
         ...l,
-        git: {
-          files: msg.files,
-          committed: msg.committed,
-          ahead: msg.ahead,
-          behind: msg.behind,
-          head: msg.head,
-          empty: msg.empty,
-        },
+        git: { files: msg.files, committed: msg.committed, ahead: msg.ahead, behind: msg.behind, head: msg.head },
         changedRanges: {},
       }));
       return { ...next, leftOpen, leftAuto };

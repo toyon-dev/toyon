@@ -23,8 +23,6 @@ export const STORAGE = {
   rail: "toyon-rail",
   /** every project's panel layout, keyed by repo id: {"<repo>":{left,right,term,design}} */
   panels: "toyon-panels",
-  /** the project that was empty at the last paint, so a reload does not paint the docks and then hide them */
-  greenfield: "toyon-greenfield",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */
   client: "toyon-client",
   /** + repo id: the profile the composer last started a worktree with, for that repo */

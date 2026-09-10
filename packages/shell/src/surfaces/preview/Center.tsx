@@ -55,6 +55,7 @@ export function Center() {
   const activeId = useActiveId();
   const active = useActive();
   const connected = useStore((s) => s.connected);
+  const heard = useStore((s) => s.heard);
   const connectFailure = useStore((s) => s.connectFailure);
   const diff = useStore((s) => s.diff);
   // an empty project asks what to build before it asks how to start; the panes a previous project
@@ -81,8 +82,7 @@ export function Center() {
   // once asked, the setup pane waits for the agent to put something in the tree before asking how
   // to start it: the pane that came back mid-turn would be a form over a directory still being
   // written. Reopened by hand is always shown.
-  const git = useLocalField(activeId, "git");
-  const treeEmpty = git?.empty === true;
+  const treeEmpty = active?.worktree.empty === true;
   const busy = !!active && isBusy(active);
   const forcedSetup = needsSetup && !treeEmpty && !busy ? needsSetup : null;
   const setupRepo = forcedSetup ?? reopened;
@@ -301,14 +301,20 @@ export function Center() {
             <div className="empty">
               {incompatible ? (
                 "toyon was updated: reload this page"
-              ) : !connected ? (
+              ) : !connected && (!heard || connectFailure) ? (
+                // heard over the bootstrap fetch means the daemon is up and the socket is a
+                // moment away; saying "connecting" for that moment is the flash, not the truth
                 HAS_TOKEN ? (
                   CONNECT_TEXT[connectFailure ?? "probing"]
                 ) : (
                   "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
                 )
               ) : !active ? (
-                `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
+                heard ? (
+                  `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
+                ) : (
+                  ""
+                )
               ) : needsSetup && busy ? (
                 `building in ${active.worktree.title}; the preview appears once it starts`
               ) : needsSetup && treeEmpty ? (

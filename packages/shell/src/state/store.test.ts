@@ -143,13 +143,13 @@ describe("per-worktree records", () => {
   test("greenfield holds on an empty, unconfigured main until the first message lands", () => {
     const fresh = { ...repo("r"), needsSetup: true };
     const main = wt("main", "main");
-    const empty = server({ t: "git-status", worktreeId: "main", files: [], empty: true });
-    const s = run([helloIn([fresh], main), { a: "activate", id: "main" }, empty]);
+    const empty: WorktreeStatus = { ...main, worktree: { ...main.worktree!, empty: true } };
+    const s = run([helloIn([fresh], empty), { a: "activate", id: "main" }]);
     expect(isGreenfield(s)).toBe(true);
     // a repo with history, a configured repo, and a busy agent are each not greenfield
-    expect(isGreenfield(run([server({ t: "git-status", worktreeId: "main", files: [] })], s))).toBe(false);
+    expect(isGreenfield(run([worktrees(main)], s))).toBe(false);
     expect(isGreenfield(run([repos(repo("r"))], s))).toBe(false);
-    expect(isGreenfield(run([worktrees({ ...main, agent: "working" })], s))).toBe(false);
+    expect(isGreenfield(run([worktrees({ ...empty, agent: "working" })], s))).toBe(false);
     // the daemon echoes the message back, and that ends it for good
     const spoken = run([agent("main", { type: "user-message", text: "make a site", ts: 0 })], s);
     expect(isGreenfield(spoken)).toBe(false);
@@ -157,21 +157,10 @@ describe("per-worktree records", () => {
     expect(s.rightOpen).toBe(true);
     expect(reducer({ ...s, rightOpen: false }, { a: "show-right" }).rightOpen).toBe(true);
   });
-  test("a reload of an empty project starts greenfield and stays so until git-status says otherwise", () => {
-    const fresh = { ...repo("r"), needsSetup: true };
-    const main = wt("main", "main");
-    const remembered = initialState({ clientId: ME, storedRepo: "r", storedActive: "main", storedGreenfield: "r" });
-    expect(isGreenfield(remembered)).toBe(true);
-    const said = run([helloIn([fresh], main)], remembered);
-    expect(isGreenfield(said)).toBe(true);
-    expect(isGreenfield(run([server({ t: "git-status", worktreeId: "main", files: [] })], said))).toBe(false);
-    // a hint for another project, or no hint, paints the docks as usual
-    expect(isGreenfield(initialState({ clientId: ME, storedRepo: "r", storedGreenfield: "other" }))).toBe(false);
-    expect(isGreenfield(run([helloIn([fresh], main)]))).toBe(false);
-  });
-  test("git-status carries whether main's tree is empty", () => {
-    const s = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [], empty: true })]);
-    expect(s.local.main?.git?.empty).toBe(true);
+  test("nothing is heard until a hello, from the socket or the bootstrap alike", () => {
+    expect(initial.heard).toBe(false);
+    expect(isGreenfield(initial)).toBe(false);
+    expect(run([hello()]).heard).toBe(true);
   });
   test("page errors keep the last three and reset on a fresh load", () => {
     const s = run([hello(wt("a")), ...["e1", "e2", "e3", "e4"].map((e): Action => ({ a: "page", id: "a", error: e }))]);

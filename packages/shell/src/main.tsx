@@ -1,4 +1,4 @@
-import { isTermMsg, PROTOCOL_VERSION } from "@toyon/shared";
+import { isTermMsg, PROTOCOL_VERSION, type ServerMsg } from "@toyon/shared";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
@@ -95,7 +95,6 @@ const store = createStore(
     systemDark: prefersDark(),
     storedActive: read(localStorage, STORAGE.active),
     storedRepo: read(localStorage, STORAGE.repo),
-    storedGreenfield: read(localStorage, STORAGE.greenfield) || null,
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",
     storedPanels: storedPanels(),
     storedLastActive: storedLastActive(),
@@ -141,14 +140,33 @@ window.addEventListener("beforeunload", (e) => {
   e.returnValue = "an agent is still working";
 });
 
-createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <StoreProvider store={store} sock={sock}>
-        <App />
-      </StoreProvider>
-    </ErrorBoundary>
-  </React.StrictMode>,
+// The hello the inline script in index.html asked for before this bundle loaded. Applied through
+// the same reducer as the socket's, so the first paint is the real project; a daemon that is down
+// answers null and the page paints as it always has. The render waits for it rather than racing
+// it: it is normally resolved long before this line runs, and a paint without it is the flash
+// this exists to remove.
+declare global {
+  interface Window {
+    toyonBoot?: Promise<unknown>;
+  }
+}
+const booted = (window.toyonBoot ?? Promise.resolve(null)).then((boot) => {
+  const msg = boot as ServerMsg | null;
+  if (msg && typeof msg === "object" && msg.t === "hello" && msg.protocol === PROTOCOL_VERSION) {
+    store.dispatch({ a: "server", msg });
+  }
+});
+
+booted.then(() =>
+  createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <StoreProvider store={store} sock={sock}>
+          <App />
+        </StoreProvider>
+      </ErrorBoundary>
+    </React.StrictMode>,
+  ),
 );
 
 if ("serviceWorker" in navigator) {

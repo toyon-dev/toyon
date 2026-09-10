@@ -2,21 +2,41 @@
 @layer tokens, base, surfaces;
 @layer base {
   .chip-picker {
+    position: relative;
     display: inline-flex;
     align-items: center;
   }
-  /* the panel takes the row's width, positioned against the row (see ChipPicker.tsx): the anchored
-   box's own 460px is the pill's, sized for the top bar, and here it ran past the box the row is in */
+  /* Over the chip, the way the switcher opens over the pill: -6px/-9px are the panel's border plus
+   the field strip's padding, so the lead chip lands exactly on the chip and the value does not
+   move. 360px is what a description takes on one line; the anchored box's own 460px is the pill's,
+   sized for the top bar. */
   .chip-picker {
     & > .overlay-box.anchored {
-      left: 0;
-      right: 0;
-      width: auto;
+      top: -6px;
+      left: -9px;
+      width: min(360px, calc(100vw - 16px));
     }
     /* a chip's list is a handful of rows inside a panel that is already most of the way down the
      screen, so it takes the inline picker's budget rather than a centred palette's half viewport */
     & .picker-list {
       max-height: min(280px, 40vh);
+    }
+  }
+  /* No room below the chip (the composer's chips are at the foot of the window): the panel rises
+   above it instead, in its usual order, so the field stays the top of the panel and the rows
+   read downward as they do everywhere else. ChipPicker.tsx measures and sets this. */
+  .chip-picker-up {
+    & > .overlay-box.anchored {
+      top: auto;
+      bottom: calc(100% + 6px);
+    }
+  }
+  /* no room to the right (the chat dock sits on the window's edge): the panel hangs its right edge
+   on the chip's instead of landing its lead on it */
+  .chip-picker-right {
+    & > .overlay-box.anchored {
+      left: auto;
+      right: -9px;
     }
   }
   /* An option is its name over a line saying what it means. The descriptions are sentences, and

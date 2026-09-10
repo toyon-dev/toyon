@@ -14,16 +14,24 @@ export type ChipOption<T extends string> = {
   description?: string;
 };
 
+/** the panel's footprint before it is on screen, for deciding which way it opens: the width is
+ * chip-picker.css's, the height is the field strip, the key row and a two-line row per option */
+const PANEL_W = 360;
+const panelH = (rows: number) => 100 + 38 * rows;
+
+/** which way the panel opens: over the chip unless that runs off the screen, then above it, or
+ * hung from the chip's right edge */
+type Placement = { up: boolean; right: boolean };
+
 /**
  * A chip holding one value out of a few, and the panel it opens into: the one the project pill
  * drops, with the value as the field's lead chip, a row per option with a line under its name
  * saying what it means, and the current one marked down its edge. A context menu is a list of
  * actions; a value you set gets the picker, so every chip with options reads as the switcher does.
  *
- * The panel spans the row the chip sits in rather than hanging off the chip, because a chip can
- * be anywhere in its row and a panel hung off one in the middle ran past the box's edge. The host
- * row is the containing block (the prompt's variants row, the composer), so the wrapper takes no
- * position of its own; the composer turns the panel upward in its own stylesheet.
+ * The panel lands over the chip the way the switcher lands over the pill. A chip can sit at the
+ * foot of the window (the composer's) or against its right edge (the chat dock's), so the
+ * placement is measured on open rather than written once: see chip-picker.css.
  */
 export function ChipPicker<T extends string>({
   value,
@@ -49,9 +57,9 @@ export function ChipPicker<T extends string>({
   /** the panel went away, picked or not: the host puts the caret back where it was */
   onClose?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<Placement | null>(null);
   const close = () => {
-    setOpen(false);
+    setOpen(null);
     onClose?.();
   };
   const shown = options.find((o) => o.id === value)?.label ?? value;
@@ -60,7 +68,7 @@ export function ChipPicker<T extends string>({
     // overlay and would shut whatever this chip sits in (the prompt, a bottom pane). The topmost
     // thing owns Escape, and this one is not in the store.
     <span
-      className="chip-picker"
+      className={cx("chip-picker", open?.up && "chip-picker-up", open?.right && "chip-picker-right")}
       onKeyDownCapture={(e) => {
         if (!open || e.key !== "Escape") return;
         e.stopPropagation();
@@ -70,10 +78,17 @@ export function ChipPicker<T extends string>({
       <Button
         variant="outline"
         mono
-        on={open}
+        on={open !== null}
         className={cx("chip-picker-btn", className)}
         {...tip(hint)}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          if (open) return close();
+          const r = e.currentTarget.getBoundingClientRect();
+          setOpen({
+            up: r.top - 6 + panelH(options.length) > window.innerHeight - 8,
+            right: r.left - 9 + PANEL_W > window.innerWidth - 8,
+          });
+        }}
       >
         {shown} <Icon name="caret" className="icon-inline" />
       </Button>

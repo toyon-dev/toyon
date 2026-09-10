@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ProcState } from "@toyon/shared";
 import { WorktreeProcs } from "./supervisor.ts";
 
 function alive(pid: number): boolean {
@@ -122,4 +123,47 @@ describe("WorktreeProcs supervision", () => {
     expect(await until(() => states.filter((s) => s === "starting").length >= 2)).toBe(true);
     await procs.stopAll();
   }, 10_000);
+});
+
+// A proc that never answers on $PORT used to stay "starting" forever. After the deadline the
+// supervisor asks what the process actually bound and says so, one way or the other.
+describe("WorktreeProcs port diagnosis", () => {
+  test("nothing listening anywhere: unreachable, with the reason in the state and the log", async () => {
+    const states: ProcState[] = [];
+    const lines: string[] = [];
+    const procs = new WorktreeProcs(
+      process.cwd(),
+      (p) => states.push({ ...p }),
+      (_p, l) => lines.push(l),
+      noop,
+      noop,
+      {
+        pollAttempts: 2,
+      },
+    );
+    await procs.start("web", "sleep 30");
+    expect(await until(() => states.some((s) => s.status === "unreachable"), 8000)).toBe(true);
+    const last = states.at(-1)!;
+    expect(last.detail).toContain("bound no other port");
+    expect(lines.some((l) => l.includes("bound no other port"))).toBe(true);
+    expect(last.boundPort).toBeUndefined();
+    await procs.stopAll();
+  }, 15_000);
+
+  test("listening on another port: running there, with boundPort set and the flag named", async () => {
+    const states: ProcState[] = [];
+    const procs = new WorktreeProcs(process.cwd(), (p) => states.push({ ...p }), noop, noop, noop, {
+      pollAttempts: 2,
+    });
+    // a vite-shaped server: prints its own URL and binds a port that is not $PORT
+    const other = 40000 + Math.floor(Math.random() * 20000);
+    const script = `echo "Local: http://localhost:${other}/"; exec bun -e 'Bun.serve({port:${other},hostname:"127.0.0.1",fetch(){return new Response("x")}}); await new Promise(()=>{})'`;
+    const st = await procs.start("web", script);
+    expect(await until(() => states.some((s) => s.status === "running"), 10000)).toBe(true);
+    const running = states.find((s) => s.status === "running")!;
+    expect(running.boundPort).toBe(other);
+    expect(running.port).toBe(st.port);
+    expect(running.detail).toContain("--port $PORT");
+    await procs.stopAll();
+  }, 15_000);
 });

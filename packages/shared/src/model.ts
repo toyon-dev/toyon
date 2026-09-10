@@ -137,17 +137,24 @@ export function hasOwnBranch(wt: Pick<WorktreeInfo, "branch">): boolean {
   return wt.branch.startsWith("toyon/");
 }
 
-export type ProcStatus = "starting" | "running" | "crashed" | "stopped";
+/** `unreachable`: alive, but nothing answered on its port before the deadline and it bound no
+ * other port either (a server that never listens, or listens somewhere toyon cannot see) */
+export type ProcStatus = "starting" | "running" | "unreachable" | "crashed" | "stopped";
 
 export interface ProcState {
   name: string;
   command: string;
+  /** the port toyon assigned, handed to the proc as $PORT */
   port: number;
   status: ProcStatus;
   pid?: number;
   exitCode?: number | null;
   /** address family the proc actually listens on (some dev servers bind ::1 only) */
   host?: string;
+  /** the port it really bound when it ignored $PORT; the proxy and the sibling URLs follow this */
+  boundPort?: number;
+  /** why it is unreachable, or what it is doing on the wrong port, for the person at the shell */
+  detail?: string;
 }
 
 /** the worktree's own shell, as a stream name. Every other stream is a proc, named by its key in

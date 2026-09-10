@@ -34,7 +34,7 @@ browser (shell UI) ──HTTP/WS──> daemon (one per machine)
                                   └─ git ops (status/diff, ref watcher)
 ```
 
-The proc contract: *run in foreground, listen on `$PORT`, reload yourself however you like.* Works with Vite, uvicorn `--reload`, `cargo watch`, or a `start.sh`. A `toyon.json` in the repo names the install and start commands and any profiles; the first open guesses one and asks you to confirm it.
+The proc contract: *run in foreground, listen on `$PORT`, reload yourself however you like.* Works with Vite, Next, uvicorn `--reload`, `cargo watch`, or a `start.sh`. A `toyon.json` in the repo names the install and start commands and any profiles; the first open guesses one and asks you to confirm it. Tools that take their port from a flag rather than the environment, Vite among them, get the flag added by the guess; if a server still comes up on some other port, toyon follows it there and tells you which flag to add, and if it never listens at all the preview says so instead of waiting.
 
 Worktrees start when you open them, not when the daemon boots. `toyon stop` stops the daemon and everything it runs. `toyon doctor` says what is running and why a page cannot connect.
 

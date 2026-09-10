@@ -67,7 +67,8 @@ export function procUrlEnv(states: ProcState[], previewName: string | undefined)
   for (const st of states) {
     if (st.name === previewName) continue;
     const urlVar = `${st.name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_URL`;
-    const url = `http://127.0.0.1:${st.port}`;
+    // a proc that ignored $PORT is reachable where it actually bound, not where it was told to
+    const url = `http://127.0.0.1:${st.boundPort ?? st.port}`;
     env[urlVar] = url;
     env[`VITE_${urlVar}`] = url;
     if (st.name === "api") {
@@ -164,15 +165,16 @@ function defaultProxy(wt: WorktreeInfo, previewName: string | undefined, procs: 
   });
 }
 
-/** where the proxy forwards: the preview proc unless it crashed (a proc that is still starting is
- * a valid target — the proxy serves its "starting…" page until the port answers) */
+/** where the proxy forwards: the preview proc unless it crashed or never came up (a proc that is
+ * still starting is a valid target — the proxy serves its "starting…" page until the port answers),
+ * at the port it actually bound when that differs from the one it was given */
 function previewTargetOf(procs: WorktreeProcs, previewName: string | undefined): ProxyTarget | null {
   const st =
     procs.states().find((p) => p.name === previewName) ??
     // backend-only repo: point preview at the first proc
     procs.states()[0];
-  if (!st || st.status === "crashed") return null;
-  return { port: st.port, host: st.host ?? "127.0.0.1" };
+  if (!st || st.status === "crashed" || st.status === "unreachable") return null;
+  return { port: st.boundPort ?? st.port, host: st.host ?? "127.0.0.1" };
 }
 
 export class RuntimeRegistry {

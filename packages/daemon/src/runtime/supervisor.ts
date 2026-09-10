@@ -1,11 +1,20 @@
 import type { LogLine, ProcState } from "@toyon/shared";
 import { fireAndForget } from "../core/log.ts";
 import { LineSplitter } from "./lines.ts";
+import { listeningPorts, portFromLogs, reachableHost } from "./listeners.ts";
 import { allocatePort, releasePort } from "./ports.ts";
 import { PtyStream } from "./pty.ts";
 
 /** the merged line ring, per worktree rather than per proc, so the tail is chronological */
 const LOG_RING_SIZE = 500;
+/** how long a proc gets to answer on $PORT before toyon asks the OS what it did instead */
+const POLL_INTERVAL_MS = 500;
+const POLL_ATTEMPTS = 120;
+
+export interface ProcsOpts {
+  /** polls of $PORT before the diagnosis; tests shorten the 60s deadline */
+  pollAttempts?: number;
+}
 /** a proc keeps a smaller replay ring than the shell: a worktree has several of them */
 const PROC_RING = 128 * 1024;
 /** what a proc's pty is sized to before any pane has opened its tab */
@@ -43,6 +52,7 @@ export class WorktreeProcs {
     private onLog: LogListener,
     private onData: DataListener = () => {},
     private onStreamExit: ExitListener = () => {},
+    private opts: ProcsOpts = {},
   ) {}
 
   async start(name: string, command: string, extraEnv: Record<string, string> = {}) {
@@ -66,6 +76,10 @@ export class WorktreeProcs {
     mp.lastStart = Date.now();
     mp.handInput = false;
     mp.state.status = "starting";
+    // a restart starts the diagnosis over: the last run's wrong port is not this run's
+    mp.state.host = undefined;
+    mp.state.boundPort = undefined;
+    mp.state.detail = undefined;
     try {
       // FORCE_COLOR is deliberately absent: isatty is true on a pty, so tools decide for
       // themselves, and TERM has to be set for them to decide yes (bun-pty ignores its `name`
@@ -102,8 +116,8 @@ export class WorktreeProcs {
     }
     mp.state.pid = mp.pty.pid;
     this.onProc({ ...mp.state });
-    // "running" once the port accepts connections
-    this.pollPort(mp);
+    // "running" once the port accepts connections, or a diagnosis when it never does
+    fireAndForget(name, this.pollPort(mp), "port poll");
   }
 
   private handleExit(mp: ManagedProc, code: number) {
@@ -136,33 +150,57 @@ export class WorktreeProcs {
   }
 
   private async pollPort(mp: ManagedProc) {
-    const { port } = mp.state;
-    for (let i = 0; i < 120; i++) {
-      if (this.stopped || mp.state.status === "crashed" || mp.state.status === "stopped") return;
-      // dev servers bind whichever family "localhost" resolves to first: try both
-      for (const hostname of ["127.0.0.1", "::1"]) {
-        try {
-          const sock = await Bun.connect({
-            hostname,
-            port,
-            socket: {
-              data() {},
-              open(s) {
-                s.end();
-              },
-            },
-          });
-          sock.end();
-          mp.state.host = hostname;
-          mp.state.status = "running";
-          this.onProc({ ...mp.state });
-          return;
-        } catch {
-          // nothing listening yet; try the other family, then wait
-        }
+    const attempts = this.opts.pollAttempts ?? POLL_ATTEMPTS;
+    for (let i = 0; i < attempts; i++) {
+      if (this.stopped || mp.state.status !== "starting") return;
+      const host = await reachableHost(mp.state.port);
+      if (host) {
+        mp.state.host = host;
+        mp.state.status = "running";
+        this.onProc({ ...mp.state });
+        return;
       }
-      await Bun.sleep(500);
+      await Bun.sleep(POLL_INTERVAL_MS);
     }
+    await this.diagnose(mp);
+  }
+
+  /** The deadline passed with nothing on $PORT. Left alone that is "starting" forever, which is
+   * how a dev server that takes its port from a flag (vite) looked exactly like a slow boot. Ask
+   * the OS what this process group bound: if it is up on another port, follow it and say so; if it
+   * bound nothing, say that instead of spinning. */
+  private async diagnose(mp: ManagedProc) {
+    if (this.stopped || mp.state.status !== "starting") return;
+    const { name, port, pid } = mp.state;
+    let found = pid ? ((await listeningPorts(pid)).find((l) => l.port !== port) ?? null) : null;
+    if (!found) {
+      // no lsof: the server's own banner names a port, but a banner is a claim, so only believe
+      // one that answers
+      const logged = portFromLogs(this.lines.filter((l) => l.proc === name).map((l) => l.line));
+      if (logged && logged !== port) {
+        const host = await reachableHost(logged);
+        if (host) found = { host, port: logged };
+      }
+    }
+    // the probes take time; the proc may have crashed or been stopped underneath them
+    if (this.stopped || mp.state.status !== "starting") return;
+    if (found) {
+      mp.state.boundPort = found.port;
+      mp.state.host = (await reachableHost(found.port)) ?? found.host;
+      mp.state.status = "running";
+      mp.state.detail =
+        `ignoring $PORT: listening on :${found.port}, not the :${port} toyon assigned. The preview follows ` +
+        `:${found.port} for now; add the tool's port flag (vite: --port $PORT --strictPort) to the command ` +
+        "so two worktrees do not fight over one port.";
+    } else {
+      const waited = ((this.opts.pollAttempts ?? POLL_ATTEMPTS) * POLL_INTERVAL_MS) / 1000;
+      mp.state.status = "unreachable";
+      mp.state.detail =
+        `nothing listening on :${port} after ${waited}s, and the process bound no other port. ` +
+        "The command has to run in the foreground and listen on $PORT.";
+    }
+    this.onProc({ ...mp.state });
+    this.pushLine(name, mp.state.detail);
   }
 
   /** the proc's pty, for a pane attaching to its tab */
@@ -190,6 +228,7 @@ export class WorktreeProcs {
       this.spawnProc(mp);
       return;
     }
+    // an unreachable proc is still alive: it goes through the kill like a running one below
     // mark stopped first so the exit handler doesn't schedule a crash-restart
     mp.state.status = "stopped";
     fireAndForget(

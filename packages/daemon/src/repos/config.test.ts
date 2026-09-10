@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detectConfig, readConfigFile } from "./config.ts";
+import { detectConfig, procCommand, readConfigFile } from "./config.ts";
 
 let dir = "";
 afterEach(() => dir && rmSync(dir, { recursive: true, force: true }));
@@ -19,19 +19,30 @@ const pkg = (scripts: Record<string, string>, extra: Record<string, unknown> = {
 
 describe("detectConfig", () => {
   test("dev script → web, dev:api → api, runner from the lockfile", () => {
-    const d = detectConfig(repo({ "package.json": pkg({ dev: "vite", "dev:api": "x" }), "bun.lock": "" }));
+    const d = detectConfig(repo({ "package.json": pkg({ dev: "next dev", "dev:api": "x" }), "bun.lock": "" }));
     expect(d).toEqual({
       config: { procs: { web: "bun run dev", api: "bun run dev:api" }, setup: ["bun install"] },
       needsSetup: true,
     });
   });
 
+  test("a vite script gets the port flag, since vite never reads $PORT; npm needs the `--`", () => {
+    expect(procCommand("bun", "dev", "vite")).toBe("bun run dev --port $PORT --strictPort");
+    expect(procCommand("npm", "dev", "vite --open")).toBe("npm run dev -- --port $PORT --strictPort");
+    expect(procCommand("pnpm", "dev", "vitepress dev docs")).toBe("pnpm run dev --port $PORT --strictPort");
+    expect(procCommand("npm", "dev", "astro dev")).toBe("npm run dev -- --port $PORT");
+    // a script that already threads $PORT, or a tool that reads it, is left alone
+    expect(procCommand("npm", "dev", "vite --port $PORT")).toBe("npm run dev");
+    expect(procCommand("npm", "dev", "next dev")).toBe("npm run dev");
+    expect(procCommand("npm", "dev", "invite-service")).toBe("npm run dev");
+  });
+
   test("start script counts when there is no dev; yarn from yarn.lock or packageManager", () => {
-    expect(detectConfig(repo({ "package.json": pkg({ start: "vite" }), "yarn.lock": "" })).config.procs).toEqual({
+    expect(detectConfig(repo({ "package.json": pkg({ start: "next start" }), "yarn.lock": "" })).config.procs).toEqual({
       web: "yarn run start",
     });
     expect(
-      detectConfig(repo({ "package.json": pkg({ start: "vite" }, { packageManager: "yarn@4.12.0" }) })).config,
+      detectConfig(repo({ "package.json": pkg({ start: "next start" }, { packageManager: "yarn@4.12.0" }) })).config,
     ).toEqual({ procs: { web: "yarn run start" }, setup: ["yarn install"] });
     // dev wins over start when both exist
     expect(detectConfig(repo({ "package.json": pkg({ dev: "a", start: "b" }) })).config.procs).toEqual({
@@ -42,7 +53,7 @@ describe("detectConfig", () => {
   test("wrangler config plus functions detects as a pages app, not the dev script", () => {
     const d = detectConfig(
       repo({
-        "package.json": pkg({ dev: "vite", build: "vite build" }),
+        "package.json": pkg({ dev: "next dev", build: "next build" }),
         "wrangler.jsonc": '{\n  // trailing comma and comment\n  "pages_build_output_dir": "dist",\n}',
         "functions/": "",
       }),
@@ -60,17 +71,19 @@ describe("detectConfig", () => {
     const wrangler = '{ "pages_build_output_dir": "dist" }';
     // no functions/ directory: a plain worker, whose dev server does serve everything
     expect(
-      detectConfig(repo({ "package.json": pkg({ dev: "vite", build: "b" }), "wrangler.jsonc": wrangler })).config.procs,
+      detectConfig(repo({ "package.json": pkg({ dev: "next dev", build: "b" }), "wrangler.jsonc": wrangler })).config
+        .procs,
     ).toEqual({ web: "npm run dev" });
     // no build script: nothing to point wrangler at
     expect(
-      detectConfig(repo({ "package.json": pkg({ dev: "vite" }), "wrangler.jsonc": wrangler, "functions/": "" })).config
-        .procs,
+      detectConfig(repo({ "package.json": pkg({ dev: "next dev" }), "wrangler.jsonc": wrangler, "functions/": "" }))
+        .config.procs,
     ).toEqual({ web: "npm run dev" });
     // no output dir in the config
     expect(
-      detectConfig(repo({ "package.json": pkg({ dev: "vite", build: "b" }), "wrangler.jsonc": "{}", "functions/": "" }))
-        .config.procs,
+      detectConfig(
+        repo({ "package.json": pkg({ dev: "next dev", build: "b" }), "wrangler.jsonc": "{}", "functions/": "" }),
+      ).config.procs,
     ).toEqual({ web: "npm run dev" });
   });
 
@@ -89,7 +102,7 @@ describe("detectConfig", () => {
   });
 
   test("an invalid toyon.json is reported and detection falls through", () => {
-    const bad = repo({ "toyon.json": "{ nope", "package.json": pkg({ dev: "vite" }) });
+    const bad = repo({ "toyon.json": "{ nope", "package.json": pkg({ dev: "next dev" }) });
     const f = readConfigFile(bad);
     expect(f?.ok).toBe(false);
     if (f && !f.ok) expect(f.reason).toMatch(/not valid JSON/);

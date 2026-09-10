@@ -368,7 +368,10 @@ describe("redetect at turn end", () => {
     writeFileSync(join(w.repo, "package.json"), JSON.stringify({ scripts: { dev: "vite" } }));
     writeFileSync(join(w.repo, "bun.lock"), "");
     turnEnd(main.id);
-    expect(w.state.requireRepo(repo.id).config).toEqual({ procs: { web: "bun run dev" }, setup: ["bun install"] });
+    expect(w.state.requireRepo(repo.id).config).toEqual({
+      procs: { web: "bun run dev --port $PORT --strictPort" },
+      setup: ["bun install"],
+    });
     expect(w.state.requireRepo(repo.id).needsSetup).toBe(true);
     expect(repos).toBe(1);
     // the same tree again says nothing new

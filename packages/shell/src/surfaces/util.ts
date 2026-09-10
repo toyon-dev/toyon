@@ -62,7 +62,8 @@ export function dotClass(w: WorktreeStatus): DotState {
   if (w.agent === "waiting") return "waiting";
   if (w.agent === "working") return "working";
   if (w.worktree?.landed) return "landed";
-  if (w.procs.some((p) => p.status === "crashed")) return "crashed";
+  // unreachable wears the crashed colour: alive, but nothing to show, and it needs a person
+  if (w.procs.some((p) => p.status === "crashed" || p.status === "unreachable")) return "crashed";
   if (w.procs.some((p) => p.status === "running")) return "running";
   if (w.procs.some((p) => p.status === "starting")) return "starting";
   return "idle";
@@ -85,22 +86,27 @@ export function stateLabel(w: WorktreeStatus, needsSetup = false): string {
   return d === "idle" && needsSetup ? "Not set up" : DOT_LABEL[d];
 }
 
-/** what the composer's terminal badge says. Only "crashed" counts as trouble: "stopped" is a
- * clean exit or one you killed in the proc's own tab, and "starting" resolves on its own. */
+/** what the composer's terminal badge says. "crashed" and "unreachable" count as trouble:
+ * "stopped" is a clean exit or one you killed in the proc's own tab, and "starting" resolves on
+ * its own (or turns into unreachable, which is when it becomes trouble). */
 export interface ProcTrouble {
-  /** the crashed procs, in config order */
+  /** the crashed or unreachable procs, in config order */
   dead: ProcState[];
-  /** tooltip: what died and what a click does */
+  /** tooltip: what is wrong and what a click does */
   tip: string;
   /** the tab a click should land on */
   stream: string;
 }
 
 export function procTrouble(procs: ProcState[]): ProcTrouble | null {
-  const dead = procs.filter((p) => p.status === "crashed");
+  const dead = procs.filter((p) => p.status === "crashed" || p.status === "unreachable");
   const first = dead[0];
   if (!first) return null;
-  const what = dead.map((p) => `${p.name} crashed on :${p.port}`).join(", ");
+  const what = dead
+    .map((p) =>
+      p.status === "unreachable" ? `${p.name} never answered on :${p.port}` : `${p.name} crashed on :${p.port}`,
+    )
+    .join(", ");
   return { dead, tip: `${what} · click to open its tab`, stream: first.name };
 }
 

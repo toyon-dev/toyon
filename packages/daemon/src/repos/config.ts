@@ -44,9 +44,9 @@ export function detectConfig(repoPath: string): DetectedConfig {
     if (pages) return { config: { procs: pages, setup: [`${runner} install`] }, needsSetup: true };
     const procs: Record<string, string> = {};
     // `dev` is the vite/next convention, `start` the CRA/yarn one; a repo with both means dev
-    if (scripts.dev) procs.web = `${runner} run dev`;
-    else if (scripts.start) procs.web = `${runner} run start`;
-    if (scripts["dev:api"]) procs.api = `${runner} run dev:api`;
+    if (scripts.dev) procs.web = procCommand(runner, "dev", scripts.dev);
+    else if (scripts.start) procs.web = procCommand(runner, "start", scripts.start);
+    if (scripts["dev:api"]) procs.api = procCommand(runner, "dev:api", scripts["dev:api"]);
     if (Object.keys(procs).length > 0) {
       return {
         config: { procs, setup: [`${runner} install`] },
@@ -60,6 +60,26 @@ export function detectConfig(repoPath: string): DetectedConfig {
   }
 
   return { config: { procs: {} }, needsSetup: true };
+}
+
+/** Tools that take their port from a flag and never read $PORT, with the flag each one wants. A
+ * bare `run dev` for any of these boots on the tool's own port while the preview waits on the one
+ * toyon assigned. Detection pre-empts the cases common enough to encode; anything else that
+ * ignores $PORT is caught at runtime by the supervisor's listener probe, which needs no list. */
+const PORT_FLAGS: Array<[RegExp, string]> = [
+  [/(?:^|[\s;&|])(?:vite|vitepress)(?=$|[\s;&|])/, "--port $PORT --strictPort"],
+  [/(?:^|[\s;&|])astro\s+dev(?=$|[\s;&|])/, "--port $PORT"],
+];
+
+/** `<runner> run <script>`, plus the tool's port flag when the script's own command needs one */
+export function procCommand(runner: string, script: string, body: string): string {
+  const base = `${runner} run ${script}`;
+  // a script that already threads $PORT through knows what it is doing
+  if (/\$\{?PORT\b/.test(body)) return base;
+  const flag = PORT_FLAGS.find(([re]) => re.test(body))?.[1];
+  if (!flag) return base;
+  // npm is the only one of the runners that needs `--` before the script's own argv
+  return `${base}${runner === "npm" ? " --" : ""} ${flag}`;
 }
 
 /** Cloudflare Pages with a functions/ directory: the API is served by the Pages runtime, not by

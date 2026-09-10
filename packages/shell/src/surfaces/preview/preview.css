@@ -143,3 +143,53 @@
     margin-top: 12px;
   }
 }
+@layer surfaces {
+  /* ---- boot pane: what stands in for the preview until a server answers ---- */
+  .boot-pane {
+    width: min(720px, 100%);
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .boot-line {
+    color: var(--text1);
+  }
+  .boot-procs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .boot-proc {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    column-gap: 12px;
+    & .boot-name {
+      font: var(--type-mono);
+      color: var(--text0);
+    }
+    & .boot-status {
+      color: var(--text1);
+    }
+    /* the reason spans the row; it is the line the person came here to read */
+    & .boot-detail {
+      grid-column: 1 / -1;
+      color: var(--text0);
+    }
+    &.boot-bad .boot-status {
+      color: var(--red);
+    }
+  }
+  .boot-tail {
+    margin: 0;
+    max-height: 40vh;
+    overflow: auto;
+    font: var(--type-mono-sm);
+    color: var(--text1);
+    white-space: pre-wrap;
+  }
+}

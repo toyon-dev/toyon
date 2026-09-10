@@ -36,7 +36,7 @@ import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
-import { chord, previewUrl, relFile, wtDir } from "../util.ts";
+import { chord, isBusy, previewUrl, relFile, wtDir } from "../util.ts";
 import { DiscoveredPane } from "./DiscoveredPane.tsx";
 import { GreenfieldPane } from "./GreenfieldPane.tsx";
 import { ImportPane } from "./ImportPane.tsx";
@@ -74,9 +74,15 @@ export function Center() {
       ? (s.repos.find((r) => r.id === (s.overlay as { repoId: string }).repoId) ?? null)
       : null,
   );
-  const setupRepo = needsSetup ?? reopened;
-  // an empty project asks what to build before it asks how to start
+  // an empty project asks what to build before it asks how to start, and once asked it waits for
+  // the agent to put something in the tree before asking how to start it: the pane that came back
+  // mid-turn would be a form over a directory still being written. Reopened by hand is always shown.
   const greenfield = useGreenfield();
+  const git = useLocalField(activeId, "git");
+  const treeEmpty = git?.empty === true;
+  const busy = !!active && isBusy(active);
+  const forcedSetup = needsSetup && !treeEmpty && !busy ? needsSetup : null;
+  const setupRepo = forcedSetup ?? reopened;
   // a clone being watched takes the preview slot too: same reason as the setup pane, in that the
   // project it belongs to cannot show one yet
   const watching = useStore((s) => s.pending.find((p) => p.id === s.activeImportId) ?? null);
@@ -279,9 +285,10 @@ export function Center() {
           {greenfield && active && !watching && <GreenfieldPane key={active.worktree.id} active={active} />}
           {setupRepo && !watching && !greenfield && (
             <SetupPane
-              key={setupRepo.id}
+              // the form reads the guess once, so a fresh guess (the agent scaffolded) remounts it
+              key={`${setupRepo.id}:${JSON.stringify(setupRepo.config)}`}
               repo={setupRepo}
-              onClose={needsSetup ? undefined : () => dispatch({ a: "close" })}
+              onClose={forcedSetup ? undefined : () => dispatch({ a: "close" })}
             />
           )}
           {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
@@ -295,12 +302,16 @@ export function Center() {
                     : "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
                   : !active
                     ? `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
-                    : log.length > 0
-                      ? log
-                          .slice(-20)
-                          .map((l) => `[${l.proc}] ${l.line}`)
-                          .join("\n")
-                      : "starting dev servers…"}
+                    : needsSetup && busy
+                      ? `building in ${active.worktree.title}; the preview appears once it starts`
+                      : needsSetup && treeEmpty
+                        ? `${active.worktree.title} is empty so far; say what to build`
+                        : log.length > 0
+                          ? log
+                              .slice(-20)
+                              .map((l) => `[${l.proc}] ${l.line}`)
+                              .join("\n")
+                          : "starting dev servers…"}
             </div>
           )}
         </div>

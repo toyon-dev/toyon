@@ -459,12 +459,10 @@
       color: var(--text0);
       background: var(--surface2);
     }
-    /* same width as the icon it stands in for, so the name does not step sideways when the call ends */
-    & .spinner {
-      flex: 0 0 auto;
-      width: 13px;
+    /* the icon's own box, so the name does not step sideways when the call ends; the working
+     colour, since a turning ring in the text colour reads as a stalled icon */
+    & .tool-spinner {
       color: var(--yellow);
-      text-align: center;
     }
   }
   /* the graft divider is the blocked row's box with the accent's edge: both are one line the
@@ -565,6 +563,13 @@
     }
   }
   /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
+  /* main's target row above the box: the draft strip's shape, inside the composer's frame */
+  .composer-target {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
   .spawn-left {
     display: flex;
     align-items: center;

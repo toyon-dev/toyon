@@ -140,6 +140,7 @@ export function Composer({
   const currentEffort = useLocalField(id, "effort");
   // how full this agent's context is: the stream's last word, else the row's (a cold worktree)
   const usage = useLocalField(id, "usage") ?? active?.usage;
+
   // the draft's row above the box holds the profile; main's fast path takes the remembered one
   const [remembered] = useNewWorktreeProfile(repo);
   const profile = draft?.profile ?? remembered;
@@ -175,6 +176,21 @@ export function Composer({
   // same agent stands in, main first (commandSource says why that is sound)
   const source = useStore((s) => (drafting ? commandSource(s.rows, repoId, spawnAgent, defaultAgent) : id));
   const commands = useLocalField(source, "commands");
+  // the one thing to do about a full context, offered by the ring: the agent's own command,
+  // when it has one and is not mid-turn
+  const canCompact = commands.some((c) => c.name === "compact");
+  const midTurn = active?.agent === "working" || active?.agent === "waiting";
+  const compactable = canCompact && !midTurn;
+  const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
+  const compactItems = () => [
+    {
+      id: "compact",
+      label: "compact the context",
+      detail: "shrink the chat to a summary",
+      disabled: !canCompact ? "this agent offers no compact command" : midTurn ? "wait for the turn to end" : undefined,
+      onClick: compact,
+    },
+  ];
   const [caret, setCaret] = useState(0);
   /** the mention the user dismissed with esc, so it does not reopen on the next keystroke */
   const [dismissed, setDismissed] = useState<number | null>(null);
@@ -419,6 +435,20 @@ export function Composer({
 
   return (
     <div className="composer chat-input">
+      {/* where a message from main goes, on its own row above the box the way the draft's birth-time
+          choices sit above it: a worktree's messages only ever go to that worktree (a fork is the
+          row menu's "new worktree from here"), so only main has the choice */}
+      {onMain && !greenfield && !drafting && active && (
+        <div className="hint composer-target">
+          <TargetChip
+            title={title}
+            main
+            value={spawnNew ? "new" : "here"}
+            onChange={(t) => setSpawnNew(t === "new")}
+            onClose={refocus}
+          />
+        </div>
+      )}
       {boxId &&
         images.map((img, i) => (
           <ImageChip
@@ -556,26 +586,6 @@ export function Composer({
           back when it closes. */}
       <div className="hint composer-knobs">
         <span className="spawn-left">
-          {!greenfield && !drafting && active && (
-            <TargetChip
-              title={title}
-              main={onMain}
-              value={spawnNew ? "new" : "here"}
-              onChange={(t) => setSpawnNew(t === "new")}
-              onClose={refocus}
-            />
-          )}
-          {spawning ? (
-            <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
-          ) : (
-            active && (
-              <ModeChip
-                value={activeMode}
-                onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
-                onClose={refocus}
-              />
-            )
-          )}
           {spawning ? (
             <ModelChip models={agentModels} value={newModel} onChange={setNewModel} onClose={refocus} />
           ) : (
@@ -602,34 +612,34 @@ export function Composer({
               />
             )
           )}
-        </span>
-        <span className="spawn-tools">
+          {spawning ? (
+            <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
+          ) : (
+            active && (
+              <ModeChip
+                value={activeMode}
+                onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
+                onClose={refocus}
+              />
+            )
+          )}
           {usage && !spawning && id && (
             <IconButton
               icon={<Ring fraction={usage.used / usage.size} />}
               tone="chrome"
               label={`${Math.round((100 * usage.used) / usage.size)}% of context`}
-              detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}`}
-              // the one thing to do about a full context is to compact it, and the agent that
-              // can offers the command; the figures stay in the tip, a menu is for verbs
-              {...cm.dropdown(
-                () => [
-                  {
-                    id: "compact",
-                    label: "compact the context",
-                    detail: "shrink the chat to a summary",
-                    disabled: !commands.some((c) => c.name === "compact")
-                      ? "this agent offers no compact command"
-                      : active?.agent === "working" || active?.agent === "waiting"
-                        ? "wait for the turn to end"
-                        : undefined,
-                    onClick: () => sock?.send({ t: "chat", worktreeId: id, text: "/compact" }),
-                  },
-                ],
-                "right",
-              )}
+              detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}${compactable ? " · click to compact" : ""}`}
+              // a click does the one thing there is to do about a full context; when it cannot, the
+              // menu says why, and it is the right-click menu at all times
+              onClick={(e) => {
+                if (compactable) compact();
+                else cm.openUnder(e.currentTarget, compactItems);
+              }}
+              {...cm.contextMenu(compactItems)}
             />
           )}
+        </span>
+        <span className="spawn-tools">
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar. Not on an empty project: the pane is hidden
               there, and a button that flips a hidden pane is a dead button. */}

@@ -6,22 +6,16 @@ import type { TabItem } from "../../ui/Tabs.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 
 /** the pane's header as tab items: the shell first, then the procs in config order. Each proc
- * carries the `.dot` the rail uses for its status. Restart is a thing you do to one stream, so it
- * rides on the tab itself, at its trailing edge, and stays out until the stream has exited; a
- * right-click on the tab offers the same. */
+ * carries the `.dot` the rail uses for its status. Restart is a thing you do to the stream you are
+ * looking at, so it rides on the open tab at its trailing edge; a right-click on any tab offers
+ * the same for that one. */
 export function useTermTabs({
   worktreeId,
   procs,
-  stream,
-  exited,
   onRestart,
 }: {
   worktreeId: string;
   procs: ProcState[];
-  /** the open tab */
-  stream: string;
-  /** the open stream has exited, so its restart stays out */
-  exited: boolean;
   onRestart: (stream: string) => void;
 }): TabItem<string>[] {
   const sock = useSock();
@@ -36,7 +30,6 @@ export function useTermTabs({
       tip: tip("A shell in this worktree", undefined, { placement: "top" }),
       menu: () => shellItems(worktreeId, deps),
       trail: trail(SHELL_STREAM, "Restart the shell"),
-      alert: stream === SHELL_STREAM && exited,
     },
     ...procs.map((p) => ({
       id: p.name,
@@ -45,7 +38,6 @@ export function useTermTabs({
       tip: tip(`${p.command}\n${p.status} on :${p.port}`, undefined, { placement: "top" }),
       menu: () => procItems(p, worktreeId, deps),
       trail: trail(p.name, `Restart ${p.name}`),
-      alert: stream === p.name && exited,
     })),
   ];
 }

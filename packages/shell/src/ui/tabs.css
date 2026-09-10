@@ -80,10 +80,10 @@
     color: var(--text2);
     font-variant-numeric: tabular-nums;
   }
-  /* the trail floats over the button's end rather than sitting beside it, so the button is the
-   whole tab and a press on the reserved slot still opens it; the button keeps the slot clear.
-   Hidden with visibility so it leaves the tab order until it is shown. */
-  .tab:has(.tab-trail) .tab-btn {
+  /* the trail is the open tab's alone, so the tab grows by the slot when it opens. It floats over
+   the button's end rather than sitting beside it, so the button is the whole tab and the slot is
+   the button's own padding. */
+  .tab-trailed .tab-btn {
     padding-right: calc(var(--row-inset) + 26px);
   }
   .tab-trail {
@@ -93,12 +93,6 @@
     right: 6px;
     display: flex;
     align-items: center;
-    visibility: hidden;
-  }
-  .tab:hover .tab-trail,
-  .tab:focus-within .tab-trail,
-  .tab-alert .tab-trail {
-    visibility: visible;
   }
   /* the pane's close and its actions: the head's own inset, outside the scrolling list */
   .tabs-end {

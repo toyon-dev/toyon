@@ -63,7 +63,7 @@ export function TerminalPane({
     }
     setExit({ code });
   };
-  const tabs = useTermTabs({ worktreeId, procs, stream, exited: exit !== null, onRestart: restart });
+  const tabs = useTermTabs({ worktreeId, procs, onRestart: restart });
   return (
     <Pane
       className="term-pane"

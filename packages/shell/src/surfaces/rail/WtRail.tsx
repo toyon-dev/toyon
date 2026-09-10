@@ -435,6 +435,7 @@ export function WtRail() {
               className="rail-new"
               data-tip="New worktree"
               data-tip-key={chord("new")}
+              data-tip-placement="left"
               onClick={() => dispatch({ a: "open", overlay: { kind: "prompt" } })}
             >
               <span className="rail-gut">
@@ -461,7 +462,7 @@ export function WtRail() {
                 {...tip(
                   `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that toyon did not make`,
                   undefined,
-                  "follow",
+                  "left",
                 )}
                 onClick={() => dispatch({ a: "toggle-discovered" })}
               >

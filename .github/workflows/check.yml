@@ -1,0 +1,31 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    # macOS is the supported platform. The Linux column runs so the gap is measured on every PR
+    # (notes/MVP.md, item 6) but it does not block a merge until that pass is done.
+    continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # pinned rather than read from package.json so a runner and a laptop disagree only
+          # when someone means them to; engines.bun there is the floor for humans
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      # typecheck + biome + tests + bridge size gate; the daemon tests run real git in temp repos
+      - run: bun run check

@@ -95,6 +95,7 @@ const store = createStore(
     systemDark: prefersDark(),
     storedActive: read(localStorage, STORAGE.active),
     storedRepo: read(localStorage, STORAGE.repo),
+    storedGreenfield: read(localStorage, STORAGE.greenfield) || null,
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",
     storedPanels: storedPanels(),
     storedLastActive: storedLastActive(),

@@ -286,7 +286,9 @@ export function LeftDock({ width }: { width: number }) {
       >
         {tab === "changes" && files.length > 0 && (
           <>
-            <div className="section-title">uncommitted · {files.length}</div>
+            {/* the tab already says changes and how many; the title is only needed to tell this
+                section from the committed one under it */}
+            {committed.length > 0 && <div className="section-title">uncommitted · {files.length}</div>}
             {files.map((f, i) => (
               <GitFileRow
                 key={f.path}

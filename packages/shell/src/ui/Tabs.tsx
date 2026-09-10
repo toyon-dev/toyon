@@ -13,7 +13,8 @@ export type TabItem<Id extends string> = {
   /** before the label: the proc's status dot */
   lead?: ReactNode;
   /** after the label, hidden until the tab is hovered or focused: the stream's restart. A sibling
-   * of the tab's own button rather than a child, since a button cannot hold one. */
+   * of the tab's own button floated over its end rather than a child, since a button cannot hold
+   * one, and the tab's button stays the whole tab. */
   trail?: ReactNode;
   /** the trail stays visible: the stream has exited and its restart is the one thing to do */
   alert?: boolean;

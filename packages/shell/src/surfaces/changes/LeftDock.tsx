@@ -265,7 +265,17 @@ export function LeftDock({ width }: { width: number }) {
         owner="changes-tabs"
         label="changes panel"
         items={[
-          { id: "changes", label: files.length > 0 ? `changes · ${files.length}` : "changes" },
+          {
+            id: "changes",
+            label:
+              files.length > 0 ? (
+                <>
+                  changes <span className="tab-count">{files.length}</span>
+                </>
+              ) : (
+                "changes"
+              ),
+          },
           { id: "history", label: "history" },
         ]}
         current={tab}

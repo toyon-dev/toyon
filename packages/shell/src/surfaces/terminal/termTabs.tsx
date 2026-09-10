@@ -32,7 +32,8 @@ export function useTermTabs({
     {
       id: SHELL_STREAM,
       label: "shell",
-      tip: tip("A shell in this worktree"),
+      // above: the strip heads the body, so a box below it lands on the first lines of output
+      tip: tip("A shell in this worktree", undefined, { placement: "top" }),
       menu: () => shellItems(worktreeId, deps),
       trail: trail(SHELL_STREAM, "Restart the shell"),
       alert: stream === SHELL_STREAM && exited,
@@ -41,7 +42,7 @@ export function useTermTabs({
       id: p.name,
       label: p.name,
       lead: <span className={`dot ${p.status}`} />,
-      tip: tip(`${p.command}\n${p.status} on :${p.port}`),
+      tip: tip(`${p.command}\n${p.status} on :${p.port}`, undefined, { placement: "top" }),
       menu: () => procItems(p, worktreeId, deps),
       trail: trail(p.name, `Restart ${p.name}`),
       alert: stream === p.name && exited,

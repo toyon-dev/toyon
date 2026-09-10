@@ -9,13 +9,13 @@
    The rule under the strip is an inset shadow rather than a border, because a shadow paints under
    the children: the open tab's own background covers it, and the rule breaks there without a
    second rule to keep in step. */
-  /* the dense tier: the strip's text is the small tier, and the rows it heads (changed files, the
-   terminal's lines) are on the same rung, so the taller row token read as a header for a list of
-   something bigger */
+  /* the dense tier by default: the strip's text is the small tier, and a pane head is on the same
+   rung as the terminal's lines. A parent may name the taller one (`--tabs-height`): the dock does,
+   since its strip heads a whole panel under the bar rather than a pane inside a column. */
   .tabs {
     display: flex;
     align-items: stretch;
-    min-height: var(--row-height-sm);
+    min-height: var(--tabs-height, var(--row-height-sm));
     flex-shrink: 0;
     min-width: 0;
     background: var(--tabs-strip, var(--sunken));
@@ -39,7 +39,8 @@
   .tab {
     position: relative;
     display: flex;
-    align-items: center;
+    /* the button stretches to the strip's height, so a press anywhere on the tab opens it */
+    align-items: stretch;
     flex-shrink: 0;
     color: var(--text1);
     font: var(--type-ui-sm);
@@ -74,11 +75,24 @@
   .tabs-fill .tab-btn {
     justify-content: center;
   }
-  /* the slot is reserved on every tab that has one, so a change of tab never reflows the strip;
-   hidden this way it also leaves the tab order until it is shown */
+  /* a count beside the label, in the skip tier: the label is the tab, the number is an aside */
+  .tab-count {
+    color: var(--text2);
+    font-variant-numeric: tabular-nums;
+  }
+  /* the trail floats over the button's end rather than sitting beside it, so the button is the
+   whole tab and a press on the reserved slot still opens it; the button keeps the slot clear.
+   Hidden with visibility so it leaves the tab order until it is shown. */
+  .tab:has(.tab-trail) .tab-btn {
+    padding-right: calc(var(--row-inset) + 26px);
+  }
   .tab-trail {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 6px;
     display: flex;
-    margin-right: 6px;
+    align-items: center;
     visibility: hidden;
   }
   .tab:hover .tab-trail,

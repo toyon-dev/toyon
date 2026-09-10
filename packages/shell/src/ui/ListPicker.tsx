@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusOnMount } from "./hooks.ts";
-import { Kbd } from "./Kbd.tsx";
+import { KeyHints } from "./KeyHints.tsx";
 import { useListNav } from "./listNav.ts";
 import { Overlay } from "./Overlay.tsx";
 
@@ -157,16 +157,7 @@ export function ListPicker<T>({
       {footer?.(q, results)}
     </div>
   );
-  const keysEl = hints.length > 0 && (
-    <div className="lp-keys">
-      {hints.map(([k, label]) => (
-        <span key={k} className="lp-key">
-          <Kbd k={k} />
-          {label}
-        </span>
-      ))}
-    </div>
-  );
+  const keysEl = hints.length > 0 && <KeyHints hints={hints} />;
   return (
     <Overlay onClose={onBack} boxClass="quick-open" anchored={anchored}>
       {inputEl}

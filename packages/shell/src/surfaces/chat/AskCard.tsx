@@ -15,6 +15,7 @@ import { useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
+import { KeyHints } from "../../ui/KeyHints.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import {
   activeQuestion,
@@ -30,6 +31,15 @@ import {
 } from "./ask.ts";
 
 type Ask = Extract<ChatItem, { kind: "ask" }>;
+
+/** the same key row a picker draws under its rows: one hint per cell, so a verb never breaks away
+ * from the key it belongs to when the card is narrow */
+const KEYS: Array<[string, string]> = [
+  ["↑↓", "move"],
+  ["⏎", "choose"],
+  ["⌘⏎", "send"],
+  ["esc", "back to the message box"],
+];
 
 const CLOSED: Record<string, string> = {
   skipped: "you skipped this",
@@ -160,22 +170,23 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
               const at = rows.findIndex((r) => r.q === qi && r.option.value === o.value);
               const on = draft[qi]?.selected.includes(o.value);
               return (
-                <Button
+                <button
                   key={o.value}
-                  variant="outline"
-                  size="md"
-                  className={`ask-opt ${at === nav.index ? "active" : ""}`}
-                  on={on}
+                  type="button"
+                  className={`qo-item cmd-item ask-opt row-edge ${at === nav.index ? "active" : ""} ${on ? "on" : ""}`}
+                  // mousemove, not mouseenter, for the same reason the picker gives: a row arriving
+                  // under a stationary pointer must not steal the highlight the keyboard is on
+                  onMouseMove={() => at !== nav.index && nav.setIndex(at)}
                   onClick={() => {
                     nav.setIndex(at);
                     pick(rows[at]!);
                     card.current?.focus();
                   }}
                 >
-                  <Kbd k={String(oi + 1)} chip />
-                  <span className="ask-label">{o.label}</span>
-                  {o.description && <span className="ask-desc">{o.description}</span>}
-                </Button>
+                  <Kbd k={String(oi + 1)} className="ask-num row-dim" />
+                  <span className="ip-name">{o.label}</span>
+                  {o.description && <span className="ip-desc row-dim">{o.description}</span>}
+                </button>
               );
             })}
           </div>
@@ -183,7 +194,7 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
             <pre className="ask-preview">{nav.active.option.preview}</pre>
           )}
           {q.note && noteFor !== qi && (
-            <Button tone="quiet" className="ask-note-btn" onClick={() => setNoteFor(qi)}>
+            <Button tone="quiet" onClick={() => setNoteFor(qi)}>
               <Kbd k="n" chip />
               {draft[qi]?.note?.trim() ? "edit your note" : "add a note"}
             </Button>
@@ -212,17 +223,15 @@ function QuestionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { kin
         </div>
       ))}
       <div className="ask-foot">
-        <Button variant="outline" className="ask-send" disabled={!canSubmit(questions, draft)} onClick={submit}>
+        <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
           send
         </Button>
-        <Button tone="quiet" onClick={() => send()}>
+        <Button tone="quiet" size="md" onClick={() => send()}>
           <Kbd k="s" chip />
           skip
         </Button>
-        <span className="ask-keys">
-          <Kbd k="↑↓" /> move <Kbd k="⏎" /> choose <Kbd k="⌘⏎" /> send <Kbd k="esc" /> back to the message box
-        </span>
       </div>
+      <KeyHints hints={KEYS} className="ask-keys" />
     </fieldset>
   );
 }
@@ -263,19 +272,17 @@ function PermissionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { k
         <div className="ask-detail md" dangerouslySetInnerHTML={{ __html: html }} />
       )}
       {open ? (
-        <div className="ask-options ask-choices">
+        <div className="ask-options">
           {ask.choices.map((c, i) => (
-            <Button
+            <button
               key={c.id}
-              variant="outline"
-              size="md"
-              tone={c.kind.startsWith("reject") ? "danger" : undefined}
-              className="ask-opt"
+              type="button"
+              className={`qo-item cmd-item ask-opt row-edge ${c.kind.startsWith("reject") ? "deny" : ""}`}
               onClick={() => decide(c.id)}
             >
-              <Kbd k={String(i + 1)} chip />
-              <span className="ask-label">{c.name}</span>
-            </Button>
+              <Kbd k={String(i + 1)} className="ask-num row-dim" />
+              <span className="ip-name">{c.name}</span>
+            </button>
           ))}
         </div>
       ) : (

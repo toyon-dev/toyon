@@ -2198,6 +2198,12 @@ body.resizing .rb-center {
   border-radius: 8px;
   background: var(--surface0);
   outline: none;
+  /* the options are a picker's rows, so the card is the box they bleed out of: --lp-bleed undoes
+     this padding for the row bands and the key strip, --lp-pad puts it back inside the row, and
+     the labels stay in the same column as the question above them */
+  --lp-bleed: -12px;
+  --lp-pad: 12px;
+  overflow: hidden;
 }
 .ask-card.done {
   border-left-color: var(--border0);
@@ -2227,27 +2233,48 @@ body.resizing .rb-center {
   color: var(--text1);
   margin-bottom: 6px;
 }
+/* An answer is picked out of a list, so the options are the app's list rows: the same band, the
+   same highlight and the same edge as the command palette and the @ menu, wearing .qo-item and the
+   command row's name/description columns. They were chips in a padded box for a while, which read
+   as four controls to press rather than one choice to make, and .btn's nowrap meant a description
+   could not wrap and ran off the card instead. */
 .ask-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  margin: 6px var(--lp-bleed) 0;
 }
-/* the option is one target however it is reached: the number is a label on the button, not a
-   separate hint parked somewhere the mouse cannot use */
+/* Prose, not a path: the palette rows are mono because they hold literals you also type, and an
+   option's label and description are neither. And prose that is the reason to pick this row, so it
+   wraps rather than ellipsising the way the slash menu's descriptions do: there the name carries
+   the meaning and the description is a nicety, here it is often the only thing telling two options
+   apart.
+
+   The selection bar moves off the row's own left edge because the card is already wearing one
+   there: an accent border saying the turn is still open. Butted against it the two became a single
+   thicker segment and the mark stopped reading as a mark; six pixels in it is plainly its own. */
 .ask-opt {
+  font: var(--type-ui);
   align-items: baseline;
-  text-align: left;
+  white-space: normal;
+  --row-edge-x: 6px;
 }
+.ask-opt .ip-desc {
+  white-space: normal;
+  overflow: visible;
+}
+/* the digit is how the row is reached, in a gutter of its own so the labels line up under each
+   other however many options there are */
+.ask-num {
+  flex: none;
+  justify-content: flex-end;
+  min-width: 10px;
+}
+/* your answer, marked the one way this app marks a selection */
 .ask-opt.on {
-  color: var(--accent);
-  border-color: currentColor;
+  --row-edge-color: var(--accent);
 }
-.ask-opt.active {
-  border-color: var(--text1);
-}
-.ask-desc {
-  color: var(--text2);
-  margin-left: 6px;
+/* saying no to the agent stops something mid-flight, which is what the danger tone is for. It sits
+   on the name rather than the row, so the seat still lifts under the pointer like any other row. */
+.ask-opt.deny .ip-name {
+  color: var(--red);
 }
 .ask-preview {
   margin: 6px 0 0;
@@ -2271,9 +2298,11 @@ body.resizing .rb-center {
   gap: 8px;
   margin-top: 10px;
 }
+/* the key strip closes the card the way it closes a picker: its own band under the actions, ruled
+   off and reaching both edges, rather than a sentence squeezed to the right of the send button */
 .ask-keys {
-  margin-left: auto;
-  color: var(--text2);
+  margin-top: 10px;
+  margin-bottom: -10px;
 }
 /* a plan is prose a person reads, and can be long: it scrolls in the card rather than the page */
 .ask-detail {

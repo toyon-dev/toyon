@@ -1,5 +1,5 @@
 import type { ReactNode, RefObject } from "react";
-import { Kbd } from "./Kbd.tsx";
+import { KeyHints } from "./KeyHints.tsx";
 import type { ListNav } from "./listNav.ts";
 
 /**
@@ -44,20 +44,13 @@ export function InlinePicker<T>({
         ))}
         {results.length === 0 && <div className="dock-empty">{empty}</div>}
       </div>
-      <div className="lp-keys">
-        <span className="lp-key">
-          <Kbd k="↑↓" />
-          moves
-        </span>
-        <span className="lp-key">
-          <Kbd k="tab" />
-          inserts
-        </span>
-        <span className="lp-key">
-          <Kbd k="esc" />
-          dismisses
-        </span>
-      </div>
+      <KeyHints
+        hints={[
+          ["↑↓", "moves"],
+          ["tab", "inserts"],
+          ["esc", "dismisses"],
+        ]}
+      />
     </div>
   );
 }

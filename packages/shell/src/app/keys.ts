@@ -60,7 +60,15 @@ export function useChords() {
             break;
           }
           case "new":
-            dispatch({ a: "open-draft" });
+            // the chord means "get me to the box", not a switch: pressed blind with a draft
+            // already open it keeps the draft and puts the caret back in it, so a hand that has
+            // not looked is never dropped back on the row it left. The rail's row still toggles,
+            // since a click on the picked row is a deliberate second look; Escape is the way back.
+            if (s.draft) {
+              if (!s.rightOpen) dispatch({ a: "show-right" });
+              // next frame: the dock may be re-appearing
+              requestAnimationFrame(() => document.querySelector<HTMLElement>(".chat-input textarea")?.focus());
+            } else dispatch({ a: "open-draft" });
             break;
           case "project":
             // the picker hangs off the pill, and zen hides the bar it lives in: leave zen first

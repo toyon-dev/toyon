@@ -37,6 +37,12 @@
       animation-name: tooltip-in-right;
     }
   }
+  /* a box beside its anchor keeps its text against it: placed to the left of a row, the line ends
+   at the row's edge, so the state word sits next to the row it describes and a detail that wraps
+   still ends there */
+  .tooltip[data-side="left"] {
+    text-align: right;
+  }
   .tooltip-key {
     margin-left: 12px;
     color: var(--text1);
@@ -45,6 +51,12 @@
   .tooltip-detail {
     margin-right: 12px;
     color: var(--text1);
+  }
+  /* the row's dot, restated beside the word for it; middle puts an 8px dot on the x-height */
+  .tooltip-dot {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 6px;
   }
   @keyframes tooltip-in-bottom {
     from {

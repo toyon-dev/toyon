@@ -28,9 +28,8 @@
     font: var(--type-mono-sm);
     font-variant-numeric: tabular-nums;
     color: var(--text2);
-    /* 38, not the 32 this used to be: a 20px control in a 32px bar leaves 6px above it, and the
-     project panel that opens over the pill needs that space for its own top edge. The bar in the
-     installed app is already this tall (the OS title bar sets it), so the two now match. */
+    /* 38: a 20px control needs room above it for the project panel's top edge when it opens over
+     the pill, and the installed app's bar is already this tall (the OS title bar sets it) */
     min-height: 38px;
   }
   /* installed PWA with window-controls-overlay: the browser drops its title bar and only the

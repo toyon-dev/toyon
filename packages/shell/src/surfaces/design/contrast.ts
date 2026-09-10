@@ -35,11 +35,10 @@ function luminance([r, g, b]: [number, number, number]): number {
 /**
  * The token's contrast against a ground, as "4.30:1".
  *
- * The ground has to be the scanned project's, and it used to be the shell's: read off the running
- * document, which is toyon's own theme. Previewing toyon that happens to be the same colour and
- * the number looked right; for any other project it was a confident figure about a background the
- * project never paints. The caller passes the project's own ground and the pane names which token
- * it used, so a wrong guess is visible rather than silent.
+ * The ground is the scanned project's, never the shell's own document: for any project but toyon
+ * that would be a confident figure about a background the project never paints. The caller passes
+ * the project's own ground and the pane names which token it used, so a wrong guess is visible
+ * rather than silent.
  */
 export function contrastRatio(value: string, ground: string): string | null {
   if (hasAlpha(value)) return null;

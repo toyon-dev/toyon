@@ -7,9 +7,6 @@ import { Button } from "../../ui/Button.tsx";
  * pane: both take the preview slot for a project that cannot show one yet, and both are the place
  * the person waits rather than a toast that is gone before they look back.
  *
- * A toast was the first shape and it was wrong: it dismisses after five seconds, so a three-minute
- * clone spent most of its life looking like nothing had happened.
- *
  * Escape closes this pane without stopping the clone (see the ladder in `app/keys.ts`); the button
  * is what stops it. Escape is reflexive, and a five-minute download is not worth losing to one. */
 export function ImportPane({ pending }: { pending: PendingRepo }) {

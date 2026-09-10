@@ -9,8 +9,6 @@ import { defaultPanels, initialState, type Panels } from "./state/store.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
-// the input primitive has no component yet, so nothing else owns its stylesheet
-import "./ui/field.css";
 import { applyTheme, cachedTheme, prefersDark } from "./theme.ts";
 import { DaemonSocket } from "./ws.ts";
 

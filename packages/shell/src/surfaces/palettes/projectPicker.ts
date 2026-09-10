@@ -1,6 +1,5 @@
 // What the project picker offers for a given query. Kept out of the component so the rules that
-// decide whether a row promises something the daemon will actually do are testable on their own:
-// the old picker offered "open <path>" for a path that did not exist, and the daemon refused it.
+// decide whether a row promises something the daemon will actually do are testable on their own.
 
 import {
   gitUrl,

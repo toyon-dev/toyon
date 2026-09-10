@@ -102,12 +102,8 @@
     color: var(--text1);
     margin-bottom: 9px;
   }
-  /* The lattice is drawn by the cells, not by a coloured ground showing through 1px gaps. The ground
-   version filled the tail of a short last row with a slab of border colour, so a group of two
-   tokens came with a long grey bar beside it saying nothing. */
-  /* No border on the container. Its top and left edges ran the full width of the grid box, so a
-   group of two cells came with a hairline stretching across the empty space beside them. Every
-   line here is drawn by a cell, which is the only way one cannot outlive its cells. */
+  /* Every line here is drawn by a cell, so no line can outlive its cells: a border on the container
+   or a ground showing through 1px gaps runs on past a short last row as a bar beside nothing. */
   /*
  * Fixed tracks, collapsed when empty. `auto-fill` with `1fr` tracks keeps every track it can fit
  * and stretches the filled ones, which left a short group's cells against the left of a wide box
@@ -188,8 +184,8 @@
     min-width: 0;
     width: calc(100% + 40px);
     margin-left: -40px;
-    /* 40px lands the content on the column exactly. It used to be 40 plus the marker's own border,
-     which put every token name two pixels right of the column it was meant to sit on. */
+    /* 40px lands the content on the column exactly: the marker is drawn out of flow, so its border
+     is not part of the offset */
     padding: 2px 10px 2px 40px;
   }
   .design-face:hover,
@@ -279,9 +275,8 @@
     margin-left: -40px;
     min-height: var(--row-height-sm);
     text-align: left;
-    /* the 2px was the marker's border, which was load bearing: it plus the 28px count and the 10px
-     gap are what put the name on the column. .row-edge draws the marker out of flow, so the gutter
-     has to keep those two pixels itself. */
+    /* 2px stands in for the marker's border, which .row-edge draws out of flow: 2px plus the 28px
+     count and the 10px gap put the name on the column. */
     padding: 0 10px 0 2px;
     border: 0;
     background: none;
@@ -329,17 +324,11 @@
     font: var(--type-mono);
   }
 
-  /* Text holds a centred measure and the grids break out of it to the full width of the pane, the
-   way a wide table sits outside the column in a document. Placed last because the `margin`
-   shorthands above reset the inline axis. */
-  /*
- * One centre line. Everything sits on it, and a grid too wide for the column grows out of the
- * column symmetrically rather than sliding off to one side.
- *
- * Every element here is centred in the same 1500px section, so their midpoints coincide whatever
- * their widths. Text and a grid small enough to fit are held to the 720 measure; a grid that wants
- * more takes up to the full 1500 and the extra appears equally on both sides.
- */
+  /* One centre line: text holds a centred measure and a grid too wide for it grows out of the
+   column symmetrically, the way a wide table sits outside the column in a document. Every element
+   is centred in the same 1500px section, so their midpoints coincide whatever their widths; text
+   and a grid that fits are held to the 720 measure. Placed last because the `margin` shorthands
+   above reset the inline axis. */
   .design-section {
     max-width: 1500px;
     margin-inline: auto;

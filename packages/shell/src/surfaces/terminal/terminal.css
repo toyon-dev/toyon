@@ -9,7 +9,7 @@
       padding: 4px 12px;
     }
   }
-  /* the tab strip is the pane's header, so the buttons no longer float over the terminal */
+  /* the tab strip is the pane's header */
   .term-tabs {
     display: flex;
     align-items: center;

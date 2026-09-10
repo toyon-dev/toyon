@@ -3,19 +3,14 @@ import postcss, { type Container } from "postcss";
 
 /**
  * The stylesheets as the tests read them: every rule, with its selectors resolved through any
- * nesting and at-rule it sits in, and its declarations as property/value pairs.
+ * nesting and at-rule it sits in, and its declarations as property/value pairs. Resolving the
+ * selector is what lets a test keep saying `.ask-card.done .ask-lead` in its allowlist after that
+ * rule is written as `.ask-card { &.done .ask-lead { … } }`.
  *
- * The tests used to match `[^{}]+\{[^{}]*\}` over the raw text, which reads a flat stylesheet and
- * nothing else: the first nested rule would have been matched as its parent's declarations, and an
- * `@layer` or `@media` block as a rule named after its prelude. Resolving the selector here is what
- * lets a test keep saying `.ask-card.done .ask-lead` in its allowlist after that rule is written as
- * `.ask-card { &.done .ask-lead { … } }`.
- *
- * PostCSS rather than css-tree, which was tried first: css-tree 3 only parses a nested rule that
- * opens with `&`, and turns `.row { … }` inside a block into a Raw node the walk never sees. A rule
- * a test cannot see is an invariant that has quietly stopped being checked, which is the one
- * failure mode a test like this must not have. PostCSS parses nesting syntactically and keeps the
- * selector as written, so `.design-tail > summary` stays spelled the way the allowlist spells it.
+ * PostCSS rather than css-tree: css-tree 3 only parses a nested rule that opens with `&`, and turns
+ * `.row { … }` inside a block into a Raw node the walk never sees, which is a rule a test has
+ * quietly stopped checking. PostCSS parses nesting syntactically and keeps the selector as written,
+ * so `.design-tail > summary` stays spelled the way the allowlist spells it.
  */
 export type CssRule = {
   /** each selector of the rule, fully resolved: `.rail .row`, never `& .row` */

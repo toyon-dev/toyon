@@ -64,11 +64,8 @@
       color: var(--text0);
       background: var(--element0);
     }
-    /* text2, the same tier every other :disabled rule already used. This briefly had a fourth tier of
-   its own, because disabled used to be a surface step that sits 1.4 L* off text2, so a dead toolbar
-   icon and a live one were the same colour. The real fault was that an icon button at rest was on
-   text2 at all; once rest moved up to text1 with every other control, 4.3:1 against 2.1:1 says
-   disabled perfectly well and the extra tier had nothing left to do. */
+    /* text2, the same tier every :disabled rule uses; 4.3:1 against rest's 2.1:1 says disabled on
+   its own, so there is no fourth tier for it */
     &:disabled {
       color: var(--text2);
       cursor: default;
@@ -78,15 +75,8 @@
 
   /* ---- the two other closed axes: variant (the treatment) and tone (what the colour means) ----
 
-   Both are small because both were counted rather than invented. At rest exactly two things ever
-   varied the treatment: .btn-outline's border and .set-v's sunken fill. So there are three
-   variants and no `solid`, `link` or `transparent`, which are names other systems have and this
-   app does not.
-
-   Tone is what the twenty semantic classes turned out to be holding: seven colour values, and
-   only four meanings once `on` was pulled out of them as a state. Six surfaces had each written
-   `color: var(--accent)` for their own `.on`, because .btn-icon.on existed and .btn.on did not;
-   they agreed by luck, so .btn.on says it once instead. */
+   Both are closed: a treatment or a meaning that is not here is added here, and `on` is a state
+   rather than either, said once by .btn.on below. */
 
   /* variant: field is a button drawn as a form field, which is what a settings value is: it shows
    the current one and you click it to change it */
@@ -117,10 +107,10 @@
     color: var(--red);
   }
 
-  /* on: a text button's accent, and a toolbar switch's seat. The seat is the older of the two rules
-   (.btn-icon.on) and the reason it stays a seat is written there. `chrome` is that same switch
-   behaviour named, so a text button can ask for it (the project pill) and an icon button can
-   decline it (the composer's picker is a mode, not a panel, so it takes tone-primary). */
+  /* on: a text button's accent, and a toolbar switch's seat (.tone-chrome below says why it is a
+   seat). `chrome` is that same switch behaviour named, so a text button can ask for it (the project
+   pill) and an icon button can decline it (the composer's picker is a mode, not a panel, so it
+   takes tone-primary). */
   .btn.on,
   .btn-icon.on {
     color: var(--accent);
@@ -129,11 +119,10 @@
    the seat gets deeper, element0 under the pointer and element1 when it is on, and the glyph never
    changes colour. The accent is for picking one thing out of a set; spending it here painted a
    branch icon red, which reads as a merge conflict rather than as an open panel, and a 2px accent
-   bar across the bottom of a 24px rounded square is a graphic fighting a shape. This used to be
-   keyed on .btn-icon, which made it a fact about the element instead of about the control: the
+   bar across the bottom of a 24px rounded square is a graphic fighting a shape. Keyed on the tone
+   rather than on .btn-icon, because it is a fact about the control and not the element: the
    project pill is a text button that wants the seat, and the composer's picker is an icon button
-   that wants the accent, and both had to override it to say so. Declared after :hover so a hovered
-   switch that is on still reads as on. */
+   that wants the accent. Declared after :hover so a hovered switch that is on still reads as on. */
   .tone-chrome {
     &.on {
       color: var(--text0);

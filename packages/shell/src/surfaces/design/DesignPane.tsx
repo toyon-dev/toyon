@@ -60,8 +60,7 @@ export function DesignPane({
       resizable={!full}
       onDragStart={onDragStart}
       // The other panes put what you are looking at here: the diff its file path, the terminal its
-      // tabs. Naming this one "Design system" was the only header in the app that said what the
-      // thing already obviously is. What it cannot say for itself is how far the scan reached.
+      // tabs. This one says how far the scan reached, the one thing the body cannot say for itself.
       title={index ? <span>{reach(index)}</span> : undefined}
       onClose={() => dispatch({ a: "toggle-design" })}
       actions={
@@ -141,11 +140,8 @@ function Gap({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Grouped by what a token *is*, not by what it is called.
- *
- * Name prefixes looked like the obvious grouping and are not: `--accent`, `--aqua` and `--blue`
- * are each their own prefix, so every colour became a section of one, and a page of colours turned
- * into forty headed bands with one swatch apiece. Kind gives four groups for any project.
+ * Grouped by what a token *is*, not by what it is called: name prefixes make every colour a
+ * section of one (`--accent`, `--aqua`, `--blue`), while kind gives four groups for any project.
  *
  * Order inside a group is the order the stylesheet declares them, which is the grouping the author
  * already made and the only one worth trusting: a token file writes the surface rungs together,
@@ -167,9 +163,9 @@ function groundOf(tokens: DesignToken[]): DesignToken | undefined {
   return tokens.find((t) => t.kind === "color" && parseHex(t.resolved ?? t.value) !== null);
 }
 
-// `index.live` is not read here on purpose. It said "declared, not resolved" in the header, which
-// is true of every scan so far and so told a reader nothing; when the live half lands and the two
-// actually differ, the difference is worth a word and this is where it goes.
+// `index.live` is deliberately unread: it is false for every scan until the live half lands, and a
+// header saying "declared, not resolved" on every scan tells a reader nothing. When the two can
+// differ, the difference is worth a word and this is where it goes.
 function Tokens({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Outline; clear: () => void }) {
   const ground = groundOf(tokens);
   /* Which other tokens carry this one's value. Built once for the whole set rather than per swatch,
@@ -231,9 +227,7 @@ function Tokens({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Ou
  * to the left, and so on.
  *
  * Written as CSS rather than numbers because the count of cells in a row depends on a width only
- * the layout knows. A previous attempt used mod() on the section width alone, which aligned the
- * lattice but ignored the group: every row was pushed left the same two cells whether it held six
- * chips or thirty-three. round() does the same snapping with the row's own width in hand.
+ * the layout knows, and round() snaps with the row's own width in hand.
  */
 function breakout(count: number): React.CSSProperties {
   const cell = "var(--design-cell)";
@@ -433,11 +427,8 @@ function Swatch({
 }
 
 /**
- * The whole chip, a line at a time.
- *
- * One sentence ran to nearly the tooltip's full width and read as a paragraph about a swatch; these
- * are three separate facts and belong on three lines. The value is worth repeating even though the
- * cell shows it, because the cell truncates and this is where you come to read it in full.
+ * The whole chip, three facts on three lines. The value repeats even though the cell shows it,
+ * because the cell truncates and this is where you come to read it in full.
  */
 function describe(
   token: DesignToken,
@@ -540,8 +531,7 @@ function Classes({
   const shared = classes.filter((c) => c.uses >= 2);
   const rest = classes.filter((c) => c.uses < 2);
   const unwrapped = shared.filter((c) => c.unwrapped).length;
-  // said once, in the header, and marked on the rows it is about. Listing them again underneath
-  // was the same names twice on one screen.
+  // said once, in the header, and marked on the rows it is about
   const note = classes.length
     ? `${shared.length} reused of ${classes.length}` +
       (unwrapped ? `, ${unwrapped} with no component of their name` : "")

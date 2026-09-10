@@ -82,7 +82,6 @@ export function Center() {
   // each preview's origin: the only target we post to and the only sender we accept for that frame
   const originRefs = useRef(new Map<string, string>());
 
-  // let the rest of the shell post commands into preview iframes
   useEffect(() => {
     previewBus.post = (id, m) =>
       frameRefs.current.get(id)?.contentWindow?.postMessage({ __toyon: true, ...m }, originRefs.current.get(id) ?? "*");

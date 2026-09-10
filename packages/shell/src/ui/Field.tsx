@@ -5,11 +5,6 @@ import "./field.css";
 /**
  * Every input and textarea in the app, across three closed axes: size, font, `bare`.
  *
- * Counted, like Button's, rather than designed. Five surface rules had each changed the box or the
- * face of `.field` on their own: the form's 5px padding, the palette's mono face on a prose-sized
- * box, the anchored strip's stripped border, the composer's bare textarea, the ask note's ui face.
- * Those are three sizes, two faces and one treatment, and nothing else ever varied.
- *
  * The face follows the size unless told otherwise: an identifier box (sm, md) holds a path, a
  * branch, a command, which are literals the person also types elsewhere, so it is mono; a prose
  * box (lg) holds what they write, so it is ui. The palette says `font="mono"` on its prose-sized
@@ -43,8 +38,7 @@ function classes({ size = "sm", font, bare, className }: Shared): string {
 
 // forwardRef, because on React 18 a function component is handed no `ref` at all: it is not in
 // the props, so spreading `...rest` onto the element drops it without a type error. The picker's
-// focus-on-mount, the composer's caret placement and the prompt's field all reach in this way, and
-// every one of them went dead when these wrappers replaced the raw elements.
+// focus-on-mount, the composer's caret placement and the prompt's field all reach in this way.
 export const Field = forwardRef<HTMLInputElement, Omit<ComponentProps<"input">, "size"> & Shared>(function Field(
   { size, font, bare, className, ...rest },
   ref,

@@ -25,9 +25,9 @@ import type { DiffLine } from "./toolCall.ts";
  * transcript. An unregistered language colours nothing, which is the right failure.
  *
  * The C-family grammars are not here; BY_EXT sends those extensions to javascript instead. It gets
- * their comments, strings, numbers and shared keywords right, which is most of what a glance down a
- * transcript reads, and costs 27 KB less than carrying c, cpp, csharp, java and swift. Ruby, php
- * and sql have no such neighbour and are left to colour nothing. */
+ * their comments, strings, numbers and shared keywords right, if not `int` or `#include`, which is
+ * most of what a glance down a transcript reads, and costs 27 KB less than carrying c, cpp, csharp,
+ * java and swift. Ruby, php and sql have no such neighbour and are left to colour nothing. */
 const low = createLowlight({
   bash,
   css,
@@ -69,8 +69,7 @@ const BY_EXT: Record<string, string> = {
   pyi: "python",
   rs: "rust",
   go: "go",
-  // the C family borrows javascript: braces, line comments, quoted strings and half the keywords
-  // land, `int` and `#include` do not. Better than plain, and 27 KB cheaper than five grammars
+  // the C family borrows javascript; the note on createLowlight above says why
   java: "javascript",
   kt: "javascript",
   c: "javascript",

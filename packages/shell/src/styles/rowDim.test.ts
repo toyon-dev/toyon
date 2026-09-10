@@ -2,14 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { cssRules, shellCss } from "./cssRules.ts";
 
 /**
- * The bug this exists to stop, which landed three separate times before anyone caught it:
- *
- * A row lifts its seat on hover or when it is picked, and a child inside it goes on naming --text2.
- * text2 on element1 is 1.06:1, so that child does not go quiet, it disappears. It happened to a
- * changed file's directory, then to the same span in the picker, then to the design pane's count
- * and path, and the worktree row's "more" button was worse again: hidden until the row is hovered,
- * so it arrived at 1.44:1 and was invisible for as long as it existed. Each time the fix was one
- * more hand-written rule for that one child, which is why it kept happening.
+ * A row lifts its seat on hover or when it is picked, and a child inside it that goes on naming
+ * --text2 does not go quiet, it disappears: text2 on element1 is 1.06:1. That landed four times,
+ * each fixed with one more hand-written rule for that one child, which is why it kept happening.
  *
  * The rule is that a child sitting a tier below its row takes .row-dim and reads --row-dim-color,
  * which the row sets when its seat lifts. Naming --text2 directly inside a row is therefore the
@@ -39,9 +34,8 @@ const NOT_A_TIER = [".dot.starting", ".dot.discovered", ".dot.unseen"];
 
 /** text on something that never lifts: an empty state, a hint, a heading, a control switched off */
 const NEVER_LIFTS = [
-  /* the quiet tone: a way out, an aside, a link. It replaced .deep-link, .ask-note-btn and
-     .ask-skip, which were each here for the same reason and are one rule now. No quiet button
-     sits inside a row; if one ever does it takes .row-dim like any other passenger. */
+  /* the quiet tone: a way out, an aside, a link. No quiet button sits inside a row; if one ever
+     does it takes .row-dim like any other passenger. */
   ".tone-quiet",
   ".ask-answered",
   ".ask-card.done",

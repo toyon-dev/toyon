@@ -56,7 +56,7 @@ export function LeftDock({ width }: { width: number }) {
   const [fileMenu, setFileMenu] = useState<{ x: number; y: number; path: string; canDiscard: boolean } | null>(null);
   const closeMenu = useCallback(() => setFileMenu(null), []);
 
-  // hover a changed file -> highlight only its changed lines' elements
+  // hovering a changed file highlights only its changed lines' elements
   const hoverPathRef = useRef<string | null>(null);
   const ranges = useLocalField(activeId, "changedRanges");
   const hoverFile = useCallback(

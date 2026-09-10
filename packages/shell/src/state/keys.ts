@@ -1,4 +1,4 @@
-/** every localStorage key the shell uses, in one place (they were literals across four files) */
+/** every localStorage key the shell uses, in one place */
 export const STORAGE = {
   /** last selected worktree id, restored on reload */
   active: "toyon-active",

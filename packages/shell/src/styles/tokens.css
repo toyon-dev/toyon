@@ -120,9 +120,7 @@
    *   overlay   it has taken the screen and the app is dimmed behind a scrim
    *
    * These are complete box-shadow values, which is why they are not --shadow-*: --shadow is
-   * the colour inside them, the same way --face-* is the family inside a --type-*. There were five
-   * floating surfaces and four recipes between them before this, including one scrimmed card with
-   * the largest shadow in the app and another, also scrimmed, with none at all.
+   * the colour inside them, the same way --face-* is the family inside a --type-*.
    *
    * Two things deliberately stay off this: the worktree rail's peek, whose negative spread is a
    * seam rather than a lift, and the jump-down pill, which is a control and not a surface. */
@@ -164,12 +162,10 @@
    * needed, that is its name.
    *
    * No mono token states a leading. Every consumer is a row, an input or a stacked line whose height
- * is padding plus one line box, and naming an absolute there moved all of them: 18px grew the tool
- * block by 38%, and 13px on stacked code was half a pixel tight. `normal` is the leading mono has
- * always had here and it is the right one. Only the sans tiers carry a ratio, the 1.5 the shell has
- * inherited from the root all along.
- *
- * The one trap: `font` resets every font-variant-* longhand, so a rule using one of these has to
+   * is padding plus one line box, so an absolute there would resize all of them; `normal` is the
+   * right one. Only the sans tiers carry a ratio, the 1.5 the shell inherits from the root.
+   *
+   * The one trap: `font` resets every font-variant-* longhand, so a rule using one of these has to
    * re-declare font-variant-numeric: tabular-nums after it. Everything with a number that changes
    * under you depends on that. */
     --type-ui-sm: 400 11px / 1.4 var(--face-ui);

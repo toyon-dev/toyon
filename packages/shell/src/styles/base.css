@@ -184,10 +184,8 @@
     height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
-    /* full green, the same value the +N counts use. It was mixed toward the surface for a while on the
-   argument that running is the steady state and so shouldn't carry the second-most chroma in the
-   palette; in practice a status dot that is not plainly green is not doing its job, and the eight
-   pixels it occupies are not what makes a window loud. */
+    /* full green, the same value the +N counts use: a status dot that is not plainly green is not
+   doing its job, and the eight pixels it occupies are not what makes a window loud */
     &.running {
       background: var(--green);
     }

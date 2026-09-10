@@ -9,29 +9,10 @@ import "./button.css";
  * Every pressable control in the app, across five closed axes: variant, size, tone, `on`, `mono`,
  * and one more state, `busy`, for the moment between a press and its answer.
  *
- * Each of the five is small because each was counted rather than chosen from a list other design
- * systems publish. At rest exactly two things ever varied the treatment, so there are three
- * variants and no `solid`, `link` or `transparent`. Twenty semantic classes held seven colour
- * values between them, and only four meanings once `on` was separated out of them, so there are
- * four tones. Five controls set the mono face, so `mono` is a prop; one set a smaller ui face, so
- * that stayed with its surface.
- *
- * What the axes replaced, in order of how quietly it went wrong:
- *
- * The box. Ten semantic classes had each written their own padding on .btn's 1px 8px, four of them
- * near-misses of the same 4px 8px. An AskCard option was `btn btn-outline picker-item ask-opt`, three
- * of which declare padding at equal specificity, so the winner was their line numbers in a
- * 2400-line stylesheet; picker-item won and dragged a list row's width and min-height onto a chip.
- *
- * The `on` state. base.css had .btn-icon.on and no .btn.on, so six surfaces each wrote
- * `color: var(--accent)` for their own. They agreed, which is luck rather than a system, and the
- * two that did not agree (the project pill's seat, the composer picker's accent) were overrides
- * winning on source order rather than choices anyone could read.
- *
- * Dead colour. .rb-btn set the text1 that .btn-icon already sets, and .toggle restated
- * .btn-icon.on. A class that does nothing is what an open escape hatch produces, so `className`
- * no longer carries colour: it is left only for how a button sits in its parent (a max-width, a
- * flex-shrink), which is genuinely the surface's business. styles/button.test.ts holds that line.
+ * Each axis is closed: a variant, size or tone that is not here is added here, not in a surface's
+ * stylesheet. `className` never carries colour or the box; it is left for how a button sits in its
+ * parent (a max-width, a flex-shrink), which is genuinely the surface's business.
+ * styles/button.test.ts holds that line.
  */
 export type ButtonSize = "sm" | "md" | "lg";
 export type ButtonVariant = "ghost" | "outline" | "field";

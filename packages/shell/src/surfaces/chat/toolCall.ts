@@ -58,10 +58,9 @@ const KIND_ICON: Record<ToolKind, IconName> = {
  * a panel open per call reads itself out loud and walks the message you were reading off the top of
  * the log. A set rather than a check so a kind can be added back on its own.
  *
- * `think` is here for consistency rather than for Claude: an agent that models its reasoning as a
- * call gets it read the way one that streams it gets it read, which is open, since a thought is
- * prose about the turn rather than output to go back to. Claude's adapter sends thoughts as
- * `agent_thought_chunk`, which becomes a `thinking` item and never reaches a row (acp/map.ts). */
+ * `think` never reaches a row for Claude (its adapter sends thoughts as `agent_thought_chunk`,
+ * which becomes a `thinking` item; acp/map.ts). It is here for an agent that models its reasoning
+ * as a call, which reads the way a streamed thought does: open. */
 export const AUTO_OPEN: ReadonlySet<ToolKind> = new Set<ToolKind>(["edit", "think"]);
 
 /** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
@@ -187,8 +186,8 @@ export function parseToolOutput(out: string): OutputBlock[] {
   let fenced = false;
   const flush = () => {
     // blank lines around a block go; the indentation inside it stays, being the shape of the code.
-    // A block that is nothing but whitespace is not a block: a command that printed one newline used
-    // to come through as a block holding a space, which drew as an empty bar under the row.
+    // A block that is nothing but whitespace is not a block: a command that printed one newline
+    // would otherwise draw an empty bar under the row.
     const text = lines.join("\n").replace(/^\n+|\n+$/g, "");
     if (text.trim()) blocks.push({ code: fenced, diff: isDiff(text, lang), lang: fenced ? lang : "", text });
     lines = [];

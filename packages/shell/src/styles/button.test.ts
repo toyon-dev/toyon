@@ -2,28 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { cssRules, shellCss } from "./cssRules.ts";
 
 /**
- * The drift this exists to stop, which the written rule did not:
+ * The drift this exists to stop: semantic classes each writing their own padding over .btn's and
+ * their own colour over its tone, with the winner on a stacked className decided by line order in
+ * the stylesheet. The written rule said not to, and a diff never runs into prose.
  *
- * .btn sets padding: 1px 8px. Ten semantic classes then set their own on top of it, in ten values,
- * four of those near-misses of a 4px 8px nobody had written down. Three of the ten landed on one
- * day, with "a semantic class adds color only" already written down as the rule, because prose in a
- * markdown file is not something a diff runs into.
- *
- * The silent part was worse than the count. An AskCard option was `btn btn-outline picker-item ask-opt`
- * and three of those four declare padding at equal specificity, so the winner was whichever sat
- * lowest in a 2400-line stylesheet, and the button quietly took a list row's min-height with it.
- *
- * Colour went the same way once the box was fixed. Twenty classes held seven colour values between
- * them, two of which restated what .btn-icon already set and so did nothing at all, which is what
- * an open escape hatch produces. So Button owns colour through a closed `tone`, and `className` is
- * left for how a button sits in its parent: a max-width, a flex-shrink, a margin. That is genuinely
- * the surface's business; the button's own appearance is not.
- *
- * So a class reaching a button may set neither the box nor a resting colour. State rules (:hover,
- * .on, :disabled) may still name a colour where one is genuinely unique, as .deep-link's blue
- * hover is. The one-offs below are real and each costs a deliberate line here rather than being
- * something you can do by accident. A chip that is not pressable (.pick-chip, .picker-chip: a div and a
- * span) is not a button and never reaches this test.
+ * So Button owns the box through a closed `size` and colour through a closed `tone`, and a class
+ * reaching a button may set neither the box nor a resting colour; `className` is left for how a
+ * button sits in its parent (a max-width, a flex-shrink, a margin). State rules (:hover, .on,
+ * :disabled) may still name a colour where one is genuinely unique, as .deep-link's blue hover is.
+ * The one-offs below are real and each costs a deliberate line here rather than being something
+ * you can do by accident. A chip that is not pressable (.pick-chip, .picker-chip: a div and a span)
+ * is not a button and never reaches this test.
  */
 
 /** the box: what a size owns */

@@ -186,9 +186,8 @@ export function useFileDrop(worktreeId: string | null) {
 /**
  * The composer's paste, in precedence order: an image wins, because copying a spreadsheet cell or
  * a figure offers an image and a text flavour and the picture is what was meant; then a non-image
- * file, which used to be dropped on the floor here (the image filter skipped it, and a Finder copy
- * carries no text to fall through to); then text long enough to bury the textarea. Anything
- * shorter is typed in as usual.
+ * file (a Finder copy carries no text to fall through to); then text long enough to bury the
+ * textarea. Anything shorter is typed in as usual.
  */
 export function useComposerPaste(worktreeId: string | null) {
   const store = useStoreInstance();

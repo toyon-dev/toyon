@@ -1,8 +1,6 @@
 /**
- * Row state, as the data attribute a stylesheet reads. Three orthogonal words, and orthogonal is
- * the point: `active`, `sel`, `open` and `on` were four class names for three ideas, with `sel`
- * meaning the keyboard cursor in the changes panel and multi-select membership in the rail, and
- * `on` a toggle on a button but a chosen answer on an ask row.
+ * Row state, as the data attribute a stylesheet reads. Three orthogonal words, each answering a
+ * different question:
  *
  *   current   the pane beside this row is showing it: the open file, the expanded commit, the
  *             active worktree, the theme kind being previewed

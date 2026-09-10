@@ -13,8 +13,8 @@ export const useActiveId = () => useStore((s) => s.activeId);
 export const useOffline = (): boolean => useSettled(!useStore((s) => s.connected), 900);
 
 /** the active row when toyon owns it: what the chat, the composer and landing read. Null while a
- * found worktree is selected, so nothing that writes or talks to an agent sees one. (identity
- * changes with every worktrees/proc message, like before) */
+ * found worktree is selected, so nothing that writes or talks to an agent sees one. Its identity
+ * changes with every worktrees/proc message. */
 export const useActive = (): OwnedWorktree | null => useStore((s) => worktreeById(s, s.activeId));
 
 /** the active row whoever owns it: the title, the pane, the dock and the rail read this one */

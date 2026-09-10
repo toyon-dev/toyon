@@ -1,14 +1,12 @@
 // The shell's Theme, rendered as a Monaco theme.
 //
 // Monaco has two colour surfaces and they fail differently. `rules` paint the tokens its monarch
-// tokenizers emit, and `colors` paint every piece of chrome the editor draws around them. Both used
-// to be filled in only where a Toyon key mapped cleanly, with `inherit: true` covering the rest,
-// and "the rest" is VS Code Dark+: `delimiter` at #DCDCDC (brighter than any Toyon foreground, so
-// every brace and semicolon out-shouted the code), `number.hex` teal, `regexp` mauve, JSON keys and
-// HTML attributes in Dark+ blue, indent guides at #404040, the collapsed-region breadcrumb in Dark+
-// symbol purple. A theme's own palette can't fix a colour it was never asked for, so nothing here
-// inherits: the empty-token rule is the floor, and a token nobody names lands on the theme's own
-// foreground rather than on a constant from another palette.
+// tokenizers emit, and `colors` paint every piece of chrome the editor draws around them. Nothing
+// here inherits: with `inherit: true` every token the theme did not name lands on VS Code Dark+
+// (`delimiter` brighter than any Toyon foreground, JSON keys and HTML attributes in Dark+ blue, the
+// collapsed-region breadcrumb in Dark+ purple), and a theme's own palette can't fix a colour it was
+// never asked for. The empty-token rule is the floor, so a token nobody names lands on the theme's
+// own foreground rather than on a constant from another palette.
 
 import type { Theme } from "@toyon/shared";
 import { accentKey, hex8, syntaxOf, wordTint } from "@toyon/shared";

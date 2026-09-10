@@ -4,10 +4,8 @@ import { cssRules } from "./cssRules.ts";
 
 /**
  * A class lives in the file of the component or surface that renders it, and nothing is defined
- * that nothing renders. This is the rule that the naming pass of 2026-09-10 established and the
- * one that decays fastest without a test: a class named for where a thing was first drawn is
- * exactly what a hurry produces, and the audit found six prefixes on one picker, three on one
- * status bar, and a Pane whose header wore "file" in the terminal.
+ * that nothing renders. This is the rule that decays fastest without a test: a class named for
+ * where a thing was first drawn is exactly what a hurry produces.
  *
  * Two scopes. A stylesheet under styles/, ui/ or app/ is shared, so its classes may be rendered
  * anywhere in src (Button's tones are written by every surface; the row idiom by every list). A

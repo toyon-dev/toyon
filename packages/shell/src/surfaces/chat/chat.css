@@ -496,8 +496,8 @@
   .composer {
     display: flex;
     flex-direction: column;
-    /* the field's own background, now carried by the whole region: level with the transcript it
-     would read as a disabled box rather than somewhere to type */
+    /* the field's own background, carried by the whole region: level with the transcript it would
+     read as a disabled box rather than somewhere to type */
     background: var(--sunken);
     border-top: 1px solid var(--border0);
     padding: 10px;

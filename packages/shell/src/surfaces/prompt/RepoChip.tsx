@@ -4,8 +4,8 @@ import { Button } from "../../ui/Button.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../palettes/ProjectPicker.tsx";
 
-/** which project the new worktree branches from. ⌘K has always been scoped to the active repo but
- * never named it, and the scrim covers the status bar pill that would. The switcher is the same
+/** which project the new worktree branches from. ⌘K is scoped to the active repo, and the scrim
+ * covers the status bar pill that would name it. The switcher is the same
  * picker that pill drops, embedded rather than opened as an overlay of its own: `activate-repo`
  * leaves `overlay` alone, so the prompt stays up and the text already typed survives the switch.
  * Nothing to say with a single project, so nothing renders. */

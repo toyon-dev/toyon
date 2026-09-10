@@ -45,8 +45,7 @@
     text-align: left;
   }
 
-  /* these are <button>s that never picked up .btn, so each chose its own rest colour and all of them
-   chose text2. An idle control is an idle control: same tier as .btn and .btn-icon. */
+  /* an idle control is an idle control: the same rest tier as .btn and .btn-icon */
   .rail-new {
     color: var(--text1);
     padding: 6px 12px;

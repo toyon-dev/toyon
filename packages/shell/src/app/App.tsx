@@ -72,7 +72,6 @@ export function App() {
     subsRef.current = subsRef.current.filter((id) => alive.has(id));
   }, [rows]);
 
-  // window/app title follows the active row
   useEffect(() => {
     document.title = activeRow ? `${activeRow.name} · toyon` : "toyon";
   }, [activeRow]);
@@ -100,7 +99,6 @@ export function App() {
   }, [theme, previewing]);
   useEffect(() => onPrefersDarkChange((v) => dispatch({ a: "system-dark", v })), [dispatch]);
 
-  // remember the selection across reloads
   useEffect(() => {
     if (!activeId) return;
     try {

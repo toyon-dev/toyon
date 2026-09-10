@@ -94,7 +94,6 @@ export function worktreeItems(
   // want to answer
   if (isBusy(w))
     stop.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
-  // a landing op already out for this worktree takes the others off the list until it answers
   const idle = !s.shipping[id];
   if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !s.leftOpen) {
     look.push({
@@ -117,11 +116,16 @@ export function worktreeItems(
     });
   }
   look.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
-  // main runs procs too, and is where switching is wanted most; flat items, the menu has no submenus
+  // main runs procs too, and is where switching is wanted most; flat items, the menu has no
+  // submenus. The one running now is on the list with its check, so the list also answers which.
   const current = profileOf(w.worktree, repo);
   for (const name of profileNames(repo)) {
-    if (name !== current)
-      run.push({ id: `profile:${name}`, label: `run with ${name}`, onClick: () => acts.setProfile(w, name) });
+    run.push({
+      id: `profile:${name}`,
+      label: `run with ${name}`,
+      checked: name === current,
+      onClick: () => acts.setProfile(w, name),
+    });
   }
   if (canRename(w.worktree)) change.push({ id: "rename", label: "rename…", onClick: () => acts.rename(w) });
   if (w.worktree.variant) change.push({ id: "keep", label: "keep this variant…", onClick: () => acts.pickVariant(w) });
@@ -129,23 +133,29 @@ export function worktreeItems(
     const graft = ui.graft;
     change.push({ id: "graft", label: "graft with…", onClick: () => graft(id) });
   }
+  // a landing op already out for this worktree keeps the others on the list but off, with the
+  // reason under them, until it answers
+  const busy = idle ? undefined : "waiting on the one in progress";
   // the count on the row is read, not pressed, so the sync it used to offer lives here
-  if (canSync(w) && (w.behind ?? 0) > 0 && idle) {
+  if (canSync(w) && (w.behind ?? 0) > 0) {
     land.push({
       id: "sync",
       label: `sync from main (${w.behind} behind)`,
+      disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
     });
   }
-  if (canLand(w.worktree) && idle) {
+  if (canLand(w.worktree)) {
     land.push({
       id: "merge",
       label: "merge into main",
+      disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }),
     });
     land.push({
       id: "ship",
       label: "push + PR",
+      disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }),
     });
   }
@@ -165,15 +175,16 @@ export function discoveredItems(
   s: Pick<State, "termOpen" | "clientId">,
   { sock, dispatch }: Deps,
 ): MenuEntry[] {
-  const adopt: MenuItem[] = [];
   const items: MenuItem[] = [];
-  if (!d.locked) {
-    adopt.push({
+  // held by another tool: the line stays, off, saying who has it
+  const adopt: MenuItem[] = [
+    {
       id: "adopt",
       label: "take over",
+      disabled: d.locked ? `held by ${d.lockReason ?? "another tool"}` : undefined,
       onClick: () => sock?.send({ t: "adopt-worktree", worktreeId: d.id, clientId: s.clientId }),
-    });
-  }
+    },
+  ];
   // the one write without take-over: the daemon refuses unless the tree is clean
   if (canSync(d) && (d.behind ?? 0) > 0) {
     items.push({

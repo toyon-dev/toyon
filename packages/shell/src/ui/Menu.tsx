@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStoreInstance } from "../state/context.tsx";
-import { jumpTo, step } from "./listNav.ts";
+import { jumpTo } from "./listNav.ts";
 import "./menu.css";
 import { cx } from "./cx.ts";
+import { Icon } from "./Icon.tsx";
 import { Kbd } from "./Kbd.tsx";
-import { isItem, type MenuItem, type MenuSpec, menuBox, menuStore, useMenu } from "./menu.ts";
+import { isItem, type MenuItem, type MenuSpec, menuBox, menuStore, stepEnabled, useMenu } from "./menu.ts";
 import { rowState } from "./rowState.ts";
 
 /** wide enough for the longest verb and its chord on one line ("show worktree panel  ⌘⇧K") */
@@ -91,11 +92,12 @@ function Menu({ spec }: { spec: MenuSpec }) {
         e.preventDefault();
         e.stopPropagation();
         const d = e.key === "ArrowDown" ? 1 : -1;
-        // from nothing, down takes the first row and up the last, so either key opens the list
-        setIdx(i < 0 ? (d === 1 ? 0 : its.length - 1) : step(i, d, its.length));
+        // from nothing, down takes the first row and up the last, so either key opens the list;
+        // a disabled row is walked past, the way the OS menus do
+        setIdx(stepEnabled(its, i, d));
         return;
       }
-      if ((e.key === "Enter" || e.key === " ") && i >= 0 && its[i]) {
+      if ((e.key === "Enter" || e.key === " ") && i >= 0 && its[i] && !its[i].disabled) {
         e.preventDefault();
         e.stopPropagation();
         its[i].onClick();
@@ -115,7 +117,7 @@ function Menu({ spec }: { spec: MenuSpec }) {
         e.stopPropagation();
         const rows = Array.from(box.current?.querySelectorAll(".menu-label") ?? [], (b) => b.textContent ?? "");
         const j = jumpTo(rows, i, e.key);
-        if (j >= 0) setIdx(j);
+        if (j >= 0 && !its[j]?.disabled) setIdx(j);
         return;
       }
       // anything else (a chord, tab, a function key) closes the menu and is still let through, so
@@ -148,11 +150,14 @@ function Menu({ spec }: { spec: MenuSpec }) {
     b.style.left = `${x}px`;
     b.style.top = `${y}px`;
   }, [spec]);
+  // a list with a checked row in it reserves the gutter on every row, so the labels stay in a column
+  const gutter = items.some((it) => it.checked);
   return (
     // the width is set here rather than in the stylesheet because the clamp above depends on it,
     // and a menu that is one width in CSS and another in the maths lands off screen at the edges
     <div
       className="menu"
+      role="menu"
       ref={box}
       style={{ position: "fixed", left: 0, top: 0, width: WIDTH }}
       // a right-click on the menu itself is not a request for another one
@@ -161,29 +166,48 @@ function Menu({ spec }: { spec: MenuSpec }) {
       {entries.map((e, n) => {
         // a rule between groups: it has no index in the rows, so the arrows walk straight past it
         // biome-ignore lint/suspicious/noArrayIndexKey: a rule has no identity but its place
-        if (!isItem(e)) return <div key={`sep-${n}`} className="menu-sep" aria-hidden="true" />;
+        if (!isItem(e)) return <hr key={`sep-${n}`} className="menu-sep" />;
         const i = items.indexOf(e);
-        return <MenuRow key={e.id} item={e} cursor={i === idx} onEnter={() => setIdx(i)} />;
+        return <MenuRow key={e.id} item={e} gutter={gutter} cursor={i === idx} onEnter={() => setIdx(i)} />;
       })}
     </div>
   );
 }
 
-function MenuRow({ item, cursor, onEnter }: { item: MenuItem; cursor: boolean; onEnter: () => void }) {
+function MenuRow({
+  item,
+  gutter,
+  cursor,
+  onEnter,
+}: {
+  item: MenuItem;
+  gutter: boolean;
+  cursor: boolean;
+  onEnter: () => void;
+}) {
+  const off = item.disabled !== undefined;
+  // the reason a row is off is what its detail line says, unless it already says something
+  const detail = item.detail ?? item.disabled;
   return (
     <button
-      className={cx("row", item.danger && "danger", item.detail !== undefined && "row-tall")}
-      data-state={rowState({ cursor })}
-      // the pointer and the arrows drive one highlight, not two
-      onMouseEnter={onEnter}
+      {...(item.checked === undefined
+        ? { role: "menuitem" }
+        : { role: "menuitemcheckbox", "aria-checked": item.checked })}
+      aria-disabled={off || undefined}
+      className={cx("row", item.danger && "danger", detail !== undefined && "row-tall", off && "disabled")}
+      data-state={rowState({ cursor, checked: item.checked })}
+      // the pointer and the arrows drive one highlight, not two; a row that is off takes neither
+      onMouseEnter={off ? undefined : onEnter}
       onClick={() => {
+        if (off) return;
         item.onClick();
         menuStore.close();
       }}
     >
+      {gutter && <span className="menu-check">{item.checked && <Icon name="check" className="icon-inline" />}</span>}
       <span className="menu-text">
         <span className="menu-label">{item.label}</span>
-        {item.detail !== undefined && <span className="menu-detail row-dim">{item.detail}</span>}
+        {detail !== undefined && <span className="menu-detail row-dim">{detail}</span>}
       </span>
       {item.key && <Kbd k={item.key} className="menu-key" />}
     </button>

@@ -42,7 +42,8 @@ export function buildCommands(
    * line says which worktree it is about, and the chord or a string detail becomes the hint */
   const addItems = (items: MenuEntry[], whose?: string) => {
     for (const it of items) {
-      if (!isItem(it)) continue;
+      // a rule is not a command; nor is a verb that cannot run now, or the choice already in effect
+      if (!isItem(it) || it.disabled !== undefined || it.checked) continue;
       const hint = it.key ?? (typeof it.detail === "string" ? it.detail : undefined);
       add(it.id, whose ? `${it.label} · ${whose}` : it.label, it.onClick, hint, it.sub);
     }

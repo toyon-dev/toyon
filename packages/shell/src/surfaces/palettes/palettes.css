@@ -48,6 +48,12 @@
   .keys-d {
     color: var(--text1);
   }
+  /* the agent page's head: the way back on the left, the agent's name where a card title goes */
+  .agent-page-head {
+    justify-content: flex-start;
+    gap: 12px;
+    padding-bottom: 6px;
+  }
   .keys-h {
     padding: 0 0 4px 2px;
   }

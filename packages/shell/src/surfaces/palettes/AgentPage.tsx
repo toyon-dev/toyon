@@ -4,8 +4,10 @@ import { agentItems } from "../../state/actions/agent.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
+import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
 import { authLabel, authTip } from "./KeysHelp.tsx";
 
 /** One agent, as settings sees it: the card the agent's chip opens, in the settings card's own
@@ -26,14 +28,21 @@ export function AgentPage({ agentId }: { agentId: string }) {
   if (!agent) return null;
 
   const actions = agentItems(agent, { sock, dispatch });
+  const back = () => dispatch({ a: "close", back: true });
   const short = (path: string) => (home && path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path);
   const reveal = (f: AgentConfigFile) =>
     sock?.send({ t: "reveal-agent-file", agent: agentId, file: f.id, ...(repo ? { repoId: repo.id } : {}) });
 
   return (
-    <Overlay bare boxClass="keys-stack" onClose={() => dispatch({ a: "close", back: true })}>
+    <Overlay bare boxClass="keys-stack" onClose={back}>
       <div className="keys-card keys-settings">
-        <div className="section-title keys-h">{agent.name}</div>
+        <div className="keys-setting agent-page-head">
+          {/* the way back, for the hand on the mouse; Escape does the same */}
+          <Button tone="quiet" size="sm" onClick={back} {...tip("back to settings", "esc")}>
+            <Icon name="back" className="icon-inline" /> settings
+          </Button>
+          <span className="section-title">{agent.name}</span>
+        </div>
         <div className="keys-setting">
           <span className="keys-d">signed in</span>
           {/* the chip carries the actions on the identity when there are any; a bare value otherwise */}

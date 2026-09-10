@@ -116,7 +116,11 @@ function AgentRow({ agent }: { agent: AgentInfo }) {
         variant="field"
         mono
         data-tip={authTip(agent)}
-        onClick={() => dispatch({ a: "open", overlay: { kind: "agent-page", agent: agent.id } })}
+        onClick={() => {
+          // like the other chips: mark the card as where Escape comes back to, then open
+          dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
+          dispatch({ a: "open", overlay: { kind: "agent-page", agent: agent.id } });
+        }}
       >
         {authLabel(agent)}
       </Button>

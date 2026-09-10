@@ -1,5 +1,5 @@
 import type { LogLine, OwnedWorktree, ProcState } from "@toyon/shared";
-import { useSock } from "../../state/context.tsx";
+import { useDispatch, useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { procFixPrompt } from "./fixPrompt.ts";
@@ -13,6 +13,7 @@ const TAIL = 30;
  * that was the difference between "it is coming" and "nothing will ever come". */
 export function BootPane({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[] }) {
   const sock = useSock();
+  const dispatch = useDispatch();
   const procs = worktree.procs;
   const restart = (p: ProcState) => sock?.send({ t: "term-restart", worktreeId: worktree.id, stream: p.name });
   const bad = procs.some((p) => p.status === "crashed" || p.status === "unreachable");
@@ -42,10 +43,17 @@ export function BootPane({ worktree, log }: { worktree: OwnedWorktree; log: LogL
           ))}
         </ul>
       )}
-      {bad && worktree.agent === "idle" && (
+      {bad && (
         <div className="boot-actions">
-          <Button variant="outline" size="lg" onClick={askAgent}>
-            ask the agent to fix it
+          {worktree.agent === "idle" && (
+            <Button variant="outline" size="lg" onClick={askAgent}>
+              ask the agent to fix it
+            </Button>
+          )}
+          {/* the way back to the command, for the person who can see what is wrong with it: the
+              same page the palette's "set up" opens, which nobody reading a crash log knows about */}
+          <Button onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: worktree.repoId } })}>
+            edit setup
           </Button>
         </div>
       )}

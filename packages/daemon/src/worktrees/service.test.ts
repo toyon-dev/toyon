@@ -115,7 +115,7 @@ describe("create / remove", () => {
   });
 
   test("removing an adopted worktree keeps the person's branch", async () => {
-    const repoId = await registered();
+    await registered();
     await settle();
     const wt = await adoptDir(foreignWorktree("theirs", "their-branch"));
     await settle();
@@ -737,7 +737,7 @@ describe("discovery", () => {
 
 describe("adopt", () => {
   test("take-over records it, starts its procs, and drops it from discovered", async () => {
-    const repoId = await registered();
+    await registered();
     await settle();
     const dir = foreignWorktree("takeover", "take-me");
 
@@ -758,7 +758,7 @@ describe("adopt", () => {
   });
 
   test("an adopted worktree keeps its branch name: rename refuses rather than moving it under toyon/", async () => {
-    const repoId = await registered();
+    await registered();
     await settle();
     const wt = await adoptDir(foreignWorktree("theirs", "their-branch"));
     await expect(w.worktrees.rename(wt.id, "mine now")).rejects.toBeInstanceOf(UserError);
@@ -817,7 +817,7 @@ describe("adopt", () => {
   });
 
   test("no stray symlink is planted beside it, on adopt or on the next boot", async () => {
-    const repoId = await registered();
+    await registered();
     await settle();
     const dir = foreignWorktree("linkless", "editor-pane");
 
@@ -840,7 +840,7 @@ describe("adopt", () => {
   });
 
   test("a locked worktree belongs to whoever locked it", async () => {
-    const repoId = await registered();
+    await registered();
     await settle();
     const dir = foreignWorktree("locked", "held");
     sh(w.repo, "git", "worktree", "lock", "--reason", "claude session dsys (pid 900)", dir);
@@ -851,7 +851,7 @@ describe("adopt", () => {
   });
 
   test("a worktree nested inside the repo would run its procs in the main checkout", async () => {
-    const repoId = await registered();
+    await registered();
     await settle();
     const inside = join(w.repo, "nested");
     sh(w.repo, "git", "worktree", "add", "-q", "-b", "nested-branch", inside, "main");
@@ -861,7 +861,7 @@ describe("adopt", () => {
   });
 
   test("a detached worktree has no branch to land or ship", async () => {
-    const repoId = await registered();
+    await registered();
     await settle();
     const dir = join(dirname(w.repo), "loose");
     sh(w.repo, "git", "worktree", "add", "-q", "--detach", dir, "main");
@@ -871,7 +871,7 @@ describe("adopt", () => {
   });
 
   test("a path toyon was never offered is refused", async () => {
-    const repoId = await registered();
+    await registered();
     await settle();
     expect(adoptDir(join(dirname(w.repo), "never-existed"))).rejects.toThrow(UserError);
   });
@@ -910,7 +910,7 @@ describe("a shell at a discovered worktree", () => {
   });
 
   test("taking the worktree over takes the loose shell with it", async () => {
-    const repoId = await registered();
+    await registered();
     await settle();
     const dir = foreignWorktree("adoptshell", "adopt-shell");
     const row = (await w.worktrees.discovered())[0]!;

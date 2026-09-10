@@ -29,9 +29,11 @@ type Placement = { up: boolean; right: boolean };
  * saying what it means, and the current one marked down its edge. A context menu is a list of
  * actions; a value you set gets the picker, so every chip with options reads as the switcher does.
  *
- * The panel lands over the chip the way the switcher lands over the pill. A chip can sit at the
- * foot of the window (the composer's) or against its right edge (the chat dock's), so the
- * placement is measured on open rather than written once: see chip-picker.css.
+ * The panel lands over the chip the way the switcher lands over the pill, whichever way it opens:
+ * a chip at the foot of the window (the composer's) gets the field strip at the panel's bottom and
+ * the rows rising above it, and one against the window's right edge (the chat dock's) hangs the
+ * panel from its right edge. The placement is measured on open: see chip-picker.css. The lead chip
+ * is a button, because it covers the chip that opened the panel and a second click there closes it.
  */
 export function ChipPicker<T extends string>({
   value,
@@ -107,7 +109,11 @@ export function ChipPicker<T extends string>({
               os.findIndex((o) => o.id === value),
             )
           }
-          lead={<span className="picker-chip">{shown}</span>}
+          lead={
+            <Button tone="chrome" mono on className="chip-picker-lead" {...tip("Close")} onClick={close}>
+              {shown}
+            </Button>
+          }
           placeholder={placeholder}
           rowClass={() => "picker-row"}
           row={(o) => (

@@ -6,6 +6,7 @@ import type { ClientMsg, ServerMsg, WorktreeInfo } from "@toyon/shared";
 import { pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
+import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -405,6 +406,21 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   "agent-decide"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "choice", choiceId: msg.choiceId });
+  },
+
+  "agent-config"(msg, ctx, s) {
+    const spec = s.agents.require(msg.agent);
+    const repoPath = msg.repoId ? (s.state.repo(msg.repoId)?.path ?? null) : null;
+    ctx.reply({ t: "agent-config", ...describeAgentConfig(spec, repoPath) });
+  },
+
+  "reveal-agent-file"(msg, _ctx, s) {
+    // only a path the listing named: the shell echoes an id, never a path of its own
+    const spec = s.agents.require(msg.agent);
+    const repoPath = msg.repoId ? (s.state.repo(msg.repoId)?.path ?? null) : null;
+    const file = agentConfigFiles(spec, repoPath).find((f) => f.id === msg.file);
+    if (!file) throw new UserError("no such file");
+    s.files.revealPath(file.path);
   },
 
   async "agent-logout"(msg, _ctx, s) {

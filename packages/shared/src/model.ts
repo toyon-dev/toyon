@@ -216,6 +216,29 @@ export interface AgentInfo {
   models?: ModelChoice[];
 }
 
+/** what settings shows about an agent's own setup: the files it reads and the MCP servers it will
+ * load, as found on disk. Read-only: the files are the person's, edited where they were made. */
+export interface AgentConfigInfo {
+  agent: string;
+  files: AgentConfigFile[];
+  servers: McpServerInfo[];
+}
+export interface AgentConfigFile {
+  /** stable within the agent, for reveal requests */
+  id: string;
+  label: string;
+  path: string;
+  exists: boolean;
+}
+export interface McpServerInfo {
+  name: string;
+  /** where it is declared: the person's own config, the repo's file, or the config's entry for
+   * this repo's path */
+  scope: "user" | "project" | "local";
+  /** the command line or the URL, for telling two apart */
+  detail: string;
+}
+
 /** one of an agent's advertised models, as ACP's model config option lists them */
 export interface ModelChoice {
   id: string;

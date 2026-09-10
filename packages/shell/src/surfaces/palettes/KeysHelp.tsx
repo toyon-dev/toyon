@@ -90,13 +90,13 @@ export function KeysHelp() {
 }
 
 /** what the agent last reported about its own credentials; the row says nothing it was not told */
-function authLabel(a: AgentInfo): string {
+export function authLabel(a: AgentInfo): string {
   if (!a.available) return a.installing ? "installing" : "not installed";
   if (!a.auth) return "ready";
   return a.auth.kind === "none" ? "not logged in" : a.auth.label;
 }
 
-function authTip(a: AgentInfo): string {
+export function authTip(a: AgentInfo): string {
   if (!a.available) return a.reason ?? "not installed";
   if (!a.auth) return "installed; it names the account it runs on the first time it runs";
   const who = [a.auth.detail, a.auth.account?.email, a.auth.account?.organization].filter(Boolean).join(" · ");
@@ -106,10 +106,9 @@ function authTip(a: AgentInfo): string {
 /** One agent: its login state, and the actions that change it. Logging *in* stays in the chat,
  * where the auth card can also run a method that needs the worktree's terminal. */
 function AgentRow({ agent }: { agent: AgentInfo }) {
-  const sock = useSock();
   const dispatch = useDispatch();
-  const cm = useContextMenu("keys");
-  const items = agentItems(agent, { sock, dispatch });
+  // the chip opens the agent's own page, the way every other chip here opens what it names: who
+  // it is, its actions, the files it reads and the MCP servers it will load
   return (
     <div className="keys-setting">
       <span className="keys-d">{agent.name}</span>
@@ -117,8 +116,7 @@ function AgentRow({ agent }: { agent: AgentInfo }) {
         variant="field"
         mono
         data-tip={authTip(agent)}
-        disabled={items.length === 0}
-        {...cm.dropdown(() => items, "right")}
+        onClick={() => dispatch({ a: "open", overlay: { kind: "agent-page", agent: agent.id } })}
       >
         {authLabel(agent)}
       </Button>

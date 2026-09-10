@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import type {
+  AgentConfigInfo,
   AgentInfo,
   CommitEntry,
   DesignIndex,
@@ -59,6 +60,8 @@ export type ServerMsg =
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
+  /** the files an agent reads and the MCP servers it will load, on request from settings */
+  | ({ t: "agent-config" } & AgentConfigInfo)
   | { t: "repos"; repos: RepoInfo[] }
   /** clones in flight: shown in the switcher and watched in the import pane */
   | { t: "pending-repos"; pending: PendingRepo[] }
@@ -346,6 +349,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("agent-decide"), worktreeId: id, askId: z.string().max(64), choiceId: z.string().max(200) }),
   /** drop this agent's stored credential (ACP logout), whatever worktree it was logged in from */
   z.object({ t: z.literal("agent-logout"), agent: id }),
+  /** settings: the files this agent reads and the MCP servers it will load, for the repo when given */
+  z.object({ t: z.literal("agent-config"), agent: id, repoId: id.optional() }),
+  /** reveal one of those files in Finder; `file` is the id the agent-config reply named */
+  z.object({ t: z.literal("reveal-agent-file"), agent: id, file: z.string().max(64), repoId: id.optional() }),
   /** raw VS Code theme JSON/JSONC text picked in the browser */
   z.object({ t: z.literal("import-theme"), name: z.string().max(300), source: z.string().max(2_000_000) }),
   z.object({ t: z.literal("rescan-themes") }),

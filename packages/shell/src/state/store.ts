@@ -4,6 +4,7 @@
 
 import type {
   AgentCommand,
+  AgentConfigInfo,
   AgentEvent,
   AgentInfo,
   AskAnswer,
@@ -182,6 +183,8 @@ export type Overlay =
   | { kind: "appearance" }
   /** default-agent picker */
   | { kind: "agent" }
+  /** one agent's page in settings: who it is, the files it reads, the MCP servers it loads */
+  | { kind: "agent-page"; agent: string }
   /** the setup pane for a repo that is already configured (install + start commands) */
   | { kind: "setup"; repoId: string }
   /** the project switcher: pick a registered repo, or type a path to open another. It hangs off
@@ -328,6 +331,8 @@ export interface State {
   /** the daemon's agent registry and the default for new worktrees */
   agents: AgentInfo[];
   defaultAgent: string;
+  /** what settings asked the daemon about an agent's setup, by agent id */
+  agentConfigs: Record<string, AgentConfigInfo>;
 }
 
 export interface InitialOpts {
@@ -401,6 +406,7 @@ export function initialState(opts: InitialOpts): State {
     activeImportId: null,
     agents: [],
     defaultAgent: "claude",
+    agentConfigs: {},
   };
   // paint the last project's layout before the daemon's hello names it, so a reload does not
   // flash the docks open and then shut them
@@ -493,7 +499,8 @@ function activate(s: State, id: string | null): State {
   return { ...s, activeId: id, activeRepoId, lastActive, diff: null };
 }
 
-export const isSubPicker = (o: Overlay) => o.kind === "theme" || o.kind === "appearance" || o.kind === "agent";
+export const isSubPicker = (o: Overlay) =>
+  o.kind === "theme" || o.kind === "appearance" || o.kind === "agent" || o.kind === "agent-page";
 
 /** what reaches the reducer: terminal frames are routed to the pane before dispatch (main.tsx) */
 export type StoreServerMsg = Exclude<ServerMsg, TermServerMsg>;
@@ -793,6 +800,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "agents":
       return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent };
+    case "agent-config": {
+      const { t: _t, ...info } = msg;
+      return { ...s, agentConfigs: { ...s.agentConfigs, [info.agent]: info } };
+    }
     case "pending-repos": {
       const known = new Set(s.pending.map((x) => x.id));
       const started = msg.pending.find((x) => !known.has(x.id));

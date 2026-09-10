@@ -2,6 +2,7 @@ import { useStore } from "../../state/context.tsx";
 import { useActiveId, useOverlay } from "../../state/selectors.ts";
 import { NewProjectOverlay } from "../prompt/NewProjectOverlay.tsx";
 import { PromptOverlay } from "../prompt/PromptOverlay.tsx";
+import { AgentPage } from "./AgentPage.tsx";
 import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
@@ -28,6 +29,7 @@ export function Overlays() {
       {overlay?.kind === "theme" && <ThemePicker slot={overlay.slot} />}
       {overlay?.kind === "appearance" && <AppearancePicker />}
       {overlay?.kind === "agent" && <AgentPicker />}
+      {overlay?.kind === "agent-page" && <AgentPage agentId={overlay.agent} />}
       {overlay?.kind === "commands" && <CommandPalette />}
       {overlay?.kind === "prompt" && <PromptOverlay />}
       {overlay?.kind === "projects" && overlay.dialog && <ProjectPicker dialog />}

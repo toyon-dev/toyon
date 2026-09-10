@@ -607,6 +607,12 @@
     gap: 8px;
     min-width: 0;
   }
+  /* a sentence about the base or the branch, under the knobs row, with sync beside it when there is one */
+  .spawn-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   /* .btn-icon is a grid box, so an inline wrapper would stack the two tools; keep them on one line */
   .spawn-tools {
     display: flex;

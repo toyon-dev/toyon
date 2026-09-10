@@ -1,4 +1,5 @@
 import type { AgentCommand } from "@toyon/shared";
+import { isMain } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo, useLocalField } from "../../state/selectors.ts";
@@ -9,6 +10,7 @@ import { Overlay } from "../../ui/Overlay.tsx";
 import { filterCommands, insertAt, triggerAt } from "../chat/mentions.ts";
 import { CommandRow } from "../palettes/CommandRow.tsx";
 import { commandSource } from "../util.ts";
+import { baseNote } from "./baseNote.ts";
 import { ModeChip, useNewWorktreeMode } from "./ModeChip.tsx";
 import { ModelChip, useNewWorktreeModel } from "./ModelChip.tsx";
 import { ProfileChip, useNewWorktreeProfile } from "./ProfileChip.tsx";
@@ -35,6 +37,12 @@ export function PromptOverlay() {
   const [model, setModel] = useNewWorktreeModel(agent);
   const field = useRef<HTMLTextAreaElement>(null);
   const refocus = () => field.current?.focus();
+  // a new worktree branches from the default branch's last commit; what sits uncommitted on it
+  // stays behind, and this is where to say so
+  const mainRow = useStore(
+    (s) => s.rows.find((r) => r.repoId === repo?.id && r.worktree !== undefined && isMain(r.worktree)) ?? null,
+  );
+  const note = repo ? baseNote(repo.defaultBranch, mainRow?.dirty) : null;
 
   // the `/` menu. A command dispatches on a worktree's first prompt like any other, so it is worth
   // offering here; `@path` is not, because the worktree whose files it would name does not exist.
@@ -191,6 +199,7 @@ export function PromptOverlay() {
           />
         )}
       </div>
+      {note && <div className="hint prompt-note">{note}</div>}
       <div className="prompt-variants">
         {/* a picker takes focus while it is up, so put the caret back when it closes */}
         <RepoChip onClose={refocus} />

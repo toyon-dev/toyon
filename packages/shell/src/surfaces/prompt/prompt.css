@@ -23,6 +23,10 @@
     }
   }
 
+  /* the base's uncommitted count, on its own line between the box and the chips */
+  .prompt-note {
+    margin-top: 8px;
+  }
   .prompt-variants {
     display: flex;
     align-items: center;

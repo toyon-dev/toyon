@@ -80,20 +80,23 @@ const notify = async (s: Services, ctx: HandlerCtx, worktreeId: string, msg: Ser
 
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async subscribe(msg, ctx, s) {
-    s.state.requireWorktree(msg.worktreeId);
+    const wt = s.state.requireWorktree(msg.worktreeId);
     // the shell re-asserts its whole subscription set on every switch; only a NEW subscription
     // needs the backfill (an existing one has been receiving the stream all along)
     if (!ctx.subscribe(msg.worktreeId)) return;
-    const agent = s.runtime.agentFor(msg.worktreeId);
-    const events = agent?.transcript() ?? [];
+    // opening is what starts a cold worktree; the reply does not wait for it
+    s.repos.touch(msg.worktreeId);
+    // the adapter, not the runtime: a cold worktree has its transcript on disk and nothing else
+    const agent = s.runtime.ensureAgent(wt).agent;
+    const events = agent.transcript();
     ctx.reply({
       t: "backfill",
       worktreeId: msg.worktreeId,
       events: events.slice(-1000),
       log: s.runtime.recentLogs(msg.worktreeId),
     });
-    ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: agent?.queueItems ?? [] });
-    ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: agent?.commands ?? [] });
+    ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: agent.queueItems });
+    ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: agent.commands });
     await gitStatus(s, ctx, msg.worktreeId);
   },
 

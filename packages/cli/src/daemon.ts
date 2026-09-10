@@ -24,6 +24,7 @@ export interface Health {
   pid?: number;
   branded?: boolean;
   lag?: { last: number; max: number; maxCause: string | null; over: number };
+  worktrees?: { total: number; running: number };
 }
 
 /** null when nothing answers on the port within a second */

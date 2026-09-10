@@ -78,6 +78,10 @@ export async function doctor(): Promise<number> {
           (h.lag ? `, event loop worst ${h.lag.max}ms${h.lag.maxCause ? ` (${h.lag.maxCause})` : ""}` : ""),
       ),
     );
+    if (h.worktrees) {
+      const { total, running } = h.worktrees;
+      lines.push(line(true, "running", `${running} of ${total} worktrees started; the rest start when opened`));
+    }
     if (version !== pkg.version) {
       lines.push(
         line(

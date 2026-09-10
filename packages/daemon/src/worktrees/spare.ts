@@ -40,23 +40,27 @@ export class SparePool {
 
   constructor(private d: SparePoolDeps) {}
 
-  /** Reuse a persisted spare from a previous daemon run, else warm a fresh one. */
-  adoptOrCreate(repoId: string) {
+  /** Take over a spare persisted by a previous daemon run, without touching it: bookkeeping only,
+   * so boot stays cheap. Stale extras are removed. `warm` is what brings it up to date. */
+  adopt(repoId: string) {
     const persisted = this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind === "spare");
     // keep at most one; stale extras are removed
     for (const extra of persisted.slice(1)) fireAndForget(extra.id, this.d.remove(extra.id), "stale spare removal");
     const spare = persisted[0];
-    if (spare) {
-      this.spares.set(repoId, {
-        worktreeId: spare.id,
-        lockHash: lockfileHash(spare.path),
-        refreshing: null,
-        ready: true,
-      });
-      fireAndForget(repoId, this.refresh(repoId), "spare refresh"); // main may have moved while the daemon was down
-    } else {
-      fireAndForget(repoId, this.ensure(repoId), "spare warm-up");
-    }
+    if (!spare) return;
+    this.spares.set(repoId, {
+      worktreeId: spare.id,
+      lockHash: lockfileHash(spare.path),
+      refreshing: null,
+      ready: true,
+    });
+  }
+
+  /** the repo is in use: refresh its adopted spare (main may have moved while the daemon was
+   * down), or warm a fresh one when there is none */
+  warm(repoId: string) {
+    if (this.spares.has(repoId)) fireAndForget(repoId, this.refresh(repoId), "spare refresh");
+    else fireAndForget(repoId, this.ensure(repoId), "spare warm-up");
   }
 
   async ensure(repoId: string): Promise<void> {

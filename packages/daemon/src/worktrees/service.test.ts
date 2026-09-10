@@ -419,9 +419,63 @@ describe("boot", () => {
     expect(state2.worktree(wt.id)).toBeUndefined();
     expect(state2.worktree("stale-spare")).toBeUndefined();
     expect(state2.worktrees.filter((x) => x.kind === "spare").length).toBe(1);
-    expect(runtime2.get(state2.worktrees.find((x) => x.kind === "main")!.id)).toBeDefined();
+    // boot starts nothing; opening main is what starts it
+    const main = state2.worktrees.find((x) => x.kind === "main")!;
+    expect(runtime2.get(main.id)?.procs ?? null).toBeNull();
+    repos2.touch(main.id);
+    await settle();
+    expect(runtime2.get(main.id)?.procs).toBeTruthy();
     await runtime2.shutdown();
     repos2.stopWatchers();
+  });
+
+  test("touching one repo warms all of its worktrees and none of another's", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "a");
+    const b = await w.worktrees.create(repoId, "b");
+    const other = tmpRepo();
+    try {
+      const otherId = (await w.repos.register(other.repo)).id;
+      const otherMain = w.state.worktrees.find((x) => x.repoId === otherId && x.kind === "main")!;
+      await settle();
+      // restart over the same state: everything comes back cold
+      await w.runtime.shutdown();
+      const state2 = new StateStore(w.paths);
+      const hub2 = new Hub();
+      const f2 = fakeFactories();
+      const runtime2 = new RuntimeRegistry({
+        hub: hub2,
+        state: state2,
+        paths: w.paths,
+        agents: w.registry,
+        bridgeScript: () => "",
+        ...f2.factories,
+      });
+      const worktrees2 = new WorktreeService({
+        state: state2,
+        hub: hub2,
+        runtime: runtime2,
+        paths: w.paths,
+        agents: w.registry,
+        namer: async () => null,
+      });
+      const repos2 = new RepoRegistry({ state: state2, hub: hub2, runtime: runtime2, worktrees: worktrees2 });
+      await repos2.boot();
+      await settle();
+      expect(runtime2.runningCount()).toBe(0);
+      repos2.touch(a.id);
+      await settle();
+      const up = (id: string) => !!runtime2.get(id)?.procs;
+      expect([up(a.id), up(b.id), up(otherMain.id)]).toEqual([true, true, false]);
+      // a second touch of the same repo is not a second warm
+      repos2.touch(b.id);
+      await settle();
+      expect(up(otherMain.id)).toBe(false);
+      await runtime2.shutdown();
+      repos2.stopWatchers();
+    } finally {
+      other.cleanup();
+    }
   });
 });
 

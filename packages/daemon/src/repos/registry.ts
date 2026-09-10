@@ -33,24 +33,57 @@ const IMPORT_LINES = 40;
 export class RepoRegistry {
   private watchers = new Map<string, () => void>();
   private imports = new Map<string, { pending: PendingRepo; abort: AbortController }>();
+  /** repos whose worktrees have been started this daemon run; the rest are cold */
+  private warmed = new Set<string>();
 
   constructor(private d: RepoRegistryDeps) {}
 
-  /** restart runtimes for persisted worktrees whose paths still exist, then watchers and spares */
+  /** Recover the persisted state, reserve every port, and watch every repo. Nothing runs yet: a
+   * daemon that starts a dev server for every worktree of every registered repo the moment it
+   * comes up is fifteen vite processes on a laptop whose owner wanted one, so a repo's worktrees
+   * start together the first time something touches the repo (`warm`), and a single worktree
+   * starts on its own when it is opened after that (`touch`). */
   async boot(): Promise<void> {
-    const { state, runtime } = this.d;
+    const { state } = this.d;
     state.pruneWorktrees((wt) => existsSync(wt.path) && state.repos.some((r) => r.id === wt.repoId));
     // toyon.json may have been edited while the daemon was down
     for (const repo of state.repos) this.applyConfigFile(repo, false);
     for (const wt of state.worktrees) reservePort(wt.proxyPort);
-    for (const wt of state.worktrees) {
-      await runtime.start(wt, state.requireRepo(wt.repoId));
-    }
     state.save();
     for (const repo of state.repos) {
       this.startWatcher(repo);
-      this.d.worktrees.spare.adoptOrCreate(repo.id);
+      this.d.worktrees.spare.adopt(repo.id);
     }
+    const cold = state.worktrees.filter((w) => w.kind !== "spare").length;
+    if (cold > 0) log.info("daemon", `${cold} worktrees across ${state.repos.length} repos start when opened`);
+  }
+
+  /** Start every worktree of a repo, once per daemon run. Sequential and in the background: the
+   * caller is a subscribe or a register that should answer now, and one dev server at a time is
+   * how boot always started them. */
+  warm(repoId: string): void {
+    if (this.warmed.has(repoId)) return;
+    this.warmed.add(repoId);
+    const repo = this.d.state.requireRepo(repoId);
+    const mine = this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind !== "spare");
+    fireAndForget(
+      repoId,
+      (async () => {
+        for (const wt of mine) await this.d.runtime.start(wt, repo);
+      })(),
+      "warm",
+    );
+    this.d.worktrees.spare.warm(repoId);
+  }
+
+  /** a worktree is being looked at: its repo warms if it has not, and it starts if it is cold */
+  touch(worktreeId: string): void {
+    const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
+    if (!this.warmed.has(repo.id)) {
+      this.warm(repo.id);
+      return;
+    }
+    if (!this.d.runtime.get(wt.id)?.procs) fireAndForget(wt.id, this.d.runtime.start(wt, repo), "start on open");
   }
 
   /** Make a project and open it. The containment check lives here rather than in `create.ts`
@@ -152,7 +185,11 @@ export class RepoRegistry {
     if (!(await isGitRepo(path))) throw new UserError(`${path} is not a git repository`);
     const root = await repoRoot(path);
     const existing = this.d.state.repos.find((r) => r.path === root);
-    if (existing) return existing;
+    if (existing) {
+      // `toyon` in a repo you already opened: this is the project you are about to look at
+      this.warm(existing.id);
+      return existing;
+    }
 
     const detected = detectConfig(root);
     const repo: RepoInfo = {
@@ -178,6 +215,7 @@ export class RepoRegistry {
       createdAt: Date.now(),
     };
     this.d.state.addWorktree(main);
+    this.warmed.add(repo.id);
     await this.d.runtime.start(main, repo);
     this.startWatcher(repo);
     fireAndForget(repo.id, this.d.worktrees.spare.ensure(repo.id), "spare warm-up");
@@ -222,7 +260,9 @@ export class RepoRegistry {
       log.warn(repoId, "could not write toyon.json", e);
     }
     // (re)start procs for this repo's worktrees — spares included, or a spare warmed under the old
-    // config would be handed to the next task with stale procs; agents stay
+    // config would be handed to the next task with stale procs; agents stay. Every worktree, cold
+    // ones too: the person is sitting in front of this repo's setup pane.
+    this.warmed.add(repoId);
     for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId)) {
       fireAndForget(
         wt.id,
@@ -241,14 +281,16 @@ export class RepoRegistry {
   reloadConfig(repoId: string) {
     const repo = this.d.state.requireRepo(repoId);
     if (!this.applyConfigFile(repo, true)) return;
-    for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId)) {
+    // only what is running comes back under the new file; a cold worktree stays cold and reads
+    // the file when it is opened
+    for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId && this.d.runtime.get(w.id)?.procs)) {
       fireAndForget(
         wt.id,
         this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),
         "runtime restart",
       );
     }
-    fireAndForget(repoId, this.d.worktrees.spare.ensure(repoId), "spare warm-up");
+    if (this.warmed.has(repoId)) fireAndForget(repoId, this.d.worktrees.spare.ensure(repoId), "spare warm-up");
     this.d.hub.emit("reposChanged");
     this.d.hub.emit("worktreesChanged");
   }

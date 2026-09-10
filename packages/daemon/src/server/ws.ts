@@ -125,6 +125,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   };
   const metrics = () => ({
     lag,
+    // what the daemon is running, for `toyon doctor`: worktrees start when opened, not at boot
+    worktrees: {
+      total: s.state.worktrees.filter((w) => w.kind !== "spare").length,
+      running: s.runtime.runningCount(),
+    },
     sockets: [...sockets].map(
       (ws): SocketStats => ({ subs: [...ws.data.subs], sent: ws.data.sent, bytes: ws.data.bytes }),
     ),

@@ -227,6 +227,14 @@ export class RuntimeRegistry {
     return this.runtimes.get(id);
   }
 
+  /** worktrees with procs up. Spares are left out to match the worktree count the shell shows;
+   * `info` is the live state record, so a claimed spare counts from the moment its kind changes. */
+  runningCount(): number {
+    let n = 0;
+    for (const rt of this.runtimes.values()) if (rt.procs && rt.info.kind !== "spare") n++;
+    return n;
+  }
+
   agentFor(id: string): AgentAdapter | undefined {
     return this.runtimes.get(id)?.agent;
   }

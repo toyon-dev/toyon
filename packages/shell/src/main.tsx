@@ -133,7 +133,11 @@ window.addEventListener("vite:preloadError", markStaleBuild);
 // mid-turn or waiting on an answer, when closing reads as walking out on it.
 window.addEventListener("beforeunload", (e) => {
   const busy = store.getState().rows.some((r) => r.agent === "working" || r.agent === "waiting");
-  if (busy) e.preventDefault();
+  if (!busy) return;
+  e.preventDefault();
+  // Chrome honours preventDefault, older engines the string; no browser shows the text itself.
+  // Chrome also shows nothing until the page has been clicked or typed in once since load.
+  e.returnValue = "an agent is still working";
 });
 
 createRoot(document.getElementById("root")!).render(

@@ -12,10 +12,10 @@
     padding: 24px;
     text-align: center;
     background: var(--surface0);
-    /* inside a Pane: clear of its title bar, matching the editor's own inset */
+    /* inside a Pane: clear of its head, which is one dense row tall */
     &.in-pane {
       position: absolute;
-      inset: 33px 0 0 0;
+      inset: var(--row-height-sm) 0 0 0;
     }
   }
   .crash-title {

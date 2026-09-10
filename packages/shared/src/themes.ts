@@ -958,6 +958,13 @@ export function sunkenOf(theme: Theme): string {
   return stepL(theme.colors.surface1, -4);
 }
 
+/** The same recess cut into the floor: a pane's tab strip, which sits on surface0 and needs a
+ * tone behind its tabs. --sunken is measured from the chrome and lands level with the floor in the
+ * dark half, so the floor has to name its own. */
+export function sunkenFloorOf(theme: Theme): string {
+  return stepL(theme.colors.surface0, -4);
+}
+
 /** The characters an edit touched, inside a line whose band already says it changed. Both surfaces
  * that show a diff paint this over the line tint, so it is a fraction of that tint rather than a
  * colour of its own: at full strength the two composite to nearly twice the wash and a block of
@@ -995,6 +1002,7 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
   out["--accent"] = theme.colors[accentKey(theme)];
   out["--fault"] = theme.colors[faultKey(theme)];
   out["--sunken"] = sunkenOf(theme);
+  out["--sunken-floor"] = sunkenFloorOf(theme);
   out["--scrim"] = hex8(theme.colors.surface0, 0.7);
   out["--shadow"] = theme.kind === "dark" ? "#00000066" : "#0000002e";
   out["--diff-add-word"] = wordTint(theme.colors.diffAdd);

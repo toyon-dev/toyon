@@ -550,7 +550,7 @@ export function Composer({
       {/* the row reads left to right as where this goes, then what runs there: each chip after the
           target is about the target. A chip's panel takes focus while it is up, so the caret goes
           back when it closes. */}
-      <div className="hint spawn-row">
+      <div className="hint composer-knobs">
         <span className="spawn-left">
           {!greenfield && !drafting && active && (
             <TargetChip

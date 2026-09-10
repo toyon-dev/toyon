@@ -19,6 +19,8 @@ import {
 } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
 import { bridgeThemeMsg } from "../../theme.ts";
+import { Button } from "../../ui/Button.tsx";
+import { CrashCard, STALE_BUILD } from "../../ui/ErrorBoundary.tsx";
 import { useDragResize, usePersisted } from "../../ui/hooks.ts";
 import { hasToken } from "../../ws.ts";
 
@@ -319,35 +321,57 @@ export function Center() {
             />
           )}
           {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
-          {!activeReady && !draftSpare && !activeDiscovered && !setupRepo && !watching && !greenfield && (
-            <div className="empty">
-              {incompatible ? (
-                "toyon was updated: reload this page"
-              ) : !connected && (!heard || connectFailure) ? (
-                // heard over the bootstrap fetch means the daemon is up and the socket is a
-                // moment away; saying "connecting" for that moment is the flash, not the truth
-                HAS_TOKEN ? (
-                  CONNECT_TEXT[connectFailure ?? "probing"]
+          {/* a stale build is the same card wherever it is noticed: here, or a chunk that failed to load */}
+          {!activeReady &&
+            !draftSpare &&
+            !activeDiscovered &&
+            !setupRepo &&
+            !watching &&
+            !greenfield &&
+            incompatible && (
+              <CrashCard
+                title={STALE_BUILD.title}
+                body={STALE_BUILD.body}
+                action={
+                  <Button variant="outline" onClick={() => window.location.reload()}>
+                    reload
+                  </Button>
+                }
+              />
+            )}
+          {!activeReady &&
+            !draftSpare &&
+            !activeDiscovered &&
+            !setupRepo &&
+            !watching &&
+            !greenfield &&
+            !incompatible && (
+              <div className="empty">
+                {!connected && (!heard || connectFailure) ? (
+                  // heard over the bootstrap fetch means the daemon is up and the socket is a
+                  // moment away; saying "connecting" for that moment is the flash, not the truth
+                  HAS_TOKEN ? (
+                    CONNECT_TEXT[connectFailure ?? "probing"]
+                  ) : (
+                    "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
+                  )
+                ) : !active ? (
+                  heard ? (
+                    `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
+                  ) : (
+                    ""
+                  )
+                ) : needsSetup && busy ? (
+                  `building in ${active.worktree.title}; the preview appears once it starts`
+                ) : needsSetup && treeEmpty ? (
+                  `${active.worktree.title} is empty so far; say what to build`
+                ) : noProcs ? (
+                  <NoPreviewPane repo={noProcs} />
                 ) : (
-                  "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
-                )
-              ) : !active ? (
-                heard ? (
-                  `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
-                ) : (
-                  ""
-                )
-              ) : needsSetup && busy ? (
-                `building in ${active.worktree.title}; the preview appears once it starts`
-              ) : needsSetup && treeEmpty ? (
-                `${active.worktree.title} is empty so far; say what to build`
-              ) : noProcs ? (
-                <NoPreviewPane repo={noProcs} />
-              ) : (
-                <BootPane worktree={active} log={log} />
-              )}
-            </div>
-          )}
+                  <BootPane worktree={active} log={log} />
+                )}
+              </div>
+            )}
         </div>
       </div>
       {diff && (

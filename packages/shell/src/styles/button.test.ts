@@ -17,6 +17,9 @@ import { cssRules, shellCss } from "./cssRules.ts";
 
 /** the box: what a size owns */
 const BOX = ["padding", "padding-top", "padding-bottom", "padding-left", "padding-right", "height", "min-height"];
+/** the face: Button's `mono` and Field's `font` are how a control asks for one. Unguarded, this is
+ * how two tab strips built from the same buttons ended up in two faces. */
+const FACE = ["font", "font-family", "font-size"];
 
 /** the primitives: Button's sizes, variants and tones, and Field's sizes and faces */
 const PRIMITIVES = new Set([
@@ -51,7 +54,9 @@ const ONE_OFFS = new Set([".setup-add", ".jump-down", ".rail-new", ".rail-disc-h
 /**
  * A raw <button> is a row, or one of three inline controls that are text rather than a chip:
  * .pick-open is a link inside a chip's sentence, .dl.more the last line of a diff block, and the
- * rail's two full-width rows are above. Anything else pressable is a Button or an IconButton.
+ * rail's two full-width rows are above. A tab (.tab-btn) is a band in a strip, and its box is the
+ * strip's the way a picker row's is the list's. Anything else pressable is a Button or an
+ * IconButton.
  */
 const RAW_BUTTON_OK = new Set([
   "row",
@@ -62,6 +67,7 @@ const RAW_BUTTON_OK = new Set([
   "jump-down",
   "pick-open",
   "dl",
+  "tab-btn",
 ]);
 
 type Tag = { kind: string; words: string[]; text: string };
@@ -122,6 +128,7 @@ describe("a control's box and its resting colour", () => {
     for (const rule of cssRules(await shellCss())) {
       const named = BOX.filter((p) => rule.decls.has(p));
       if (rule.decls.has("color")) named.push("a resting colour");
+      if (FACE.some((p) => rule.decls.has(p))) named.push("a face");
       if (named.length === 0) continue;
       for (const sel of rule.selectors) {
         // a bare single-class rule only: `.foo { … }`. A state or descendant rule is scoped, and

@@ -56,12 +56,9 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
       )}
       <ProjectPill />
       <RouteBar worktreeId={id} ready={ready} left={navCenter} />
+      {/* an action, not a switch: chrome's seat is for a toggle */}
       {installEvt && (
-        <Button
-          tone="chrome"
-          data-tip="Install Toyon as an app (own window, dock icon)"
-          onClick={() => void installEvt.prompt()}
-        >
+        <Button data-tip="Install Toyon as an app (own window, dock icon)" onClick={() => void installEvt.prompt()}>
           <Icon name="download" className="icon-inline" /> install app
         </Button>
       )}
@@ -195,6 +192,7 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
   const pageMenu = cm.contextMenu(() =>
     ready ? previewItems(url, { reload: () => id && previewBus.post(id, { type: "reload" }) }) : [],
   );
+  // the three are actions, not switches, so they take no chrome tone: its seat says "on"
   return (
     <div className="bar-center" style={{ left }}>
       <IconButton

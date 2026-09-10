@@ -1,0 +1,98 @@
+/* Tabs: a strip of alternatives with one open. See Tabs.tsx for the idea. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* the strip is a recess under the ground it heads, and the open tab is that ground showing
+   through: the lit tab is the open one, the way every tab bar has taught the eye, and the others
+   sit behind it. A recess rather than the tier above, because the tier above is lighter and that
+   put the open tab in the dark. The parent names the recess (`--tabs-strip`) beside its ground,
+   since the floor has a recess of its own (--sunken-floor) where the chrome has --sunken.
+   The rule under the strip is an inset shadow rather than a border, because a shadow paints under
+   the children: the open tab's own background covers it, and the rule breaks there without a
+   second rule to keep in step. */
+  /* the dense tier: the strip's text is the small tier, and the rows it heads (changed files, the
+   terminal's lines) are on the same rung, so the taller row token read as a header for a list of
+   something bigger */
+  .tabs {
+    display: flex;
+    align-items: stretch;
+    min-height: var(--row-height-sm);
+    flex-shrink: 0;
+    min-width: 0;
+    background: var(--tabs-strip, var(--sunken));
+    box-shadow: inset 0 -1px 0 var(--border0);
+  }
+  /* the list scrolls when the labels outgrow the strip, without a bar: there is no gutter to
+   reserve because there is no bar left (base.css says why nothing else may do this) */
+  .tabs-list {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+  .tabs-fill .tabs-list {
+    flex: 1;
+  }
+  .tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text1);
+    font: var(--type-ui-sm);
+    &:hover {
+      color: var(--text0);
+    }
+    /* the open tab is the ground under the strip, named by the parent beside its own background */
+    &[data-state~="current"] {
+      background: var(--tabs-ground, var(--surface0));
+      color: var(--text0);
+    }
+  }
+  .tabs-fill .tab {
+    flex: 1;
+    min-width: 0;
+  }
+  .tabs-mono .tab {
+    font: var(--type-mono-sm);
+  }
+  /* a raw button: the tab's box is the strip's, the way a picker row's is the list's */
+  .tab-btn {
+    flex: 1;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 var(--row-inset);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tabs-fill .tab-btn {
+    justify-content: center;
+  }
+  /* the slot is reserved on every tab that has one, so a change of tab never reflows the strip;
+   hidden this way it also leaves the tab order until it is shown */
+  .tab-trail {
+    display: flex;
+    margin-right: 6px;
+    visibility: hidden;
+  }
+  .tab:hover .tab-trail,
+  .tab:focus-within .tab-trail,
+  .tab-alert .tab-trail {
+    visibility: visible;
+  }
+  /* the pane's close and its actions: the head's own inset, outside the scrolling list */
+  .tabs-end {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px 0 12px;
+    flex-shrink: 0;
+  }
+}

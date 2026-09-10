@@ -6,6 +6,10 @@
     width: 220px;
     flex-shrink: 0;
     background: var(--surface1);
+    /* the panel's two lists are alternatives, so they take the shared strip; its open tab is
+     painted in this ground so it joins the list under it, and the strip is the recess under it */
+    --tabs-ground: var(--surface1);
+    --tabs-strip: var(--sunken);
     border-right: 1px solid var(--border0);
     display: flex;
     flex-direction: column;
@@ -24,20 +28,6 @@
   .left-dock.collapsed,
   .right-dock.collapsed {
     display: none;
-  }
-
-  /* the panel's two lists are alternatives, not sections, so they get the tab strip the terminal
-   pane already uses rather than a second section title */
-  .changes-tabs {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    padding: 8px 12px 2px;
-  }
-  .changes-tab {
-    font: var(--type-ui-sm);
-    flex-shrink: 0;
   }
 
   /* one commit: the subject takes the row, the age ends it where a file row ends with its counts */
@@ -162,8 +152,11 @@
    knobs row alone: where you are, and the one move that is left */
   .commit-box {
     flex-shrink: 0;
+    /* one line at rest, growing with the draft up to a few lines and scrolling past that, so the
+     list above keeps its room. Where field-sizing is not known the box stays one line and scrolls. */
     & textarea {
-      min-height: 56px;
+      field-sizing: content;
+      max-height: 8lh;
     }
   }
   .commit-where {
@@ -182,7 +175,7 @@
   .commit-acts {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     flex-shrink: 0;
   }
 }

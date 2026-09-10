@@ -54,6 +54,7 @@ export function CommitBox({
           <TextArea
             size="lg"
             bare
+            rows={1}
             value={msg}
             onChange={(e) => setMsg(e.target.value)}
             onKeyDown={(e) => {
@@ -68,7 +69,7 @@ export function CommitBox({
           />
         </div>
       )}
-      <div className="hint">
+      <div className="hint composer-knobs">
         <span className="commit-where">
           <Icon name="branch" className="icon-inline" />
           <span className="branch-name">{active.branch ?? "detached"}</span>

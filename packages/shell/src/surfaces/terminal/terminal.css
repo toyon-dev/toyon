@@ -1,32 +1,10 @@
-/* The terminal pane: tabs, body, host. */
+/* The terminal pane: body and host. The tab strip is the pane's head, and it is Tabs' own. */
 @layer tokens, base, surfaces;
 @layer surfaces {
   .term-pane {
     min-height: 140px;
     display: flex;
     flex-direction: column;
-    & .pane-head {
-      padding: 4px 12px;
-    }
-  }
-  /* the tab strip is the pane's header */
-  .term-tabs {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-  .term-tab {
-    flex-shrink: 0;
-  }
-  .term-exit {
-    color: var(--red);
-    font: var(--type-mono);
   }
   .term-body {
     flex: 1;

@@ -460,6 +460,7 @@ export function WtRail() {
             icon="worktrees"
             label="Worktree panel"
             hint={chord("rail")}
+            tone="chrome"
             on={railOpen}
             onClick={() => dispatch({ a: "toggle-rail" })}
           />

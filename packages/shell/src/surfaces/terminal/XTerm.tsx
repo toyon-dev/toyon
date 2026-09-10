@@ -129,15 +129,25 @@ export default function XTerm({
       }
     });
     const resized = term.onResize(({ cols, rows }) => sock.send({ t: "term-resize", worktreeId, stream, cols, rows }));
+    // a proc the supervisor respawns keeps its stream, so no snapshot follows its exit: the first
+    // thing it prints is what says it is back
+    let dead = false;
     const off = terminalBus.on(streamKey(worktreeId, stream), (m) => {
-      if (m.t === "term-data") term.write(m.data);
-      else if (m.t === "term-snapshot") {
+      if (m.t === "term-data") {
+        term.write(m.data);
+        if (dead) {
+          dead = false;
+          onAliveRef.current(true);
+        }
+      } else if (m.t === "term-snapshot") {
         // the daemon replays raw output into a fresh terminal (a reopen, a reconnect, a respawn)
         term.reset();
         term.write(m.data);
+        dead = !m.alive;
         onAliveRef.current(m.alive);
       } else {
         term.write(`\r\n\x1b[2m[exited ${m.exitCode}]\x1b[0m\r\n`);
+        dead = true;
         onAliveRef.current(false, m.exitCode);
       }
     });

@@ -5,6 +5,7 @@
 import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
+  type AgentEvent,
   type AgentStatus,
   type CommitEntry,
   type DiscoveredWorktree,
@@ -21,7 +22,7 @@ import { attachmentsDirFor } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer } from "../agent/tasks.ts";
-import { transcriptPathFor } from "../agent/transcript.ts";
+import { cutPoint, transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -47,6 +48,14 @@ import { SparePool } from "./spare.ts";
 const LOCAL_CONFIG_FILES = [".env", ".env.local", ".env.development", ".env.development.local", ".dev.vars"];
 
 export type Variant = { group: string; index: number; of: number };
+
+/** what a grafted transcript keeps of a message: the source's attachment store goes with the
+ * source, so an image or paste ref would point at nothing; the captions in the text stay */
+function withoutAttachments(event: AgentEvent): AgentEvent {
+  if (event.type !== "user-message") return event;
+  const { images: _images, pastes: _pastes, ...rest } = event;
+  return rest;
+}
 
 /** Where a worktree id points, for work that only reads.
  *
@@ -439,57 +448,61 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** Ephemeral local octopus merge of several worktree branches, as its own preview worktree. */
-  async combine(worktreeIds: string[]): Promise<WorktreeInfo> {
-    const wts = worktreeIds
+  /** Merge other worktrees' branches into one and remove them. A local merge, nothing pushed: the
+   * target keeps its title, procs, agent session and port, and the sources' transcripts are
+   * appended to its own so the reasoning behind their commits stays readable. Every check runs
+   * before anything is touched, and a conflict leaves both sides exactly as they were.
+   *
+   * It used to make a third worktree (a `combined` kind, kept apart from its sources until it
+   * landed). That cost a directory, a deps clone, a port and a cold agent with no memory of either
+   * side, for insurance the merge already provides: every commit is in the target, and a conflict
+   * never gets this far. */
+  async graft(targetId: string, sourceIds: string[]): Promise<{ target: WorktreeInfo; grafted: string[] }> {
+    const target = this.d.state.worktree(targetId);
+    if (!target) throw new UserError("that worktree is gone");
+    const sources = [...new Set(sourceIds)]
+      .filter((id) => id !== targetId)
       .map((id) => this.d.state.worktree(id))
-      .filter((w): w is WorktreeInfo => !!w && w.kind !== "main");
-    if (wts.length < 2) throw new UserError("select at least two worktrees to combine");
-    const repoId = wts[0]!.repoId;
-    if (!wts.every((w) => w.repoId === repoId)) throw new UserError("worktrees must belong to one repo");
-    const repo = this.d.state.requireRepo(repoId);
-
-    // graft names are the recipe: <a>+<b> (the ⧉ icon marks it as a graft); random suffix only on collision
-    let slug = wts
-      .map((w) => w.title.split("-")[0])
-      .join("+")
-      .slice(0, 40);
-    if ((await git(repo.path, "show-ref", "--verify", `refs/heads/toyon/${slug}`)).ok) {
-      slug = `${slug.slice(0, 34)}-${shortId().slice(0, 4)}`;
+      .filter((w): w is WorktreeInfo => !!w);
+    if (sources.length === 0) throw new UserError("pick at least one worktree to graft in");
+    const all = [target, ...sources];
+    for (const w of all) {
+      if (w.kind === "main") throw new UserError("graft between worktrees, not into or out of main");
+      if (w.kind === "spare") throw new UserError("that worktree is a spare");
+      if (w.repoId !== target.repoId) throw new UserError("worktrees must belong to one repo");
+      // a merge under an editing agent races its file tools, and a removal under one loses its
+      // turn; refusing beats stopping someone's turn from a rail button
+      const status = this.d.runtime.agentFor(w.id)?.status;
+      if (status === "working" || status === "waiting")
+        throw new UserError(`${w.title}'s agent is mid-turn; stop it first`);
     }
-    const branch = `toyon/${slug}`;
-    const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
-
+    // uncommitted work is the one thing the merge would not carry and the removal would lose
+    for (const w of all) {
+      if ((await statusFiles(w.path)).length > 0)
+        throw new UserError(`commit or discard the changes in ${w.title} first`);
+    }
+    const repo = this.d.state.requireRepo(target.repoId);
     await withRepoLock(repo.path, async () => {
-      await gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch);
-      const m = await git(wtPath, "merge", "--no-edit", ...wts.map((w) => w.branch));
+      const m = await git(target.path, "merge", "--no-edit", ...sources.map((w) => w.branch));
       if (!m.ok) {
-        await git(wtPath, "merge", "--abort");
-        await git(repo.path, "worktree", "remove", "--force", wtPath);
-        await git(repo.path, "branch", "-D", branch);
+        await git(target.path, "merge", "--abort");
         throw new UserError(`branches conflict: these worktrees can't be grafted cleanly (${m.err.slice(0, 200)})`);
       }
     });
-
-    // a graft runs the sources' profile when they agree, else the default
-    const profiles = new Set(wts.map((w) => w.profile));
-    const profile = profiles.size === 1 ? wts[0]!.profile : undefined;
-    const wt: WorktreeInfo = {
-      id: shortId(),
-      repoId,
-      path: wtPath,
-      branch,
-      kind: "combined",
-      proxyPort: await allocateProxyPort(),
-      title: slug,
-      createdAt: Date.now(),
-      sources: wts.map((w) => w.id),
-      ...(profile !== undefined ? { profile } : {}),
-    };
-    this.d.state.addWorktree(wt);
+    // the sources' history rides along in order, each behind a marker saying where it came from.
+    // Through the adapter, so the file, the in-memory copy and every open tab agree without a
+    // reload; a cold source's session object reads its file and is closed again by remove().
+    const agent = this.d.runtime.ensureAgent(target).agent;
+    for (const w of sources) {
+      const entries = this.d.runtime.ensureAgent(w).agent.transcript();
+      agent.note({ type: "grafted", title: w.title, branch: w.branch, ts: Date.now() });
+      for (const { event } of entries.slice(cutPoint(entries))) agent.note(withoutAttachments(event));
+    }
+    for (const w of sources) await this.remove(w.id);
+    this.setLanded(target.id, false);
+    this.countsCache.delete(target.id);
     this.d.hub.emit("worktreesChanged");
-    fireAndForget(wt.id, this.setupAndStart(wt, repo, wts[0]!.path), "setup + start");
-    return wt;
+    return { target, grafted: sources.map((w) => w.title) };
   }
 
   // ---- setup ----
@@ -575,7 +588,7 @@ export class WorktreeService {
   }
 
   /** merge into main locally. Returns the worktrees the UI should offer to clean up: landing a
-   * graft lands its sources; landing a variant ends the tournament. */
+   * variant ends the tournament. */
   async merge(worktreeId: string): Promise<{ result: ShipResult; removeIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "merge");
     // touches the main checkout: serialize with spare refresh / worktree add on the same repo
@@ -583,9 +596,7 @@ export class WorktreeService {
     if (!result.ok) return { result };
     this.setLanded(wt.id, true);
     let removeIds: string[];
-    if (wt.kind === "combined") {
-      removeIds = [wt.id, ...(wt.sources ?? []).filter((id) => this.d.state.worktree(id))];
-    } else if (wt.variant) {
+    if (wt.variant) {
       const group = wt.variant.group;
       removeIds = this.d.state.worktrees.filter((w) => w.variant?.group === group).map((w) => w.id);
     } else {

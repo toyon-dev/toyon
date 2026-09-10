@@ -462,5 +462,13 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="tool-hint">{item.path}</span>
         </div>
       );
+    case "grafted":
+      return (
+        <div className="graft-row" data-tip={`what follows was said in ${item.title} before it was merged in here`}>
+          <span className="graft-tag">grafted</span>
+          <span className="tool-name">{item.title}</span>
+          <span className="tool-hint">{item.branch}</span>
+        </div>
+      );
   }
 });

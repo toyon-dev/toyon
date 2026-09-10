@@ -269,7 +269,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("ship"), worktreeId: id }),
   z.object({ t: z.literal("merge-main"), worktreeId: id }),
   z.object({ t: z.literal("commit"), worktreeId: id, message: z.string().max(5_000) }),
-  z.object({ t: z.literal("combine"), worktreeIds: z.array(id).min(2).max(20) }),
+  /** merge the sources' branches into the target worktree and remove them; a local merge, and the
+   * target keeps its agent, procs and port */
+  z.object({ t: z.literal("graft"), targetId: id, sourceIds: z.array(id).min(1).max(20) }),
   z.object({ t: z.literal("sync-main"), worktreeId: id }),
   z.object({ t: z.literal("write-file"), worktreeId: id, path: relPath, content: z.string().max(10_000_000) }),
   z.object({ t: z.literal("list-files"), worktreeId: id }),

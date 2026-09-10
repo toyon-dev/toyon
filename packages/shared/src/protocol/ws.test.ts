@@ -26,7 +26,7 @@ describe("parseClientMsg", () => {
       { t: "agent-answer", worktreeId: "a", askId: "k1" },
       { t: "agent-decide", worktreeId: "a", askId: "k1", choiceId: "allow_once" },
       { t: "agent-logout", agent: "codex" },
-      { t: "combine", worktreeIds: ["a", "b"] },
+      { t: "graft", targetId: "a", sourceIds: ["b"] },
       { t: "confirm-config", repoId: "r", config: { procs: { web: "bun dev" } } },
       {
         t: "confirm-config",
@@ -108,8 +108,8 @@ describe("parseClientMsg", () => {
     if (!r.ok) expect(r.reason).toMatch(/^pastes/);
   });
 
-  test("combine needs at least two worktrees; unqueue index is a non-negative integer", () => {
-    expect(parseClientMsg({ t: "combine", worktreeIds: ["a"] }).ok).toBe(false);
+  test("graft needs a source; unqueue index is a non-negative integer", () => {
+    expect(parseClientMsg({ t: "graft", targetId: "a", sourceIds: [] }).ok).toBe(false);
     expect(parseClientMsg({ t: "unqueue", worktreeId: "a", index: -1 }).ok).toBe(false);
     expect(parseClientMsg({ t: "unqueue", worktreeId: "a", index: 1.5 }).ok).toBe(false);
   });

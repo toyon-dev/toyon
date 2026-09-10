@@ -74,7 +74,7 @@ export interface PendingRepo {
   error?: string;
 }
 
-export type WorktreeKind = "main" | "worktree" | "spare" | "combined";
+export type WorktreeKind = "main" | "worktree" | "spare";
 
 export interface WorktreeInfo {
   id: string;
@@ -92,8 +92,6 @@ export interface WorktreeInfo {
   createdAt: number;
   /** merged into main and no new work since */
   landed?: boolean;
-  /** for kind "combined": the worktrees this graft was made from */
-  sources?: string[];
   /** set when spawned as one of N parallel attempts at the same prompt */
   variant?: { group: string; index: number; of: number };
   /** open PR created from this worktree (via gh) */
@@ -111,7 +109,7 @@ export interface WorktreeInfo {
   seenAt?: number;
 }
 
-/** the branch is toyon's to manage: made by create, combine or a spare claim, so removing the
+/** the branch is toyon's to manage: made by create or a spare claim, so removing the
  * worktree may delete it and a title link may be planted beside it. An adopted worktree runs on
  * a branch the person made, in a directory they chose, and neither is toyon's to touch. */
 export function hasOwnBranch(wt: Pick<WorktreeInfo, "branch">): boolean {

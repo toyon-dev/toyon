@@ -20,8 +20,9 @@ export function transcriptPathFor(transcriptsDir: string, worktreeId: string): s
 }
 
 /** where to cut so the kept tail starts on a turn boundary: a tool row without its start, or a
- * reply without its question, would render as a torn first item */
-function cutPoint(entries: TranscriptEntry[]): number {
+ * reply without its question, would render as a torn first item. Exported for a graft, which
+ * copies one transcript into another and wants the same tail. */
+export function cutPoint(entries: TranscriptEntry[]): number {
   const from = Math.max(0, entries.length - KEEP_ENTRIES);
   for (let i = from; i < entries.length; i++) {
     const t = entries[i]!.event.type;

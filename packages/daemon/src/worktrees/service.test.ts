@@ -275,17 +275,6 @@ describe("profiles", () => {
     await settle();
     expect(w.procs.get(a.id)).toBe(after);
   });
-
-  test("a graft inherits the sources' profile when they agree", async () => {
-    const repoId = await registeredWithProfiles();
-    const a = await w.worktrees.create(repoId, "a", { profile: "full" });
-    const b = await w.worktrees.create(repoId, "b", { profile: "full" });
-    await settle();
-    sh(a.path, "sh", "-c", "echo a > a.txt && git add -A && git commit -qm a");
-    sh(b.path, "sh", "-c", "echo b > b.txt && git add -A && git commit -qm b");
-    const g = await w.worktrees.combine([a.id, b.id]);
-    expect(g.profile).toBe("full");
-  });
 });
 
 describe("config reload", () => {
@@ -366,34 +355,82 @@ describe("landing", () => {
   });
 });
 
-describe("combine", () => {
-  test("conflicting branches roll back the graft worktree and branch", async () => {
+describe("graft", () => {
+  const commitIn = (path: string, file: string) => {
+    writeFileSync(join(path, file), `${file}\n`);
+    sh(path, "git", "add", "-A");
+    sh(path, "git", "commit", "-qm", file);
+  };
+
+  test("merges the source into the target, appends its transcript, and removes it", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "alpha");
     const b = await w.worktrees.create(repoId, "beta");
+    await settle();
+    commitIn(a.path, "a.txt");
+    commitIn(b.path, "b.txt");
+    w.agents.get(b.id)!.note({ type: "user-message", text: "in beta", ts: 1 });
+    const portBefore = a.proxyPort;
+    const { target, grafted } = await w.worktrees.graft(a.id, [b.id]);
+    expect(target.id).toBe(a.id);
+    expect(grafted).toEqual([b.title]);
+    expect(existsSync(join(a.path, "b.txt"))).toBe(true);
+    expect(w.state.worktree(b.id)).toBeUndefined();
+    expect(existsSync(b.path)).toBe(false);
+    expect((await git(w.repo, "branch", "--list", b.branch)).out).toBe("");
+    // the target is the same worktree it was: same record, same port, procs never restarted
+    expect(w.state.worktree(a.id)?.proxyPort).toBe(portBefore);
+    expect(w.state.worktree(a.id)?.kind).toBe("worktree");
+    // beta's history is now alpha's, behind a marker saying where it came from
+    const recorded = w.agents.get(a.id)!.recorded;
+    expect(recorded.map((e) => e.type)).toEqual(["grafted", "user-message"]);
+    expect(recorded[0]).toMatchObject({ type: "grafted", title: b.title, branch: b.branch });
+  });
+
+  test("a dirty source is refused and nothing is touched", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "alpha");
+    const b = await w.worktrees.create(repoId, "beta");
+    await settle();
+    commitIn(b.path, "b.txt");
+    writeFileSync(join(b.path, "wip.txt"), "not committed\n");
+    const head = (await git(a.path, "rev-parse", "HEAD")).out;
+    await expect(w.worktrees.graft(a.id, [b.id])).rejects.toThrow(`commit or discard the changes in ${b.title}`);
+    expect(w.state.worktree(b.id)).toBeDefined();
+    expect((await git(a.path, "rev-parse", "HEAD")).out).toBe(head);
+    expect(existsSync(join(b.path, "wip.txt"))).toBe(true);
+  });
+
+  test("a conflict aborts the merge and removes nothing", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "alpha");
+    const b = await w.worktrees.create(repoId, "beta");
+    await settle();
     writeFileSync(join(a.path, "README.md"), "from a\n");
     sh(a.path, "git", "commit", "-qam", "a");
     writeFileSync(join(b.path, "README.md"), "from b\n");
     sh(b.path, "git", "commit", "-qam", "b");
-    await expect(w.worktrees.combine([a.id, b.id])).rejects.toBeInstanceOf(UserError);
-    expect(w.state.worktrees.some((x) => x.kind === "combined")).toBe(false);
-    expect((await git(w.repo, "branch", "--list", "toyon/alpha+beta")).out).toBe("");
+    await expect(w.worktrees.graft(a.id, [b.id])).rejects.toBeInstanceOf(UserError);
+    expect(w.state.worktree(b.id)).toBeDefined();
+    expect(existsSync(join(a.path, ".git", "MERGE_HEAD")) || existsSync(join(a.path, "MERGE_HEAD"))).toBe(false);
+    expect((await git(a.path, "status", "--porcelain")).out).toBe("");
+    expect(readFileSync(join(a.path, "README.md"), "utf8")).toBe("from a\n");
   });
 
-  test("clean branches graft into a combined worktree", async () => {
+  test("a mid-turn agent, main, and a target among its own sources are refused", async () => {
     const repoId = await registered();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
     const a = await w.worktrees.create(repoId, "alpha");
     const b = await w.worktrees.create(repoId, "beta");
-    writeFileSync(join(a.path, "a.txt"), "a\n");
-    sh(a.path, "git", "add", "-A");
-    sh(a.path, "git", "commit", "-qm", "a");
-    writeFileSync(join(b.path, "b.txt"), "b\n");
-    sh(b.path, "git", "add", "-A");
-    sh(b.path, "git", "commit", "-qm", "b");
-    const g = await w.worktrees.combine([a.id, b.id]);
-    expect(g.kind).toBe("combined");
-    expect(g.sources).toEqual([a.id, b.id]);
-    expect(existsSync(join(g.path, "a.txt")) && existsSync(join(g.path, "b.txt"))).toBe(true);
+    await settle();
+    commitIn(b.path, "b.txt");
+    w.agents.get(b.id)!.status = "working";
+    await expect(w.worktrees.graft(a.id, [b.id])).rejects.toThrow(/mid-turn/);
+    w.agents.get(b.id)!.status = "idle";
+    await expect(w.worktrees.graft(main.id, [b.id])).rejects.toBeInstanceOf(UserError);
+    await expect(w.worktrees.graft(a.id, [main.id])).rejects.toBeInstanceOf(UserError);
+    await expect(w.worktrees.graft(a.id, [a.id])).rejects.toBeInstanceOf(UserError);
+    expect(w.state.worktree(b.id)).toBeDefined();
   });
 });
 

@@ -180,10 +180,7 @@ export function WtRail() {
                   tabIndex={-1}
                 />
               )}
-              <span className="branch">
-                {w.worktree.kind === "combined" && <Icon name="layers" className="icon-inline" />}
-                {w.worktree.title}
-              </span>
+              <span className="branch">{w.worktree.title}</span>
               {(() => {
                 // only the non-default profile is worth a tag: it is the one you need to notice
                 const repo = repoOf(w);
@@ -285,18 +282,41 @@ export function WtRail() {
           ))}
           {graftMode && (
             <div className="rail-graft">
-              <Button
-                size="md"
-                tone="primary"
-                disabled={sel.length < 2}
-                data-tip="Preview these worktrees merged together (local octopus merge)"
-                onClick={() => {
-                  sock?.send({ t: "combine", worktreeIds: sel });
-                  cancelGraft();
-                }}
-              >
-                <Icon name="layers" className="icon-inline" /> graft {sel.length}
-              </Button>
+              {(() => {
+                // the row you are on takes the others: it keeps its agent, procs and port, and
+                // the checked ones are merged into it and removed
+                const target = worktrees.find((w) => w.worktree.id === activeId && w.worktree.kind !== "main");
+                const sources = sel.filter((id) => id !== target?.worktree.id);
+                const names = sources
+                  .map((id) => worktrees.find((w) => w.worktree.id === id)?.worktree.title ?? id)
+                  .join(", ");
+                return (
+                  <Button
+                    size="md"
+                    tone="primary"
+                    disabled={!target || sources.length === 0}
+                    data-tip={
+                      target
+                        ? `Merge the checked worktrees into ${target.worktree.title} and remove them`
+                        : "Select a worktree to graft into"
+                    }
+                    onClick={() => {
+                      if (!target) return;
+                      if (
+                        window.confirm(
+                          `Graft ${names} into ${target.worktree.title}?\n\nTheir branches are merged in, then their directories and branches are removed.`,
+                        )
+                      ) {
+                        sock?.send({ t: "graft", targetId: target.worktree.id, sourceIds: sources });
+                        cancelGraft();
+                      }
+                    }}
+                  >
+                    <Icon name="layers" className="icon-inline" /> graft {sources.length} into{" "}
+                    {target?.worktree.title ?? "…"}
+                  </Button>
+                );
+              })()}
               <Button
                 size="md"
                 disabled={!sel.some((id) => (worktrees.find((w) => w.worktree.id === id)?.behind ?? 0) > 0)}

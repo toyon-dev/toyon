@@ -92,10 +92,6 @@ describe("active worktree", () => {
     expect(run([worktrees(wt("main", "main"), wt("fresh", "worktree", "tab-2"))], s).activeId).toBe("main");
     expect(run([worktrees(wt("main", "main"), wt("cli"))], s).activeId).toBe("main");
   });
-  test("a new combined worktree does not steal focus even from this tab", () => {
-    const s = run([hello(wt("main", "main"))]);
-    expect(run([worktrees(wt("main", "main"), wt("g", "combined", ME))], s).activeId).toBe("main");
-  });
   test("the first worktrees list after an empty state does not count as new", () => {
     expect(run([worktrees(wt("main", "main"), wt("a", "worktree", ME))]).activeId).toBe("main");
   });
@@ -157,6 +153,17 @@ describe("chat folding", () => {
     expect(
       s.local.a?.chat.map((i) => (i.kind === "user" || i.kind === "assistant" ? `${i.kind}:${i.text}` : i.kind)),
     ).toEqual(["user:hi", "assistant:hello", "user:more", "assistant:x"]);
+  });
+  test("a graft marker is a divider item; what follows folds as usual", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "grafted", title: "beta", branch: "toyon/beta", ts: 0 }),
+      agent("a", { type: "user-message", text: "in beta", ts: 0 }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "grafted", title: "beta", branch: "toyon/beta" },
+      { kind: "user", text: "in beta" },
+    ]);
   });
   test("tool-end completes the matching tool-start", () => {
     const s = run([

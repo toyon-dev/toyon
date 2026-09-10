@@ -231,10 +231,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message));
   },
 
-  async combine(msg, ctx, s) {
-    const wt = await s.worktrees.combine(msg.worktreeIds);
-    ctx.reply(
-      toast(wt.id, true, `grafted: ${wt.title}; local merge of ${msg.worktreeIds.length} branches, nothing pushed`),
+  async graft(msg, ctx, s) {
+    const { target, grafted } = await s.worktrees.graft(msg.targetId, msg.sourceIds);
+    await notify(
+      s,
+      ctx,
+      target.id,
+      toast(target.id, true, `grafted ${grafted.join(", ")} into ${target.title}; merged locally, nothing pushed`),
     );
   },
 

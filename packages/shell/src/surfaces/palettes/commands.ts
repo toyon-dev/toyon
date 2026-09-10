@@ -9,7 +9,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileNames, profileOf } from "../../state/profiles.ts";
 import { type Action, repoById, type State, worktreeById } from "../../state/store.ts";
 import type { DaemonSocket } from "../../ws.ts";
-import { worktreeActions } from "../rail/worktreeActions.ts";
+import { shipOp, worktreeActions } from "../rail/worktreeActions.ts";
 import { chord, isBusy } from "../util.ts";
 
 export type Command = {
@@ -166,13 +166,19 @@ export function buildCommands(
     for (const name of profileNames(repo)) {
       if (name !== current) add(`profile:${name}`, `run ${t} with ${name}`, () => acts.setProfile(wt, name));
     }
-    if ((wt.behind ?? 0) > 0)
-      add("sync", `sync main into ${t} (${wt.behind} behind)`, () => sock?.send({ t: "sync-main", worktreeId: id }));
+    // a landing op already out for this worktree takes the others off the list until it answers
+    const idle = !state.shipping[id];
+    if ((wt.behind ?? 0) > 0 && idle)
+      add("sync", `sync main into ${t} (${wt.behind} behind)`, () =>
+        shipOp(sock, dispatch, { t: "sync-main", worktreeId: id }),
+      );
     if (wt.worktree.kind !== "main") {
       add("rename", `rename worktree · ${t}…`, () => acts.rename(wt));
       if (wt.worktree.variant) add("keep", `keep this variant · ${t}…`, () => acts.pickVariant(wt));
-      add("merge", `merge ${t} into main`, () => sock?.send({ t: "merge-main", worktreeId: id }));
-      add("ship", `push + PR · ${t}`, () => sock?.send({ t: "ship", worktreeId: id }));
+      if (idle) {
+        add("merge", `merge ${t} into main`, () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }));
+        add("ship", `push + PR · ${t}`, () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }));
+      }
       add("remove", `remove worktree · ${t}…`, () => acts.remove(wt));
     }
   }
@@ -213,6 +219,7 @@ export type CommandState = Pick<
   | "repos"
   | "agents"
   | "defaultAgent"
+  | "shipping"
 >;
 
 export function useCommands(): Command[] {
@@ -234,6 +241,7 @@ export function useCommands(): Command[] {
   const repos = useStore((s) => s.repos);
   const agents = useStore((s) => s.agents);
   const defaultAgent = useStore((s) => s.defaultAgent);
+  const shipping = useStore((s) => s.shipping);
   return useMemo(() => {
     const st: CommandState = {
       picking,
@@ -252,6 +260,7 @@ export function useCommands(): Command[] {
       repos,
       agents,
       defaultAgent,
+      shipping,
     };
     return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repoById(st as State, activeRepoId));
   }, [
@@ -271,6 +280,7 @@ export function useCommands(): Command[] {
     repos,
     agents,
     defaultAgent,
+    shipping,
     dispatch,
     sock,
   ]);

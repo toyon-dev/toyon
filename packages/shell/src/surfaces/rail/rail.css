@@ -326,6 +326,7 @@
       padding: 0 16px 0 12px;
     }
     & .rail-item .dot,
+    & .rail-item .spinner,
     & .rail-glyph {
       margin-left: 12px;
     }

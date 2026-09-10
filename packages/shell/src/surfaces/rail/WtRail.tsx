@@ -13,9 +13,10 @@ import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
+import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { chord, dotClass, procTrouble } from "../util.ts";
-import { removeWorktrees, worktreeActions } from "./worktreeActions.ts";
+import { removeWorktrees, shipOp, worktreeActions } from "./worktreeActions.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -39,6 +40,7 @@ export function WtRail() {
   const railOpen = useStore((s) => s.railOpen);
   const termOpen = useStore((s) => s.termOpen);
   const repos = useStore((s) => s.repos);
+  const shipping = useStore((s) => s.shipping);
   const repoOf = (w: WorktreeStatus) => repos.find((r) => r.id === w.worktree.repoId) ?? null;
   const [menu, setMenu] = useState<MenuState | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -107,9 +109,9 @@ export function WtRail() {
     const id = w.worktree.id;
     const merge: MenuItem = {
       label: "merge into main",
-      onClick: () => sock?.send({ t: "merge-main", worktreeId: id }),
+      onClick: () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }),
     };
-    const ship: MenuItem = { label: "push + PR", onClick: () => sock?.send({ t: "ship", worktreeId: id }) };
+    const ship: MenuItem = { label: "push + PR", onClick: () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }) };
     if (land) return [merge, ship];
     const items: MenuItem[] = [];
     if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !leftOpen) {
@@ -229,11 +231,13 @@ export function WtRail() {
               {(w.behind ?? 0) > 0 && (
                 // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
                 <span
-                  className="rail-badge badge-behind clickable"
-                  data-tip="Sync from main"
+                  className={cx("rail-badge badge-behind", !shipping[w.worktree.id] && "clickable")}
+                  data-tip={shipping[w.worktree.id] === "sync-main" ? "Syncing from main" : "Sync from main"}
                   onClick={(e) => {
                     e.stopPropagation();
-                    sock?.send({ t: "sync-main", worktreeId: w.worktree.id });
+                    // the count stays until the daemon's frame replaces it: the dot is what says
+                    // the sync is running, and a second click while it does has nothing to send
+                    if (!shipping[w.worktree.id]) shipOp(sock, dispatch, { t: "sync-main", worktreeId: w.worktree.id });
                   }}
                 >
                   <span className="num">↓{w.behind}</span>
@@ -272,6 +276,11 @@ export function WtRail() {
                 // dot is the click target because in the collapsed strip it is the whole row you
                 // can see; offline the colour is the socket's, not the proc's, so it stays inert.
                 const trouble = graftMode || offline ? null : procTrouble(w.procs);
+                // a landing op is out: the dot's slot shows it working, since the op was started
+                // from this row and the control that started it may be off screen in the strip.
+                // `waiting` still wins: a person being needed outranks a git op that finishes on
+                // its own.
+                if (shipping[w.worktree.id] && dotClass(w) !== "waiting") return <Spinner size="dot" />;
                 // the ring is a modifier, not a state: it rides on whatever the dot already says
                 const unseen = w.unseen ? " unseen" : "";
                 if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}${unseen}`} />;
@@ -311,7 +320,7 @@ export function WtRail() {
                 onClick={() => {
                   for (const id of sel) {
                     const w = worktrees.find((x) => x.worktree.id === id);
-                    if ((w?.behind ?? 0) > 0) sock?.send({ t: "sync-main", worktreeId: id });
+                    if ((w?.behind ?? 0) > 0) shipOp(sock, dispatch, { t: "sync-main", worktreeId: id });
                   }
                   cancelGraft();
                 }}

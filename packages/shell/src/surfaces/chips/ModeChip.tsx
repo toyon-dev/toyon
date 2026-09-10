@@ -37,7 +37,6 @@ export function ModeChip({
       className={cx("mode-chip", value !== "auto" && "mode-held")}
       hint={`${value}: ${describe(value)}. Click to change`}
       placeholder="what the agent may do without asking"
-      pickVerb="sets it"
     />
   );
 }

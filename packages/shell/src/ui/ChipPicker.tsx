@@ -16,9 +16,9 @@ export type ChipOption<T extends string> = {
 };
 
 /** the panel's footprint before it is on screen, for deciding which way it opens: the width is
- * chip-picker.css's, the height is the field strip, the key row and a two-line row per option */
+ * chip-picker.css's, the height is the field strip and a two-line row per option */
 const PANEL_W = 360;
-const panelH = (rows: number) => 100 + 38 * rows;
+const panelH = (rows: number) => 68 + 38 * rows;
 
 /** which way the panel opens: over the chip unless that runs off the screen, then above it, or
  * hung from the chip's right edge */
@@ -43,7 +43,6 @@ export function ChipPicker<T extends string>({
   onChange,
   placeholder,
   hint,
-  pickVerb = "picks",
   className,
   onClose,
 }: {
@@ -54,8 +53,6 @@ export function ChipPicker<T extends string>({
   placeholder: string;
   /** the chip's tooltip */
   hint: string;
-  /** what enter does, for the key row */
-  pickVerb?: string;
   /** how the chip sits in its row, and the surface's own colour for a value worth flagging */
   className?: string;
   /** the panel went away, picked or not: the host puts the caret back where it was */
@@ -135,7 +132,6 @@ export function ChipPicker<T extends string>({
             close();
           }}
           onBack={close}
-          keys={{ pick: pickVerb, back: "closes" }}
         />
       )}
     </span>

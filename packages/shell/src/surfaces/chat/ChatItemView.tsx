@@ -357,8 +357,9 @@ export const ToolRow = memo(
     // the row the agent is on opens itself, but only where its output is worth watching arrive: a
     // read or a search is a file you asked for, and having each one throw a panel open walks the
     // message you were reading off the top of the log. A command the person ran themselves is
-    // open from the start: what it printed is the reason they ran it.
-    const auto = head.name === SHELL_TOOL || (!!live && AUTO_OPEN.has(head.toolKind ?? "other"));
+    // open from the start, since what it printed is the reason they ran it, and the next one
+    // closes it: a series of `!` commands is a prompt, not a stack of listings.
+    const auto = !!live && (head.name === SHELL_TOOL || AUTO_OPEN.has(head.toolKind ?? "other"));
     const { label, name, icon, hint } = toolLabel(head, roots);
     const running = !tools.at(-1)?.done;
     const what = [label, hint].filter(Boolean).join(" ");

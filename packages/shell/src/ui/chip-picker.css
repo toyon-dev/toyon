@@ -32,7 +32,7 @@
   }
   /* No room below the chip (the composer's chips are at the foot of the window): the panel is
    flipped, so the field strip is its bottom band and still lands on the chip, with the rows rising
-   above it and the key row on top. Each band swaps the edge it draws its rule and corners on.
+   above it. Each band swaps the edge it draws its rule and corners on.
    ChipPicker.tsx measures and sets this. */
   .chip-picker-up {
     & > .overlay-box.anchored {
@@ -49,10 +49,6 @@
     }
     & > .overlay-box.anchored .picker-list {
       margin: 0 var(--picker-bleed, 0) 6px;
-    }
-    & > .overlay-box.anchored .key-hints {
-      border-top: 0;
-      border-bottom: 1px solid var(--border0);
     }
   }
   /* no room to the right (the chat dock sits on the window's edge): the panel hangs from the chip's

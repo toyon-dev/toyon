@@ -73,6 +73,8 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   // a thought is live only while it is the newest thing in the log: the next call or word closes it
   const last = entries.at(-1);
   const liveThought = working && last && "item" in last && last.item.kind === "thinking" ? entries.length - 1 : -1;
+  // the newest `!` command is the one whose output is open; each one closes the one before it
+  const newestShell = entries.findLastIndex((e) => "tools" in e && e.tools[0]?.name === SHELL_TOOL);
   // a `!` command still going: its row spins, and this is where the stop for it lives
   const shellRunning = items.some((i) => i.kind === "tool" && i.name === SHELL_TOOL && !i.done);
 
@@ -81,7 +83,13 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
       <div className="chat-log" ref={logRef} onScroll={onScroll}>
         {entries.map((entry, i) =>
           "tools" in entry ? (
-            <ToolRow key={entry.at} tools={entry.tools} live={i === liveRow} roots={roots} worktreeId={id} />
+            <ToolRow
+              key={entry.at}
+              tools={entry.tools}
+              live={i === liveRow || i === newestShell}
+              roots={roots}
+              worktreeId={id}
+            />
           ) : entry.item.kind === "thinking" ? (
             <ThoughtRow key={entry.at} item={entry.item} live={i === liveThought} />
           ) : (

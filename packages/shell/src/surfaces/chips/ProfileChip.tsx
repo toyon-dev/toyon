@@ -47,7 +47,6 @@ export function ProfileChip({
       onClose={onClose}
       hint={names.length > 1 ? `${value}: ${runs(value)}. Click to change` : "the only profile in toyon.json"}
       placeholder="the profile the worktree runs"
-      pickVerb="runs it"
     />
   );
 }

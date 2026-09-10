@@ -33,7 +33,6 @@ export function AgentChip({
       onClose={onClose}
       hint={`${shown?.name ?? value} works on the new worktree; click to change`}
       placeholder="which agent works on it"
-      pickVerb="picks it"
     />
   );
 }

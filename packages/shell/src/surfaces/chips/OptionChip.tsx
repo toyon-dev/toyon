@@ -54,7 +54,6 @@ export function OptionChip({
       className={className}
       hint={value ? `asked for ${label}; click to change` : `${label}, the agent's choice; click to pick ${what}`}
       placeholder={placeholder}
-      pickVerb="sets it"
     />
   );
 }

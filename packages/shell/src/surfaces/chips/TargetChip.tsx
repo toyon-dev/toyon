@@ -40,7 +40,6 @@ export function TargetChip({
           : `a message here goes to ${title}; click to change`
       }
       placeholder="where the message goes"
-      pickVerb="sets it"
     />
   );
 }

@@ -13,6 +13,7 @@ import { Field } from "../../ui/Field.tsx";
 import { useReveal } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
+import { Spinner } from "../../ui/Spinner.tsx";
 import { attachmentUrl } from "../../ws.ts";
 import { wtDir } from "../util.ts";
 import { AskCard } from "./AskCard.tsx";
@@ -377,7 +378,7 @@ export const ToolRow = memo(
         }}
         summary={
           <>
-            {running ? <span className="spinner">●</span> : <Icon name={icon} className="tool-icon" />}
+            {running ? <Spinner className="tool-spinner" /> : <Icon name={icon} className="tool-icon" />}
             {name && <span className="tool-name">{name}</span>}
             {hint && <span className="tool-hint">{hint}</span>}
             {tools.length > 1 && <span className="tool-count">×{tools.length}</span>}

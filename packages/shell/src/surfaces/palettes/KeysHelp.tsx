@@ -1,10 +1,13 @@
 import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveTheme } from "@toyon/shared";
+import { agentItems } from "../../state/actions/agent.ts";
+import { projectItems } from "../../state/actions/project.ts";
 import { appearanceLabel } from "../../state/actions/settings.ts";
-import { useDispatch, useStore } from "../../state/context.tsx";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
+import { useContextMenu } from "../../ui/menu.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
 import { chord } from "../util.ts";
 
@@ -17,6 +20,8 @@ const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
  * settings live here as well as in the palette; esc from a picker opened here comes back */
 export function KeysHelp() {
   const dispatch = useDispatch();
+  const sock = useSock();
+  const cm = useContextMenu("keys");
   const prefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
@@ -64,6 +69,7 @@ export function KeysHelp() {
               mono
               data-tip={`edit the install + start commands in ${repo.name}'s toyon.json`}
               onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
+              {...cm.contextMenu(() => projectItems(repo, repo.id, { sock, dispatch }))}
             >
               {Object.keys(repo.config.procs).join(" + ") || "not set up"}
             </Button>
@@ -105,8 +111,11 @@ export function authTip(a: AgentInfo): string {
  * where the auth card can also run a method that needs the worktree's terminal. */
 function AgentRow({ agent }: { agent: AgentInfo }) {
   const dispatch = useDispatch();
+  const sock = useSock();
+  const cm = useContextMenu("keys");
   // the chip opens the agent's own page, the way every other chip here opens what it names: who
-  // it is, its actions, the files it reads and the MCP servers it will load
+  // it is, its actions, the files it reads and the MCP servers it will load. One level in, on a
+  // right-click, are the page's own verbs: log out, install again.
   return (
     <div className="keys-setting">
       <span className="keys-d">{agent.name}</span>
@@ -114,6 +123,7 @@ function AgentRow({ agent }: { agent: AgentInfo }) {
         variant="field"
         mono
         data-tip={authTip(agent)}
+        {...cm.contextMenu(() => agentItems(agent, { sock, dispatch }))}
         onClick={() => {
           // like the other chips: mark the card as where Escape comes back to, then open
           dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });

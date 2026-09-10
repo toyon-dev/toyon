@@ -1,5 +1,5 @@
 import { type ProcState, SHELL_STREAM } from "@toyon/shared";
-import { procItems } from "../../state/actions/proc.ts";
+import { procItems, shellItems } from "../../state/actions/proc.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
@@ -32,6 +32,7 @@ export function TabStrip({
         on={active === SHELL_STREAM}
         onClick={() => onPick(SHELL_STREAM)}
         {...tip("A shell in this worktree")}
+        {...cm.contextMenu(() => shellItems(worktreeId, { sock, dispatch }))}
       >
         shell
       </Button>

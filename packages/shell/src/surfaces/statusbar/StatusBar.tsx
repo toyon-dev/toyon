@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
+import { previewItems } from "../../state/actions/preview.ts";
+import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useActive, useActiveRepo, useGreenfield, useLocalField } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
-import { useContextMenu } from "../../ui/menu.ts";
+import { grouped, useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../palettes/ProjectPicker.tsx";
 import { chord, isBusy, isInstalledApp } from "../util.ts";
@@ -113,8 +115,24 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
  * an agent is working in a project that is not on screen. */
 function ProjectPill() {
   const dispatch = useDispatch();
+  const sock = useSock();
   const repo = useActiveRepo();
   const repos = useStore((s) => s.repos);
+  // the pill opens the switcher, so one level in is the switch itself and the open project's own
+  // verbs, the ones its row in the switcher carries
+  const cm = useContextMenu("bar");
+  const pillMenu = () =>
+    grouped([
+      [
+        {
+          id: "project",
+          label: repos.length > 1 ? "switch project…" : "open project…",
+          key: chord("project"),
+          onClick: () => dispatch({ a: "open", overlay: { kind: "projects" } }),
+        },
+      ],
+      repo ? projectItems(repo, repo.id, { sock, dispatch }) : [],
+    ]);
   // the dialog form draws over the preview instead; this is only the panel that drops out of here
   const open = useStore((s) => s.overlay?.kind === "projects" && !s.overlay.dialog);
   const busyElsewhere = useStore((s) => s.rows.some((w) => isBusy(w) && w.repoId !== s.activeRepoId));
@@ -129,6 +147,7 @@ function ProjectPill() {
         on={open}
         {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
         onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
+        {...cm.contextMenu(pillMenu)}
       >
         <span className="bar-project-name">{repo?.name ?? (heard ? "open project" : "")}</span>
         {busyElsewhere && <span className="bar-project-dot" {...tip("An agent is working in another project")} />}
@@ -165,6 +184,12 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
     previewBus.post(id, { type: "navigate", path: clean });
     setEditing(false);
   };
+  // the nav cluster is the preview's chrome: a right-click on any of it offers the page as a page,
+  // in a real tab or as its address. The field beside it is an input and keeps the browser's own.
+  const cm = useContextMenu("bar");
+  const pageMenu = cm.contextMenu(() =>
+    ready ? previewItems(url, { reload: () => id && previewBus.post(id, { type: "reload" }) }) : [],
+  );
   return (
     <div className="bar-center" style={{ left }}>
       <IconButton
@@ -172,18 +197,21 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
         label="Back"
         disabled={!ready}
         onClick={() => id && previewBus.post(id, { type: "back" })}
+        {...pageMenu}
       />
       <IconButton
         icon="forward"
         label="Forward"
         disabled={!ready}
         onClick={() => id && previewBus.post(id, { type: "forward" })}
+        {...pageMenu}
       />
       <IconButton
         icon="reload"
         label="Reload preview"
         disabled={!ready}
         onClick={() => id && previewBus.post(id, { type: "reload" })}
+        {...pageMenu}
       />
       <Field
         className="bar-path"

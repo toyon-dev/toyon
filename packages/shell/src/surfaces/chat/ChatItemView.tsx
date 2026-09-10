@@ -3,6 +3,7 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
+import { blockedItems, messageItems } from "../../state/actions/message.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { type ChatItem, worktreeById } from "../../state/store.ts";
@@ -69,10 +70,17 @@ function useThrottledMarkdown(text: string): string {
   return html;
 }
 
-function Markdown({ text }: { text: string }) {
+function Markdown({ text, menu }: { text: string; menu: () => MenuEntry[] }) {
   const html = useThrottledMarkdown(text);
-  // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
-  return <div className="msg-assistant md" dangerouslySetInnerHTML={{ __html: html }} />;
+  const cm = useContextMenu("chat");
+  return (
+    <div
+      className="msg-assistant md"
+      {...cm.contextMenu(menu)}
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 /** how much of a diff the log prints before it hands off to the pane. A row is a receipt for what
@@ -488,10 +496,17 @@ export const ChatItemView = memo(function ChatItemView({
 }) {
   const store = useStoreInstance();
   const sock = useSock();
+  const cm = useContextMenu("chat");
+  const deps = { sock, dispatch: store.dispatch };
+  // the worktree's directory, for a path a row names without its root
+  const dirOf = () => {
+    const w = worktreeById(store.getState(), worktreeId);
+    return w ? wtDir(w.worktree) : null;
+  };
   switch (item.kind) {
     case "user":
       return (
-        <div className="msg-user">
+        <div className="msg-user" {...cm.contextMenu(() => messageItems(item, worktreeId ?? null, deps))}>
           {item.images && worktreeId && (
             <div className="msg-images">
               {item.images.map((img) => (
@@ -528,16 +543,28 @@ export const ChatItemView = memo(function ChatItemView({
         </div>
       );
     case "assistant":
-      return <Markdown text={item.text} />;
+      return <Markdown text={item.text} menu={() => messageItems(item, worktreeId ?? null, deps)} />;
     case "error":
-      return <div className="msg-assistant msg-error">{item.text}</div>;
+      return (
+        <div
+          className="msg-assistant msg-error"
+          {...cm.contextMenu(() => messageItems(item, worktreeId ?? null, deps))}
+        >
+          {item.text}
+        </div>
+      );
     case "auth":
       return <AuthCard item={item} />;
     case "ask":
       return <AskCard item={item} />;
     case "blocked":
       return (
-        <div className="blocked-row" data-tip={item.reason} data-tip-placement="follow">
+        <div
+          className="blocked-row"
+          data-tip={item.reason}
+          data-tip-placement="follow"
+          {...cm.contextMenu(() => blockedItems(item.path, dirOf()))}
+        >
           <span className="blocked-tag">blocked</span>
           <span className="tool-name">{item.tool}</span>
           <span className="tool-hint">{item.path}</span>

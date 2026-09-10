@@ -1,6 +1,6 @@
 import { isOwned, type RepoInfo } from "@toyon/shared";
 import { useCallback } from "react";
-import { projectItems } from "../../state/actions/project.ts";
+import { importItems, projectItems } from "../../state/actions/project.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { IconButton } from "../../ui/Button.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
@@ -167,8 +167,14 @@ export function ProjectPicker({
       }}
       onBack={goBack}
       // a project row is a project: its setup and its forget are a right-click away, as they are
-      // in the palette
-      rowMenu={(r) => (r.kind === "repo" ? projectItems(r.repo, current, { sock, dispatch }) : [])}
+      // in the palette; a clone still running can be stopped from its row
+      rowMenu={(r) =>
+        r.kind === "repo"
+          ? projectItems(r.repo, current, { sock, dispatch })
+          : r.kind === "pending"
+            ? importItems(r.pending, { sock, dispatch })
+            : []
+      }
       placeholder={repos.length > 1 ? "switch project, or type a name or path" : "type a name or a path to start"}
       keys={(active) => ({
         complete: "completes the path",

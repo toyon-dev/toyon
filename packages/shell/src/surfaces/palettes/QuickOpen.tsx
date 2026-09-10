@@ -1,11 +1,13 @@
 import type { GitFileStatus } from "@toyon/shared";
 import { useCallback } from "react";
+import { fileItems } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
+import { worktreeById } from "../../state/store.ts";
 import { markHits } from "../../ui/highlight.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { LineCounts } from "../changes/GitFileRow.tsx";
-import { xyClass, xyLetter } from "../util.ts";
+import { wtDir, xyClass, xyLetter } from "../util.ts";
 import { commandRow } from "./CommandPalette.tsx";
 import { type Command, filterCommands, useCommands } from "./commands.ts";
 import { matchPositions, rankFiles, splitPath } from "./quickOpen.ts";
@@ -24,6 +26,11 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
   const status = local.git?.files ?? EMPTY_STATUS;
   const commands = useCommands();
   const initialQuery = useStore((s) => (s.paletteReturn?.mode === "quick-open" ? s.paletteReturn.q : ""));
+  // a file row is a file: open in an editor or reveal it, as the changes panel's rows offer
+  const dir = useStore((s) => {
+    const w = worktreeById(s, worktreeId)?.worktree;
+    return w ? wtDir(w) : null;
+  });
 
   // changed files lead an empty query (same order as the changes panel); once typing, it's fuzzy
   // order with a small nudge for changed files
@@ -52,6 +59,9 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
         }
       }}
       onBack={() => dispatch({ a: "close" })}
+      rowMenu={(r) =>
+        r.kind === "file" && dir ? fileItems({ id: worktreeId, dir }, r.path, false, { sock, dispatch }) : []
+      }
       placeholder="jump to file · type > for commands"
       keys={{ pick: "opens", back: "closes" }}
       initialQuery={initialQuery}

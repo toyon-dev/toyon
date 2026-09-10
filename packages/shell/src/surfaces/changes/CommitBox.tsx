@@ -1,11 +1,13 @@
 import { canSync, isOwned, canLand as landable, type WorktreeStatus } from "@toyon/shared";
 import { useState } from "react";
+import { copyText } from "../../state/actions/deps.ts";
 import { shipOp } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
@@ -28,6 +30,7 @@ export function CommitBox({
 }) {
   const sock = useSock();
   const dispatch = useDispatch();
+  const cm = useContextMenu("changes");
   const owned = isOwned(active) ? active.worktree : null;
   const id = active.id;
   // the op out for this worktree, if any: its button shows busy and the others wait, since the
@@ -133,6 +136,14 @@ export function CommitBox({
                       tone="primary"
                       data-tip={`PR open: click to view · ${owned.prUrl}`}
                       onClick={() => window.open(owned.prUrl, "_blank")}
+                      // the button opens the PR; one level in is the PR as a link
+                      {...cm.contextMenu(() => {
+                        const url = owned.prUrl ?? "";
+                        return [
+                          { id: "open-pr", label: "open on GitHub", onClick: () => window.open(url, "_blank") },
+                          { id: "copy-link", label: "copy link", onClick: () => copyText(url) },
+                        ];
+                      })}
                     >
                       pr open <Icon name="external" className="icon-inline" />
                     </Button>

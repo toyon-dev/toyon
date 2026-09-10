@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { previewBus } from "../../app/previewBus.ts";
+import { fileItems } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { localOf, type State, worktreeById } from "../../state/store.ts";
@@ -53,6 +54,11 @@ export function DiffView({
       resizable={!full}
       onDragStart={onDragStart}
       title={history ? `${diff.path} at ${diff.ref?.slice(0, 7)}` : diff.path}
+      // the header names the file, so it answers with the file's actions, the same list its row in
+      // the changes panel has; a commit's copy is read-only, so no discard
+      menu={() =>
+        wtPath ? fileItems({ id: diff.worktreeId, dir: wtPath }, diff.path, !history, { sock, dispatch }) : []
+      }
       onClose={() => dispatch({ a: "close-diff" })}
       actions={
         <>

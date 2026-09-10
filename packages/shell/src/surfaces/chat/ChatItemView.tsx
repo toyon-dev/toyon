@@ -257,16 +257,22 @@ function Fold({
 }) {
   const [pinned, setPinned] = useState<boolean | null>(null);
   const card = useRef<HTMLDetailsElement>(null);
-  // output that lands below the pane is scrolled into view once the row has opened
+  // output that lands below the pane is scrolled into view once the row has opened. The hook is
+  // handed the card, not the summary: the summary is the one part of the row that is already on
+  // the page, and measuring it alone found nothing to reveal.
   const reveal = useReveal(".chat-log");
   const open = pinned ?? auto;
+  const toggle = () => {
+    if (!open) reveal(card.current);
+    setPinned(!open);
+  };
   const cm = useContextMenu("chat");
   return (
     <details
       ref={card}
       className={className}
       open={open}
-      {...cm.contextMenu(() => menu({ open, toggle: () => setPinned(!open) }))}
+      {...cm.contextMenu(() => menu({ open, toggle }))}
       // clicking the output selects text and leaves focus on the body, so the card takes it: that is
       // what makes Escape close the row you are reading, not only the one whose chip you clicked
       tabIndex={-1}
@@ -285,8 +291,7 @@ function Fold({
         aria-label={label}
         onClick={(e) => {
           e.preventDefault();
-          if (!open) reveal(e.currentTarget);
-          setPinned(!open);
+          toggle();
         }}
       >
         {summary}

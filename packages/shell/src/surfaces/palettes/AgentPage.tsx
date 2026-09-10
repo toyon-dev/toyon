@@ -3,11 +3,9 @@ import { useEffect } from "react";
 import { agentItems } from "../../state/actions/agent.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
-import { Button } from "../../ui/Button.tsx";
-import { Icon } from "../../ui/Icon.tsx";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
-import { tip } from "../../ui/Tooltip.tsx";
 import { authLabel, authTip } from "./KeysHelp.tsx";
 
 /** One agent, as settings sees it: the card the agent's chip opens, in the settings card's own
@@ -37,10 +35,10 @@ export function AgentPage({ agentId }: { agentId: string }) {
     <Overlay bare boxClass="keys-stack" onClose={back}>
       <div className="keys-card keys-settings">
         <div className="agent-page-back">
-          {/* the way back, for the hand on the mouse; Escape does the same */}
-          <Button tone="quiet" size="sm" onClick={back} {...tip("back to settings", "esc")}>
-            <Icon name="back" className="icon-inline" /> settings
-          </Button>
+          {/* the way back, for the hand on the mouse; Escape does the same. An icon on the gutter
+              rather than a word: a ghost button pulled into the margin painted its hover box past
+              the card's own edge */}
+          <IconButton icon="back" label="back to settings" hint="esc" onClick={back} />
         </div>
         <div className="section-title keys-h">{agent.name}</div>
         <div className="keys-setting">

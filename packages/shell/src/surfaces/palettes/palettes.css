@@ -29,12 +29,15 @@
       padding: 12px 24px 12px;
     }
   }
+  /* Every row on the same height token the app's list rows sit on, with no vertical padding of
+   its own: a row holding a chip and a row holding only text used to differ by the chip's box, so
+   the cards read as unevenly spaced. Centring inside a fixed slot is what makes them one rhythm. */
   .keys-setting {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 24px;
-    padding: 3px 0;
+    min-height: var(--row-height);
   }
   /* a row with nothing to change reads as a value, not a control: :hover still fires on a disabled
    button, so the hover state has to be overridden too */
@@ -43,19 +46,25 @@
     grid-template-columns: 76px 1fr;
     gap: 16px;
     align-items: center;
-    padding: 3px 0;
+    min-height: var(--row-height);
   }
   .keys-d {
     color: var(--text1);
   }
-  /* the agent page's head: the way back first, its word on the rows' gutter and its icon hung
-   into the margin (the ghost button's padding, icon and gap pulled back), then the agent's name
-   as the card's section title, the way "Settings" heads the card it came from */
-  .agent-page-back .btn {
-    margin-inline-start: calc(-1 * (var(--btn-pad-x) + var(--icon-inline-size) + var(--btn-gap)));
+  /* the agent page's head: the way back first, an icon button on the rows' gutter, then the
+   agent's name as the card's section title, the way "Settings" heads the card it came from */
+  .agent-page-back {
+    display: flex;
+    align-items: center;
+    min-height: var(--row-height);
   }
+  /* a section title is a row too, on the smaller height, sitting at the foot of its slot so it
+   reads as belonging to the rows under it rather than floating between two groups */
   .keys-h {
-    padding: 0 0 4px 2px;
+    display: flex;
+    align-items: flex-end;
+    min-height: var(--row-height-sm);
+    padding: 0 0 2px 2px;
   }
   /* theme picker: dark / light chips; the one being previewed on the highlighted row lights up */
   .theme-kinds {

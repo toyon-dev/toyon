@@ -22,9 +22,10 @@ import "./tooltip.css";
 export type TipPlacement = "follow" | "top" | "bottom" | "left" | "right";
 type Side = Exclude<TipPlacement, "follow">;
 
-/** `detail` sits before the text in the quiet tier, for the where or the which ahead of the what:
- * a worktree's path, then its state. The two tiers keep them apart; a middot between them read as
- * one phrase, and a second line made a box twice as tall for a row the pointer sweeps through.
+/** `detail` is a second line under the text in the quiet tier, for the where or the which under
+ * the what: a worktree's state, then its path. The text is what you asked, so it comes first; a
+ * middot between the two on one line read as a phrase, and the path ahead of the state put the
+ * answer last.
  * `dot` is a status dot class (`running`, `waiting`, see base.css) drawn just before the text:
  * for a tip that names a dot's state, so the colour and the word sit together even when the dot
  * itself is at the other end of the row. */
@@ -245,10 +246,10 @@ export function Tooltips() {
   if (!anchor) return null;
   return createPortal(
     <div ref={box} className="tooltip" role="tooltip">
-      {anchor.detail && <span className="tooltip-detail">{anchor.detail}</span>}
       {anchor.dot && <span className={`dot ${anchor.dot} tooltip-dot`} />}
       {anchor.text}
       {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}
+      {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
     </div>,
     document.body,
   );

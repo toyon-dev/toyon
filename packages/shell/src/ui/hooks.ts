@@ -124,7 +124,8 @@ export function useWindowWidth(): number {
  * while the transcript is short enough to sit on the composer, down once it scrolls. Either way the
  * output can land below the pane, so after the open commits the scroller moves down far enough to
  * show it, and no further than the header reaching the top: the header is the one thing that must
- * stay on the page. Call `reveal(el)` in the handler, before the state change. */
+ * stay on the page. Call `reveal(row)` in the handler, before the state change, with the element
+ * that grows: it is measured after the open commits, so its rect is the header and the output. */
 export function useReveal(scroller: string) {
   const armed = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {

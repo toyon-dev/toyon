@@ -127,8 +127,9 @@ export function LeftDock({ width }: { width: number }) {
   );
   // a moved selection has to come into view, and it is the row that scrolls, not the list
   useEffect(() => {
-    // a file row or a commit row: both carry .sel, and only one of them is ever selected
-    if (focused) listRef.current?.querySelector<HTMLElement>(".sel")?.scrollIntoView({ block: "nearest" });
+    // a file row or a commit row: both carry the cursor state, and only one of them ever has it
+    if (focused)
+      listRef.current?.querySelector<HTMLElement>('[data-state~="cursor"]')?.scrollIntoView({ block: "nearest" });
   }, [sel, focused]);
   // ⌘B on a panel that is already open and unfocused lands the keyboard here (the chord itself is
   // in app/keys.ts). Next frame: the dock may be re-appearing in this same commit. The arrows pick

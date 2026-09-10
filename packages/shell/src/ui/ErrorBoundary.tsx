@@ -12,7 +12,7 @@ export function markStaleBuild() {
 }
 
 /** Catches a render throw so it can't unmount the root. Without one, any error anywhere leaves an
- * empty #root painted --bg0: a flat gray screen that says nothing about what happened or that a
+ * empty #root painted --surface0: a flat gray screen that says nothing about what happened or that a
  * reload fixes it. `pane` fits the boundary inside a Pane instead of the whole window. */
 export class ErrorBoundary extends Component<{ children: ReactNode; pane?: boolean }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };

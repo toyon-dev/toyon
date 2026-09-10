@@ -84,8 +84,16 @@ describe("a class belongs to the file that renders it", () => {
       }
     }
     const offenders: string[] = [];
-    for (const f of new Glob("**/*.tsx").scanSync({ cwd: SRC })) {
+    for (const f of new Glob("**/*.{ts,tsx}").scanSync({ cwd: SRC })) {
+      if (f.endsWith(".test.ts")) continue;
       const src = await Bun.file(`${SRC}${f}`).text();
+      // a selector handed to the DOM names classes too, and a stale one fails more quietly than a
+      // className: the changes panel scrolled to `.sel` for a day after the state became data-state
+      for (const q of src.matchAll(/(?:querySelector(?:All)?|closest)(?:<[^>]*>)?\((['"])(.*?)\1/g)) {
+        for (const t of (q[2] ?? "").matchAll(/\.([a-z][\w-]*)/g)) {
+          if (!defined.has(t[1]!)) offenders.push(`${f} selects .${t[1]}, which no stylesheet defines`);
+        }
+      }
       // the static words of a className: a quoted string, the literal text of a template, and the
       // string branches of a template's ternaries (`${on ? "on" : ""}`); a string that is an
       // argument or a comparison inside the template is not a class

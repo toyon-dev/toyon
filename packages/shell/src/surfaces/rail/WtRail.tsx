@@ -350,7 +350,7 @@ export function WtRail() {
             </button>
           )}
           {/* Below "new worktree", not above it: the whole section is hidden in the strip (see
-              surfaces.css), so what appears when the panel opens pushes nothing anyone is aiming
+              rail.css), so what appears when the panel opens pushes nothing anyone is aiming
               at. The rows are divs, not .rail-item buttons, so a shift-click never drags one into
               the graft selection. */}
           {!graftMode && discovered.length > 0 && (

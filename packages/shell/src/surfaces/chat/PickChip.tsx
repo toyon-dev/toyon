@@ -1,7 +1,9 @@
 import type { PickMeta } from "@toyon/shared";
+import { pickItems } from "../../state/actions/message.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { useContextMenu } from "../../ui/menu.ts";
 import { pickLabel, relFile } from "../util.ts";
 
 /** a picked element as a chip: crosshair, <Component>, then file:line. In the composer it can be removed;
@@ -41,12 +43,14 @@ export function PickChip({
     ) : (
       label
     );
+  const cm = useContextMenu("chat");
   return (
     <div
       className={cx("pick-chip", className)}
       data-tip={tipText}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
+      {...cm.contextMenu(() => pickItems(pick, { remove: onRemove }))}
     >
       <span className="pick-target">
         <Icon name="pick" className="icon-inline" /> {pickLabel(pick)}

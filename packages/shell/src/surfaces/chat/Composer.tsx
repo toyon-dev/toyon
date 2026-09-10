@@ -2,6 +2,7 @@ import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree } from "@t
 import { DEFAULT_PERMISSION_MODE, pickMetaOf } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
+import { terminalItems } from "../../state/actions/proc.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useLocalField } from "../../state/selectors.ts";
@@ -11,6 +12,7 @@ import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { useListNav } from "../../ui/listNav.ts";
+import { useContextMenu } from "../../ui/menu.ts";
 import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
@@ -69,6 +71,7 @@ export function Composer({
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
+  const cm = useContextMenu("composer");
   const id = active?.worktree.id ?? null;
   const text = useLocalField(id, "draft");
   const page = useLocalField(id, "page");
@@ -497,6 +500,10 @@ export function Composer({
               label={trouble ? trouble.tip : "Terminal"}
               hint={chord("terminal")}
               badge={trouble && <span className="composer-term-dot" />}
+              // the button opens the pane, so one level in is its tabs: a restart per proc and the shell
+              {...cm.contextMenu(() =>
+                active && id ? terminalItems(active.procs, id, termOpen, { sock, dispatch: store.dispatch }) : [],
+              )}
               onClick={() => {
                 // opening onto the badge's own tab: the dot is the only thing that says a proc died,
                 // so following it should land on the crash, not on whichever tab you left open

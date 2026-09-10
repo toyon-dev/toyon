@@ -1,3 +1,4 @@
+import { agentItems } from "../../state/actions/agent.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { byName } from "./commands.ts";
@@ -27,6 +28,8 @@ export function AgentPicker() {
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close", back: true })}
+      // a dimmed row is an agent that is not installed, and installing it is the verb it wants
+      rowMenu={(a) => agentItems(a, { sock, dispatch })}
       placeholder="default agent for new worktrees"
       keys={{ pick: "sets", back: "closes" }}
       row={(a) => (

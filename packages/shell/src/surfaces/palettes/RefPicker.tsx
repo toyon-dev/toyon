@@ -1,5 +1,6 @@
 import type { RefHit } from "@toyon/shared";
 import { useCallback } from "react";
+import { refItems } from "../../state/actions/ref.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Icon, type IconName } from "../../ui/Icon.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
@@ -52,6 +53,7 @@ export function RefPicker({ repoId }: { repoId: string }) {
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close" })}
+      rowMenu={refItems}
       placeholder="open a branch or PR…"
       keys={(active) => ({
         nav: "moves",

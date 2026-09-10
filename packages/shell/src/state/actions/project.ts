@@ -1,6 +1,22 @@
-import type { RepoInfo } from "@toyon/shared";
+import type { PendingRepo, RepoInfo } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { Deps } from "./deps.ts";
+
+/** a clone still running: stop it. The same verb as the import pane's button, which is the only
+ * other place it lives. */
+export function importItems(p: PendingRepo, { sock, dispatch }: Deps): MenuEntry[] {
+  return [
+    {
+      id: `cancel-import:${p.id}`,
+      label: p.error ? "dismiss" : "stop the clone",
+      danger: !p.error,
+      onClick: () => {
+        sock?.send({ t: "cancel-import", id: p.id });
+        dispatch({ a: "watch-import", id: null });
+      },
+    },
+  ];
+}
 
 /** a project: switch to it, then run its setup again or take it off the list */
 export function projectItems(r: RepoInfo, activeRepoId: string | null, { sock, dispatch }: Deps): MenuEntry[] {

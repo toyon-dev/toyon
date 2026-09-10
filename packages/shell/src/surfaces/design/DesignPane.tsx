@@ -11,7 +11,7 @@
 import type { DesignClass, DesignComponent, DesignIndex, DesignToken } from "@toyon/shared";
 import { useEffect } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { designRowItems } from "../../state/actions/design.ts";
+import { designRowItems, designTokenItems } from "../../state/actions/design.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
@@ -312,6 +312,7 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
     });
   const rows = tokens.map((t) => ({ token: t, actual: t.resolved ?? t.value, ...parseFace(t.resolved ?? t.value) }));
   const families = [...new Set(rows.map((r) => r.family))];
+  const cm = useContextMenu("design");
   return (
     <div className="design-faces">
       {families.map((family) => {
@@ -326,6 +327,7 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
               className="design-face-head row-edge"
               onMouseEnter={(e) => hover(e, false, face ? face.token.name : family)}
               onMouseLeave={clear}
+              {...cm.contextMenu(() => (face ? designTokenItems(face.token.name, face.actual) : []))}
               {...(face ? tip(`${face.token.name}\n${face.actual}`, undefined, { placement: "follow" }) : {})}
             >
               {/* the whole stack, not the first name in it: `ui-monospace` on its own resolves to
@@ -345,6 +347,7 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
                 className="design-face row-edge"
                 onMouseEnter={(e) => hover(e, true, r.token.name)}
                 onMouseLeave={clear}
+                {...cm.contextMenu(() => designTokenItems(r.token.name, r.actual))}
                 {...tip(`${r.token.name}\n${r.actual}`, undefined, { placement: "follow" })}
               >
                 <span className="design-face-sample" style={{ font: r.actual }}>
@@ -384,11 +387,13 @@ function Swatch({
   const paintable = token.kind === "color" && parseHex(actual) !== null;
   const sample = token.kind === "color";
   const size = token.kind === "length" ? Number.parseFloat(actual) : Number.NaN;
+  const cm = useContextMenu("design");
 
   return (
     <div
       className="design-cell"
       data-kind={token.kind}
+      {...cm.contextMenu(() => designTokenItems(token.name, actual))}
       onMouseEnter={
         paintable
           ? (e) => {

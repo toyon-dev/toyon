@@ -1,8 +1,11 @@
 import type { SearchHit } from "@toyon/shared";
 import { useCallback } from "react";
+import { fileItems } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
+import { worktreeById } from "../../state/store.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
+import { wtDir } from "../util.ts";
 
 const NONE: SearchHit[] = [];
 /** short queries would match everything */
@@ -14,6 +17,11 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
   const sock = useSock();
   const results = useLocal(worktreeId).search;
   const leftOpen = useStore((s) => s.leftOpen);
+  // a hit is a file: open in an editor or reveal it, as the changes panel's rows offer
+  const dir = useStore((s) => {
+    const w = worktreeById(s, worktreeId)?.worktree;
+    return w ? wtDir(w) : null;
+  });
   // stale = the daemon hasn't answered this query yet; keep showing the previous hits meanwhile
   const filter = useCallback((hits: SearchHit[], q: string) => (q.trim().length >= MIN ? hits : NONE), []);
   const onQuery = useCallback(
@@ -39,6 +47,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close" })}
+      rowMenu={(h) => (dir ? fileItems({ id: worktreeId, dir }, h.path, false, { sock, dispatch }) : [])}
       placeholder="search in files…"
       keys={{ pick: "opens the file", back: "closes" }}
       empty={(q) => (q.trim().length < MIN ? "type at least two characters" : isStale(q) ? "searching…" : "no matches")}

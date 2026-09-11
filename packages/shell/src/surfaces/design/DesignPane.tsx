@@ -54,7 +54,7 @@ export function DesignPane({
   const live = {
     outline: (msg: Parameters<typeof previewBus.post>[1]) => previewBus.post(worktreeId, msg),
     clear: () => previewBus.post(worktreeId, { type: "highlight-clear" }),
-    open: (path: string) => sock?.send({ t: "file-diff", worktreeId, path }),
+    open: (path: string) => sock?.send({ t: "read-file", worktreeId, path, seq: 0 }),
   };
 
   return (

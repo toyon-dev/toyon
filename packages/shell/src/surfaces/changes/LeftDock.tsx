@@ -86,7 +86,7 @@ export function LeftDock({ width }: { width: number }) {
   }, [ranges, activeId]);
 
   const open = useCallback(
-    (path: string) => activeId && sock?.send({ t: "file-diff", worktreeId: activeId, path }),
+    (path: string) => activeId && sock?.send({ t: "read-file", worktreeId: activeId, path, seq: 0 }),
     [activeId, sock],
   );
 
@@ -171,7 +171,7 @@ export function LeftDock({ width }: { width: number }) {
   const openAt = useCallback(
     (path: string) => {
       const ref = openShaRef.current;
-      if (activeId && ref) sock?.send({ t: "file-diff", worktreeId: activeId, path, ref });
+      if (activeId && ref) sock?.send({ t: "read-file", worktreeId: activeId, path, ref, seq: 0 });
     },
     [activeId, sock],
   );

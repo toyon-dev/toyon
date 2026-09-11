@@ -51,6 +51,9 @@ function wt(
 
 const initial = initialState({ clientId: ME });
 const server = (msg: StoreServerMsg): Action => ({ a: "server", msg });
+/** a file-read answer, with the fields a test does not care about filled in */
+const fileRead = (m: { worktreeId: string; path: string; before: string; after: string; ref?: string }): Action =>
+  server({ t: "file-read", seq: 0, version: null, writable: true, binary: false, tooLarge: false, ...m });
 const repo = (id: string): RepoInfo => ({
   id,
   path: `/p/${id}`,
@@ -114,7 +117,7 @@ describe("active worktree", () => {
   });
   test("activate closes the open file", () => {
     const s = run([hello(wt("main", "main"), wt("a"))]);
-    const withDiff = reducer(s, server({ t: "file-diff", worktreeId: "main", path: "x", before: "", after: "" }));
+    const withDiff = reducer(s, fileRead({ worktreeId: "main", path: "x", before: "", after: "" }));
     expect(withDiff.editor).not.toBeNull();
     expect(reducer(withDiff, { a: "activate", id: "a" }).editor).toBeNull();
   });
@@ -715,11 +718,11 @@ describe("streams and notices", () => {
     expect(on.termOpen).toBe(true);
     expect(reducer(on, { a: "toggle-terminal" }).termOpen).toBe(false);
   });
-  test("a file-diff carries the pending goto line only for the file it was asked for", () => {
+  test("a file read carries the pending goto line only for the file it was asked for", () => {
     const s = run([
       hello(wt("a")),
       { a: "goto-line", v: { worktreeId: "a", path: "x.ts", line: 7 } },
-      server({ t: "file-diff", worktreeId: "a", path: "y.ts", before: "", after: "" }),
+      fileRead({ worktreeId: "a", path: "y.ts", before: "", after: "" }),
     ]);
     expect(s.editor?.line).toBeUndefined();
     expect(s.gotoLine).toBeNull();
@@ -730,7 +733,7 @@ describe("streams and notices", () => {
       hello(wt("a")),
       { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55, fiber: true } },
       { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
+      fileRead({ worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
     ]);
     // the file is open, but revealing 55 now would land three lines past the element
     expect(opened.editor).toMatchObject({ path: "x.tsx", view: "file" });
@@ -749,7 +752,7 @@ describe("streams and notices", () => {
       hello(wt("a")),
       server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
       { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55, fiber: true } },
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
+      fileRead({ worktreeId: "a", path: "x.tsx", before: "", after: "" }),
     ]);
     expect(s.editor?.line).toBe(52);
     expect(s.gotoLine).toBeNull();
@@ -759,7 +762,7 @@ describe("streams and notices", () => {
       hello(wt("a")),
       server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
       { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55 } },
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
+      fileRead({ worktreeId: "a", path: "x.tsx", before: "", after: "" }),
     ]);
     expect(s.editor?.line).toBe(55);
   });
@@ -767,28 +770,25 @@ describe("streams and notices", () => {
     const asked = run([
       hello(wt("a")),
       { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
+      fileRead({ worktreeId: "a", path: "x.tsx", before: "", after: "" }),
     ]);
     expect(asked.editor?.view).toBe("file");
     expect(asked.openView).toBeNull();
 
     // the changes list or a chat link sends no view: a changed file opens on its diff
-    const next = reducer(asked, server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }));
+    const next = reducer(asked, fileRead({ worktreeId: "a", path: "x.tsx", before: "a", after: "b" }));
     expect(next.editor?.view).toBe("diff");
 
     const stale = run([
       hello(wt("a")),
       { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
-      server({ t: "file-diff", worktreeId: "a", path: "y.tsx", before: "a", after: "b" }),
+      fileRead({ worktreeId: "a", path: "y.tsx", before: "a", after: "b" }),
     ]);
     expect(stale.editor?.view).toBe("diff");
     expect(stale.openView).toBeNull();
   });
   test("a file with nothing changed opens as the file when no view was asked for", () => {
-    const s = run([
-      hello(wt("a")),
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "a" }),
-    ]);
+    const s = run([hello(wt("a")), fileRead({ worktreeId: "a", path: "x.tsx", before: "a", after: "a" })]);
     expect(s.editor?.view).toBe("file");
   });
   test("the open file switches view in place, and the line it jumped to is spent", () => {
@@ -796,52 +796,13 @@ describe("streams and notices", () => {
       hello(wt("a")),
       { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 9 } },
       { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
+      fileRead({ worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
     ]);
     expect(s.editor).toMatchObject({ view: "file", line: 9 });
     const diff = reducer(s, { a: "editor-view", v: "diff" });
     expect(diff.editor).toMatchObject({ path: "x.tsx", view: "diff", after: "b" });
     expect(diff.editor?.line).toBeUndefined();
     expect(reducer(initial, { a: "editor-view", v: "file" }).editor).toBeNull();
-  });
-  test("a discard refreshes the pane showing that file, closes it when the file is gone, and opens none", () => {
-    const open = run([
-      hello(wt("a")),
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
-      { a: "editor-view", v: "file" },
-    ]);
-    const restored = reducer(
-      open,
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "a", discarded: "restored" }),
-    );
-    expect(restored.editor).toMatchObject({ path: "x.tsx", view: "file", before: "a", after: "a" });
-
-    const removed = server({
-      t: "file-diff",
-      worktreeId: "a",
-      path: "x.tsx",
-      before: "",
-      after: "",
-      discarded: "removed",
-    });
-    expect(reducer(open, removed).editor).toBeNull();
-
-    const other = server({
-      t: "file-diff",
-      worktreeId: "a",
-      path: "y.tsx",
-      before: "",
-      after: "",
-      discarded: "restored",
-    });
-    expect(reducer(open, other)).toBe(open);
-    expect(reducer(run([hello(wt("a"))]), removed).editor).toBeNull();
-
-    const history = run([
-      hello(wt("a")),
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b", ref: "abc1234" }),
-    ]);
-    expect(reducer(history, removed)).toBe(history);
   });
 });
 

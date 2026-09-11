@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import type { ProxyTarget } from "../runtime/proxy.ts";
 import { resolveInside } from "../worktrees/paths.ts";
 
@@ -16,7 +15,7 @@ export async function viteLineOffset(worktreePath: string, path: string, target:
     });
     if (!res.ok) return 0;
     const served = await res.text();
-    const disk = readFileSync(resolveInside(worktreePath, path), "utf8").split("\n");
+    const disk = (await Bun.file(resolveInside(worktreePath, path)).text()).split("\n");
     for (let i = 0; i < disk.length; i++) {
       const m = disk[i]!.match(/>([^<>{}\n]{6,60})</);
       const anchor = m?.[1]?.trim();

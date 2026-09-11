@@ -134,7 +134,7 @@ function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: s
                 className="dl more"
                 disabled={!path || !worktreeId}
                 data-tip={path && worktreeId ? "Open this file's diff" : undefined}
-                onClick={() => worktreeId && sock?.send({ t: "file-diff", worktreeId, path })}
+                onClick={() => worktreeId && sock?.send({ t: "read-file", worktreeId, path, seq: 0 })}
               >
                 {b.lines.length - DIFF_LINES} more lines
               </button>

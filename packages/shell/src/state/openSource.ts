@@ -10,6 +10,6 @@ export function openSource(store: Store, sock: DaemonSocket | null, worktreeId: 
   const { leftOpen } = store.getState();
   store.dispatch({ a: "goto-line", v: { worktreeId, path, line, fiber: true } });
   store.dispatch({ a: "open-view", v: { worktreeId, path, view: "file" } });
-  sock?.send({ t: "file-diff", worktreeId, path });
+  sock?.send({ t: "read-file", worktreeId, path, seq: 0 });
   if (!leftOpen) store.dispatch({ a: "toggle-left" });
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { clientMsgSchema, type ServerMsg, SHELL_STREAM, streamKey } from "@toyon/shared";
+import { clientMsgSchema, FILE_MAX_CHARS, type ServerMsg, SHELL_STREAM, streamKey } from "@toyon/shared";
 import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
@@ -11,6 +11,7 @@ import { StateStore } from "../core/state.ts";
 import { DesignService } from "../design/service.ts";
 import { ExecService } from "../exec/service.ts";
 import { FileService } from "../files/service.ts";
+import { GIT } from "../git/exec.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RouteService } from "../routes/service.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
@@ -108,6 +109,16 @@ function make() {
   return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, ...f };
 }
 
+/** the repo registered, and its main row, which the file tests read and write through */
+async function mainOf(services: Services, repo: string) {
+  const r = await services.repos.register(repo);
+  return services.state.worktrees.find((x) => x.repoId === r.id)!;
+}
+
+function lastOf<T extends ServerMsg["t"]>(replies: ServerMsg[], t: T) {
+  return replies.findLast((m): m is Extract<ServerMsg, { t: T }> => m.t === t);
+}
+
 describe("handlers", () => {
   test("every ClientMsg kind in the schema has a handler and nothing extra", () => {
     const kinds = clientMsgSchema.options.map((o) => o.shape.t.value).sort();
@@ -115,14 +126,15 @@ describe("handlers", () => {
   });
 
   test("unknown worktree surfaces as a UserError, not a crash", async () => {
-    const { services, ctx } = make();
+    const { services, ctx, replies } = make();
     await expect(dispatch({ t: "chat", worktreeId: "nope", text: "hi" }, ctx, services)).rejects.toBeInstanceOf(
       UserError,
     );
     await expect(dispatch({ t: "ship", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
-    await expect(
-      dispatch({ t: "write-file", worktreeId: "nope", path: "a", content: "" }, ctx, services),
-    ).rejects.toBeInstanceOf(UserError);
+    // a write is answered with its refusal rather than thrown: the shell holds the file's next save
+    // until the answer comes
+    await dispatch({ t: "write-file", worktreeId: "nope", path: "a", content: "", base: null, seq: 1 }, ctx, services);
+    expect(replies.at(-1)).toMatchObject({ t: "file-written", seq: 1, ok: false, reason: "refused" });
   });
 
   test("design-scan replies with an index of the worktree's own design system", async () => {
@@ -402,16 +414,28 @@ describe("handlers", () => {
     expect(replies.at(-1)).toMatchObject({ t: "shipped", ok: true, message: "batch: 2 worktree(s) started" });
   });
 
-  test("file-diff and write-file refuse paths outside the worktree", async () => {
-    const { services, ctx, repo } = make();
-    const r = await services.repos.register(repo);
-    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await expect(dispatch({ t: "file-diff", worktreeId: main.id, path: "../x" }, ctx, services)).rejects.toThrow(
-      "escapes",
+  test("read-file and write-file refuse paths outside the worktree, and still answer", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "../x", seq: 1 }, ctx, services);
+    expect(replies.at(-1)).toMatchObject({
+      t: "file-read",
+      seq: 1,
+      writable: false,
+      error: expect.stringContaining("escapes"),
+    });
+    await dispatch(
+      { t: "write-file", worktreeId: main.id, path: "/etc/passwd", content: "", base: null, seq: 2 },
+      ctx,
+      services,
     );
-    await expect(
-      dispatch({ t: "write-file", worktreeId: main.id, path: "/etc/passwd", content: "" }, ctx, services),
-    ).rejects.toThrow("escapes");
+    expect(replies.at(-1)).toMatchObject({
+      t: "file-written",
+      seq: 2,
+      ok: false,
+      reason: "refused",
+      message: expect.stringContaining("escapes"),
+    });
   });
 
   test("term-open replies a snapshot and watches; input reaches the shell; term-close unwatches", async () => {
@@ -583,38 +607,142 @@ describe("handlers", () => {
     expect(services.repos.pending).toEqual([]);
   });
 
-  test("write-file then file-diff round-trips and replies git-status", async () => {
+  test("a read names the version on disk, and a write over it answers with the next", async () => {
     const { services, ctx, replies, repo } = make();
-    const r = await services.repos.register(repo);
-    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await dispatch({ t: "write-file", worktreeId: main.id, path: "new.txt", content: "abc" }, ctx, services);
-    expect(replies.at(-1)?.t).toBe("git-status");
-    await dispatch({ t: "file-diff", worktreeId: main.id, path: "new.txt" }, ctx, services);
-    const diff = replies.at(-1);
-    expect(diff?.t === "file-diff" && diff.after).toBe("abc");
+    const main = await mainOf(services, repo);
+    const changed: string[] = [];
+    services.hub.on("filesChanged", (id) => changed.push(id));
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "README.md", seq: 1 }, ctx, services);
+    const read = lastOf(replies, "file-read");
+    expect(read).toMatchObject({ seq: 1, before: "hello\n", after: "hello\n", writable: true, binary: false });
+    expect(read?.version).toBeString();
+
+    const write = { t: "write-file", worktreeId: main.id, path: "README.md", content: "edited\n", seq: 2 } as const;
+    await dispatch({ ...write, base: read?.version ?? null }, ctx, services);
+    const written = lastOf(replies, "file-written");
+    expect(written).toMatchObject({ seq: 2, ok: true });
+    expect(await Bun.file(join(repo, "README.md")).text()).toBe("edited\n");
+    // the other tabs hear of it through the hub, not a reply to this socket
+    expect(changed).toEqual([main.id]);
+
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "README.md", seq: 3 }, ctx, services);
+    expect(lastOf(replies, "file-read")?.version).toBe(written?.ok ? written.version : "not ok");
   });
 
-  test("discard-file replies the file as the discard left it", async () => {
+  test("a write over a file that moved since its base is refused and leaves the file alone", async () => {
     const { services, ctx, replies, repo } = make();
-    const r = await services.repos.register(repo);
-    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await dispatch({ t: "write-file", worktreeId: main.id, path: "README.md", content: "edited\n" }, ctx, services);
-    await dispatch({ t: "write-file", worktreeId: main.id, path: "new.txt", content: "abc" }, ctx, services);
+    const main = await mainOf(services, repo);
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "README.md", seq: 1 }, ctx, services);
+    const base = lastOf(replies, "file-read")?.version ?? null;
+    // the agent's edit, landing between the editor's read and its save
+    await Bun.write(join(repo, "README.md"), "agent\n");
+    await dispatch(
+      { t: "write-file", worktreeId: main.id, path: "README.md", content: "mine\n", base, seq: 2 },
+      ctx,
+      services,
+    );
+    const written = lastOf(replies, "file-written");
+    expect(written).toMatchObject({ seq: 2, ok: false, reason: "changed" });
+    expect(written?.version).toBeString();
+    expect(written?.version).not.toBe(base);
+    expect(await Bun.file(join(repo, "README.md")).text()).toBe("agent\n");
+  });
+
+  test("two writes on one base: exactly one lands", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "README.md", seq: 1 }, ctx, services);
+    const base = lastOf(replies, "file-read")?.version ?? null;
+    const write = (content: string, seq: number) =>
+      dispatch({ t: "write-file", worktreeId: main.id, path: "README.md", content, base, seq }, ctx, services);
+    await Promise.all([write("one\n", 2), write("two\n", 3)]);
+    const answers = replies.filter((m) => m.t === "file-written");
+    expect(answers.filter((m) => m.ok)).toHaveLength(1);
+    expect(answers.filter((m) => !m.ok && m.reason === "changed")).toHaveLength(1);
+  });
+
+  test("a write sent again after it landed is ok, and a new file wants a null base", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    const write = (content: string, base: string | null, seq: number) =>
+      dispatch({ t: "write-file", worktreeId: main.id, path: "new.txt", content, base, seq }, ctx, services);
+    await write("abc", null, 1);
+    expect(lastOf(replies, "file-written")).toMatchObject({ seq: 1, ok: true });
+    // the same bytes again, as a resend after a reconnect would be
+    await write("abc", null, 2);
+    expect(lastOf(replies, "file-written")).toMatchObject({ seq: 2, ok: true });
+    await write("xyz", null, 3);
+    expect(lastOf(replies, "file-written")).toMatchObject({ seq: 3, ok: false, reason: "changed" });
+
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "gone.txt", seq: 4 }, ctx, services);
+    expect(lastOf(replies, "file-read")).toMatchObject({ seq: 4, version: null, after: "", writable: true });
+  });
+
+  test("a BOM survives a save, and bytes that are not text open read-only", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    await Bun.write(join(repo, "bom.txt"), new Uint8Array([0xef, 0xbb, 0xbf, 0x68, 0x69]));
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "bom.txt", seq: 1 }, ctx, services);
+    const read = lastOf(replies, "file-read");
+    expect(read).toMatchObject({ after: "hi", writable: true, binary: false });
+    await dispatch(
+      { t: "write-file", worktreeId: main.id, path: "bom.txt", content: "hey", base: read?.version ?? null, seq: 2 },
+      ctx,
+      services,
+    );
+    expect(lastOf(replies, "file-written")).toMatchObject({ ok: true });
+    const saved = new Uint8Array(await Bun.file(join(repo, "bom.txt")).arrayBuffer());
+    expect(Array.from(saved)).toEqual([0xef, 0xbb, 0xbf, 0x68, 0x65, 0x79]);
+
+    await Bun.write(join(repo, "blob.bin"), new Uint8Array([0x00, 0x01, 0xff]));
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "blob.bin", seq: 3 }, ctx, services);
+    const blob = lastOf(replies, "file-read");
+    expect(blob).toMatchObject({ binary: true, writable: false, before: "", after: "" });
+    await dispatch(
+      { t: "write-file", worktreeId: main.id, path: "blob.bin", content: "x", base: blob?.version ?? null, seq: 4 },
+      ctx,
+      services,
+    );
+    expect(lastOf(replies, "file-written")).toMatchObject({ seq: 4, ok: false, reason: "refused" });
+  });
+
+  test("a file over the cap reads as too large, with no text", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    await Bun.write(join(repo, "big.txt"), "x".repeat(FILE_MAX_CHARS + 1));
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "big.txt", seq: 1 }, ctx, services);
+    expect(lastOf(replies, "file-read")).toMatchObject({ tooLarge: true, writable: false, after: "" });
+  });
+
+  test("a commit's copy is read-only and names no version", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    const ref = sh(repo, GIT, "rev-parse", "HEAD");
+    await dispatch({ t: "read-file", worktreeId: main.id, path: "README.md", ref, seq: 1 }, ctx, services);
+    expect(lastOf(replies, "file-read")).toMatchObject({
+      ref,
+      before: "",
+      after: "hello\n",
+      version: null,
+      writable: false,
+    });
+  });
+
+  test("a discard answers with its toast and tells every tab the files changed", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    const changed: string[] = [];
+    services.hub.on("filesChanged", (id) => changed.push(id));
+    await Bun.write(join(repo, "README.md"), "edited\n");
+    await Bun.write(join(repo, "new.txt"), "abc");
 
     replies.length = 0;
     await dispatch({ t: "discard-file", worktreeId: main.id, path: "README.md" }, ctx, services);
-    expect(replies.find((m) => m.t === "file-diff")).toEqual({
-      t: "file-diff",
-      worktreeId: main.id,
-      path: "README.md",
-      before: "hello\n",
-      after: "hello\n",
-      discarded: "restored",
-    });
+    expect(await Bun.file(join(repo, "README.md")).text()).toBe("hello\n");
+    expect(replies.map((m) => m.t)).toEqual(["shipped"]);
 
-    replies.length = 0;
     await dispatch({ t: "discard-file", worktreeId: main.id, path: "new.txt" }, ctx, services);
-    expect(replies.find((m) => m.t === "file-diff")).toMatchObject({ path: "new.txt", discarded: "removed" });
-    expect(replies.at(-1)?.t).toBe("git-status");
+    expect(existsSync(join(repo, "new.txt"))).toBe(false);
+    expect(changed).toEqual([main.id, main.id]);
   });
 });

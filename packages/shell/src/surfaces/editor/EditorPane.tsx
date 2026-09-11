@@ -105,8 +105,17 @@ export function EditorPane({
               line={editor.line}
               view={view}
               theme={theme}
-              readOnly={history}
-              onSave={(path, content) => sock?.send({ t: "write-file", worktreeId: editor.worktreeId, path, content })}
+              readOnly={history || !editor.writable}
+              onSave={(path, content) =>
+                sock?.send({
+                  t: "write-file",
+                  worktreeId: editor.worktreeId,
+                  path,
+                  content,
+                  base: editor.version,
+                  seq: 0,
+                })
+              }
               // the editor knows the lines; whose file they are, and at which commit, is the pane's
               onCopy={(path, lines, clipboard) =>
                 writeCopiedSource(clipboard, {

@@ -16,7 +16,12 @@ import type { ServerMsg, TermServerMsg } from "./ws.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 23;
+export const PROTOCOL_VERSION = 24;
+
+/** the largest file the editor opens or saves, in characters (a read counts bytes, which is never
+ * fewer). A larger one opens read-only with nothing in it, and a save of more is refused before any
+ * handler runs, so the shell never sends one: that refusal could not say which write it was. */
+export const FILE_MAX_CHARS = 5_000_000;
 
 /** image formats the models accept; the shell re-encodes anything else (and anything too large) */
 export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;

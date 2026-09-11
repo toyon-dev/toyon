@@ -8,7 +8,7 @@ const VIEWS: EditorView[] = ["diff", "file"];
 /** open a file in the editor pane as its diff or as the file; a commit's copy names its `ref` */
 export function openFile({ sock, dispatch }: Deps, worktreeId: string, path: string, view: EditorView, ref?: string) {
   dispatch({ a: "open-view", v: { worktreeId, path, view } });
-  sock?.send({ t: "file-diff", worktreeId, path, ref });
+  sock?.send({ t: "read-file", worktreeId, path, ref, seq: 0 });
 }
 
 /** a file in the changes panel: show it in the editor pane as its diff or as the file, open it

@@ -337,6 +337,9 @@ export interface State {
     line?: number;
     ref?: string;
     view: EditorView;
+    /** the bytes the text was read or last saved as; a save names it as the version it replaces */
+    version: string | null;
+    writable: boolean;
   } | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
@@ -346,11 +349,11 @@ export interface State {
   /** the armed element picker's verb (⌘E's chat, ⌘I's code) + last picked element (pending chat attachment) */
   picking: PickVerb | false;
   pick: (PickedElement & { worktreeId: string }) | null;
-  /** a search hit or a picked element: reveal this line once its file-diff arrives. `fiber` marks
+  /** a search hit or a picked element: reveal this line once its file-read arrives. `fiber` marks
    * a line the running page reported, counted against the served module rather than the file, and
    * mapped back by the changed-ranges offset for that path. */
   gotoLine: { worktreeId: string; path: string; line: number; fiber?: boolean } | null;
-  /** the view a file was asked for in, held until its file-diff arrives; a reply for any other file
+  /** the view a file was asked for in, held until its file-read arrives; a reply for any other file
    * opens as a diff, which is what every other way into the pane wants */
   openView: { worktreeId: string; path: string; view: EditorView } | null;
   overlay: Overlay | null;
@@ -640,7 +643,7 @@ export type Action =
   /** show a clone's progress in the preview area (null stops watching) */
   | { a: "watch-import"; id: string | null }
   | { a: "close-editor" }
-  /** a file-diff is going out for this file, and it should open in this view */
+  /** a read-file is going out for this file, and it should open in this view */
   | { a: "open-view"; v: { worktreeId: string; path: string; view: EditorView } }
   /** switch the open file between its diff and the file */
   | { a: "editor-view"; v: EditorView }
@@ -1133,18 +1136,29 @@ function onServer(s: State, msg: StoreServerMsg): State {
       if (next.editor?.worktreeId !== msg.worktreeId || next.editor.path !== msg.path) return next;
       return { ...next, editor: { ...next.editor, line: g.line - msg.lineOffset }, gotoLine: null };
     }
-    case "file-diff": {
-      if (msg.discarded) {
-        const d = s.editor;
-        // a commit's copy is history the discard never touched
-        if (!d || d.ref !== undefined || d.worktreeId !== msg.worktreeId || d.path !== msg.path) return s;
-        return { ...s, editor: msg.discarded === "removed" ? null : { ...d, before: msg.before, after: msg.after } };
-      }
+    case "file-written": {
+      const e = s.editor;
+      if (!e || e.worktreeId !== msg.worktreeId || e.path !== msg.path) return s;
+      if (msg.ok) return { ...s, editor: { ...e, version: msg.version } };
+      const message = msg.reason === "changed" ? `not saved: ${msg.path} changed on disk` : msg.message;
+      return { ...s, toast: { ok: false, message: message ?? `not saved: ${msg.path}` } };
+    }
+    case "file-read": {
+      if (msg.error) return { ...s, toast: { ok: false, message: msg.error }, gotoLine: null, openView: null };
       const o = s.openView;
       // with no view asked for, a changed file opens on its diff and an unchanged one has none to show
       const asked = o && o.worktreeId === msg.worktreeId && o.path === msg.path ? o.view : undefined;
       const view = asked ?? (msg.before === msg.after ? "file" : "diff");
-      const opened = { ...msg, view };
+      const opened = {
+        worktreeId: msg.worktreeId,
+        path: msg.path,
+        before: msg.before,
+        after: msg.after,
+        ...(msg.ref ? { ref: msg.ref } : {}),
+        view,
+        version: msg.version,
+        writable: msg.writable,
+      };
       const g = s.gotoLine;
       if (!g || g.worktreeId !== msg.worktreeId || g.path !== msg.path)
         return { ...s, editor: opened, gotoLine: null, openView: null };

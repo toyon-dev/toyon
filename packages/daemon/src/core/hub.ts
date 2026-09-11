@@ -29,6 +29,8 @@ export interface HubEvents {
   agentsChanged: () => void;
   /** the order of a repo's most used preview pages changed */
   visitsChanged: (repoId: string) => void;
+  /** the editor saved or discarded a file: every tab's changes list, and any editor open on it, re-reads */
+  filesChanged: (worktreeId: string) => void;
 }
 
 type Listener<K extends keyof HubEvents> = HubEvents[K];

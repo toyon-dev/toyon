@@ -18,6 +18,9 @@ export type ChipOption<T extends string> = {
   prefix?: string;
   /** after the label on the row only, a tier quieter (a model's version) */
   suffix?: string;
+  /** the chip's words where the label alone would not tell this value from another row's ("GPT 5.5"
+   * beside "GPT 5.2"); the label when absent */
+  chip?: string;
 };
 
 /** the panel's footprint before it is on screen, for deciding which way it opens: the width is
@@ -68,7 +71,8 @@ export function ChipPicker<T extends string>({
     setOpen(null);
     onClose?.();
   };
-  const shown = options.find((o) => o.id === value)?.label ?? value;
+  const picked = options.find((o) => o.id === value);
+  const shown = picked?.chip ?? picked?.label ?? value;
   return (
     // Escape inside the picker reaches app/keys.ts otherwise, which knows only about the store's
     // overlay and would shut whatever this chip sits in (the prompt, a bottom pane). The topmost
@@ -104,10 +108,11 @@ export function ChipPicker<T extends string>({
           anchored
           items={options}
           filter={(os, q) => {
-            // each word against the whole name the row shows, so "codex" or "claude sonnet" narrows
+            // each word against the whole name the row shows and the id the agent gave it, so "codex"
+            // or "claude sonnet" narrows, and so does "gpt" for a row that reads "Codex Sol 5.6"
             const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
             return os.filter((o) => {
-              const hay = `${o.prefix ?? ""} ${o.label ?? o.id} ${o.suffix ?? ""}`.toLowerCase();
+              const hay = `${o.prefix ?? ""} ${o.label ?? o.id} ${o.suffix ?? ""} ${o.id}`.toLowerCase();
               return words.every((w) => hay.includes(w));
             });
           }}

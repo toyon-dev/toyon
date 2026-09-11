@@ -34,15 +34,21 @@ describe("modelWords", () => {
       description: "1M context · Efficient",
     });
   });
-  test("left alone when the description does not open with the same name and a version", () => {
-    const gpt = { id: "g", name: "GPT-5.6-Terra", description: "Balanced agentic coding model." };
-    expect(modelWords(gpt)).toEqual({ label: gpt.name, description: gpt.description });
+  test("a version inside the name moves after it, and a codename leads", () => {
+    const sol = { id: "gpt-5.6-sol", name: "GPT-5.6-Sol", description: "Latest frontier agentic coding model." };
+    expect(modelWords(sol)).toEqual({ label: "Sol", version: "5.6", description: sol.description });
+    expect(modelWords({ id: "gpt-6-astra", name: "GPT-6-Astra" })).toEqual({ label: "Astra", version: "6" });
+    expect(modelWords({ id: "gpt-5.5", name: "GPT-5.5" })).toEqual({ label: "GPT", version: "5.5" });
+  });
+  test("left alone when neither shape fits", () => {
     const effort = { id: "low", name: "Low", description: "Fast responses with lighter reasoning" };
     expect(modelWords(effort)).toEqual({ label: "Low", description: effort.description });
     expect(modelWords({ id: "x", name: "Fable", description: "Opus 5" })).toEqual({
       label: "Fable",
       description: "Opus 5",
     });
+    expect(modelWords({ id: "g", name: "gemini-2.5-pro" })).toEqual({ label: "gemini-2.5-pro" });
+    expect(modelWords({ id: "m", name: "GPT-5.1-Codex-Max" })).toEqual({ label: "GPT-5.1-Codex-Max" });
   });
 });
 
@@ -64,6 +70,18 @@ describe("choiceRows", () => {
       ["default model", undefined],
       ["Opus", undefined],
       ["Opus (1M context)", undefined],
+    ]);
+  });
+  test("rows that share only a label keep the split, and their chip carries the version", () => {
+    const gpts = [
+      { id: "gpt-5.6-sol", name: "GPT-5.6-Sol" },
+      { id: "gpt-5.5", name: "GPT-5.5" },
+      { id: "gpt-5.2", name: "GPT-5.2" },
+    ];
+    expect(choiceRows(gpts, "", undefined, empty).rows.slice(1)).toEqual([
+      { id: "gpt-5.6-sol", label: "Sol", suffix: "5.6" },
+      { id: "gpt-5.5", label: "GPT", suffix: "5.5", chip: "GPT 5.5" },
+      { id: "gpt-5.2", label: "GPT", suffix: "5.2", chip: "GPT 5.2" },
     ]);
   });
   test("the default's id, reported or asked for, reads as the row it names", () => {

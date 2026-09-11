@@ -438,30 +438,105 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
-  test("stop() cancels the turn, drops the queue, and the turn ends as interrupted", async () => {
-    const fake = fakeAgent(
-      (p) =>
-        new Promise((resolve) => {
-          const t = setInterval(() => {
-            if (fake.cancels > 0) {
-              clearInterval(t);
-              resolve({ stopReason: "cancelled" });
-            }
-          }, 5);
-          void p;
-        }),
-    );
-    const w = world(fake);
+  /** an agent whose turn on "go" runs until it is cancelled, saying something about a steered
+   * message if `answer`; anything else it answers straight away */
+  const untilCancelled = ({ answer, ...opts }: { steering?: boolean; answer?: boolean } = {}) => {
+    const fake = fakeAgent(async (p, client) => {
+      if ((p.prompt[0] as { text: string }).text !== "go") return say("done")(p, client);
+      let answered = false;
+      while (fake.cancels === 0) {
+        if (answer && !answered && fake.steers.length > 0) {
+          answered = true;
+          await say("on it")(p, client);
+        }
+        await Bun.sleep(5);
+      }
+      return { stopReason: "cancelled" };
+    }, opts);
+    return fake;
+  };
+  const promptTexts = (f: FakeAgent) => f.prompts.map((p) => (p.prompt[0] as { text: string }).text);
+
+  test("stop() cancels the turn, which ends as interrupted, and the queue goes next", async () => {
+    const stopping = untilCancelled();
+    const w = world(stopping);
     w.session.send("go");
     w.session.send("later");
     await Bun.sleep(30);
     expect(w.session.status).toBe("working");
     w.session.stop();
     await w.idle();
-    expect(fake.cancels).toBe(1);
+    expect(stopping.cancels).toBe(1);
     expect(w.session.queueItems).toEqual([]);
-    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "interrupted" });
-    expect(fake.prompts).toHaveLength(1);
+    expect(stopping.prompts.map((p) => (p.prompt[0] as { text: string }).text)).toEqual(["go", "later"]);
+    expect(w.events.filter((e) => e.type === "turn-end")).toMatchObject([
+      { stopReason: "interrupted" },
+      { stopReason: "end_turn" },
+    ]);
+    await w.session.close();
+  });
+
+  test("a stop before the prompt has gone out keeps it from going, and the queue still runs", async () => {
+    const stopping = untilCancelled();
+    const w = world(stopping);
+    w.session.send("go");
+    w.session.send("later");
+    // the agent is still starting: there is no turn on its side for a cancel to reach
+    w.session.stop();
+    await w.idle();
+    expect(promptTexts(stopping)).toEqual(["later"]);
+    expect(w.events.filter((e) => e.type === "turn-end")).toMatchObject([
+      { stopReason: "interrupted" },
+      { stopReason: "end_turn" },
+    ]);
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
+  test("a message sent while a stop settles runs once the turn has ended, not into the cancelled one", async () => {
+    const stopping = untilCancelled({ steering: true });
+    const w = world(stopping);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.stop();
+    w.session.send("next");
+    await w.idle();
+    expect(stopping.steers).toHaveLength(0);
+    expect(promptTexts(stopping)).toEqual(["go", "next"]);
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
+  test("a steered message the agent had not answered when stopped runs as the next turn, shown once", async () => {
+    const stopping = untilCancelled({ steering: true });
+    const w = world(stopping);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.send("also");
+    await Bun.sleep(30);
+    expect(stopping.steers).toHaveLength(1);
+    w.session.send("then");
+    await Bun.sleep(30);
+    w.session.stop();
+    await w.idle();
+    // in the order they were sent, the bubbles where they already are
+    expect(promptTexts(stopping)).toEqual(["go", "also", "then"]);
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(3);
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
+  test("a steered message the agent had started answering stays with the turn a stop ends", async () => {
+    const stopping = untilCancelled({ steering: true, answer: true });
+    const w = world(stopping);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.send("also");
+    await Bun.sleep(40);
+    w.session.stop();
+    await w.idle();
+    expect(promptTexts(stopping)).toEqual(["go"]);
+    expect(w.session.queueItems).toEqual([]);
     await w.session.close();
   });
 
@@ -487,6 +562,41 @@ describe("AcpSession", () => {
     expect(answers).toEqual(["allow-once", "reject"]);
     const blocked = w.events.find((e) => e.type === "agent-blocked");
     expect(blocked).toMatchObject({ tool: "Edit", path: "/etc/passwd" });
+    await w.session.close();
+  });
+
+  test("a network ask's row ends with its answer, since no tool runs behind it to end it", async () => {
+    const host = "registry.npmjs.org";
+    const fake = fakeAgent(async (p, client) => {
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: p.sessionId,
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "n1",
+          name: "SandboxNetworkAccess",
+          title: "SandboxNetworkAccess",
+          kind: "other",
+          status: "pending",
+          rawInput: { host },
+        },
+      });
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: { toolCallId: "n1", name: "SandboxNetworkAccess", title: host, kind: "other", rawInput: { host } },
+        options: [
+          { optionId: "yes", name: "Yes", kind: "allow_once" },
+          { optionId: "no", name: "No", kind: "reject_once" },
+        ],
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake);
+    w.session.send("install");
+    await w.idle();
+    expect(w.events.filter((e) => "toolId" in e && e.toolId === "n1")).toEqual([
+      { type: "tool-start", toolId: "n1", name: "network", input: { host }, kind: "fetch", title: host },
+      { type: "tool-end", toolId: "n1", output: "allowed", isError: false },
+    ]);
     await w.session.close();
   });
 

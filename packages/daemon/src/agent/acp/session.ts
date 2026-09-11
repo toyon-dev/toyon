@@ -35,7 +35,7 @@ import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcri
 import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
 import { parseForm, toContent } from "./elicit.ts";
-import { mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
+import { endOfAsk, mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
 import { currentValues, type LiveOptions, type OptionCategory, readOptions } from "./options.ts";
 import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
@@ -157,6 +157,9 @@ interface PendingAsk {
 export class AcpSession implements AgentAdapter {
   status: AgentStatus = "idle";
   private queue: QueueItem[] = [];
+  /** messages steered into the running turn that the agent has not started answering. A cancel
+   * takes such a message with the turn (the adapter never runs it), so a stop hands it back. */
+  private steered: QueueItem[] = [];
   /** the message refused for want of credentials; sent again after a login */
   private refused: QueueItem | null = null;
   private running = false;
@@ -296,6 +299,8 @@ export class AcpSession implements AgentAdapter {
     const live = this.live;
     // writing the attachments is a window the turn can settle in, and then this is a plain message
     if (!live || !this.running || this.interrupted) return this.enqueue(item);
+    // unanswered from the moment it goes out: a stop can land before the agent replies
+    this.steered.push(item);
     let outcome: SteerOutcome;
     try {
       outcome = steerOutcome(
@@ -310,28 +315,49 @@ export class AcpSession implements AgentAdapter {
     } catch (e) {
       // nothing was injected: both adapters validate the request before they push anything
       log.warn(this.d.worktreeId, "steering failed; the message goes as its own turn", e);
-      return this.enqueue(item);
+      if (this.unsteer(item)) this.enqueue(item);
+      return;
     }
-    if (outcome === "promptRequired") return this.enqueue(item);
+    // a stop that landed while the request was out has already queued it
+    if (outcome === "promptRequired") {
+      if (this.unsteer(item)) this.enqueue(item);
+      return;
+    }
     if (outcome === "startedNewTurn") {
       // an agent that ignored the opt-in and prompted itself. Sending it again would run the same
       // message twice and cancelling could take the new turn with it, so the agent keeps it: what
       // is lost is the turn's framing, and status reads idle a beat early. Hold the reaper off it.
+      // That includes a copy a stop already queued.
+      if (!this.unsteer(item)) {
+        this.queue = this.queue.filter((q) => q !== item);
+        this.queueChanged();
+      }
       this.clearReaper();
       log.warn(this.d.worktreeId, "steered message started a turn of the agent's own");
     }
   }
 
-  /** Interrupt the running turn and drop anything queued. Context up to the interrupt persists
-   * in the agent's session; the next message resumes from there. */
+  /** off the unanswered list; false when a stop has already moved it to the queue */
+  private unsteer(item: QueueItem): boolean {
+    const at = this.steered.indexOf(item);
+    if (at >= 0) this.steered.splice(at, 1);
+    return at >= 0;
+  }
+
+  /** Interrupt the running turn. Context up to the interrupt persists in the agent's session, and
+   * anything queued goes next from there: a stop is for the turn, not for the messages behind it. */
   stop() {
-    this.queue = [];
-    this.queueChanged();
     // before the running guard and before session/cancel: an open card is the thing holding the
     // turn open, so the agent unblocks on our answer whether or not its own cancel reaches it
     this.cancelAsks();
     if (!this.running) return;
     this.interrupted = true;
+    // what the agent had not got to goes first, ahead of anything sent after it
+    if (this.steered.length > 0) {
+      this.queue.unshift(...this.steered);
+      this.steered = [];
+      this.queueChanged();
+    }
     const live = this.live;
     if (live) {
       fireAndForget(
@@ -346,6 +372,10 @@ export class AcpSession implements AgentAdapter {
   async close(): Promise<void> {
     this.stopped = true;
     this.clearReaper();
+    // nothing may start a turn after this, so what was queued goes with the process
+    this.queue = [];
+    this.steered = [];
+    this.queueChanged();
     this.stop();
     await this.dropConn();
     await this.log.flush();
@@ -357,17 +387,23 @@ export class AcpSession implements AgentAdapter {
     this.setStatus("working");
     let item: QueueItem | null = null;
     try {
-      while (this.queue.length > 0 && !this.interrupted) {
+      while (this.queue.length > 0) {
         item = this.queue.shift()!;
         this.queueChanged();
-        await this.runTurn(item);
+        try {
+          await this.runTurn(item);
+        } catch (e) {
+          if (!this.interrupted) throw e;
+          this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
+        }
+        // the stop was for that turn: what was queued behind it, or sent while its cancel settled,
+        // goes next without the status dropping to idle in between
+        this.interrupted = false;
+        this.steered = [];
       }
       this.setStatus("idle");
     } catch (e) {
-      if (this.interrupted) {
-        this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
-        this.setStatus("idle");
-      } else if (this.conn && (isAuthRequired(e) || this.rejectedCredential(e))) {
+      if (this.conn && (isAuthRequired(e) || this.rejectedCredential(e))) {
         const rejected = !isAuthRequired(e);
         // a refused credential is a plain turn failure, so the provider's own words go out first:
         // without them "not logged in" would contradict an agent that thinks it is
@@ -391,6 +427,7 @@ export class AcpSession implements AgentAdapter {
       }
     } finally {
       this.interrupted = false;
+      this.steered = [];
       this.running = false;
       this.maybeArmReaper();
     }
@@ -502,6 +539,13 @@ export class AcpSession implements AgentAdapter {
     await this.applyMode(live);
     await this.applyOption(live, "model");
     await this.applyOption(live, "thought_level");
+    // a stop that landed while the agent was starting or being set up had no turn to cancel, so the
+    // prompt must not go out at all: esc straight after a send would otherwise do nothing. Nothing
+    // runs between this check and the request being written, so a later stop's cancel follows it.
+    if (this.interrupted) {
+      this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
+      return;
+    }
     const carried = this.carried(live, item.recorded.attachments);
     const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
     live.prefixPending = false;
@@ -730,12 +774,25 @@ export class AcpSession implements AgentAdapter {
     // the agent changed its own model or effort (a slash command can): keep the comparison honest
     if (params.update.sessionUpdate === "config_option_update") this.absorb(live, params.update.configOptions);
     for (const ev of mapUpdate(params.update, live.tools, this.d.worktreeId)) {
+      // words or a call after a steer are the agent answering it. Output the pre-emption cut off can
+      // still trail in and clear this early, and a stop then takes that message with the turn.
+      if (ev.type === "text-delta" || ev.type === "tool-start") this.steered = [];
       // the mapper does not know the session id; the transcript wants the real one
       this.emit(ev.type === "session-info" ? { ...ev, sessionId: live.sessionId } : ev);
     }
   }
 
-  private onPermission(
+  private onPermission(params: acp.RequestPermissionRequest, bounds: Bounds): Promise<acp.RequestPermissionResponse> {
+    // taken now: a card the process took down with it settles after `live` is already gone
+    const tools = this.live?.tools;
+    return Promise.resolve(this.answerPermission(params, bounds)).then((res) => {
+      const end = tools && endOfAsk(params, res, tools);
+      if (end) this.emit(end);
+      return res;
+    });
+  }
+
+  private answerPermission(
     params: acp.RequestPermissionRequest,
     bounds: Bounds,
   ): acp.RequestPermissionResponse | Promise<acp.RequestPermissionResponse> {

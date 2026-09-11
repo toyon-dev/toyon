@@ -2,7 +2,15 @@
 // any number of `tool_call_update`s; the transcript wants one tool-start and one tool-end, so a
 // small memo per tool call id carries the pieces until the status settles.
 
-import type { AvailableCommand, SessionUpdate, StopReason, ToolCallContent, ToolKind } from "@agentclientprotocol/sdk";
+import type {
+  AvailableCommand,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  SessionUpdate,
+  StopReason,
+  ToolCallContent,
+  ToolKind,
+} from "@agentclientprotocol/sdk";
 import type { AgentCommand, AgentEvent } from "@toyon/shared";
 import { log } from "../../core/log.ts";
 import { unifiedDiff } from "./diff.ts";
@@ -44,6 +52,45 @@ function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
+/** Claude's sandbox asking whether a command may reach a host. The adapter draws the question as a
+ * call named for the check, with the host only in its input, and no tool ever runs behind it. */
+const NETWORK_ASK = "SandboxNetworkAccess";
+
+/** the words a call's row starts with: the agent's own, except a network ask's, which reads as a
+ * fetch of the host it named rather than as the check's internal name */
+function heading(update: { name?: string | null; title: string; kind?: ToolKind | null; rawInput?: unknown }): {
+  name: string;
+  title: string;
+  kind?: ToolKind;
+} {
+  const name = update.name ?? update.title;
+  const host = asRecord(update.rawInput).host;
+  if (name === NETWORK_ASK && typeof host === "string") return { name: "network", title: host, kind: "fetch" };
+  return { name, title: update.title, ...(update.kind ? { kind: update.kind } : {}) };
+}
+
+/** A network ask's row ends with the answer to it. No tool runs behind that call, so no update ever
+ * settles it, and the row would spin for the rest of the transcript. Null for every other request,
+ * whose call ends when its tool does. */
+export function endOfAsk(
+  req: RequestPermissionRequest,
+  res: RequestPermissionResponse,
+  memos: ToolMemos,
+): AgentEvent | null {
+  const memo = memos.get(req.toolCall.toolCallId);
+  if (req.toolCall.name !== NETWORK_ASK || !memo || memo.ended) return null;
+  const outcome = res.outcome;
+  const picked = outcome.outcome === "selected" ? req.options.find((o) => o.optionId === outcome.optionId) : undefined;
+  const allowed = picked?.kind === "allow_once" || picked?.kind === "allow_always";
+  memo.ended = true;
+  return {
+    type: "tool-end",
+    toolId: req.toolCall.toolCallId,
+    output: allowed ? "allowed" : "refused",
+    isError: !allowed,
+  };
+}
+
 export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string): AgentEvent[] {
   switch (update.sessionUpdate) {
     case "agent_message_chunk": {
@@ -64,9 +111,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
     }
     case "tool_call": {
       const memo: ToolMemo = {
-        name: update.name ?? update.title,
-        title: update.title,
-        ...(update.kind ? { kind: update.kind } : {}),
+        ...heading(update),
         content: update.content ?? [],
         rawOutput: update.rawOutput,
         ended: false,

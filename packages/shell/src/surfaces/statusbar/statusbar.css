@@ -176,14 +176,6 @@
     text-overflow: ellipsis;
     max-width: 160px;
   }
-  /* an agent is working in a project that is not on screen: the only reason to look away from here */
-  .bar-project-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--yellow);
-    flex: none;
-  }
   .status-bar {
     & .bar-grow {
       flex: 1;

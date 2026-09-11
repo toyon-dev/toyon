@@ -35,7 +35,7 @@ export interface AgentAdapter {
   warmCommands(): Promise<void>;
   /** context (live-page state) reaches the prompt but never the visible transcript */
   send(text: string, opts?: SendOpts): void;
-  /** interrupt the running turn and drop anything queued */
+  /** interrupt the running turn; anything queued goes next */
   stop(): void;
   unqueue(index: number): void;
   transcript(): Array<{ seq: number; event: AgentEvent }>;

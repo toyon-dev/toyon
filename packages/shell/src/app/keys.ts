@@ -76,10 +76,9 @@ export function useChords() {
             else dispatch({ a: "open-draft" });
             break;
           case "project":
-            // the picker hangs off the pill, and zen hides the bar it lives in: leave zen first
-            // so the chord opens something visible
-            if (s.zen && s.overlay?.kind !== "projects") dispatch({ a: "toggle-zen" });
-            dispatch({ a: "toggle", overlay: { kind: "projects" } });
+            // over the preview, where the eyes are when a key is pressed; the pill's dropdown is for
+            // a click that is already up in the corner
+            dispatch({ a: "toggle", overlay: { kind: "projects", form: "center" } });
             break;
           case "quick-open":
             if (s.overlay?.kind === "quick-open") dispatch({ a: "close" });

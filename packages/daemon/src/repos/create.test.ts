@@ -168,6 +168,10 @@ describe("initRepoInPlace", () => {
     expect((await git(dir, "ls-tree", "HEAD")).out).toBe("");
     // and excluded locally, so the project reads as untouched and still gets its first-run screen
     expect((await git(dir, "status", "--porcelain", "-uall")).out).toBe("");
+    // an install before the scaffold's own .gitignore does not flood the changes list either
+    mkdirSync(join(dir, "node_modules", "left-pad"), { recursive: true });
+    writeFileSync(join(dir, "node_modules", "left-pad", "index.js"), "module.exports = 1;\n");
+    expect((await git(dir, "status", "--porcelain", "-uall")).out).toBe("");
     cleanup();
   });
 

@@ -39,7 +39,22 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
     atBottomRef.current = true;
     setShowJump(false);
   });
+  // The composer is a sibling that grows: a recap line, the target sentence, a chip that wraps the
+  // model row. Each one takes height off the log without a scroll event, so the newest row slides
+  // under the box and nothing puts it back.
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (atBottomRef.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
+  // Read from the element rather than from where a scroll meant to land: a programmatic scroll has
+  // to answer here before it paints, because the pinning above runs on the same frame and a stale
+  // `true` would pull the log straight back to the bottom.
   const onScroll = () => {
     const el = logRef.current;
     if (!el) return;
@@ -77,6 +92,7 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
     if (!row) return;
     const pad = parseFloat(getComputedStyle(el).paddingTop) || 0;
     el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - pad;
+    onScroll();
   });
 
   // stable across renders so memoized rows don't re-render on every delta
@@ -107,6 +123,13 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   const newestShell = entries.findLastIndex((e) => "tools" in e && e.tools[0]?.name === SHELL_TOOL);
   // a `!` command still going: its row spins, and this is where the stop for it lives
   const shellRunning = items.some((i) => i.kind === "tool" && i.name === SHELL_TOOL && !i.done);
+  // The rows under the transcript land a frame after the message that caused them: the agent goes
+  // busy after the send is in the log, a queued message after the daemon takes it. They add height
+  // without touching `items`, so the send they follow scrolls out from under them.
+  useOnChange([busy, active?.agent, shellRunning, queue.length], () => {
+    const el = logRef.current;
+    if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
+  });
 
   return (
     <div className="chat-wrap">

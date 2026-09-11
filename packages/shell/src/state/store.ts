@@ -775,7 +775,6 @@ export type Action =
   | { a: "set-draft"; id: string; text: string }
   /** someone is looking at this worktree: latch the recap of a stop they have not seen */
   | { a: "arrive"; id: string }
-  | { a: "recap-dismiss"; id: string }
   /** the composer's up and down: the draft and where the walk is, in one write */
   | { a: "walk"; id: string; walk: ComposerWalk | null; text: string }
   /** attachments joining a composer box, after whatever is already waiting there */
@@ -987,8 +986,6 @@ function reduce(s: State, action: Action): State {
       if (!unseen || !turn?.recap) return s;
       return withLocal(s, action.id, (l) => (l.recapFor === turn.at ? l : { ...l, recapFor: turn.at }));
     }
-    case "recap-dismiss":
-      return withLocal(s, action.id, withoutRecap);
     case "walk":
       return withLocal(s, action.id, ({ walk: _walk, ...l }) => ({
         ...l,

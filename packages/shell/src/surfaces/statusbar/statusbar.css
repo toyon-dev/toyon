@@ -22,14 +22,19 @@
     display: flex;
     flex: 1;
     min-width: 0;
+    /* The top corners are the field's, since the panel lies exactly on it: a rounder panel leaves the
+     field's tighter corner showing outside its arc. The bottom corners are the floating box's. The
+     strip sits inside the panel's border, so its curve is the field's less that 1px. */
     & .overlay-box.anchored {
       top: 0;
       left: 0;
       width: 100%;
+      border-radius: var(--radius) var(--radius) var(--radius-lg) var(--radius-lg);
       --picker-inset: 10px;
     }
     & .overlay-box.anchored .picker-input {
       padding: 3px 10px;
+      border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
     }
     /* the project panel's budget: hanging off the bar, half the viewport would bury the preview */
     & .overlay-box .picker-list {

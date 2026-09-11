@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDirs, makePaths } from "./paths.ts";
-import { loadState, saveState } from "./state.ts";
+import { loadState, StateStore, saveState } from "./state.ts";
 
 const home = mkdtempSync(join(tmpdir(), "toyon-state-"));
 const paths = makePaths(home);
@@ -56,6 +56,27 @@ describe("state", () => {
     expect(loaded.modelCache).toBeUndefined();
     saveState(paths, loaded);
     expect(readFileSync(paths.stateFile, "utf8").includes("modelCache")).toBe(false);
+  });
+
+  test("load keeps page records for worktrees that exist or were found on disk, and drops the rest", () => {
+    const rec = { repoId: "r1", at: 0, files: {} };
+    saveState(paths, {
+      repos: [],
+      worktrees: [wt("a")],
+      sessions: {},
+      seen: { a: rec, "disc-0123456789ab": rec, gone: rec },
+    });
+    expect(Object.keys(loadState(paths).seen ?? {}).sort()).toEqual(["a", "disc-0123456789ab"]);
+  });
+
+  test("page records keep the worktrees opened most recently, and go with a removed worktree", () => {
+    const store = new StateStore(paths, { repos: [], worktrees: [wt("a")], sessions: {} });
+    for (let i = 0; i <= 50; i++) store.seenFor(`w${i}`, "r1", i);
+    expect(store.seenOf("w0")).toBeUndefined();
+    expect(store.seenOf("w50")).toBeDefined();
+    store.seenFor("a", "r1", 100);
+    store.removeWorktree("a");
+    expect(store.seenOf("a")).toBeUndefined();
   });
 
   test("corrupt file is backed up, not silently discarded", () => {

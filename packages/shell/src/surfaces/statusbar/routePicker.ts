@@ -1,7 +1,7 @@
 // The route bar's rows, from what was typed, the pages this branch changed and the pages the
 // project's previews are used on. Pure, so the ordering rules are tested without a DOM.
 
-import type { RouteInfo } from "@toyon/shared";
+import type { PageBadge, RouteInfo } from "@toyon/shared";
 
 export type Row =
   | { kind: "go"; path: string }
@@ -10,9 +10,6 @@ export type Row =
 
 /** A branch that touched every page still leaves the list room for the pages you use. */
 export const CHANGED_MAX = 8;
-
-/** the files a worktree has changed, as its git status carries them */
-export type ChangedFiles = { files: Array<{ path: string }>; committed?: Array<{ path: string }> };
 
 /** the address as the bar shows it: path, query and hash, since a hash router's route is its hash */
 export function pathOf(url: string | undefined): string {
@@ -45,20 +42,15 @@ export function completionFor(path: string, q: string): string | null {
   return q && c.toLowerCase().startsWith(q.toLowerCase()) ? c : null;
 }
 
-/** The whole parameter in a template, in whichever router's syntax, so typing over the selection
- * replaces it: `[id]`, `[...slug]`, `[[lang]]`, `:id`, `:lang?`, `$postId`, `*`. Null when there is none. */
-export function paramRange(path: string): [number, number] | null {
-  const m = /\[\[?[^\]]*\]\]?|:[\w-]+\??|\$[\w-]*|\*/.exec(path);
-  return m ? [m.index, m.index + m[0].length] : null;
-}
-
-/** The pages this branch changed: routes whose file is among the worktree's uncommitted files or
- * those committed ahead of main, in the scan's order (places before templates). Endpoints are left
- * out, since sending the preview to a handler's JSON is rarely where anyone meant to go. */
-export function changedRoutes(routes: RouteInfo[] | undefined, git: ChangedFiles | undefined): RouteInfo[] {
-  if (!routes?.length || !git) return [];
-  const touched = new Set([...git.files, ...(git.committed ?? [])].map((f) => f.path));
-  return routes.filter((r) => !r.endpoint && touched.has(r.file)).slice(0, CHANGED_MAX);
+/** The pages whose file changed since you last had them open here, in the scan's order (places
+ * before templates). Endpoints never carry a badge, since sending the preview to a handler's JSON is
+ * rarely where anyone meant to go. */
+export function changedRoutes(
+  routes: RouteInfo[] | undefined,
+  unseen: Record<string, PageBadge> | undefined,
+): RouteInfo[] {
+  if (!routes?.length || !unseen) return [];
+  return routes.filter((r) => !r.endpoint && unseen[r.file]).slice(0, CHANGED_MAX);
 }
 
 /**
@@ -95,7 +87,7 @@ export function rowsFor({
   }
   if (typed) {
     const go = normalizePath(query);
-    // a template sitting in the field is its own row already, and enter on it selects the parameter again
+    // a template sitting in the field is its own row already
     if (!rows.some((r) => r.path === go)) rows.unshift({ kind: "go", path: go });
   }
   return rows;

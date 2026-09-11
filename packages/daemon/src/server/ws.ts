@@ -194,11 +194,26 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   // a save or a discard in one tab: the writer's changes list and every other tab's follow from the
   // same push, and an editor open on the file re-reads it from there
   s.hub.on("filesChanged", refreshGitStatus);
+  // a worktree's pages ride behind its git status: the same pushes, sent only when they moved, so the
+  // route list is current before anyone opens it
+  const sentPages = new Map<string, string>();
+  const sendPages = (worktreeId: string, pages: Awaited<ReturnType<typeof s.routes.pages>>) => {
+    const json = JSON.stringify(pages);
+    if (sentPages.get(worktreeId) === json) return;
+    sentPages.set(worktreeId, json);
+    sendTo(worktreeId, { t: "routes", worktreeId, ...pages });
+  };
   const pushGitStatus = async (worktreeId: string) => {
     if (![...sockets].some((ws) => ws.data.subs.has(worktreeId))) return;
     const info = await s.worktrees.gitStatus(worktreeId);
-    if (info) sendTo(worktreeId, { t: "git-status", worktreeId, ...info });
+    if (!info) return;
+    sendTo(worktreeId, { t: "git-status", worktreeId, ...info });
+    sendPages(worktreeId, await s.routes.pages(worktreeId, info));
   };
+  s.hub.on("pagesChanged", (worktreeId) => {
+    const pages = s.routes.cached(worktreeId);
+    if (pages) sendPages(worktreeId, pages);
+  });
   s.hub.on("repoTick", (repoId) => {
     // main moved: refresh badges + git status for every subscribed worktree of the repo,
     // discovered ones included, since their behind count moved with it

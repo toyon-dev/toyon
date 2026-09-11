@@ -6,7 +6,6 @@ import { visitItems } from "../../state/actions/route.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
-import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { wtDir } from "../util.ts";
@@ -21,7 +20,7 @@ const isTemplate = (r: Row) => r.kind === "changed" && r.dynamic;
 /** The route bar's list: the pages this branch changed, then the pages the project's previews are
  * used on, most used first. It opens over the address field the way the project switcher opens over
  * its pill, holding the address selected so typing replaces it, and a typed path that is not already
- * a row leads as its own. */
+ * a row leads as its own. The pages arrive with the worktree's git status, before the list opens. */
 export function RoutePicker({
   worktreeId,
   repoId,
@@ -35,16 +34,12 @@ export function RoutePicker({
   const sock = useSock();
   const history = useStore((s) => s.visits[repoId] ?? NONE);
   const frequent = useMemo(() => history.map((p) => p.path), [history]);
-  const routes = useLocalField(worktreeId, "routes");
-  const git = useLocalField(worktreeId, "git");
+  const pages = useLocalField(worktreeId, "pages");
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId);
     return w ? wtDir(w.worktree) : null;
   });
-  // the file layout is read each time the list opens, so a page the agent just added is on it; the
-  // daemon keeps a scan for a few seconds, and git status keeps the changed set live meanwhile
-  useOnChange([worktreeId], () => sock?.send({ t: "routes", worktreeId }));
-  const changed = useMemo(() => changedRoutes(routes, git), [routes, git]);
+  const changed = useMemo(() => changedRoutes(pages?.routes, pages?.unseen), [pages]);
   const current = pathOf(url);
   const here = url ? routeKey(url) : null;
   const filter = useCallback(

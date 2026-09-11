@@ -56,7 +56,6 @@ describe("parseClientMsg", () => {
       { t: "visit", worktreeId: "a", path: "/pricing", title: "Pricing | Acme" },
       { t: "page-title", worktreeId: "a", path: "/pricing", title: "Pricing | Acme" },
       { t: "forget-visit", repoId: "r", path: "/#/about" },
-      { t: "routes", worktreeId: "a" },
     ]) {
       const r = parseClientMsg(msg);
       expect(r.ok, JSON.stringify(msg)).toBe(true);

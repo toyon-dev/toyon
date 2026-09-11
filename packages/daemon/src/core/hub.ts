@@ -29,6 +29,8 @@ export interface HubEvents {
   agentsChanged: () => void;
   /** the order of a repo's most used preview pages changed */
   visitsChanged: (repoId: string) => void;
+  /** a worktree's page badges moved: a page was opened, or left */
+  pagesChanged: (worktreeId: string) => void;
   /** a worktree of this repo was archived, restored, or deleted from the archive */
   archiveChanged: (repoId: string) => void;
   /** the editor saved or discarded a file: every tab's changes list, and any editor open on it, re-reads */

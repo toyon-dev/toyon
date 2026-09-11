@@ -29,6 +29,9 @@ export interface PersistedState {
    * page. Beside the repo rather than on RepoInfo, which is broadcast whole on every config change
    * and would carry this to every tab each time. */
   visits?: Record<string, Record<string, PageVisit>>;
+  /** per worktree, found ones included: the page files last opened there and what they held
+   * (routes/seen.ts), so a page the agent changed afterwards can say so */
+  seen?: Record<string, SeenRecord>;
 }
 
 /** one page's standing in a repo's list: a count that decays, as of `last`, and the title the page
@@ -38,6 +41,20 @@ export interface PageVisit {
   last: number;
   title?: string;
 }
+
+/** what one worktree remembers of the pages opened in it */
+export interface SeenRecord {
+  repoId: string;
+  /** when a page was last opened here; past the cap the record opened longest ago goes */
+  at: number;
+  /** the file on screen, stamped again when it is left */
+  here?: string;
+  /** file to the hash of what it held when its page was last open */
+  files: Record<string, string>;
+}
+
+/** worktrees whose page records are kept: a found worktree removed outside toyon never says so */
+const SEEN_WORKTREES = 50;
 
 const empty: PersistedState = { repos: [], worktrees: [], sessions: {} };
 
@@ -69,6 +86,11 @@ export function loadState(paths: Paths): PersistedState {
   // sessions belong to worktrees; a removed worktree's entry is an orphan
   const ids = new Set(state.worktrees.map((w) => w.id));
   for (const id of Object.keys(state.sessions)) if (!ids.has(id)) delete state.sessions[id];
+  // page records too, except a found worktree's: it has no record here to be checked against, and
+  // its ids start disc- (worktrees/discover.ts)
+  for (const id of Object.keys(state.seen ?? {})) {
+    if (!ids.has(id) && !id.startsWith("disc-")) delete state.seen?.[id];
+  }
   if (state.modelCache) {
     state.optionCache ??= {};
     for (const [agentId, models] of Object.entries(state.modelCache)) {
@@ -154,11 +176,38 @@ export class StateStore {
     this.state.repos.push(repo);
     this.save();
   }
-  /** drops the repo record and its page list; the caller has removed its worktrees and stopped its runtimes */
+  /** drops the repo record, its page list and its worktrees' page records; the caller has removed its
+   * worktrees and stopped its runtimes */
   removeRepo(id: string) {
     this.state.repos = this.state.repos.filter((r) => r.id !== id);
     if (this.state.visits) delete this.state.visits[id];
+    for (const [worktreeId, rec] of Object.entries(this.state.seen ?? {})) {
+      if (rec.repoId === id) delete this.state.seen?.[worktreeId];
+    }
     this.save();
+  }
+
+  /** a worktree's page record, live like every record here; undefined until a page is opened there */
+  seenOf(worktreeId: string): SeenRecord | undefined {
+    return this.state.seen?.[worktreeId];
+  }
+  /** the same record, made on first use and marked as used now. Past the cap the record used longest
+   * ago goes. No save: the route service decides when a visit is written. */
+  seenFor(worktreeId: string, repoId: string, now: number): SeenRecord {
+    this.state.seen ??= {};
+    const seen = this.state.seen;
+    let rec = seen[worktreeId];
+    if (!rec) {
+      rec = { repoId, at: now, files: {} };
+      seen[worktreeId] = rec;
+      const others = Object.entries(seen).filter(([id]) => id !== worktreeId);
+      if (others.length >= SEEN_WORKTREES) {
+        const oldest = others.reduce((a, b) => (b[1].at < a[1].at ? b : a));
+        delete seen[oldest[0]];
+      }
+    }
+    rec.at = now;
+    return rec;
   }
 
   /** a repo's page list, live like every record here; undefined until its first visit */
@@ -179,6 +228,7 @@ export class StateStore {
   removeWorktree(id: string) {
     this.state.worktrees = this.state.worktrees.filter((w) => w.id !== id);
     delete this.state.sessions[id];
+    if (this.state.seen) delete this.state.seen[id];
     this.save();
   }
   session(worktreeId: string): string | undefined {

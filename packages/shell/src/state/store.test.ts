@@ -1353,11 +1353,12 @@ describe("visits", () => {
 });
 
 describe("routes", () => {
-  test("a routes reply is kept on its worktree", () => {
+  test("a worktree's pages are kept with their badges", () => {
     const routes = [
       { path: "/users/[id]", source: "next" as const, file: "app/users/[id]/page.tsx", dynamic: true, endpoint: false },
     ];
-    const s = run([hello(wt("a")), server({ t: "routes", worktreeId: "a", routes })]);
-    expect(localOf(s, "a").routes).toEqual(routes);
+    const unseen = { "app/users/[id]/page.tsx": "new" as const };
+    const s = run([hello(wt("a")), server({ t: "routes", worktreeId: "a", routes, unseen })]);
+    expect(localOf(s, "a").pages).toEqual({ routes, unseen });
   });
 });

@@ -26,7 +26,7 @@ import type {
   WorktreeStatus,
 } from "../model.ts";
 import { SHELL_STREAM } from "../model.ts";
-import type { PageEntry, RouteInfo } from "../routes.ts";
+import type { PageEntry, WorktreePages } from "../routes.ts";
 import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta } from "./events.ts";
 import {
   FILE_MAX_CHARS,
@@ -73,8 +73,9 @@ export type ServerMsg =
   | { t: "repos"; repos: RepoInfo[] }
   /** one repo's history, whole, sent when its order or a title changes */
   | { t: "visits"; repoId: string; pages: PageEntry[] }
-  /** the pages a worktree's files define: the reply to the route bar's list opening */
-  | { t: "routes"; worktreeId: string; routes: RouteInfo[] }
+  /** the pages a worktree's files define and which changed since you last had them open there: sent
+   * on subscribe behind git status, and again whenever either moves */
+  | ({ t: "routes"; worktreeId: string } & WorktreePages)
   /** clones in flight: shown in the switcher and watched in the import pane */
   | { t: "pending-repos"; pending: PendingRepo[] }
   /** directories matching what the project picker has typed so far, plus what the typed path
@@ -397,8 +398,6 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("page-title"), worktreeId: id, path: routePath, title: pageTitle }),
   /** take a page off the repo's list */
   z.object({ t: z.literal("forget-visit"), repoId: id, path: routePath }),
-  /** the pages the worktree's files define, for the route bar's list; replies `routes` */
-  z.object({ t: z.literal("routes"), worktreeId: id }),
   z.object({ t: z.literal("pick-variant"), worktreeId: id }),
   z.object({ t: z.literal("unqueue"), worktreeId: id, index: z.number().int().min(0) }),
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),

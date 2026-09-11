@@ -157,13 +157,21 @@ export function ListPicker<T>({
   if (verbs?.pick) hints.push(["enter", verbs.pick]);
   if (verbs?.back) hints.push(["esc", verbs.back]);
   const inputEl = (
-    <div className="picker-input">
+    <div
+      className="picker-input"
+      // the strip is drawn as the field, so a press on its padding belongs in the field; otherwise it
+      // lands on a div and focus leaves for the body, where the next keystroke goes nowhere
+      onMouseDown={(e) => {
+        if ((e.target as HTMLElement).closest("input, button")) return;
+        e.preventDefault();
+        inputRef.current?.focus();
+      }}
+    >
       {lead}
       <div className="picker-caret">
         <Field
-          size="lg"
           font="mono"
-          bare={anchored}
+          bare
           ref={inputRef}
           value={q}
           onChange={(e) => {

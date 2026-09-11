@@ -203,10 +203,17 @@ export function truncate(s: string, max = 4000): string {
 /** What the composer's `/` picker renders, out of what the agent advertised. Names go through
  * verbatim: the Claude adapter re-expands `/mcp:server:cmd` into `/server:cmd (MCP)` on the way
  * back, so normalising one here would break MCP prompts. Capped so a chatty adapter cannot flood
- * every subscribed socket on each change. */
+ * every subscribed socket on each change. One entry per name, the first: the picker keys its rows
+ * by name, and a name advertised twice (a user and a project command both called `review`) left a
+ * stale row behind when the list narrowed. */
 export function mapCommands(cmds: AvailableCommand[]): AgentCommand[] {
+  const seen = new Set<string>();
   return cmds
-    .filter((c) => typeof c.name === "string" && c.name.length > 0 && c.name.length <= 120)
+    .filter((c) => {
+      if (typeof c.name !== "string" || c.name.length === 0 || c.name.length > 120 || seen.has(c.name)) return false;
+      seen.add(c.name);
+      return true;
+    })
     .slice(0, 300)
     .map((c) => ({
       name: c.name,

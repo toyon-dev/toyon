@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type ToyonConfig, toyonConfigSchema } from "@toyon/shared";
+import { issueReason, type ToyonConfig, toyonConfigSchema } from "@toyon/shared";
 import { log } from "../core/log.ts";
 
 export interface DetectedConfig {
@@ -26,9 +26,7 @@ export function readConfigFile(repoPath: string): ConfigFile {
   }
   const r = toyonConfigSchema.safeParse(raw);
   if (r.success) return { ok: true, config: r.data };
-  const issue = r.error.issues[0];
-  const where = issue?.path.length ? `${issue.path.join(".")}: ` : "";
-  return { ok: false, reason: `toyon.json: ${where}${issue?.message ?? "invalid"}` };
+  return { ok: false, reason: `toyon.json: ${issueReason(r.error, "invalid")}` };
 }
 
 export function detectConfig(repoPath: string): DetectedConfig {

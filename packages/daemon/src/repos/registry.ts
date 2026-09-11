@@ -16,7 +16,16 @@ import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
 import { expandTilde } from "./browse.ts";
 import { detectConfig, readConfigFile } from "./config.ts";
-import { type CreateOpts, cloneInto, createRepoDir, isInside, type Plan, planProject } from "./create.ts";
+import {
+  type CreateOpts,
+  cloneInto,
+  createRepoDir,
+  initRepoInPlace,
+  isInside,
+  type Plan,
+  planInPlace,
+  planProject,
+} from "./create.ts";
 import { watchConfigFile, watchDefaultBranch, watchWorktreeDir } from "./watcher.ts";
 
 export interface RepoRegistryDeps {
@@ -100,9 +109,10 @@ export class RepoRegistry {
   /** Make a project and open it. The containment check lives here rather than in `create.ts`
    * because it is the only part that needs daemon state: see `refuseIfManaged`. */
   async create(opts: CreateOpts): Promise<RepoInfo> {
-    const { dir } = planProject(opts);
+    const inPlace = opts.mode === "init";
+    const { dir } = inPlace ? planInPlace(opts) : planProject(opts);
     this.refuseIfManaged(dir);
-    return this.register(await createRepoDir(opts));
+    return this.register(await (inPlace ? initRepoInPlace(opts) : createRepoDir(opts)));
   }
 
   /** A project nested inside a repo or worktree toyon already manages is the thing to prevent, and

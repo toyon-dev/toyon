@@ -6,6 +6,7 @@ import { AppearancePicker } from "./AppearancePicker.tsx";
 import { ArchivePicker } from "./ArchivePicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { ElementSources } from "./ElementSources.tsx";
+import { FolderPicker } from "./FolderPicker.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
 import { NewProjectOverlay } from "./NewProjectOverlay.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
@@ -36,6 +37,7 @@ export function Overlays() {
       {overlay?.kind === "commands" && <CommandPalette />}
       {overlay?.kind === "projects" && overlay.dialog && <ProjectPicker dialog />}
       {overlay?.kind === "new-project" && <NewProjectOverlay overlay={overlay} />}
+      {overlay?.kind === "choose-folder" && <FolderPicker form={overlay.form} />}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { agentDefault, type ModelChoice } from "@toyon/shared";
+import { agentDefault, defaultStandsFor, type ModelChoice } from "@toyon/shared";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import "./chips.css";
 
@@ -11,7 +11,9 @@ export const DEFAULT_OPTION = "";
  * what the running session reported, which is the truth when the record names nothing.
  *
  * An agent that lists its own default row is taken at its word: that row stands in for the
- * empty option and no second "default" is drawn beside it. */
+ * empty option and no second "default" is drawn beside it. When that row only names another
+ * (Claude's "Default" is "Opus"), the named row is drawn in place of both and marked recommended,
+ * so one model is never two rows; not picking still follows the agent, picking it pins it. */
 export function OptionChip({
   choices,
   value,
@@ -40,11 +42,20 @@ export function OptionChip({
 }) {
   if (choices.length === 0) return null;
   const own = agentDefault(choices);
-  const shown = value || current || own?.id || DEFAULT_OPTION;
-  const known = choices.some((c) => c.id === shown);
+  const named = defaultStandsFor(choices);
+  // the default's id (what the session reports when nothing is asked, or a record that asked for
+  // it) reads as the row it names
+  const requested = value || current || own?.id || DEFAULT_OPTION;
+  const shown = named && requested === own?.id ? named.id : requested;
+  const listed = named ? choices.filter((c) => c !== own) : choices;
+  const known = listed.some((c) => c.id === shown);
   const options = [
     ...(own ? [] : [{ id: DEFAULT_OPTION, label: defaultLabel, description: defaultDescription }]),
-    ...choices.map((c) => ({ id: c.id, label: c.name, description: c.description })),
+    ...listed.map((c) => ({
+      id: c.id,
+      label: c.name,
+      description: c === named ? ["recommended", c.description].filter(Boolean).join(" · ") : c.description,
+    })),
     // the session reported something the list does not carry: show it rather than lie
     ...(shown && !known ? [{ id: shown, label: shown }] : []),
   ];

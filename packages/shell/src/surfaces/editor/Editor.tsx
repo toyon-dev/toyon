@@ -64,6 +64,20 @@ function shellType() {
 const THEME = "toyon";
 monaco.editor.defineTheme(THEME, toMonacoTheme(toyonDark));
 
+// ⌘E and ⌘I arm the element picker wherever the keyboard is, so Monaco's own bindings for them come
+// off: find-with-selection on ⌘E, and suggest's second key on ⌘I (⌃Space still suggests). A key
+// Monaco does not bind is not stopped at its input, so the keydown reaches useChords on the window.
+monaco.editor.addKeybindingRules(
+  (
+    [
+      ["actions.findWithSelection", monaco.KeyCode.KeyE],
+      ["editor.action.triggerSuggest", monaco.KeyCode.KeyI],
+      ["focusSuggestion", monaco.KeyCode.KeyI],
+      ["toggleSuggestionDetails", monaco.KeyCode.KeyI],
+    ] as const
+  ).map(([command, key]) => ({ keybinding: monaco.KeyMod.CtrlCmd | key, command: `-${command}` })),
+);
+
 function editorOptions(readOnly: boolean) {
   return {
     readOnly,

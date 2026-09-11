@@ -287,6 +287,26 @@ export interface SpareInfo {
   ready: boolean;
 }
 
+/** A worktree that was removed. Removing archives: the directory and branch go, while the chat,
+ * its attachments and a git ref to the commits and uncommitted work stay with the daemon until the
+ * worktree is restored or deleted for good. */
+export interface ArchivedWorktree {
+  id: string;
+  repoId: string;
+  title: string;
+  branch: string;
+  createdAt: number;
+  archivedAt: number;
+  /** the first message sent, so a row can say what the work was */
+  prompt?: string;
+  /** git still holds its commits, so a restore brings the work back and not only the chat */
+  restorable: boolean;
+  /** uncommitted changes were kept beside the commits */
+  uncommitted?: boolean;
+  /** it had been merged into main */
+  landed?: boolean;
+}
+
 /** One row of the rail: a worktree toyon runs, or one git knows about that toyon did not create
  * (made in a terminal, by another agent, by an editor). Ownership is `worktree`. Present, and
  * toyon has a record, a port, procs and an agent for it, and may write to it. Absent, and the

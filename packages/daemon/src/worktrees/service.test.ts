@@ -95,7 +95,7 @@ describe("create / remove", () => {
     await expect(w.worktrees.create(repoId, "c", { agent: "nope" })).rejects.toBeInstanceOf(UserError);
   });
 
-  test("remove stops the agent and procs, deletes the directory, branch, transcript and state row", async () => {
+  test("remove stops the agent and procs, deletes the directory, branch and state row, and archives the transcript", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "task");
     await settle();
@@ -110,6 +110,7 @@ describe("create / remove", () => {
     expect(existsSync(wt.path)).toBe(false);
     expect(sh(w.repo, "git", "branch", "--list", wt.branch)).toBe("");
     expect(existsSync(transcriptPathFor(w.paths.transcriptsDir, wt.id))).toBe(false);
+    expect(existsSync(join(w.paths.archiveDir, wt.id, "transcript.jsonl"))).toBe(true);
     expect(w.state.worktree(wt.id)).toBeUndefined();
     expect(w.runtime.get(wt.id)).toBeUndefined();
   });
@@ -129,6 +130,116 @@ describe("create / remove", () => {
     const main = w.state.worktrees.find((x) => x.kind === "main")!;
     await w.worktrees.remove(main.id);
     expect(w.state.worktree(main.id)).toBeDefined();
+  });
+});
+
+describe("archive", () => {
+  const userLine = (text: string) => `${JSON.stringify({ seq: 0, event: { type: "user-message", text, ts: 1 } })}\n`;
+  const ref = (id: string) => `refs/toyon/archive/${id}`;
+  const refExists = async (id: string) => (await git(w.repo, "rev-parse", "--verify", "--quiet", ref(id))).ok;
+
+  /** a worktree with a commit of its own, an edit, an untracked file, a chat and a session */
+  async function workedOn(repoId: string) {
+    const wt = await w.worktrees.create(repoId, "tidy the footer");
+    await settle();
+    writeFileSync(join(wt.path, "done.txt"), "committed\n");
+    sh(wt.path, "git", "add", "done.txt");
+    sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "done");
+    writeFileSync(join(wt.path, "README.md"), "edited\n");
+    writeFileSync(join(wt.path, "wip.txt"), "untracked\n");
+    writeFileSync(transcriptPathFor(w.paths.transcriptsDir, wt.id), userLine("tidy the footer"));
+    w.state.setSession(wt.id, "session-1");
+    return { wt, head: sh(wt.path, "git", "rev-parse", "HEAD") };
+  }
+
+  test("remove keeps the commits and uncommitted work under a ref beside the archived chat", async () => {
+    const repoId = await registered();
+    const { wt, head } = await workedOn(repoId);
+    const archived = await w.worktrees.remove(wt.id);
+    expect(archived).toMatchObject({
+      id: wt.id,
+      title: wt.title,
+      branch: wt.branch,
+      prompt: "tidy the footer",
+      restorable: true,
+      uncommitted: true,
+    });
+    expect(existsSync(wt.path)).toBe(false);
+    expect(sh(w.repo, "git", "branch", "--list", wt.branch)).toBe("");
+    // the ref is the uncommitted work as a commit over the one the branch was on
+    expect(sh(w.repo, "git", "rev-parse", `${ref(wt.id)}^`)).toBe(head);
+    expect(sh(w.repo, "git", "show", `${ref(wt.id)}:wip.txt`)).toBe("untracked");
+    expect(w.worktrees.archived(repoId).map((a) => a.id)).toEqual([wt.id]);
+  });
+
+  test("restore puts back the branch, the commits, the uncommitted work, the chat and the session", async () => {
+    const repoId = await registered();
+    const { wt, head } = await workedOn(repoId);
+    await w.worktrees.remove(wt.id);
+    const back = await w.worktrees.restore(wt.id, "tab-1");
+    await settle();
+    expect(back).toMatchObject({ id: wt.id, path: wt.path, branch: wt.branch, createdBy: "tab-1" });
+    expect(sh(back.path, "git", "rev-parse", "HEAD")).toBe(head);
+    expect(readFileSync(join(back.path, "README.md"), "utf8")).toBe("edited\n");
+    expect(readFileSync(join(back.path, "wip.txt"), "utf8")).toBe("untracked\n");
+    expect(readFileSync(transcriptPathFor(w.paths.transcriptsDir, wt.id), "utf8")).toBe(userLine("tidy the footer"));
+    expect(w.state.session(wt.id)).toBe("session-1");
+    expect(w.state.worktree(wt.id)).toBeDefined();
+    expect(await refExists(wt.id)).toBe(false);
+    expect(w.worktrees.archived(repoId)).toEqual([]);
+  });
+
+  test("a restore whose branch name was taken since comes back on a new branch", async () => {
+    const repoId = await registered();
+    const { wt, head } = await workedOn(repoId);
+    await w.worktrees.remove(wt.id);
+    sh(w.repo, "git", "branch", wt.branch, "main");
+    const back = await w.worktrees.restore(wt.id);
+    expect(back.branch).not.toBe(wt.branch);
+    expect(sh(back.path, "git", "rev-parse", "HEAD")).toBe(head);
+    expect(sh(w.repo, "git", "rev-parse", wt.branch)).toBe(sh(w.repo, "git", "rev-parse", "main"));
+  });
+
+  test("delete forgets an archived worktree for good", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    await w.worktrees.remove(wt.id);
+    await w.worktrees.deleteArchived(wt.id);
+    expect(existsSync(join(w.paths.archiveDir, wt.id))).toBe(false);
+    expect(await refExists(wt.id)).toBe(false);
+    expect(w.worktrees.archived(repoId)).toEqual([]);
+    await expect(w.worktrees.restore(wt.id)).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("a worktree whose directory went while the daemon was down is archived, restorable from its branch", async () => {
+    const repoId = await registered();
+    const { wt, head } = await workedOn(repoId);
+    await w.runtime.stop(wt.id);
+    rmSync(wt.path, { recursive: true, force: true });
+    await w.worktrees.forgetGone(wt);
+    expect(w.state.worktree(wt.id)).toBeUndefined();
+    expect(w.worktrees.archived(repoId)).toMatchObject([{ id: wt.id, restorable: true }]);
+    const back = await w.worktrees.restore(wt.id);
+    expect(sh(back.path, "git", "rev-parse", "HEAD")).toBe(head);
+  });
+
+  test("a spare's removal archives nothing", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    writeFileSync(transcriptPathFor(w.paths.transcriptsDir, spare.id), userLine("warming"));
+    await w.worktrees.remove(spare.id, { spare: true });
+    expect(w.state.worktree(spare.id)).toBeUndefined();
+    expect(existsSync(transcriptPathFor(w.paths.transcriptsDir, spare.id))).toBe(false);
+    expect(w.worktrees.archived(repoId)).toEqual([]);
+  });
+
+  test("forgetting a project deletes the chat on main, which has nowhere to come back to", async () => {
+    const repoId = await registered();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    writeFileSync(transcriptPathFor(w.paths.transcriptsDir, main.id), userLine("on main"));
+    await w.repos.forget(repoId);
+    expect(existsSync(transcriptPathFor(w.paths.transcriptsDir, main.id))).toBe(false);
   });
 });
 
@@ -603,6 +714,8 @@ describe("graft", () => {
     const recorded = w.agents.get(a.id)!.recorded;
     expect(recorded.map((e) => e.type)).toEqual(["grafted", "user-message"]);
     expect(recorded[0]).toMatchObject({ type: "grafted", title: b.title, branch: b.branch });
+    // its history lives on in the target, so there is nothing to archive
+    expect(w.worktrees.archived(repoId)).toEqual([]);
   });
 
   test("a dirty source is refused and nothing is touched", async () => {

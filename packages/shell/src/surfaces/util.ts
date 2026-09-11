@@ -158,6 +158,21 @@ export function pickLabel(p: { component: string | null; tag: string }): string 
  * claimed spare's, else the directory (git and the procs always use `path`) */
 export const wtDir = (w: WorktreeInfo) => w.linkPath ?? w.path;
 
+/** Coarse on purpose: the question an age in a row answers is "how long ago", and a narrow row has
+ * no space for a date the reader would have to parse anyway. */
+export function ago(at: number): string {
+  const secs = Math.max(0, (Date.now() - at) / 1000);
+  if (secs < 60) return "now";
+  const mins = secs / 60;
+  if (mins < 60) return `${Math.floor(mins)}m`;
+  const hours = mins / 60;
+  if (hours < 24) return `${Math.floor(hours)}h`;
+  const days = hours / 24;
+  if (days < 7) return `${Math.floor(days)}d`;
+  if (days < 365) return `${Math.floor(days / 7)}w`;
+  return `${Math.floor(days / 365)}y`;
+}
+
 /** Whose advertised slash commands stand in for a session that does not exist yet.
  *
  * ⌘K opens before there is a worktree, so it has no session to ask, but it does not need its own:

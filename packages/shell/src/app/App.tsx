@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { appItems } from "../state/actions/app.ts";
+import { restoreArchived } from "../state/actions/archive.ts";
 import { removeWorktrees } from "../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
@@ -55,6 +56,7 @@ export function App() {
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
   const toast = useStore((s) => s.toast);
+  const clientId = useStore((s) => s.clientId);
   const rows = useRows();
 
   // the daemon streams only subscribed worktrees. Keep the last few visited subscribed so their
@@ -247,6 +249,21 @@ export function App() {
               }}
             >
               {toast.removeIds.length > 1 ? `clean up ${toast.removeIds.length} worktrees` : "remove worktree"}
+            </Button>
+          )}
+          {toast.restoreId && (
+            <Button
+              variant="outline"
+              size="md"
+              tone="primary"
+              className="toast-action"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (toast.restoreId) restoreArchived(sock, toast.restoreId, clientId);
+                dispatch({ a: "dismiss-toast" });
+              }}
+            >
+              restore
             </Button>
           )}
         </div>

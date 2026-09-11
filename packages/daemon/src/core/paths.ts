@@ -15,6 +15,8 @@ export interface Paths {
   transcriptsDir: string;
   /** images attached to chat messages, by worktree id (agent/attachments.ts) */
   attachmentsDir: string;
+  /** removed worktrees: each one's record, transcript and attachments (worktrees/archive.ts) */
+  archiveDir: string;
   worktreesDir: string;
   /** user-dropped theme files: Toyon Theme JSON or raw VS Code theme JSON/JSONC */
   themesDir: string;
@@ -31,6 +33,7 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     pidFile: join(home, DAEMON_FILES.pid),
     transcriptsDir: join(home, "transcripts"),
     attachmentsDir: join(home, "attachments"),
+    archiveDir: join(home, "archive"),
     // `.noindex` keeps Spotlight out of the worktrees: each one carries a CoW clone of
     // node_modules, which the indexer walks as fresh paths every time, so it never converges.
     // The suffix is the only mechanism that works: `.metadata_never_index` is ignored on a
@@ -46,6 +49,7 @@ export function ensureDirs(p: Paths) {
   mkdirSync(p.home, { recursive: true, mode: 0o700 });
   mkdirSync(p.transcriptsDir, { recursive: true });
   mkdirSync(p.attachmentsDir, { recursive: true });
+  mkdirSync(p.archiveDir, { recursive: true });
   mkdirSync(p.worktreesDir, { recursive: true });
   mkdirSync(p.themesDir, { recursive: true });
   mkdirSync(p.agentsDir, { recursive: true });

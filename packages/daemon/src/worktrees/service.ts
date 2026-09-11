@@ -3,10 +3,11 @@
 // spare pool do the work.
 
 import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   type AgentEvent,
   type AgentStatus,
+  type ArchivedWorktree,
   type CommitEntry,
   canGraft,
   canLand,
@@ -36,6 +37,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
+import { archiveRef, checkOutKept, commitOf, type KeptState, keepState } from "../git/archive.ts";
 import { GIT, git, gitOrThrow, NO_PROMPT, run } from "../git/exec.ts";
 import { commitWorktree, mergeToMain, pullMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
@@ -54,6 +56,7 @@ import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
+import { type ArchiveRecord, type ChatFiles, firstPrompt, summarize, WorktreeArchive } from "./archive.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
 import { SparePool } from "./spare.ts";
@@ -141,6 +144,7 @@ const FETCH_EVERY_MS = 5 * 60_000;
 
 export class WorktreeService {
   readonly spare: SparePool;
+  private archive: WorktreeArchive;
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
   /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
   private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
@@ -153,13 +157,16 @@ export class WorktreeService {
   private lastFetch = new Map<string, number>();
 
   constructor(private d: WorktreeServiceDeps) {
+    this.archive = new WorktreeArchive(d.paths.archiveDir);
     this.spare = new SparePool({
       state: d.state,
       hub: d.hub,
       runtime: d.runtime,
       paths: d.paths,
       setupAndStart: (wt, repo) => this.setupAndStart(wt, repo),
-      remove: (id) => this.remove(id, true),
+      remove: async (id) => {
+        await this.remove(id, { spare: true });
+      },
     });
     // worktrees claimed before links existed get theirs at boot
     for (const wt of d.state.worktrees) this.refreshLink(wt);
@@ -494,35 +501,216 @@ export class WorktreeService {
     );
   }
 
-  async remove(worktreeId: string, allowSpare = false): Promise<void> {
+  /** Remove a worktree: its runtime, its directory, its branch when the branch is toyon's, and its
+   * record. The chat is archived rather than deleted, with the commits and uncommitted work kept
+   * under a ref, so a remove can be undone and a landed branch's conversation brought back. A spare
+   * holds nobody's work and a grafted source's history already lives in its target, so those two
+   * go outright. Returns what was archived, if anything. */
+  async remove(
+    worktreeId: string,
+    opts: { spare?: boolean; archive?: boolean } = {},
+  ): Promise<ArchivedWorktree | null> {
     const wt = this.d.state.worktree(worktreeId);
     // a spare is the pool's to remove, never a person's
-    if (!wt || !(canRemove(wt) || (allowSpare && wt.kind === "spare"))) return;
+    if (!wt || !(canRemove(wt) || (opts.spare && wt.kind === "spare"))) return null;
     const repo = this.d.state.requireRepo(wt.repoId);
+    const archive = wt.kind !== "spare" && opts.archive !== false;
     // the agent first (inside runtime.stop): it may be mid-turn in the directory about to be
     // deleted, and its session-info callback would re-add the session entry removed below
     await this.d.runtime.stop(worktreeId);
-    await withRepoLock(repo.path, async () => {
+    const kept = await withRepoLock(repo.path, async () => {
+      // before the directory goes: its uncommitted work exists nowhere else
+      const k = archive ? await this.keep(repo, wt) : null;
       await gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path);
       // the confirm promised the branch goes with the directory. Only toyon's own: an adopted
-      // worktree's branch is the person's. Forced, since unmerged work is what the confirm warned
-      // about; best effort, since the checkout is already gone and a leftover branch is the lesser
-      // surprise than a remove that reports failure after doing most of its work.
+      // worktree's branch is the person's. Forced, since the archive ref holds its commits; best
+      // effort, since the checkout is already gone and a leftover branch is the lesser surprise
+      // than a remove that reports failure after doing most of its work.
       if (hasOwnBranch(wt)) {
         const r = await git(repo.path, "branch", "-D", wt.branch);
         if (!r.ok) log.warn(worktreeId, `could not delete branch ${wt.branch}: ${r.err}`);
       }
+      return k;
     });
     this.dropLink(wt);
+    const sessionId = this.d.state.session(worktreeId);
     this.d.state.removeWorktree(worktreeId);
+    releasePort(wt.proxyPort);
+    let archived: ArchivedWorktree | null = null;
+    if (archive) archived = this.archiveChat(wt, repo, kept, sessionId);
+    else this.deleteChat(worktreeId);
+    this.d.hub.emit("worktreesChanged");
+    return archived;
+  }
+
+  /** a worktree's commits and uncommitted work, under its archive ref, before its directory goes */
+  private async keep(repo: RepoInfo, wt: WorktreeInfo): Promise<KeptState | null> {
+    const index = join(this.d.paths.archiveDir, `${wt.id}.index`);
+    const kept = await keepState(repo.path, wt.path, archiveRef(wt.id), index);
+    if (!kept) log.warn(wt.id, "could not keep its git state: the chat is archived without its work");
+    else if (kept.lost) log.warn(wt.id, "could not keep its uncommitted changes: only its commits are archived");
+    return kept;
+  }
+
+  /** The chat into the archive beside a record of the worktree. A failure leaves the files where
+   * they were and says so, since deleting them is what the archive exists to stop. */
+  private archiveChat(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    kept: KeptState | null,
+    sessionId: string | undefined,
+  ): ArchivedWorktree | null {
+    const files = this.chatFiles(wt.id);
+    const prompt = firstPrompt(files.transcript);
+    const rec: ArchiveRecord = {
+      worktree: wt,
+      repoPath: repo.path,
+      archivedAt: Date.now(),
+      ...(sessionId ? { sessionId } : {}),
+      ...(prompt ? { prompt } : {}),
+      ...(kept ? { kept } : {}),
+    };
     try {
-      rmSync(transcriptPathFor(this.d.paths.transcriptsDir, worktreeId), { force: true });
-      rmSync(attachmentsDirFor(this.d.paths.attachmentsDir, worktreeId), { recursive: true, force: true });
+      this.archive.put(rec, files);
+    } catch (e) {
+      log.warn(wt.id, "could not archive its chat; the files stay where they were", e);
+      return null;
+    }
+    this.d.hub.emit("archiveChanged", repo.id);
+    return summarize(rec, repo.id);
+  }
+
+  private chatFiles(worktreeId: string): ChatFiles {
+    return {
+      transcript: transcriptPathFor(this.d.paths.transcriptsDir, worktreeId),
+      attachments: attachmentsDirFor(this.d.paths.attachmentsDir, worktreeId),
+    };
+  }
+
+  /** a chat with nowhere to go: a spare's, a grafted source's, main's when its project is forgotten */
+  deleteChat(worktreeId: string) {
+    const files = this.chatFiles(worktreeId);
+    try {
+      rmSync(files.transcript, { force: true });
+      rmSync(files.attachments, { recursive: true, force: true });
     } catch (e) {
       log.warn(worktreeId, "could not delete transcript or attachments", e);
     }
-    releasePort(wt.proxyPort);
-    this.d.hub.emit("worktreesChanged");
+  }
+
+  /** Drop the record of a worktree whose directory went while the daemon was down, or whose
+   * project is no longer open, the way a remove would have: a task's chat is archived, with its
+   * commits when its branch is still there, and any other chat is deleted. Nothing runs at boot, so
+   * there is no runtime to stop. */
+  async forgetGone(wt: WorktreeInfo): Promise<void> {
+    const repo = this.d.state.repo(wt.repoId);
+    const sessionId = this.d.state.session(wt.id);
+    this.dropLink(wt);
+    this.d.state.removeWorktree(wt.id);
+    if (!repo || wt.kind !== "worktree") {
+      this.deleteChat(wt.id);
+      return;
+    }
+    const kept = await withRepoLock(repo.path, async (): Promise<KeptState | null> => {
+      await git(repo.path, "worktree", "prune");
+      const head = await commitOf(repo.path, `refs/heads/${wt.branch}`);
+      if (!head || !(await git(repo.path, "update-ref", archiveRef(wt.id), head)).ok) return null;
+      if (hasOwnBranch(wt)) await git(repo.path, "branch", "-D", wt.branch);
+      return { head };
+    });
+    this.archiveChat(wt, repo, kept, sessionId);
+  }
+
+  /** a project's archived worktrees, newest first */
+  archived(repoId: string): ArchivedWorktree[] {
+    const repo = this.d.state.repo(repoId);
+    return repo ? this.archive.list(repo) : [];
+  }
+
+  /** the project a record belongs to now: by id, or by checkout when it was forgotten and reopened */
+  private repoOf(rec: ArchiveRecord): RepoInfo | undefined {
+    return this.d.state.repo(rec.worktree.repoId) ?? this.d.state.repos.find((r) => r.path === rec.repoPath);
+  }
+
+  /** Put an archived worktree back as it was removed: its branch at the commit it was on, its
+   * uncommitted work over that, unstaged, and its chat. The agent resumes its own session when the
+   * directory is the same one, since that is what the session is keyed by. */
+  async restore(archiveId: string, createdBy?: string): Promise<WorktreeInfo> {
+    const rec = this.archive.get(archiveId);
+    if (!rec) throw new UserError("that archived worktree is gone");
+    const old = rec.worktree;
+    const repo = this.repoOf(rec);
+    if (!repo) throw new UserError(`${old.title} belongs to a project that is not open`);
+    const kept = rec.kept;
+    if (!kept) throw new UserError(`${old.title} was archived without its commits, so there is nothing to restore`);
+    const path = existsSync(old.path)
+      ? join(dirname(old.path), `${basename(old.path)}-${shortId().slice(0, 4)}`)
+      : old.path;
+    const branch = await withRepoLock(repo.path, async () => {
+      if (!(await commitOf(repo.path, archiveRef(old.id)))) {
+        throw new UserError(`${old.title}'s kept commits are gone from git`);
+      }
+      let name = old.branch;
+      let create = true;
+      const tip = await commitOf(repo.path, `refs/heads/${name}`);
+      if (tip && hasOwnBranch(old)) {
+        // toyon deleted its own branch on archive, so a branch by that name now is someone else's
+        name = `${name}-${shortId().slice(0, 3)}`;
+      } else if (tip) {
+        // the person's branch was never deleted and is checked out as it stands; uncommitted work
+        // from an older commit would quietly undo whatever landed on it since
+        if (tip !== kept.head && kept.snapshot) {
+          throw new UserError(`${name} has moved since ${old.title} was archived: check it out in git instead`);
+        }
+        create = false;
+      }
+      try {
+        await checkOutKept(repo.path, path, kept, { name, create });
+      } catch (e) {
+        // half a restore is a stray worktree git lists and toyon does not; the archive still has it
+        await git(repo.path, "worktree", "remove", "--force", path);
+        if (create) await git(repo.path, "branch", "-D", name);
+        throw e;
+      }
+      return name;
+    });
+    const { variant: _variant, linkPath: _linkPath, ...rest } = old;
+    const wt: WorktreeInfo = {
+      ...rest,
+      repoId: repo.id,
+      path,
+      branch,
+      proxyPort: await allocateProxyPort(),
+      ...(createdBy ? { createdBy } : {}),
+    };
+    try {
+      this.archive.take(old.id, this.chatFiles(old.id));
+    } catch (e) {
+      log.warn(old.id, "could not move its chat back out of the archive", e);
+    }
+    if (rec.sessionId && path === old.path) this.d.state.setSession(wt.id, rec.sessionId);
+    const dropped = await git(repo.path, "update-ref", "-d", archiveRef(old.id));
+    if (!dropped.ok) log.warn(old.id, `could not drop its archive ref: ${dropped.err}`);
+    this.countsCache.delete(wt.id);
+    this.refreshLink(wt);
+    this.launch(wt, repo, repo.path);
+    this.d.hub.emit("archiveChanged", repo.id);
+    return wt;
+  }
+
+  /** Delete an archived worktree for good: its record, chat and attachments, and the ref that kept
+   * its commits alive. */
+  async deleteArchived(archiveId: string): Promise<void> {
+    const rec = this.archive.get(archiveId);
+    if (!rec) return;
+    const repo = this.repoOf(rec);
+    const repoPath = repo?.path ?? rec.repoPath;
+    if (rec.kept && existsSync(repoPath)) {
+      const r = await git(repoPath, "update-ref", "-d", archiveRef(archiveId));
+      if (!r.ok) log.warn(archiveId, `could not drop its archive ref: ${r.err}`);
+    }
+    this.archive.delete(archiveId);
+    if (repo) this.d.hub.emit("archiveChanged", repo.id);
   }
 
   async rename(worktreeId: string, title: string): Promise<void> {
@@ -650,7 +838,7 @@ export class WorktreeService {
       agent.note({ type: "grafted", title: w.title, branch: w.branch, ts: Date.now() });
       for (const { event } of entries.slice(cutPoint(entries))) agent.note(withoutAttachments(event));
     }
-    for (const w of sources) await this.remove(w.id);
+    for (const w of sources) await this.remove(w.id, { archive: false });
     this.setLanded(target.id, false);
     this.countsCache.delete(target.id);
     this.d.hub.emit("worktreesChanged");

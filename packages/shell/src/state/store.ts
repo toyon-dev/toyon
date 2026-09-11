@@ -7,6 +7,7 @@ import type {
   AgentConfigInfo,
   AgentEvent,
   AgentInfo,
+  ArchivedWorktree,
   AskAnswer,
   AskChoice,
   AskOutcome,
@@ -230,6 +231,8 @@ export type Overlay =
   | { kind: "search" }
   /** the ref palette: a branch or PR to open as a worktree */
   | { kind: "refs" }
+  /** a project's removed worktrees: restore one, or delete it for good */
+  | { kind: "archived"; repoId: string }
   | { kind: "keys" }
   /** theme picker: which pref slot Enter writes */
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
@@ -373,6 +376,8 @@ export interface State {
   /** per repo: the ref palette's last reply, with the query it answered so a stale one is told
    * from the one the person is waiting on. Repo-scoped, since a ref is not a worktree's. */
   refs: Record<string, { query: string; refs: RefHit[] }>;
+  /** per repo: its archived worktrees, newest first; absent until the archive picker first asks */
+  archived: Record<string, ArchivedWorktree[]>;
   /** the worktree last selected in each repo: switching back to a project lands where you left it.
    * Persisted (App.tsx), so it survives a reload the same way the panel layout does. */
   lastActive: Record<string, string>;
@@ -390,7 +395,7 @@ export interface State {
   local: Record<string, WorktreeLocal>;
   /** the file the editor pane has open; null when the pane is closed */
   editor: EditorFile | null;
-  toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
+  toast: { ok: boolean; message: string; url?: string; removeIds?: string[]; restoreId?: string } | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
   /** a file is being dragged over the chat panel, which is the one place a drop attaches */
@@ -490,6 +495,7 @@ export function initialState(opts: InitialOpts): State {
     visibleDiscovered: [],
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
     refs: {},
+    archived: {},
     lastActive: opts.storedLastActive ?? {},
     pendingOpen: false,
     activeId: null,
@@ -1044,6 +1050,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         refs: pruneByRepo(s.refs, msg.repos),
+        archived: pruneByRepo(s.archived, msg.repos),
         themes: msg.themes ?? s.themes,
         themePrefs: msg.themePrefs ?? s.themePrefs,
         agents: msg.agents,
@@ -1088,6 +1095,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, paths: { query: msg.query, entries: msg.entries, target: msg.target } };
     case "refs":
       return { ...s, refs: { ...s.refs, [msg.repoId]: { query: msg.query, refs: msg.refs } } };
+    case "archived":
+      return { ...s, archived: { ...s.archived, [msg.repoId]: msg.items } };
     case "repos": {
       const known = new Set(s.repos.map((r) => r.id));
       const added = msg.repos.find((r) => !known.has(r.id));
@@ -1225,6 +1234,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
           message: msg.message,
           url: msg.url,
           removeIds: msg.merged && msg.ok ? (msg.removeIds ?? [msg.worktreeId]) : undefined,
+          restoreId: msg.restoreId,
         },
       };
     }

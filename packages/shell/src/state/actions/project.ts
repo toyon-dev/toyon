@@ -39,13 +39,18 @@ export function projectItems(r: RepoInfo, activeRepoId: string | null, { sock, d
       onClick: () => dispatch({ a: "open", overlay: { kind: "setup", repoId: r.id } }),
     },
     {
+      id: `archived:${r.id}`,
+      label: "archived worktrees…",
+      onClick: () => dispatch({ a: "open", overlay: { kind: "archived", repoId: r.id } }),
+    },
+    {
       id: `forget:${r.id}`,
       label: "forget project…",
       danger: true,
       onClick: () => {
         if (
           window.confirm(
-            `Forget ${r.name}?\n\nIts procs stop and it leaves the project list. The checkout is not touched; open it again any time.`,
+            `Forget ${r.name}?\n\nIts procs stop, it leaves the project list, and the chat on main is deleted. The checkout is not touched, and archived worktrees come back when you open it again.`,
           )
         )
           sock?.send({ t: "forget-repo", repoId: r.id });

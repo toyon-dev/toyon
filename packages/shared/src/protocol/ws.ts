@@ -8,6 +8,7 @@ import { z } from "zod";
 import type {
   AgentConfigInfo,
   AgentInfo,
+  ArchivedWorktree,
   CommitEntry,
   DesignIndex,
   GitFileStatus,
@@ -135,12 +136,17 @@ export type ServerMsg =
       message: string;
       merged?: boolean;
       removeIds?: string[];
+      /** an archived worktree the toast offers to bring back */
+      restoreId?: string;
       suggestion?: string;
     }
   | { t: "files"; worktreeId: string; paths: string[] }
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
   /** the ref palette's rows for a query; `query` is echoed so a stale reply is told from a fresh one */
   | { t: "refs"; repoId: string; query: string; refs: RefHit[] }
+  /** a project's archived worktrees, newest first: the reply to list-archived, and pushed to every
+   * tab when one is archived, restored or deleted */
+  | { t: "archived"; repoId: string; items: ArchivedWorktree[] }
   | { t: "design-index"; worktreeId: string; index: DesignIndex }
   | { t: "queue"; worktreeId: string; items: string[] }
   /** the slash commands this worktree's agent session advertises. Ephemeral, never a transcript
@@ -319,7 +325,19 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("set-worktree-effort"), worktreeId: id, effort: z.string().max(100) }),
   /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
+  /** remove a worktree; its chat and work are archived, and the reply toast offers to restore it */
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
+  /** the project's archived worktrees; replies `archived` */
+  z.object({ t: z.literal("list-archived"), repoId: id }),
+  /** bring an archived worktree back: its directory, branch, uncommitted work and chat */
+  z.object({
+    t: z.literal("restore-worktree"),
+    archiveId: id,
+    /** as on create-worktree: only the tab that asked focuses the restored row */
+    clientId: z.string().max(64).optional(),
+  }),
+  /** delete an archived worktree for good: its chat, attachments and the commits kept for it */
+  z.object({ t: z.literal("delete-archived"), archiveId: id }),
   /** take over a worktree git knows about but toyon did not create: the row's id, which the
    * daemon resolves to a path and then re-derives the list for, refusing anything not still on it */
   z.object({

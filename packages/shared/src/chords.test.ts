@@ -106,6 +106,11 @@ describe("matchChord", () => {
     // an alias that is not hostOnly still reaches a guest: ⌃Tab walks from inside the terminal
     expect(matchChord(ev("Tab", { meta: false, ctrl: true }), { guest: true })).toEqual({ id: "wt-next" });
   });
+  test("⌘⇧U marks the worktree unread, as it does a message in Mail; ⌘U stays the editor's", () => {
+    expect(matchChord(ev("U", { shift: true }))).toEqual({ id: "mark-unread" });
+    expect(matchChord(ev("u", { shift: true }))).toEqual({ id: "mark-unread" });
+    expect(matchChord(ev("u"))).toBeNull(); // Monaco's cursor undo
+  });
   test("keys the table doesn't own pass through", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find
     expect(matchChord(ev("w"))).toBeNull();
@@ -151,6 +156,7 @@ describe("labels", () => {
     expect(chordLabel("wt-next")).toBe("⌥↓");
     expect(chordLabel("wt-unseen-prev")).toBe("⌥⇧↑");
     expect(chordLabel("wt-unseen-next")).toBe("⌥⇧↓");
+    expect(chordLabel("mark-unread")).toBe("⌘⇧U");
     // an installed app window has no tabs, so it lets ⌃Tab through; the ⇧ belongs to the alias
     expect(chordLabel("wt-next", { pwa: true })).toBe("⌃Tab");
     expect(chordLabel("wt-prev", { pwa: true })).toBe("⌃⇧Tab");

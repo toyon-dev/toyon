@@ -136,6 +136,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.worktrees.markSeen(msg.worktreeId);
   },
 
+  "mark-unread"(msg, _ctx, s) {
+    s.worktrees.markUnread(msg.worktreeId);
+  },
+
   visit(msg, _ctx, s) {
     s.routes.visit(msg.worktreeId, msg.path);
   },

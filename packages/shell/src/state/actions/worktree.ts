@@ -34,6 +34,13 @@ export function removeWorktrees(sock: DaemonSocket | null, dispatch: Dispatch, i
   for (const id of ids) sock?.send({ t: "remove-worktree", worktreeId: id });
 }
 
+/** put the unseen ring back on a worktree to come back to. On the row you are on the store holds
+ * the mark until you select another, or the moment of looking that clears rings would take it off. */
+export function markUnread(sock: DaemonSocket | null, dispatch: Dispatch, id: string) {
+  dispatch({ a: "hold-unread", id });
+  sock?.send({ t: "mark-unread", worktreeId: id });
+}
+
 /** confirm-then-send worktree actions: the rail's badges reach these directly, the menu and the
  * palette through `worktreeItems` */
 export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
@@ -116,6 +123,13 @@ export function worktreeItems(
     });
   }
   look.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
+  // a ring to come back to; a row that already has one has nothing to add
+  look.push({
+    id: "unread",
+    label: "mark as unread",
+    disabled: w.unseen ? "already unread" : undefined,
+    onClick: () => markUnread(sock, dispatch, id),
+  });
   // the draft tab with this row as its base: from main it is what ⌘K opens; from a task it is a
   // stacked worktree, for a follow-up that depends on work not landed yet
   const spawn: MenuItem[] = [

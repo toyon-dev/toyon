@@ -40,6 +40,7 @@ describe("a worktree's actions", () => {
     expect(labels(quiet)).toEqual([
       "open terminal",
       "reveal in Finder",
+      "mark as unread",
       "|",
       "new worktree from here",
       "|",
@@ -63,6 +64,7 @@ describe("a worktree's actions", () => {
       "view changes (2)",
       "open terminal",
       "reveal in Finder",
+      "mark as unread",
       "|",
       "new worktree from here",
       "|",
@@ -87,6 +89,13 @@ describe("a worktree's actions", () => {
     const off = items.filter(isItem).filter((i) => i.disabled !== undefined);
     expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "merge into main", "push + PR"]);
     expect(off[0]?.disabled).toBe("waiting on the one in progress");
+  });
+
+  test("mark as unread stays on the list but off for a row that already has its ring", () => {
+    const ringed = worktreeItems(owned({ unseen: true }), null, { leftOpen: true, termOpen: true, shipping: {} }, deps);
+    expect(ringed.filter(isItem).find((i) => i.id === "unread")?.disabled).toBe("already unread");
+    const quiet = worktreeItems(owned(), null, { leftOpen: true, termOpen: true, shipping: {} }, deps);
+    expect(quiet.filter(isItem).find((i) => i.id === "unread")?.disabled).toBeUndefined();
   });
 
   test("the profile running now is on the list with its check", () => {

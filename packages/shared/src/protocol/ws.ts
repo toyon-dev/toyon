@@ -384,6 +384,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
   /** the person is looking at this worktree right now: clears the rail's unseen ring */
   z.object({ t: z.literal("seen"), worktreeId: id }),
+  /** put the ring back on a worktree to come back to; the next `seen` clears it */
+  z.object({ t: z.literal("mark-unread"), worktreeId: id }),
   /** the preview settled on a page (the shell waits out redirects): count it toward the repo's
    * list. `path` is the page's key (routeKey), which the daemon recomputes rather than trusts. */
   z.object({ t: z.literal("visit"), worktreeId: id, path: routePath }),

@@ -1130,6 +1130,25 @@ describe("discovered worktrees", () => {
 
 // The rail sorts `visible` (railOrder.ts has the rules); `rows` stays as the daemon sent it, since
 // the preview frames are keyed in that order and one moved in the DOM reloads.
+// Marking the row on screen unread would be undone by the moment of looking that clears rings, so
+// the store holds the mark until the selection moves on.
+describe("marking unread", () => {
+  test("a hold on the row you are on lasts until you select another", () => {
+    let s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }, { a: "hold-unread", id: "a" }]);
+    expect(s.unreadHold).toBe("a");
+    // a push from the daemon is not a move
+    s = reducer(s, worktrees(wt("main", "main"), wt("a")));
+    expect(s.unreadHold).toBe("a");
+    s = reducer(s, { a: "activate", id: "main" });
+    expect(s.unreadHold).toBeNull();
+  });
+
+  test("a hold on a row that is not on screen has nothing to hold", () => {
+    const s = run([hello(wt("main", "main"), wt("a")), { a: "hold-unread", id: "a" }]);
+    expect(s.unreadHold).toBeNull();
+  });
+});
+
 describe("rail order", () => {
   const sent = (w: WorktreeStatus, promptedAt: number): WorktreeStatus => ({
     ...w,

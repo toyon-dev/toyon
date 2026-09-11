@@ -1,5 +1,6 @@
 import { type ChordId, matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
+import { markUnread } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import { isSubPicker, localOf, previewIdOf } from "../state/store.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
@@ -59,6 +60,12 @@ export function useChords() {
             else if (to) dispatch({ a: "activate", id: to.activate });
             break;
           }
+          case "mark-unread":
+            // the worktree on screen, when it is one of ours; a draft is not a worktree yet
+            if (s.activeId && !s.draft && s.visible.some((w) => w.id === s.activeId)) {
+              markUnread(sock, dispatch, s.activeId);
+            }
+            break;
           case "new":
             // the chord means "get me to the box", not a switch: pressed blind with a draft
             // already open it keeps the draft and puts the caret back in it, so a hand that has

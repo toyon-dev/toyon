@@ -141,6 +141,8 @@ export interface WorktreeInfo {
   /** when someone last looked at this worktree in a shell. Absent until it has been looked at
    * since the feature landed, which reads as "seen" so old rows do not all light up at once. */
   seenAt?: number;
+  /** the person marked it unread to come back to; rings the row until it is next seen */
+  unread?: boolean;
   /** main only: nothing tracked and nothing untracked, which is what a project made from the
    * picker looks like until something is scaffolded into it. Kept current by every git status
    * read, and stored so the first frame of a page load can say so without asking git. */

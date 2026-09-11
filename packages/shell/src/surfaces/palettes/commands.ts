@@ -17,7 +17,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { type Action, repoById, type State, worktreeById } from "../../state/store.ts";
 import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
-import { chord } from "../util.ts";
+import { chord, rowLabel } from "../util.ts";
 
 export type Command = {
   id: string;
@@ -79,9 +79,8 @@ export function buildCommands(
 
   if (wt && id) {
     // the active worktree's menu, line for line, each saying whose it is
-    const t = wt.worktree.title;
     const repo = state.repos.find((r) => r.id === wt.worktree.repoId) ?? null;
-    addItems(worktreeItems(wt, repo, state, deps), t);
+    addItems(worktreeItems(wt, repo, state, deps), rowLabel(wt, repo));
     for (const p of wt.procs) addItems(procItems(p, id, deps));
   }
   state.visible.forEach((w, i) => {
@@ -89,7 +88,7 @@ export function buildCommands(
     const v = w.worktree.variant;
     add(
       `go:${w.worktree.id}`,
-      `switch to ${w.worktree.title}${v ? ` (v${v.index}/${v.of})` : ""}`,
+      `switch to ${rowLabel(w, repo)}${v ? ` (v${v.index}/${v.of})` : ""}`,
       () => dispatch({ a: "activate", id: w.worktree.id }),
       worktreeChord(i, state.visible.length),
     );

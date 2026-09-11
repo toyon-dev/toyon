@@ -212,7 +212,12 @@ export function ListPicker<T>({
           title={rowTitle?.(t)}
           // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
           onMouseMove={() => i !== clamped && nav.setIndex(i)}
-          onClick={() => nav.pick(t)}
+          onClick={() => {
+            nav.pick(t);
+            // a row that only narrowed the query leaves the picker open, and the click took the
+            // caret with it; the field is where the next keystroke belongs
+            inputRef.current?.focus();
+          }}
           {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
         >
           {row(t, i === clamped, q)}

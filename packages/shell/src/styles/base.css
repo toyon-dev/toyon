@@ -342,4 +342,12 @@
   .badge-mode {
     color: var(--yellow);
   }
+  /* a page on the route list since you last had it open: green where it arrived, the change colour
+     where it moved, the same pair the status letters use */
+  .badge-new {
+    color: var(--green);
+  }
+  .badge-changed {
+    color: var(--yellow);
+  }
 }

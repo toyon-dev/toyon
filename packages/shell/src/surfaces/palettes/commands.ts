@@ -38,14 +38,18 @@ export function buildCommands(
   const cmds: Command[] = [];
   const add = (id: string, label: string, run: () => void, hint?: string, sub?: boolean) =>
     cmds.push({ id, label, hint, run, sub });
-  /** a menu's items as commands, the rules between groups dropped: `whose` is appended so the
-   * line says which worktree it is about, and the chord or a string detail becomes the hint */
-  const addItems = (items: MenuEntry[], whose?: string) => {
+  /** a menu's items as commands, the rules between groups dropped: an owner's name is appended so
+   * the line says which project or worktree it is about, and the chord or a string detail becomes
+   * the hint. Menu ids are only unique within their menu, and the palette keys its rows by id: the
+   * app's "terminal" and a worktree's "terminal" under one key left a stale row in the DOM when the
+   * list changed under them, so an owner's items are scoped by it. */
+  const addItems = (items: MenuEntry[], owner?: { scope: string; name: string }) => {
     for (const it of items) {
       // a rule is not a command; nor is a verb that cannot run now, or the choice already in effect
       if (!isItem(it) || it.disabled !== undefined || it.checked) continue;
       const hint = it.key ?? (typeof it.detail === "string" ? it.detail : undefined);
-      add(it.id, whose ? `${it.label} · ${whose}` : it.label, it.onClick, hint, it.sub);
+      const id = owner ? `${owner.scope}:${it.id}` : it.id;
+      add(id, owner ? `${it.label} · ${owner.name}` : it.label, it.onClick, hint, it.sub);
     }
   };
   const deps = { sock, dispatch };
@@ -57,7 +61,7 @@ export function buildCommands(
   addItems(appItems(state, deps).filter((it) => !isItem(it) || it.id !== "commands"));
   // the open project's own verbs (its toyon.json, forget), each saying which project; the others
   // are listed by name below
-  if (repo) addItems(projectItems(repo, repo.id, deps), repo.name);
+  if (repo) addItems(projectItems(repo, repo.id, deps), { scope: "project", name: repo.name });
   if (id) {
     add(
       "pick",
@@ -80,7 +84,7 @@ export function buildCommands(
   if (wt && id) {
     // the active worktree's menu, line for line, each saying whose it is
     const repo = state.repos.find((r) => r.id === wt.worktree.repoId) ?? null;
-    addItems(worktreeItems(wt, repo, state, deps), rowLabel(wt, repo));
+    addItems(worktreeItems(wt, repo, state, deps), { scope: "wt", name: rowLabel(wt, repo) });
     for (const p of wt.procs) addItems(procItems(p, id, deps));
   }
   state.visible.forEach((w, i) => {

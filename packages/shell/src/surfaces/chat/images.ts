@@ -1,8 +1,8 @@
 // Images on their way into a message: pulled out of a paste or drop, downscaled to the models'
 // long-edge ceiling, and re-encoded when the original is a format or size the daemon refuses.
 
-import { IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, IMAGE_MIME_TYPES, type ImageMimeType } from "@toyon/shared";
-import type { ChatItem, PendingImage } from "../../state/store.ts";
+import { IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, IMAGE_MIME_TYPES, type ImageInput, type ImageMimeType } from "@toyon/shared";
+import type { PendingAttachment } from "../../state/store.ts";
 
 const ACCEPTED = new Set<string>(IMAGE_MIME_TYPES);
 /** past this a "text" file is not something anyone means to paste into a message */
@@ -48,21 +48,6 @@ export async function readText(file: File): Promise<string | null> {
   }
 }
 
-/** the number the daemon will give the next image sent from this worktree: the count is per
- * session, so the composer's chips can show it before the send */
-export function nextImageNumber(chat: ChatItem[]): number {
-  let n = 0;
-  for (const item of chat) if (item.kind === "user") for (const img of item.images ?? []) n = Math.max(n, img.n);
-  return n + 1;
-}
-
-/** the same for pastes, which the daemon numbers on their own sequence */
-export function nextPasteNumber(chat: ChatItem[]): number {
-  let n = 0;
-  for (const item of chat) if (item.kind === "user") for (const p of item.pastes ?? []) n = Math.max(n, p.n);
-  return n + 1;
-}
-
 async function decode(file: File): Promise<ImageBitmap> {
   try {
     return await createImageBitmap(file);
@@ -95,7 +80,7 @@ let keySeq = 0;
  * models accept. Originals that already qualify go through untouched (a re-encode of a
  * screenshot only loses quality); the rest are drawn down and saved as PNG, or JPEG when the
  * source was one, since a photo re-encoded as PNG balloons. */
-export async function prepareImage(file: File): Promise<PendingImage> {
+export async function prepareImage(file: File): Promise<Extract<PendingAttachment, { kind: "image" }>> {
   const bitmap = await decode(file);
   try {
     const edge = Math.max(bitmap.width, bitmap.height);
@@ -118,6 +103,7 @@ export async function prepareImage(file: File): Promise<PendingImage> {
       height = Math.max(1, Math.round(bitmap.height * scale));
     }
     return {
+      kind: "image",
       key: `img${++keySeq}`,
       name: file.name || `pasted.${mimeType === "image/jpeg" ? "jpg" : "png"}`,
       mimeType: mimeType as ImageMimeType,
@@ -131,7 +117,7 @@ export async function prepareImage(file: File): Promise<PendingImage> {
   }
 }
 
-export function dataUrl(img: Pick<PendingImage, "mimeType" | "data">): string {
+export function dataUrl(img: Pick<ImageInput, "mimeType" | "data">): string {
   return `data:${img.mimeType};base64,${img.data}`;
 }
 

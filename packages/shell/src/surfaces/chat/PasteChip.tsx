@@ -1,4 +1,4 @@
-import { type PasteSource, sourceLabel } from "@toyon/shared";
+import { attachmentLabel, type PasteSource, sourceLabel } from "@toyon/shared";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -40,7 +40,7 @@ export function PasteChip({
     <>
       <Icon name="text" className="icon-inline" />
       <span className="pick-target">
-        <b>{name ?? (source ? sourceLabel(source) : `Pasted text ${n}`)}</b>
+        <b>{name ?? (source ? sourceLabel(source) : attachmentLabel("paste", n))}</b>
         {detail && <span className="pick-file"> · {detail}</span>}
       </span>
     </>

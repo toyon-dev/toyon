@@ -1,8 +1,35 @@
 import { describe, expect, test } from "bun:test";
-import { buildPrompt, pasteCaption, SYSTEM_APPEND } from "./prompt.ts";
+import type { ContentBlock } from "@agentclientprotocol/sdk";
+import { buildPrompt, pasteCaption, pickCaption, SYSTEM_APPEND } from "./prompt.ts";
 
-const ref = { n: 2, name: "shot.png", mimeType: "image/png", bytes: 3, width: 10, height: 5, file: "2.png" };
-const paste = { n: 1, chars: 17, lines: 2, preview: "line one", file: "1.txt" };
+const ref = {
+  kind: "image" as const,
+  n: 2,
+  name: "shot.png",
+  mimeType: "image/png",
+  bytes: 3,
+  width: 10,
+  height: 5,
+  file: "2.png",
+};
+const paste = { kind: "paste" as const, n: 1, chars: 17, lines: 2, preview: "line one", file: "1.txt" };
+const pick = {
+  kind: "pick" as const,
+  n: 1,
+  component: "Button",
+  file: "src/ui/Button.tsx",
+  line: 12,
+  callFile: "src/pages/Home.tsx",
+  callLine: 40,
+  tag: "button",
+  selector: "main > button",
+  text: "Save",
+  html: "<button>Save</button>",
+};
+const image = { kind: "image" as const, ref, bytes: Buffer.from("abc") };
+const picked = "An element the user picked in the preview:";
+/** each block's first line, or its type when it is not text */
+const heads = (blocks: ContentBlock[]) => blocks.map((b) => (b.type === "text" ? b.text.split("\n")[0] : b.type));
 
 describe("SYSTEM_APPEND", () => {
   test("tells the agent what makes a project runnable here", () => {
@@ -21,7 +48,7 @@ describe("buildPrompt", () => {
     ]);
   });
   test("images lead, each behind its numbered caption; the prefix stays on the text block", () => {
-    const blocks = buildPrompt("what is this", undefined, SYSTEM_APPEND, [{ ref, bytes: Buffer.from("abc") }]);
+    const blocks = buildPrompt("what is this", undefined, SYSTEM_APPEND, [image]);
     expect(blocks).toEqual([
       { type: "text", text: "Image 2: shot.png (10×5)" },
       { type: "image", mimeType: "image/png", data: "YWJj" },
@@ -30,7 +57,9 @@ describe("buildPrompt", () => {
   });
 
   test("a paste rides behind its caption, fenced so the model can see where it ends", () => {
-    const blocks = buildPrompt("fix this", undefined, undefined, [], [{ ref: paste, text: "line one\nline two" }]);
+    const blocks = buildPrompt("fix this", undefined, undefined, [
+      { kind: "paste", ref: paste, text: "line one\nline two" },
+    ]);
     expect(blocks).toEqual([
       {
         type: "text",
@@ -40,8 +69,26 @@ describe("buildPrompt", () => {
     ]);
   });
 
+  test("attachments of every kind keep the order they were attached in", () => {
+    const blocks = buildPrompt("do it", "[ctx]", undefined, [
+      { kind: "pick", ref: pick },
+      { kind: "paste", ref: paste, text: "a" },
+      image,
+    ]);
+    expect(heads(blocks)).toEqual([
+      `${picked} <Button /> used at src/pages/Home.tsx:40, its own JSX at src/ui/Button.tsx:12, text "Save"`,
+      "Pasted text 1 (2 lines, 17 chars), begins: line one",
+      "Image 2: shot.png (10×5)",
+      "image",
+      "do it",
+      "[ctx]",
+    ]);
+  });
+
   test("a paste from a file says so in the caption", () => {
-    const blocks = buildPrompt("x", undefined, undefined, [], [{ ref: { ...paste, name: "App.tsx" }, text: "a" }]);
+    const blocks = buildPrompt("x", undefined, undefined, [
+      { kind: "paste", ref: { ...paste, name: "App.tsx" }, text: "a" },
+    ]);
     expect((blocks[0] as { text: string }).text).toStartWith("Pasted text 1 (App.tsx, 2 lines,");
   });
 
@@ -54,11 +101,32 @@ describe("buildPrompt", () => {
   });
 });
 
+describe("pickCaption", () => {
+  test("names the element, both files and which is which, then the markup on a line of its own", () => {
+    expect(pickCaption(pick).split("\n")).toEqual([
+      `${picked} <Button /> used at src/pages/Home.tsx:40, its own JSX at src/ui/Button.tsx:12, text "Save"`,
+      "its HTML: <button>Save</button>",
+    ]);
+  });
+  test("carries no number, since the chip shows none", () => {
+    expect(pickCaption({ ...pick, n: 7 })).toBe(pickCaption(pick));
+  });
+  test("an element whose JSX is the file that renders it names one file", () => {
+    expect(pickCaption({ ...pick, callFile: null, callLine: null })).toStartWith(
+      `${picked} <Button /> defined at src/ui/Button.tsx:12,`,
+    );
+  });
+  test("an element with no source and no text is its tag", () => {
+    const bare = { ...pick, component: null, file: null, line: null, callFile: null, callLine: null, text: "" };
+    expect(pickCaption(bare).split("\n")[0]).toBe(`${picked} <button>`);
+  });
+});
+
 // An agent only dispatches a slash command when it leads the first text block, so a message that
 // opens with one has to outrank the captions and the prefix that normally come first.
 describe("buildPrompt with a leading slash command", () => {
   test("the command is block 0, ahead of image captions and the prefix", () => {
-    const blocks = buildPrompt("/review the auth flow", "[ctx]", SYSTEM_APPEND, [{ ref, bytes: Buffer.from("abc") }]);
+    const blocks = buildPrompt("/review the auth flow", "[ctx]", SYSTEM_APPEND, [image]);
     expect(blocks).toEqual([
       { type: "text", text: "/review the auth flow" },
       { type: "text", text: SYSTEM_APPEND },

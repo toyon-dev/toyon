@@ -9,7 +9,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
-import { groupTools, railSlots } from "./group.ts";
+import { groupTools, openRow, railSlots } from "./group.ts";
 import { isBlank } from "./recall.ts";
 
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill */
@@ -97,9 +97,9 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   const entries = useMemo(() => groupTools(items, roots), [items, roots]);
   // a colour per subagent, so two of them running at once are two runs and not one indented block
   const rails = useMemo(() => railSlots(items), [items]);
-  // the newest call while the agent runs: that row shows its output, everything above it is a line
+  // the row whose output is open while the agent runs; everything else in the turn is a line
   const working = active?.agent === "working";
-  const liveRow = working ? entries.findLastIndex((e) => "tools" in e) : -1;
+  const liveRow = useMemo(() => (working ? openRow(entries, roots) : -1), [working, entries, roots]);
   // a thought is live only while it is the newest thing in the log: the next call or word closes it
   const last = entries.at(-1);
   const liveThought = working && last && "item" in last && last.item.kind === "thinking" ? entries.length - 1 : -1;

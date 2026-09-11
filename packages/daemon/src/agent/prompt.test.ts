@@ -8,6 +8,8 @@ describe("SYSTEM_APPEND", () => {
   test("tells the agent what makes a project runnable here", () => {
     expect(SYSTEM_APPEND).toContain("toyon.json");
     expect(SYSTEM_APPEND).toContain("$PORT");
+    // an install before the ignore file floods the changes list with every dependency
+    expect(SYSTEM_APPEND).toContain(".gitignore");
   });
 });
 

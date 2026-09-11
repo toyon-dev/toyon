@@ -31,10 +31,12 @@ export interface PersistedState {
   visits?: Record<string, Record<string, PageVisit>>;
 }
 
-/** one page's standing in a repo's list: a count that decays, as of `last` */
+/** one page's standing in a repo's list: a count that decays, as of `last`, and the title the page
+ * had when it was last there */
 export interface PageVisit {
   score: number;
   last: number;
+  title?: string;
 }
 
 const empty: PersistedState = { repos: [], worktrees: [], sessions: {} };

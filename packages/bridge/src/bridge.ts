@@ -52,7 +52,7 @@ window.addEventListener("unhandledrejection", (e) => {
 });
 
 // hashchange as well as popstate: a hash router can navigate without the browser firing a popstate
-const navigated = () => post({ type: "navigated", url: location.href });
+const navigated = () => post({ type: "navigated", url: location.href, title: document.title });
 const origPush = history.pushState.bind(history);
 history.pushState = (...args) => {
   origPush(...args);
@@ -65,6 +65,17 @@ history.replaceState = (...args) => {
 };
 window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);
+
+// An app names its page after it navigates, a tick or a fetch later, so the title is watched rather
+// than read once. Only a real change is posted: the head also changes when scripts and styles land.
+let lastTitle = document.title;
+if (document.head) {
+  new MutationObserver(() => {
+    if (document.title === lastTitle) return;
+    lastTitle = document.title;
+    post({ type: "title", title: lastTitle });
+  }).observe(document.head, { childList: true, subtree: true, characterData: true });
+}
 
 // zen: the shell is out of the way and the page owns the keyboard, so the table stands down
 let zen = false;

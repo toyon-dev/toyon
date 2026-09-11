@@ -22,13 +22,19 @@ function fakeTimers() {
 }
 
 describe("VisitTracker", () => {
-  let sent: Array<[string, string]>;
+  let sent: string[][];
+  let renamed: string[][];
   let clock: ReturnType<typeof fakeTimers>;
   let tracker: VisitTracker;
   beforeEach(() => {
     sent = [];
+    renamed = [];
     clock = fakeTimers();
-    tracker = new VisitTracker((id, path) => sent.push([id, path]), clock.timers);
+    tracker = new VisitTracker(
+      (id, path, title) => sent.push(title === undefined ? [id, path] : [id, path, title]),
+      (id, path, title) => renamed.push([id, path, title]),
+      clock.timers,
+    );
   });
 
   test("a page counts once it has stayed, keyed without its query", () => {
@@ -80,5 +86,40 @@ describe("VisitTracker", () => {
     tracker.note("w1", "http://x/a");
     tracker.dispose();
     expect(clock.pending.size).toBe(0);
+  });
+
+  test("the visit carries the title the document settled on during the dwell", () => {
+    tracker.note("w1", "http://x/pricing", "Home | Acme");
+    tracker.title("w1", "  Pricing |   Acme ");
+    clock.elapse();
+    expect(sent).toEqual([["w1", "/pricing", "Pricing | Acme"]]);
+    expect(renamed).toEqual([]);
+  });
+
+  test("a title that settles after the visit was counted renames the page once", () => {
+    tracker.note("w1", "http://x/pricing", "Acme");
+    clock.elapse();
+    tracker.title("w1", "Pricing | Acme");
+    tracker.title("w1", "Pricing | Acme");
+    expect(renamed).toEqual([["w1", "/pricing", "Pricing | Acme"]]);
+  });
+
+  test("a page waiting out its dwell keeps its title off the page counted before it", () => {
+    tracker.note("w1", "http://x/a", "A");
+    clock.elapse();
+    // the navigation lands while the document still carries the old title
+    tracker.note("w1", "http://x/b", "A");
+    tracker.title("w1", "B");
+    expect(renamed).toEqual([]);
+    clock.elapse();
+    expect(sent.at(-1)).toEqual(["w1", "/b", "B"]);
+  });
+
+  test("a reload that brings a new title renames the page without counting it again", () => {
+    tracker.note("w1", "http://x/a", "Draft");
+    clock.elapse();
+    tracker.note("w1", "http://x/a", "About");
+    expect(sent).toEqual([["w1", "/a", "Draft"]]);
+    expect(renamed).toEqual([["w1", "/a", "About"]]);
   });
 });

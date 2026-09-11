@@ -170,27 +170,39 @@ describe("handlers", () => {
       now: () => (now += 1000),
     });
 
-    await dispatch({ t: "visit", worktreeId: main.id, path: "/pricing" }, ctx, services);
+    const order = () => services.routes.history(r.id).map((p) => p.path);
+
+    await dispatch({ t: "visit", worktreeId: main.id, path: "/pricing", title: "Pricing  | Acme" }, ctx, services);
     await dispatch({ t: "visit", worktreeId: found.id, path: "/about" }, ctx, services);
     await dispatch({ t: "visit", worktreeId: found.id, path: "/pricing?tab=2" }, ctx, services);
     await dispatch({ t: "visit", worktreeId: main.id, path: "/pricing/" }, ctx, services);
-    expect(services.routes.ranked(r.id)).toEqual(["/pricing", "/about"]);
-    expect(services.routes.rankedAll()).toEqual({ [r.id]: ["/pricing", "/about"] });
-    // the last visit left the order as it was, so it announced nothing
+    expect(order()).toEqual(["/pricing", "/about"]);
+    expect(services.routes.historyAll()[r.id]?.map((p) => p.path)).toEqual(["/pricing", "/about"]);
+    // a visit without a title keeps the one the page had, cleaned of its doubled space
+    expect(services.routes.history(r.id)[0]?.title).toBe("Pricing | Acme");
+    // the last visit left order and titles as they were, so it announced nothing
     expect(changed).toEqual([r.id, r.id, r.id]);
+
+    // a title that settles later renames the page without counting a visit, and announces it once
+    await dispatch({ t: "page-title", worktreeId: found.id, path: "/about", title: "About us" }, ctx, services);
+    await dispatch({ t: "page-title", worktreeId: found.id, path: "/about", title: "About us" }, ctx, services);
+    await dispatch({ t: "page-title", worktreeId: found.id, path: "/never-visited", title: "Nope" }, ctx, services);
+    expect(services.routes.history(r.id)[1]).toMatchObject({ path: "/about", title: "About us" });
+    expect(order()).toEqual(["/pricing", "/about"]);
+    expect(changed).toHaveLength(4);
 
     // a frame whose worktree has gone is dropped without a toast
     await dispatch({ t: "visit", worktreeId: "gone", path: "/x" }, ctx, services);
-    expect(services.routes.ranked(r.id)).toEqual(["/pricing", "/about"]);
+    expect(order()).toEqual(["/pricing", "/about"]);
 
     await dispatch({ t: "forget-visit", repoId: r.id, path: "/pricing" }, ctx, services);
-    expect(services.routes.ranked(r.id)).toEqual(["/about"]);
+    expect(order()).toEqual(["/about"]);
     await expect(dispatch({ t: "forget-visit", repoId: "nope", path: "/a" }, ctx, services)).rejects.toBeInstanceOf(
       UserError,
     );
 
     services.routes.flush();
-    expect(Object.keys(new StateStore(paths).visitsOf(r.id) ?? {})).toEqual(["/about"]);
+    expect(new StateStore(paths).visitsOf(r.id)).toEqual({ "/about": expect.objectContaining({ title: "About us" }) });
   });
 
   test("routes replies with the pages a Next app's files define, uncommitted ones included", async () => {

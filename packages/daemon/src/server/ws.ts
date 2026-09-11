@@ -231,7 +231,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
-  s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, paths: s.routes.ranked(repoId) }));
+  s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
   s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));
 
   // What a page learns first, over the socket or over the bootstrap fetch that precedes it. Quick
@@ -251,7 +251,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
       home: homedir(),
       pending: s.repos.pending,
-      visits: s.routes.rankedAll(),
+      visits: s.routes.historyAll(),
     }) satisfies ServerMsg;
 
   let branded = false;

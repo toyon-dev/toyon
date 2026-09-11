@@ -1,4 +1,4 @@
-import { routeKey } from "@toyon/shared";
+import { type PageEntry, routeKey } from "@toyon/shared";
 import { useCallback, useMemo } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { fileItems } from "../../state/actions/file.ts";
@@ -13,7 +13,7 @@ import { wtDir } from "../util.ts";
 import { changedRoutes, completionFor, pathOf, type Row, rowsFor } from "./routePicker.ts";
 
 /** module constants, so a repo with no visits yet answers the selector with the same array */
-const NONE: string[] = [];
+const NONE: PageEntry[] = [];
 const NO_ROWS: Row[] = [];
 
 const isTemplate = (r: Row) => r.kind === "changed" && r.dynamic;
@@ -33,7 +33,8 @@ export function RoutePicker({
 }) {
   const dispatch = useDispatch();
   const sock = useSock();
-  const frequent = useStore((s) => s.visits[repoId] ?? NONE);
+  const history = useStore((s) => s.visits[repoId] ?? NONE);
+  const frequent = useMemo(() => history.map((p) => p.path), [history]);
   const routes = useLocalField(worktreeId, "routes");
   const git = useLocalField(worktreeId, "git");
   const dir = useStore((s) => {

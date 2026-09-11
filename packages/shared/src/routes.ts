@@ -20,6 +20,24 @@ export interface RouteInfo {
   endpoint: boolean;
 }
 
+/** the longest page title kept: past this it is a sentence, not a name */
+export const TITLE_MAX = 200;
+
+/** A page in a repo's history as the shell is sent it: best first, with the title it had when last
+ * visited. `score` is as of the last send; decay scales every score alike, so the order stands. */
+export interface PageEntry {
+  path: string;
+  title?: string;
+  score: number;
+  last: number;
+}
+
+/** a page title as it is kept: whitespace collapsed, trimmed, capped; undefined when nothing is left */
+export function cleanTitle(title: string | undefined): string | undefined {
+  const t = title?.replace(/\s+/g, " ").trim().slice(0, TITLE_MAX).trim();
+  return t ? t : undefined;
+}
+
 /**
  * The page an address names, as the route bar lists it: the path, plus the hash when the app routes
  * on it (`#/about`). The query is dropped, inside a hash route too: `?tab=2` would split one page

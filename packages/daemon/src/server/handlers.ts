@@ -141,7 +141,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   visit(msg, _ctx, s) {
-    s.routes.visit(msg.worktreeId, msg.path);
+    s.routes.visit(msg.worktreeId, msg.path, msg.title);
+  },
+
+  "page-title"(msg, _ctx, s) {
+    s.routes.retitle(msg.worktreeId, msg.path, msg.title);
   },
 
   "forget-visit"(msg, _ctx, s) {

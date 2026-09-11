@@ -53,6 +53,8 @@ describe("parseClientMsg", () => {
       { t: "term-restart", worktreeId: "a", stream: "web" },
       { t: "term-close", worktreeId: "a", stream: "shell" },
       { t: "visit", worktreeId: "a", path: "/pricing" },
+      { t: "visit", worktreeId: "a", path: "/pricing", title: "Pricing | Acme" },
+      { t: "page-title", worktreeId: "a", path: "/pricing", title: "Pricing | Acme" },
       { t: "forget-visit", repoId: "r", path: "/#/about" },
       { t: "routes", worktreeId: "a" },
     ]) {
@@ -136,6 +138,9 @@ describe("parseClientMsg", () => {
     expect(parseClientMsg({ t: "visit", worktreeId: "a", path: "" }).ok).toBe(false);
     expect(parseClientMsg({ t: "visit", worktreeId: "a", path: `/${"x".repeat(2_000)}` }).ok).toBe(false);
     expect(parseClientMsg({ t: "forget-visit", repoId: "r" }).ok).toBe(false);
+    // a title is bounded before the daemon ever trims it, and a rename needs one
+    expect(parseClientMsg({ t: "visit", worktreeId: "a", path: "/a", title: "x".repeat(1_001) }).ok).toBe(false);
+    expect(parseClientMsg({ t: "page-title", worktreeId: "a", path: "/a" }).ok).toBe(false);
   });
 
   test("unknown extra fields are dropped, not rejected", () => {

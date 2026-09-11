@@ -22,6 +22,7 @@ import type {
   ImageRef,
   LogLine,
   OwnedWorktree,
+  PageEntry,
   PasteInput,
   PasteRef,
   PathEntry,
@@ -463,8 +464,8 @@ export interface State {
   /** every repo's warm spare, as the daemon last listed them: the preview behind a draft from
    * main, and nothing else. Can shrink between frames (a warm-up rolled back). */
   spares: SpareInfo[];
-  /** each repo's most used preview pages, best first, as the daemon ranks them: the route bar's list */
-  visits: Record<string, string[]>;
+  /** each repo's remembered preview pages, best first, with their titles: the route bar's history */
+  visits: Record<string, PageEntry[]>;
 }
 
 export interface InitialOpts {
@@ -1084,7 +1085,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       };
     }
     case "visits":
-      return { ...s, visits: { ...s.visits, [msg.repoId]: msg.paths } };
+      return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages } };
     case "themes":
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "agents":

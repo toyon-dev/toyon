@@ -63,7 +63,12 @@ export type PickedElement = z.infer<typeof pickedElementSchema>;
 
 export const bridgeToShellSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("loaded"), url: z.string(), title: z.string() }),
-  z.object({ type: z.literal("navigated"), url: z.string() }),
+  /** `title` is the document's as the navigation lands; optional, so a page still holding an older
+   * bridge keeps parsing */
+  z.object({ type: z.literal("navigated"), url: z.string(), title: z.string().optional() }),
+  /** the document's title changed after the page loaded or navigated: an app names its page a tick
+   * or a fetch after it gets there */
+  z.object({ type: z.literal("title"), title: z.string() }),
   z.object({ type: z.literal("hmr") }),
   z.object({
     type: z.literal("page-error"),

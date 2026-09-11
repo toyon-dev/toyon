@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type RouteInfo, routeKey } from "@toyon/shared";
+import { cleanTitle, type PageEntry, type RouteInfo, routeKey } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { log } from "../core/log.ts";
@@ -7,7 +7,7 @@ import type { StateStore } from "../core/state.ts";
 import { git } from "../git/exec.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
 import { fileRoutes, frameworksOf, isManifest, type Manifest } from "./fileRouters.ts";
-import { bump, rank } from "./frecency.ts";
+import { bump, entries, retitle } from "./frecency.ts";
 
 /** state.json is written whole and synchronously, and a page that rewrites its address as it
  * scrolls would otherwise have it written on every scroll. A crash loses at most this much. */
@@ -26,12 +26,16 @@ export interface RouteDeps {
   saveDelayMs?: number;
 }
 
+/** what the shell's list would show: order and titles. A score that moved and reordered nothing is
+ * not news, since decay scales every score alike */
+const signatureOf = (list: PageEntry[]) => list.map((e) => `${e.path}\t${e.title ?? ""}`).join("\n");
+
 /** The route bar's list: which preview pages each project is used on, counted per repo rather than
  * per worktree so a new worktree starts out knowing the pages you already use, and the pages a
  * worktree's own files define, read off its file layout. */
 export class RouteService {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
-  /** the list last announced per repo, so a visit that leaves the order alone broadcasts nothing */
+  /** the list last announced per repo, so a visit that leaves order and titles alone broadcasts nothing */
   private announced = new Map<string, string>();
   /** each worktree's last scan, kept briefly; the promise itself, so a second ask joins one in flight */
   private scans = new Map<string, { at: number; routes: Promise<RouteInfo[]> }>();
@@ -40,7 +44,7 @@ export class RouteService {
 
   /** A preview settled on a page. An id nobody knows is dropped rather than refused: the frame may
    * belong to a worktree removed a moment ago, and a toast on every navigation would be noise. */
-  visit(worktreeId: string, path: string): void {
+  visit(worktreeId: string, path: string, title?: string): void {
     const repoId = this.repoOf(worktreeId);
     if (!repoId) {
       log.warn("routes", `a visit from unknown worktree ${worktreeId} was dropped`);
@@ -49,8 +53,21 @@ export class RouteService {
     const key = routeKey(path);
     if (!key) return;
     const before = this.signature(repoId);
-    bump(this.d.state.visitsFor(repoId), key, this.now());
+    bump(this.d.state.visitsFor(repoId), key, this.now(), cleanTitle(title));
     this.changed(repoId, before);
+  }
+
+  /** A page's title settled after its visit was counted: an app names its page a tick or a fetch
+   * after it gets there. Renames without counting; a page not on the list is left off it. */
+  retitle(worktreeId: string, path: string, title: string): void {
+    const repoId = this.repoOf(worktreeId);
+    const key = routeKey(path);
+    const named = cleanTitle(title);
+    const pages = repoId ? this.d.state.visitsOf(repoId) : undefined;
+    // the same quiet drop as a visit's: a title for a worktree that has gone is nobody's mistake
+    if (!repoId || !key || !named || !pages) return;
+    const before = this.signature(repoId);
+    if (retitle(pages, key, named)) this.changed(repoId, before);
   }
 
   /** take a page off a repo's list */
@@ -64,16 +81,17 @@ export class RouteService {
     this.changed(repoId, before);
   }
 
-  ranked(repoId: string): string[] {
+  /** a repo's remembered pages, best first, as the shell is sent them */
+  history(repoId: string): PageEntry[] {
     const pages = this.d.state.visitsOf(repoId);
-    return pages ? rank(pages, this.now()) : [];
+    return pages ? entries(pages, this.now()) : [];
   }
 
-  /** every registered repo's list that has anything in it, for hello */
-  rankedAll(): Record<string, string[]> {
-    const out: Record<string, string[]> = {};
+  /** every registered repo's history that has anything in it, for hello */
+  historyAll(): Record<string, PageEntry[]> {
+    const out: Record<string, PageEntry[]> = {};
     for (const r of this.d.state.repos) {
-      const list = this.ranked(r.id);
+      const list = this.history(r.id);
       if (list.length > 0) out[r.id] = list;
     }
     return out;
@@ -128,13 +146,13 @@ export class RouteService {
 
   private changed(repoId: string, before: string): void {
     this.scheduleSave();
-    const after = this.ranked(repoId).join("\n");
+    const after = signatureOf(this.history(repoId));
     this.announced.set(repoId, after);
     if (after !== before) this.d.hub.emit("visitsChanged", repoId);
   }
 
   private signature(repoId: string): string {
-    return this.announced.get(repoId) ?? this.ranked(repoId).join("\n");
+    return this.announced.get(repoId) ?? signatureOf(this.history(repoId));
   }
 
   private scheduleSave(): void {

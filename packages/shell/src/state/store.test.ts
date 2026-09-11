@@ -1340,14 +1340,15 @@ describe("add to chat", () => {
 });
 
 describe("visits", () => {
-  test("hello brings every repo's list and a visits frame replaces one of them", () => {
+  test("hello brings every repo's history and a visits frame replaces one of them", () => {
+    const page = (path: string, title?: string) => ({ path, score: 1, last: 0, ...(title ? { title } : {}) });
     const h = helloIn([repo("r"), repo("q")]);
     if (h.a !== "server" || h.msg.t !== "hello") throw new Error("expected a hello");
     const s = run([
-      server({ ...h.msg, visits: { r: ["/a"], q: ["/b"] } }),
-      server({ t: "visits", repoId: "r", paths: ["/c", "/a"] }),
+      server({ ...h.msg, visits: { r: [page("/a")], q: [page("/b", "Docs")] } }),
+      server({ t: "visits", repoId: "r", pages: [page("/c", "Pricing"), page("/a")] }),
     ]);
-    expect(s.visits).toEqual({ r: ["/c", "/a"], q: ["/b"] });
+    expect(s.visits).toEqual({ r: [page("/c", "Pricing"), page("/a")], q: [page("/b", "Docs")] });
   });
 });
 

@@ -37,5 +37,5 @@ export function greenfieldContext(name: string, kind: Kind | null): string {
   const what = kind
     ? `It should become ${kind.brief} If the message names a stack, that wins.`
     : "Pick the mainstream stack for what the message describes, and say which in your first sentence.";
-  return `[New project: ${name}. The repository is empty apart from a root commit. ${what} Scaffold it in this directory, make it start on $PORT, and write toyon.json.]`;
+  return `[New project: ${name}. The repository is empty apart from a root commit. ${what} Scaffold it in this directory, write its .gitignore before installing anything, make it start on $PORT, and write toyon.json.]`;
 }

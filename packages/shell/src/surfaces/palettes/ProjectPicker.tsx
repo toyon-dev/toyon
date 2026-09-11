@@ -23,19 +23,8 @@ import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker
  * the same switcher over the preview (`center`), where the eyes are when nothing was clicked; the
  * pill sits at the far edge of the screen. `disk` is the centered form the field's folder button
  * opens, which starts in the home directory: more room for walking the filesystem, where the
- * anchored one would run out of screen. `embedded` is the dropdown hanging off ⌘K's repo chip,
- * inside an overlay that is already open and has to survive the switch. */
-export function ProjectPicker({
-  form = "pill",
-  embedded = false,
-  onDone,
-}: {
-  form?: ProjectsOverlay["form"];
-  /** mounted inside another overlay (⌘K's repo chip) rather than owning the screen: closing is the
-   * host's to define, since dispatching `close` here would take the host down with it */
-  embedded?: boolean;
-  onDone?: () => void;
-}) {
+ * anchored one would run out of screen. */
+export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const repos = useStore((s) => s.repos);
@@ -86,9 +75,8 @@ export function ProjectPicker({
     return parts.filter(Boolean).join(" · ") || undefined;
   };
 
-  /** picked something, or backed out: the embedded picker hands both to its host */
-  const finish = () => (onDone ? onDone() : dispatch({ a: "close" }));
-  const goBack = () => (onDone ? onDone() : dispatch({ a: "close", back: true }));
+  const finish = () => dispatch({ a: "close" });
+  const goBack = () => dispatch({ a: "close", back: true });
 
   const open = (path: string) => {
     dispatch({ a: "open-repo" });
@@ -127,7 +115,7 @@ export function ProjectPicker({
         )
       }
       trailing={
-        form === "disk" || embedded ? undefined : (
+        form === "disk" ? undefined : (
           <IconButton
             icon="folder"
             label="Find a project on disk"

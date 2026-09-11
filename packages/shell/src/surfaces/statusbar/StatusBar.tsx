@@ -156,7 +156,7 @@ function ProjectPill() {
       >
         <span className="bar-project-name">{repo?.name ?? (heard ? "open project" : "")}</span>
       </Button>
-      {open && <ProjectPicker />}
+      {open && <ProjectPicker form="pill" />}
     </span>
   );
 }

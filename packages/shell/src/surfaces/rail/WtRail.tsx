@@ -1,5 +1,5 @@
 import { canGraft, isMain, isOwned, type OwnedWorktree, type WorktreeStatus } from "@toyon/shared";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   discoveredItems,
   removeWorktrees,
@@ -9,6 +9,7 @@ import {
 } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileOf } from "../../state/profiles.ts";
+import { sentAt } from "../../state/railOrder.ts";
 import {
   useActiveId,
   useDiscoveredOpen,
@@ -24,7 +25,7 @@ import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { dollars, tokens } from "../chat/usage.ts";
-import { chord, dotClass, procTrouble, rowLabel, stateLabel } from "../util.ts";
+import { ago, chord, dotClass, procTrouble, rowLabel, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -42,6 +43,12 @@ export function WtRail() {
   // main leads and the new-worktree row sits under it, above the tasks (state/railOrder.ts)
   const lead = worktrees[0] && isMain(worktrees[0].worktree) ? worktrees[0] : null;
   const tasks = lead ? worktrees.slice(1) : worktrees;
+  // the gutter's times read in minutes, and a quiet rail can go a long while without a frame
+  const [, setMinute] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setMinute((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const greenfield = useGreenfield();
   // the draft tab: the new-worktree row is the selected one while a worktree is being drafted
   const draftOpen = useStore((s) => s.draft !== null);
@@ -247,20 +254,27 @@ export function WtRail() {
             <input type="checkbox" className="rail-graft-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
           ) : (
             !graftMode && (
-              // not .row-dim: it is only there while the row is lifted, and its three dots are the
-              // thinnest mark in the column, so it takes the row's own colour rather than a tier
-              // under it. Full size for the same reason: at the inline size the dots go hairline.
-              // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
-              <span
-                className="rail-more"
-                {...tip("Actions")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  cm.openUnder(e.currentTarget, () => rowItems(w), id);
-                }}
-              >
-                <Icon name="more" />
-              </span>
+              <>
+                {owned && !isMain(owned.worktree) && (
+                  // at rest the column says how long since anyone sent something here, the time the
+                  // rail is sorted by; the kebab takes its seat while the row is lifted (rail.css)
+                  <span className="rail-at row-dim">{ago(sentAt(owned.worktree))}</span>
+                )}
+                {/* not .row-dim: it is only there while the row is lifted, and its three dots are the
+                    thinnest mark in the column, so it takes the row's own colour rather than a tier
+                    under it. Full size for the same reason: at the inline size the dots go hairline. */}
+                {/* biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row) */}
+                <span
+                  className="rail-more"
+                  {...tip("Actions")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cm.openUnder(e.currentTarget, () => rowItems(w), id);
+                  }}
+                >
+                  <Icon name="more" />
+                </span>
+              </>
             )
           )}
         </span>

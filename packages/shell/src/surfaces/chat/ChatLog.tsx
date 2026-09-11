@@ -1,19 +1,22 @@
 import { type OwnedWorktree, type PickMeta, SHELL_TOOL } from "@toyon/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { useDispatch, useSock } from "../../state/context.tsx";
+import { useDispatch, useSock, useStoreInstance } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
+import { localOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { groupTools, railSlots } from "./group.ts";
+import { isBlank } from "./recall.ts";
 
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill */
 export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
+  const store = useStoreInstance();
   const id = active?.worktree.id ?? null;
   const items = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
@@ -50,6 +53,31 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
     atBottomRef.current = true;
     setShowJump(false);
   };
+
+  // The composer's walk back through what was sent marks the row it is on and brings that row to
+  // the top of the log, so what came after it is what fills the pane. A walk that ends in a blank box
+  // (esc, a send, down past the newest) puts the log back where it began, pinned to the bottom if it
+  // was; one that ends in an edit leaves the log on the message being edited.
+  const walkAt = useLocalField(id, "walk")?.at;
+  const walkStart = useRef<{ bottom: boolean; top: number } | null>(null);
+  useOnChange([walkAt], () => {
+    const el = logRef.current;
+    if (!el) return;
+    if (walkAt === undefined) {
+      const start = walkStart.current;
+      walkStart.current = null;
+      if (!start || !isBlank(localOf(store.getState(), id).draft)) return;
+      el.scrollTop = start.bottom ? el.scrollHeight : start.top;
+      atBottomRef.current = start.bottom;
+      if (start.bottom) setShowJump(false);
+      return;
+    }
+    walkStart.current ??= { bottom: atBottomRef.current, top: el.scrollTop };
+    const row = el.querySelector<HTMLElement>(':scope > [data-state~="cursor"]');
+    if (!row) return;
+    const pad = parseFloat(getComputedStyle(el).paddingTop) || 0;
+    el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - pad;
+  });
 
   // stable across renders so memoized rows don't re-render on every delta
   const onPickHover = useCallback(
@@ -92,11 +120,19 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
               roots={roots}
               worktreeId={id}
               rail={rails.get(entry.tools[0]?.parentToolId ?? "")}
+              // a `!` command is never grouped, so the walk's index is the row's own
+              marked={entry.at === walkAt}
             />
           ) : entry.item.kind === "thinking" ? (
             <ThoughtRow key={entry.at} item={entry.item} live={i === liveThought} />
           ) : (
-            <ChatItemView key={entry.at} item={entry.item} worktreeId={id} onPickHover={onPickHover} />
+            <ChatItemView
+              key={entry.at}
+              item={entry.item}
+              worktreeId={id}
+              onPickHover={onPickHover}
+              marked={entry.at === walkAt}
+            />
           ),
         )}
         {busy && active && (

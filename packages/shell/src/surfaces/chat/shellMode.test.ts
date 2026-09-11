@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatItem } from "../../state/store.ts";
-import { shellCommandOf, shellContext, shellHistory } from "./shellMode.ts";
+import { shellCommandOf, shellContext } from "./shellMode.ts";
 
 const run = (command: string, output?: string, done = true): ChatItem => ({
   kind: "tool",
@@ -33,13 +33,6 @@ describe("shellCommandOf", () => {
     expect(shellCommandOf("ls")).toBeNull();
     expect(shellCommandOf("wow !ls")).toBeNull();
     expect(shellCommandOf("")).toBeNull();
-  });
-});
-
-describe("shellHistory", () => {
-  test("newest first, each command once, the agent's own runs left out", () => {
-    const chat = [run("ls"), agentRun("pwd"), run("git status"), run("ls")];
-    expect(shellHistory(chat)).toEqual(["ls", "git status"]);
   });
 });
 

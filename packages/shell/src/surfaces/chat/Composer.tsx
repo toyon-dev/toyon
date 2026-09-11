@@ -34,12 +34,16 @@ import { dataUrl, nextImageNumber, nextPasteNumber } from "./images.ts";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { shellCommandOf, shellContext, shellHistory } from "./shellMode.ts";
+import { type Step, stepWalk } from "./recall.ts";
+import { shellCommandOf, shellContext } from "./shellMode.ts";
 import { dollars, tokens } from "./usage.ts";
 import { useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
 const NO_CHOICES: ModelChoice[] = [];
+
+/** the keys that move the caret along the text: pressing one in a recalled message is starting to edit it */
+const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
 
 /** what the inline `@` / `/` menu can offer */
 type Row =
@@ -105,7 +109,11 @@ export function Composer({
   const text = useLocalField(boxId, "draft");
   const images = useLocalField(boxId, "images");
   const pastes = useLocalField(boxId, "pastes");
+  // up and down in a blank box walk back through what was sent from it (recall.ts): this is where
+  // they have got to, and the draft holds that entry until it is touched
+  const walk = useLocalField(boxId, "walk");
   const chat = useLocalField(id, "chat");
+  const queue = useLocalField(id, "queue");
   // the frame on screen: while drafting the base's preview (or its warm spare's), which is what
   // the picker picks from and the page context describes
   const frameId = usePreviewId();
@@ -212,8 +220,10 @@ export function Composer({
   const listRef = useRef<HTMLDivElement>(null);
 
   const trigger = boxId ? triggerAt(text, caret) : null;
-  // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing
-  const menuOpen = trigger !== null && trigger.from !== dismissed;
+  // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
+  // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
+  // the arrows the walk is using.
+  const menuOpen = trigger !== null && trigger.from !== dismissed && !walk;
   // keyed on the query and the kind, not the trigger: triggerAt rebuilds that object on every keystroke
   const triggerKind = trigger?.kind;
   const triggerQuery = trigger?.query;
@@ -285,9 +295,6 @@ export function Composer({
   // `!` mode: the draft is a command for the worktree's shell, not a message. The box wears the
   // mono face while it is one, so the change of contract shows before anything runs.
   const shellCmd = id ? shellCommandOf(text) : null;
-  const history = useMemo(() => shellHistory(chat), [chat]);
-  /** which earlier command up-arrow has walked back to; -1 is the draft as typed */
-  const [hist, setHist] = useState(-1);
 
   // what the inserted command still expects, drawn after the caret. Only while nothing has been
   // typed after it: once the arguments are being written, the hint is in the way rather than help.
@@ -381,7 +388,6 @@ export function Composer({
       // the agent and stay for the next message
       if (shellCmd) sock?.send({ t: "exec", worktreeId: id, command: shellCmd });
       setText("");
-      setHist(-1);
       return;
     }
     const prompt = text.trim();
@@ -469,6 +475,21 @@ export function Composer({
     return false;
   };
 
+  // the draft and the walk's place go in one write, and the caret goes to the end the way a shell
+  // leaves it: after that render, since the draft round-trips through the store
+  const walkTo = (step: Step) => {
+    if (!boxId) return;
+    dispatch({ a: "walk", id: boxId, walk: step.walk, text: step.text });
+    requestAnimationFrame(() => {
+      composerRef.current?.setSelectionRange(step.text.length, step.text.length);
+      setCaret(step.text.length);
+    });
+  };
+  // the recalled text becomes the person's own, and the arrows go back to moving the caret
+  const keepRecalled = () => {
+    if (boxId && walk) dispatch({ a: "walk", id: boxId, walk: null, text });
+  };
+
   return (
     <div className="composer chat-input">
       {/* where a message from main goes, as a line above the box the way the draft's birth-time
@@ -545,7 +566,7 @@ export function Composer({
           }}
         />
       )}
-      <div className={cx("composer-field", shellCmd !== null && "shell")}>
+      <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
         <TextArea
           size="lg"
           bare
@@ -557,11 +578,14 @@ export function Composer({
             setCaret(e.target.selectionStart ?? e.target.value.length);
             nav.setIndex(0);
             setDismissed(null);
-            setHist(-1);
           }}
-          // arrow keys and clicks move the caret without changing the text, and the menu follows it
+          // arrow keys and clicks move the caret without changing the text, and the menu follows it;
+          // a click in a recalled message is starting to edit it
           onKeyUp={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-          onClick={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+          onClick={(e) => {
+            setCaret(e.currentTarget.selectionStart ?? 0);
+            keepRecalled();
+          }}
           onPaste={onPaste}
           onKeyDown={(e) => {
             // an IME builds a word out of several keystrokes; a menu opening mid-composition would
@@ -577,21 +601,33 @@ export function Composer({
               }
               if (nav.onKeyDown(e)) return;
             }
-            // up and down in a one-line `!` draft walk the commands run here, the way a shell does;
-            // a draft that has grown a second line needs the keys for moving through it
-            if (shellCmd !== null && !text.includes("\n") && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-              const next = e.key === "ArrowUp" ? Math.min(hist + 1, history.length - 1) : Math.max(hist - 1, -1);
-              if (next === hist) return;
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              // a message still waiting in the queue is the nearest thing sent and the likeliest to
+              // want changing: up in an empty box takes the newest one back, as its edit button does
+              const queued = queue.at(-1);
+              if (e.key === "ArrowUp" && !walk && text === "" && id && !drafting && queued !== undefined) {
+                e.preventDefault();
+                sock?.send({ t: "unqueue", worktreeId: id, index: queue.length - 1 });
+                walkTo({ walk: null, text: queued });
+                return;
+              }
+              // while walking the arrows are the walk's however many lines the entry has; in a box
+              // with something typed in it they move the caret
+              const step = id ? stepWalk(chat, walk ?? null, text, e.key === "ArrowUp" ? "up" : "down") : null;
+              if (step) {
+                e.preventDefault();
+                if (step.walk !== walk || step.text !== text) walkTo(step);
+                return;
+              }
+            }
+            if (walk && e.key === "Escape") {
+              // back to the box as it was; the app-wide esc would toggle the terminal instead
               e.preventDefault();
-              setHist(next);
-              const recalled = next === -1 ? "!" : `!${history[next]}`;
-              setText(recalled);
-              requestAnimationFrame(() => {
-                composerRef.current?.setSelectionRange(recalled.length, recalled.length);
-                setCaret(recalled.length);
-              });
+              e.stopPropagation();
+              walkTo({ walk: null, text: walk.from });
               return;
             }
+            if (walk && CARET_KEYS.has(e.key)) keepRecalled();
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               send();

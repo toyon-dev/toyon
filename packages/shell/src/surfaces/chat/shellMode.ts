@@ -14,23 +14,12 @@ export function shellCommandOf(text: string): string | null {
   return text.slice(1).trim();
 }
 
-function commandOf(item: ChatItem): string | null {
+/** the command a row of the transcript ran from the composer; null for anything else, the agent's
+ * own shell calls included */
+export function commandOf(item: ChatItem): string | null {
   if (item.kind !== "tool" || item.name !== SHELL_TOOL) return null;
   const input = item.input as { command?: unknown } | null;
   return typeof input?.command === "string" ? input.command : null;
-}
-
-/** what up-arrow in `!` mode walks: the commands run here, newest first, each once */
-export function shellHistory(chat: ChatItem[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (let i = chat.length - 1; i >= 0; i--) {
-    const c = commandOf(chat[i]!);
-    if (c === null || seen.has(c)) continue;
-    seen.add(c);
-    out.push(c);
-  }
-  return out;
 }
 
 /** how much of one command's output the agent is shown: enough for a log or a listing, not a

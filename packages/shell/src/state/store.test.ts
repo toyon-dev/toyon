@@ -592,6 +592,14 @@ describe("drafts", () => {
     expect(s.local.a?.draft).toBe("half a thought");
     expect(localOf(s, "b").draft).toBe("");
   });
+  test("a walk writes the draft and its place together, and any other write to the draft ends it", () => {
+    let s = run([hello(wt("a")), { a: "walk", id: "a", walk: { at: 3, from: "" }, text: "fix the header" }]);
+    expect(s.local.a?.draft).toBe("fix the header");
+    expect(s.local.a?.walk).toEqual({ at: 3, from: "" });
+    s = run([{ a: "set-draft", id: "a", text: "fix the header again" }], s);
+    expect(s.local.a?.draft).toBe("fix the header again");
+    expect(s.local.a?.walk).toBeUndefined();
+  });
   test("a sync-conflict suggestion lands in that worktree's draft and focuses it", () => {
     const s = run([
       hello(wt("main", "main"), wt("a")),

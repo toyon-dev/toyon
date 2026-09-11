@@ -65,6 +65,16 @@
     align-self: flex-end;
     max-width: 92%;
     white-space: pre-wrap;
+    /* the message the composer has walked back to, marked the one way this app marks where you
+     are: the edge and a lifted seat together. The bubble clips the edge to its own corners, and a
+     flex item that clips loses its content-height floor, so the log's column would squeeze it
+     shut; it keeps its height instead. */
+    &[data-state~="cursor"] {
+      --row-edge-color: var(--accent);
+      background: var(--element1);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
   }
 
   .queued-msg {
@@ -240,7 +250,16 @@
    positioned pseudo-element rather than an inset shadow or a border: a shadow paints under the
    header and panel backgrounds, which cover the band edge to edge, and a border would push every
    one of them 2px right of the column the collapsed rows sit on. */
-    &[open]::before {
+    /* a command the composer has walked back to wears the same edge, open or not, with its line
+     lifted: the edge and the seat together are the mark for the row you are on */
+    &[data-state~="cursor"] {
+      position: relative;
+      & > summary {
+        background: var(--element0);
+      }
+    }
+    &[open]::before,
+    &[data-state~="cursor"]::before {
       content: "";
       position: absolute;
       left: 0;
@@ -588,6 +607,11 @@
   .composer-field {
     &.shell .composer-ghost {
       font: var(--type-mono);
+    }
+    /* a message walked back to is not the person's until they touch it: a tier quieter, so the
+     change to full colour is what says the arrows have gone back to moving the caret */
+    &.recalled .field {
+      color: var(--text1);
     }
   }
   /* an empty box with something to say under its placeholder draws both itself: the placeholder

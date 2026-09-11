@@ -107,6 +107,14 @@ export interface GitInfo {
   head?: string;
 }
 
+/** where up-arrow has walked the composer back to (surfaces/chat/recall.ts) */
+export interface ComposerWalk {
+  /** the sent entry's index in the chat, which is also the transcript row that is marked */
+  at: number;
+  /** what the box held when the walk began: nothing, or the `!` that asked for commands only */
+  from: string;
+}
+
 /** everything the shell tracks for one worktree; dropped when the worktree disappears */
 export interface WorktreeLocal {
   chat: ChatItem[];
@@ -132,6 +140,9 @@ export interface WorktreeLocal {
   /** the composer's unsent text; survives switching worktrees, and is where the daemon's
    * conflict-resolution suggestion lands */
   draft: string;
+  /** set while up and down are walking the composer back through what was sent, with `draft`
+   * holding the entry walked to. Any other write to the draft ends it: a keystroke, a suggestion. */
+  walk?: ComposerWalk;
   /** images pasted or dropped on the composer, not yet sent; `key` is local (the daemon numbers
    * them on send) */
   images: PendingImage[];
@@ -625,6 +636,8 @@ export type Action =
   | { a: "editor-view"; v: EditorView }
   | { a: "dismiss-toast" }
   | { a: "set-draft"; id: string; text: string }
+  /** the composer's up and down: the draft and where the walk is, in one write */
+  | { a: "walk"; id: string; walk: ComposerWalk | null; text: string }
   | { a: "add-images"; id: string; images: PendingImage[] }
   | { a: "remove-image"; id: string; key: string }
   | { a: "clear-images"; id: string }
@@ -782,7 +795,13 @@ function reduce(s: State, action: Action): State {
     case "dismiss-toast":
       return { ...s, toast: null };
     case "set-draft":
-      return withLocal(s, action.id, (l) => ({ ...l, draft: action.text }));
+      return withLocal(s, action.id, ({ walk: _walk, ...l }) => ({ ...l, draft: action.text }));
+    case "walk":
+      return withLocal(s, action.id, ({ walk: _walk, ...l }) => ({
+        ...l,
+        draft: action.text,
+        ...(action.walk ? { walk: action.walk } : {}),
+      }));
     case "add-images":
       // the chips are the only sign an attachment landed, so a drop on a collapsed chat opens it
       return withLocal({ ...s, rightOpen: true }, action.id, (l) => ({

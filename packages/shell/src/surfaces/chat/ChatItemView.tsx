@@ -13,6 +13,7 @@ import { Field } from "../../ui/Field.tsx";
 import { useReveal } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
+import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { attachmentUrl } from "../../ws.ts";
 import { wtDir } from "../util.ts";
@@ -241,6 +242,7 @@ function Painted({ pieces }: { pieces: Piece[] }) {
  * a long turn is a list of one-line rows; a click pins the row either way from then on. */
 function Fold({
   className,
+  state,
   auto,
   label,
   summary,
@@ -248,6 +250,8 @@ function Fold({
   children,
 }: {
   className: string;
+  /** the row's data-state words (ui/rowState.ts) */
+  state?: string;
   auto: boolean;
   label: string;
   summary: ReactNode;
@@ -271,6 +275,7 @@ function Fold({
     <details
       ref={card}
       className={className}
+      data-state={state}
       open={open}
       {...cm.contextMenu(() => menu({ open, toggle }))}
       // clicking the output selects text and leaves focus on the body, so the card takes it: that is
@@ -344,6 +349,7 @@ export const ToolRow = memo(
     roots,
     worktreeId,
     rail,
+    marked,
   }: {
     tools: ToolItem[];
     live?: boolean;
@@ -351,6 +357,8 @@ export const ToolRow = memo(
     worktreeId?: string | null;
     /** which subagent's rail this row sits on, while more than one of them is running */
     rail?: number;
+    /** the composer has walked back to the command this row ran */
+    marked?: boolean;
   }) {
     // every call in a run prints the same line, so the first one is the row
     const head = tools[0]!;
@@ -383,6 +391,7 @@ export const ToolRow = memo(
           head.subagent && "spawn",
           rail !== undefined && `rail-${rail}`,
         )}
+        state={rowState({ cursor: marked })}
         auto={auto}
         label={tools.length > 1 ? `${what}, ${tools.length} calls` : what}
         menu={(fold) => {
@@ -412,6 +421,7 @@ export const ToolRow = memo(
     a.roots === b.roots &&
     a.worktreeId === b.worktreeId &&
     a.rail === b.rail &&
+    a.marked === b.marked &&
     sameTools(a.tools, b.tools),
 );
 
@@ -510,10 +520,13 @@ export const ChatItemView = memo(function ChatItemView({
   item,
   worktreeId,
   onPickHover,
+  marked,
 }: {
   item: Exclude<ChatItem, ToolItem | ThinkingItem>;
   worktreeId?: string | null;
   onPickHover?: (p: PickMeta, entering: boolean) => void;
+  /** the composer has walked back to this message */
+  marked?: boolean;
 }) {
   const store = useStoreInstance();
   const sock = useSock();
@@ -527,7 +540,11 @@ export const ChatItemView = memo(function ChatItemView({
   switch (item.kind) {
     case "user":
       return (
-        <div className="msg-user" {...cm.contextMenu(() => messageItems(item, worktreeId ?? null, deps))}>
+        <div
+          className="msg-user row-edge"
+          data-state={rowState({ cursor: marked })}
+          {...cm.contextMenu(() => messageItems(item, worktreeId ?? null, deps))}
+        >
           {item.images && worktreeId && (
             <div className="msg-images">
               {item.images.map((img) => (

@@ -9,6 +9,7 @@ import {
   EMPTY_LOCAL,
   initialState,
   isGreenfield,
+  isSubPicker,
   localOf,
   type OpenFile,
   previewIdOf,
@@ -93,6 +94,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     agents: [],
     defaultAgent: "claude",
     home: "/home/t",
+    folderDialog: false,
     pending: [],
     visits: {},
   });
@@ -532,6 +534,20 @@ describe("overlays", () => {
     ]);
     expect(s.overlay).toEqual({ kind: "commands" });
     expect(s.paletteReturn?.q).toBe("the");
+  });
+  test("backing out of the folder chooser returns to the new-project form it came from", () => {
+    const form = { kind: "new-project", mode: "create", name: "my-app", parent: "~/Projects" } as const;
+    const choosing = run([{ a: "open", overlay: { kind: "choose-folder", form } }]);
+    expect(isSubPicker(choosing.overlay ?? { kind: "keys" })).toBe(true);
+    expect(reducer(choosing, { a: "close", back: true }).overlay).toEqual(form);
+    // a plain close still closes, since the form was already left for the chooser
+    expect(reducer(choosing, { a: "close" }).overlay).toBeNull();
+  });
+  test("each folder-chosen answer is numbered, so the form can tell a new one from the last", () => {
+    const answer = (path: string | null): Action =>
+      server({ t: "folder-chosen", folder: path ? { path, kind: "empty" } : null });
+    const s = run([answer("~/a"), answer(null)]);
+    expect(s.chosenFolder).toEqual({ seq: 2, folder: null });
   });
   test("a plain close forgets the return; opening a palette does too", () => {
     const s = run([

@@ -13,6 +13,7 @@ import type {
   AskOutcome,
   AskQuestion,
   AuthMethodInfo,
+  ChosenFolder,
   CommitEntry,
   ConnectFailure,
   DesignIndex,
@@ -253,11 +254,23 @@ export type Overlay =
   /** the project switcher: pick a registered repo, or type a path to open another. It hangs off
    * the pill in the bar; `dialog` is the roomier centered form its browse button opens. */
   | { kind: "projects"; dialog?: boolean }
-  /** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
-   * a location; `clone` has both derived from the URL and shows them so they can be changed. */
-  | { kind: "new-project"; mode: "create" | "clone"; name: string; parent: string; url?: string }
+  | NewProjectForm
+  /** the new-project form's location, walked to rather than typed. It carries the form and reopens
+   * it: with the folder filled in on a pick, or as it was when backed out of. */
+  | { kind: "choose-folder"; form: NewProjectForm }
   /** the route bar's list of pages, opened over the address field */
   | { kind: "routes" };
+
+/** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
+ * a location; `clone` has both derived from the URL and shows them so they can be changed. */
+export type NewProjectForm = {
+  kind: "new-project";
+  /** `init` makes the empty folder at parent/name the project where it stands */
+  mode: "create" | "clone" | "init";
+  name: string;
+  parent: string;
+  url?: string;
+};
 
 /** which docks and panes a project is left with. The layout is remembered per project, so a reload
  * comes back to it and switching projects carries each one's own back (zen is deliberately not in
@@ -456,6 +469,11 @@ export interface State {
   paths: { query: string; entries: PathEntry[]; target: PathTarget | null };
   /** the daemon's home directory, for writing `~` paths the way a person would type them */
   home: string;
+  /** hello's `folderDialog`: whether "choose in Finder" would open where the person is */
+  folderDialog: boolean;
+  /** the last answer to `choose-folder`, numbered so the form that asked can tell a new answer from
+   * the one it already applied */
+  chosenFolder: { seq: number; folder: ChosenFolder | null } | null;
   /** clones in flight, held by the daemon so every tab sees them and a reload does not lose them */
   pending: PendingRepo[];
   /** the import being watched in the preview area, if any. Separate from `activeRepoId` because a
@@ -549,6 +567,8 @@ export function initialState(opts: InitialOpts): State {
     systemDark: opts.systemDark ?? true,
     paths: { query: "", entries: [], target: null },
     home: "",
+    folderDialog: false,
+    chosenFolder: null,
     pending: [],
     activeImportId: null,
     agents: [],
@@ -695,7 +715,11 @@ function draftAfter(s: State, rows: WorktreeStatus[], created: boolean): Draft |
 }
 
 export const isSubPicker = (o: Overlay) =>
-  o.kind === "theme" || o.kind === "appearance" || o.kind === "agent" || o.kind === "agent-page";
+  o.kind === "theme" ||
+  o.kind === "appearance" ||
+  o.kind === "agent" ||
+  o.kind === "agent-page" ||
+  o.kind === "choose-folder";
 
 /** what reaches the reducer: terminal frames are routed to the pane, and file answers to fileSync,
  * before dispatch (main.tsx) */
@@ -994,6 +1018,8 @@ function reduce(s: State, action: Action): State {
         paletteReturn: isSubPicker(action.overlay) ? s.paletteReturn : null,
       };
     case "close":
+      // the folder chooser is a step inside the new-project form, so backing out of it is the form
+      if (action.back && s.overlay?.kind === "choose-folder") return { ...s, overlay: s.overlay.form };
       return { ...s, previewTheme: null, ...paletteBack(s, action.back) };
     case "toggle":
       return s.overlay?.kind === action.overlay.kind
@@ -1115,6 +1141,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         agents: msg.agents,
         defaultAgent: msg.defaultAgent,
         home: msg.home,
+        folderDialog: msg.folderDialog,
         pending: msg.pending,
         visits: msg.visits,
         // an import this tab was watching may have finished while it was away
@@ -1152,6 +1179,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "path-entries":
       return { ...s, paths: { query: msg.query, entries: msg.entries, target: msg.target } };
+    case "folder-chosen":
+      return { ...s, chosenFolder: { seq: (s.chosenFolder?.seq ?? 0) + 1, folder: msg.folder } };
     case "refs":
       return { ...s, refs: { ...s.refs, [msg.repoId]: { query: msg.query, refs: msg.refs } } };
     case "archived":

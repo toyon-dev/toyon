@@ -3,6 +3,8 @@ import { useCallback } from "react";
 import { importItems, projectItems } from "../../state/actions/project.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { IconButton } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { isBusy } from "../util.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
@@ -143,9 +145,11 @@ export function ProjectPicker({
                 ? `p:${r.pending.id}`
                 : r.kind === "clone"
                   ? `clone:${r.url}`
-                  : `new:${r.parent ?? ""}/${r.name}`
+                  : r.kind === "new"
+                    ? "new-project"
+                    : `new:${r.parent ?? ""}/${r.name}`
       }
-      rowClass={() => "picker-row"}
+      rowClass={(r) => cx("picker-row", r.kind === "new" && "new-project-row")}
       onQuery={onQuery}
       // a folder completes to itself with a trailing slash, so tab keeps walking down the tree
       completionOf={(r) => (r.kind === "dir" ? (r.entry.isRepo ? r.entry.path : `${r.entry.path}/`) : null)}
@@ -156,6 +160,7 @@ export function ProjectPicker({
         // form too, so those branches return rather than falling through to the close below
         if (r.kind === "clone") return ask("clone", r.name, r.url);
         if (r.kind === "create" && !r.parent) return ask("create", r.name);
+        if (r.kind === "new") return ask("create", "");
 
         if (r.kind === "pending") dispatch({ a: "watch-import", id: r.pending.id });
         else if (r.kind === "repo") dispatch({ a: "activate-repo", id: r.repo.id });
@@ -189,10 +194,13 @@ export function ProjectPicker({
                   : "names it"
                 : active?.kind === "clone"
                   ? "clones it"
-                  : "opens",
+                  : active?.kind === "new"
+                    ? "starts one"
+                    : "opens",
         back: "closes",
       })}
-      empty={(q) => (q ? "nothing here; keep typing a path (~/… or /…)" : "no other projects; type a name to make one")}
+      // an empty query always has the "new project" row, so there is always something typed here
+      empty="nothing here; keep typing a path (~/… or /…)"
       row={(r) =>
         r.kind === "repo" ? (
           <PaletteRow label={r.repo.name} hint={hintFor(r.repo)} />
@@ -204,6 +212,15 @@ export function ProjectPicker({
           <PaletteRow label={`open ${r.path}`} hint="register with this daemon" />
         ) : r.kind === "clone" ? (
           <PaletteRow label={`clone ${r.name}`} hint={hostOf(r.url)} />
+        ) : r.kind === "new" ? (
+          <PaletteRow
+            label={
+              <>
+                <Icon name="plus" className="icon-inline" />
+                new project
+              </>
+            }
+          />
         ) : (
           <PaletteRow label={`create ${r.name}`} hint={r.parent ? `in ${r.parent}` : "new project"} />
         )

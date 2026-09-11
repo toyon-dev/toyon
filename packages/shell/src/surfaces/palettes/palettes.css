@@ -8,6 +8,61 @@
     overflow-wrap: anywhere;
     padding-top: 5px;
   }
+  /* the name of an empty folder being made the project: it is that folder's, so it is read, not edited */
+  .new-project-name {
+    display: flex;
+    align-items: center;
+    min-height: var(--row-height);
+    font: var(--type-mono);
+    color: var(--text0);
+    overflow-wrap: anywhere;
+  }
+  /* the form's location, read back with the way to change it beside it: it sits on the row slot
+     the name field beside it does, so the label centres on it the same way */
+  .new-project-where {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--row-height);
+    min-width: 0;
+  }
+  /* a long path loses its start rather than its end, since the end is the folder being named */
+  .new-project-parent {
+    font: var(--type-mono);
+    color: var(--text0);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+  }
+  /* The folder chooser's hints are paths, the one hint long enough to crowd its row, so here the
+     hint takes what the label leaves rather than holding its width, and loses its start the same
+     way the form's path does. */
+  .folder-row {
+    & .picker-label {
+      flex: 0 1 auto;
+    }
+    & .picker-hint {
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      direction: rtl;
+    }
+  }
+  .new-project-change {
+    flex-shrink: 0;
+  }
+  /* the project list's standing row: its icon rides inside the label, the way a ref row's does */
+  .new-project-row {
+    & .picker-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  }
   /* ---- keyboard shortcuts help ---- */
   .keys-card {
     background: var(--surface1);

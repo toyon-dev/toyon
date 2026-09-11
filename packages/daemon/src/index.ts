@@ -11,7 +11,7 @@ import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
 import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
-import { makePlanner } from "./agent/tasks.ts";
+import { makePlanner, makeRecapper } from "./agent/tasks.ts";
 import { locateAssets } from "./core/assets.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
@@ -85,7 +85,12 @@ const runtime = new RuntimeRegistry({
 });
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
-const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
+const turns = new TurnService({
+  state,
+  hub,
+  transcript: (id) => runtime.agentFor(id)?.transcript() ?? [],
+  summarize: makeRecapper(runtime, agents, state),
+});
 const files = new FileService(state, runtime, (id) => worktrees.readable(id));
 const design = new DesignService((id) => worktrees.readable(id));
 const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });

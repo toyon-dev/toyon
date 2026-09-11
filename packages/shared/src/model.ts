@@ -185,6 +185,10 @@ export interface LastTurn {
   at: number;
   end: TurnEnd;
   facts: TurnFacts;
+  /** set once the stop has stayed unseen for the recap delay, so the line is due. `text` is the
+   * agent's one-sentence summary: absent while it is written, when recaps show facts only, or when
+   * none came back. */
+  recap?: { at: number; text?: string };
 }
 
 /** the branch is toyon's to manage: made by create or a spare claim, so removing the

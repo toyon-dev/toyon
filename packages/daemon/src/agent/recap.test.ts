@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent, ToolKind } from "@toyon/shared";
-import { factsOf, openAskOf, turnsSince } from "./recap.ts";
+import { factsOf, openAskOf, parseRecap, recapPrompt, turnsSince } from "./recap.ts";
 
 const log = (...events: AgentEvent[]) => events.map((event, seq) => ({ seq, event }));
 const user = (text: string, ts: number): AgentEvent => ({ type: "user-message", text, ts });
@@ -144,5 +144,77 @@ describe("openAskOf", () => {
     expect(openAskOf(log(q, p))).toBe("Approve the plan");
     expect(openAskOf(log(q, p, closed("p")))).toBe("Which port?");
     expect(openAskOf(log(q, closed("q")))).toBeUndefined();
+  });
+});
+
+describe("recapPrompt", () => {
+  test("Claude Code's wording, the task, each turn since the last look, and where it stands now", () => {
+    const turns = turnsSince(
+      log(user("add a sticky header", 1), start(2), tool("a", "edit"), done("a"), say("Added it."), end(3)),
+      0,
+    );
+    const p = recapPrompt({
+      title: "sticky-header",
+      firstAsk: "add a sticky header",
+      turns,
+      end: "asking",
+      facts: { turns: 1, edits: 1, toolErrors: 0, ask: "Keep the shadow?" },
+    });
+    expect(p).toContain("Recap in under 40 words");
+    expect(p).toContain("Task: sticky-header");
+    expect(p).toContain("You asked: add a sticky header");
+    expect(p).toContain("Agent ended with: Added it.");
+    expect(p).toContain("Facts: 1 edit");
+    expect(p).toContain(`Now: waiting for the user's answer to "Keep the shadow?"`);
+  });
+
+  test("a long stretch keeps its newest turns and stays inside the budget", () => {
+    const events = Array.from({ length: 10 }, (_, n) => [
+      user(`request ${n} ${"x".repeat(390)}`, n * 10 + 1),
+      start(n * 10 + 2),
+      say(`reply ${n} ${"y".repeat(790)}`),
+      end(n * 10 + 3),
+    ]).flat();
+    const p = recapPrompt({
+      title: "t",
+      turns: turnsSince(log(...events), 0),
+      end: "done",
+      facts: { turns: 10, edits: 0, toolErrors: 0 },
+    });
+    expect(p.length).toBeLessThanOrEqual(4_000);
+    expect(p).toContain("request 9");
+    expect(p).not.toContain("request 3 ");
+  });
+});
+
+describe("parseRecap", () => {
+  test("a reply becomes one plain line in the product's own style", () => {
+    expect(parseRecap("Recap: **Adding** a sticky header \u2014 it is in.\n\nNext \u2192 check `/pricing`.")).toBe(
+      "Adding a sticky header, it is in. Next to check /pricing.",
+    );
+    expect(parseRecap('"Fixing pages 3\u20135 of the docs; review them next."')).toBe(
+      "Fixing pages 3-5 of the docs; review them next.",
+    );
+    expect(parseRecap("```\nShipping the fix; merge it next.\n```")).toBe("Shipping the fix; merge it next.");
+  });
+
+  test("an empty, one-word or refusing reply is no recap", () => {
+    for (const r of [
+      null,
+      "",
+      "  ",
+      "Done.",
+      "I can't see the transcript, sorry.",
+      "Sorry, I cannot help with that.",
+    ]) {
+      expect(parseRecap(r)).toBeNull();
+    }
+  });
+
+  test("a long reply is cut at a sentence end, and nothing it returns carries a dash or an arrow", () => {
+    const out = parseRecap("Building the settings card for recaps \u2014 wiring it \u2192 the daemon. ".repeat(8))!;
+    expect(out.length).toBeLessThanOrEqual(300);
+    expect(out.endsWith(".")).toBe(true);
+    expect(out).not.toMatch(/[\u2013\u2014\u2192]/);
   });
 });

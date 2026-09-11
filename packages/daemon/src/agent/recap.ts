@@ -1,6 +1,6 @@
 // What the turns since someone last looked at a worktree did, read off its transcript: the facts a
-// recap states. Pure, over transcript entries, so a live transcript and one read from disk give the
-// same answer.
+// recap states, and the prompt its one sentence is written from. Pure, over transcript entries, so
+// a live transcript and one read from disk give the same answer.
 
 import { isWriteTool, type TurnEnd, type TurnFacts } from "@toyon/shared";
 import type { TranscriptEntry } from "./transcript.ts";
@@ -129,4 +129,102 @@ export function factsOf(turns: readonly TurnSlice[], end: TurnEnd, ask?: string)
     ...(end === "done" && cut ? { cut } : {}),
     ...(end === "asking" && ask ? { ask } : {}),
   };
+}
+
+/** the first thing anyone asked here: the task itself, whatever the title has become */
+export function firstAskOf(entries: readonly TranscriptEntry[]): string | undefined {
+  for (const { event: e } of entries) if (e.type === "user-message" && e.text.trim()) return e.text;
+  return undefined;
+}
+
+export const RECAP_SYSTEM =
+  "You write one-line status recaps for a developer coming back to a coding task. Reply with only the recap.";
+
+/** Claude Code's own recap wording, which is what the sentence is meant to read like */
+const RECAP_ASK =
+  "The user stepped away and is coming back. Recap in under 40 words, 1-2 plain sentences, no markdown. Lead with the overall goal and current task, then the one next action. Skip root-cause narrative, fix internals and secondary to-dos.";
+
+export interface RecapInput {
+  title: string;
+  firstAsk?: string | undefined;
+  turns: readonly TurnSlice[];
+  end: TurnEnd;
+  facts: TurnFacts;
+}
+
+/** the newest turns a prompt carries, and its size: a recap costs what a short question costs */
+const RECAP_TURNS = 6;
+const RECAP_CHARS = 4_000;
+
+export function recapPrompt(i: RecapInput): string {
+  const head = [RECAP_ASK, "", `Task: ${clip(i.title, 200)}`];
+  if (i.firstAsk) head.push(`First request: ${clip(i.firstAsk, 300)}`);
+  const now = `Now: ${standing(i.end, i.facts)}`;
+  let blocks = i.turns.slice(-RECAP_TURNS).map(turnBlock);
+  const size = () => [...head, "", ...blocks, "", now].join("\n\n").length;
+  // oldest first: the newest turn is the one "the next action" follows from
+  while (blocks.length > 1 && size() > RECAP_CHARS) blocks = blocks.slice(1);
+  return [head.join("\n"), blocks.join("\n\n"), now].join("\n\n");
+}
+
+function turnBlock(t: TurnSlice): string {
+  const facts = [t.edits ? plural(t.edits, "edit") : "", t.toolErrors ? plural(t.toolErrors, "failed tool") : ""]
+    .filter(Boolean)
+    .join(", ");
+  const lines: string[] = [];
+  if (t.asks.length) lines.push(`You asked: ${clip(t.asks.join(" / "), 400)}`);
+  if (t.reply.trim()) lines.push(`Agent ended with: ${tail(t.reply, 800)}`);
+  if (facts) lines.push(`Facts: ${facts}`);
+  return lines.join("\n");
+}
+
+function standing(end: TurnEnd, f: TurnFacts): string {
+  switch (end) {
+    case "asking":
+      return f.ask ? `waiting for the user's answer to "${f.ask}"` : "waiting for the user";
+    case "failed":
+      return f.error ? `failed: ${f.error}` : "failed";
+    case "stopped":
+      return "stopped before it finished";
+    case "done":
+      return f.cut ? `finished early (${f.cut})` : "finished";
+  }
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+function tail(text: string, max: number): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > max ? `…${line.slice(-(max - 1))}` : line;
+}
+
+/** the longest sentence a row carries */
+const RECAP_MAX = 300;
+
+/** A model's reply as one plain line, or null when it is not a recap. Markdown and labels go, and
+ * so do dashes used as punctuation and arrows: the line is read in the product like any other copy. */
+export function parseRecap(text: string | null): string | null {
+  if (!text) return null;
+  let s = text
+    .replace(/```[a-z]*\n?/gi, "")
+    .replace(/[`*]/g, "")
+    .replace(/^\s*#+\s*/gm, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(recap|summary)\s*:\s*/i, "")
+    .replace(/^["“](.*)["”]$/, "$1")
+    .replace(/(\d)\s*[\u2013\u2014]\s*(\d)/g, "$1-$2")
+    .replace(/\s*[\u2013\u2014]\s*/g, ", ")
+    .replace(/\s*(\u2192|->)\s*/g, " to ")
+    .replace(/\u2026/g, "...")
+    .trim();
+  if (s.split(" ").length < 3 || /^(i can(no|['’])t|i'm sorry|sorry|error|unable)\b/i.test(s)) return null;
+  if (s.length > RECAP_MAX) {
+    const cut = s.slice(0, RECAP_MAX);
+    const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+    s = end > 0 ? cut.slice(0, end + 1) : `${cut.slice(0, cut.lastIndexOf(" "))}.`;
+  }
+  return s;
 }

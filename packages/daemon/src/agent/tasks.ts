@@ -5,8 +5,10 @@
 // batch still wants splitting, on an agent that offers no small model.
 
 import type { WorktreeInfo } from "@toyon/shared";
-import type { RuntimeRegistry } from "../runtime/registry.ts";
+import type { StateStore } from "../core/state.ts";
+import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { askFreshAgent } from "./oneshot.ts";
+import { parseRecap, RECAP_SYSTEM } from "./recap.ts";
 import type { AgentRegistry } from "./registry.ts";
 
 export const NAME_SYSTEM = "You are a naming assistant. Reply with only the requested name.";
@@ -59,6 +61,25 @@ export function parsePlan(text: string | null): string[] | null {
 export function makeNamer(runtime: RuntimeRegistry) {
   return async (task: string, wt: WorktreeInfo): Promise<string | null> =>
     parseName(await runtime.ensureAgent(wt).agent.ask(NAME_SYSTEM, namePrompt(task), { quick: "prefer" }));
+}
+
+/** A recap's sentence on the worktree's own agent, on its quick model or not at all: the one side
+ * question that would rather go unasked than cost what the chat costs. It never starts a runtime,
+ * and never wakes an agent whose model list is already known to lack its quick model. */
+export function makeRecapper(
+  runtime: Pick<RuntimeRegistry, "agentFor">,
+  agents: Pick<AgentRegistry, "get">,
+  state: Pick<StateStore, "cachedOptions" | "defaultAgent">,
+) {
+  return async (wt: WorktreeInfo, prompt: string): Promise<string | null> => {
+    const spec = agents.get(wt.agent ?? state.defaultAgent ?? DEFAULT_AGENT_ID);
+    const quick = spec?.quickModel;
+    if (!spec || !quick) return null;
+    const offered = state.cachedOptions(spec.id, "model");
+    if (offered.length > 0 && !offered.some((m) => m.id === quick)) return null;
+    const agent = runtime.agentFor(wt.id);
+    return agent ? parseRecap(await agent.ask(RECAP_SYSTEM, prompt, { quick: "require" })) : null;
+  };
 }
 
 /** plans a batch on the agent the batch will run, spawned for the question (no worktree exists yet) */

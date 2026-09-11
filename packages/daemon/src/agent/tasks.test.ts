@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { parseName, parsePlan } from "./tasks.ts";
+import type { WorktreeInfo } from "@toyon/shared";
+import { FakeAgent } from "../../test/helpers/fakes.ts";
+import type { AgentSpec } from "./registry.ts";
+import { makeRecapper, parseName, parsePlan } from "./tasks.ts";
 
 describe("parseName", () => {
   test("keeps 2-4 kebab words, cleans quotes and case, takes the last line", () => {
@@ -25,5 +28,39 @@ describe("parsePlan", () => {
     expect(parsePlan("[oops")).toBeNull();
     expect(parsePlan("[1, 2]")).toBeNull();
     expect(parsePlan(null)).toBeNull();
+  });
+});
+
+describe("makeRecapper", () => {
+  const wt = { id: "w1", agent: "claude" } as WorktreeInfo;
+  function setup(quickModel: string | undefined, offered: readonly string[], running = true) {
+    const agent = new FakeAgent("w1");
+    agent.askReply = "Recap: adding a sticky header; check the page next.";
+    const spec = { id: "claude", ...(quickModel ? { quickModel } : {}) } as AgentSpec;
+    const recap = makeRecapper(
+      { agentFor: (id) => (running && id === "w1" ? agent : undefined) },
+      { get: (id) => (id === "claude" ? spec : undefined) },
+      { cachedOptions: () => offered.map((id) => ({ id, name: id })), defaultAgent: undefined },
+    );
+    return { agent, recap };
+  }
+
+  test("asks the worktree's own agent on its quick model, and cleans the answer", async () => {
+    const { agent, recap } = setup("haiku", ["opus", "haiku"]);
+    expect(await recap(wt, "the prompt")).toBe("adding a sticky header; check the page next.");
+    expect(agent.asked.map(([, prompt, opts]) => [prompt, opts])).toEqual([["the prompt", { quick: "require" }]]);
+  });
+
+  test("asks nothing with no quick model, one the agent is known not to offer, or no agent running", async () => {
+    const cases: Array<[string | undefined, string[], boolean]> = [
+      [undefined, [], true],
+      ["haiku", ["opus"], true],
+      ["haiku", [], false],
+    ];
+    for (const [quick, offered, running] of cases) {
+      const { agent, recap } = setup(quick, offered, running);
+      expect(await recap(wt, "p")).toBeNull();
+      expect(agent.asked).toEqual([]);
+    }
   });
 });

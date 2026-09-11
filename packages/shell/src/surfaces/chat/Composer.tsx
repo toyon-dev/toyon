@@ -252,6 +252,17 @@ export function Composer({
     const f = requestAnimationFrame(() => composerRef.current?.focus());
     return () => cancelAnimationFrame(f);
   }, [drafting]);
+  // An empty project's page is this one box, so it takes the caret when a project lands on it: made
+  // from the form, whose close left focus on the body, or switched to. Only when nothing else has
+  // the keyboard, so a palette opened in the meantime keeps it.
+  useOnChange([greenfield ? active?.worktree.id : null], () => {
+    if (!greenfield) return;
+    const f = requestAnimationFrame(() => {
+      const held = document.activeElement;
+      if (!held || held === document.body) composerRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(f);
+  });
   // ⌘K and ⌘L ask for the box by bumping a counter; focus is the DOM's. Only a bump seen after
   // mount counts, or a box mounting later (an empty project's) would take a request long answered.
   // On an empty project the dock's copy is hidden, so the centre's answers.

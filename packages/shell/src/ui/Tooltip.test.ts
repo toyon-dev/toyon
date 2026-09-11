@@ -23,7 +23,11 @@ function setup(rect: { left: number; top: number; width: number; height: number 
     dataset: {} as Record<string, string>,
   };
   place(box as unknown as HTMLDivElement, { el, text: "t", placement }, { x: 0, y: 0 });
-  return { side: box.dataset.side, top: Number.parseInt(box.style.top), left: Number.parseInt(box.style.left) };
+  return {
+    side: box.dataset.side,
+    top: Number.parseInt(box.style.top, 10),
+    left: Number.parseInt(box.style.left, 10),
+  };
 }
 
 describe("tooltip placement", () => {

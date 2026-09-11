@@ -154,7 +154,7 @@ export class RepoRegistry {
     const main = mine.find((w) => w.kind === "main");
     if (!main || mine.length > 1) return `${repo.name} has worktrees now`;
     if (!repo.needsSetup) return `${repo.name} is set up now`;
-    if (main.promptedAt || main.lastTurnAt) return `${repo.name} has a chat now`;
+    if (main.promptedAt || main.lastTurn) return `${repo.name} has a chat now`;
     // an adapter writes its settings here on its first spawn, which is excluded from git's view
     if (existsSync(join(repo.path, ".claude"))) return `an agent has already run in ${repo.name}`;
     if ((await statusFiles(repo.path)).length > 0 || !(await treeEmpty(repo.path))) {

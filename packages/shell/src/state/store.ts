@@ -31,6 +31,7 @@ import type {
   PendingRepo,
   PickInput,
   PickVerb,
+  Prefs,
   RefHit,
   RepoInfo,
   SearchHit,
@@ -45,6 +46,7 @@ import type {
 } from "@toyon/shared";
 import {
   builtinThemes,
+  DEFAULT_PREFS,
   defaultThemePrefs,
   isEditTool,
   isMain,
@@ -478,6 +480,8 @@ export interface State {
   /** the daemon's agent registry and the default for new worktrees */
   agents: AgentInfo[];
   defaultAgent: string;
+  /** the daemon's preferences, shared by every tab */
+  prefs: Prefs;
   /** what settings asked the daemon about an agent's setup, by agent id */
   agentConfigs: Record<string, AgentConfigInfo>;
   /** the new worktree being drafted, if the draft tab is open */
@@ -569,6 +573,7 @@ export function initialState(opts: InitialOpts): State {
     activeImportId: null,
     agents: [],
     defaultAgent: "claude",
+    prefs: DEFAULT_PREFS,
     agentConfigs: {},
     draft: null,
     spares: [],
@@ -1128,6 +1133,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         themePrefs: msg.themePrefs ?? s.themePrefs,
         agents: msg.agents,
         defaultAgent: msg.defaultAgent,
+        prefs: msg.prefs,
         home: msg.home,
         folderDialog: msg.folderDialog,
         pending: msg.pending,
@@ -1142,6 +1148,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "agents":
       return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent };
+    case "prefs":
+      return { ...s, prefs: msg.prefs };
     case "agent-config": {
       const { t: _t, ...info } = msg;
       return { ...s, agentConfigs: { ...s.agentConfigs, [info.agent]: info } };

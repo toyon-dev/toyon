@@ -541,6 +541,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.hub.emit("agentsChanged");
   },
 
+  "set-prefs"(msg, _ctx, s) {
+    s.state.setPrefs(msg.prefs);
+    s.hub.emit("prefsChanged");
+  },
+
   "rescan-themes"(_msg, _ctx, s) {
     s.themes.load();
     s.hub.emit("themesChanged");

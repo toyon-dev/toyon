@@ -93,6 +93,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     themePrefs: initial.themePrefs,
     agents: [],
     defaultAgent: "claude",
+    prefs: initial.prefs,
     home: "/home/t",
     folderDialog: false,
     pending: [],
@@ -360,6 +361,13 @@ describe("chat folding", () => {
     s = reducer(s, server({ t: "agents", agents: list, defaultAgent: "claude" }));
     expect(s.agents).toEqual(list);
     expect(s.defaultAgent).toBe("claude");
+  });
+
+  test("hello and prefs carry the daemon's preferences", () => {
+    let s = run([hello(wt("a"))]);
+    expect(s.prefs).toEqual({ recaps: "summarize" });
+    s = reducer(s, server({ t: "prefs", prefs: { recaps: "facts" } }));
+    expect(s.prefs).toEqual({ recaps: "facts" });
   });
 
   test("backfill rebuilds the chat from the transcript", () => {

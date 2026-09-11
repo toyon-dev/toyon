@@ -486,6 +486,14 @@ export interface ThemePrefs {
   dark: string;
 }
 
+/** preferences the daemon holds for every browser that connects. `recaps`: whether coming back to
+ * a worktree also asks its agent's quick model for a sentence, or shows the facts alone. */
+export interface Prefs {
+  recaps: "summarize" | "facts";
+}
+
+export const DEFAULT_PREFS: Prefs = { recaps: "summarize" };
+
 // ---- Design system ----
 
 /** What a token's value is for, decided from the value itself rather than its name: a project can

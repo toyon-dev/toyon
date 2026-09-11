@@ -27,6 +27,8 @@ export interface HubEvents {
   themesChanged: () => void;
   /** the default agent (or the registry) changed */
   agentsChanged: () => void;
+  /** a global preference changed */
+  prefsChanged: () => void;
   /** the order of a repo's most used preview pages changed */
   visitsChanged: (repoId: string) => void;
   /** a worktree's page badges moved: a page was opened, or left */

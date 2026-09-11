@@ -148,7 +148,7 @@ describe("openAskOf", () => {
 });
 
 describe("recapPrompt", () => {
-  test("Claude Code's wording, the task, each turn since the last look, and where it stands now", () => {
+  test("the one-sentence ask, the task, each turn since the last look, and where it stands now", () => {
     const turns = turnsSince(
       log(user("add a sticky header", 1), start(2), tool("a", "edit"), done("a"), say("Added it."), end(3)),
       0,
@@ -160,7 +160,7 @@ describe("recapPrompt", () => {
       end: "asking",
       facts: { turns: 1, edits: 1, toolErrors: 0, ask: "Keep the shadow?" },
     });
-    expect(p).toContain("Recap in under 40 words");
+    expect(p).toContain("Recap in one sentence, under 20 words");
     expect(p).toContain("Task: sticky-header");
     expect(p).toContain("You asked: add a sticky header");
     expect(p).toContain("Agent ended with: Added it.");
@@ -213,7 +213,7 @@ describe("parseRecap", () => {
 
   test("a long reply is cut at a sentence end, and nothing it returns carries a dash or an arrow", () => {
     const out = parseRecap("Building the settings card for recaps \u2014 wiring it \u2192 the daemon. ".repeat(8))!;
-    expect(out.length).toBeLessThanOrEqual(300);
+    expect(out.length).toBeLessThanOrEqual(160);
     expect(out.endsWith(".")).toBe(true);
     expect(out).not.toMatch(/[\u2013\u2014\u2192]/);
   });

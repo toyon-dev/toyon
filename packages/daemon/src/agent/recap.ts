@@ -140,9 +140,10 @@ export function firstAskOf(entries: readonly TranscriptEntry[]): string | undefi
 export const RECAP_SYSTEM =
   "You write one-line status recaps for a developer coming back to a coding task. Reply with only the recap.";
 
-/** Claude Code's own recap wording, which is what the sentence is meant to read like */
+/** The sentence is read as the composer's placeholder, above the keys and the chips, so it is one
+ * line or it is in the way: what this worktree is about, and then where the agent left it. */
 const RECAP_ASK =
-  "The user stepped away and is coming back. Recap in under 40 words, 1-2 plain sentences, no markdown. Lead with the overall goal and current task, then the one next action. Skip root-cause narrative, fix internals and secondary to-dos.";
+  "The user stepped away and is coming back. Recap in one sentence, under 20 words, no markdown. Say what the task is, then what just happened or what to do next. Skip root-cause narrative, fix internals and secondary to-dos.";
 
 export interface RecapInput {
   title: string;
@@ -200,8 +201,8 @@ function tail(text: string, max: number): string {
   return line.length > max ? `…${line.slice(-(max - 1))}` : line;
 }
 
-/** the longest sentence a row carries */
-const RECAP_MAX = 300;
+/** the longest sentence a row carries: a model that runs long is cut at its last full stop */
+const RECAP_MAX = 160;
 
 /** A model's reply as one plain line, or null when it is not a recap. Markdown and labels go, and
  * so do dashes used as punctuation and arrows: the line is read in the product like any other copy. */

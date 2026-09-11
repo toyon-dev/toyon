@@ -11,9 +11,9 @@ const turn = (end: LastTurn["end"], f: Partial<TurnFacts> = {}, minsAgo = 12, te
 
 describe("recapLine", () => {
   const lines: Array<[LastTurn, string]> = [
-    [turn("done", { edits: 4 }), "Finished 12m ago, 4 edits."],
-    [turn("done", { turns: 2, edits: 4, toolErrors: 1 }), "Finished 12m ago, 2 turns, 4 edits, 1 failed tool."],
-    [turn("done", { edits: 1 }, 0), "Finished just now, 1 edit."],
+    [turn("done", { edits: 4 }), "Finished 12m ago."],
+    [turn("done", { turns: 2, edits: 4, toolErrors: 1 }), "Finished 12m ago."],
+    [turn("done", { edits: 1 }, 0), "Finished just now."],
     [turn("done", { cut: "max_tokens" }, 5), "Ended early 5m ago (max_tokens)."],
     [turn("stopped", {}, 180), "Stopped 3h ago."],
     [turn("failed", { error: "rate limited" }, 5), "Failed 5m ago: rate limited."],
@@ -22,13 +22,14 @@ describe("recapLine", () => {
     [turn("asking", {}, 0), "Waiting on you."],
   ];
 
-  test("each way an agent stops reads as a plain sentence of facts", () => {
+  test("a stop with no sentence says how it ended, and never what it took to get there", () => {
     for (const [t, line] of lines) expect(recapLine(t)).toBe(line);
   });
 
-  test("the agent's sentence follows the facts when one was written", () => {
+  test("a sentence takes the line, behind the time and nothing else", () => {
     const t = turn("done", { edits: 4 }, 12, "Adding a sticky header; check the page next.");
-    expect(recapLine(t)).toBe("Finished 12m ago, 4 edits. Adding a sticky header; check the page next.");
+    expect(recapLine(t)).toBe("12m ago. Adding a sticky header; check the page next.");
+    expect(recapLine(turn("stopped", {}, 0, "Sticky header half done"))).toBe("Just now. Sticky header half done.");
   });
 
   test("no line carries a dash or an arrow", () => {

@@ -548,40 +548,38 @@ export const ChatItemView = memo(function ChatItemView({
           data-state={rowState({ cursor: marked })}
           {...cm.contextMenu(() => messageItems(item, worktreeId ?? null, deps))}
         >
-          {item.images && worktreeId && (
-            <div className="msg-images">
-              {item.images.map((img) => (
-                <SentImageChip key={img.n} img={img} src={attachmentUrl(worktreeId, img.file)} />
-              ))}
-            </div>
-          )}
-          {item.pastes && worktreeId && (
-            <div className="msg-images">
-              {item.pastes.map((p) => (
-                <PasteChip
-                  key={p.n}
-                  className="in-chat"
-                  n={p.n}
-                  name={p.name}
-                  source={p.source}
-                  lines={p.lines}
-                  chars={p.chars}
-                  preview={p.preview}
-                  href={attachmentUrl(worktreeId, p.file)}
-                />
-              ))}
+          {item.attachments && worktreeId && (
+            <div className="msg-attachments">
+              {item.attachments.map((a) =>
+                a.kind === "image" ? (
+                  <SentImageChip key={`${a.kind}-${a.n}`} img={a} src={attachmentUrl(worktreeId, a.file)} />
+                ) : a.kind === "paste" ? (
+                  <PasteChip
+                    key={`${a.kind}-${a.n}`}
+                    className="in-chat"
+                    n={a.n}
+                    name={a.name}
+                    source={a.source}
+                    lines={a.lines}
+                    chars={a.chars}
+                    preview={a.preview}
+                    href={attachmentUrl(worktreeId, a.file)}
+                  />
+                ) : (
+                  <PickChip
+                    key={`${a.kind}-${a.n}`}
+                    pick={a}
+                    dir={dirOf()}
+                    className="in-chat"
+                    tipText="Hover to highlight on the page"
+                    onHover={(entering) => onPickHover?.(a, entering)}
+                    onOpen={(path, line) => openSource(store, sock, worktreeId, path, line)}
+                  />
+                ),
+              )}
             </div>
           )}
           {item.text}
-          {item.pick && (
-            <PickChip
-              pick={item.pick}
-              className="in-chat"
-              tipText="Hover to highlight on the page"
-              onHover={(entering) => onPickHover?.(item.pick!, entering)}
-              onOpen={worktreeId ? (path, line) => openSource(store, sock, worktreeId, path, line) : undefined}
-            />
-          )}
         </div>
       );
     case "assistant":

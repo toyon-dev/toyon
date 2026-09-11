@@ -95,11 +95,11 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
       "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAS0lEQVR42u3PQQkAAAgAsetfWiP4FgYrsKZeS0BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEDgsqnc8OJg6Ln3AAAAAElFTkSuQmCC";
     try {
       session.send("Reply with exactly one word, the dominant color of image 1. Do not use any tools.", {
-        images: [{ name: "swatch.png", mimeType: "image/png", data: red, width: 64, height: 64 }],
+        attachments: [{ kind: "image", name: "swatch.png", mimeType: "image/png", data: red, width: 64, height: 64 }],
       });
       await settle();
       expect(session.status).toBe("idle");
-      expect(events[0]).toMatchObject({ type: "user-message", images: [{ n: 1, file: "1.png" }] });
+      expect(events[0]).toMatchObject({ type: "user-message", attachments: [{ kind: "image", n: 1, file: "1.png" }] });
       expect(events.some((e) => e.type === "agent-error")).toBe(false);
       expect(said().toLowerCase(), `the agent said: ${said()}`).toContain("red");
       expect(existsSync(join(t.paths.attachmentsDir, "it", "1.png"))).toBe(true);

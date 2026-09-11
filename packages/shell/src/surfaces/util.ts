@@ -150,9 +150,9 @@ export function isInstalledApp(): boolean {
 const IS_CHROMIUM_PWA = /Chrome\//.test(navigator.userAgent) && isInstalledApp();
 export const chord = (id: ChordId) => chordLabel(id, { firefox: IS_FIREFOX, pwa: IS_CHROMIUM_PWA });
 
-/** the picked element as a label: <Component> or <tag> */
+/** the picked element as a label: <Component /> or <tag>, the way the prompt names it too */
 export function pickLabel(p: { component: string | null; tag: string }): string {
-  return p.component ? `<${p.component}>` : `<${p.tag}>`;
+  return p.component ? `<${p.component} />` : `<${p.tag}>`;
 }
 
 /** the path to show people for a worktree: the title-named link when the directory itself is a

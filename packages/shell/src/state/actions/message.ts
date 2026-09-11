@@ -22,10 +22,13 @@ export function messageItems(
   return grouped([copy, again]);
 }
 
-/** a picked element: the file it was rendered from, opened elsewhere; and off the message */
-export function pickItems(pick: PickMeta, ui: { remove?: () => void } = {}): MenuEntry[] {
+/** a picked element: the file it was rendered from, opened elsewhere; and off the message. A pick's
+ * paths are relative to its checkout, so `dir` is the worktree they are read in; the editors need
+ * the file on disk, and the path copied is the one the chip shows. */
+export function pickItems(pick: PickMeta, ui: { dir?: string | null; remove?: () => void } = {}): MenuEntry[] {
   const file = pick.callFile ?? pick.file;
-  const open: MenuItem[] = file ? editorItems(file) : [];
+  const abs = file && (file.startsWith("/") ? file : ui.dir ? `${ui.dir}/${file}` : null);
+  const open: MenuItem[] = abs ? editorItems(abs) : [];
   const copy: MenuItem[] = file ? [{ id: "copy-path", label: "copy path", onClick: () => copyText(file) }] : [];
   const remove: MenuItem[] = ui.remove ? [{ id: "remove", label: "remove", onClick: ui.remove }] : [];
   return grouped([open, copy, remove]);

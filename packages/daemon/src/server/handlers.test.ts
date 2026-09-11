@@ -406,11 +406,12 @@ describe("handlers", () => {
     expect(lastToast(replies) ?? (t?.t === "shipped" ? t.message : "")).toContain("uncommitted");
   });
 
-  test("chat hands the text and pick to the agent", async () => {
+  test("chat hands the text, context and attachments to the agent", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
     const pick = {
+      kind: "pick" as const,
       component: "App",
       file: "src/App.tsx",
       line: 3,
@@ -418,9 +419,11 @@ describe("handlers", () => {
       callLine: 9,
       tag: "div",
       selector: "div",
+      text: "",
+      html: "<div></div>",
     };
-    await dispatch({ t: "chat", worktreeId: main.id, text: "hi", context: "ctx", pick }, ctx, services);
-    expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: "ctx", pick, images: undefined }]);
+    await dispatch({ t: "chat", worktreeId: main.id, text: "hi", context: "ctx", attachments: [pick] }, ctx, services);
+    expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: "ctx", attachments: [pick] }]);
     // a send is what moves a row up the rail
     expect(services.state.worktree(main.id)?.promptedAt).toBeGreaterThan(0);
   });
@@ -429,14 +432,21 @@ describe("handlers", () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    const img = { name: "a.png", mimeType: "image/png" as const, data: "UE5H", width: 2, height: 1 };
-    await dispatch({ t: "chat", worktreeId: main.id, text: "see", images: [img] }, ctx, services);
-    expect(agents.get(main.id)?.sent[0]?.images).toEqual([img]);
+    const img = {
+      kind: "image" as const,
+      name: "a.png",
+      mimeType: "image/png" as const,
+      data: "UE5H",
+      width: 2,
+      height: 1,
+    };
+    await dispatch({ t: "chat", worktreeId: main.id, text: "see", attachments: [img] }, ctx, services);
+    expect(agents.get(main.id)?.sent[0]?.attachments).toEqual([img]);
     const bad = clientMsgSchema.safeParse({
       t: "chat",
       worktreeId: "w",
       text: "x",
-      images: [{ ...img, mimeType: "image/svg+xml" }],
+      attachments: [{ ...img, mimeType: "image/svg+xml" }],
     });
     expect(bad.success).toBe(false);
   });
@@ -453,7 +463,7 @@ describe("handlers", () => {
         agent: "codex",
         mode: "ask",
         effort: "high",
-        pastes: [{ text: "p" }],
+        attachments: [{ kind: "paste", text: "p" }],
       },
       ctx,
       services,
@@ -462,8 +472,8 @@ describe("handlers", () => {
     expect(made.agent).toBe("codex");
     expect(made.mode).toBe("ask");
     expect(made.effort).toBe("high");
-    // the first message's pastes reach the agent like a chat's do
-    expect(agents.get(made.id)?.sent[0]?.pastes).toEqual([{ text: "p" }]);
+    // the first message's attachments reach the agent like a chat's do
+    expect(agents.get(made.id)?.sent[0]?.attachments).toEqual([{ kind: "paste", text: "p" }]);
     await dispatch({ t: "set-worktree-effort", worktreeId: made.id, effort: "" }, ctx, services);
     expect(services.state.worktree(made.id)?.effort).toBeUndefined();
     await dispatch({ t: "set-worktree-mode", worktreeId: made.id, mode: "plan" }, ctx, services);

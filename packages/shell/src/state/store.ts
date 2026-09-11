@@ -12,6 +12,7 @@ import type {
   AskChoice,
   AskOutcome,
   AskQuestion,
+  AttachmentRef,
   AuthMethodInfo,
   ChosenFolder,
   CommitEntry,
@@ -20,18 +21,15 @@ import type {
   FileServerMsg,
   GitFileStatus,
   ImageInput,
-  ImageRef,
   LogLine,
   OwnedWorktree,
   PageEntry,
   PageLink,
   PasteInput,
-  PasteRef,
   PathEntry,
   PathTarget,
   PendingRepo,
-  PickedElement,
-  PickMeta,
+  PickInput,
   PickVerb,
   RefHit,
   RepoInfo,
@@ -61,7 +59,7 @@ import { railOrder } from "./railOrder.ts";
 export type UsageFigures = { used: number; size: number; cost?: number };
 
 export type ChatItem =
-  | { kind: "user"; text: string; pick?: PickMeta; images?: ImageRef[]; pastes?: PasteRef[] }
+  | { kind: "user"; text: string; attachments?: AttachmentRef[] }
   | { kind: "assistant"; text: string }
   | { kind: "thinking"; text: string }
   | {
@@ -156,12 +154,9 @@ export interface WorktreeLocal {
   /** set while up and down are walking the composer back through what was sent, with `draft`
    * holding the entry walked to. Any other write to the draft ends it: a keystroke, a suggestion. */
   walk?: ComposerWalk;
-  /** images pasted or dropped on the composer, not yet sent; `key` is local (the daemon numbers
-   * them on send) */
-  images: PendingImage[];
-  /** long text pasted on the composer, not yet sent; `key` is local (the daemon numbers them on
-   * send, like images) */
-  pastes: PendingPaste[];
+  /** what is attached to the message being written, in the order it was attached; `key` is local,
+   * and the daemon numbers each kind on send */
+  attachments: PendingAttachment[];
   /** the slash commands this worktree's agent advertises; empty until it has run once */
   commands: AgentCommand[];
   /** which stream the terminal pane is showing for this worktree: its shell or one of its procs.
@@ -203,17 +198,12 @@ export const draftKey = (repoId: string) => DRAFT_PREFIX + repoId;
 export const composerBoxOf = (active: OwnedWorktree | null, drafting: boolean): string | null =>
   active ? (drafting ? draftKey(active.worktree.repoId) : active.worktree.id) : null;
 
-export interface PendingImage extends ImageInput {
-  key: string;
-  bytes: number;
-}
-
-export interface PendingPaste extends PasteInput {
-  key: string;
-  chars: number;
-  lines: number;
-  preview: string;
-}
+/** an attachment waiting in a composer box: what the wire takes, a local key, and what its chip
+ * shows before the daemon has stored it */
+export type PendingAttachment =
+  | (ImageInput & { key: string; bytes: number })
+  | (PasteInput & { key: string; chars: number; lines: number; preview: string })
+  | (PickInput & { key: string });
 
 export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   chat: [],
@@ -226,8 +216,7 @@ export const EMPTY_LOCAL: WorktreeLocal = Object.freeze({
   search: null,
   design: null,
   draft: "",
-  images: [],
-  pastes: [],
+  attachments: [],
   commands: [],
   termStream: SHELL_STREAM,
 }) as WorktreeLocal;
@@ -428,9 +417,8 @@ export interface State {
   reloadReq: { id: string; n: number } | null;
   /** a file is being dragged over the chat panel, which is the one place a drop attaches */
   dragFiles: boolean;
-  /** the armed element picker's verb (⌘E's chat, ⌘I's code) + last picked element (pending chat attachment) */
+  /** the armed element picker's verb: ⌘E's chat, ⌘I's code */
   picking: PickVerb | false;
-  pick: (PickedElement & { worktreeId: string }) | null;
   overlay: Overlay | null;
   /** a sub-picker (theme, appearance) was opened from a palette: esc goes back there with the query restored */
   paletteReturn: { mode: "commands" | "quick-open" | "keys"; q: string } | null;
@@ -552,7 +540,6 @@ export function initialState(opts: InitialOpts): State {
     reloadReq: null,
     dragFiles: false,
     picking: false,
-    pick: null,
     overlay: null,
     paletteReturn: null,
     incompatible: false,
@@ -771,20 +758,16 @@ export type Action =
   | { a: "set-draft"; id: string; text: string }
   /** the composer's up and down: the draft and where the walk is, in one write */
   | { a: "walk"; id: string; walk: ComposerWalk | null; text: string }
-  | { a: "add-images"; id: string; images: PendingImage[] }
-  | { a: "remove-image"; id: string; key: string }
-  | { a: "clear-images"; id: string }
-  | { a: "add-paste"; id: string; paste: PendingPaste }
-  | { a: "remove-paste"; id: string; key: string }
-  | { a: "clear-pastes"; id: string }
+  /** attachments joining a composer box, after whatever is already waiting there */
+  | { a: "attach"; id: string; items: PendingAttachment[] }
+  | { a: "detach"; id: string; key: string }
+  | { a: "clear-attachments"; id: string }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
   /** links a preview's page showed, for an app with no route table */
   | { a: "links"; id: string; links: PageLink[] }
   | { a: "drag-files"; v: boolean }
   | { a: "set-picking"; v: PickVerb | false }
-  | { a: "picked"; pick: NonNullable<State["pick"]> }
-  | { a: "clear-pick" }
   /** open an overlay (closes any other); palettes forget a pending return, sub-pickers keep it */
   | { a: "open"; overlay: Overlay }
   /** close the open overlay; with `back`, reopen the palette a sub-picker came from */
@@ -978,22 +961,19 @@ function reduce(s: State, action: Action): State {
         draft: action.text,
         ...(action.walk ? { walk: action.walk } : {}),
       }));
-    case "add-images":
-      // the chips are the only sign an attachment landed, so a drop on a collapsed chat opens it
+    case "attach":
+      // the chips are the only sign an attachment landed, so one arriving on a collapsed chat opens it
       return withLocal({ ...s, rightOpen: true }, action.id, (l) => ({
         ...l,
-        images: [...l.images, ...action.images],
+        attachments: [...l.attachments, ...action.items],
       }));
-    case "remove-image":
-      return withLocal(s, action.id, (l) => ({ ...l, images: l.images.filter((i) => i.key !== action.key) }));
-    case "clear-images":
-      return withLocal(s, action.id, (l) => (l.images.length ? { ...l, images: [] } : l));
-    case "add-paste":
-      return withLocal(s, action.id, (l) => ({ ...l, pastes: [...l.pastes, action.paste] }));
-    case "remove-paste":
-      return withLocal(s, action.id, (l) => ({ ...l, pastes: l.pastes.filter((p) => p.key !== action.key) }));
-    case "clear-pastes":
-      return withLocal(s, action.id, (l) => (l.pastes.length ? { ...l, pastes: [] } : l));
+    case "detach":
+      return withLocal(s, action.id, (l) => ({
+        ...l,
+        attachments: l.attachments.filter((a) => a.key !== action.key),
+      }));
+    case "clear-attachments":
+      return withLocal(s, action.id, (l) => (l.attachments.length ? { ...l, attachments: [] } : l));
     case "hmr":
       return withLocal(s, action.id, (l) => ({ ...l, turn: { ...l.turn, hmr: true } }));
     case "page":
@@ -1014,11 +994,6 @@ function reduce(s: State, action: Action): State {
       return s.dragFiles === action.v ? s : { ...s, dragFiles: action.v };
     case "set-picking":
       return { ...s, picking: action.v };
-    case "picked":
-      // the pick is a chat attachment, so make sure the chat is visible to receive it
-      return { ...s, picking: false, pick: action.pick, rightOpen: true };
-    case "clear-pick":
-      return { ...s, pick: null };
     case "open":
       // any overlay change drops the theme picker's live preview so the kept theme paints again
       return {
@@ -1444,9 +1419,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
         {
           kind: "user",
           text: event.text,
-          pick: event.pick,
-          ...(event.images?.length ? { images: event.images } : {}),
-          ...(event.pastes?.length ? { pastes: event.pastes } : {}),
+          ...(event.attachments?.length ? { attachments: event.attachments } : {}),
         },
       ];
     case "text-delta":

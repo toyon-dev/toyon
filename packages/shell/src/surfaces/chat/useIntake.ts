@@ -1,9 +1,10 @@
-import { IMAGES_PER_MESSAGE, isLongPaste, PASTES_PER_MESSAGE } from "@toyon/shared";
+import { isLongPaste, limitMessage } from "@toyon/shared";
 import { useEffect } from "react";
 import { readCopiedSource } from "../../app/copiedSource.ts";
-import { attachText } from "../../state/attach.ts";
+import { attachText, roomIn } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
 import { useStoreInstance } from "../../state/context.tsx";
+import { composerBoxOf, worktreeById } from "../../state/store.ts";
 import { imageFiles, otherFiles, prepareImage, readText } from "./images.ts";
 
 /** the chat panel, registered by RightDock. The drop is handled on the window (a file dropped on
@@ -60,53 +61,49 @@ function refuseFileDrag(store: Store) {
 
 /** files on their way to the composer, from a paste or a drop on the chat panel. Reads the pending
  * count from the store at call time so neither call site has to subscribe to it. */
-async function attachImages(store: Store, worktreeId: string | null, files: File[]) {
-  const dispatch = store.dispatch;
-  if (!worktreeId || files.length === 0) return;
-  const room = IMAGES_PER_MESSAGE - (store.getState().local[worktreeId]?.images.length ?? 0);
-  if (room <= 0)
-    return dispatch({
-      a: "toast",
-      toast: { ok: false, message: `at most ${IMAGES_PER_MESSAGE} images per message` },
-    });
+async function attachImages(store: Store, boxId: string | null, files: File[]) {
+  if (!boxId || files.length === 0) return;
+  const room = roomIn(store, boxId, "image");
+  if (room === 0) return;
   const results = await Promise.allSettled(files.slice(0, room).map(prepareImage));
   const images = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
   const failed = results.find((r) => r.status === "rejected");
-  if (images.length) dispatch({ a: "add-images", id: worktreeId, images });
-  if (failed)
-    dispatch({
-      a: "toast",
-      toast: { ok: false, message: String((failed as PromiseRejectedResult).reason?.message ?? failed.reason) },
-    });
-  else if (files.length > room)
-    dispatch({
-      a: "toast",
-      toast: {
-        ok: false,
-        message: `kept ${room} of ${files.length}: at most ${IMAGES_PER_MESSAGE} images per message`,
-      },
-    });
+  if (images.length) store.dispatch({ a: "attach", id: boxId, items: images });
+  if (failed) toast(store, String((failed as PromiseRejectedResult).reason?.message ?? failed.reason));
+  else if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${limitMessage("image")}`);
 }
 
 /** a file that is not an image: attached as text under its own name, or refused by name */
-async function attachTextFiles(store: Store, worktreeId: string | null, files: File[]) {
-  for (const f of files.slice(0, PASTES_PER_MESSAGE)) {
+async function attachTextFiles(store: Store, boxId: string | null, files: File[]) {
+  if (!boxId || files.length === 0) return;
+  const room = roomIn(store, boxId, "paste");
+  if (room === 0) return;
+  for (const f of files.slice(0, room)) {
     const text = await readText(f);
     if (text === null) toast(store, `${f.name}: not a text file`);
-    else attachText(store, worktreeId, text, { name: f.name });
+    else attachText(store, boxId, text, { name: f.name });
   }
+  if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${limitMessage("paste")}`);
+}
+
+/** the box a drop lands in: the one the composer on screen writes in, which while drafting is the
+ * draft's and not the active worktree's. Read at drop time, like the pending counts. */
+function dropBox(store: Store): string | null {
+  const s = store.getState();
+  return composerBoxOf(worktreeById(s, s.activeId), !!s.draft);
 }
 
 /** a drop on the chat panel */
-function dropFiles(store: Store, worktreeId: string | null, files: File[]) {
+function dropFiles(store: Store, files: File[]) {
   const refused = drag?.refused ?? false;
   endFileDrag(store);
   if (refused || files.length === 0) return;
+  const boxId = dropBox(store);
   const images = files.filter((f) => f.type.startsWith("image/"));
-  if (images.length) return void attachImages(store, worktreeId, images);
+  if (images.length) return void attachImages(store, boxId, images);
   // not an image, but a log or a source file is still worth attaching: it lands as a paste chip,
   // and attachTextFiles names anything that will not decode
-  void attachTextFiles(store, worktreeId, files);
+  void attachTextFiles(store, boxId, files);
 }
 
 /** a file drop the shell swallowed away from the chat panel, including one the bridge caught
@@ -125,21 +122,21 @@ const onPanel = (e: DragEvent) => e.target instanceof Node && !!chatPanel.el?.co
 /** the app-wide file drag, mounted once. Only the chat panel takes a drop; everywhere else the
  * drag is still intercepted, because the browser's own answer to a stray file drop is to navigate
  * the tab to that file. The panel lights up only while the pointer is actually over it. */
-export function useFileDrop(worktreeId: string | null) {
+export function useFileDrop() {
   const store = useStoreInstance();
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {
       // a surface that took the drag itself (a text drop into a field) keeps it
       if (e.defaultPrevented || !hasFiles(e.dataTransfer)) return;
       e.preventDefault();
-      noteFileDrag(store, onPanel(e) && !!worktreeId);
+      noteFileDrag(store, onPanel(e) && !!dropBox(store));
       // the cursor carries the same answer as the highlight: nowhere else will take this
       if (e.dataTransfer) e.dataTransfer.dropEffect = store.getState().dragFiles ? "copy" : "none";
     };
     const onDrop = (e: DragEvent) => {
       if (e.defaultPrevented || !hasFiles(e.dataTransfer)) return;
       e.preventDefault();
-      if (onPanel(e)) dropFiles(store, worktreeId, Array.from(e.dataTransfer?.files ?? []));
+      if (onPanel(e)) dropFiles(store, Array.from(e.dataTransfer?.files ?? []));
       else missedFileDrop(store);
     };
     const onDragLeave = () => fadeFileDrag(store);
@@ -158,7 +155,7 @@ export function useFileDrop(worktreeId: string | null) {
       window.removeEventListener("dragleave", onDragLeave);
       window.removeEventListener("keydown", onKey, true);
     };
-  }, [store, worktreeId]);
+  }, [store]);
 }
 
 /**

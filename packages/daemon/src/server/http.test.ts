@@ -139,9 +139,16 @@ describe("/register", () => {
 
 describe("/attachments", () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
-  const img = { name: "shot.png", mimeType: "image/png" as const, data: png, width: 2, height: 2 };
+  const img = {
+    kind: "image" as const,
+    name: "shot.png",
+    mimeType: "image/png" as const,
+    data: png,
+    width: 2,
+    height: 2,
+  };
   test("serves a stored image with the token, immutable", async () => {
-    await new AttachmentStore(attachmentsDir).putImage("wt1", 1, img);
+    await new AttachmentStore(attachmentsDir).put("wt1", 1, img);
     const r = await fetch(req("/attachments/wt1/1.png?token=secret"), srv());
     expect(r?.status).toBe(200);
     expect(r?.headers.get("cache-control")).toContain("immutable");

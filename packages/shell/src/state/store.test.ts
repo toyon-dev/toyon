@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
-import { addToChat } from "./attach.ts";
+import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
 import {
   type Action,
@@ -476,7 +476,7 @@ describe("the draft tab", () => {
   });
 
   test("the warm spare's preview stands behind a draft from main, when one is ready", () => {
-    const sp = { repoId: "r", id: "sp1", proxyPort: 9, ready: true };
+    const sp = { repoId: "r", id: "sp1", path: "/w/sp1", proxyPort: 9, ready: true };
     const rows = [wt("main", "main"), wt("a")];
     const s = run([server({ t: "worktrees", rows, spares: [sp] }), { a: "open-draft" }], found(...rows));
     expect(previewIdOf(s)).toBe("sp1");
@@ -577,66 +577,50 @@ describe("overlays", () => {
     expect(reducer(s, { a: "close" }).previewTheme).toBeNull();
     expect(reducer(s, { a: "open", overlay: { kind: "keys" } }).previewTheme).toBeNull();
   });
-  test("a picked element clears picking mode and opens the chat dock", () => {
-    const s = run([
-      { a: "toggle-right" },
-      { a: "set-picking", v: "chat" },
-      {
-        a: "picked",
-        pick: {
-          worktreeId: "a",
-          component: null,
-          file: null,
-          line: null,
-          callFile: null,
-          callLine: null,
-          tag: "div",
-          classes: "",
-          text: "",
-          html: "",
-          route: "/",
-          selector: "div",
-          element: { tag: "div", id: "", classes: [], text: "", attrs: [] },
-        },
-      },
-    ]);
-    expect(s.picking).toBe(false);
-    expect(s.rightOpen).toBe(true);
-  });
 });
 
 describe("attachments", () => {
-  const img = { key: "k1", name: "a.png", mimeType: "image/png" as const, data: "UE5H", width: 2, height: 1, bytes: 3 };
-  test("pending images are kept per worktree, removable by key, cleared on send", () => {
-    let s = run([hello(wt("a"), wt("b")), { a: "add-images", id: "a", images: [img, { ...img, key: "k2" }] }]);
-    expect(s.local.a?.images.map((i) => i.key)).toEqual(["k1", "k2"]);
-    expect(localOf(s, "b").images).toEqual([]);
-    s = run([{ a: "remove-image", id: "a", key: "k1" }], s);
-    expect(s.local.a?.images.map((i) => i.key)).toEqual(["k2"]);
-    s = run([{ a: "clear-images", id: "a" }], s);
-    expect(s.local.a?.images).toEqual([]);
+  const img = {
+    kind: "image" as const,
+    key: "k1",
+    name: "a.png",
+    mimeType: "image/png" as const,
+    data: "UE5H",
+    width: 2,
+    height: 1,
+    bytes: 3,
+  };
+  const paste = { kind: "paste" as const, key: "p1", text: "a\nb", chars: 3, lines: 2, preview: "a" };
+  test("waiting attachments are kept per box in the order they came, removable by key, cleared on send", () => {
+    let s = run([hello(wt("a"), wt("b")), { a: "attach", id: "a", items: [img] }]);
+    s = run([{ a: "attach", id: "a", items: [paste, { ...img, key: "k2" }] }], s);
+    expect(s.local.a?.attachments.map((x) => x.key)).toEqual(["k1", "p1", "k2"]);
+    expect(localOf(s, "b").attachments).toEqual([]);
+    s = run([{ a: "detach", id: "a", key: "p1" }], s);
+    expect(s.local.a?.attachments.map((x) => x.key)).toEqual(["k1", "k2"]);
+    s = run([{ a: "clear-attachments", id: "a" }], s);
+    expect(s.local.a?.attachments).toEqual([]);
   });
-  test("a sent message keeps its image refs for the bubble", () => {
-    const ref = { n: 1, name: "a.png", mimeType: "image/png", bytes: 3, width: 2, height: 1, file: "1.png" };
-    const s = run([hello(wt("a")), agent("a", { type: "user-message", text: "see", ts: 0, images: [ref] })]);
-    expect(s.local.a?.chat[0]).toEqual({ kind: "user", text: "see", pick: undefined, images: [ref] });
+  test("an attachment opens a collapsed chat, since its chip is the only sign it landed", () => {
+    const s = run([hello(wt("a")), { a: "toggle-right" }, { a: "attach", id: "a", items: [paste] }]);
+    expect(s.rightOpen).toBe(true);
   });
-
-  const paste = { key: "p1", text: "a\nb", chars: 3, lines: 2, preview: "a" };
-  test("pending pastes are kept per worktree, removable by key, cleared on send", () => {
-    let s = run([hello(wt("a"), wt("b")), { a: "add-paste", id: "a", paste }]);
-    s = run([{ a: "add-paste", id: "a", paste: { ...paste, key: "p2" } }], s);
-    expect(s.local.a?.pastes.map((p) => p.key)).toEqual(["p1", "p2"]);
-    expect(localOf(s, "b").pastes).toEqual([]);
-    s = run([{ a: "remove-paste", id: "a", key: "p1" }], s);
-    expect(s.local.a?.pastes.map((p) => p.key)).toEqual(["p2"]);
-    s = run([{ a: "clear-pastes", id: "a" }], s);
-    expect(s.local.a?.pastes).toEqual([]);
-  });
-  test("a sent message keeps its paste refs for the bubble", () => {
-    const ref = { n: 1, chars: 3, lines: 2, preview: "a", file: "1.txt" };
-    const s = run([hello(wt("a")), agent("a", { type: "user-message", text: "this", ts: 0, pastes: [ref] })]);
-    expect(s.local.a?.chat[0]).toEqual({ kind: "user", text: "this", pick: undefined, pastes: [ref] });
+  test("a sent message keeps its refs for the bubble, in the order they were attached", () => {
+    const refs = [
+      { kind: "paste" as const, n: 1, chars: 3, lines: 2, preview: "a", file: "1.txt" },
+      {
+        kind: "image" as const,
+        n: 1,
+        name: "a.png",
+        mimeType: "image/png",
+        bytes: 3,
+        width: 2,
+        height: 1,
+        file: "1.png",
+      },
+    ];
+    const s = run([hello(wt("a")), agent("a", { type: "user-message", text: "see", ts: 0, attachments: refs })]);
+    expect(s.local.a?.chat[0]).toEqual({ kind: "user", text: "see", attachments: refs });
   });
 });
 
@@ -1413,7 +1397,9 @@ describe("add to chat", () => {
     const store = storeOn();
     const asked = store.getState().focusRight;
     addToChat(store, { worktreeId: "a", source, text: "one\ntwo\nthree\n" });
-    expect(store.getState().local.a?.pastes).toMatchObject([{ text: "one\ntwo\nthree", source, lines: 3 }]);
+    expect(store.getState().local.a?.attachments).toMatchObject([
+      { kind: "paste", text: "one\ntwo\nthree", source, lines: 3 },
+    ]);
     expect(store.getState().focusRight).toBe(asked + 1);
   });
   test("the same lines again, or nothing selected, only move the keyboard", () => {
@@ -1422,13 +1408,65 @@ describe("add to chat", () => {
     addToChat(store, { worktreeId: "a", source, text: "x" });
     addToChat(store, { worktreeId: "a", source, text: "x" });
     addToChat(store, null);
-    expect(store.getState().local.a?.pastes).toHaveLength(1);
+    expect(store.getState().local.a?.attachments).toHaveLength(1);
     expect(store.getState().focusRight).toBe(asked + 3);
   });
   test("lines from a worktree that is not on screen attach nothing", () => {
     const store = storeOn();
     addToChat(store, { worktreeId: "b", source, text: "x" });
-    expect(store.getState().local.a?.pastes ?? []).toHaveLength(0);
+    expect(store.getState().local.a?.attachments ?? []).toHaveLength(0);
+  });
+});
+
+describe("attach a pick", () => {
+  const picked = {
+    component: "Button",
+    file: "/w/a/src/ui/Button.tsx",
+    line: 3,
+    callFile: "/w/a/src/pages/Home.tsx",
+    callLine: 9,
+    tag: "button",
+    selector: "main > button",
+    classes: "",
+    text: "Save",
+    html: "<button>Save</button>",
+    route: "/",
+    element: { tag: "button", id: "", classes: [], text: "Save", attrs: [] },
+  };
+
+  test("the element joins its frame's box with paths relative to that checkout, once, and picking ends", () => {
+    const store = createStore(run([hello(wt("a")), { a: "set-picking", v: "chat" }]));
+    const asked = store.getState().focusRight;
+    attachPick(store, "a", picked);
+    attachPick(store, "a", picked);
+    const s = store.getState();
+    expect(s.picking).toBe(false);
+    expect(s.local.a?.attachments).toMatchObject([
+      { kind: "pick", file: "src/ui/Button.tsx", callFile: "src/pages/Home.tsx", selector: "main > button" },
+    ]);
+    // the click left the keyboard in the frame, so each pick hands it back to the box
+    expect(s.focusRight).toBe(asked + 2);
+  });
+  test("a second element stacks beside the first rather than replacing it", () => {
+    const store = createStore(run([hello(wt("a"))]));
+    attachPick(store, "a", picked);
+    attachPick(store, "a", { ...picked, selector: "nav" });
+    expect(store.getState().local.a?.attachments.map((x) => (x.kind === "pick" ? x.selector : x.kind))).toEqual([
+      "main > button",
+      "nav",
+    ]);
+  });
+  test("a path outside the checkout is left as it came", () => {
+    const store = createStore(run([hello(wt("a"))]));
+    attachPick(store, "a", { ...picked, file: "/elsewhere/x.tsx", callFile: null, callLine: null });
+    expect(store.getState().local.a?.attachments).toMatchObject([{ file: "/elsewhere/x.tsx", callFile: null }]);
+  });
+  test("while drafting, a pick from the base's frame or a spare's goes to the draft", () => {
+    const store = createStore(run([hello(wt("m", "main"), wt("a")), { a: "open-draft", base: "m" }]));
+    attachPick(store, "m", picked);
+    attachPick(store, "spare-1", { ...picked, selector: "nav" });
+    expect(store.getState().local[draftKey("r")]?.attachments).toHaveLength(2);
+    expect(store.getState().local.m?.attachments ?? []).toHaveLength(0);
   });
 });
 

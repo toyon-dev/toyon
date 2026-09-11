@@ -229,7 +229,7 @@ function paintPick(el: Element) {
     ? target
       ? chip(`open ${at(target)}`, hints(other && `⇧ ${at(other)}`, inspect && "⌥ chat"))
       : chip(`find ${named(el)}`, hints(inspect && "⌥ chat"))
-    : chip(comp ? `<${comp}>${target ? ` · ${at(target)}` : ""}` : named(el), hints(!inspect && "⌥ code"));
+    : chip(comp ? `<${comp} />${target ? ` · ${at(target)}` : ""}` : named(el), hints(!inspect && "⌥ code"));
   drawBox(el.getBoundingClientRect(), label, code);
 }
 

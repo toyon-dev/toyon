@@ -1,9 +1,10 @@
 import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree } from "@toyon/shared";
-import { canSync, DEFAULT_PERMISSION_MODE, isMain, pickMetaOf } from "@toyon/shared";
+import { canSync, DEFAULT_PERMISSION_MODE, isMain, nextNumbers, numbered } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { shipOp } from "../../state/actions/worktree.ts";
+import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
@@ -28,9 +29,9 @@ import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
 import { greenfieldContext } from "../preview/greenfield.ts";
-import { chord, commandSource, pickLabel, procTrouble, relFile } from "../util.ts";
+import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
-import { dataUrl, nextImageNumber, nextPasteNumber } from "./images.ts";
+import { dataUrl } from "./images.ts";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -105,8 +106,7 @@ export function Composer({
   const repoId = active?.worktree.repoId;
   const boxId = composerBoxOf(active, drafting);
   const text = useLocalField(boxId, "draft");
-  const images = useLocalField(boxId, "images");
-  const pastes = useLocalField(boxId, "pastes");
+  const attachments = useLocalField(boxId, "attachments");
   // up and down in a blank box walk back through what was sent from it (recall.ts): this is where
   // they have got to, and the draft holds that entry until it is touched
   const walk = useLocalField(boxId, "walk");
@@ -117,8 +117,6 @@ export function Composer({
   const frameId = usePreviewId();
   const page = useLocalField(frameId, "page");
   const onPaste = useComposerPaste(boxId, id);
-  const firstImageNumber = nextImageNumber(chat);
-  const firstPasteNumber = nextPasteNumber(chat);
   const setText = (t: string) => boxId && dispatch({ a: "set-draft", id: boxId, text: t });
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
@@ -171,7 +169,6 @@ export function Composer({
   const activeMode = active?.worktree.mode ?? DEFAULT_PERMISSION_MODE;
   const picking = useStore((s) => s.picking);
   const termOpen = useStore((s) => s.termOpen);
-  const pick = useStore((s) => (s.pick && s.pick.worktreeId === frameId ? s.pick : null));
   const trouble = procTrouble(active?.procs ?? []);
   const cm = useContextMenu("composer");
 
@@ -241,15 +238,8 @@ export function Composer({
     return out;
   }, [triggerKind, triggerQuery, files, git, commands]);
 
-  // picking happens inside the iframe, which takes focus; hand it back to the composer so the
-  // user can type about the element straight away (next frame: the dock may be re-appearing)
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const refocus = () => composerRef.current?.focus();
-  useEffect(() => {
-    if (!pick) return;
-    const f = requestAnimationFrame(() => composerRef.current?.focus());
-    return () => cancelAnimationFrame(f);
-  }, [pick]);
   // the draft tab opened: the box is what it is for, so the caret goes there
   useEffect(() => {
     if (!drafting) return;
@@ -368,19 +358,6 @@ export function Composer({
     }
     if (pc.title) parts.push(`page title: ${pc.title}`);
     if (pc.errors.length) parts.push(`recent console errors:\n${pc.errors.map((e) => `- ${e}`).join("\n")}`);
-    if (pick) {
-      const at = (f: string, l: number | null) => `${relFile(f, active.worktree.path)}${l ? `:${l}` : ""}`;
-      // both files, and which is which: the JSX alone sends the agent into the shared component
-      // when the line to change is the one that writes it
-      const where = pick.callFile
-        ? ` used at ${at(pick.callFile, pick.callLine)}${pick.file ? `, its own JSX at ${at(pick.file, pick.line)}` : ""}`
-        : pick.file
-          ? ` defined at ${at(pick.file, pick.line)}`
-          : "";
-      parts.push(
-        `user-selected element (via the element picker): ${pick.component ? `<${pick.component}> component` : `<${pick.tag}>`}${where}${pick.text ? `, text "${pick.text}"` : ""}\nits HTML: ${pick.html}`,
-      );
-    }
     const blocks: string[] = [];
     if (greenfield) blocks.push(greenfieldContext(active.worktree.title));
     if (parts.length > 0)
@@ -403,13 +380,18 @@ export function Composer({
       setText("");
       return;
     }
+    // a batch splits the prompt into tasks and takes no attachments: refused rather than sent without
+    // them, since the draft closing would carry them out of sight
+    if (draft?.batch && attachments.length) {
+      dispatch({
+        a: "toast",
+        toast: { ok: false, message: "a batch takes no attachments; remove them or turn batch off" },
+      });
+      return;
+    }
     const prompt = text.trim();
     const context = buildContext();
-    const pickMeta = pick ? pickMetaOf(pick) : undefined;
-    const sent = images.length ? images.map(({ key: _key, bytes: _bytes, ...img }) => img) : undefined;
-    const sentPastes = pastes.length
-      ? pastes.map(({ key: _key, chars: _chars, lines: _lines, preview: _preview, ...p }) => p)
-      : undefined;
+    const sent = attachments.length ? attachments.map(toInput) : undefined;
     if (spawning) {
       const from = {
         clientId,
@@ -417,9 +399,7 @@ export function Composer({
         // main is what a worktree branches from when no base is named; a task names itself
         ...(onMain ? {} : { baseWorktreeId: id }),
         context,
-        pick: pickMeta,
-        images: sent,
-        pastes: sentPastes,
+        attachments: sent,
         agent: spawnAgent,
         profile,
         mode: newMode,
@@ -454,19 +434,9 @@ export function Composer({
         sock?.send({ t: "set-worktree-model", worktreeId: id, model: newModel });
         sock?.send({ t: "set-worktree-effort", worktreeId: id, effort: newEffort });
       }
-      sock?.send({
-        t: "chat",
-        worktreeId: id,
-        text: prompt,
-        context,
-        pick: pickMeta,
-        images: sent,
-        pastes: sentPastes,
-      });
+      sock?.send({ t: "chat", worktreeId: id, text: prompt, context, attachments: sent });
     }
-    if (pick) dispatch({ a: "clear-pick" });
-    if (images.length) dispatch({ a: "clear-images", id: boxId });
-    if (pastes.length) dispatch({ a: "clear-pastes", id: boxId });
+    if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
     setText("");
     // the reply lands in the dock, so the dock comes back with the message that started it
     if (greenfield) dispatch({ a: "show-right" });
@@ -474,24 +444,12 @@ export function Composer({
     if (drafting) dispatch({ a: "close-draft" });
   };
 
-  // backspace in an empty box removes the last attachment, newest kind first
+  // backspace in an empty box removes the attachment added last
   const removeLast = (): boolean => {
-    if (!boxId) return false;
-    const lastPaste = pastes[pastes.length - 1];
-    if (lastPaste) {
-      dispatch({ a: "remove-paste", id: boxId, key: lastPaste.key });
-      return true;
-    }
-    const last = images[images.length - 1];
-    if (last) {
-      dispatch({ a: "remove-image", id: boxId, key: last.key });
-      return true;
-    }
-    if (pick) {
-      dispatch({ a: "clear-pick" });
-      return true;
-    }
-    return false;
+    const last = attachments[attachments.length - 1];
+    if (!boxId || !last) return false;
+    dispatch({ a: "detach", id: boxId, key: last.key });
+    return true;
   };
 
   // the draft and the walk's place go in one write, and the caret goes to the end the way a shell
@@ -509,6 +467,11 @@ export function Composer({
     if (boxId && walk) dispatch({ a: "walk", id: boxId, walk: null, text });
   };
 
+  // the number each chip will carry on send, counting each kind on from this session's: a message
+  // that starts a worktree starts that worktree's session, so its count starts over
+  const sentBefore = spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined));
+  const dir = active ? wtDir(active.worktree) : null;
+
   return (
     <div className="composer chat-input">
       {/* where a message from main goes, as a line above the box the way the draft's birth-time
@@ -525,48 +488,54 @@ export function Composer({
         </div>
       )}
       {boxId &&
-        images.map((img, i) => (
-          <ImageChip
-            key={img.key}
-            src={dataUrl(img)}
-            n={firstImageNumber + i}
-            name={img.name}
-            width={img.width}
-            height={img.height}
-            bytes={img.bytes}
-            onRemove={() => dispatch({ a: "remove-image", id: boxId, key: img.key })}
-          />
-        ))}
-      {boxId &&
-        pastes.map((p, i) => (
-          <PasteChip
-            key={p.key}
-            n={firstPasteNumber + i}
-            name={p.name}
-            source={p.source}
-            lines={p.lines}
-            chars={p.chars}
-            preview={p.preview}
-            onRemove={() => dispatch({ a: "remove-paste", id: boxId, key: p.key })}
-          />
-        ))}
-      {pick && frameId && (
-        <PickChip
-          pick={pick}
-          worktreePath={active?.worktree.path}
-          tipText={pick.html}
-          onHover={(entering) =>
-            previewBus.post(
-              frameId,
-              entering
-                ? { type: "highlight-selector", selector: pick.selector, label: pickLabel(pick) }
-                : { type: "highlight-clear" },
-            )
-          }
-          onOpen={(path, line) => id && openSource(store, sock, id, path, line)}
-          onRemove={() => dispatch({ a: "clear-pick" })}
-        />
-      )}
+        numbered(attachments, nextNumbers(sentBefore)).map(([item, n]) => {
+          const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
+          if (item.kind === "image")
+            return (
+              <ImageChip
+                key={item.key}
+                src={dataUrl(item)}
+                n={n}
+                name={item.name}
+                width={item.width}
+                height={item.height}
+                bytes={item.bytes}
+                onRemove={detach}
+              />
+            );
+          if (item.kind === "paste")
+            return (
+              <PasteChip
+                key={item.key}
+                n={n}
+                name={item.name}
+                source={item.source}
+                lines={item.lines}
+                chars={item.chars}
+                preview={item.preview}
+                onRemove={detach}
+              />
+            );
+          return (
+            <PickChip
+              key={item.key}
+              pick={item}
+              dir={dir}
+              tipText={item.html}
+              onHover={(entering) =>
+                frameId &&
+                previewBus.post(
+                  frameId,
+                  entering
+                    ? { type: "highlight-selector", selector: item.selector, label: pickLabel(item) }
+                    : { type: "highlight-clear" },
+                )
+              }
+              onOpen={(path, line) => id && openSource(store, sock, id, path, line)}
+              onRemove={detach}
+            />
+          );
+        })}
       {menuOpen && trigger && (
         <InlinePicker
           results={rows}

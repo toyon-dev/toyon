@@ -45,8 +45,8 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   worktree: { label: "switch worktree", section: "Worktrees" },
   "wt-prev": { label: "previous worktree", section: "Worktrees", advertise: { key: "Tab", when: "pwa" } },
   "wt-next": { label: "next worktree", section: "Worktrees", advertise: { key: "Tab", when: "pwa" } },
-  "wt-unseen-prev": { label: "previous unseen worktree", section: "Worktrees", hidden: true },
-  "wt-unseen-next": { label: "next unseen worktree", section: "Worktrees", hidden: true },
+  "wt-unseen-prev": { label: "previous worktree that needs you", section: "Worktrees", hidden: true },
+  "wt-unseen-next": { label: "next worktree that needs you", section: "Worktrees" },
   project: { label: "open project", section: "Worktrees" },
   refs: { label: "open a branch or PR", section: "Worktrees" },
 };

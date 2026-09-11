@@ -132,8 +132,9 @@ describe("labels", () => {
     expect(chordLabel("wt-unseen-next", { pwa: true })).toBe("⌥⇧↓");
   });
   test("a hidden chord has wording but no row on the card", () => {
-    expect(chordLabel("wt-unseen-next")).toBeTruthy();
-    for (const section of CHORD_SECTIONS) expect(chordsInSection(section)).not.toContain("wt-unseen-next");
+    expect(chordLabel("wt-unseen-prev")).toBeTruthy();
+    for (const section of CHORD_SECTIONS) expect(chordsInSection(section)).not.toContain("wt-unseen-prev");
+    expect(chordsInSection("Worktrees")).toContain("wt-unseen-next");
     expect(chordsInSection("Worktrees")).toContain("wt-next");
   });
   test("worktreeChord / worktreeIndex agree: ⌘9 is always the last", () => {

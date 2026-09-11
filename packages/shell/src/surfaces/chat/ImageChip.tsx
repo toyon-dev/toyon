@@ -1,4 +1,4 @@
-import type { ImageRef } from "@toyon/shared";
+import { attachmentLabel, type ImageRef } from "@toyon/shared";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { fmtBytes } from "./images.ts";
@@ -29,7 +29,7 @@ export function ImageChip({
     <>
       <img className="image-thumb" src={src} alt={name} width={40} height={40} />
       <span className="pick-target">
-        <b>Image {n}</b>
+        <b>{attachmentLabel("image", n)}</b>
         <span className="pick-file">
           {" "}
           · {name} · {width}×{height} · {fmtBytes(bytes)}

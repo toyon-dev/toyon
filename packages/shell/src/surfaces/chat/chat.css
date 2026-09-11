@@ -770,6 +770,17 @@
     &.in-chat:hover {
       border-color: var(--accent);
     }
+    /* a sent attachment that opens what the daemon stored (the full image, a paste's text) is the
+     whole row as a link: laid out and coloured as the row, never as inline link text */
+    & .image-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+      color: inherit;
+      text-decoration: none;
+    }
   }
 
   /* image attachments: the pick-chip row with a thumbnail in the leading slot */
@@ -783,15 +794,6 @@
       background: var(--surface2);
       flex: none;
     }
-    & .image-link {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex: 1;
-      min-width: 0;
-      color: inherit;
-      text-decoration: none;
-    }
     &.in-chat {
       display: flex;
       padding: 3px 6px;
@@ -804,7 +806,7 @@
       box-shadow: var(--elevation-float);
     }
   }
-  .msg-images {
+  .msg-attachments {
     display: flex;
     flex-direction: column;
     gap: 4px;

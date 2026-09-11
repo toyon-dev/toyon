@@ -296,6 +296,8 @@ export function defaultStandsFor(choices: ModelChoice[]): ModelChoice | undefine
 export interface SpareInfo {
   repoId: string;
   id: string;
+  /** its checkout: the directory a picked element's source paths in its preview start with */
+  path: string;
   proxyPort: number;
   /** its procs and proxy are up, so the port answers (with the waiting page until the preview
    * proc does) */

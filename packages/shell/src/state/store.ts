@@ -159,6 +159,10 @@ export interface WorktreeLocal {
   /** what is attached to the message being written, in the order it was attached; `key` is local,
    * and the daemon numbers each kind on send */
   attachments: PendingAttachment[];
+  /** the stop whose recap this tab arrived to, by its `lastTurn.at`. The line shows for that stop
+   * until the box is written in, a turn starts, or the worktree is left; coming back is a new
+   * arrival, which only a stop still unseen answers. */
+  recapFor?: number;
   /** the slash commands this worktree's agent advertises; empty until it has run once */
   commands: AgentCommand[];
   /** which stream the terminal pane is showing for this worktree: its shell or one of its procs.
@@ -703,9 +707,17 @@ function activate(s: State, id: string | null): State {
   // project and should be somewhere that still exists next time.
   const activeRepoId = row?.repoId ?? s.activeRepoId;
   const lastActive = row && isOwned(row) ? { ...s.lastActive, [row.repoId]: row.id } : s.lastActive;
+  // leaving a worktree ends the recap this tab arrived to there
+  const leaving = s.activeId !== id ? s.activeId : null;
+  const was = leaving ? s.local[leaving] : undefined;
+  const local = leaving && was?.recapFor !== undefined ? { ...s.local, [leaving]: withoutRecap(was) } : s.local;
   // choosing a row is leaving the draft, the base's own row included: a snapshot that only
   // re-asserts the selection puts the draft back itself (see the worktrees frame)
-  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, draft: null };
+  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, draft: null, local };
+}
+
+function withoutRecap({ recapFor: _recapFor, ...l }: WorktreeLocal): WorktreeLocal {
+  return l;
 }
 
 /** the draft after a frame: kept while its base is still listed, dropped once the worktree it was
@@ -761,6 +773,9 @@ export type Action =
   | { a: "editor-view"; v: EditorView }
   | { a: "dismiss-toast" }
   | { a: "set-draft"; id: string; text: string }
+  /** someone is looking at this worktree: latch the recap of a stop they have not seen */
+  | { a: "arrive"; id: string }
+  | { a: "recap-dismiss"; id: string }
   /** the composer's up and down: the draft and where the walk is, in one write */
   | { a: "walk"; id: string; walk: ComposerWalk | null; text: string }
   /** attachments joining a composer box, after whatever is already waiting there */
@@ -959,7 +974,21 @@ function reduce(s: State, action: Action): State {
     case "dismiss-toast":
       return { ...s, toast: null };
     case "set-draft":
-      return withLocal(s, action.id, ({ walk: _walk, ...l }) => ({ ...l, draft: action.text }));
+      // writing in the box is answering the recap, and emptying the box again does not bring it back
+      return withLocal(s, action.id, ({ walk: _walk, recapFor, ...l }) => ({
+        ...l,
+        draft: action.text,
+        ...(recapFor !== undefined && !action.text.trim() ? { recapFor } : {}),
+      }));
+    case "arrive": {
+      const turn = rowById(s, action.id)?.worktree?.lastTurn;
+      const unseen = rowById(s, action.id)?.unseen;
+      // only a stop nobody has seen whose recap is due; the ring clears a moment after this
+      if (!unseen || !turn?.recap) return s;
+      return withLocal(s, action.id, (l) => (l.recapFor === turn.at ? l : { ...l, recapFor: turn.at }));
+    }
+    case "recap-dismiss":
+      return withLocal(s, action.id, withoutRecap);
     case "walk":
       return withLocal(s, action.id, ({ walk: _walk, ...l }) => ({
         ...l,
@@ -969,7 +998,8 @@ function reduce(s: State, action: Action): State {
     case "attach":
       // the chips are the only sign an attachment landed, so one arriving on a collapsed chat opens it
       return withLocal({ ...s, rightOpen: true }, action.id, (l) => ({
-        ...l,
+        // attaching is writing the message, which answers the recap the way typing does
+        ...withoutRecap(l),
         attachments: [...l.attachments, ...action.items],
       }));
     case "detach":
@@ -1265,8 +1295,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const model = ev.type === "session-info" && ev.model ? ev.model : l.model;
         const effort = ev.type === "session-info" && ev.effort ? ev.effort : l.effort;
         const usage = ev.type === "usage" ? figuresOf(ev) : l.usage;
+        // a message sent or a turn begun: the recap was about the stop before it
+        const moved = ev.type === "turn-start" || ev.type === "user-message";
         return {
-          ...l,
+          ...(moved ? withoutRecap(l) : l),
           chat,
           turn,
           ...(model !== l.model ? { model } : {}),

@@ -144,6 +144,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.routes.forget(msg.repoId, msg.path);
   },
 
+  async routes(msg, ctx, s) {
+    ctx.reply({ t: "routes", worktreeId: msg.worktreeId, routes: await s.routes.files(msg.worktreeId) });
+  },
+
   chat(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);

@@ -1304,3 +1304,13 @@ describe("visits", () => {
     expect(s.visits).toEqual({ r: ["/c", "/a"], q: ["/b"] });
   });
 });
+
+describe("routes", () => {
+  test("a routes reply is kept on its worktree", () => {
+    const routes = [
+      { path: "/users/[id]", source: "next" as const, file: "app/users/[id]/page.tsx", dynamic: true, endpoint: false },
+    ];
+    const s = run([hello(wt("a")), server({ t: "routes", worktreeId: "a", routes })]);
+    expect(localOf(s, "a").routes).toEqual(routes);
+  });
+});

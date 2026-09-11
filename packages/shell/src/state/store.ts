@@ -31,6 +31,7 @@ import type {
   PickVerb,
   RefHit,
   RepoInfo,
+  RouteInfo,
   SearchHit,
   ServerMsg,
   SpareInfo,
@@ -138,6 +139,8 @@ export interface WorktreeLocal {
   search: { query: string; hits: SearchHit[]; truncated: boolean } | null;
   /** the design pane's last scan; null until it has been opened once for this worktree */
   design: DesignIndex | null;
+  /** the pages this worktree's files define, from the route bar's last opening; undefined before one */
+  routes?: RouteInfo[];
   /** the composer's unsent text; survives switching worktrees, and is where the daemon's
    * conflict-resolution suggestion lands */
   draft: string;
@@ -1234,6 +1237,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       }));
     case "design-index":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, design: msg.index }));
+    case "routes":
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, routes: msg.routes }));
     case "queue":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, queue: msg.items }));
     case "agent-commands":

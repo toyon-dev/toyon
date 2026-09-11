@@ -1,9 +1,9 @@
-import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cx } from "./cx.ts";
 import { Field } from "./Field.tsx";
 import { useFocusOnMount } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
-import { sectionStarts, useListNav } from "./listNav.ts";
+import { type Narrow, sectionStarts, useListNav } from "./listNav.ts";
 import { type MenuEntry, menuStore, useContextMenu } from "./menu.ts";
 import { Overlay } from "./Overlay.tsx";
 import "./picker.css";
@@ -66,8 +66,9 @@ export function ListPicker<T>({
    * after the caret and tab accepts it. Return null when the row cannot extend what was typed. */
   completionOf?: (t: T, q: string) => string | null;
   /** a row that narrows the search instead of ending it (a folder to descend into): return the
-   * query it becomes and the picker stays open; null means hand the row to onPick as usual */
-  narrowTo?: (t: T, q: string) => string | null;
+   * query it becomes and the picker stays open, or a Narrow to also select part of that query (a
+   * template's parameter, typed over next); null means hand the row to onPick as usual */
+  narrowTo?: (t: T, q: string) => string | Narrow | null;
   placeholder: string;
   initialQuery?: string;
   /** where the highlight starts (mount only); default 0 */
@@ -105,11 +106,24 @@ export function ListPicker<T>({
   const starts = useMemo(() => sectionStarts(results, groupOf), [results, groupOf]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useFocusOnMount<HTMLInputElement>(selectOnMount);
+  /** the range a narrowed row asked for, applied once its query is in the field */
+  const pendingSelect = useRef<[number, number] | null>(null);
   useEffect(() => {
     if (!onQuery) return;
     const h = setTimeout(() => onQuery(q), 150);
     return () => clearTimeout(h);
   }, [q, onQuery]);
+  // no dependency list: the query a row narrowed to lands in some later render, and this checks
+  // after each one, doing nothing until a range is waiting
+  useLayoutEffect(() => {
+    const range = pendingSelect.current;
+    const el = inputRef.current;
+    if (!range || !el) return;
+    pendingSelect.current = null;
+    // a click on the row may have taken focus from the field
+    el.focus();
+    el.setSelectionRange(range[0], range[1]);
+  });
   const nav = useListNav({
     results,
     keyOf,
@@ -120,6 +134,9 @@ export function ListPicker<T>({
     onSide,
     completionOf,
     narrowTo,
+    onNarrow: (n) => {
+      pendingSelect.current = n.select ?? null;
+    },
     setQ,
     initialIndex,
   });

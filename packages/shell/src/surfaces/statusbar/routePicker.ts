@@ -1,7 +1,18 @@
-// The route bar's rows, from what was typed and the pages the project's previews are used on.
-// Pure, so the ordering rules are tested without a DOM.
+// The route bar's rows, from what was typed, the pages this branch changed and the pages the
+// project's previews are used on. Pure, so the ordering rules are tested without a DOM.
 
-export type Row = { kind: "go" | "frequent"; path: string };
+import type { RouteInfo } from "@toyon/shared";
+
+export type Row =
+  | { kind: "go"; path: string }
+  | { kind: "changed"; path: string; file: string; dynamic: boolean }
+  | { kind: "frequent"; path: string };
+
+/** A branch that touched every page still leaves the list room for the pages you use. */
+export const CHANGED_MAX = 8;
+
+/** the files a worktree has changed, as its git status carries them */
+export type ChangedFiles = { files: Array<{ path: string }>; committed?: Array<{ path: string }> };
 
 /** the address as the bar shows it: path, query and hash, since a hash router's route is its hash */
 export function pathOf(url: string | undefined): string {
@@ -34,17 +45,35 @@ export function completionFor(path: string, q: string): string | null {
   return q && c.toLowerCase().startsWith(q.toLowerCase()) ? c : null;
 }
 
+/** The whole parameter in a template, in whichever router's syntax, so typing over the selection
+ * replaces it: `[id]`, `[...slug]`, `[[lang]]`, `:id`, `:lang?`, `$postId`, `*`. Null when there is none. */
+export function paramRange(path: string): [number, number] | null {
+  const m = /\[\[?[^\]]*\]\]?|:[\w-]+\??|\$[\w-]*|\*/.exec(path);
+  return m ? [m.index, m.index + m[0].length] : null;
+}
+
+/** The pages this branch changed: routes whose file is among the worktree's uncommitted files or
+ * those committed ahead of main, in the scan's order (places before templates). Endpoints are left
+ * out, since sending the preview to a handler's JSON is rarely where anyone meant to go. */
+export function changedRoutes(routes: RouteInfo[] | undefined, git: ChangedFiles | undefined): RouteInfo[] {
+  if (!routes?.length || !git) return [];
+  const touched = new Set([...git.files, ...(git.committed ?? [])].map((f) => f.path));
+  return routes.filter((r) => !r.endpoint && touched.has(r.file)).slice(0, CHANGED_MAX);
+}
+
 /**
  * The field opens holding the page's own address, selected, so typing replaces it. Until something
- * is typed the address is not a filter and every page is listed. Once it is, the rows narrow, and a
- * typed path that is not already a row leads as a `go` row, so enter always goes somewhere.
- * The page on screen is never listed: going there is what the reload button is for.
+ * is typed the address is not a filter and every row is listed: the pages this branch changed, then
+ * the pages you use. Once it is, the rows narrow, and a typed path that is not already a row leads
+ * as a `go` row, so enter always goes somewhere. The page on screen is left out, since going there
+ * is what reload is for; a changed template stays, since it is not a place until it is filled in.
  */
 export function rowsFor({
   query,
   current,
   here,
   frequent,
+  changed,
 }: {
   query: string;
   /** the address the field opened with */
@@ -52,14 +81,22 @@ export function rowsFor({
   /** the page on screen, keyed the way the list is */
   here: string | null;
   frequent: string[];
+  changed: RouteInfo[];
 }): Row[] {
   const typed = query.trim() !== "" && query !== current;
-  const pages = frequent.filter((p) => p !== here && (!typed || matches(p, query)));
-  const rows: Row[] = [];
+  const keep = (path: string) => !typed || matches(path, query);
+  const rows: Row[] = changed
+    .filter((r) => (r.dynamic || r.path !== here) && keep(r.path))
+    .map((r): Row => ({ kind: "changed", path: r.path, file: r.file, dynamic: r.dynamic }));
+  // a page both changed and visited is listed once, as changed
+  const changedPaths = new Set(changed.map((r) => r.path));
+  for (const path of frequent) {
+    if (path !== here && !changedPaths.has(path) && keep(path)) rows.push({ kind: "frequent", path });
+  }
   if (typed) {
     const go = normalizePath(query);
-    if (!pages.includes(go)) rows.push({ kind: "go", path: go });
+    // a template sitting in the field is its own row already, and enter on it selects the parameter again
+    if (!rows.some((r) => r.path === go)) rows.unshift({ kind: "go", path: go });
   }
-  for (const path of pages) rows.push({ kind: "frequent", path });
   return rows;
 }

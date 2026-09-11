@@ -874,6 +874,53 @@ describe("boot", () => {
   });
 });
 
+// The rail's counts are cached for ten seconds and recounted on a frame, which on its own left a row
+// reading clean while its changes list showed files. Each of these moves the number without waiting
+// out the cache.
+describe("rail counts", () => {
+  const dirtyOf = async (id: string) => (await w.worktrees.rows()).find((x) => x.id === id)?.dirty;
+  const opened = async (repoId: string, branch: string) => {
+    sh(w.repo, "git", "branch", branch, "main");
+    const wt = await w.worktrees.openRef(repoId, "branch", branch);
+    await settle();
+    expect(await dirtyOf(wt.id)).toBe(0);
+    return wt;
+  };
+
+  test("a git status read moves the row's count at once, and says so", async () => {
+    const repoId = await registered();
+    const wt = await opened(repoId, "counted");
+    writeFileSync(join(wt.path, "wip.txt"), "x\n");
+    // still inside the cache: the rows alone would go on reading clean
+    expect(await dirtyOf(wt.id)).toBe(0);
+    let changed = 0;
+    w.hub.on("worktreesChanged", () => changed++);
+    await w.worktrees.gitStatus(wt.id);
+    expect(await dirtyOf(wt.id)).toBe(1);
+    expect(changed).toBeGreaterThan(0);
+  });
+
+  test("a turn ending recounts its row", async () => {
+    const repoId = await registered();
+    const wt = await opened(repoId, "turned");
+    writeFileSync(join(wt.path, "wip.txt"), "x\n");
+    w.hub.emit("agentStatus", wt.id, "working");
+    w.hub.emit("agentStatus", wt.id, "idle");
+    expect(await dirtyOf(wt.id)).toBe(1);
+  });
+
+  test("a recount drops every row's cache and ticks the repo", async () => {
+    const repoId = await registered();
+    const wt = await opened(repoId, "recounted");
+    writeFileSync(join(wt.path, "wip.txt"), "x\n");
+    const ticks: string[] = [];
+    w.hub.on("repoTick", (id) => ticks.push(id));
+    w.worktrees.recount(repoId);
+    expect(ticks).toEqual([repoId]);
+    expect(await dirtyOf(wt.id)).toBe(1);
+  });
+});
+
 // The rail rings a worktree whose turn ended while nobody was looking. Green alone cannot separate
 // "just finished" from "untouched for a week", and the ring is what closes that gap.
 describe("unseen", () => {

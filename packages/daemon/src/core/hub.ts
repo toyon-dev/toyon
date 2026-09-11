@@ -18,7 +18,7 @@ export interface HubEvents {
   termExit: (worktreeId: string, stream: string, exitCode: number) => void;
   /** the worktree list or any per-worktree status changed */
   worktreesChanged: () => void;
-  /** the repo's default branch moved: badges + git-status need refreshing */
+  /** the repo's default branch moved, or a recount was asked for: badges + git-status need refreshing */
   repoTick: (repoId: string) => void;
   /** a repo's config or setup state changed (confirmed, or toyon.json edited) */
   reposChanged: () => void;

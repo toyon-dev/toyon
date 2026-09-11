@@ -6,6 +6,7 @@ import {
   PROTOCOL_VERSION,
   parseClientMsg,
   type ServerMsg,
+  SHELL_STREAM,
   streamKey,
   ThemeImportError,
   WS_CLOSE_UNAUTHORIZED,
@@ -194,6 +195,23 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   // a save or a discard in one tab: the writer's changes list and every other tab's follow from the
   // same push, and an editor open on the file re-reads it from there
   s.hub.on("filesChanged", refreshGitStatus);
+  // A shell in toyon's terminal writes files and commits with nothing else noticing, so once its
+  // output has gone quiet the worktree is recounted: the rail's badges and, when it is open, its
+  // changes list. Quiet rather than per chunk, since a build prints thousands of them.
+  const shellQuiet = new Map<string, ReturnType<typeof setTimeout>>();
+  s.hub.on("termData", (worktreeId, stream) => {
+    if (stream !== SHELL_STREAM) return;
+    clearTimeout(shellQuiet.get(worktreeId));
+    shellQuiet.set(
+      worktreeId,
+      setTimeout(() => {
+        shellQuiet.delete(worktreeId);
+        s.worktrees.invalidateCounts(worktreeId);
+        worktreesChanged();
+        fireAndForget(worktreeId, pushGitStatus(worktreeId), "git status after the shell went quiet");
+      }, 1500),
+    );
+  });
   // a worktree's pages ride behind its git status: the same pushes, sent only when they moved, so the
   // route list is current before anyone opens it
   const sentPages = new Map<string, string>();

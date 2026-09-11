@@ -603,6 +603,15 @@ describe("handlers", () => {
     ).rejects.toBeInstanceOf(UserError);
   });
 
+  test("refresh-git recounts the project: a repo tick for its rows and open changes lists", async () => {
+    const { services, ctx, repo } = make();
+    const r = await services.repos.register(repo);
+    const ticks: string[] = [];
+    services.hub.on("repoTick", (id) => ticks.push(id));
+    await dispatch({ t: "refresh-git", repoId: r.id }, ctx, services);
+    expect(ticks).toEqual([r.id]);
+  });
+
   test("exec runs the command in the worktree and records it on the transcript as a shell tool call", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);

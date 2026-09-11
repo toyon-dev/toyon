@@ -30,6 +30,8 @@ const RAIL_OPEN_PX = 232;
 const MRU_SUBSCRIPTIONS = 3;
 /** how long a worktree stays on screen, with the window focused, before its unseen ring clears */
 const SEEN_AFTER_MS = 2000;
+/** the least time between recounts on coming back to the window */
+const RECOUNT_AFTER_MS = 5000;
 
 /** Where the browser's own menu is the useful one and ours would take it away: anything typed
  * into (spelling, paste), the terminal (paste), Monaco, and the preview, which is the person's
@@ -120,6 +122,22 @@ export function App() {
       window.removeEventListener("blur", disarm);
     };
   }, [sock, activeId, unseen, held]);
+
+  // Files edited in another app while this window was behind it are news the rail cannot hear on
+  // its own: its counts move on toyon's events. Coming back recounts the project's rows and re-reads
+  // its open changes lists, at most once every few seconds, since a focus bounce through a dialog is
+  // not a trip away.
+  const recountedAt = useRef(0);
+  useEffect(() => {
+    if (!sock || !connected || !activeRepoId) return;
+    const onFocus = () => {
+      if (Date.now() - recountedAt.current < RECOUNT_AFTER_MS) return;
+      recountedAt.current = Date.now();
+      sock.send({ t: "refresh-git", repoId: activeRepoId });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [sock, connected, activeRepoId]);
 
   // paint the selected theme (or the picker's live preview); previews get the accent for their overlays
   useEffect(() => {

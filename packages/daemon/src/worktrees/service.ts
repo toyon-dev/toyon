@@ -189,6 +189,9 @@ export class WorktreeService {
       if (!wt) return;
       wt.lastTurnAt = Date.now();
       d.state.save();
+      // what the turn wrote is the count the rail should show now, not whenever its cache runs out;
+      // dropped before the status frame this same event pushes (the ws listener runs after this one)
+      this.countsCache.delete(worktreeId);
       // A proc that crashed or never answered gets another go once the agent has had a turn: the
       // boot pane's "ask the agent to fix it" ends here, and a fix nobody restarts after is not a
       // fix. A proc that is fine, or one you stopped yourself, is left alone.
@@ -1060,9 +1063,19 @@ export class WorktreeService {
 
   // ---- queries ----
 
-  /** the default branch moved: badge counts are stale */
-  invalidateCounts() {
+  /** badge counts are stale: every row's when the default branch moved, one worktree's when only
+   * its own files did */
+  invalidateCounts(worktreeId?: string) {
+    if (worktreeId) this.countsCache.delete(worktreeId);
+    else this.countsCache.clear();
+  }
+
+  /** Files may have changed where toyon could not see them (another app, while the window was
+   * behind it): the same refresh as the default branch moving, every row recounted and every open
+   * changes list re-read. */
+  recount(repoId: string) {
     this.countsCache.clear();
+    this.d.hub.emit("repoTick", repoId);
   }
 
   /** something under `.git/worktrees` changed: git's list is no longer what we last read */
@@ -1185,11 +1198,25 @@ export class WorktreeService {
       // the empty-tree fact lives on main's record, so the rows frame carries it without git: a
       // task worktree of an empty repo is not the greenfield surface, so only main keeps it
       if (r.wt && isMain) this.setEmpty(r.wt, files.length === 0 ? await treeEmpty(r.path) : false);
+      this.noteCounts(worktreeId, isMain, files.length, counts);
       return { files, committed, head: head.ok ? head.out : undefined, ...counts };
     } catch (e) {
       log.warn(worktreeId, "git status failed", e);
       return null;
     }
+  }
+
+  /** A status read is a fresher count than the rows' cache, so the row takes it: an agent's edits
+   * reach the rail's badge with the changes list beside it, not at the end of the turn. A frame goes
+   * out only when a number moved. Main's ahead and behind are counted against origin by the rows, so
+   * it lends only its dirty count, and only once the rows have counted it the long way. */
+  private noteCounts(id: string, main: boolean, dirty: number, ab: { ahead?: number; behind?: number }) {
+    const prev = this.countsCache.get(id);
+    if (main && !prev) return;
+    const ahead = main ? prev?.ahead : ab.ahead;
+    const behind = main ? prev?.behind : ab.behind;
+    this.countsCache.set(id, { ahead, behind, dirty, at: Date.now() });
+    if (prev?.dirty !== dirty || prev?.ahead !== ahead || prev?.behind !== behind) this.d.hub.emit("worktreesChanged");
   }
 
   /** the history tab's commit list. Unlike gitStatus this is asked for, not pushed: the panel

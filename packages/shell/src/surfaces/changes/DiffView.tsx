@@ -2,7 +2,8 @@ import { lazy, Suspense, useEffect } from "react";
 import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
 import { fileItems } from "../../state/actions/file.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { addToChat } from "../../state/attach.ts";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
 import { localOf, type State, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
@@ -30,6 +31,7 @@ export function DiffView({
   onDragStart: (e: React.PointerEvent) => void;
 }) {
   const dispatch = useDispatch();
+  const store = useStoreInstance();
   const sock = useSock();
   const theme = useTheme();
   const wtPath = useStore((s) => {
@@ -111,6 +113,21 @@ export function DiffView({
                 ...lines,
                 ...(diff.ref ? { ref: diff.ref } : {}),
               })
+            }
+            onChat={(path, taken) =>
+              addToChat(
+                store,
+                taken && {
+                  worktreeId: diff.worktreeId,
+                  text: taken.text,
+                  source: {
+                    path,
+                    startLine: taken.startLine,
+                    endLine: taken.endLine,
+                    ...(diff.ref ? { ref: diff.ref } : {}),
+                  },
+                },
+              )
             }
             onLineHover={
               history

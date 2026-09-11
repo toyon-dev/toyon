@@ -7,7 +7,7 @@ import { shipOp } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
-import { type Draft, draftKey } from "../../state/store.ts";
+import { composerBoxOf, type Draft } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -103,9 +103,7 @@ export function Composer({
   const drafting = !!draft;
   const id = active?.worktree.id ?? null;
   const repoId = active?.worktree.repoId;
-  // where the words live: a draft's record is the repo's, so it survives the tab closing and
-  // reopening, and is never a row's
-  const boxId = drafting && repoId ? draftKey(repoId) : id;
+  const boxId = composerBoxOf(active, drafting);
   const text = useLocalField(boxId, "draft");
   const images = useLocalField(boxId, "images");
   const pastes = useLocalField(boxId, "pastes");

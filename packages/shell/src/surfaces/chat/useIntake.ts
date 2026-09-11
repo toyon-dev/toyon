@@ -1,14 +1,7 @@
-import {
-  IMAGES_PER_MESSAGE,
-  isLongPaste,
-  PASTE_MAX_CHARS,
-  PASTES_PER_MESSAGE,
-  type PasteSource,
-  pasteSummary,
-  stripAnsi,
-} from "@toyon/shared";
+import { IMAGES_PER_MESSAGE, isLongPaste, PASTES_PER_MESSAGE } from "@toyon/shared";
 import { useEffect } from "react";
 import { readCopiedSource } from "../../app/copiedSource.ts";
+import { attachText } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
 import { useStoreInstance } from "../../state/context.tsx";
 import { imageFiles, otherFiles, prepareImage, readText } from "./images.ts";
@@ -95,36 +88,12 @@ async function attachImages(store: Store, worktreeId: string | null, files: File
     });
 }
 
-/** Text long enough to bury the textarea becomes a chip instead, and so does a piece of a file
- * copied in the editor. Either way the text travels with the message: an `@path` would name the
- * file as it is by the time the agent reads it, not the lines that were copied. */
-function attachPaste(
-  store: Store,
-  worktreeId: string | null,
-  raw: string,
-  from: { name?: string; source?: PasteSource } = {},
-) {
-  if (!worktreeId) return;
-  // a whole-line copy ends in the line break, which is not one of the lines it names
-  const text = stripAnsi(from.source ? raw.replace(/\r?\n$/, "") : raw);
-  const pending = store.getState().local[worktreeId]?.pastes.length ?? 0;
-  if (pending >= PASTES_PER_MESSAGE) return toast(store, `at most ${PASTES_PER_MESSAGE} pastes per message`);
-  if (text.length > PASTE_MAX_CHARS)
-    // neither truncated nor dropped in silence: say what to do with something this big
-    return toast(store, "that paste is too large; save it in the worktree and reference it with @path");
-  store.dispatch({
-    a: "add-paste",
-    id: worktreeId,
-    paste: { key: crypto.randomUUID(), text, ...from, ...pasteSummary(text) },
-  });
-}
-
 /** a file that is not an image: attached as text under its own name, or refused by name */
 async function attachTextFiles(store: Store, worktreeId: string | null, files: File[]) {
   for (const f of files.slice(0, PASTES_PER_MESSAGE)) {
     const text = await readText(f);
     if (text === null) toast(store, `${f.name}: not a text file`);
-    else attachPaste(store, worktreeId, text, { name: f.name });
+    else attachText(store, worktreeId, text, { name: f.name });
   }
 }
 
@@ -220,6 +189,6 @@ export function useComposerPaste(boxId: string | null, worktreeId: string | null
     const source = text.trim() ? readCopiedSource(e.clipboardData, worktreeId) : null;
     if (!(source && text.includes("\n")) && !isLongPaste(text)) return;
     e.preventDefault();
-    attachPaste(store, boxId, text, source ? { source } : {});
+    attachText(store, boxId, text, source ? { source } : {});
   };
 }

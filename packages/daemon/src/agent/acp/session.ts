@@ -36,7 +36,7 @@ import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcri
 import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
 import { parseForm, toContent } from "./elicit.ts";
-import { mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
+import { endOfAsk, mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
 import { currentValues, type LiveOptions, type OptionCategory, readOptions } from "./options.ts";
 import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
@@ -798,7 +798,17 @@ export class AcpSession implements AgentAdapter {
     }
   }
 
-  private onPermission(
+  private onPermission(params: acp.RequestPermissionRequest, bounds: Bounds): Promise<acp.RequestPermissionResponse> {
+    // taken now: a card the process took down with it settles after `live` is already gone
+    const tools = this.live?.tools;
+    return Promise.resolve(this.answerPermission(params, bounds)).then((res) => {
+      const end = tools && endOfAsk(params, res, tools);
+      if (end) this.emit(end);
+      return res;
+    });
+  }
+
+  private answerPermission(
     params: acp.RequestPermissionRequest,
     bounds: Bounds,
   ): acp.RequestPermissionResponse | Promise<acp.RequestPermissionResponse> {

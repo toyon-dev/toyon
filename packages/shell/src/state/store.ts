@@ -1100,6 +1100,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...next, diff: { ...next.diff, line: g.line - msg.lineOffset }, gotoLine: null };
     }
     case "file-diff": {
+      if (msg.discarded) {
+        const d = s.diff;
+        // a commit's copy is history the discard never touched
+        if (!d || d.ref !== undefined || d.worktreeId !== msg.worktreeId || d.path !== msg.path) return s;
+        return { ...s, diff: msg.discarded === "removed" ? null : { ...d, before: msg.before, after: msg.after } };
+      }
       const o = s.openView;
       const view = o && o.worktreeId === msg.worktreeId && o.path === msg.path ? o.view : "diff";
       const opened = { ...msg, view };

@@ -94,8 +94,17 @@ export type ServerMsg =
   | { t: "git-log"; worktreeId: string; commits: CommitEntry[] }
   /** the files one commit touched; the reply to picking a commit in the history list */
   | { t: "git-commit"; worktreeId: string; sha: string; files: GitFileStatus[] }
-  /** `ref` set means the diff is a commit's, and the editor opens it read-only */
-  | { t: "file-diff"; worktreeId: string; path: string; before: string; after: string; ref?: string }
+  /** `ref` set means the diff is a commit's, and the editor opens it read-only. `discarded` marks
+   * the file as a discard left it: it refreshes a pane already showing that file and opens none */
+  | {
+      t: "file-diff";
+      worktreeId: string;
+      path: string;
+      before: string;
+      after: string;
+      ref?: string;
+      discarded?: "restored" | "removed";
+    }
   | {
       t: "shipped";
       worktreeId: string;

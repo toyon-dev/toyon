@@ -33,7 +33,9 @@ export function parsePorcelain(out: string): GitFileStatus[] {
 export async function fileBefore(worktreePath: string, defaultBr: string, file: string): Promise<string> {
   const base = await git(worktreePath, "merge-base", "HEAD", defaultBr);
   const ref = base.ok && base.out ? base.out : "HEAD";
-  const r = await git(worktreePath, "show", `${ref}:${file}`);
+  // untrimmed: the editor compares this against the file on disk, and a trimmed final newline drew
+  // an added empty line at the end of every diff, and one on a file with no changes at all
+  const r = await gitRaw(worktreePath, "show", `${ref}:${file}`);
   return r.ok ? r.out : "";
 }
 

@@ -62,15 +62,15 @@ describe("commitFiles", () => {
 
 describe("fileAtCommit", () => {
   test("both sides of an edit", async () => {
-    expect(await fileAtCommit(repo, second, "a.ts")).toEqual({ before: "one\ntwo", after: "one\ntwo\nthree" });
+    expect(await fileAtCommit(repo, second, "a.ts")).toEqual({ before: "one\ntwo\n", after: "one\ntwo\nthree\n" });
   });
 
   test("a file the commit added has no before side", async () => {
-    expect(await fileAtCommit(repo, first, "a.ts")).toEqual({ before: "", after: "one\ntwo" });
+    expect(await fileAtCommit(repo, first, "a.ts")).toEqual({ before: "", after: "one\ntwo\n" });
   });
 
   test("a file the commit deleted has no after side", async () => {
-    expect(await fileAtCommit(repo, third, "b.ts")).toEqual({ before: "b", after: "" });
+    expect(await fileAtCommit(repo, third, "b.ts")).toEqual({ before: "b\n", after: "" });
   });
 
   test("a path outside the repo reads as empty rather than escaping it", async () => {

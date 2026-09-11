@@ -781,6 +781,45 @@ describe("streams and notices", () => {
     expect(s.diff).toMatchObject({ path: "x.tsx", view: "file", line: 9, after: "b" });
     expect(reducer(initial, { a: "editor-view", v: "file" }).diff).toBeNull();
   });
+  test("a discard refreshes the pane showing that file, closes it when the file is gone, and opens none", () => {
+    const open = run([
+      hello(wt("a")),
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
+      { a: "editor-view", v: "file" },
+    ]);
+    const restored = reducer(
+      open,
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "a", discarded: "restored" }),
+    );
+    expect(restored.diff).toMatchObject({ path: "x.tsx", view: "file", before: "a", after: "a" });
+
+    const removed = server({
+      t: "file-diff",
+      worktreeId: "a",
+      path: "x.tsx",
+      before: "",
+      after: "",
+      discarded: "removed",
+    });
+    expect(reducer(open, removed).diff).toBeNull();
+
+    const other = server({
+      t: "file-diff",
+      worktreeId: "a",
+      path: "y.tsx",
+      before: "",
+      after: "",
+      discarded: "restored",
+    });
+    expect(reducer(open, other)).toBe(open);
+    expect(reducer(run([hello(wt("a"))]), removed).diff).toBeNull();
+
+    const history = run([
+      hello(wt("a")),
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b", ref: "abc1234" }),
+    ]);
+    expect(reducer(history, removed)).toBe(history);
+  });
 });
 
 // The shell is scoped to one project at a time while the daemon runs them all: `visible` is what

@@ -2,7 +2,7 @@
 // one file's content on either side of a commit. Read-only; nothing here writes a ref.
 
 import type { CommitEntry, GitFileStatus } from "@toyon/shared";
-import { git } from "./exec.ts";
+import { git, gitRaw } from "./exec.ts";
 import { parseNumstat } from "./status.ts";
 
 /** How far back the history tab reads. Deep enough to cover a worktree's own work and the main
@@ -73,9 +73,10 @@ export async function fileAtCommit(
   sha: string,
   file: string,
 ): Promise<{ before: string; after: string }> {
+  // untrimmed, as the file is: a trim eats a first line's indent and hides a final newline change
   const [before, after] = await Promise.all([
-    git(worktreePath, "show", `${sha}^:${file}`),
-    git(worktreePath, "show", `${sha}:${file}`),
+    gitRaw(worktreePath, "show", `${sha}^:${file}`),
+    gitRaw(worktreePath, "show", `${sha}:${file}`),
   ]);
   return { before: before.ok ? before.out : "", after: after.ok ? after.out : "" };
 }

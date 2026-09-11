@@ -52,7 +52,7 @@
       direction: rtl;
     }
   }
-  .new-project-change {
+  .new-project-folder {
     flex-shrink: 0;
   }
   /* the project list's standing row: its icon rides inside the label, the way a ref row's does */

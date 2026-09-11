@@ -471,8 +471,10 @@ export interface State {
   paths: { query: string; entries: PathEntry[]; target: PathTarget | null };
   /** the daemon's home directory, for writing `~` paths the way a person would type them */
   home: string;
-  /** hello's `folderDialog`: whether "choose in Finder" would open where the person is */
+  /** hello's `folderDialog`: whether the form's folder button opens Finder where the person is */
   folderDialog: boolean;
+  /** the Finder dialog is up for the new-project form: Escape is its, and closing the form closes it */
+  choosingFolder: boolean;
   /** the last answer to `choose-folder`, numbered so the form that asked can tell a new answer from
    * the one it already applied */
   chosenFolder: { seq: number; folder: ChosenFolder | null } | null;
@@ -570,6 +572,7 @@ export function initialState(opts: InitialOpts): State {
     paths: { query: "", entries: [], target: null },
     home: "",
     folderDialog: false,
+    choosingFolder: false,
     chosenFolder: null,
     pending: [],
     activeImportId: null,
@@ -782,6 +785,7 @@ export type Action =
   | { a: "open"; overlay: Overlay }
   /** close the open overlay; with `back`, reopen the palette a sub-picker came from */
   | { a: "close"; back?: boolean }
+  | { a: "choosing-folder"; v: boolean }
   | { a: "toggle"; overlay: Overlay }
   | { a: "palette-return"; v: State["paletteReturn"] }
   | { a: "toggle-left" }
@@ -1019,10 +1023,13 @@ function reduce(s: State, action: Action): State {
         previewTheme: null,
         paletteReturn: isSubPicker(action.overlay) ? s.paletteReturn : null,
       };
+    case "choosing-folder":
+      return { ...s, choosingFolder: action.v };
     case "close":
       // the folder chooser is a step inside the new-project form, so backing out of it is the form
       if (action.back && s.overlay?.kind === "choose-folder") return { ...s, overlay: s.overlay.form };
-      return { ...s, previewTheme: null, ...paletteBack(s, action.back) };
+      // a Finder dialog the form was waiting on goes with it (the form sends the cancel)
+      return { ...s, previewTheme: null, choosingFolder: false, ...paletteBack(s, action.back) };
     case "toggle":
       return s.overlay?.kind === action.overlay.kind
         ? reducer(s, { a: "close" })
@@ -1201,7 +1208,18 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeRepoId = msg.repos[0]?.id ?? null;
       }
       if (activeRepoId === s.activeRepoId) return { ...s, repos: msg.repos, pendingOpen };
-      return { ...s, repos: msg.repos, pendingOpen, activeRepoId, activeId: landingIn(s, activeRepoId), editor: null };
+      // A draft is for a worktree in the project it was opened in. Carried into this one, it hides
+      // behind a new project's first-run screen and takes over the moment that screen gives way,
+      // with the other project's preview behind it.
+      return {
+        ...s,
+        repos: msg.repos,
+        pendingOpen,
+        activeRepoId,
+        activeId: landingIn(s, activeRepoId),
+        editor: null,
+        draft: null,
+      };
     }
     case "worktrees": {
       let activeId = s.activeId;

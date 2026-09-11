@@ -8,6 +8,7 @@ import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
+import type { FolderDialog } from "../core/dialog.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -46,8 +47,8 @@ export interface Services {
   attachments: AttachmentStore;
   /** request → 1–5 independent tasks (the default agent by default; tests inject a stub) */
   planTasks: (prompt: string, cwd: string) => Promise<string[] | null>;
-  /** the OS folder dialog: the folder picked, or null when cancelled (tests inject a stub) */
-  chooseFolder: (start: string) => Promise<string | null>;
+  /** the OS folder dialog behind the new-project form's folder button (tests inject a stub) */
+  folderDialog: FolderDialog;
 }
 
 export interface HandlerCtx {
@@ -454,13 +455,18 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async "choose-folder"(msg, ctx, s) {
     let path: string | null;
     try {
-      path = await s.chooseFolder(msg.start);
+      path = await s.folderDialog.choose(msg.start);
     } catch (e) {
       // the form is waiting on an answer to stop looking busy; the throw still reaches it as a toast
       ctx.reply({ t: "folder-chosen", folder: null });
       throw e;
     }
     ctx.reply({ t: "folder-chosen", folder: path ? await describeFolder(path) : null });
+  },
+
+  "cancel-folder"(_msg, _ctx, s) {
+    // the choose waiting on the dialog answers null, which is what tells the form it is over
+    s.folderDialog.cancel();
   },
 
   async "forget-repo"(msg, ctx, s) {

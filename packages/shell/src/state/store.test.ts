@@ -549,6 +549,15 @@ describe("overlays", () => {
     const s = run([answer("~/a"), answer(null)]);
     expect(s.chosenFolder).toEqual({ seq: 2, folder: null });
   });
+  test("closing the form forgets a Finder dialog it was waiting on", () => {
+    const form = { kind: "new-project", mode: "create", name: "my-app", parent: "~/Projects" } as const;
+    const s = run([
+      { a: "open", overlay: form },
+      { a: "choosing-folder", v: true },
+    ]);
+    expect(s.choosingFolder).toBe(true);
+    expect(reducer(s, { a: "close" }).choosingFolder).toBe(false);
+  });
   test("a plain close forgets the return; opening a palette does too", () => {
     const s = run([
       { a: "palette-return", v: { mode: "keys", q: "x" } },
@@ -997,6 +1006,15 @@ describe("projects", () => {
     expect(s.activeRepoId).toBe("r3");
     // and the flag is spent: the next repo to arrive does not steal the scope again
     expect(reducer(s, repos(repo("r1"), repo("r2"), repo("r3"), repo("r4"))).activeRepoId).toBe("r3");
+  });
+
+  test("a project arriving from this tab leaves a draft open in the last one behind", () => {
+    let s = run([two(), { a: "open-draft" }, { a: "open-repo" }]);
+    expect(s.draft).not.toBeNull();
+    s = reducer(s, repos(repo("r1"), repo("r2"), repo("r3")));
+    expect(s.activeRepoId).toBe("r3");
+    // kept, it would surface in the new project once its first-run screen gave way
+    expect(s.draft).toBeNull();
   });
 
   test("forgetting the active project moves the scope to a remaining one", () => {

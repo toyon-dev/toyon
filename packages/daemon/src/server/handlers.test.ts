@@ -90,7 +90,7 @@ function make() {
     accounts,
     attachments,
     planTasks: async () => planned.shift() ?? null,
-    chooseFolder: async () => chosen.shift() ?? null,
+    folderDialog: { choose: async () => chosen.shift() ?? null, cancel: () => {} },
   };
   const replies: ServerMsg[] = [];
   const broadcasts: ServerMsg[] = [];
@@ -734,11 +734,22 @@ describe("handlers", () => {
 
   test("a dialog that fails still answers, so the form stops waiting", async () => {
     const { services, ctx, replies } = make();
-    services.chooseFolder = async () => {
-      throw new UserError("no dialog here");
+    services.folderDialog = {
+      choose: async () => {
+        throw new UserError("no dialog here");
+      },
+      cancel: () => {},
     };
     await expect(dispatch({ t: "choose-folder", start: "~" }, ctx, services)).rejects.toBeInstanceOf(UserError);
     expect(lastOf(replies, "folder-chosen")).toEqual({ t: "folder-chosen", folder: null });
+  });
+
+  test("cancel-folder closes the dialog that is up", async () => {
+    const { services, ctx } = make();
+    let cancels = 0;
+    services.folderDialog = { choose: async () => null, cancel: () => cancels++ };
+    await dispatch({ t: "cancel-folder" }, ctx, services);
+    expect(cancels).toBe(1);
   });
 
   test("create-repo init makes an empty folder the project where it stands, name and all", async () => {

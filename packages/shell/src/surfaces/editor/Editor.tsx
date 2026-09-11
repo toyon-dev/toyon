@@ -395,7 +395,9 @@ export default function Editor({
     if (!code || !model || line === undefined || revealedFor.current === openSeq) return;
     revealedFor.current = openSeq;
     const ln = Math.max(1, Math.min(line, model.getLineCount()));
-    code.setPosition({ lineNumber: ln, column: 1 });
+    // on the line's first character rather than its indent: for a picked element that is the tag
+    // itself. A blank line has no first character and reports 0.
+    code.setPosition({ lineNumber: ln, column: model.getLineFirstNonWhitespaceColumn(ln) || 1 });
     code.revealLineInCenter(ln);
   });
 

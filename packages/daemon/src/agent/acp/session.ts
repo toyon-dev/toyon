@@ -246,7 +246,14 @@ export class AcpSession implements AgentAdapter {
   }
 
   get queueItems(): string[] {
-    return this.queue.map((q) => q.text);
+    return this.waiting().map((q) => q.text);
+  }
+
+  /** what waits with no bubble of its own yet. A message already in the transcript (steered, then
+   * handed back by a stop or by the agent) just goes next: drawn as queued it would show twice, and
+   * taking it back to edit would send a second copy. */
+  private waiting(): QueueItem[] {
+    return this.queue.filter((q) => !q.recorded);
   }
 
   onQueueChange: (() => void) | null = null;
@@ -256,10 +263,10 @@ export class AcpSession implements AgentAdapter {
   }
 
   unqueue(index: number) {
-    if (index >= 0 && index < this.queue.length) {
-      this.queue.splice(index, 1);
-      this.queueChanged();
-    }
+    const item = this.waiting()[index];
+    if (!item) return;
+    this.queue.splice(this.queue.indexOf(item), 1);
+    this.queueChanged();
   }
 
   transcript(): TranscriptEntry[] {
@@ -562,6 +569,13 @@ export class AcpSession implements AgentAdapter {
     await this.applyMode(live);
     await this.applyOption(live, "model");
     await this.applyOption(live, "thought_level");
+    // a stop that landed while the agent was starting or being set up had no turn to cancel, so the
+    // prompt must not go out at all: esc straight after a send would otherwise do nothing. Nothing
+    // runs between this check and the request being written, so a later stop's cancel follows it.
+    if (this.interrupted) {
+      this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
+      return;
+    }
     const carried = this.carriedImages(live, item.recorded.images);
     const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
     live.prefixPending = false;

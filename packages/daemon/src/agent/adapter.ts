@@ -25,6 +25,7 @@ export interface SendOpts {
 export interface AgentAdapter {
   readonly status: AgentStatus;
   readonly queueLength: number;
+  /** the waiting messages the shell draws as queued: those not yet shown in the transcript */
   readonly queueItems: string[];
   /** notified whenever the pending queue changes (send/consume/unqueue/stop) */
   onQueueChange: (() => void) | null;
@@ -38,6 +39,7 @@ export interface AgentAdapter {
   send(text: string, opts?: SendOpts): void;
   /** interrupt the running turn; anything queued goes next */
   stop(): void;
+  /** `index` is a position in `queueItems` */
   unqueue(index: number): void;
   transcript(): Array<{ seq: number; event: AgentEvent }>;
   /** put an event the daemon produced itself (a command the person ran from the composer) on the

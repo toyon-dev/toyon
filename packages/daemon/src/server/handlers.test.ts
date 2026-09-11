@@ -19,6 +19,7 @@ import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
 import { RefSearch } from "../worktrees/refs.ts";
 import { WorktreeService } from "../worktrees/service.ts";
+import { TurnService } from "../worktrees/turns.ts";
 import { dispatch, type HandlerCtx, handlers, type Services } from "./handlers.ts";
 
 let cleanup = () => {};
@@ -78,6 +79,7 @@ function make() {
     ...f.factories,
   });
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
+  const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
   const files = new FileService(state, runtime, (id) => worktrees.readable(id));
   const design = new DesignService((id) => worktrees.readable(id));
@@ -94,11 +96,13 @@ function make() {
   const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
   const planned: string[][] = [];
   const chosen: Array<string | null> = [];
+  const planArgs: Array<[prompt: string, cwd: string, agent: string]> = [];
   const services: Services = {
     state,
     hub,
     repos,
     worktrees,
+    turns,
     files,
     design,
     routes,
@@ -109,7 +113,10 @@ function make() {
     agents,
     accounts,
     attachments,
-    planTasks: async () => planned.shift() ?? null,
+    planTasks: async (prompt, cwd, agent) => {
+      planArgs.push([prompt, cwd, agent]);
+      return planned.shift() ?? null;
+    },
     folderDialog: { choose: async () => chosen.shift() ?? null, cancel: () => {} },
   };
   const replies: ServerMsg[] = [];
@@ -128,7 +135,7 @@ function make() {
     watchTerminal: (id, stream) => terms.add(streamKey(id, stream)),
     unwatchTerminal: (id, stream) => terms.delete(streamKey(id, stream)),
   };
-  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, chosen, ...f };
+  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, chosen, planArgs, ...f };
 }
 
 /** the repo registered, and its main row, which the file tests read and write through */
@@ -509,6 +516,18 @@ describe("handlers", () => {
     expect(broadcasts.length).toBe(0);
   });
 
+  test("set-prefs changes only what it names, persists and emits", async () => {
+    const { services, ctx } = make();
+    let emitted = 0;
+    services.hub.on("prefsChanged", () => emitted++);
+    expect(services.state.prefs).toEqual({ recaps: "summarize" });
+    await dispatch({ t: "set-prefs", prefs: { recaps: "facts" } }, ctx, services);
+    // naming nothing changes nothing, and still says so
+    await dispatch({ t: "set-prefs", prefs: {} }, ctx, services);
+    expect(services.state.prefs).toEqual({ recaps: "facts" });
+    expect(emitted).toBe(2);
+  });
+
   test("agent-auth: an agent method just runs; a terminal method types its line once a pane opens", async () => {
     const { services, ctx, replies, terminals, agents, repo } = make();
     const r = await services.repos.register(repo);
@@ -561,7 +580,7 @@ describe("handlers", () => {
   });
 
   test("batch-worktrees plans with the injected planner and creates one worktree per task", async () => {
-    const { services, ctx, replies, planned, repo } = make();
+    const { services, ctx, replies, planned, planArgs, repo } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
     planned.push(["first task", "second task"]);
@@ -576,6 +595,8 @@ describe("handlers", () => {
     // the model the picker chose rides with every planned worktree, as it does on create-worktree
     expect(made.map((x) => x.model)).toEqual(["gpt-b", "gpt-b"]);
     expect(replies.at(-1)).toMatchObject({ t: "shipped", ok: true, message: "batch: 2 worktree(s) started" });
+    // the request is split by the agent that will run the tasks, not by the default one
+    expect(planArgs.map((a) => a[2])).toEqual(["codex"]);
   });
 
   test("read-file and write-file refuse paths outside the worktree, and still answer", async () => {

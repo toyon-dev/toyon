@@ -18,6 +18,7 @@ import type {
   PathEntry,
   PathTarget,
   PendingRepo,
+  Prefs,
   RefHit,
   RepoInfo,
   SpareInfo,
@@ -51,6 +52,7 @@ export type ServerMsg =
       /** the daemon's agent registry and which entry new worktrees get by default */
       agents: AgentInfo[];
       defaultAgent: string;
+      prefs: Prefs;
       /** clones already in flight, so a tab that connects mid-import sees it straight away */
       pending: PendingRepo[];
       /** the daemon's home directory. RepoInfo.path is absolute while PathEntry.path is
@@ -68,6 +70,8 @@ export type ServerMsg =
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
+  /** a preference changed, from any tab */
+  | { t: "prefs"; prefs: Prefs }
   /** the files an agent reads and the MCP servers it will load, on request from settings */
   | ({ t: "agent-config" } & AgentConfigInfo)
   | { t: "repos"; repos: RepoInfo[] }
@@ -306,6 +310,10 @@ export const themePrefsSchema = z.object({
   dark: z.string(),
 });
 
+export const prefsSchema = z.object({
+  recaps: z.enum(["summarize", "facts"]),
+});
+
 const variantSchema = z.object({ group: z.string(), index: z.number().int().min(1), of: z.number().int().min(1) });
 
 export const clientMsgSchema = z.discriminatedUnion("t", [
@@ -484,6 +492,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("forget-repo"), repoId: id }),
   z.object({ t: z.literal("set-theme"), prefs: themePrefsSchema }),
   z.object({ t: z.literal("set-default-agent"), agent: id }),
+  /** change the preferences it names; the rest keep their values */
+  z.object({ t: z.literal("set-prefs"), prefs: prefsSchema.partial() }),
   /** (re)download an agent's adapter; progress arrives as `agents` broadcasts */
   z.object({ t: z.literal("install-agent"), agent: id }),
   /** log the worktree's agent in with one of the methods it offered; a key rides along when asked for */
@@ -573,6 +583,7 @@ type Same<A, B> = A extends B ? (B extends A ? true : never) : never;
 const _pickMeta: Same<z.infer<typeof pickMetaSchema>, PickMeta> = true;
 const _config: Same<z.infer<typeof toyonConfigSchema>, ToyonConfig> = true;
 const _prefs: Same<z.infer<typeof themePrefsSchema>, ThemePrefs> = true;
+const _globalPrefs: Same<z.infer<typeof prefsSchema>, Prefs> = true;
 const _variant: Same<z.infer<typeof variantSchema>, NonNullable<WorktreeInfo["variant"]>> = true;
 const _askAnswer: Same<z.infer<typeof askAnswerSchema>, AskAnswer> = true;
 const _pasteSource: Same<z.infer<typeof pasteSourceSchema>, PasteSource> = true;
@@ -582,4 +593,5 @@ void _pasteSource;
 void _pickRef;
 void _config;
 void _prefs;
+void _globalPrefs;
 void _variant;

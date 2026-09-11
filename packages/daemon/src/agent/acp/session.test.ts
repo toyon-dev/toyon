@@ -64,6 +64,9 @@ interface FakeAgent {
   script: PromptScript;
   loadSession: boolean;
   failLoad: boolean;
+  /** what a side question asks for besides new and prompt, in the order it arrived:
+   * `config <id>=<value>`, `mode <id>`, `close <sessionId>`, `delete <sessionId>` */
+  calls: string[];
 }
 
 function fakeAgent(
@@ -82,6 +85,8 @@ function fakeAgent(
     /** advertise an effort option (under `id`, `effort` by default) while the current model is
      * one of `for`: Claude's shape, where effort comes and goes with the model */
     effort?: { id?: string; for: string[] };
+    /** advertise session/close and session/delete */
+    caps?: { close?: boolean; delete?: boolean };
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
@@ -101,6 +106,7 @@ function fakeAgent(
     script,
     loadSession: opts.loadSession ?? true,
     failLoad: false,
+    calls: [],
     app: null!,
   };
   let n = 0;
@@ -153,6 +159,10 @@ function fakeAgent(
           loadSession: f.loadSession,
           promptCapabilities: { image: opts.images ?? false },
           ...(opts.logout ? { auth: { logout: {} } } : {}),
+          sessionCapabilities: {
+            ...(opts.caps?.close ? { close: {} } : {}),
+            ...(opts.caps?.delete ? { delete: {} } : {}),
+          },
         },
         authMethods: [
           { id: "api-key", name: "API Key" },
@@ -195,10 +205,12 @@ function fakeAgent(
     })
     .onRequest(acp.methods.agent.session.setMode, (c) => {
       f.modes.push(c.params.modeId);
+      f.calls.push(`mode ${c.params.modeId}`);
       return {};
     })
     .onRequest(acp.methods.agent.session.setConfigOption, (c) => {
       f.configs.push(`${c.params.configId}=${String(c.params.value)}`);
+      f.calls.push(`config ${c.params.configId}=${String(c.params.value)}`);
       if (c.params.configId === "model") f.model = String(c.params.value);
       else f.effort = String(c.params.value);
       // the reply is the whole list, rebuilt: a model without effort takes that option away
@@ -207,6 +219,14 @@ function fakeAgent(
     .onRequest(acp.methods.agent.session.prompt, (c) => {
       f.prompts.push(c.params);
       return f.script(c.params, c.client);
+    })
+    .onRequest(acp.methods.agent.session.close, (c) => {
+      f.calls.push(`close ${c.params.sessionId}`);
+      return {};
+    })
+    .onRequest(acp.methods.agent.session.delete, (c) => {
+      f.calls.push(`delete ${c.params.sessionId}`);
+      return {};
     })
     .onNotification(acp.methods.agent.session.cancel, () => {
       f.cancels++;
@@ -1064,6 +1084,56 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a side session's permission request is refused quietly: no card, no blocked row, no status change", async () => {
+    const answers: string[] = [];
+    const fake = fakeAgent(async (p, client) => {
+      if (p.sessionId === "s1") return say("hi")(p, client);
+      const r = await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: { toolCallId: "t", title: "Edit", kind: "edit", locations: [{ path: join(wt, "ok.ts") }] },
+        options: [
+          { optionId: "allow-once", name: "a", kind: "allow_once" },
+          { optionId: "reject", name: "r", kind: "reject_once" },
+        ],
+      });
+      answers.push(r.outcome.outcome === "selected" ? r.outcome.optionId : "cancelled");
+      return say("done")(p, client);
+    });
+    const w = world(fake);
+    w.session.send("go");
+    await w.idle();
+    const events = w.events.length;
+    const statuses = [...w.statuses];
+    expect(await w.session.ask("sys", "name this")).toBe("done");
+    // the chat runs in auto, where this edit would pass; a question nobody watches may only read
+    expect(answers).toEqual(["reject"]);
+    expect(w.events).toHaveLength(events);
+    expect(w.statuses).toEqual(statuses);
+    await w.session.close();
+  });
+
+  test("a side session carries the agent's side _meta and is closed, then deleted, when the agent offers both", async () => {
+    const fake = fakeAgent(say("sticky-header"), { caps: { close: true, delete: true } });
+    const sideMeta = { claudeCode: { options: { tools: [], persistSession: false } } };
+    const w = world(fake, { ...claudeSpec, sideMeta });
+    expect(await w.session.ask("You name things.", "Name this")).toBe("sticky-header");
+    expect(fake.newSessions[0]!._meta).toEqual({ ...sideMeta, systemPrompt: "You name things." });
+    for (let i = 0; i < 100 && fake.calls.length < 2; i++) await Bun.sleep(5);
+    expect(fake.calls).toEqual(["close s1", "delete s1"]);
+    await w.session.close();
+  });
+
+  test("a side session on an agent without close or delete is left for the process to end", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake, codexSpec);
+    expect(await w.session.ask("sys", "q")).toBe("ok");
+    await Bun.sleep(20);
+    expect(fake.calls).toEqual([]);
+    // a prompt-prefix agent with no side _meta sends none at all
+    expect(fake.newSessions[0]!._meta).toBeUndefined();
+    await w.session.close();
+  });
+
   test("close() never stores a session id afterwards and drops later sends", async () => {
     const fake = fakeAgent(say("x"));
     const w = world(fake);
@@ -1537,6 +1607,26 @@ describe("AcpSession options", () => {
     w.session.send("four");
     await w.idle();
     expect(fake.configs).toEqual(["model=big-model"]);
+    await w.session.close();
+  });
+
+  test("a side question on the agent's quick model sets it before the read-only mode", async () => {
+    const fake = fakeAgent(say("sticky-header"), { withModes: true, currentMode: "agent" });
+    const w = world(fake, { ...claudeSpec, quickModel: "big-model" });
+    expect(await w.session.ask("sys", "name this", { quick: "prefer" })).toBe("sticky-header");
+    expect(fake.calls).toEqual(["config model=big-model", "mode read-only"]);
+    await w.session.close();
+  });
+
+  test("with the quick model gone, prefer asks on the default and require asks nothing", async () => {
+    const fake = fakeAgent(say("ok"), { caps: { close: true } });
+    const w = world(fake, { ...claudeSpec, quickModel: "retired-model" });
+    expect(await w.session.ask("sys", "name this", { quick: "prefer" })).toBe("ok");
+    expect(await w.session.ask("sys", "recap this", { quick: "require" })).toBeNull();
+    // the second session opened and was cleaned up, but never saw a prompt or a model switch
+    expect(fake.prompts).toHaveLength(1);
+    for (let i = 0; i < 100 && fake.calls.length < 2; i++) await Bun.sleep(5);
+    expect(fake.calls).toEqual(["close s1", "close s2"]);
     await w.session.close();
   });
 

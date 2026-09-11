@@ -3,6 +3,7 @@ import { canSync, DEFAULT_PERMISSION_MODE, isMain, nextNumbers, numbered } from 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
+import { recapsItem } from "../../state/actions/settings.ts";
 import { shipOp } from "../../state/actions/worktree.ts";
 import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
@@ -29,6 +30,7 @@ import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
 import { greenfieldContext } from "../preview/greenfield.ts";
+import { recapLine, recapShown } from "../recap.ts";
 import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl } from "./images.ts";
@@ -200,6 +202,12 @@ export function Composer({
   // when it has one and is not mid-turn
   const canCompact = commands.some((c) => c.name === "compact");
   const midTurn = active?.agent === "working" || active?.agent === "waiting";
+  // what happened while you were away: the stop this tab arrived to, until you write or it runs again
+  const lastTurn = active?.worktree.lastTurn;
+  const recapFor = useLocalField(id, "recapFor");
+  const prefs = useStore((s) => s.prefs);
+  const blank = !text.trim() && attachments.length === 0;
+  const recap = !drafting && !greenfield && recapShown(lastTurn, recapFor, blank, midTurn) ? lastTurn : undefined;
   const compactable = canCompact && !midTurn;
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
   const compactItems = () => [
@@ -474,6 +482,19 @@ export function Composer({
 
   return (
     <div className="composer chat-input">
+      {/* first, above main's target line too: it is about what already happened, and the target is
+          about the message not yet written */}
+      {recap && id && (
+        <div
+          className="hint composer-recap"
+          {...cm.contextMenu(() => [
+            recapsItem({ prefs }, { sock }),
+            { id: "recap-hide", label: "hide", onClick: () => dispatch({ a: "recap-dismiss", id }) },
+          ])}
+        >
+          {recapLine(recap)}
+        </div>
+      )}
       {/* where a message from main goes, as a line above the box the way the draft's birth-time
           choices sit above it: a worktree's messages only ever go to that worktree (a fork is the
           row menu's "new worktree from here"), so only main has the choice */}

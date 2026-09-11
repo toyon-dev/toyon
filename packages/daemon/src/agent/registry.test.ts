@@ -100,7 +100,13 @@ describe("agent registry", () => {
   test("custom agents: valid entries are kept, invalid ones skipped, builtins can be shadowed", () => {
     const specs = parseCustomAgents(
       JSON.stringify({
-        gemini: { name: "Gemini CLI", command: "gemini", args: ["--experimental-acp"], env: { A: "1" } },
+        gemini: {
+          name: "Gemini CLI",
+          command: "gemini",
+          args: ["--experimental-acp"],
+          env: { A: "1" },
+          quickModel: "gemini-flash",
+        },
         "Bad Id": { command: "x" },
         nocmd: { name: "no command" },
         badargs: { command: "x", args: "nope" },
@@ -115,6 +121,7 @@ describe("agent registry", () => {
       env: { A: "1" },
       confinement: "none",
       systemPrompt: "prompt-prefix",
+      quickModel: "gemini-flash",
     });
     expect(specs[1]).toMatchObject({ confinement: "adapter-sandbox", mode: "agent" });
     const reg = new AgentRegistry([...BUILTIN_AGENTS, ...specs], tmp());

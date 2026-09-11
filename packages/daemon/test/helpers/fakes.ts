@@ -1,6 +1,6 @@
 import type { AgentCommand, AgentEvent, AgentStatus, LogLine, ProcState, WorktreeInfo } from "@toyon/shared";
 import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
-import type { AgentAdapter, AskReply, SendOpts } from "../../src/agent/adapter.ts";
+import type { AgentAdapter, AskOpts, AskReply, SendOpts } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
 import type { PtyHandle, PtyOpts } from "../../src/runtime/pty.ts";
@@ -35,10 +35,10 @@ export class FakeAgent implements AgentAdapter {
   async close() {
     this.closes++;
   }
-  asked: Array<[string, string]> = [];
+  asked: Array<[string, string, AskOpts | undefined]> = [];
   askReply: string | null = null;
-  async ask(system: string, prompt: string) {
-    this.asked.push([system, prompt]);
+  async ask(system: string, prompt: string, opts?: AskOpts) {
+    this.asked.push([system, prompt, opts]);
     return this.askReply;
   }
   answered: Array<[string, AskReply]> = [];

@@ -34,6 +34,7 @@ import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { dollars, tokens } from "../chat/usage.ts";
+import { recapLine } from "../recap.ts";
 import { ago, chord, dotClass, procTrouble, rowLabel, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
@@ -263,7 +264,11 @@ export function WtRail() {
         {...(owned
           ? tip(stateLabel(w, repoOf(owned)?.needsSetup), undefined, {
               placement: "left",
-              detail: wtDirLabel(w),
+              // an unseen stop says what happened above the path, so a hover is enough to triage it
+              detail:
+                w.unseen && owned.worktree.lastTurn
+                  ? `${recapLine(owned.worktree.lastTurn)}\n${wtDirLabel(w)}`
+                  : wtDirLabel(w),
               dot: dotClass(w),
               lead: leadOf(w, isMain(owned.worktree) ? (repoOf(owned)?.name ?? null) : null),
             })

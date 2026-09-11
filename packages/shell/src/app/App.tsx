@@ -111,6 +111,8 @@ export function App() {
     const arm = () => {
       clearTimeout(timer);
       if (!looking()) return;
+      // arriving is what a recap waits for: this tab keeps the line from here, before the ring clears
+      dispatch({ a: "arrive", id: activeId });
       timer = setTimeout(() => {
         if (looking()) sock.send({ t: "seen", worktreeId: activeId });
       }, SEEN_AFTER_MS);
@@ -124,7 +126,7 @@ export function App() {
       window.removeEventListener("focus", arm);
       window.removeEventListener("blur", disarm);
     };
-  }, [sock, activeId, unseen, held]);
+  }, [sock, activeId, unseen, held, dispatch]);
 
   // Files edited in another app while this window was behind it are news the rail cannot hear on
   // its own: its counts move on toyon's events. Coming back recounts the project's rows and re-reads

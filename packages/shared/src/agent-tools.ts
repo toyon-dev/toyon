@@ -14,3 +14,12 @@ export const EDIT_TOOLS: ReadonlySet<string> = new Set(["Edit", "Write", "MultiE
 export function isEditTool(ev: { name: string; kind?: ToolKind }): boolean {
   return ev.kind ? EDIT_KINDS.has(ev.kind) : EDIT_TOOLS.has(ev.name);
 }
+
+// The narrower question a recap asks: did it write a file? A shell command can change the app
+// without being an edit anyone would count, so `execute` and Bash are left out here.
+export const WRITE_KINDS: ReadonlySet<ToolKind> = new Set<ToolKind>(["edit", "delete", "move"]);
+export const WRITE_TOOLS: ReadonlySet<string> = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+
+export function isWriteTool(ev: { name: string; kind?: ToolKind }): boolean {
+  return ev.kind ? WRITE_KINDS.has(ev.kind) : WRITE_TOOLS.has(ev.name);
+}

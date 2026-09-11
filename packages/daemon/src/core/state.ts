@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import type { AgentCommand, ModelChoice, RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
+import type { AgentCommand, ModelChoice, Prefs, RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
+import { DEFAULT_PREFS } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -25,6 +26,8 @@ export interface PersistedState {
   theme?: ThemePrefs;
   /** registry id new worktrees get when the prompt does not pick one */
   defaultAgent?: string;
+  /** only what someone changed: a preference added later reads its default */
+  prefs?: Partial<Prefs>;
   /** each repo's preview pages and how much they are used (routes/frecency.ts), by repo id then
    * page. Beside the repo rather than on RepoInfo, which is broadcast whole on every config change
    * and would carry this to every tab each time. */
@@ -268,6 +271,15 @@ export class StateStore {
   }
   setDefaultAgent(id: string) {
     this.state.defaultAgent = id;
+    this.save();
+  }
+
+  get prefs(): Prefs {
+    return { ...DEFAULT_PREFS, ...this.state.prefs };
+  }
+  setPrefs(change: Partial<Prefs>) {
+    const named = Object.fromEntries(Object.entries(change).filter(([, v]) => v !== undefined));
+    this.state.prefs = { ...this.state.prefs, ...named };
     this.save();
   }
 

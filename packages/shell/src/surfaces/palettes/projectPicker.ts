@@ -20,7 +20,9 @@ export type Row =
   | { kind: "open"; path: string }
   /** somewhere a project could be made: one new folder under a parent that is already there */
   | { kind: "create"; name: string; parent: string | null }
-  | { kind: "clone"; url: string; name: string };
+  | { kind: "clone"; url: string; name: string }
+  /** the way in for someone who does not know a name can be typed here: the form, with nothing filled */
+  | { kind: "new" };
 
 /** a typed path is a filesystem query rather than a name filter */
 export const looksLikePath = (q: string) => /^(~|\/|\.\.?\/)/.test(q.trim());
@@ -91,13 +93,21 @@ export function rowsFor(input: {
     const pending = input.pending
       .filter((p) => byName(q, p.name, p.url))
       .map((p): Row => ({ kind: "pending", pending: p }));
-    if (repos.length > 0 || pending.length > 0 || !q) return [...repos, ...pending];
+    const listed = [...repos, ...pending];
+    // last, so it never pushes a project off the top of the list, and ↑ from the first row reaches it
+    if (!q) return [...listed, { kind: "new" }];
     // a URL is not a name and not a path: it is the third thing someone pastes in here
     const url = gitUrl(q);
-    if (url) return [{ kind: "clone", url: url.url, name: url.name }];
-    // nothing by that name, so offer to make it. `parent: null` means "wherever this person keeps
-    // projects", which the form fills in, because a bare name says nothing about location.
-    return projectNameError(q) ? [] : [{ kind: "create", name: q, parent: null }];
+    if (url) return listed.length > 0 ? listed : [{ kind: "clone", url: url.url, name: url.name }];
+    // Matching is by substring of the name or the path, so a new name routinely matches without
+    // being taken: `site` finds toyon-site, and `projects` finds everything in ~/Projects. Only a
+    // project already called exactly that is the project rather than an offer to make another.
+    const same = (n: string) => n.toLowerCase() === q.toLowerCase();
+    if (input.repos.some((r) => same(r.name)) || input.pending.some((p) => same(p.name))) return listed;
+    if (projectNameError(q)) return listed;
+    // `parent: null` means "wherever this person keeps projects", which the form fills in, because a
+    // bare name says nothing about location
+    return [...listed, { kind: "create", name: q, parent: null }];
   }
 
   // The daemon is 150ms behind the keystrokes, so its answer routinely describes the previous
@@ -115,4 +125,69 @@ export function rowsFor(input: {
   if (!target.parentExists) return []; // a typo: the empty state says to keep typing
   const { parent, name } = splitTypedPath(q);
   return projectNameError(name) ? dirRows() : [...dirRows(), { kind: "create", name, parent }];
+}
+
+/** a row of the folder chooser, where the new-project form's location is walked to. `here` is the
+ * folder being listed, and choosing it is the pick; `up` and `dir` only move the listing. */
+export type FolderRow =
+  | { kind: "here"; path: string }
+  | { kind: "up"; path: string }
+  | { kind: "dir"; entry: PathEntry };
+
+/** `~/Projects` as `/Users/k/Projects`, for comparing paths the daemon and the person wrote differently */
+export function expandHome(path: string, home: string): string {
+  if (!home) return path;
+  return path === "~" || path.startsWith("~/") ? `${home}${path.slice(1)}` : path;
+}
+
+/** the folder a path sits in, written back the way it would be typed; null at the top of the disk */
+export function parentFolder(path: string, home: string): string | null {
+  const abs = expandHome(path, home).replace(/\/+$/, "");
+  // "" was "/", and anything still not absolute is `~` with no home known, or relative
+  if (!abs.startsWith("/")) return null;
+  return collapseHome(abs.slice(0, abs.lastIndexOf("/")) || "/", home);
+}
+
+/** what a folder is called, which for `~` is the home folder's own name */
+export function folderName(path: string, home: string): string {
+  const abs = expandHome(path, home).replace(/\/+$/, "");
+  return abs.slice(abs.lastIndexOf("/") + 1) || "/";
+}
+
+export function folderRows(input: {
+  query: string;
+  entries: PathEntry[];
+  target: PathTarget | null;
+  /** the query the daemon's entries and target actually describe (`paths.query`) */
+  answered: string;
+  home: string;
+}): FolderRow[] {
+  const q = input.query.trim();
+  const cut = q.lastIndexOf("/");
+  // the listed folder is everything up to the last slash; after it is a prefix being typed
+  const here = cut < 0 ? "" : q.slice(0, cut) || "/";
+  const inHere = expandHome(here, input.home);
+  if (!looksLikePath(q) || !inHere.startsWith("/")) return [];
+  const prefix = q.slice(cut + 1).toLowerCase();
+
+  // Until the daemon has looked, assume the folder is there: nearly every query here is a click into
+  // a folder it just listed, and hiding the row for the debounce would move every row under the
+  // pointer. Once it has looked, a folder that is not there (or is a project) is not offered.
+  const seen = input.answered.trim() === q ? input.target : null;
+  const usable = !seen || (prefix ? seen.parentExists : seen.exists && seen.isDir && !seen.isRepo);
+
+  const dirs = input.entries.filter((e) => {
+    // a project is not a place to put one: a repo made inside another's checkout shows up in its changes
+    if (e.isRepo) return false;
+    // the answer can still be for the folder just left, and a stale row is one a click lands on
+    const abs = expandHome(e.path, input.home);
+    return (abs.slice(0, abs.lastIndexOf("/")) || "/") === inHere && e.name.toLowerCase().startsWith(prefix);
+  });
+
+  const up = parentFolder(here, input.home);
+  return [
+    ...(usable ? [{ kind: "here" as const, path: here }] : []),
+    ...(up ? [{ kind: "up" as const, path: up }] : []),
+    ...dirs.map((entry) => ({ kind: "dir" as const, entry })),
+  ];
 }

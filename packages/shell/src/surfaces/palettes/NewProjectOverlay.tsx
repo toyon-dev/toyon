@@ -1,27 +1,32 @@
 import { projectNameError } from "@toyon/shared";
 import { useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import type { Overlay as OverlayState } from "../../state/store.ts";
+import type { NewProjectForm } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Field } from "../../ui/Field.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { Overlay } from "../../ui/Overlay.tsx";
-import { destination } from "./projectPicker.ts";
+import { defaultParent, destination } from "./projectPicker.ts";
 
-type NewProject = Extract<OverlayState, { kind: "new-project" }>;
-
-/** The form behind a create or clone row. It appears exactly where something would otherwise be
- * guessed: a bare name has no location, and a clone has both name and location derived from a URL.
- * A typed path named its own destination, so that row creates without stopping here.
+/** The form behind a create or clone row, and behind the project list's standing "new project" row.
+ * It appears exactly where something would otherwise be guessed: a bare name has no location, and a
+ * clone has both name and location derived from a URL. A typed path named its own destination, so
+ * that row creates without stopping here.
+ *
+ * The location is read, not typed: it starts where the other projects already live, which is
+ * usually right, and `change` walks to another folder in the chooser. Nobody has to know how to
+ * write a path to put a project somewhere.
  *
  * Built from the same FormRow as the setup pane, because a project made here opens straight into
  * that pane asking how it runs, and the two are read one after the other. */
-export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
+export function NewProjectOverlay({ overlay }: { overlay: NewProjectForm }) {
   const dispatch = useDispatch();
   const sock = useSock();
+  const repos = useStore((s) => s.repos);
+  const current = useStore((s) => s.activeRepoId);
   const home = useStore((s) => s.home);
   const [name, setName] = useState(overlay.name);
-  const [parent, setParent] = useState(overlay.parent);
+  const { parent } = overlay;
   const clone = overlay.mode === "clone";
   const nameError = projectNameError(name);
   const ready = !nameError && parent.trim().length > 0;
@@ -58,10 +63,11 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
         </FormRow>
       )}
 
-      <FormRow label="name" hint={nameError ?? undefined}>
+      {/* an empty name is where the form starts from the "new project" row, not a mistake to flag */}
+      <FormRow label="name" hint={name.trim() ? (nameError ?? undefined) : undefined}>
         <Field
           size="md"
-          autoFocus={!overlay.name}
+          autoFocus
           value={name}
           placeholder="my-app"
           onChange={(e) => setName(e.target.value)}
@@ -69,15 +75,26 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProject }) {
         />
       </FormRow>
 
-      <FormRow label="in" hint={home && parent.startsWith("~") ? "where your other projects live" : undefined}>
-        <Field
-          size="md"
-          autoFocus={!!overlay.name}
-          value={parent}
-          placeholder="~/Projects"
-          onChange={(e) => setParent(e.target.value)}
-          onKeyDown={onKeyDown}
-        />
+      <FormRow
+        label="in"
+        hint={
+          repos.length > 0 && parent === defaultParent(repos, current, home)
+            ? "where your other projects live"
+            : undefined
+        }
+      >
+        <div className="new-project-where">
+          <span className="new-project-parent">
+            <bdi>{parent}</bdi>
+          </span>
+          {/* the chooser replaces this form while it is open, so the name typed so far rides along */}
+          <Button
+            className="new-project-change"
+            onClick={() => dispatch({ a: "open", overlay: { kind: "choose-folder", form: { ...overlay, name } } })}
+          >
+            change
+          </Button>
+        </div>
       </FormRow>
 
       <div className="form-actions">

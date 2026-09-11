@@ -253,11 +253,22 @@ export type Overlay =
   /** the project switcher: pick a registered repo, or type a path to open another. It hangs off
    * the pill in the bar; `dialog` is the roomier centered form its browse button opens. */
   | { kind: "projects"; dialog?: boolean }
-  /** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
-   * a location; `clone` has both derived from the URL and shows them so they can be changed. */
-  | { kind: "new-project"; mode: "create" | "clone"; name: string; parent: string; url?: string }
+  | NewProjectForm
+  /** the new-project form's location, walked to rather than typed. It carries the form and reopens
+   * it: with the folder filled in on a pick, or as it was when backed out of. */
+  | { kind: "choose-folder"; form: NewProjectForm }
   /** the route bar's list of pages, opened over the address field */
   | { kind: "routes" };
+
+/** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
+ * a location; `clone` has both derived from the URL and shows them so they can be changed. */
+export type NewProjectForm = {
+  kind: "new-project";
+  mode: "create" | "clone";
+  name: string;
+  parent: string;
+  url?: string;
+};
 
 /** which docks and panes a project is left with. The layout is remembered per project, so a reload
  * comes back to it and switching projects carries each one's own back (zen is deliberately not in
@@ -695,7 +706,11 @@ function draftAfter(s: State, rows: WorktreeStatus[], created: boolean): Draft |
 }
 
 export const isSubPicker = (o: Overlay) =>
-  o.kind === "theme" || o.kind === "appearance" || o.kind === "agent" || o.kind === "agent-page";
+  o.kind === "theme" ||
+  o.kind === "appearance" ||
+  o.kind === "agent" ||
+  o.kind === "agent-page" ||
+  o.kind === "choose-folder";
 
 /** what reaches the reducer: terminal frames are routed to the pane, and file answers to fileSync,
  * before dispatch (main.tsx) */
@@ -994,6 +1009,8 @@ function reduce(s: State, action: Action): State {
         paletteReturn: isSubPicker(action.overlay) ? s.paletteReturn : null,
       };
     case "close":
+      // the folder chooser is a step inside the new-project form, so backing out of it is the form
+      if (action.back && s.overlay?.kind === "choose-folder") return { ...s, overlay: s.overlay.form };
       return { ...s, previewTheme: null, ...paletteBack(s, action.back) };
     case "toggle":
       return s.overlay?.kind === action.overlay.kind

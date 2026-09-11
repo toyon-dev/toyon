@@ -21,6 +21,22 @@
       font: var(--type-ui-sm);
     }
   }
+  /* a row between the head and the text when the text alone would mislead: changed on disk under
+   unsaved edits, or not saveable from here. Its own row, so it never covers the lines it is about */
+  .editor-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--row-height-sm);
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border0);
+    background: var(--surface1);
+    font: var(--type-ui-sm);
+  }
+  .editor-note-text {
+    flex: 1;
+    color: var(--text0);
+  }
   .editor-body {
     position: relative;
     flex: 1;

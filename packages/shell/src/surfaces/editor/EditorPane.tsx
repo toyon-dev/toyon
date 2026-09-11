@@ -4,9 +4,9 @@ import { previewBus } from "../../app/previewBus.ts";
 import { fileItems } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
 import { useDispatch, useFileSync, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
-import type { EditorSync } from "../../state/fileSync.ts";
+import type { EditorSync, FileSync } from "../../state/fileSync.ts";
 import { useTheme } from "../../state/selectors.ts";
-import { type EditorFile, localOf, worktreeById } from "../../state/store.ts";
+import { type EditorDisk, type EditorFile, localOf, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
@@ -106,8 +106,15 @@ export function EditorPane({
         </>
       }
     >
+      {disk && <EditorNote editor={editor} disk={disk} files={files} />}
       <div className="editor-body">
-        {disk ? (
+        {!disk ? (
+          <div className="empty">loading {path}…</div>
+        ) : disk.binary ? (
+          <div className="empty">not a text file: open it in another editor</div>
+        ) : disk.tooLarge ? (
+          <div className="empty">too large to open here: open it in another editor</div>
+        ) : (
           <ErrorBoundary pane>
             <Suspense fallback={<div className="empty">loading {view}…</div>}>
               <Editor
@@ -162,10 +169,53 @@ export function EditorPane({
               />
             </Suspense>
           </ErrorBoundary>
-        ) : (
-          <div className="empty">loading {path}…</div>
         )}
       </div>
     </Pane>
   );
+}
+
+/** A row above the text when the text alone would mislead: the file changed on disk under unsaved
+ * edits, or nothing typed here can be saved. It takes its own row rather than covering the code. */
+function EditorNote({ editor, disk, files }: { editor: EditorFile; disk: EditorDisk; files: FileSync | null }) {
+  const { worktreeId, path, ref, conflict } = editor;
+  const file = { worktreeId, path, ...(ref ? { ref } : {}) };
+  if (conflict) {
+    const gone = conflict.version === null;
+    return (
+      <div className="editor-note">
+        <span className="editor-note-text">
+          {gone ? "deleted on disk; your edits are not saved" : "changed on disk; your edits are not saved"}
+        </span>
+        <Button
+          variant="outline"
+          onClick={() => files?.reload(file)}
+          data-tip={
+            gone
+              ? "Close the file; your edits go with it"
+              : "Take the file as it is on disk; undo brings your edits back"
+          }
+        >
+          {gone ? "close" : "reload"}
+        </Button>
+        <Button
+          variant="outline"
+          tone="danger"
+          onClick={() => files?.keepMine(file)}
+          data-tip={gone ? "Save your edits as the file again" : "Save your edits over the file on disk"}
+        >
+          keep mine
+        </Button>
+      </div>
+    );
+  }
+  // a commit's copy says which commit in the title, and a binary or oversized file says so in the body
+  if (ref === undefined && !disk.writable && !disk.binary && !disk.tooLarge) {
+    return (
+      <div className="editor-note">
+        <span className="hint">read-only: toyon does not run this worktree</span>
+      </div>
+    );
+  }
+  return null;
 }

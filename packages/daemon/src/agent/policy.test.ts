@@ -56,7 +56,7 @@ describe("policy.decide", () => {
     );
   });
 
-  test("outside the worktree is rejected with the reason the agent can act on", () => {
+  test("outside the worktree is rejected with a reason naming Toyon, not the person", () => {
     const v = decide(
       req({ kind: "edit", name: "Write", rawInput: { file_path: join(root, "outside/z") } }),
       bounds,
@@ -66,6 +66,7 @@ describe("policy.decide", () => {
     if (v.kind === "reject") {
       expect(v.tool).toBe("Write");
       expect(v.reason).toContain("outside this worktree");
+      expect(v.reason).toContain("Toyon");
     }
   });
 

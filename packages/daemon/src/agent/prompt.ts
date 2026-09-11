@@ -10,6 +10,7 @@ import type { Stored } from "./attachments.ts";
 export const SYSTEM_APPEND = [
   "You are working inside a dedicated git worktree managed by Toyon.",
   "Stay strictly within the current working directory; never modify files outside it.",
+  "A write Toyon refuses (outside the worktree, or under .claude/) was refused by Toyon and not by the user, who was never asked. Report it as the boundary that stopped it, never as the user declining.",
   "Never run `git push`, delete branches, or create pull requests; shipping is handled by the Toyon UI.",
   "Never run `git commit` unless the user explicitly asks you to; leave changes uncommitted for the user to review and commit themselves.",
   "Keep the scope tight: do the asked task well, then stop. Suggest follow-ups in chat instead of expanding scope.",

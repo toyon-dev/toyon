@@ -753,11 +753,11 @@ export function Composer({
               icon="pick"
               label="Pick an element on the page to attach"
               hint={chord("pick")}
-              // one button for both verbs: lit while either is armed, and a press disarms it; from
-              // rest it arms the chat's, since the box it sits in is where that pick lands
-              on={!!picking}
+              // the chat's verb only: ⌘I has its own button at the end of the route bar, and a press
+              // here while that one is armed swaps to this verb in place rather than stacking
+              on={picking === "chat"}
               disabled={!frameId}
-              onClick={() => frameId && togglePick(frameId, picking, dispatch, picking || "chat")}
+              onClick={() => frameId && togglePick(frameId, picking, dispatch, "chat")}
             />
           )}
         </span>

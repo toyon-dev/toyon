@@ -11,7 +11,7 @@ import { unseenJump } from "./unseenJump.ts";
 const inside = (selector: string) => !!document.activeElement?.closest(selector);
 
 /** the ⌘ chords a focused Monaco keeps for itself; it keeps every ⌥ one too (see useChords) */
-const MONACO_OWNS = new Set<ChordId>(["design", "new", "inspect"]);
+const MONACO_OWNS = new Set<ChordId>(["design", "new"]);
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
  * the handler so the listener is installed once instead of re-subscribing on every state change. */
@@ -29,12 +29,13 @@ export function useChords() {
       // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
       // picker holds shell focus, so those keep the full ladder or there is no way back out.
       if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
-      // ⌘D, ⌘K and ⌘I are Monaco's (add cursor, chord prefix, suggest) while it has the keyboard, and so is
-      // every ⌥ chord: ⌥↑/↓ is move line and ⌥⇧↑/↓ copy line. Taking them from a focused editor
-      // made a design scan out of a second cursor, and would make a worktree switch out of a line
-      // move; the same walk on ⌃Tab binds nothing in Monaco and stays ours. ⌘L is taken from it
-      // anyway: expand-line-selection is the loss, and a hand in the editor that wants to answer
-      // the agent is who the chord is for.
+      // ⌘D and ⌘K are Monaco's (add cursor, chord prefix) while it has the keyboard, and so is every
+      // ⌥ chord: ⌥↑/↓ is move line and ⌥⇧↑/↓ copy line. Taking them from a focused editor made a
+      // design scan out of a second cursor, and would make a worktree switch out of a line move; the
+      // same walk on ⌃Tab binds nothing in Monaco and stays ours. ⌘L is taken from it anyway:
+      // expand-line-selection is the loss, and a hand in the editor that wants to answer the agent
+      // is who the chord is for. ⌘E and ⌘I are taken too, and Editor.tsx unbinds Monaco's own keys
+      // for them so the keydown gets here: the picker is the same chord wherever the hand is.
       const monaco = !!document.activeElement?.closest(".monaco-editor");
       if (monaco && chord && (e.altKey || MONACO_OWNS.has(chord.id))) return;
       if (chord) {

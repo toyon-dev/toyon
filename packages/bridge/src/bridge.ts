@@ -169,6 +169,16 @@ function drawBox(rect: DOMRect, label?: HTMLElement, fill = true) {
     box.appendChild(label);
   }
   ensureOverlay().appendChild(box);
+  // the chip starts at the box's left edge, so a box near the right edge carries it off the page:
+  // slide it back in, never past the left edge
+  if (label) {
+    const r = label.getBoundingClientRect();
+    const over = r.right - (window.innerWidth - 2);
+    if (over > 0) {
+      const left = Number.parseFloat(label.style.left || "0");
+      label.style.left = `${left - Math.min(over, Math.max(0, r.left - 2))}px`;
+    }
+  }
 }
 
 function chip(text: string, hint?: string): HTMLElement {

@@ -1,6 +1,7 @@
 import { type ConnectFailure, isOwned, parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
+import { attachPick } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
 import { openSource } from "../../state/openSource.ts";
@@ -190,7 +191,7 @@ export function Center() {
             if (verb === "code" && from.file) {
               const wt = worktreeById(store.getState(), id)?.worktree;
               openSource(store, sock, id, relFile(from.file, wt && wtDir(wt)), from.line ?? 1);
-            } else dispatch({ a: "picked", pick: { worktreeId: id, ...pick } });
+            } else attachPick(store, id, pick);
             break;
           }
           case "pick-cancel":

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { PASTE_MAX_CHARS, PASTES_PER_MESSAGE } from "./limits.ts";
+import { ATTACHMENT_LIMITS } from "../attachment.ts";
+import { PASTE_MAX_CHARS } from "./limits.ts";
 import { parseClientMsg } from "./ws.ts";
 
 describe("parseClientMsg", () => {
@@ -12,7 +13,9 @@ describe("parseClientMsg", () => {
         t: "chat",
         worktreeId: "a",
         text: "hi",
-        pick: { component: null, file: null, line: null, tag: "div", selector: "div" },
+        attachments: [
+          { kind: "pick", component: null, file: null, line: null, tag: "div", selector: "div", text: "", html: "" },
+        ],
       },
       { t: "create-worktree", repoId: "r", prompt: "x", variant: { group: "g", index: 1, of: 2 } },
       { t: "create-worktree", repoId: "r", prompt: "x", agent: "codex" },
@@ -40,9 +43,9 @@ describe("parseClientMsg", () => {
       { t: "create-worktree", repoId: "r", prompt: "x", profile: "fe" },
       { t: "create-worktree", repoId: "r", prompt: "x", model: "big", effort: "high" },
       { t: "set-worktree-effort", worktreeId: "a", effort: "high" },
-      { t: "chat", worktreeId: "a", text: "hi", pastes: [{ text: "a\nb" }] },
-      { t: "chat", worktreeId: "a", text: "hi", pastes: [{ text: "x", name: "App.tsx" }] },
-      { t: "create-worktree", repoId: "r", prompt: "x", pastes: [{ text: "x" }] },
+      { t: "chat", worktreeId: "a", text: "hi", attachments: [{ kind: "paste", text: "a\nb" }] },
+      { t: "chat", worktreeId: "a", text: "hi", attachments: [{ kind: "paste", text: "x", name: "App.tsx" }] },
+      { t: "create-worktree", repoId: "r", prompt: "x", attachments: [{ kind: "paste", text: "x" }] },
       { t: "list-commands", worktreeId: "a" },
       { t: "set-worktree-profile", worktreeId: "a", profile: "full" },
       { t: "set-theme", prefs: { mode: "system", light: "l", dark: "d" } },
@@ -104,14 +107,33 @@ describe("parseClientMsg", () => {
     if (!r.ok) expect(r.reason).toMatch(/profiles\.a\.procs: unknown proc "nope"/);
   });
 
-  test("a paste must have text, and there are caps on size and count", () => {
-    const chat = (pastes: unknown) => parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", pastes });
-    expect(chat([{ text: "" }]).ok).toBe(false);
-    expect(chat([{ text: "x".repeat(PASTE_MAX_CHARS + 1) }]).ok).toBe(false);
-    expect(chat(Array(PASTES_PER_MESSAGE + 1).fill({ text: "x" })).ok).toBe(false);
-    expect(chat(Array(PASTES_PER_MESSAGE).fill({ text: "x" })).ok).toBe(true);
-    const r = chat([{ text: "" }]);
-    if (!r.ok) expect(r.reason).toMatch(/^pastes/);
+  test("a paste must have text, and there are caps on size and on each kind's count", () => {
+    const chat = (attachments: unknown) => parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", attachments });
+    const paste = (text: string) => ({ kind: "paste", text });
+    const pick = {
+      kind: "pick",
+      component: null,
+      file: null,
+      line: null,
+      tag: "div",
+      selector: "div",
+      text: "",
+      html: "",
+    };
+    expect(chat([paste("")]).ok).toBe(false);
+    expect(chat([paste("x".repeat(PASTE_MAX_CHARS + 1))]).ok).toBe(false);
+    expect(chat(Array(ATTACHMENT_LIMITS.paste + 1).fill(paste("x"))).ok).toBe(false);
+    // a full count of one kind leaves every other kind its own room
+    const full = [...Array(ATTACHMENT_LIMITS.paste).fill(paste("x")), ...Array(ATTACHMENT_LIMITS.pick).fill(pick)];
+    expect(chat(full).ok).toBe(true);
+    const r = chat([paste("")]);
+    if (!r.ok) expect(r.reason).toMatch(/^attachments/);
+    const over = chat(Array(ATTACHMENT_LIMITS.pick + 1).fill(pick));
+    expect(over.ok).toBe(false);
+    if (!over.ok) expect(over.reason).toContain(`at most ${ATTACHMENT_LIMITS.pick} elements per message`);
+  });
+  test("an attachment of no known kind is refused", () => {
+    expect(parseClientMsg({ t: "chat", worktreeId: "a", text: "hi", attachments: [{ kind: "video" }] }).ok).toBe(false);
   });
 
   test("graft needs a source; unqueue index is a non-negative integer", () => {

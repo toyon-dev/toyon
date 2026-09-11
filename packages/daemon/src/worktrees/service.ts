@@ -8,6 +8,7 @@ import {
   type AgentEvent,
   type AgentStatus,
   type ArchivedWorktree,
+  type AttachmentInput,
   type CommitEntry,
   canGraft,
   canLand,
@@ -15,11 +16,8 @@ import {
   canRename,
   type GitFileStatus,
   hasOwnBranch,
-  type ImageInput,
   isMain,
-  type PasteInput,
   type PermissionMode,
-  type PickMeta,
   type RefKind,
   type RepoInfo,
   type SpareInfo,
@@ -68,11 +66,12 @@ const LOCAL_CONFIG_FILES = [".env", ".env.local", ".env.development", ".env.deve
 
 export type Variant = { group: string; index: number; of: number };
 
-/** what a grafted transcript keeps of a message: the source's attachment store goes with the
- * source, so an image or paste ref would point at nothing; the captions in the text stay */
+/** what a grafted transcript keeps of a message: its text. The source's attachment store goes with
+ * the source, so a stored ref would point at nothing, and a pick numbered in the source's session
+ * would put the numbers the shell draws on chips out of step with the target session's own. */
 function withoutAttachments(event: AgentEvent): AgentEvent {
   if (event.type !== "user-message") return event;
-  const { images: _images, pastes: _pastes, ...rest } = event;
+  const { attachments: _attachments, ...rest } = event;
   return rest;
 }
 
@@ -116,7 +115,8 @@ export interface CreateOpts {
   baseWorktreeId?: string;
   variant?: Variant;
   context?: string;
-  pick?: PickMeta;
+  /** in the order they were attached */
+  attachments?: AttachmentInput[];
   /** one of the repo's profiles; the repo's default when absent */
   profile?: string;
   /** what the agent may do without asking; the default mode when absent */
@@ -125,8 +125,6 @@ export interface CreateOpts {
   model?: string;
   /** one of the agent's advertised effort levels; its default when absent */
   effort?: string;
-  images?: ImageInput[];
-  pastes?: PasteInput[];
 }
 
 export interface WorktreeServiceDeps {
@@ -206,7 +204,7 @@ export class WorktreeService {
   // ---- create / remove / rename ----
 
   async create(repoId: string, prompt: string, opts: CreateOpts = {}): Promise<WorktreeInfo> {
-    const { variant, context, pick, images, pastes } = opts;
+    const { variant, context, attachments } = opts;
     const repo = this.d.state.requireRepo(repoId);
     // validated up front: an unknown or uninstalled agent is a toast now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
@@ -251,7 +249,7 @@ export class WorktreeService {
         }
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
-        this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, { context, pick, images, pastes });
+        this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, { context, attachments });
         this.scheduleNaming(claimed, prompt, variant);
         return claimed;
       }
@@ -282,7 +280,7 @@ export class WorktreeService {
     };
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, base?.path ?? repo.path);
-    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context, pick, images, pastes });
+    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context, attachments });
     this.scheduleNaming(wt, prompt, variant);
     return wt;
   }
@@ -1289,6 +1287,7 @@ export class WorktreeService {
       .map((wt) => ({
         repoId: wt.repoId,
         id: wt.id,
+        path: wt.path,
         proxyPort: wt.proxyPort,
         ready: this.d.runtime.get(wt.id)?.proxy != null && this.spare.current(wt.repoId)?.worktreeId === wt.id,
       }));

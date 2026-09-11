@@ -1,7 +1,7 @@
-import { IMAGES_PER_MESSAGE, isLongPaste, PASTES_PER_MESSAGE } from "@toyon/shared";
+import { isLongPaste } from "@toyon/shared";
 import { useEffect } from "react";
 import { readCopiedSource } from "../../app/copiedSource.ts";
-import { attachText } from "../../state/attach.ts";
+import { attachText, fullMessage, roomIn } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
 import { useStoreInstance } from "../../state/context.tsx";
 import { composerBoxOf, worktreeById } from "../../state/store.ts";
@@ -62,45 +62,28 @@ function refuseFileDrag(store: Store) {
 /** files on their way to the composer, from a paste or a drop on the chat panel. Reads the pending
  * count from the store at call time so neither call site has to subscribe to it. */
 async function attachImages(store: Store, boxId: string | null, files: File[]) {
-  const dispatch = store.dispatch;
   if (!boxId || files.length === 0) return;
-  const room = IMAGES_PER_MESSAGE - (store.getState().local[boxId]?.images.length ?? 0);
-  if (room <= 0)
-    return dispatch({
-      a: "toast",
-      toast: { ok: false, message: `at most ${IMAGES_PER_MESSAGE} images per message` },
-    });
+  const room = roomIn(store, boxId, "image");
+  if (room === 0) return;
   const results = await Promise.allSettled(files.slice(0, room).map(prepareImage));
   const images = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
   const failed = results.find((r) => r.status === "rejected");
-  if (images.length) dispatch({ a: "add-images", id: boxId, images });
-  if (failed)
-    dispatch({
-      a: "toast",
-      toast: { ok: false, message: String((failed as PromiseRejectedResult).reason?.message ?? failed.reason) },
-    });
-  else if (files.length > room)
-    dispatch({
-      a: "toast",
-      toast: {
-        ok: false,
-        message: `kept ${room} of ${files.length}: at most ${IMAGES_PER_MESSAGE} images per message`,
-      },
-    });
+  if (images.length) store.dispatch({ a: "attach", id: boxId, items: images });
+  if (failed) toast(store, String((failed as PromiseRejectedResult).reason?.message ?? failed.reason));
+  else if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${fullMessage("image")}`);
 }
 
 /** a file that is not an image: attached as text under its own name, or refused by name */
 async function attachTextFiles(store: Store, boxId: string | null, files: File[]) {
   if (!boxId || files.length === 0) return;
-  const room = PASTES_PER_MESSAGE - (store.getState().local[boxId]?.pastes.length ?? 0);
-  if (room <= 0) return toast(store, `at most ${PASTES_PER_MESSAGE} pastes per message`);
+  const room = roomIn(store, boxId, "paste");
+  if (room === 0) return;
   for (const f of files.slice(0, room)) {
     const text = await readText(f);
     if (text === null) toast(store, `${f.name}: not a text file`);
     else attachText(store, boxId, text, { name: f.name });
   }
-  if (files.length > room)
-    toast(store, `kept ${room} of ${files.length}: at most ${PASTES_PER_MESSAGE} pastes per message`);
+  if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${fullMessage("paste")}`);
 }
 
 /** the box a drop lands in: the one the composer on screen writes in, which while drafting is the

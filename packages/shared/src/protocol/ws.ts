@@ -5,6 +5,7 @@
 // arrive from a browser (public internet in cloud mode) and are validated before any handler runs.
 
 import { z } from "zod";
+import { ATTACHMENT_LIMITS, ATTACHMENTS_PER_MESSAGE, KIND_NOUN, overLimit } from "../attachment.ts";
 import type {
   AgentConfigInfo,
   AgentInfo,
@@ -27,16 +28,8 @@ import type {
 } from "../model.ts";
 import { SHELL_STREAM } from "../model.ts";
 import type { PageEntry, WorktreePages } from "../routes.ts";
-import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta } from "./events.ts";
-import {
-  FILE_MAX_CHARS,
-  IMAGE_MAX_BYTES,
-  IMAGE_MAX_EDGE,
-  IMAGE_MIME_TYPES,
-  IMAGES_PER_MESSAGE,
-  PASTE_MAX_CHARS,
-  PASTES_PER_MESSAGE,
-} from "./limits.ts";
+import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta, PickRef } from "./events.ts";
+import { FILE_MAX_CHARS, IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, IMAGE_MIME_TYPES, PASTE_MAX_CHARS } from "./limits.ts";
 import { pickMetaSchema } from "./pick.ts";
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
@@ -193,7 +186,8 @@ const routePath = z.string().min(1).max(2_000);
 const pageTitle = z.string().max(1_000);
 
 /** an image as the shell sends it: already downscaled, base64 so it rides in the JSON frame */
-export const imageInputSchema = z.object({
+const imageInputSchema = z.object({
+  kind: z.literal("image"),
   name: z.string().max(200),
   mimeType: z.enum(IMAGE_MIME_TYPES),
   /** base64 (no data: prefix); 4/3 of the byte cap, rounded up to the next multiple of 4 */
@@ -201,8 +195,6 @@ export const imageInputSchema = z.object({
   width: z.number().int().min(1).max(IMAGE_MAX_EDGE),
   height: z.number().int().min(1).max(IMAGE_MAX_EDGE),
 });
-export type ImageInput = z.infer<typeof imageInputSchema>;
-const images = z.array(imageInputSchema).max(IMAGES_PER_MESSAGE).optional();
 
 /** the file and lines a selection copied in the editor came from */
 const pasteSourceSchema = z.object({
@@ -213,14 +205,43 @@ const pasteSourceSchema = z.object({
 });
 
 /** a paste as the shell sends it; the daemon derives the counts rather than trusting them */
-export const pasteInputSchema = z.object({
+const pasteInputSchema = z.object({
+  kind: z.literal("paste"),
   text: z.string().min(1).max(PASTE_MAX_CHARS),
   /** the file it came from, when it was pasted or dropped as one */
   name: z.string().max(200).optional(),
   source: pasteSourceSchema.optional(),
 });
-export type PasteInput = z.infer<typeof pasteInputSchema>;
-const pastes = z.array(pasteInputSchema).max(PASTES_PER_MESSAGE).optional();
+
+/** a picked element as the shell sends it: paths already relative to the checkout it was picked in,
+ * and the text and markup the bridge captured, bounded at the bridge's own caps */
+const pickInputSchema = pickMetaSchema.extend({
+  kind: z.literal("pick"),
+  text: z.string().max(120),
+  html: z.string().max(600),
+});
+
+export const attachmentInputSchema = z.discriminatedUnion("kind", [
+  imageInputSchema,
+  pasteInputSchema,
+  pickInputSchema,
+]);
+export type AttachmentInput = z.infer<typeof attachmentInputSchema>;
+export type ImageInput = Extract<AttachmentInput, { kind: "image" }>;
+export type PasteInput = Extract<AttachmentInput, { kind: "paste" }>;
+export type PickInput = Extract<AttachmentInput, { kind: "pick" }>;
+
+/** in the order they were attached. The length is bounded before any element is parsed; the
+ * per-kind bounds are checked once every element has. */
+const attachments = z
+  .array(attachmentInputSchema)
+  .max(ATTACHMENTS_PER_MESSAGE)
+  .superRefine((list, ctx) => {
+    const over = overLimit(list);
+    if (over)
+      ctx.addIssue({ code: "custom", message: `at most ${ATTACHMENT_LIMITS[over]} ${KIND_NOUN[over]}s per message` });
+  })
+  .optional();
 
 /** one question's answer on an ask card: the option values chosen, and the note typed beside them */
 const askAnswerSchema = z.object({
@@ -285,9 +306,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     worktreeId: id,
     text: prose,
     context: prose.optional(),
-    pick: pickMetaSchema.optional(),
-    images,
-    pastes,
+    attachments,
   }),
   z.object({
     t: z.literal("create-worktree"),
@@ -298,9 +317,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     baseWorktreeId: id.optional(),
     variant: variantSchema.optional(),
     context: prose.optional(),
-    pick: pickMetaSchema.optional(),
-    images,
-    pastes,
+    attachments,
     /** registry id; the daemon's default when absent */
     agent: id.optional(),
     /** one of the repo's profiles; its defaultProfile when absent */
@@ -514,8 +531,10 @@ const _prefs: Same<z.infer<typeof themePrefsSchema>, ThemePrefs> = true;
 const _variant: Same<z.infer<typeof variantSchema>, NonNullable<WorktreeInfo["variant"]>> = true;
 const _askAnswer: Same<z.infer<typeof askAnswerSchema>, AskAnswer> = true;
 const _pasteSource: Same<z.infer<typeof pasteSourceSchema>, PasteSource> = true;
+const _pickRef: Same<z.infer<typeof pickInputSchema>, Omit<PickRef, "n">> = true;
 void _pickMeta;
 void _pasteSource;
+void _pickRef;
 void _config;
 void _prefs;
 void _variant;

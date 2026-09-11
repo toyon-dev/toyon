@@ -302,7 +302,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       bootstrap: helloFrame,
     }),
     websocket: {
-      // a chat frame can carry IMAGES_PER_MESSAGE images of IMAGE_MAX_BYTES each, base64; Bun's
+      // a chat frame can carry ATTACHMENT_LIMITS.image images of IMAGE_MAX_BYTES each, base64; Bun's
       // default (16 MB) would drop the socket mid-paste
       maxPayloadLength: 64 * 1024 * 1024,
       async open(ws: ServerWebSocket<WsData>) {

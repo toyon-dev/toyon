@@ -14,19 +14,18 @@ import type {
   AskAnswer,
   AskChoice,
   AskOutcome,
+  AttachmentInput,
+  AttachmentKind,
   AuthMethodInfo,
-  ImageInput,
   ModelChoice,
-  PasteInput,
   PermissionMode,
-  PickMeta,
 } from "@toyon/shared";
-import { DEFAULT_PERMISSION_MODE } from "@toyon/shared";
+import { DEFAULT_PERMISSION_MODE, nextNumbers } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AuthObservation } from "../accounts.ts";
 import type { AgentAdapter, AskReply, AuthOutcome, SendOpts } from "../adapter.ts";
-import type { AttachmentStore, StoredImage, StoredPaste } from "../attachments.ts";
+import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan } from "../modes.ts";
 import { decide, pickOption } from "../policy.ts";
 import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
@@ -133,16 +132,13 @@ interface Live {
  * any path. Held on the item so a message that changes path — steered at a turn that settled first,
  * or sent again after a login — is recorded once and keeps the attachment numbers it was shown with. */
 interface Recorded {
-  images: StoredImage[];
-  pastes: StoredPaste[];
+  attachments: Stored[];
 }
 
 interface QueueItem {
   text: string;
   context?: string;
-  pick?: PickMeta;
-  images?: ImageInput[];
-  pastes?: PasteInput[];
+  attachments?: AttachmentInput[];
   recorded?: Recorded;
 }
 
@@ -179,11 +175,9 @@ export class AcpSession implements AgentAdapter {
    * one of these settles, and that is what blocks its turn. */
   private asks = new Map<string, PendingAsk>();
   private log: Transcript;
-  /** last image number handed out in this worktree's session; continues across daemon restarts
-   * because the transcript remembers every image sent */
-  private imageSeq: number;
-  /** the same for pastes; the two are numbered separately and cannot collide in the store */
-  private pasteSeq: number;
+  /** the number the next attachment of each kind takes in this worktree's session; continues across
+   * daemon restarts because the transcript remembers every attachment sent */
+  private seq: Record<AttachmentKind, number>;
   /** the live session's advertised commands. Deliberately not a transcript event: the backfill is
    * the last 1000 entries, so a long session would trim the list away. An instance field survives
    * the adapter reap, which is the point; it starts empty again after a daemon restart. */
@@ -194,8 +188,9 @@ export class AcpSession implements AgentAdapter {
     // Until then the last one this agent gave for this repo is a far better answer than nothing.
     this.commandList = d.seedCommands?.() ?? [];
     this.log = new Transcript(transcriptPathFor(d.transcriptsDir, d.worktreeId), d.worktreeId);
-    this.imageSeq = 0;
-    this.pasteSeq = 0;
+    this.seq = nextNumbers(
+      this.log.entries.map(({ event }) => (event.type === "user-message" ? event.attachments : undefined)),
+    );
     // a card the daemon died under: the adapter process went with it, so nothing is listening for
     // an answer. Close it here rather than let the next backfill draw a live-looking question that
     // can never be answered. Idempotent, since these end events close the set on the next boot.
@@ -203,9 +198,6 @@ export class AcpSession implements AgentAdapter {
     for (const { event } of this.log.entries) {
       if (event.type === "agent-question" || event.type === "agent-permission") open.add(event.id);
       else if (event.type === "agent-ask-end") open.delete(event.id);
-      if (event.type !== "user-message") continue;
-      for (const img of event.images ?? []) this.imageSeq = Math.max(this.imageSeq, img.n);
-      for (const p of event.pastes ?? []) this.pasteSeq = Math.max(this.pasteSeq, p.n);
     }
     for (const id of open) this.emit({ type: "agent-ask-end", id, outcome: "expired", ts: Date.now() });
   }
@@ -279,14 +271,8 @@ export class AcpSession implements AgentAdapter {
 
   send(text: string, opts: SendOpts = {}) {
     if (this.stopped) return log.warn(this.d.worktreeId, "send after close dropped");
-    const { context, pick, images, pastes } = opts;
-    const item: QueueItem = {
-      text,
-      context,
-      pick,
-      ...(images?.length ? { images } : {}),
-      ...(pastes?.length ? { pastes } : {}),
-    };
+    const { context, attachments } = opts;
+    const item: QueueItem = { text, context, ...(attachments?.length ? { attachments } : {}) };
     // sending during a turn means "while you are doing that": an agent that takes steering reads the
     // message as part of the work it is already on, which is the whole reason a person types then.
     // A stop already on its way is the exception — that turn is going away, so the message waits.
@@ -315,13 +301,7 @@ export class AcpSession implements AgentAdapter {
       outcome = steerOutcome(
         await live.conn.ctx.request(STEER_METHOD, {
           sessionId: live.sessionId,
-          prompt: buildPrompt(
-            item.text,
-            item.context,
-            undefined,
-            this.carriedImages(live, item.recorded.images),
-            item.recorded.pastes,
-          ),
+          prompt: buildPrompt(item.text, item.context, undefined, this.carried(live, item.recorded.attachments)),
           // the turn can also end on the wire: ask for the message back rather than let the agent
           // prompt itself with it, since nothing here would be tracking a turn it started alone
           _meta: { steering: { idleBehavior: "promptRequired" } },
@@ -486,36 +466,33 @@ export class AcpSession implements AgentAdapter {
     return /connection closed/i.test(message) ? (this.conn?.link.exitInfo() ?? message) : message;
   }
 
-  /** write the attachments and show the message. Numbered and written in send order before anything
-   * is shown, so the bubble and the prompt agree on "image N" and "pasted text N". */
-  private async record({ text, pick, images, pastes }: QueueItem): Promise<Recorded> {
-    const stored: StoredImage[] = [];
-    for (const img of images ?? [])
-      stored.push(await this.d.attachments.putImage(this.d.worktreeId, ++this.imageSeq, img));
-    const storedPastes: StoredPaste[] = [];
-    for (const p of pastes ?? [])
-      storedPastes.push(await this.d.attachments.putText(this.d.worktreeId, ++this.pasteSeq, p.text, p));
+  /** write the attachments and show the message. Numbered and written in the order they were
+   * attached before anything is shown, so the bubble and the prompt agree on "Image N". */
+  private async record({ text, attachments }: QueueItem): Promise<Recorded> {
+    const stored: Stored[] = [];
+    for (const a of attachments ?? [])
+      stored.push(await this.d.attachments.put(this.d.worktreeId, this.seq[a.kind]++, a));
     this.emit({
       type: "user-message",
       text,
       ts: Date.now(),
-      pick,
-      ...(stored.length ? { images: stored.map((s) => s.ref) } : {}),
-      ...(storedPastes.length ? { pastes: storedPastes.map((p) => p.ref) } : {}),
+      ...(stored.length ? { attachments: stored.map((s) => s.ref) } : {}),
     });
-    return { images: stored, pastes: storedPastes };
+    return { attachments: stored };
   }
 
-  /** the images this connection will take, and the visible note when it will not take them */
-  private carriedImages(live: Live, stored: StoredImage[]): StoredImage[] {
-    if (!stored.length || live.conn.acceptsImages) return stored;
-    // visible rather than silent: the text still goes, the person sees why the image did not
+  /** the attachments this connection will take, and the visible note when it will not take the
+   * images among them */
+  private carried(live: Live, stored: Stored[]): Stored[] {
+    const images = live.conn.acceptsImages ? 0 : stored.filter((s) => s.ref.kind === "image").length;
+    if (!images) return stored;
+    // visible rather than silent: the rest still goes, the person sees why the image did not
     this.emit({
       type: "agent-error",
-      message: `${live.conn.spec.name} does not accept images; the message went without ${stored.length === 1 ? "it" : "them"}`,
+      message: `${live.conn.spec.name} does not accept images; the message went without ${images === 1 ? "it" : "them"}`,
       ts: Date.now(),
     });
-    return [];
+    return stored.filter((s) => s.ref.kind !== "image");
   }
 
   private async runTurn(item: QueueItem) {
@@ -525,12 +502,12 @@ export class AcpSession implements AgentAdapter {
     await this.applyMode(live);
     await this.applyOption(live, "model");
     await this.applyOption(live, "thought_level");
-    const carried = this.carriedImages(live, item.recorded.images);
+    const carried = this.carried(live, item.recorded.attachments);
     const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
     live.prefixPending = false;
     const res = await live.conn.ctx.request(acp.methods.agent.session.prompt, {
       sessionId: live.sessionId,
-      prompt: buildPrompt(item.text, item.context, prefix, carried, item.recorded.pastes),
+      prompt: buildPrompt(item.text, item.context, prefix, carried),
     });
     this.emit({ type: "turn-end", stopReason: mapStopReason(res.stopReason), ts: Date.now() });
   }

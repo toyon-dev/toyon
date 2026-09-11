@@ -279,7 +279,9 @@ describe("spare pool", () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
     const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
-    expect(w.worktrees.spares()).toEqual([{ repoId, id: spare.id, proxyPort: spare.proxyPort, ready: true }]);
+    expect(w.worktrees.spares()).toEqual([
+      { repoId, id: spare.id, path: spare.path, proxyPort: spare.proxyPort, ready: true },
+    ]);
     const wt = await w.worktrees.create(repoId, "use the spare");
     expect(w.worktrees.spares().some((s) => s.id === wt.id)).toBe(false);
     // the next one warms in the background and says so with a frame once it is ready
@@ -819,7 +821,9 @@ describe("boot", () => {
     await settle();
     const adopted = state2.worktrees.find((x) => x.kind === "spare")!;
     expect(runtime2.get(adopted.id)?.procs).toBeTruthy();
-    expect(worktrees2.spares()).toEqual([{ repoId, id: adopted.id, proxyPort: adopted.proxyPort, ready: true }]);
+    expect(worktrees2.spares()).toEqual([
+      { repoId, id: adopted.id, path: adopted.path, proxyPort: adopted.proxyPort, ready: true },
+    ]);
     await runtime2.shutdown();
     repos2.stopWatchers();
   });

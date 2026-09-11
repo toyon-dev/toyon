@@ -4,14 +4,14 @@ import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
-import { pickLabel, relFile } from "../util.ts";
+import { pickLabel } from "../util.ts";
 
-/** a picked element as a chip: crosshair, <Component>, then file:line. In the composer it can be removed;
- * in the chat it just highlights on hover. The file half is a link wherever there is somewhere to
- * go: a pick keeps pointing at its source long after the message it rode in on. */
+/** a picked element as a chip: crosshair, <Component>, then file:line. Its paths are relative to the
+ * checkout it was picked in, made so when it was attached. In the composer it can be removed; in
+ * the chat it just highlights on hover. The file half is a link wherever there is somewhere to go:
+ * a pick keeps pointing at its source long after the message it rode in on. */
 export function PickChip({
   pick,
-  worktreePath,
   tipText,
   onHover,
   onOpen,
@@ -19,7 +19,6 @@ export function PickChip({
   className = "",
 }: {
   pick: PickMeta;
-  worktreePath?: string;
   tipText?: string;
   onHover?: (entering: boolean) => void;
   /** open the source this element was rendered from, at the line the chip names */
@@ -30,8 +29,8 @@ export function PickChip({
   // the call site leads, because it is the file the pick is usually about: picking a control finds
   // the shared component it is made of, and the line worth reading is the one that writes it. The
   // component's own JSX keeps a link of its own, named by basename so two paths still fit the row.
-  const call = pick.callFile ? relFile(pick.callFile, worktreePath) : null;
-  const src = pick.file ? relFile(pick.file, worktreePath) : null;
+  const call = pick.callFile;
+  const src = pick.file;
   const lead = call ? { path: call, line: pick.callLine } : src ? { path: src, line: pick.line } : null;
   const behind = call && src ? { path: src, line: pick.line } : null;
   const shown = (path: string, line: number | null) => `${path}${line ? `:${line}` : ""}`;

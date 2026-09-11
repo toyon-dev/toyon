@@ -1,12 +1,54 @@
-// Text on its way into the composer as a chip: a long paste, a dropped text file, or a piece of a
-// file from the editor, whether it came by the clipboard or by ⌘L. One way in, so the chip, the
-// limits and the toasts are the same whichever gesture brought it.
+// Attachments on their way into a composer box, whatever brought them: a long paste, a dropped
+// file, a piece of a file from the editor by the clipboard or by ⌘L, an image, an element picked in
+// a preview. One way in, so every kind is bounded and refused in the same words, and one way out to
+// the wire.
 
-import { PASTE_MAX_CHARS, PASTES_PER_MESSAGE, type PasteSource, pasteSummary, stripAnsi } from "@toyon/shared";
+import {
+  ATTACHMENT_LIMITS,
+  type AttachmentInput,
+  type AttachmentKind,
+  KIND_NOUN,
+  PASTE_MAX_CHARS,
+  type PasteSource,
+  type PickedElement,
+  pasteSummary,
+  roomFor,
+  stripAnsi,
+} from "@toyon/shared";
 import type { Store } from "./context.tsx";
-import { composerBoxOf, worktreeById } from "./store.ts";
+import { composerBoxOf, draftKey, type PendingAttachment, type State, worktreeById } from "./store.ts";
 
 const toast = (store: Store, message: string) => store.dispatch({ a: "toast", toast: { ok: false, message } });
+
+/** what a full box says, the same for every kind */
+export const fullMessage = (kind: AttachmentKind): string =>
+  `at most ${ATTACHMENT_LIMITS[kind]} ${KIND_NOUN[kind]}s per message`;
+
+/** how many more of `kind` box `boxId` takes; says so when that is none */
+export function roomIn(store: Store, boxId: string, kind: AttachmentKind): number {
+  const room = roomFor(store.getState().local[boxId]?.attachments ?? [], kind);
+  if (room === 0) toast(store, fullMessage(kind));
+  return room;
+}
+
+/** what the wire takes of a waiting attachment: the key and the chip's figures stay behind, since
+ * the daemon derives its own */
+export function toInput(a: PendingAttachment): AttachmentInput {
+  switch (a.kind) {
+    case "image": {
+      const { key: _key, bytes: _bytes, ...input } = a;
+      return input;
+    }
+    case "paste": {
+      const { key: _key, chars: _chars, lines: _lines, preview: _preview, ...input } = a;
+      return input;
+    }
+    case "pick": {
+      const { key: _key, ...input } = a;
+      return input;
+    }
+  }
+}
 
 /** Attach text to composer box `boxId` as a chip. The text travels with the message: an `@path`
  * would name the file as it is by the time the agent reads it, not the lines that were taken. */
@@ -19,15 +61,14 @@ export function attachText(
   if (!boxId) return;
   // a whole-line copy ends in the line break, which is not one of the lines it names
   const text = stripAnsi(from.source ? raw.replace(/\r?\n$/, "") : raw);
-  const pending = store.getState().local[boxId]?.pastes.length ?? 0;
-  if (pending >= PASTES_PER_MESSAGE) return toast(store, `at most ${PASTES_PER_MESSAGE} pastes per message`);
+  if (roomIn(store, boxId, "paste") === 0) return;
   if (text.length > PASTE_MAX_CHARS)
     // neither truncated nor dropped in silence: say what to do with something this big
     return toast(store, "that paste is too large; save it in the worktree and reference it with @path");
   store.dispatch({
-    a: "add-paste",
+    a: "attach",
     id: boxId,
-    paste: { key: crypto.randomUUID(), text, ...from, ...pasteSummary(text) },
+    items: [{ kind: "paste", key: crypto.randomUUID(), text, ...from, ...pasteSummary(text) }],
   });
 }
 
@@ -48,10 +89,61 @@ export function addToChat(store: Store, taken: Taken | null) {
   // the editor holds the active worktree's file; lines from any other checkout would mislead
   if (taken && boxId && taken.worktreeId === active?.worktree.id && taken.text.trim()) {
     const { path, startLine, endLine, ref } = taken.source;
-    const waiting = (s.local[boxId]?.pastes ?? []).some(
-      ({ source: p }) => p?.path === path && p.startLine === startLine && p.endLine === endLine && p.ref === ref,
+    const waiting = (s.local[boxId]?.attachments ?? []).some(
+      (a) =>
+        a.kind === "paste" &&
+        a.source?.path === path &&
+        a.source.startLine === startLine &&
+        a.source.endLine === endLine &&
+        a.source.ref === ref,
     );
     if (!waiting) attachText(store, boxId, taken.text, { source: taken.source });
   }
+  store.dispatch({ a: "focus-right" });
+}
+
+/** the box a pick from frame `frameId` belongs in. While drafting, the frame on screen is the
+ * draft's base or its warm spare, and which spare that is can change under an armed picker, so
+ * anything that is not some other worktree's own row goes to the draft. Otherwise the frame is a
+ * worktree's preview, and the box is that worktree's. */
+function pickBox(s: State, frameId: string): string | null {
+  const base = s.draft ? worktreeById(s, s.draft.base) : null;
+  const row = worktreeById(s, frameId);
+  if (base && (frameId === base.id || !row)) return draftKey(base.repoId);
+  return row ? frameId : null;
+}
+
+/** the directories a frame's source paths can start with: a worktree's checkout and the link it
+ * is reached by, or a spare's checkout */
+function checkoutOf(s: State, frameId: string): string[] {
+  const wt = worktreeById(s, frameId)?.worktree;
+  if (wt) return [wt.path, wt.linkPath].filter((p): p is string => !!p);
+  const spare = s.spares.find((sp) => sp.id === frameId);
+  return spare ? [spare.path] : [];
+}
+
+/** `path` relative to the checkout when it lies inside it, else as it came: a guessed root would
+ * name a file the agent cannot find */
+function inside(path: string | null, roots: readonly string[]): string | null {
+  if (!path) return path;
+  const root = roots.find((r) => path.startsWith(`${r}/`));
+  return root ? path.slice(root.length + 1) : path;
+}
+
+/** ⌘E's click in a preview. The element joins the box written in for that frame, its paths made
+ * relative to the checkout it was picked in so they read the same in whichever worktree the
+ * message starts, and the keyboard goes back to the box, since the click left it in the frame. The
+ * same element twice is one chip. */
+export function attachPick(store: Store, frameId: string, picked: PickedElement) {
+  store.dispatch({ a: "set-picking", v: false });
+  const s = store.getState();
+  const boxId = pickBox(s, frameId);
+  if (!boxId) return;
+  const { classes: _classes, route: _route, ...meta } = picked;
+  const roots = checkoutOf(s, frameId);
+  const pick = { ...meta, file: inside(meta.file, roots), callFile: inside(meta.callFile, roots) };
+  const waiting = (s.local[boxId]?.attachments ?? []).some((a) => a.kind === "pick" && a.selector === pick.selector);
+  if (!waiting && roomIn(store, boxId, "pick") > 0)
+    store.dispatch({ a: "attach", id: boxId, items: [{ kind: "pick", key: crypto.randomUUID(), ...pick }] });
   store.dispatch({ a: "focus-right" });
 }

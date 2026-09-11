@@ -16,7 +16,7 @@ import type { FileServerMsg, ServerMsg, TermServerMsg } from "./ws.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 30;
+export const PROTOCOL_VERSION = 31;
 
 /** the largest file the editor opens or saves, in characters (a read counts bytes, which is never
  * fewer). A larger one opens read-only with nothing in it, and a save of more is refused before any
@@ -29,14 +29,12 @@ export type ImageMimeType = (typeof IMAGE_MIME_TYPES)[number];
 /** the models' long-edge ceiling; the shell downscales to it before sending */
 export const IMAGE_MAX_EDGE = 2576;
 export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-export const IMAGES_PER_MESSAGE = 6;
 
 /** when a paste collapses into a chip instead of filling the textarea. Either bound trips it: a
  * wall of prose has few lines, a stack trace has short ones. */
 export const PASTE_MIN_CHARS = 1200;
 export const PASTE_MIN_LINES = 10;
 export const PASTE_MAX_CHARS = 100_000;
-export const PASTES_PER_MESSAGE = 4;
 
 /** the terminal frames, which go to the terminal bus rather than through the store. The type-only
  * import above erases, so this file reaches nothing at runtime. */

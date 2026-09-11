@@ -6,7 +6,6 @@
 // dispatching (and the schema strips the marker and anything else unexpected).
 
 import { z } from "zod";
-import type { PickMeta } from "./events.ts";
 import { pickMetaSchema } from "./pick.ts";
 
 declare global {
@@ -123,17 +122,4 @@ export type BridgeToShellMsg = z.infer<typeof bridgeToShellSchema>;
 export function parseBridgeMsg(raw: unknown): BridgeToShellMsg | null {
   const r = bridgeToShellSchema.safeParse(raw);
   return r.success ? r.data : null;
-}
-
-/** the chat-message subset of a picked element */
-export function pickMetaOf(p: PickedElement): PickMeta {
-  return {
-    component: p.component,
-    file: p.file,
-    line: p.line,
-    callFile: p.callFile,
-    callLine: p.callLine,
-    tag: p.tag,
-    selector: p.selector,
-  };
 }

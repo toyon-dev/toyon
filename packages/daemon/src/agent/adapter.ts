@@ -1,7 +1,7 @@
 // What the rest of the daemon needs from an agent session. AcpSession (agent/acp/session.ts) is
 // the implementation; tests use a fake.
 
-import type { AgentCommand, AgentEvent, AgentStatus, AskAnswer, ImageInput, PasteInput, PickMeta } from "@toyon/shared";
+import type { AgentCommand, AgentEvent, AgentStatus, AskAnswer, AttachmentInput } from "@toyon/shared";
 
 /** what a login attempt needs from the caller next */
 export type AuthOutcome =
@@ -17,9 +17,8 @@ export type AskReply = { kind: "answers"; answers?: AskAnswer[] } | { kind: "cho
 /** everything a message carries besides its text */
 export interface SendOpts {
   context?: string;
-  pick?: PickMeta;
-  images?: ImageInput[];
-  pastes?: PasteInput[];
+  /** in the order they were attached, which is the order the prompt carries them in */
+  attachments?: AttachmentInput[];
 }
 
 export interface AgentAdapter {
@@ -34,7 +33,7 @@ export interface AgentAdapter {
   onCommandsChange: ((commands: AgentCommand[]) => void) | null;
   /** start the session early so `commands` exists before the first message; best effort */
   warmCommands(): Promise<void>;
-  /** context (live-page state, picked elements) reaches the prompt but never the visible transcript */
+  /** context (live-page state) reaches the prompt but never the visible transcript */
   send(text: string, opts?: SendOpts): void;
   /** interrupt the running turn and drop anything queued */
   stop(): void;

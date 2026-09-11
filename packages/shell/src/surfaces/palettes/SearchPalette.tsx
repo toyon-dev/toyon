@@ -1,6 +1,6 @@
 import type { SearchHit } from "@toyon/shared";
 import { useCallback } from "react";
-import { fileItems } from "../../state/actions/file.ts";
+import { fileItems, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
@@ -42,12 +42,13 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       rowTitle={(h) => `${h.path}:${h.line}`}
       onPick={(hit) => {
         dispatch({ a: "goto-line", v: { worktreeId, path: hit.path, line: hit.line } });
-        sock?.send({ t: "file-diff", worktreeId, path: hit.path });
+        // a hit is a line in the file, as a ⌘P jump is a file: neither is a question about a diff
+        openFile({ sock, dispatch }, worktreeId, hit.path, "file");
         if (!leftOpen) dispatch({ a: "toggle-left" });
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close" })}
-      rowMenu={(h) => (dir ? fileItems({ id: worktreeId, dir }, h.path, false, { sock, dispatch }) : [])}
+      rowMenu={(h) => (dir ? fileItems({ id: worktreeId, dir }, h.path, {}, { sock, dispatch }) : [])}
       placeholder="search in files…"
       keys={{ pick: "opens the file", back: "closes" }}
       empty={(q) => (q.trim().length < MIN ? "type at least two characters" : isStale(q) ? "searching…" : "no matches")}

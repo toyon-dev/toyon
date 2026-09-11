@@ -1,6 +1,6 @@
 import type { GitFileStatus } from "@toyon/shared";
 import { useCallback } from "react";
-import { fileItems } from "../../state/actions/file.ts";
+import { fileItems, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
@@ -54,13 +54,15 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
           else dispatch({ a: "close" });
           r.c.run();
         } else {
-          sock?.send({ t: "file-diff", worktreeId, path: r.path });
+          // a jump is to the file, which may not have changed at all; its diff is a menu item away,
+          // and the changes list is where diffs are read
+          openFile({ sock, dispatch }, worktreeId, r.path, "file");
           dispatch({ a: "close" });
         }
       }}
       onBack={() => dispatch({ a: "close" })}
       rowMenu={(r) =>
-        r.kind === "file" && dir ? fileItems({ id: worktreeId, dir }, r.path, false, { sock, dispatch }) : []
+        r.kind === "file" && dir ? fileItems({ id: worktreeId, dir }, r.path, {}, { sock, dispatch }) : []
       }
       placeholder="jump to file · type > for commands"
       keys={{ pick: "opens", back: "closes" }}

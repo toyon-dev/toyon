@@ -27,6 +27,7 @@ export type IconName =
   | "layers"
   | "pull"
   | "text"
+  | "diff"
   | "folder"
   | "book"
   | "trash"
@@ -81,6 +82,8 @@ const ICON_PATHS: Record<IconName, string> = {
   // two stacked panes: a worktree that is a local merge of several branches
   layers: "M6 2.5h7.5V10 M2.5 6h8v7.5h-8z",
   text: "M3.5 3.5h9 M3.5 6.5h9 M3.5 9.5h9 M3.5 12.5h5",
+  // a plus over a minus: what changed in a file, where `text` is the file itself
+  diff: "M8 2.8v5 M5.5 5.3h5 M5.5 11.2h5",
   // a folder with its tab: somewhere on disk, as opposed to a project the daemon already knows
   folder: "M2.2 3.9a1 1 0 0 1 1-1h2.9l1.5 1.7h5.2a1 1 0 0 1 1 1v5.9a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1z",
   // an open book: a file the agent read but did not change (edit is the pencil). A sheet with a

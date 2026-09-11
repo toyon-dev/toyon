@@ -79,6 +79,14 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const gitStatus = async (s: Services, ctx: HandlerCtx, worktreeId: string) => {
   const info = await s.worktrees.gitStatus(worktreeId);
   if (info) ctx.reply({ t: "git-status", worktreeId, ...info });
+  return info;
+};
+
+/** what a subscriber is sent after its backfill: the changes list, then the pages the worktree's
+ * files define with their badges, so the route list is ready before anyone opens it */
+const gitAndPages = async (s: Services, ctx: HandlerCtx, worktreeId: string) => {
+  const info = await gitStatus(s, ctx, worktreeId);
+  ctx.reply({ t: "routes", worktreeId, ...(await s.routes.pages(worktreeId, info ?? { files: [] })) });
 };
 
 /** the landing-op tail: tell the caller what happened, then refresh its changes panel */
@@ -109,7 +117,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       ctx.reply({ t: "backfill", worktreeId: msg.worktreeId, events: [], log: [] });
       ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: [] });
       ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: [] });
-      await gitStatus(s, ctx, msg.worktreeId);
+      await gitAndPages(s, ctx, msg.worktreeId);
       return;
     }
     // opening is what starts a cold worktree; the reply does not wait for it
@@ -125,7 +133,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     });
     ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: agent.queueItems });
     ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: agent.commands });
-    await gitStatus(s, ctx, msg.worktreeId);
+    await gitAndPages(s, ctx, msg.worktreeId);
   },
 
   unsubscribe(msg, ctx) {
@@ -140,16 +148,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.worktrees.markUnread(msg.worktreeId);
   },
 
-  visit(msg, _ctx, s) {
-    s.routes.visit(msg.worktreeId, msg.path);
+  async visit(msg, _ctx, s) {
+    await s.routes.visit(msg.worktreeId, msg.path, msg.title);
+  },
+
+  "page-title"(msg, _ctx, s) {
+    s.routes.retitle(msg.worktreeId, msg.path, msg.title);
   },
 
   "forget-visit"(msg, _ctx, s) {
     s.routes.forget(msg.repoId, msg.path);
-  },
-
-  async routes(msg, ctx, s) {
-    ctx.reply({ t: "routes", worktreeId: msg.worktreeId, routes: await s.routes.files(msg.worktreeId) });
   },
 
   chat(msg, _ctx, s) {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { bump, HALF_LIFE_MS, KEEP, rank, type Visit } from "./frecency.ts";
+import { bump, entries, HALF_LIFE_MS, KEEP, rank, retitle, type Visit } from "./frecency.ts";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -47,8 +47,34 @@ describe("frecency", () => {
     expect(pages["/fresh"]).toBeDefined();
   });
 
-  test("rank returns at most n", () => {
+  test("rank returns every kept page unless asked for fewer", () => {
     const pages = visits(["/a", 0], ["/b", 1], ["/c", 2]);
+    expect(rank(pages, 3)).toEqual(["/c", "/b", "/a"]);
     expect(rank(pages, 3, 2)).toEqual(["/c", "/b"]);
+  });
+
+  test("a visit keeps the page's title unless it brings a new one", () => {
+    const pages: Record<string, Visit> = {};
+    bump(pages, "/a", 0, "Pricing");
+    bump(pages, "/a", 1);
+    expect(pages["/a"]?.title).toBe("Pricing");
+    bump(pages, "/a", 2, "Plans");
+    expect(pages["/a"]?.title).toBe("Plans");
+  });
+
+  test("retitling names a listed page without counting a visit, and says whether anything changed", () => {
+    const pages = visits(["/a", 0]);
+    expect(retitle(pages, "/a", "About")).toBe(true);
+    expect(retitle(pages, "/a", "About")).toBe(false);
+    expect(retitle(pages, "/missing", "Nope")).toBe(false);
+    expect(pages["/a"]).toEqual({ score: 1, last: 0, title: "About" });
+  });
+
+  test("entries are the list the shell is sent: best first, scored now, titled when known", () => {
+    const pages: Record<string, Visit> = { "/a": { score: 2, last: 0, title: "About" }, "/b": { score: 1, last: 0 } };
+    expect(entries(pages, HALF_LIFE_MS)).toEqual([
+      { path: "/a", score: 1, last: 0, title: "About" },
+      { path: "/b", score: 0.5, last: 0 },
+    ]);
   });
 });

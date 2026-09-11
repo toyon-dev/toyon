@@ -1340,23 +1340,35 @@ describe("add to chat", () => {
 });
 
 describe("visits", () => {
-  test("hello brings every repo's list and a visits frame replaces one of them", () => {
+  test("hello brings every repo's history and a visits frame replaces one of them", () => {
+    const page = (path: string, title?: string) => ({ path, score: 1, last: 0, ...(title ? { title } : {}) });
     const h = helloIn([repo("r"), repo("q")]);
     if (h.a !== "server" || h.msg.t !== "hello") throw new Error("expected a hello");
     const s = run([
-      server({ ...h.msg, visits: { r: ["/a"], q: ["/b"] } }),
-      server({ t: "visits", repoId: "r", paths: ["/c", "/a"] }),
+      server({ ...h.msg, visits: { r: [page("/a")], q: [page("/b", "Docs")] } }),
+      server({ t: "visits", repoId: "r", pages: [page("/c", "Pricing"), page("/a")] }),
     ]);
-    expect(s.visits).toEqual({ r: ["/c", "/a"], q: ["/b"] });
+    expect(s.visits).toEqual({ r: [page("/c", "Pricing"), page("/a")], q: [page("/b", "Docs")] });
   });
 });
 
 describe("routes", () => {
-  test("a routes reply is kept on its worktree", () => {
+  test("a worktree's pages are kept with their badges", () => {
     const routes = [
       { path: "/users/[id]", source: "next" as const, file: "app/users/[id]/page.tsx", dynamic: true, endpoint: false },
     ];
-    const s = run([hello(wt("a")), server({ t: "routes", worktreeId: "a", routes })]);
-    expect(localOf(s, "a").routes).toEqual(routes);
+    const unseen = { "app/users/[id]/page.tsx": "new" as const };
+    const s = run([hello(wt("a")), server({ t: "routes", worktreeId: "a", routes, unseen })]);
+    expect(localOf(s, "a").pages).toEqual({ routes, unseen });
+  });
+
+  test("links a page showed join the worktree's, and nothing new leaves its record alone", () => {
+    const first = run([
+      hello(wt("a")),
+      { a: "links", id: "a", links: [{ path: "/pricing?ref=nav", text: "Pricing" }] },
+    ]);
+    expect(localOf(first, "a").links).toEqual([{ path: "/pricing", text: "Pricing" }]);
+    const again = reducer(first, { a: "links", id: "a", links: [{ path: "/pricing", text: "Plans" }] });
+    expect(localOf(again, "a")).toBe(localOf(first, "a"));
   });
 });

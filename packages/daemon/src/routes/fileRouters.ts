@@ -17,6 +17,9 @@ const DEPENDENCIES: Array<[RouteSource, RegExp]> = [
   ["solid", /^@solidjs\/start$/],
   ["remix", /^(@remix-run\/(react|node|dev)|@react-router\/dev)$/],
   ["tanstack", /^@tanstack\/(react|solid)-(router|start)$/],
+  // last: React Router declares its routes in code (routes/reactRouter.ts), and any framework above
+  // that also lists it has a file layout that says more
+  ["react-router", /^react-router(-dom)?$/],
 ];
 
 /** a config file that names its framework where no manifest did */
@@ -245,4 +248,19 @@ const READERS: Record<RouteSource, (rels: string[]) => Found[]> = {
   solid,
   remix,
   tanstack,
+  // its routes are in its code, which the service reads (routes/reactRouter.ts)
+  "react-router": () => [],
 };
+
+/** build output or a dependency, which no scan reads */
+export function isSkipped(path: string): boolean {
+  return SKIP.test(path);
+}
+
+/** file routes with the routes code declares added where no file route has the path; places before
+ * templates, capped */
+export function mergeRoutes(primary: RouteInfo[], extra: RouteInfo[]): RouteInfo[] {
+  const out = new Map(primary.map((r) => [r.path, r]));
+  for (const r of extra) if (!out.has(r.path)) out.set(r.path, r);
+  return [...out.values()].sort(byKind).slice(0, MAX_ROUTES);
+}

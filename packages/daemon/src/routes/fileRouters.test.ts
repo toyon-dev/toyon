@@ -210,4 +210,18 @@ describe("frameworks", () => {
     expect(isManifest("apps/web/.next/package.json")).toBe(false);
     expect(isManifest("apps/web/package.json.bak")).toBe(false);
   });
+
+  test("a React Router app is one, and React Router's framework mode still reads as Remix", () => {
+    const roots = frameworksOf(
+      [],
+      [
+        { dir: "a/", deps: ["react", "react-router-dom"] },
+        { dir: "b/", deps: ["react-router"] },
+        { dir: "c/", deps: ["react-router", "@react-router/dev"] },
+      ],
+    );
+    expect(Object.fromEntries(roots)).toEqual({ "a/": "react-router", "b/": "react-router", "c/": "remix" });
+    // its routes are in its code, so the file layout reads nothing for it
+    expect(fileRoutes(["src/pages/index.tsx"], new Map([["", "react-router" as const]]))).toEqual([]);
+  });
 });

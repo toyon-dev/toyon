@@ -1,22 +1,5 @@
 import { expect, test } from "bun:test";
-import { asNarrow, ghostOf, jumpTo, sectionStarts, step } from "./listNav.ts";
-
-test("a narrowing row's answer is a query, and may carry the range of it to select", () => {
-  expect(asNarrow("/a")).toEqual({ q: "/a" });
-  expect(asNarrow({ q: "/users/[id]", select: [7, 11] })).toEqual({ q: "/users/[id]", select: [7, 11] });
-});
-
-test("a rule starts where the group changes, never above the first row", () => {
-  const rows = [
-    { g: "go", p: "/x" },
-    { g: "page", p: "/a" },
-    { g: "page", p: "/b" },
-    { g: "go", p: "/y" },
-  ];
-  expect(sectionStarts(rows, (r) => r.g)).toEqual([false, true, false, true]);
-  expect(sectionStarts(rows)).toEqual([false, false, false, false]);
-  expect(sectionStarts([], (r: { g: string }) => r.g)).toEqual([]);
-});
+import { ghostOf, ghostParts, jumpTo, step, stepFrom } from "./listNav.ts";
 
 test("a letter jumps to the next row starting with it, wrapping, and repeats walk the matches", () => {
   const rows = ["take over", "open a shell here", "reveal in Finder", "copy path", "Remove…"];
@@ -43,10 +26,41 @@ test("stepping from a stale index (results shrank) stays in range", () => {
   expect(step(Math.min(7, 2), 1, 3)).toBe(0);
 });
 
+test("from nothing highlighted, down lands on the first row and up on the last", () => {
+  expect(stepFrom(-1, 1, 3)).toBe(0);
+  expect(stepFrom(-1, -1, 3)).toBe(2);
+  expect(stepFrom(-1, 1, 0)).toBe(-1);
+  // from a row it is the ordinary wrap
+  expect(stepFrom(2, 1, 3)).toBe(0);
+  expect(stepFrom(0, 1, 0)).toBe(0);
+});
+
 test("the ghost is only the tail past what was typed, matched case-insensitively", () => {
   expect(ghostOf("toyon", "toy")).toBe("on");
   expect(ghostOf("Toyon", "toy")).toBe("on");
   expect(ghostOf("toy", "toy")).toBeNull();
   expect(ghostOf("other", "toy")).toBeNull();
   expect(ghostOf(null, "toy")).toBeNull();
+});
+
+test("a plain completion is taken whole by tab", () => {
+  expect(ghostParts("/pricing", "/pr")).toEqual({ text: "icing", accept: "icing", params: [] });
+  expect(ghostParts("/pricing", "/pricing")).toBeNull();
+  expect(ghostParts(null, "/pr")).toBeNull();
+});
+
+test("a completion can show a placeholder that tab does not take", () => {
+  // "/users/id", with "id" a placeholder and only "/users/" accepted
+  const users = { show: "/users/id", accept: "/users/", params: [[7, 9]] as Array<[number, number]> };
+  expect(ghostParts(users, "/us")).toEqual({ text: "ers/id", accept: "ers/", params: [[4, 6]] });
+  // with the literal part typed, only the placeholder is left, and tab has nothing to take
+  expect(ghostParts(users, "/users/")).toEqual({ text: "id", accept: null, params: [[0, 2]] });
+  // a placeholder already typed past is not drawn
+  const two = {
+    show: "/o/org/r/repo",
+    accept: "/o/org/r/",
+    params: [[3, 6] as [number, number], [9, 13] as [number, number]],
+  };
+  expect(ghostParts(two, "/o/acme")).toBeNull();
+  expect(ghostParts(two, "/o/org/")?.params).toEqual([[2, 6]]);
 });

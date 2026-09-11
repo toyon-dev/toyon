@@ -1,9 +1,9 @@
-import { Fragment, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { cx } from "./cx.ts";
 import { Field } from "./Field.tsx";
 import { useFocusOnMount } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
-import { type Narrow, sectionStarts, useListNav } from "./listNav.ts";
+import { type Completion, type Ghost, useListNav } from "./listNav.ts";
 import { type MenuEntry, menuStore, useContextMenu } from "./menu.ts";
 import { Overlay } from "./Overlay.tsx";
 import "./picker.css";
@@ -13,6 +13,24 @@ export { step } from "./listNav.ts";
 
 /** the verb for each key the picker binds, as the person at the shell would say it */
 type KeyVerbs = { nav?: string; side?: string; complete?: string; pick?: string; back?: string };
+
+/** the ghost's text with its placeholder ranges drawn as placeholders */
+function ghostText({ text, params }: Ghost): ReactNode {
+  if (params.length === 0) return text;
+  const out: ReactNode[] = [];
+  let at = 0;
+  for (const [a, b] of params) {
+    if (a > at) out.push(text.slice(at, a));
+    out.push(
+      <span key={a} className="picker-ghost-param">
+        {text.slice(a, b)}
+      </span>,
+    );
+    at = b;
+  }
+  if (at < text.length) out.push(text.slice(at));
+  return out;
+}
 
 /**
  * The one list-picker: overlay + filter input + rows, ↑↓ wrap, enter picks, ←→ optional, hover
@@ -38,7 +56,8 @@ export function ListPicker<T>({
   initialQuery = "",
   initialIndex,
   selectOnMount = false,
-  groupOf,
+  idleWhen,
+  onIdlePick,
   anchored = false,
   lead,
   trailing,
@@ -63,12 +82,12 @@ export function ListPicker<T>({
   /** debounced (150ms): the query changed and the source should fetch (async pickers) */
   onQuery?: (q: string) => void;
   /** what the highlighted row would complete the query to; the remainder is drawn as ghost text
-   * after the caret and tab accepts it. Return null when the row cannot extend what was typed. */
-  completionOf?: (t: T, q: string) => string | null;
+   * after the caret and tab accepts it. A Completion shows more than tab takes (a template's
+   * parameter, drawn as a placeholder). Return null when the row cannot extend what was typed. */
+  completionOf?: (t: T, q: string) => string | Completion | null;
   /** a row that narrows the search instead of ending it (a folder to descend into): return the
-   * query it becomes and the picker stays open, or a Narrow to also select part of that query (a
-   * template's parameter, typed over next); null means hand the row to onPick as usual */
-  narrowTo?: (t: T, q: string) => string | Narrow | null;
+   * query it becomes and the picker stays open; null means hand the row to onPick as usual */
+  narrowTo?: (t: T, q: string) => string | null;
   placeholder: string;
   initialQuery?: string;
   /** where the highlight starts (mount only); default 0 */
@@ -76,9 +95,11 @@ export function ListPicker<T>({
   /** open with `initialQuery` selected, so the first keystroke replaces it: an address that is
    * shown for reading and typed over to go somewhere else */
   selectOnMount?: boolean;
-  /** which section a row belongs to; a rule is drawn where it changes. Rules sit between rows,
-   * never among them, so ↑↓ and the highlight only ever land on a row. */
-  groupOf?: (t: T) => string;
+  /** a query that means nothing has been chosen yet (an address shown as it is): while the query is
+   * one, no row is highlighted, and typing anything else highlights the first row */
+  idleWhen?: (q: string) => boolean;
+  /** enter while no row is highlighted */
+  onIdlePick?: (q: string) => void;
   /** shown when there are no rows; a function sees the query */
   empty?: string | ((q: string) => string);
   /** below the rows (result counts, hints) */
@@ -103,27 +124,13 @@ export function ListPicker<T>({
   const cm = useContextMenu("picker");
   const [q, setQ] = useState(initialQuery);
   const results = useMemo(() => filter(items, q), [items, q, filter]);
-  const starts = useMemo(() => sectionStarts(results, groupOf), [results, groupOf]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useFocusOnMount<HTMLInputElement>(selectOnMount);
-  /** the range a narrowed row asked for, applied once its query is in the field */
-  const pendingSelect = useRef<[number, number] | null>(null);
   useEffect(() => {
     if (!onQuery) return;
     const h = setTimeout(() => onQuery(q), 150);
     return () => clearTimeout(h);
   }, [q, onQuery]);
-  // no dependency list: the query a row narrowed to lands in some later render, and this checks
-  // after each one, doing nothing until a range is waiting
-  useLayoutEffect(() => {
-    const range = pendingSelect.current;
-    const el = inputRef.current;
-    if (!range || !el) return;
-    pendingSelect.current = null;
-    // a click on the row may have taken focus from the field
-    el.focus();
-    el.setSelectionRange(range[0], range[1]);
-  });
   const nav = useListNav({
     results,
     keyOf,
@@ -134,11 +141,10 @@ export function ListPicker<T>({
     onSide,
     completionOf,
     narrowTo,
-    onNarrow: (n) => {
-      pendingSelect.current = n.select ?? null;
-    },
     setQ,
     initialIndex,
+    idle: idleWhen?.(initialQuery) ?? false,
+    onIdlePick,
   });
   const { index: clamped, ghost } = nav;
   const verbs = typeof keys === "function" ? keys(nav.active, q) : keys;
@@ -147,7 +153,7 @@ export function ListPicker<T>({
   if (verbs?.side && onSide) hints.push(["←→", verbs.side]);
   // tab is only offered while there is a completion under it: a standing hint for a key that does
   // nothing is worse than no hint
-  if (verbs?.complete && ghost) hints.push(["tab", verbs.complete]);
+  if (verbs?.complete && ghost?.accept) hints.push(["tab", verbs.complete]);
   if (verbs?.pick) hints.push(["enter", verbs.pick]);
   if (verbs?.back) hints.push(["esc", verbs.back]);
   const inputEl = (
@@ -162,7 +168,9 @@ export function ListPicker<T>({
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
-            nav.setIndex(0); // typing resets the highlight; the mount keeps initialIndex
+            // typing resets the highlight to the first row, or to none when the query is back to one
+            // that chooses nothing; the mount keeps initialIndex
+            nav.setIndex(idleWhen?.(e.target.value) ? -1 : 0);
           }}
           onKeyDown={(e) => {
             // the menu key, with the caret in the input: the highlighted row's menu, under that row
@@ -187,7 +195,7 @@ export function ListPicker<T>({
         {ghost && (
           <div className="picker-ghost" aria-hidden="true">
             <span className="picker-typed">{q}</span>
-            {ghost}
+            {ghostText(ghost)}
           </div>
         )}
       </div>
@@ -197,20 +205,23 @@ export function ListPicker<T>({
   const listEl = (
     <div className="picker-list" ref={listRef}>
       {results.map((t, i) => (
-        <Fragment key={keyOf(t)}>
-          {starts[i] && <div className="picker-sep" aria-hidden="true" />}
-          <button
-            className={cx("picker-item", rowClass?.(t))}
-            data-state={rowState({ cursor: i === clamped })}
-            title={rowTitle?.(t)}
-            // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
-            onMouseMove={() => i !== clamped && nav.setIndex(i)}
-            onClick={() => nav.pick(t)}
-            {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
-          >
-            {row(t, i === clamped, q)}
-          </button>
-        </Fragment>
+        <button
+          key={keyOf(t)}
+          className={cx("picker-item", rowClass?.(t))}
+          data-state={rowState({ cursor: i === clamped })}
+          title={rowTitle?.(t)}
+          // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
+          onMouseMove={() => i !== clamped && nav.setIndex(i)}
+          onClick={() => {
+            nav.pick(t);
+            // a row that only narrowed the query leaves the picker open, and the click took the
+            // caret with it; the field is where the next keystroke belongs
+            inputRef.current?.focus();
+          }}
+          {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
+        >
+          {row(t, i === clamped, q)}
+        </button>
       ))}
       {results.length === 0 && <div className="empty">{typeof empty === "function" ? empty(q) : empty}</div>}
       {footer?.(q, results)}

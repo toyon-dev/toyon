@@ -48,7 +48,12 @@ export type ShellToBridgeMsg =
   | { type: "theme"; accent: string; accentFg: string }
   /** zen hands the keyboard to the app under test: while on, the bridge takes only the chord
    * that leaves zen and lets everything else (Escape included) reach the page */
-  | { type: "zen"; on: boolean };
+  | { type: "zen"; on: boolean }
+  /** the page's same-origin links, for an app whose routes no scan could read */
+  | { type: "links" };
+
+/** a link a page offers: where it goes, as a path, and what it says */
+export type PageLink = { path: string; text: string };
 
 const range = z.tuple([z.number(), z.number()]);
 
@@ -63,7 +68,17 @@ export type PickedElement = z.infer<typeof pickedElementSchema>;
 
 export const bridgeToShellSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("loaded"), url: z.string(), title: z.string() }),
-  z.object({ type: z.literal("navigated"), url: z.string() }),
+  /** `title` is the document's as the navigation lands; optional, so a page still holding an older
+   * bridge keeps parsing */
+  z.object({ type: z.literal("navigated"), url: z.string(), title: z.string().optional() }),
+  /** the document's title changed after the page loaded or navigated: an app names its page a tick
+   * or a fetch after it gets there */
+  z.object({ type: z.literal("title"), title: z.string() }),
+  /** the page's same-origin links, the answer to `links`; bounded, since the page is untrusted */
+  z.object({
+    type: z.literal("links"),
+    links: z.array(z.object({ path: z.string().max(2048), text: z.string().max(120) })).max(200),
+  }),
   z.object({ type: z.literal("hmr") }),
   z.object({
     type: z.literal("page-error"),

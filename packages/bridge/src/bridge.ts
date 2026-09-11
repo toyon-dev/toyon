@@ -52,7 +52,7 @@ window.addEventListener("unhandledrejection", (e) => {
 });
 
 // hashchange as well as popstate: a hash router can navigate without the browser firing a popstate
-const navigated = () => post({ type: "navigated", url: location.href });
+const navigated = () => post({ type: "navigated", url: location.href, title: document.title });
 const origPush = history.pushState.bind(history);
 history.pushState = (...args) => {
   origPush(...args);
@@ -65,6 +65,17 @@ history.replaceState = (...args) => {
 };
 window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);
+
+// An app names its page after it navigates, a tick or a fetch later, so the title is watched rather
+// than read once. Only a real change is posted: the head also changes when scripts and styles land.
+let lastTitle = document.title;
+if (document.head) {
+  new MutationObserver(() => {
+    if (document.title === lastTitle) return;
+    lastTitle = document.title;
+    post({ type: "title", title: lastTitle });
+  }).observe(document.head, { childList: true, subtree: true, characterData: true });
+}
 
 // zen: the shell is out of the way and the page owns the keyboard, so the table stands down
 let zen = false;
@@ -407,6 +418,22 @@ window.addEventListener("message", (e) => {
     case "forward":
       history.forward();
       break;
+    case "links": {
+      // the pages an app with no route table offers from here: same-origin links a click would follow
+      const seen = new Set<string>();
+      const links: Array<{ path: string; text: string }> = [];
+      for (const a of Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+        if (a.origin !== location.origin || a.target === "_blank" || a.hasAttribute("download")) continue;
+        const path = a.pathname + (a.hash.startsWith("#/") ? a.hash : "");
+        if (path.startsWith("/__toyon") || seen.has(path)) continue;
+        seen.add(path);
+        const text = (a.textContent || a.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+        links.push({ path, text: text.slice(0, 80) });
+        if (links.length >= 200) break;
+      }
+      post({ type: "links", links });
+      break;
+    }
     case "pick-start":
       startPicking(d.verb === "code");
       break;

@@ -13,7 +13,7 @@ import { ExecService } from "../exec/service.ts";
 import { FileService } from "../files/service.ts";
 import { GIT } from "../git/exec.ts";
 import { RepoRegistry } from "../repos/registry.ts";
-import { RouteService } from "../routes/service.ts";
+import { type RouteFs, RouteService } from "../routes/service.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
 import { RefSearch } from "../worktrees/refs.ts";
@@ -170,30 +170,42 @@ describe("handlers", () => {
       now: () => (now += 1000),
     });
 
-    await dispatch({ t: "visit", worktreeId: main.id, path: "/pricing" }, ctx, services);
+    const order = () => services.routes.history(r.id).map((p) => p.path);
+
+    await dispatch({ t: "visit", worktreeId: main.id, path: "/pricing", title: "Pricing  | Acme" }, ctx, services);
     await dispatch({ t: "visit", worktreeId: found.id, path: "/about" }, ctx, services);
     await dispatch({ t: "visit", worktreeId: found.id, path: "/pricing?tab=2" }, ctx, services);
     await dispatch({ t: "visit", worktreeId: main.id, path: "/pricing/" }, ctx, services);
-    expect(services.routes.ranked(r.id)).toEqual(["/pricing", "/about"]);
-    expect(services.routes.rankedAll()).toEqual({ [r.id]: ["/pricing", "/about"] });
-    // the last visit left the order as it was, so it announced nothing
+    expect(order()).toEqual(["/pricing", "/about"]);
+    expect(services.routes.historyAll()[r.id]?.map((p) => p.path)).toEqual(["/pricing", "/about"]);
+    // a visit without a title keeps the one the page had, cleaned of its doubled space
+    expect(services.routes.history(r.id)[0]?.title).toBe("Pricing | Acme");
+    // the last visit left order and titles as they were, so it announced nothing
     expect(changed).toEqual([r.id, r.id, r.id]);
+
+    // a title that settles later renames the page without counting a visit, and announces it once
+    await dispatch({ t: "page-title", worktreeId: found.id, path: "/about", title: "About us" }, ctx, services);
+    await dispatch({ t: "page-title", worktreeId: found.id, path: "/about", title: "About us" }, ctx, services);
+    await dispatch({ t: "page-title", worktreeId: found.id, path: "/never-visited", title: "Nope" }, ctx, services);
+    expect(services.routes.history(r.id)[1]).toMatchObject({ path: "/about", title: "About us" });
+    expect(order()).toEqual(["/pricing", "/about"]);
+    expect(changed).toHaveLength(4);
 
     // a frame whose worktree has gone is dropped without a toast
     await dispatch({ t: "visit", worktreeId: "gone", path: "/x" }, ctx, services);
-    expect(services.routes.ranked(r.id)).toEqual(["/pricing", "/about"]);
+    expect(order()).toEqual(["/pricing", "/about"]);
 
     await dispatch({ t: "forget-visit", repoId: r.id, path: "/pricing" }, ctx, services);
-    expect(services.routes.ranked(r.id)).toEqual(["/about"]);
+    expect(order()).toEqual(["/about"]);
     await expect(dispatch({ t: "forget-visit", repoId: "nope", path: "/a" }, ctx, services)).rejects.toBeInstanceOf(
       UserError,
     );
 
     services.routes.flush();
-    expect(Object.keys(new StateStore(paths).visitsOf(r.id) ?? {})).toEqual(["/about"]);
+    expect(new StateStore(paths).visitsOf(r.id)).toEqual({ "/about": expect.objectContaining({ title: "About us" }) });
   });
 
-  test("routes replies with the pages a Next app's files define, uncommitted ones included", async () => {
+  test("subscribe sends the pages a Next app's files define behind its git status, new ones marked", async () => {
     const { services, ctx, replies, repo } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
@@ -201,12 +213,114 @@ describe("handlers", () => {
     for (const f of ["app/page.tsx", "app/(marketing)/about/page.tsx", "app/users/[id]/page.tsx"]) {
       await Bun.write(`${main.path}/${f}`, "export default function Page() {\n  return null;\n}\n");
     }
-    await dispatch({ t: "routes", worktreeId: main.id }, ctx, services);
+    await dispatch({ t: "subscribe", worktreeId: main.id }, ctx, services);
     const reply = replies.at(-1);
-    if (reply?.t !== "routes") throw new Error("expected a routes reply");
+    if (reply?.t !== "routes") throw new Error("expected the pages after git status");
     expect(reply.routes.map((x) => x.path)).toEqual(["/", "/about", "/users/[id]"]);
     expect(reply.routes.at(-1)).toMatchObject({ source: "next", file: "app/users/[id]/page.tsx", dynamic: true });
-    await expect(dispatch({ t: "routes", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+    // never opened here, and new to git
+    expect(reply.unseen).toEqual({
+      "app/page.tsx": "new",
+      "app/(marketing)/about/page.tsx": "new",
+      "app/users/[id]/page.tsx": "new",
+    });
+  });
+
+  test("a changed page's badge goes once you have had it open, and comes back when it changes again", async () => {
+    const { services, ctx, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await Bun.write(`${main.path}/package.json`, JSON.stringify({ dependencies: { next: "15.0.0" } }));
+    await Bun.write(`${main.path}/app/page.tsx`, "export default () => null;\n");
+    await Bun.write(`${main.path}/app/pricing/page.tsx`, "export default () => null;\n");
+    const moved: string[] = [];
+    services.hub.on("pagesChanged", (id) => moved.push(id));
+    const pages = async () =>
+      services.routes.pages(main.id, (await services.worktrees.gitStatus(main.id)) ?? { files: [] });
+
+    expect((await pages()).unseen).toEqual({ "app/page.tsx": "new", "app/pricing/page.tsx": "new" });
+    // on screen, a page carries no badge
+    await dispatch({ t: "visit", worktreeId: main.id, path: "/pricing" }, ctx, services);
+    expect(services.routes.cached(main.id)?.unseen).toEqual({ "app/page.tsx": "new" });
+    // left for the home page, it was remembered as it stood, so it is not news
+    await dispatch({ t: "visit", worktreeId: main.id, path: "/" }, ctx, services);
+    expect(services.routes.cached(main.id)?.unseen).toEqual({});
+    expect(moved).toEqual([main.id, main.id]);
+    // an edit after that is
+    await Bun.write(`${main.path}/app/pricing/page.tsx`, "export default () => 'plans';\n");
+    expect((await pages()).unseen).toEqual({ "app/pricing/page.tsx": "changed" });
+    expect(services.state.seenOf(main.id)?.here).toBe("app/page.tsx");
+    // written now, rather than by a timer that would outlive this test's temp directory
+    services.routes.flush();
+  });
+
+  test("a manifest is read again only when it changes", async () => {
+    const { services, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await Bun.write(`${main.path}/package.json`, JSON.stringify({ dependencies: { next: "15.0.0" } }));
+    await Bun.write(`${main.path}/app/page.tsx`, "export default () => null;\n");
+    const reads: string[] = [];
+    const fs: RouteFs = {
+      stat: async (p) => {
+        const s = await Bun.file(p).stat();
+        return { size: s.size, mtimeMs: s.mtimeMs };
+      },
+      read: async (p) => {
+        reads.push(p);
+        return new Uint8Array(await Bun.file(p).arrayBuffer());
+      },
+    };
+    const routes = new RouteService({
+      state: services.state,
+      hub: services.hub,
+      readable: (id) => services.worktrees.readable(id),
+      fs,
+    });
+    const manifestReads = () => reads.filter((p) => p.endsWith("package.json")).length;
+    await routes.pages(main.id, { files: [] });
+    await routes.pages(main.id, { files: [] });
+    expect(manifestReads()).toBe(1);
+    await Bun.write(`${main.path}/package.json`, JSON.stringify({ dependencies: { next: "15.10.0" } }));
+    expect((await routes.pages(main.id, { files: [] })).routes.map((x) => x.path)).toEqual(["/"]);
+    expect(manifestReads()).toBe(2);
+  });
+
+  test("a React Router app's pages come from its code, each named for the module it renders", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await Bun.write(`${main.path}/package.json`, JSON.stringify({ dependencies: { "react-router-dom": "7.0.0" } }));
+    await Bun.write(
+      `${main.path}/src/main.tsx`,
+      [
+        'import { createBrowserRouter } from "react-router-dom";',
+        'import Home from "./pages/Home";',
+        'import About from "./pages/About";',
+        "export const router = createBrowserRouter([",
+        '  { path: "/", element: <Home /> },',
+        '  { path: "about", element: <About /> },',
+        '  { path: "users/:id", lazy: () => import("./pages/User") },',
+        "]);",
+      ].join("\n"),
+    );
+    for (const page of ["Home", "About", "User"]) {
+      await Bun.write(`${main.path}/src/pages/${page}.tsx`, "export default () => null;\n");
+    }
+    await dispatch({ t: "subscribe", worktreeId: main.id }, ctx, services);
+    const reply = replies.at(-1);
+    if (reply?.t !== "routes") throw new Error("expected the pages after git status");
+    expect(reply.routes.map((x) => `${x.path} ${x.file} ${x.source}`)).toEqual([
+      "/ src/pages/Home.tsx react-router",
+      "/about src/pages/About.tsx react-router",
+      "/users/:id src/pages/User.tsx react-router",
+    ]);
+    // each page is its own module, so each new one says so
+    expect(reply.unseen).toEqual({
+      "src/pages/Home.tsx": "new",
+      "src/pages/About.tsx": "new",
+      "src/pages/User.tsx": "new",
+    });
   });
 
   test("subscribe registers the socket and replies backfill + queue + commands + git-status to the caller only", async () => {
@@ -214,7 +328,7 @@ describe("handlers", () => {
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
     await dispatch({ t: "subscribe", worktreeId: main.id }, ctx, services);
-    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands", "git-status"]);
+    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands", "git-status", "routes"]);
     expect(broadcasts.length).toBe(0);
     expect([...subs]).toEqual([main.id]);
     await dispatch({ t: "unsubscribe", worktreeId: main.id }, ctx, services);
@@ -228,7 +342,7 @@ describe("handlers", () => {
     services.worktrees.invalidateDiscovered();
     const found = (await services.worktrees.discovered())[0]!;
     await dispatch({ t: "subscribe", worktreeId: found.id }, ctx, services);
-    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands", "git-status"]);
+    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands", "git-status", "routes"]);
     expect(replies[0]).toMatchObject({ t: "backfill", events: [], log: [] });
     expect(services.runtime.get(found.id)).toBeUndefined();
     expect(agents.get(found.id)).toBeUndefined();

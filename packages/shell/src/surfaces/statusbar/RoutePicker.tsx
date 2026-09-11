@@ -1,35 +1,60 @@
-import { routeKey } from "@toyon/shared";
-import { useCallback, useMemo } from "react";
+import { type PageEntry, routeKey, templateText } from "@toyon/shared";
+import { type ReactNode, useCallback, useMemo } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { fileItems } from "../../state/actions/file.ts";
 import { visitItems } from "../../state/actions/route.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { wantsLinks } from "../../state/links.ts";
 import { useLocalField } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
-import type { Narrow } from "../../ui/listNav.ts";
-import { PaletteRow } from "../palettes/PaletteRow.tsx";
+import { SEP, tidy } from "../../ui/menu.ts";
 import { wtDir } from "../util.ts";
-import { changedRoutes, completionFor, paramRange, pathOf, type Row, rowsFor } from "./routePicker.ts";
+import { completionOf, fillTemplate, pageModel, pathOf, type Row, rowsFor } from "./routePicker.ts";
 
 /** module constants, so a repo with no visits yet answers the selector with the same array */
-const NONE: string[] = [];
+const NONE: PageEntry[] = [];
 const NO_ROWS: Row[] = [];
 
-const isTemplate = (r: Row) => r.kind === "changed" && r.dynamic;
-
-/** a template is not a place: enter puts it in the field with its parameter selected, to type over */
-function fillIn(r: Row): Narrow | null {
-  if (!isTemplate(r)) return null;
-  const range = paramRange(r.path);
-  return range ? { q: r.path, select: range } : { q: r.path };
+/** a row's path, a template's parameters drawn as the words to fill in */
+function RoutePath({ row }: { row: Row }) {
+  if (row.kind !== "page" || !row.template) return <span className="bar-route-path row-dim">{row.path}</span>;
+  const { text, params } = templateText(row.path);
+  const parts: ReactNode[] = [];
+  let at = 0;
+  for (const [a, b] of params) {
+    if (a > at) parts.push(text.slice(at, a));
+    parts.push(
+      <span key={a} className="bar-route-param">
+        {text.slice(a, b)}
+      </span>,
+    );
+    at = b;
+  }
+  if (at < text.length) parts.push(text.slice(at));
+  return <span className="bar-route-path row-dim">{parts}</span>;
 }
 
-/** The route bar's list: the pages this branch changed, then the pages the project's previews are
- * used on, most used first. It opens over the address field the way the project switcher opens over
- * its pill, holding the address selected so typing replaces it, and a typed path that is not already
- * a row leads as its own. */
+/** a route row: the page's name, its path a tier quieter, then what changed since you last had it open */
+function RouteRow({ row }: { row: Row }) {
+  return (
+    <>
+      <span className="picker-label">{row.title}</span>
+      <RoutePath row={row} />
+      {row.kind === "go" ? (
+        <span className="picker-hint row-dim">go</span>
+      ) : row.badge ? (
+        <span className={row.badge === "new" ? "badge-new" : "badge-changed"}>{row.badge}</span>
+      ) : null}
+    </>
+  );
+}
+
+/** The route bar's list: what a person expects to see when they click the address. It opens in the
+ * field's own box holding the address, selected, with nothing highlighted, so typing replaces the
+ * address and enter on the untouched list reloads the page as a browser's would. The pages arrive
+ * with the worktree's git status, so the rows are there on the first frame. */
 export function RoutePicker({
   worktreeId,
   repoId,
@@ -41,23 +66,26 @@ export function RoutePicker({
 }) {
   const dispatch = useDispatch();
   const sock = useSock();
-  const frequent = useStore((s) => s.visits[repoId] ?? NONE);
-  const routes = useLocalField(worktreeId, "routes");
-  const git = useLocalField(worktreeId, "git");
+  const history = useStore((s) => s.visits[repoId] ?? NONE);
+  const pages = useLocalField(worktreeId, "pages");
+  const links = useLocalField(worktreeId, "links");
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId);
     return w ? wtDir(w.worktree) : null;
   });
-  // the file layout is read each time the list opens, so a page the agent just added is on it; the
-  // daemon keeps a scan for a few seconds, and git status keeps the changed set live meanwhile
-  useOnChange([worktreeId], () => sock?.send({ t: "routes", worktreeId }));
-  const changed = useMemo(() => changedRoutes(routes, git), [routes, git]);
+  // an app no scan could read offers its pages as links: this page's are gathered as the list opens
+  useOnChange([worktreeId], () => {
+    if (wantsLinks(pages)) previewBus.post(worktreeId, { type: "links" });
+  });
+  const model = useMemo(() => pageModel(history, pages, links), [history, pages, links]);
   const current = pathOf(url);
   const here = url ? routeKey(url) : null;
   const filter = useCallback(
-    (_items: Row[], q: string) => rowsFor({ query: q, current, here, frequent, changed }),
-    [current, here, frequent, changed],
+    (_items: Row[], q: string) => rowsFor(model, { query: q, current, here }),
+    [model, current, here],
   );
+  // the address as it opened, or an empty field, has chosen nothing yet
+  const untouched = useCallback((q: string) => q === current || q.trim() === "", [current]);
   const close = () => dispatch({ a: "close" });
   return (
     <ListPicker<Row>
@@ -66,37 +94,40 @@ export function RoutePicker({
       filter={filter}
       initialQuery={current}
       selectOnMount
-      groupOf={(r) => r.kind}
+      idleWhen={untouched}
+      onIdlePick={() => {
+        previewBus.post(worktreeId, { type: "reload" });
+        close();
+      }}
       keyOf={(r) => `${r.kind}:${r.path}`}
       rowClass={() => "picker-row"}
-      rowTitle={(r) => (r.kind === "changed" ? r.file : r.path)}
-      // the untouched address is what is on screen, not the start of a path, so it completes to
-      // nothing; nor does a template, whose parameter is filled in rather than completed
-      completionOf={(r, q) => (r.kind === "go" || isTemplate(r) || q === current ? null : completionFor(r.path, q))}
-      narrowTo={fillIn}
+      rowTitle={(r) => (r.kind === "page" && r.file ? r.file : r.path)}
+      completionOf={(r, q) => (untouched(q) ? null : completionOf(r, q))}
+      // a template is not a place: enter puts its start in the field and shows the rest to fill in
+      narrowTo={(r, q) => (r.kind === "page" && r.template ? fillTemplate(r.path, q) : null)}
       onPick={(r) => {
         previewBus.post(worktreeId, { type: "navigate", path: r.path });
         close();
       }}
       onBack={close}
-      // a visited page can come off the list, and a changed one names its file, which offers the file's own list
+      // a page names its file, which offers the file's own list, and a visited one can come off the history
       rowMenu={(r) =>
-        r.kind === "frequent"
-          ? visitItems(repoId, r.path, { sock })
-          : r.kind === "changed" && dir
-            ? fileItems({ id: worktreeId, dir }, r.file, {}, { sock, dispatch })
-            : []
+        r.kind === "page"
+          ? tidy([
+              ...(r.file && dir ? fileItems({ id: worktreeId, dir }, r.file, {}, { sock, dispatch }) : []),
+              SEP,
+              ...(r.visited ? visitItems(repoId, r.path, { sock }) : []),
+            ])
+          : []
       }
       placeholder="type a path"
       keys={(active) => ({
         complete: "completes the path",
-        pick: active && isTemplate(active) ? "fills in the parameter" : "goes there",
+        pick: !active ? "reloads" : active.kind === "page" && active.template ? "fills in the parameter" : "goes there",
         back: "closes",
       })}
-      empty="no other pages yet; type a path"
-      row={(r) => (
-        <PaletteRow label={r.path} hint={r.kind === "go" ? "go" : r.kind === "changed" ? r.file : undefined} />
-      )}
+      empty="no pages yet; type a path"
+      row={(r) => <RouteRow row={r} />}
     />
   );
 }

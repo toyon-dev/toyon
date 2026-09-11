@@ -36,6 +36,21 @@
       max-height: min(340px, 50vh);
     }
   }
+  /* a route row: the page's name, its path a tier quieter, then what changed. The path gives way
+   before the name does, since the name is what you read first */
+  .bar-route-path {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 55%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* a template's parameter: the word you fill in, marked the way the ghost after the caret marks it */
+  .bar-route-param {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
 
   /* ---- status bar ---- */
   .status-bar {

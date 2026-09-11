@@ -22,6 +22,8 @@ import type {
   ImageRef,
   LogLine,
   OwnedWorktree,
+  PageEntry,
+  PageLink,
   PasteInput,
   PasteRef,
   PathEntry,
@@ -32,7 +34,6 @@ import type {
   PickVerb,
   RefHit,
   RepoInfo,
-  RouteInfo,
   SearchHit,
   ServerMsg,
   SpareInfo,
@@ -40,6 +41,7 @@ import type {
   Theme,
   ThemePrefs,
   ToolKind,
+  WorktreePages,
   WorktreeStatus,
 } from "@toyon/shared";
 import {
@@ -52,6 +54,7 @@ import {
   SHELL_STREAM,
   toyonDark,
 } from "@toyon/shared";
+import { mergeLinks } from "./links.ts";
 import { railOrder } from "./railOrder.ts";
 
 export type UsageFigures = { used: number; size: number; cost?: number };
@@ -141,8 +144,11 @@ export interface WorktreeLocal {
   search: { query: string; hits: SearchHit[]; truncated: boolean } | null;
   /** the design pane's last scan; null until it has been opened once for this worktree */
   design: DesignIndex | null;
-  /** the pages this worktree's files define, from the route bar's last opening; undefined before one */
-  routes?: RouteInfo[];
+  /** the pages this worktree's files define and which changed since you last had them open, pushed
+   * with its git status; undefined until the first push */
+  pages?: WorktreePages;
+  /** links this worktree's preview pages showed, for an app with no route table; this session only */
+  links?: PageLink[];
   /** the composer's unsent text; survives switching worktrees, and is where the daemon's
    * conflict-resolution suggestion lands */
   draft: string;
@@ -463,8 +469,8 @@ export interface State {
   /** every repo's warm spare, as the daemon last listed them: the preview behind a draft from
    * main, and nothing else. Can shrink between frames (a warm-up rolled back). */
   spares: SpareInfo[];
-  /** each repo's most used preview pages, best first, as the daemon ranks them: the route bar's list */
-  visits: Record<string, string[]>;
+  /** each repo's remembered preview pages, best first, with their titles: the route bar's history */
+  visits: Record<string, PageEntry[]>;
 }
 
 export interface InitialOpts {
@@ -723,6 +729,8 @@ export type Action =
   | { a: "clear-pastes"; id: string }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
+  /** links a preview's page showed, for an app with no route table */
+  | { a: "links"; id: string; links: PageLink[] }
   | { a: "drag-files"; v: boolean }
   | { a: "set-picking"; v: PickVerb | false }
   | { a: "picked"; pick: NonNullable<State["pick"]> }
@@ -944,6 +952,11 @@ function reduce(s: State, action: Action): State {
           errors: action.fresh ? [] : action.error ? [...l.page.errors.slice(-2), action.error] : l.page.errors,
         },
       }));
+    case "links":
+      return withLocal(s, action.id, (l) => {
+        const links = mergeLinks(l.links ?? [], action.links);
+        return links === l.links ? l : { ...l, links };
+      });
     case "drag-files":
       return s.dragFiles === action.v ? s : { ...s, dragFiles: action.v };
     case "set-picking":
@@ -1084,7 +1097,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       };
     }
     case "visits":
-      return { ...s, visits: { ...s.visits, [msg.repoId]: msg.paths } };
+      return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages } };
     case "themes":
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "agents":
@@ -1269,7 +1282,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
     case "design-index":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, design: msg.index }));
     case "routes":
-      return withLocal(s, msg.worktreeId, (l) => ({ ...l, routes: msg.routes }));
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, pages: { routes: msg.routes, unseen: msg.unseen } }));
     case "queue":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, queue: msg.items }));
     case "agent-commands":

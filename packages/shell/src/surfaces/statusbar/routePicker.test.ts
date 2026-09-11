@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import type { RouteInfo } from "@toyon/shared";
+import type { PageBadge, PageEntry, RouteInfo } from "@toyon/shared";
 import {
-  CHANGED_MAX,
-  changedRoutes,
-  completionFor,
-  matches,
+  completionOf,
+  fillTemplate,
   normalizePath,
-  paramRange,
+  pageModel,
   pathOf,
+  type Row,
   rowsFor,
+  UNTOUCHED_MAX,
 } from "./routePicker.ts";
 
 const route = (path: string, over: Partial<RouteInfo> = {}): RouteInfo => ({
@@ -20,134 +20,179 @@ const route = (path: string, over: Partial<RouteInfo> = {}): RouteInfo => ({
   ...over,
 });
 
-const rows = (
-  query: string,
-  frequent: string[],
-  changed: RouteInfo[] = [],
-  current = "/about",
-  here: string | null = "/about",
-) => rowsFor({ query, current, here, frequent, changed }).map((r) => `${r.kind} ${r.path}`);
+const entry = (path: string, title?: string): PageEntry => ({ path, score: 1, last: 0, ...(title ? { title } : {}) });
 
-describe("route picker rows", () => {
-  test("opening on the page's own address lists every other page, with no go row", () => {
-    expect(rows("/about", ["/pricing", "/about", "/docs"])).toEqual(["frequent /pricing", "frequent /docs"]);
-  });
+const show = (rows: Row[]) =>
+  rows.map((r) =>
+    r.kind === "go" ? `go ${r.path}` : [r.title, r.path, r.badge, r.template && "template"].filter(Boolean).join(" "),
+  );
 
-  test("typing filters the pages and leads with the typed path", () => {
-    expect(rows("/pri", ["/pricing", "/docs", "/pricing/team"])).toEqual([
-      "go /pri",
-      "frequent /pricing",
-      "frequent /pricing/team",
-    ]);
-  });
+const untouched = (
+  history: PageEntry[],
+  routes: RouteInfo[],
+  unseen: Record<string, PageBadge> = {},
+  here: string | null = "/",
+) => show(rowsFor(pageModel(history, { routes, unseen }), { query: "/", current: "/", here }));
 
-  test("a typed path that is already a row is not offered twice", () => {
-    expect(rows("docs", ["/pricing", "/docs"])).toEqual(["frequent /docs"]);
-  });
+const typed = (query: string, history: PageEntry[], routes: RouteInfo[], here: string | null = "/") =>
+  show(rowsFor(pageModel(history, { routes, unseen: {} }), { query, current: "/", here }));
 
-  test("the page on screen is left out even when typed, so enter on it reloads through the go row", () => {
-    expect(rows("/about ", ["/about", "/about/team"], [], "/about?x=1", "/about")).toEqual([
-      "go /about",
-      "frequent /about/team",
-    ]);
-  });
+const app = [
+  route("/"),
+  route("/pricing"),
+  route("/docs"),
+  route("/team"),
+  route("/about"),
+  route("/users/[id]"),
+  route("/api/x", { file: "app/api/x/route.ts", endpoint: true }),
+];
 
-  test("clearing the field lists everything again", () => {
-    expect(rows("", ["/a", "/b"])).toEqual(["frequent /a", "frequent /b"]);
-  });
-
-  test("nothing visited, nothing changed and nothing typed is an empty list", () => {
-    expect(rows("/about", [])).toEqual([]);
-  });
-
-  test("changed pages lead, and a page both changed and visited is listed once, as changed", () => {
-    expect(rows("/about", ["/pricing", "/docs"], [route("/pricing"), route("/users/[id]")])).toEqual([
-      "changed /pricing",
-      "changed /users/[id]",
-      "frequent /docs",
-    ]);
-  });
-
-  test("a changed page on screen is left out, and a changed template never is", () => {
-    expect(rows("/about", [], [route("/about"), route("/users/[id]")])).toEqual(["changed /users/[id]"]);
-  });
-
-  test("a template in the field is its own row, not a go row", () => {
-    expect(rows("/users/[id]", [], [route("/users/[id]")])).toEqual(["changed /users/[id]"]);
-  });
-
-  test("typing filters changed pages too", () => {
-    expect(rows("pri", ["/pricing/team"], [route("/pricing"), route("/users/[id]")])).toEqual([
-      "go /pri",
-      "changed /pricing",
-      "frequent /pricing/team",
-    ]);
-  });
-});
-
-describe("changed routes", () => {
-  test("a route is changed when its file is uncommitted or committed ahead of main, and endpoints are not listed", () => {
-    const routes = [
-      route("/"),
-      route("/pricing"),
-      route("/about"),
-      route("/api/x", { file: "app/api/x/route.ts", endpoint: true }),
+describe("the untouched list", () => {
+  test("what changed, then what you use by title, then the app's other pages, the page on screen left out", () => {
+    const history = [
+      entry("/pricing", "Pricing | Acme"),
+      entry("/docs", "Docs | Acme"),
+      entry("/users/42"),
+      entry("/users/43"),
     ];
-    const git = {
-      files: [{ path: "app/pricing/page.tsx" }, { path: "app/api/x/route.ts" }],
-      committed: [{ path: "app/about/page.tsx" }],
-    };
-    expect(changedRoutes(routes, git).map((r) => r.path)).toEqual(["/pricing", "/about"]);
+    const unseen = { "app/team/page.tsx": "new", "app/docs/page.tsx": "changed" } as const;
+    expect(untouched(history, app, unseen)).toEqual([
+      "Team /team new",
+      "Docs /docs changed",
+      "Pricing /pricing",
+      "Users /users/42",
+      "About /about",
+    ]);
   });
 
-  test("nothing is changed before the scan or the status arrives, and the list is capped", () => {
-    expect(changedRoutes(undefined, { files: [] })).toEqual([]);
-    expect(changedRoutes([route("/a")], undefined)).toEqual([]);
-    const many = Array.from({ length: CHANGED_MAX + 4 }, (_, i) => route(`/p${i}`));
-    expect(changedRoutes(many, { files: many.map((r) => ({ path: r.file })) })).toHaveLength(CHANGED_MAX);
+  test("an empty field is the untouched list too", () => {
+    const m = pageModel([entry("/docs")], { routes: app, unseen: {} });
+    expect(show(rowsFor(m, { query: "", current: "/pricing", here: "/pricing" }))[0]).toBe("Docs /docs");
+  });
+
+  test("it stops at eight rows, and keeps three of your own however much changed", () => {
+    const routes = [...Array.from({ length: 10 }, (_, i) => route(`/p${i}`)), route("/h0"), route("/h1"), route("/h2")];
+    const unseen = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`app/p${i}/page.tsx`, "new" as const]));
+    const rows = untouched([entry("/h0"), entry("/h1"), entry("/h2")], routes, unseen);
+    expect(rows).toHaveLength(UNTOUCHED_MAX);
+    expect(rows.slice(5)).toEqual(["H0 /h0", "H1 /h1", "H2 /h2"]);
+  });
+
+  test("a changed template shows as the id you visited under it, or as itself when you have visited none", () => {
+    const routes = [route("/"), route("/users/[id]")];
+    const unseen = { "app/users/[id]/page.tsx": "new" } as const;
+    expect(untouched([], routes, unseen)).toEqual(["Users /users/[id] new template"]);
+    expect(untouched([entry("/users/7")], routes, unseen)).toEqual(["Users /users/7 new"]);
+  });
+
+  test("ids gather under their template after the page on screen is left out", () => {
+    const routes = [route("/users/[id]")];
+    expect(untouched([entry("/users/42"), entry("/users/43")], routes, {}, "/users/42")).toEqual(["Users /users/43"]);
+  });
+
+  test("an app with no route table lists the links its pages showed, by what they say", () => {
+    const links = [
+      { path: "/", text: "Home" },
+      { path: "/pricing", text: "Plans and pricing" },
+      { path: "/contact", text: "" },
+    ];
+    const m = pageModel([entry("/pricing")], { routes: [], unseen: {} }, links);
+    // the page you visited is named by its link, the page on screen is left out, and a link that
+    // says nothing is named from its path
+    expect(show(rowsFor(m, { query: "/", current: "/", here: "/" }))).toEqual([
+      "Plans and pricing /pricing",
+      "Contact /contact",
+    ]);
+    expect(show(rowsFor(m, { query: "plans", current: "/", here: "/" }))).toEqual([
+      "go /plans",
+      "Plans and pricing /pricing",
+    ]);
   });
 });
 
-describe("route picker helpers", () => {
+describe("typing", () => {
+  const history = [entry("/pricing", "Pricing | Acme"), entry("/docs", "Docs | Acme")];
+
+  test("a path prefix leads, and the typed path waits at the end so tab completes the top row", () => {
+    expect(typed("pri", history, app)).toEqual(["Pricing /pricing", "go /pri"]);
+  });
+
+  test("with nothing starting that way, the typed path leads", () => {
+    expect(typed("xyz", history, app)).toEqual(["go /xyz"]);
+    const routes = [route("/docs/getting-started")];
+    expect(typed("started", [], routes)).toEqual(["go /started", "Getting started /docs/getting-started"]);
+  });
+
+  test("an exact page is enough, with no typed row beside it", () => {
+    expect(typed("/pricing", [], app)).toEqual(["Pricing /pricing"]);
+  });
+
+  test("a path that fills a template in is a place: it leads, and the template steps aside", () => {
+    expect(typed("users/7", [entry("/users/42")], app)).toEqual(["go /users/7"]);
+  });
+
+  test("typing toward a template lists the ids you visited, then the template", () => {
+    expect(typed("us", [entry("/users/42"), entry("/users/43")], app)).toEqual([
+      "Users /users/42",
+      "Users /users/43",
+      "Users /users/[id] template",
+      "go /us",
+    ]);
+  });
+
+  test("three ids a template, until the query reaches its parameter", () => {
+    const visited = Array.from({ length: 5 }, (_, i) => entry(`/users/${i + 1}`));
+    const instances = (rows: string[]) => rows.filter((r) => /^Users \/users\/\d$/.test(r));
+    expect(instances(typed("us", visited, app))).toHaveLength(3);
+    expect(instances(typed("users/", visited, app))).toHaveLength(5);
+  });
+});
+
+describe("the ghost and filling in", () => {
+  const page = (path: string, template = false): Row => ({ kind: "page", path, title: "", template, visited: false });
+
+  test("a page completes in the form the query was typed", () => {
+    expect(completionOf(page("/pricing"), "/pr")).toBe("/pricing");
+    expect(completionOf(page("/pricing"), "pr")).toBe("pricing");
+    expect(completionOf({ kind: "go", path: "/x", title: "" }, "x")).toBeNull();
+  });
+
+  test("a template shows its parameters as words, and tab takes the text up to the next one", () => {
+    expect(completionOf(page("/users/[id]", true), "us")).toEqual({
+      show: "users/id",
+      accept: "users/",
+      params: [[6, 8]],
+    });
+    expect(completionOf(page("/users/[id]", true), "/us")).toEqual({
+      show: "/users/id",
+      accept: "/users/",
+      params: [[7, 9]],
+    });
+    expect(completionOf(page("/users/[id]", true), "users/4")).toBeNull();
+    expect(completionOf(page("/o/:org/r/:repo", true), "o/acme/")).toEqual({
+      show: "o/acme/r/repo",
+      accept: "o/acme/r/",
+      params: [[9, 13]],
+    });
+  });
+
+  test("enter on a template puts what tab would take in the field, or its literal start", () => {
+    expect(fillTemplate("/users/[id]", "/")).toBe("/users/");
+    expect(fillTemplate("/users/[id]", "/pricing")).toBe("/users/");
+    expect(fillTemplate("/o/:org/r/:repo", "o/acme/")).toBe("o/acme/r/");
+    expect(fillTemplate("/users/[id]", "users/4")).toBe("users/4");
+  });
+});
+
+describe("helpers", () => {
   test("a typed path gets a leading slash unless it is a query or a hash route", () => {
     expect(normalizePath(" about ")).toBe("/about");
-    expect(normalizePath("/about")).toBe("/about");
     expect(normalizePath("?q=1")).toBe("?q=1");
     expect(normalizePath("#/tab")).toBe("#/tab");
-  });
-
-  test("matching ignores case and one leading slash", () => {
-    expect(matches("/Pricing", "pri")).toBe(true);
-    expect(matches("/pricing", "/PRI")).toBe(true);
-    expect(matches("/docs", "pri")).toBe(false);
-    expect(matches("/docs", " ")).toBe(true);
-  });
-
-  test("a completion keeps the form the query was typed in", () => {
-    expect(completionFor("/pricing", "/pr")).toBe("/pricing");
-    expect(completionFor("/pricing", "pr")).toBe("pricing");
-    expect(completionFor("/pricing", "do")).toBeNull();
-    expect(completionFor("/pricing", "")).toBeNull();
-  });
-
-  test("the whole parameter is selected, in each router's syntax", () => {
-    const sel = (p: string) => {
-      const r = paramRange(p);
-      return r ? p.slice(r[0], r[1]) : null;
-    };
-    expect(sel("/users/[id]")).toBe("[id]");
-    expect(sel("/blog/[...slug]")).toBe("[...slug]");
-    expect(sel("/[[lang]]/docs")).toBe("[[lang]]");
-    expect(sel("/concerts/:city")).toBe(":city");
-    expect(sel("/:lang?/pricing")).toBe(":lang?");
-    expect(sel("/posts/$postId/edit")).toBe("$postId");
-    expect(sel("/files/*")).toBe("*");
-    expect(sel("/pricing")).toBeNull();
   });
 
   test("the bar shows path, query and hash, and a missing page is the root", () => {
     expect(pathOf("http://x/a?b=1#/c")).toBe("/a?b=1#/c");
     expect(pathOf(undefined)).toBe("/");
-    expect(pathOf("not a url")).toBe("/");
   });
 });

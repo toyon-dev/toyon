@@ -49,6 +49,7 @@ import { ImportPane } from "./ImportPane.tsx";
 import { NoPreviewPane } from "./NoPreviewPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 import "./preview.css";
+import { wantsLinks } from "../../state/links.ts";
 import { VisitTracker } from "../../state/visits.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 
@@ -63,7 +64,15 @@ export function Center() {
   const sockRef = useRef(sock);
   sockRef.current = sock;
   const [visits] = useState(
-    () => new VisitTracker((worktreeId, path) => sockRef.current?.send({ t: "visit", worktreeId, path })),
+    () =>
+      new VisitTracker(
+        (worktreeId, path, title) => {
+          sockRef.current?.send({ t: "visit", worktreeId, path, title });
+          // an app no scan could read offers its pages as links: gather this page's while it is on screen
+          if (wantsLinks(store.getState().local[worktreeId]?.pages)) previewBus.post(worktreeId, { type: "links" });
+        },
+        (worktreeId, path, title) => sockRef.current?.send({ t: "page-title", worktreeId, path, title }),
+      ),
   );
   useEffect(() => () => visits.dispose(), [visits]);
   const rows = useRows();
@@ -153,11 +162,18 @@ export function Center() {
             previewBus.post(id, { type: "zen", on: zenRef.current });
             dispatch({ a: "hmr", id });
             dispatch({ a: "page", id, url: d.url, title: d.title, fresh: true });
-            visits.note(id, d.url);
+            visits.note(id, d.url, d.title);
             break;
           case "navigated":
-            dispatch({ a: "page", id, url: d.url });
-            visits.note(id, d.url);
+            dispatch({ a: "page", id, url: d.url, ...(d.title !== undefined ? { title: d.title } : {}) });
+            visits.note(id, d.url, d.title);
+            break;
+          case "title":
+            dispatch({ a: "page", id, title: d.title });
+            visits.title(id, d.title);
+            break;
+          case "links":
+            dispatch({ a: "links", id, links: d.links });
             break;
           case "page-error": {
             const where = d.source ? ` (${relFile(d.source)}:${d.line ?? "?"})` : "";

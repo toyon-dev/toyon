@@ -26,7 +26,7 @@ import type {
   WorktreeStatus,
 } from "../model.ts";
 import { SHELL_STREAM } from "../model.ts";
-import type { RouteInfo } from "../routes.ts";
+import type { PageEntry, WorktreePages } from "../routes.ts";
 import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta } from "./events.ts";
 import {
   FILE_MAX_CHARS,
@@ -62,18 +62,20 @@ export type ServerMsg =
       /** the daemon's home directory. RepoInfo.path is absolute while PathEntry.path is
        * tilde-collapsed daemon side, so without this the shell cannot write a `~` path of its own */
       home: string;
-      /** each repo's most used preview pages, best first: the route bar's list, there on first paint */
-      visits: Record<string, string[]>;
+      /** each repo's remembered preview pages, best first, with their titles: the route bar's
+       * history, there on first paint */
+      visits: Record<string, PageEntry[]>;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
   /** the files an agent reads and the MCP servers it will load, on request from settings */
   | ({ t: "agent-config" } & AgentConfigInfo)
   | { t: "repos"; repos: RepoInfo[] }
-  /** one repo's most used preview pages, sent when their order changes */
-  | { t: "visits"; repoId: string; paths: string[] }
-  /** the pages a worktree's files define: the reply to the route bar's list opening */
-  | { t: "routes"; worktreeId: string; routes: RouteInfo[] }
+  /** one repo's history, whole, sent when its order or a title changes */
+  | { t: "visits"; repoId: string; pages: PageEntry[] }
+  /** the pages a worktree's files define and which changed since you last had them open there: sent
+   * on subscribe behind git status, and again whenever either moves */
+  | ({ t: "routes"; worktreeId: string } & WorktreePages)
   /** clones in flight: shown in the switcher and watched in the import pane */
   | { t: "pending-repos"; pending: PendingRepo[] }
   /** directories matching what the project picker has typed so far, plus what the typed path
@@ -187,6 +189,8 @@ const termInput = z.string().max(65_536);
 const streamName = z.string().min(1).max(100);
 /** a preview page as the route bar keys it: a path and maybe a hash route, never a whole URL */
 const routePath = z.string().min(1).max(2_000);
+/** a page's title as the document has it; the daemon collapses and caps it to what it keeps */
+const pageTitle = z.string().max(1_000);
 
 /** an image as the shell sends it: already downscaled, base64 so it rides in the JSON frame */
 export const imageInputSchema = z.object({
@@ -387,12 +391,13 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** put the ring back on a worktree to come back to; the next `seen` clears it */
   z.object({ t: z.literal("mark-unread"), worktreeId: id }),
   /** the preview settled on a page (the shell waits out redirects): count it toward the repo's
-   * list. `path` is the page's key (routeKey), which the daemon recomputes rather than trusts. */
-  z.object({ t: z.literal("visit"), worktreeId: id, path: routePath }),
+   * list. `path` is the page's key (routeKey), which the daemon recomputes rather than trusts, and
+   * `title` the document's when the dwell ended. */
+  z.object({ t: z.literal("visit"), worktreeId: id, path: routePath, title: pageTitle.optional() }),
+  /** a counted page's title settled later: renames it without counting another visit */
+  z.object({ t: z.literal("page-title"), worktreeId: id, path: routePath, title: pageTitle }),
   /** take a page off the repo's list */
   z.object({ t: z.literal("forget-visit"), repoId: id, path: routePath }),
-  /** the pages the worktree's files define, for the route bar's list; replies `routes` */
-  z.object({ t: z.literal("routes"), worktreeId: id }),
   z.object({ t: z.literal("pick-variant"), worktreeId: id }),
   z.object({ t: z.literal("unqueue"), worktreeId: id, index: z.number().int().min(0) }),
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),

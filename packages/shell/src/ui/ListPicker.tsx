@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { cx } from "./cx.ts";
 import { Field } from "./Field.tsx";
 import { useFocusOnMount } from "./hooks.ts";
@@ -24,6 +24,7 @@ export function ListPicker<T>({
   items,
   filter,
   keyOf,
+  groupOf,
   row,
   rowClass,
   rowTitle,
@@ -49,6 +50,9 @@ export function ListPicker<T>({
   /** narrow the list for a query (empty query → everything) */
   filter: (items: T[], q: string) => T[];
   keyOf: (t: T) => string;
+  /** the heading a row is listed under, drawn above the first of each run of rows sharing it. A
+   * heading is not a row: it takes no highlight and the keys pass over it. */
+  groupOf?: (t: T) => string | undefined;
   row: (t: T, active: boolean, q: string) => ReactNode;
   rowClass?: (t: T) => string;
   rowTitle?: (t: T) => string;
@@ -170,20 +174,26 @@ export function ListPicker<T>({
   );
   const listEl = (
     <div className="picker-list" ref={listRef}>
-      {results.map((t, i) => (
-        <button
-          key={keyOf(t)}
-          className={cx("picker-item", rowClass?.(t))}
-          data-state={rowState({ cursor: i === clamped })}
-          title={rowTitle?.(t)}
-          // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
-          onMouseMove={() => i !== clamped && nav.setIndex(i)}
-          onClick={() => nav.pick(t)}
-          {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
-        >
-          {row(t, i === clamped, q)}
-        </button>
-      ))}
+      {results.map((t, i) => {
+        const group = groupOf?.(t);
+        const heading = group && group !== (i > 0 ? groupOf?.(results[i - 1] as T) : undefined);
+        return (
+          <Fragment key={keyOf(t)}>
+            {heading && <div className="section-title picker-group">{group}</div>}
+            <button
+              className={cx("picker-item", rowClass?.(t))}
+              data-state={rowState({ cursor: i === clamped })}
+              title={rowTitle?.(t)}
+              // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
+              onMouseMove={() => i !== clamped && nav.setIndex(i)}
+              onClick={() => nav.pick(t)}
+              {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
+            >
+              {row(t, i === clamped, q)}
+            </button>
+          </Fragment>
+        );
+      })}
       {results.length === 0 && <div className="empty">{typeof empty === "function" ? empty(q) : empty}</div>}
       {footer?.(q, results)}
     </div>

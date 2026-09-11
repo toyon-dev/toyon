@@ -20,7 +20,7 @@ import { Ring } from "../../ui/Ring.tsx";
 import { baseNote, behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
-import { ModelChip, useNewWorktreeModel } from "../chips/ModelChip.tsx";
+import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
 import { TargetLine } from "../chips/TargetChip.tsx";
 import { CommandRow } from "../palettes/CommandRow.tsx";
@@ -136,6 +136,19 @@ export function Composer({
   const agentEfforts = agentInfo?.efforts ?? NO_CHOICES;
   const [newModel, setNewModel] = useNewWorktreeModel(spawnAgent);
   const [newEffort, setNewEffort] = useNewWorktreeEffort(spawnAgent);
+  // A worktree born from main lists every agent's models, and picking another agent's model
+  // switches the agent with it: on the draft, or as the daemon's default on main's fast path,
+  // which is what the send would have remembered anyway.
+  const agents = useStore((s) => s.agents);
+  const pickAgentModel = (agent: string, model: string) => {
+    if (agent === spawnAgent) {
+      setNewModel(model);
+      return;
+    }
+    rememberNewWorktreeModel(agent, model);
+    if (drafting) dispatch({ a: "draft-agent", id: agent });
+    else sock?.send({ t: "set-default-agent", agent });
+  };
   const currentModel = useLocalField(id, "model");
   const currentEffort = useLocalField(id, "effort");
   // how full this agent's context is: the stream's last word, else the row's (a cold worktree)
@@ -399,7 +412,14 @@ export function Composer({
       // gets the same one. Settings has no row for it because this is where it is chosen.
       if (onMain && spawnAgent !== defaultAgent) sock?.send({ t: "set-default-agent", agent: spawnAgent });
       if (draft?.batch) {
-        sock?.send({ t: "batch-worktrees", repoId: active.worktree.repoId, prompt, agent: spawnAgent });
+        sock?.send({
+          t: "batch-worktrees",
+          repoId: active.worktree.repoId,
+          prompt,
+          agent: spawnAgent,
+          ...(newModel ? { model: newModel } : {}),
+          ...(newEffort ? { effort: newEffort } : {}),
+        });
       } else if (draft && draft.variants > 1) {
         const group = Math.random().toString(36).slice(2, 10);
         for (let i = 0; i < draft.variants; i++) {
@@ -602,7 +622,18 @@ export function Composer({
       <div className="hint composer-knobs">
         <span className="spawn-left">
           {spawning ? (
-            <ModelChip models={agentModels} value={newModel} onChange={setNewModel} onClose={refocus} />
+            // a draft stacked on a worktree keeps that worktree's agent, so only main's list spans agents
+            onMain && agents.length > 1 ? (
+              <AgentModelChip
+                agents={agents}
+                agent={spawnAgent}
+                model={newModel}
+                onChange={pickAgentModel}
+                onClose={refocus}
+              />
+            ) : (
+              <ModelChip models={agentModels} value={newModel} onChange={setNewModel} onClose={refocus} />
+            )
           ) : (
             active && (
               <ModelChip

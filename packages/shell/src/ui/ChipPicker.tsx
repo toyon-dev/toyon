@@ -13,12 +13,15 @@ export type ChipOption<T extends string> = {
   description?: string;
   /** listed but not pickable, with the description saying why (an agent that is not installed) */
   disabled?: boolean;
+  /** the heading it is listed under (the agent a model belongs to); rows sharing one are adjacent */
+  group?: string;
 };
 
 /** the panel's footprint before it is on screen, for deciding which way it opens: the width is
- * chip-picker.css's, the height is the field strip and a two-line row per option */
+ * chip-picker.css's, the height is the field strip, a two-line row per option and a heading per
+ * group */
 const PANEL_W = 360;
-const panelH = (rows: number) => 68 + 38 * rows;
+const panelH = (rows: number, groups: number) => 68 + 38 * rows + 24 * groups;
 
 /** which way the panel opens: over the chip unless that runs off the screen, then above it, or
  * hung from the chip's right edge */
@@ -87,7 +90,9 @@ export function ChipPicker<T extends string>({
           if (open) return close();
           const r = e.currentTarget.getBoundingClientRect();
           setOpen({
-            up: r.top - 6 + panelH(options.length) > window.innerHeight - 8,
+            up:
+              r.top - 6 + panelH(options.length, new Set(options.flatMap((o) => o.group ?? [])).size) >
+              window.innerHeight - 8,
             right: r.left - 9 + PANEL_W > window.innerWidth - 8,
           });
         }}
@@ -99,10 +104,15 @@ export function ChipPicker<T extends string>({
           anchored
           items={options}
           filter={(os, q) => {
-            const n = q.trim().toLowerCase();
-            return n ? os.filter((o) => (o.label ?? o.id).toLowerCase().includes(n)) : os;
+            // each word against the name and its heading, so "codex" or "claude sonnet" narrows
+            const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+            return os.filter((o) => {
+              const hay = `${o.group ?? ""} ${o.label ?? o.id}`.toLowerCase();
+              return words.every((w) => hay.includes(w));
+            });
           }}
           keyOf={(o) => o.id}
+          groupOf={(o) => o.group}
           initialIndex={(os) =>
             Math.max(
               0,

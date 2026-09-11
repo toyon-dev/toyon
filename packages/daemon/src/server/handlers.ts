@@ -184,7 +184,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
         let failed = 0;
         for (const task of tasks) {
           try {
-            await s.worktrees.create(msg.repoId, task, { agent: msg.agent });
+            await s.worktrees.create(msg.repoId, task, { agent: msg.agent, model: msg.model, effort: msg.effort });
           } catch (e) {
             failed++;
             log.warn(msg.repoId, `batch: could not start "${task.slice(0, 60)}"`, e);

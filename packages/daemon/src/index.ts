@@ -9,6 +9,7 @@ import pkg from "../package.json" with { type: "json" };
 import { AgentAccounts } from "./agent/accounts.ts";
 import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
+import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { makePlanner } from "./agent/tasks.ts";
 import { locateAssets } from "./core/assets.ts";
@@ -46,7 +47,22 @@ const state = new StateStore(paths);
 const hub = new Hub();
 const bridge = new BridgeScript(BRIDGE_JS);
 const agents = loadAgentRegistry(paths.home, paths.agentsDir);
-agents.onChange = () => hub.emit("agentsChanged");
+// A new worktree's picker lists every agent's models, and an agent nobody has run yet has listed
+// none: once it is installed, a throwaway session reads them. The daemon's home is only where it runs.
+const probe = new OptionProbe({
+  infos: () => agents.infos(),
+  require: (id) => agents.require(id),
+  connect: (app, spec) => spawnAcp(app, agents.launch(spec), paths.home, `probe:${spec.id}`),
+  cwd: paths.home,
+  known: (id) => state.cachedOptions(id, "model").length > 0,
+  learned: (id, category, choices) => {
+    if (state.setCachedOptions(id, category, choices)) hub.emit("agentsChanged");
+  },
+});
+agents.onChange = () => {
+  hub.emit("agentsChanged");
+  fireAndForget("agents", probe.missing(), "read agent models");
+};
 // a sign-out spawns the adapter on its own, with no session and no worktree: the daemon's home is
 // only where the process runs, never written to
 const accounts = new AgentAccounts({
@@ -127,8 +143,13 @@ if (cloud.enabled) {
 
 await repos.boot();
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default
-// agent first, so the first prompt waits on one download at most
-fireAndForget("agents", agents.installMissing(), "agent adapter install");
+// agent first, so the first prompt waits on one download at most. One already on disk installs
+// without a change event, so the probe is asked here as well.
+fireAndForget(
+  "agents",
+  agents.installMissing().then(() => probe.missing()),
+  "agent adapter install",
+);
 
 // register a repo passed on the command line (used by the CLI)
 const repoArg = process.argv[2];

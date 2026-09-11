@@ -343,10 +343,16 @@ describe("handlers", () => {
     const r = await services.repos.register(repo);
     r.needsSetup = false;
     planned.push(["first task", "second task"]);
-    await dispatch({ t: "batch-worktrees", repoId: r.id, prompt: "do two things", agent: "codex" }, ctx, services);
+    await dispatch(
+      { t: "batch-worktrees", repoId: r.id, prompt: "do two things", agent: "codex", model: "gpt-b" },
+      ctx,
+      services,
+    );
     for (let i = 0; i < 100 && replies.length < 2; i++) await Bun.sleep(10);
     const made = services.state.worktrees.filter((x) => x.kind === "worktree");
     expect(made.map((x) => x.agent)).toEqual(["codex", "codex"]);
+    // the model the picker chose rides with every planned worktree, as it does on create-worktree
+    expect(made.map((x) => x.model)).toEqual(["gpt-b", "gpt-b"]);
     expect(replies.at(-1)).toMatchObject({ t: "shipped", ok: true, message: "batch: 2 worktree(s) started" });
   });
 

@@ -593,7 +593,7 @@
   }
   /* What a just-inserted command still expects, drawn after the caret rather than listed in the
    menu: it is only useful once the command is chosen, and in the row it competed with the
-   descriptions. The metrics have to match .field-lg exactly or the ghost drifts off the caret. */
+   descriptions. The metrics have to match the bare field exactly or the ghost drifts off the caret. */
   .composer-ghost {
     position: absolute;
     inset: 0;

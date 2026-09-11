@@ -7,8 +7,8 @@ import "./field.css";
  *
  * The face follows the size unless told otherwise: an identifier box (sm, md) holds a path, a
  * branch, a command, which are literals the person also types elsewhere, so it is mono; a prose
- * box (lg) holds what they write, so it is ui. The palette says `font="mono"` on its prose-sized
- * box because a filter is an identifier, and the ask note says `font="ui"` on its small one.
+ * box (lg) holds what they write, so it is ui. A picker's filter says `font="mono"` because a filter
+ * is an identifier, and the ask note says `font="ui"` on its small box.
  */
 export type FieldSize = "sm" | "md" | "lg";
 export type FieldFont = "mono" | "ui";
@@ -18,14 +18,14 @@ const SIZE: Record<FieldSize, string> = {
   sm: "",
   /** a form's input, tall enough to point at */
   md: "field-md",
-  /** prose: the composer, the commit message, the palette */
+  /** prose: the composer, the commit message */
   lg: "field-lg",
 };
 
 type Shared = {
   size?: FieldSize;
   font?: FieldFont;
-  /** no box of its own, because the region it sits in is the box: the composer, an anchored picker's strip */
+  /** no box of its own, because the region it sits in is the box: the composer, a picker's strip */
   bare?: boolean;
   /** how the field sits in its parent (flex, width, margin). Never its box or its face. */
   className?: string;

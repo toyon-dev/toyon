@@ -69,25 +69,25 @@
     &.picker input {
       width: 100%;
     }
-    /* Anchored, the field is the top of the panel and borrows the composer's treatment: the field's
-   background carried by the whole strip and no inset box (the Field is `bare`), so the panel reads
-   as the bar it drops out of rather than a control floating in a menu. -8px undoes .picker's
-   padding. */
-    &.anchored {
-      --picker-inset: 8px;
-    }
-    &.anchored .picker-input {
+    /* The field is the top of the panel and borrows the composer's treatment: the field's
+   background carried by the whole strip and no inset box (the Field is `bare`), so a palette and a
+   dropdown read as one thing and neither holds a control floating inside it. -8px undoes .picker's
+   padding; the strip's side padding is the rows' inset, so the query starts on the rows' text. */
+    &.picker .picker-input {
       margin: -8px -8px 0;
-      padding: 5px 8px;
+      padding: 12px var(--picker-inset);
       background: var(--sunken);
       border-bottom: 1px solid var(--border0);
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     }
-    /* the ghost tracks the caret, so it loses the same border and padding the input just did */
-    &.anchored .picker-ghost {
-      inset: 0;
-      padding: 0;
-      font: var(--type-mono);
+    /* Anchored, the strip is a row of the bar it drops out of, so it keeps a bar's height.
+   chip-picker.css and statusbar.css place the panel from this padding, so the lead lands exactly
+   on the control that opened it. */
+    &.anchored {
+      --picker-inset: 8px;
+    }
+    &.anchored .picker-input {
+      padding-block: 5px;
     }
   }
   /* what the query is scoped to, in the pill's own box so the project name does not move when the
@@ -108,7 +108,7 @@
     text-overflow: ellipsis;
   }
   /* ghost completion: the typed part is hidden but still laid out, so the suffix lands exactly
-   where the caret is. Metrics must match .field/.field-lg or the tail drifts. */
+   where the caret is. Metrics must match the bare field (no border, no padding) or the tail drifts. */
   .picker-input {
     display: flex;
     align-items: center;
@@ -126,8 +126,7 @@
   }
   .picker-ghost {
     position: absolute;
-    inset: 1px;
-    padding: 8px 10px;
+    inset: 0;
     font: var(--type-mono);
     color: var(--text2);
     white-space: pre;

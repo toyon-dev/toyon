@@ -246,7 +246,14 @@ export class AcpSession implements AgentAdapter {
   }
 
   get queueItems(): string[] {
-    return this.queue.map((q) => q.text);
+    return this.waiting().map((q) => q.text);
+  }
+
+  /** what waits with no bubble of its own yet. A message already in the transcript (steered, then
+   * handed back by a stop or by the agent) just goes next: drawn as queued it would show twice, and
+   * taking it back to edit would send a second copy. */
+  private waiting(): QueueItem[] {
+    return this.queue.filter((q) => !q.recorded);
   }
 
   onQueueChange: (() => void) | null = null;
@@ -256,10 +263,10 @@ export class AcpSession implements AgentAdapter {
   }
 
   unqueue(index: number) {
-    if (index >= 0 && index < this.queue.length) {
-      this.queue.splice(index, 1);
-      this.queueChanged();
-    }
+    const item = this.waiting()[index];
+    if (!item) return;
+    this.queue.splice(this.queue.indexOf(item), 1);
+    this.queueChanged();
   }
 
   transcript(): TranscriptEntry[] {

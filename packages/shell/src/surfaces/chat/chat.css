@@ -66,14 +66,13 @@
     max-width: 92%;
     white-space: pre-wrap;
     /* the message the composer has walked back to, marked the one way this app marks where you
-     are: the edge and a lifted seat together. The bubble clips the edge to its own corners, and a
-     flex item that clips loses its content-height floor, so the log's column would squeeze it
-     shut; it keeps its height instead. */
+     are: the edge and a lifted seat together. The edge is a straight bar, so the bubble squares
+     the corners on its side while it carries one; on a rounded corner the bar bends into a smear. */
     &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
       background: var(--element1);
-      overflow: hidden;
-      flex-shrink: 0;
+      border-start-start-radius: 0;
+      border-end-start-radius: 0;
     }
   }
 

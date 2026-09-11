@@ -3,10 +3,12 @@ import {
   isLongPaste,
   PASTE_MAX_CHARS,
   PASTES_PER_MESSAGE,
+  type PasteSource,
   pasteSummary,
   stripAnsi,
 } from "@toyon/shared";
 import { useEffect } from "react";
+import { readCopiedSource } from "../../app/copiedSource.ts";
 import type { Store } from "../../state/context.tsx";
 import { useStoreInstance } from "../../state/context.tsx";
 import { imageFiles, otherFiles, prepareImage, readText } from "./images.ts";
@@ -93,11 +95,18 @@ async function attachImages(store: Store, worktreeId: string | null, files: File
     });
 }
 
-/** Text long enough to bury the textarea becomes a chip instead. There is no file to point at,
- * so unlike an `@path` this has to travel with the message. */
-function attachPaste(store: Store, worktreeId: string | null, raw: string, name?: string) {
+/** Text long enough to bury the textarea becomes a chip instead, and so does a piece of a file
+ * copied in the editor. Either way the text travels with the message: an `@path` would name the
+ * file as it is by the time the agent reads it, not the lines that were copied. */
+function attachPaste(
+  store: Store,
+  worktreeId: string | null,
+  raw: string,
+  from: { name?: string; source?: PasteSource } = {},
+) {
   if (!worktreeId) return;
-  const text = stripAnsi(raw);
+  // a whole-line copy ends in the line break, which is not one of the lines it names
+  const text = stripAnsi(from.source ? raw.replace(/\r?\n$/, "") : raw);
   const pending = store.getState().local[worktreeId]?.pastes.length ?? 0;
   if (pending >= PASTES_PER_MESSAGE) return toast(store, `at most ${PASTES_PER_MESSAGE} pastes per message`);
   if (text.length > PASTE_MAX_CHARS)
@@ -106,7 +115,7 @@ function attachPaste(store: Store, worktreeId: string | null, raw: string, name?
   store.dispatch({
     a: "add-paste",
     id: worktreeId,
-    paste: { key: crypto.randomUUID(), text, ...(name ? { name } : {}), ...pasteSummary(text) },
+    paste: { key: crypto.randomUUID(), text, ...from, ...pasteSummary(text) },
   });
 }
 
@@ -115,7 +124,7 @@ async function attachTextFiles(store: Store, worktreeId: string | null, files: F
   for (const f of files.slice(0, PASTES_PER_MESSAGE)) {
     const text = await readText(f);
     if (text === null) toast(store, `${f.name}: not a text file`);
-    else attachPaste(store, worktreeId, text, f.name);
+    else attachPaste(store, worktreeId, text, { name: f.name });
   }
 }
 
@@ -186,27 +195,31 @@ export function useFileDrop(worktreeId: string | null) {
 /**
  * The composer's paste, in precedence order: an image wins, because copying a spreadsheet cell or
  * a figure offers an image and a text flavour and the picture is what was meant; then a non-image
- * file (a Finder copy carries no text to fall through to); then text long enough to bury the
- * textarea. Anything shorter is typed in as usual.
+ * file (a Finder copy carries no text to fall through to); then a selection copied in the editor
+ * that takes in a line break, which is a piece of the file rather than words for the sentence, on a
+ * chip named for its file and lines; then text long enough to bury the textarea. Anything shorter
+ * is typed in as usual. `boxId` is where the attachment waits; `worktreeId` is the worktree on
+ * screen, whose files a copy has to come from for its lines to mean anything to the agent.
  */
-export function useComposerPaste(worktreeId: string | null) {
+export function useComposerPaste(boxId: string | null, worktreeId: string | null) {
   const store = useStoreInstance();
   return (e: React.ClipboardEvent) => {
     const images = imageFiles(e.clipboardData);
     if (images.length > 0) {
       e.preventDefault();
-      return void attachImages(store, worktreeId, images);
+      return void attachImages(store, boxId, images);
     }
     const files = otherFiles(e.clipboardData);
     if (files.length > 0) {
       e.preventDefault();
-      return void attachTextFiles(store, worktreeId, files);
+      return void attachTextFiles(store, boxId, files);
     }
     // text/plain, never text/html: an editor or a web page offers both, and the markup is style
     // noise the model has no use for
     const text = e.clipboardData.getData("text/plain");
-    if (!isLongPaste(text)) return;
+    const source = text.trim() ? readCopiedSource(e.clipboardData, worktreeId) : null;
+    if (!(source && text.includes("\n")) && !isLongPaste(text)) return;
     e.preventDefault();
-    attachPaste(store, worktreeId, text);
+    attachPaste(store, boxId, text, source ? { source } : {});
   };
 }

@@ -34,8 +34,12 @@ describe("AttachmentStore", () => {
     expect(store.fileFor("wt-1", "3.txt")).toBe(join(dir, "wt-1", "3.txt"));
   });
   test("a paste from a file keeps its name; an empty one is a user error", async () => {
-    expect((await store.putText("wt-1", 4, "x", "App.tsx")).ref.name).toBe("App.tsx");
+    expect((await store.putText("wt-1", 4, "x", { name: "App.tsx" })).ref.name).toBe("App.tsx");
     await expect(store.putText("wt-1", 5, "")).rejects.toThrow("empty paste");
+  });
+  test("a paste copied in the editor keeps the file and lines it names", async () => {
+    const source = { path: "src/App.tsx", startLine: 3, endLine: 9 };
+    expect((await store.putText("wt-1", 6, "x", { source })).ref.source).toEqual(source);
   });
   test("images and pastes are numbered apart, so <n> can repeat without colliding", async () => {
     const i = await store.putImage("wt-2", 1, img);

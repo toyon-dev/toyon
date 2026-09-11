@@ -494,7 +494,7 @@ export class AcpSession implements AgentAdapter {
       stored.push(await this.d.attachments.putImage(this.d.worktreeId, ++this.imageSeq, img));
     const storedPastes: StoredPaste[] = [];
     for (const p of pastes ?? [])
-      storedPastes.push(await this.d.attachments.putText(this.d.worktreeId, ++this.pasteSeq, p.text, p.name));
+      storedPastes.push(await this.d.attachments.putText(this.d.worktreeId, ++this.pasteSeq, p.text, p));
     this.emit({
       type: "user-message",
       text,

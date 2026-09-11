@@ -110,7 +110,7 @@ export function Composer({
   // the picker picks from and the page context describes
   const frameId = usePreviewId();
   const page = useLocalField(frameId, "page");
-  const onPaste = useComposerPaste(boxId);
+  const onPaste = useComposerPaste(boxId, id);
   const firstImageNumber = nextImageNumber(chat);
   const firstPasteNumber = nextPasteNumber(chat);
   const setText = (t: string) => boxId && dispatch({ a: "set-draft", id: boxId, text: t });
@@ -389,7 +389,7 @@ export function Composer({
     const pickMeta = pick ? pickMetaOf(pick) : undefined;
     const sent = images.length ? images.map(({ key: _key, bytes: _bytes, ...img }) => img) : undefined;
     const sentPastes = pastes.length
-      ? pastes.map((p) => ({ text: p.text, ...(p.name ? { name: p.name } : {}) }))
+      ? pastes.map(({ key: _key, chars: _chars, lines: _lines, preview: _preview, ...p }) => p)
       : undefined;
     if (spawning) {
       const from = {
@@ -503,6 +503,7 @@ export function Composer({
             key={p.key}
             n={firstPasteNumber + i}
             name={p.name}
+            source={p.source}
             lines={p.lines}
             chars={p.chars}
             preview={p.preview}

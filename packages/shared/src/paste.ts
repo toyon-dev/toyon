@@ -2,6 +2,7 @@
 // numbers from the same text: the shell to label the chip before sending, the daemon to build the
 // PasteRef it stores, so a chip and its transcript entry can never disagree.
 
+import type { PasteSource } from "./protocol/events.ts";
 import { PASTE_MIN_CHARS, PASTE_MIN_LINES } from "./protocol/limits.ts";
 
 /** how many characters of the first line the chip and the prompt header carry */
@@ -16,6 +17,16 @@ export function pasteSummary(text: string): { chars: number; lines: number; prev
 /** a paste the composer collapses into a chip rather than dropping into the textarea */
 export function isLongPaste(text: string): boolean {
   return text.length >= PASTE_MIN_CHARS || text.split("\n").length >= PASTE_MIN_LINES;
+}
+
+/** a line range the way an editor's gutter reads it: one number for a single line */
+export function lineSpan({ startLine, endLine }: PasteSource): string {
+  return startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
+}
+
+/** a paste copied out of a file, named the way an editor names a selection: the file, then its lines */
+export function sourceLabel(source: PasteSource): string {
+  return `${source.path.slice(source.path.lastIndexOf("/") + 1)} (${lineSpan(source)})`;
 }
 
 // A copied terminal buffer brings its colours along: noise to the model, garbage in the chip

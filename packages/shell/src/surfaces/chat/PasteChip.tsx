@@ -1,3 +1,4 @@
+import { type PasteSource, sourceLabel } from "@toyon/shared";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -7,6 +8,7 @@ import { Icon } from "../../ui/Icon.tsx";
 export function PasteChip({
   n,
   name,
+  source,
   lines,
   chars,
   preview,
@@ -16,6 +18,8 @@ export function PasteChip({
 }: {
   n: number;
   name?: string;
+  /** the file and lines it was copied from in the editor */
+  source?: PasteSource;
   lines: number;
   chars: number;
   preview: string;
@@ -24,14 +28,20 @@ export function PasteChip({
   onRemove?: () => void;
   className?: string;
 }) {
+  // a piece of a file is named the way an editor names a selection; its directory, and the commit
+  // when it is history, stand where a paste's counts would
+  const dir = source?.path.includes("/") ? source.path.slice(0, source.path.lastIndexOf("/")) : "";
+  const detail = source
+    ? [dir, source.ref ? `at ${source.ref.slice(0, 7)}` : ""].filter(Boolean).join(" ")
+    : [`${lines} ${lines === 1 ? "line" : "lines"}`, `${chars.toLocaleString()} chars`, preview]
+        .filter(Boolean)
+        .join(" · ");
   const label = (
     <>
       <Icon name="text" className="icon-inline" />
       <span className="pick-target">
-        <b>{name ?? `Pasted text ${n}`}</b>
-        <span className="pick-file">
-          {lines} {lines === 1 ? "line" : "lines"} · {chars.toLocaleString()} chars{preview ? ` · ${preview}` : ""}
-        </span>
+        <b>{name ?? (source ? sourceLabel(source) : `Pasted text ${n}`)}</b>
+        {detail && <span className="pick-file"> · {detail}</span>}
       </span>
     </>
   );

@@ -750,6 +750,37 @@ describe("streams and notices", () => {
     ]);
     expect(s.diff?.line).toBe(55);
   });
+  test("a file asked for as the file opens without its diff, and only that file", () => {
+    const asked = run([
+      hello(wt("a")),
+      { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
+    ]);
+    expect(asked.diff?.view).toBe("file");
+    expect(asked.openView).toBeNull();
+
+    // the changes list, a chat link or a search hit sends no view: those open the diff
+    const next = reducer(asked, server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }));
+    expect(next.diff?.view).toBe("diff");
+
+    const stale = run([
+      hello(wt("a")),
+      { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
+      server({ t: "file-diff", worktreeId: "a", path: "y.tsx", before: "", after: "" }),
+    ]);
+    expect(stale.diff?.view).toBe("diff");
+    expect(stale.openView).toBeNull();
+  });
+  test("the open file switches view in place, keeping its line", () => {
+    const s = run([
+      hello(wt("a")),
+      { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 9 } },
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
+      { a: "editor-view", v: "file" },
+    ]);
+    expect(s.diff).toMatchObject({ path: "x.tsx", view: "file", line: 9, after: "b" });
+    expect(reducer(initial, { a: "editor-view", v: "file" }).diff).toBeNull();
+  });
 });
 
 // The shell is scoped to one project at a time while the daemon runs them all: `visible` is what

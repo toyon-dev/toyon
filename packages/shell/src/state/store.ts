@@ -253,6 +253,9 @@ function applyPanels(s: State, p: Panels): State {
   return { ...s, leftOpen: p.left, rightOpen: p.right, termOpen: p.term, designOpen: p.design, leftAuto: false };
 }
 
+/** what the editor pane draws for its file: the diff against main, or the file with none over it */
+export type EditorView = "diff" | "file";
+
 export interface State {
   connected: boolean;
   /** why the socket is down, once the shell has worked it out; null while connected or still probing */
@@ -308,7 +311,15 @@ export interface State {
   heard: boolean;
   local: Record<string, WorktreeLocal>;
   /** `ref` set means this is a commit's diff: history, so the editor opens it read-only */
-  diff: { worktreeId: string; path: string; before: string; after: string; line?: number; ref?: string } | null;
+  diff: {
+    worktreeId: string;
+    path: string;
+    before: string;
+    after: string;
+    line?: number;
+    ref?: string;
+    view: EditorView;
+  } | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
@@ -321,6 +332,9 @@ export interface State {
    * a line the running page reported, counted against the served module rather than the file, and
    * mapped back by the changed-ranges offset for that path. */
   gotoLine: { worktreeId: string; path: string; line: number; fiber?: boolean } | null;
+  /** the view a file was asked for in, held until its file-diff arrives; a reply for any other file
+   * opens as a diff, which is what every other way into the pane wants */
+  openView: { worktreeId: string; path: string; view: EditorView } | null;
   overlay: Overlay | null;
   /** a sub-picker (theme, appearance) was opened from a palette: esc goes back there with the query restored */
   paletteReturn: { mode: "commands" | "quick-open" | "keys"; q: string } | null;
@@ -420,6 +434,7 @@ export function initialState(opts: InitialOpts): State {
     heard: false,
     local: {},
     diff: null,
+    openView: null,
     toast: null,
     reloadReq: null,
     dragFiles: false,
@@ -604,6 +619,10 @@ export type Action =
   /** show a clone's progress in the preview area (null stops watching) */
   | { a: "watch-import"; id: string | null }
   | { a: "close-diff" }
+  /** a file-diff is going out for this file, and it should open in this view */
+  | { a: "open-view"; v: { worktreeId: string; path: string; view: EditorView } }
+  /** switch the open file between its diff and the file */
+  | { a: "editor-view"; v: EditorView }
   | { a: "dismiss-toast" }
   | { a: "set-draft"; id: string; text: string }
   | { a: "add-images"; id: string; images: PendingImage[] }
@@ -754,6 +773,10 @@ function reduce(s: State, action: Action): State {
       return { ...s, activeImportId: action.id };
     case "close-diff":
       return { ...s, diff: null };
+    case "open-view":
+      return { ...s, openView: action.v };
+    case "editor-view":
+      return s.diff ? { ...s, diff: { ...s.diff, view: action.v } } : s;
     case "dismiss-toast":
       return { ...s, toast: null };
     case "set-draft":
@@ -1077,14 +1100,22 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...next, diff: { ...next.diff, line: g.line - msg.lineOffset }, gotoLine: null };
     }
     case "file-diff": {
+      const o = s.openView;
+      const view = o && o.worktreeId === msg.worktreeId && o.path === msg.path ? o.view : "diff";
+      const opened = { ...msg, view };
       const g = s.gotoLine;
       if (!g || g.worktreeId !== msg.worktreeId || g.path !== msg.path)
-        return { ...s, diff: { ...msg }, gotoLine: null };
+        return { ...s, diff: opened, gotoLine: null, openView: null };
       const offset = localOf(s, msg.worktreeId).changedRanges[msg.path]?.offset;
       // hold the goto rather than reveal the wrong line: without the offset a preamble-shifted
       // file lands a few lines off, and changed-ranges (which DiffView asks for on mount) places it
-      if (g.fiber && offset === undefined) return { ...s, diff: { ...msg } };
-      return { ...s, diff: { ...msg, line: g.line - (g.fiber ? (offset ?? 0) : 0) }, gotoLine: null };
+      if (g.fiber && offset === undefined) return { ...s, diff: opened, openView: null };
+      return {
+        ...s,
+        diff: { ...opened, line: g.line - (g.fiber ? (offset ?? 0) : 0) },
+        gotoLine: null,
+        openView: null,
+      };
     }
     case "shipped": {
       // a suggestion lands in that worktree's composer and focuses it

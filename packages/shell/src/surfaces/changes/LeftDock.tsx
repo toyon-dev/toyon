@@ -246,11 +246,18 @@ export function LeftDock({ width }: { width: number }) {
   const wtId = active?.worktree.id;
   const dir = active ? wtDir(active.worktree) : "";
   const menuUncommitted = useCallback(
-    (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, true, { sock, dispatch }) : []),
+    (path: string): MenuEntry[] =>
+      wtId ? fileItems({ id: wtId, dir }, path, { discard: true }, { sock, dispatch }) : [],
     [wtId, dir, sock, dispatch],
   );
   const menuCommitted = useCallback(
-    (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, false, { sock, dispatch }) : []),
+    (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, {}, { sock, dispatch }) : []),
+    [wtId, dir, sock, dispatch],
+  );
+  // a history row's file views open it as that commit left it, the way clicking the row does
+  const menuAtCommit = useCallback(
+    (path: string): MenuEntry[] =>
+      wtId ? fileItems({ id: wtId, dir }, path, { ref: openShaRef.current ?? undefined }, { sock, dispatch }) : [],
     [wtId, dir, sock, dispatch],
   );
   // the list has the keyboard, so shift+F10 lands here rather than on the highlighted row: answer
@@ -262,7 +269,7 @@ export function LeftDock({ width }: { width: number }) {
       return f ? (sel < files.length ? menuUncommitted : menuCommitted)(f.path) : [];
     }
     const r = histRows[sel];
-    return r ? (r.file ? menuCommitted(r.file.path) : commitItems(r.commit)) : [];
+    return r ? (r.file ? menuAtCommit(r.file.path) : commitItems(r.commit)) : [];
   };
   const clickRow = useCallback(
     (path: string) => {
@@ -391,7 +398,7 @@ export function LeftDock({ width }: { width: number }) {
                   active={marked(i, openRef === r.commit.sha && r.file.path === openPath)}
                   selected={focused && sel === i}
                   onOpen={clickHistFile}
-                  menu={menuCommitted}
+                  menu={menuAtCommit}
                   onHover={noHover}
                 />
               ) : (

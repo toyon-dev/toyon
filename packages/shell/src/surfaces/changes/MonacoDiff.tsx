@@ -1,5 +1,6 @@
-// Lazy-loaded Monaco diff editor. Loaded via React.lazy so the editor bundle only downloads when
-// a diff is first opened. Working-tree diffs are editable and autosave; a commit's are read-only.
+// Lazy-loaded Monaco editor for the editor pane: the diff against main, or the file on its own.
+// Loaded via React.lazy so the editor bundle only downloads when a file is first opened.
+// Working-tree files are editable and autosave; a commit's are read-only.
 
 import type { Theme } from "@toyon/shared";
 import { toyonDark } from "@toyon/shared";
@@ -8,6 +9,7 @@ import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import { useEffect, useRef } from "react";
+import type { EditorView } from "../../state/store.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
 
 // monaco 0.56 moved the TS language API off `monaco.languages.typescript` (now a deprecated stub)
@@ -54,11 +56,24 @@ function shellType() {
 const THEME = "toyon";
 monaco.editor.defineTheme(THEME, toMonacoTheme(toyonDark));
 
+/** what the editor held when a view switch tore it down, so the other view opens on the same text
+ * at the same place */
+interface Carry {
+  path: string;
+  after: string;
+  readOnly: boolean;
+  view: EditorView;
+  value: string;
+  position: monaco.Position | null;
+  top: number;
+}
+
 export default function MonacoDiff({
   before,
   after,
   path,
   line: focusLine,
+  view,
   theme,
   readOnly = false,
   onSave,
@@ -69,10 +84,12 @@ export default function MonacoDiff({
   path: string;
   /** 1-based line to reveal + place the cursor on (search hit); otherwise the first change */
   line?: number;
+  /** the diff against main, or the file with no diff drawn over it */
+  view: EditorView;
   theme: Theme;
   /** a commit's diff: the modified side is history, not a file to edit */
   readOnly?: boolean;
-  onSave: (content: string) => void;
+  onSave: (path: string, content: string) => void;
   onLineHover?: (line: number | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -85,26 +102,29 @@ export default function MonacoDiff({
   saveRef.current = onSave;
   const hoverRef = useRef(onLineHover);
   hoverRef.current = onLineHover;
+  // A view switch rebuilds the editor from props, and the props are the file as it was opened. The
+  // text has to come from the editor being torn down instead: from the props, edits autosaved since
+  // would show as undone, and the next keystroke would save over them.
+  const carry = useRef<Carry | null>(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const original = monaco.editor.createModel(before, undefined, monaco.Uri.file(`/before/${path}`));
-    const modified = monaco.editor.createModel(after, undefined, monaco.Uri.file(`/after/${path}`));
-    const unchanged = before === after;
-    // a targeted line may sit inside an unchanged region — don't collapse those, or it'd be hidden
-    const keepAll = unchanged || focusLine != null;
-    const editor = monaco.editor.createDiffEditor(el, {
+    const c = carry.current;
+    carry.current = null;
+    // only a view switch carries: a new line to reveal or a fresh read of the file starts over
+    const kept = c && c.path === path && c.after === after && c.readOnly === readOnly && c.view !== view ? c : null;
+    const text = kept?.value ?? after;
+    const modified = monaco.editor.createModel(text, undefined, monaco.Uri.file(`/after/${path}`));
+    const unchanged = before === text;
+    const base = {
       readOnly,
-      originalEditable: false,
       automaticLayout: true,
-      renderSideBySide: false,
       theme: THEME,
       scrollBeyondLastLine: false,
       minimap: { enabled: false },
       ...shellType(),
       lineHeight: 1.5,
-      renderOverviewRuler: false,
       // monaco stacks a glyph margin (a full line-height wide), a folding column and the diff
       // gutter menu (a flat 35px) ahead of the line numbers, which in a pane this short left the
       // gutter wider than the indent of the code it labels. None of the three has a job here:
@@ -116,40 +136,74 @@ export default function MonacoDiff({
       // shipping six more colours; with them off a bracket is punctuation, which is what the
       // chat log's own diffs already draw, so a file reads the same on both surfaces
       bracketPairColorization: { enabled: false },
-      renderGutterMenu: false,
-      renderMarginRevertIcon: false,
-      // collapsing an entirely-unchanged file hides everything — plain view instead
-      hideUnchangedRegions: { enabled: !keepAll },
-    });
-    editor.setModel({ original, modified });
-    // diff computation is async: the editor first paints unfolded, then collapses.
-    // stay invisible until the first diff pass so it appears already settled.
+    };
+
+    let original: monaco.editor.ITextModel | null = null;
+    let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
+    let code: monaco.editor.IStandaloneCodeEditor;
+    if (view === "file") {
+      code = monaco.editor.create(el, { ...base, model: modified });
+    } else {
+      original = monaco.editor.createModel(before, undefined, monaco.Uri.file(`/before/${path}`));
+      // a targeted line may sit inside an unchanged region — don't collapse those, or it'd be
+      // hidden; a carried place is the same kind of target
+      const keepAll = unchanged || focusLine != null || kept != null;
+      diffEditor = monaco.editor.createDiffEditor(el, {
+        ...base,
+        originalEditable: false,
+        renderSideBySide: false,
+        renderOverviewRuler: false,
+        renderGutterMenu: false,
+        renderMarginRevertIcon: false,
+        // collapsing an entirely-unchanged file hides everything — plain view instead
+        hideUnchangedRegions: { enabled: !keepAll },
+      });
+      diffEditor.setModel({ original, modified });
+      code = diffEditor.getModifiedEditor();
+    }
+
     let reveal = () => {
       el.style.opacity = "1";
       reveal = () => {};
     };
-    if (focusLine != null) {
-      const me0 = editor.getModifiedEditor();
-      const ln = Math.max(1, Math.min(focusLine, modified.getLineCount()));
-      me0.setPosition({ lineNumber: ln, column: 1 });
-      me0.revealLineInCenter(ln);
-      me0.focus();
-      reveal();
-    } else if (unchanged) {
-      editor.getModifiedEditor().setScrollTop(0);
-      reveal();
-    } else {
+    // diff computation is async: the editor first paints unfolded, then collapses, and the deleted
+    // lines arrive as zones that push the modified ones down. Stay invisible until the first diff
+    // pass so it appears already settled, then place the viewport against the final layout.
+    const settle = (place: () => void) => {
+      if (!diffEditor || unchanged) {
+        place();
+        reveal();
+        return;
+      }
       el.style.opacity = "0";
-      const sub = editor.onDidUpdateDiff(() => {
+      const sub = diffEditor.onDidUpdateDiff(() => {
         sub.dispose();
-        const first = editor.getLineChanges()?.[0];
-        const line = first?.modifiedStartLineNumber || first?.modifiedEndLineNumber || 1;
-        editor.getModifiedEditor().revealLineInCenter(line);
+        place();
         reveal();
       });
       // safety: never stay hidden if the diff event doesn't fire
       setTimeout(() => reveal(), 400);
+    };
+    if (kept) {
+      if (kept.position) code.setPosition(kept.position);
+      settle(() => code.setScrollTop(code.getTopForLineNumber(kept.top)));
+    } else if (focusLine != null) {
+      const ln = Math.max(1, Math.min(focusLine, modified.getLineCount()));
+      code.setPosition({ lineNumber: ln, column: 1 });
+      code.revealLineInCenter(ln);
+      code.focus();
+      reveal();
+    } else if (diffEditor && !unchanged) {
+      const d = diffEditor;
+      settle(() => {
+        const first = d.getLineChanges()?.[0];
+        code.revealLineInCenter(first?.modifiedStartLineNumber || first?.modifiedEndLineNumber || 1);
+      });
+    } else {
+      code.setScrollTop(0);
+      reveal();
     }
+
     // IDE-style autosave: debounce after last keystroke; cmd+s still forces it. A commit's diff is
     // history, so neither is wired up: there is no working file for a write to land in.
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -157,26 +211,29 @@ export default function MonacoDiff({
       ? null
       : modified.onDidChangeContent(() => {
           if (saveTimer) clearTimeout(saveTimer);
-          saveTimer = setTimeout(() => saveRef.current(modified.getValue()), 800);
+          saveTimer = setTimeout(() => {
+            saveTimer = null;
+            saveRef.current(path, modified.getValue());
+          }, 800);
         });
     if (!readOnly) {
-      editor.getModifiedEditor().addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      code.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
         if (saveTimer) clearTimeout(saveTimer);
-        saveRef.current(modified.getValue());
+        saveTimer = null;
+        saveRef.current(path, modified.getValue());
       });
     }
 
     // line hover -> highlight what that line renders on the page
     let lastLine: number | null = null;
-    const me = editor.getModifiedEditor();
-    const subMove = me.onMouseMove((e) => {
+    const subMove = code.onMouseMove((e) => {
       const line = e.target?.position?.lineNumber ?? null;
       if (line !== lastLine) {
         lastLine = line;
         hoverRef.current?.(line);
       }
     });
-    const subLeave = me.onMouseLeave(() => {
+    const subLeave = code.onMouseLeave(() => {
       lastLine = null;
       hoverRef.current?.(null);
     });
@@ -184,13 +241,27 @@ export default function MonacoDiff({
       sub2?.dispose();
       subMove.dispose();
       subLeave.dispose();
-      if (saveTimer) clearTimeout(saveTimer);
+      // a keystroke inside the debounce is still owed to disk when the pane closes or the view
+      // switches; the path is this editor's, since the props may already name the next file
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveRef.current(path, modified.getValue());
+      }
       hoverRef.current?.(null);
-      editor.dispose();
-      original.dispose();
+      carry.current = {
+        path,
+        after,
+        readOnly,
+        view,
+        value: modified.getValue(),
+        position: code.getPosition(),
+        top: code.getVisibleRanges()[0]?.startLineNumber ?? 1,
+      };
+      (diffEditor ?? code).dispose();
+      original?.dispose();
       modified.dispose();
     };
-  }, [before, after, path, focusLine, readOnly]);
+  }, [before, after, path, focusLine, readOnly, view]);
 
   return <div ref={ref} style={{ position: "absolute", inset: "33px 0 0 0" }} />;
 }

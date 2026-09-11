@@ -171,6 +171,22 @@ describe("toolLabel", () => {
     });
   });
 
+  test("a network ask reads as the host it asked for, under a globe", () => {
+    const call = {
+      name: "network",
+      title: "registry.npmjs.org",
+      toolKind: "fetch" as const,
+      input: { host: "registry.npmjs.org" },
+    };
+    expect(toolLabel(call)).toEqual({
+      label: "fetch",
+      name: "network",
+      icon: "globe",
+      hint: "registry.npmjs.org",
+      command: "",
+    });
+  });
+
   test("a title that only repeats the name leaves the row one word", () => {
     expect(toolLabel({ name: "think", title: "think", input: null })).toEqual({
       label: "tool",

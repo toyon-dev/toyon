@@ -80,6 +80,7 @@ export default function MonacoDiff({
   onSave,
   onLineHover,
   onCopy,
+  onChat,
 }: {
   before: string;
   after: string;
@@ -95,6 +96,8 @@ export default function MonacoDiff({
   onLineHover?: (line: number | null) => void;
   /** a copy out of the editor, in either view: the lines it took, and the clipboard to say so on */
   onCopy?: (path: string, lines: { startLine: number; endLine: number }, clipboard: DataTransfer) => void;
+  /** ⌘L: the selection it took, or null when there was none and only the keyboard moves */
+  onChat?: (path: string, taken: { startLine: number; endLine: number; text: string } | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // setTheme is global: every editor follows, including ones created before the change
@@ -108,6 +111,8 @@ export default function MonacoDiff({
   hoverRef.current = onLineHover;
   const copyRef = useRef(onCopy);
   copyRef.current = onCopy;
+  const chatRef = useRef(onChat);
+  chatRef.current = onChat;
   // A view switch rebuilds the editor from props, and the props are the file as it was opened. The
   // text has to come from the editor being torn down instead: from the props, edits autosaved since
   // would show as undone, and the next keystroke would save over them.
@@ -257,6 +262,34 @@ export default function MonacoDiff({
     };
     el.addEventListener("copy", tagCopy, true);
     el.addEventListener("cut", tagCopy, true);
+
+    // ⌘L gives the chat what is selected, named for the lines it covers, and with nothing selected
+    // only moves the keyboard to the box, as ⌘L does everywhere else. Monaco binds the key to
+    // expanding the line selection and keeps it from the window, so the editor answers it itself:
+    // two actions split on whether there is a selection, and the one that takes it sits in the
+    // context menu, which shows the key beside it to anyone who has not read the shortcuts.
+    const chatKey = [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL];
+    const chatAction = code.addAction({
+      id: "toyon.add-to-chat",
+      label: "Add to Chat",
+      keybindings: chatKey,
+      precondition: "editorHasSelection",
+      contextMenuGroupId: "9_cutcopypaste",
+      contextMenuOrder: 5,
+      run: () => {
+        const [sel, ...more] = code.getSelections() ?? [];
+        // several cursors take lines that no single range names; the keyboard still moves
+        const taken = sel && more.length === 0 ? { ...selectedLines(sel), text: modified.getValueInRange(sel) } : null;
+        chatRef.current?.(path, taken);
+      },
+    });
+    const focusAction = code.addAction({
+      id: "toyon.focus-chat",
+      label: "Focus Chat",
+      keybindings: chatKey,
+      precondition: "!editorHasSelection",
+      run: () => chatRef.current?.(path, null),
+    });
     return () => {
       clearTimeout(safety);
       sub2?.dispose();
@@ -264,6 +297,8 @@ export default function MonacoDiff({
       subLeave.dispose();
       el.removeEventListener("copy", tagCopy, true);
       el.removeEventListener("cut", tagCopy, true);
+      chatAction.dispose();
+      focusAction.dispose();
       // a keystroke inside the debounce is still owed to disk when the pane closes or the view
       // switches; the path is this editor's, since the props may already name the next file
       if (saveTimer) {

@@ -185,6 +185,11 @@ export interface Draft {
 const DRAFT_PREFIX = "draft:";
 export const draftKey = (repoId: string) => DRAFT_PREFIX + repoId;
 
+/** the composer box the words are written in: while drafting it is the repo's draft, so it survives
+ * the tab closing and reopening and is never a row's; otherwise it is the active worktree's */
+export const composerBoxOf = (active: OwnedWorktree | null, drafting: boolean): string | null =>
+  active ? (drafting ? draftKey(active.worktree.repoId) : active.worktree.id) : null;
+
 export interface PendingImage extends ImageInput {
   key: string;
   bytes: number;

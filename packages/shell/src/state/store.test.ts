@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
+import { addToChat } from "./attach.ts";
+import { createStore } from "./context.tsx";
 import {
   type Action,
   draftKey,
@@ -1268,5 +1270,32 @@ describe("model", () => {
     expect(s.local.b?.model).toBeUndefined();
     // a session-info without a model (a resume that says nothing) keeps the last one
     expect(run([agent("a", { type: "session-info", sessionId: "s1" })], s).local.a?.model).toBe("big");
+  });
+});
+
+describe("add to chat", () => {
+  const source = { path: "src/App.tsx", startLine: 3, endLine: 5 };
+  const storeOn = () => createStore(run([hello(wt("a"))]));
+
+  test("a selection joins the active box as a chip named for its lines, and the box takes the keyboard", () => {
+    const store = storeOn();
+    const asked = store.getState().focusRight;
+    addToChat(store, { worktreeId: "a", source, text: "one\ntwo\nthree\n" });
+    expect(store.getState().local.a?.pastes).toMatchObject([{ text: "one\ntwo\nthree", source, lines: 3 }]);
+    expect(store.getState().focusRight).toBe(asked + 1);
+  });
+  test("the same lines again, or nothing selected, only move the keyboard", () => {
+    const store = storeOn();
+    const asked = store.getState().focusRight;
+    addToChat(store, { worktreeId: "a", source, text: "x" });
+    addToChat(store, { worktreeId: "a", source, text: "x" });
+    addToChat(store, null);
+    expect(store.getState().local.a?.pastes).toHaveLength(1);
+    expect(store.getState().focusRight).toBe(asked + 3);
+  });
+  test("lines from a worktree that is not on screen attach nothing", () => {
+    const store = storeOn();
+    addToChat(store, { worktreeId: "b", source, text: "x" });
+    expect(store.getState().local.a?.pastes ?? []).toHaveLength(0);
   });
 });

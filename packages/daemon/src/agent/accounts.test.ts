@@ -48,7 +48,7 @@ const infos = (): AgentInfo[] => [
 ];
 
 function world(opts: Parameters<typeof fakeAdapter>[0] = {}) {
-  const agents = fakeAgents();
+  const agents = fakeAgents("/nowhere");
   const adapter = fakeAdapter(opts);
   const accounts = new AgentAccounts({ require: (id) => agents.require(id), connect: adapter.connect });
   let changes = 0;

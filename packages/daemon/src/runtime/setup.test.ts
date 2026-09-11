@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runSetup } from "./setup.ts";
@@ -33,7 +33,11 @@ describe("runSetup", () => {
   test("runs in the directory it is given", async () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "toyon-setup-")));
     const seen: string[] = [];
-    await runSetup("pwd", dir, (l) => seen.push(l));
+    try {
+      await runSetup("pwd", dir, (l) => seen.push(l));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
     expect(seen[0]).toBe(dir);
   });
 

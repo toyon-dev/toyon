@@ -36,7 +36,7 @@ function make() {
   const state = new StateStore(t.paths, { repos: [repo], worktrees: [wt, spare], sessions: {} });
   const hub = new Hub();
   const f = fakeFactories();
-  const agents = fakeAgents();
+  const agents = fakeAgents(t.paths.agentsDir);
   const registry = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
   return { state, hub, registry, ...f };
 }

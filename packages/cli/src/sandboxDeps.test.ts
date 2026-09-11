@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { missingSandboxTools, sandboxAdvice } from "./sandboxDeps.ts";
@@ -11,10 +11,14 @@ describe("missingSandboxTools", () => {
 
   test("on Linux, names what PATH does not have", () => {
     const bin = mkdtempSync(join(tmpdir(), "toyon-sandbox-"));
-    expect(missingSandboxTools(bin, "linux")).toEqual(["bwrap", "socat"]);
-    writeFileSync(join(bin, "bwrap"), "#!/bin/sh\n");
-    chmodSync(join(bin, "bwrap"), 0o755);
-    expect(missingSandboxTools(bin, "linux")).toEqual(["socat"]);
+    try {
+      expect(missingSandboxTools(bin, "linux")).toEqual(["bwrap", "socat"]);
+      writeFileSync(join(bin, "bwrap"), "#!/bin/sh\n");
+      chmodSync(join(bin, "bwrap"), 0o755);
+      expect(missingSandboxTools(bin, "linux")).toEqual(["socat"]);
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
   });
 
   test("the advice names the missing tools and the apt line", () => {

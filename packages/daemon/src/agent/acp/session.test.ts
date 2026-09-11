@@ -476,6 +476,23 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a stop before the prompt has gone out keeps it from going, and the queue still runs", async () => {
+    const stopping = untilCancelled();
+    const w = world(stopping);
+    w.session.send("go");
+    w.session.send("later");
+    // the agent is still starting: there is no turn on its side for a cancel to reach
+    w.session.stop();
+    await w.idle();
+    expect(promptTexts(stopping)).toEqual(["later"]);
+    expect(w.events.filter((e) => e.type === "turn-end")).toMatchObject([
+      { stopReason: "interrupted" },
+      { stopReason: "end_turn" },
+    ]);
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
   test("a message sent while a stop settles runs once the turn has ended, not into the cancelled one", async () => {
     const stopping = untilCancelled({ steering: true });
     const w = world(stopping);

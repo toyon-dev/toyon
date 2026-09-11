@@ -124,9 +124,9 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       }
       items={[]}
       filter={filter}
-      // a switcher opens on somewhere to go: enter straight away leaves the open project, as ⌘Tab
-      // does, and the open one stays listed for its hint and its right-click
-      initialIndex={(rs) => rs.findIndex((r) => !(r.kind === "repo" && r.repo.id === current))}
+      // opens on the open project, as every picker opens on its current choice, so the edge and the
+      // cursor start on one row; with no open project the clamp puts it on the first
+      initialIndex={(rs) => rs.findIndex((r) => r.kind === "repo" && r.repo.id === current)}
       keyOf={(r) =>
         r.kind === "repo"
           ? r.repo.id

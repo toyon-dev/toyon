@@ -12,6 +12,7 @@ export type IconName =
   | "forward"
   | "reload"
   | "pick"
+  | "inspect"
   | "terminal"
   | "close"
   | "edit"
@@ -56,6 +57,9 @@ const ICON_PATHS: Record<IconName, string> = {
   reload: "M13.5 2.5v3.5H10 M12.4 9.2a4.8 4.8 0 1 1-1-4.9l2.1 1.7",
   // crosshair: ring with four ticks
   pick: "M8 4.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 1 0 0-7.6z M8 1.5v2.7 M8 11.8v2.7 M1.5 8h2.7 M11.8 8h2.7",
+  // a pointer over a box left open at its corner: the devtools element select, which is what ⌘I is.
+  // The crosshair stays the chat's pick, so the two buttons never read as one control in two places
+  inspect: "M6.5 13.5h-3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v3 M8.2 8.2l5.3 2-2.3.9-.9 2.3z",
   // a prompt: chevron + cursor line
   terminal:
     "M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z M4.8 5.6 7.4 8l-2.6 2.4 M8.6 10.6h2.8",

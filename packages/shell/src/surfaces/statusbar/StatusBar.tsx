@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { previewBus } from "../../app/previewBus.ts";
+import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { previewItems } from "../../state/actions/preview.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
-import { useActive, useActiveRepo, useGreenfield, useLocalField } from "../../state/selectors.ts";
+import { useActive, useActiveRepo, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -192,7 +192,13 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
   const pageMenu = cm.contextMenu(() =>
     ready ? previewItems(url, { reload: () => id && previewBus.post(id, { type: "reload" }) }) : [],
   );
-  // the three are actions, not switches, so they take no chrome tone: its seat says "on"
+  const dispatch = useDispatch();
+  const picking = useStore((s) => s.picking);
+  // the frame on screen, the same one ⌘I arms: while drafting that is the base's preview, not the row's
+  const frameId = usePreviewId();
+  // the three are actions, not switches, so they take no chrome tone: its seat says "on". The picker
+  // at the end declines it too, for its own reason: it is a mode, lit in the accent like the
+  // composer's picker, so the two read as one family whichever is armed
   return (
     <div className="bar-center" style={{ left }}>
       <IconButton
@@ -233,6 +239,16 @@ function RouteBar({ worktreeId: id, ready, left }: { worktreeId: string | null; 
           }
         }}
         spellCheck={false}
+      />
+      {/* ⌘I's own button: the page's inspector belongs in the page's chrome, where devtools keeps
+          it, and the chat's pick keeps its seat in the composer, where that pick lands */}
+      <IconButton
+        icon="inspect"
+        label="Pick an element to open its code"
+        hint={chord("inspect")}
+        on={picking === "code"}
+        disabled={!ready || !frameId}
+        onClick={() => frameId && togglePick(frameId, picking, dispatch, "code")}
       />
     </div>
   );

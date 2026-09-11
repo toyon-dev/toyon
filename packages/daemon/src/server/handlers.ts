@@ -333,7 +333,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "discard-file"(msg, ctx, s) {
-    await s.files.discard(msg.worktreeId, msg.path);
+    const discarded = await s.files.discard(msg.worktreeId, msg.path);
+    // An editor pane on this file still holds the text it opened with, and its next keystroke would
+    // autosave the discarded change back. The shell cannot ask for a fresh read itself: the socket
+    // runs messages concurrently, so a file-diff sent beside the discard may read before checkout.
+    const { before, after } =
+      discarded === "restored" ? await s.files.diff(msg.worktreeId, msg.path) : { before: "", after: "" };
+    ctx.reply({ t: "file-diff", worktreeId: msg.worktreeId, path: msg.path, before, after, discarded });
     await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, true, `discarded ${msg.path}`));
   },
 

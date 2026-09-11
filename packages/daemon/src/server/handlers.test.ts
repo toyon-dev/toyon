@@ -541,4 +541,28 @@ describe("handlers", () => {
     const diff = replies.at(-1);
     expect(diff?.t === "file-diff" && diff.after).toBe("abc");
   });
+
+  test("discard-file replies the file as the discard left it", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await dispatch({ t: "write-file", worktreeId: main.id, path: "README.md", content: "edited\n" }, ctx, services);
+    await dispatch({ t: "write-file", worktreeId: main.id, path: "new.txt", content: "abc" }, ctx, services);
+
+    replies.length = 0;
+    await dispatch({ t: "discard-file", worktreeId: main.id, path: "README.md" }, ctx, services);
+    expect(replies.find((m) => m.t === "file-diff")).toEqual({
+      t: "file-diff",
+      worktreeId: main.id,
+      path: "README.md",
+      before: "hello\n",
+      after: "hello\n",
+      discarded: "restored",
+    });
+
+    replies.length = 0;
+    await dispatch({ t: "discard-file", worktreeId: main.id, path: "new.txt" }, ctx, services);
+    expect(replies.find((m) => m.t === "file-diff")).toMatchObject({ path: "new.txt", discarded: "removed" });
+    expect(replies.at(-1)?.t).toBe("git-status");
+  });
 });

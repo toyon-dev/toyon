@@ -61,14 +61,18 @@ export class FileService {
     await Bun.write(resolveInside(wt.path, path), content);
   }
 
-  /** drop uncommitted changes to one file (delete it if untracked) */
-  async discard(worktreeId: string, path: string): Promise<void> {
+  /** drop uncommitted changes to one file: back to HEAD, or deleted if untracked */
+  async discard(worktreeId: string, path: string): Promise<"restored" | "removed"> {
     const wt = this.requireOwned(worktreeId);
     const target = resolveInside(wt.path, path);
     const entry = (await statusFiles(wt.path)).find((f) => f.path === path);
     if (!entry) throw new UserError("file has no uncommitted changes");
-    if (entry.xy === "??") unlinkSync(target);
-    else await git(wt.path, "checkout", "HEAD", "--", path);
+    if (entry.xy === "??") {
+      unlinkSync(target);
+      return "removed";
+    }
+    await git(wt.path, "checkout", "HEAD", "--", path);
+    return "restored";
   }
 
   /** tracked + untracked (respecting .gitignore) */

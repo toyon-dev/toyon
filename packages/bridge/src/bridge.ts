@@ -8,6 +8,7 @@
 // (cloud with no known public host) both sides fall back to open.
 import { matchChord } from "@toyon/shared/chords";
 import type { BridgeToShellMsg, ShellToBridgeMsg } from "@toyon/shared/protocol/bridge";
+import { type Fiber, pickedAt, pickTarget, type Source, sourceOf } from "./fiber.ts";
 
 declare global {
   interface Window {
@@ -114,72 +115,13 @@ window.addEventListener("drop", (e) => {
   post({ type: "drop-files" });
 });
 
-// ---- React fiber source mapping ----
-
-type Fiber = {
-  return: Fiber | null;
-  type: unknown;
-  _debugSource?: { fileName: string; lineNumber: number };
-  _debugStack?: { stack?: string } | Error;
-};
+// ---- React fiber source mapping (the rules are in fiber.ts) ----
 
 function fiberOf(el: Element): Fiber | null {
   for (const k of Object.keys(el)) {
     if (k.startsWith("__reactFiber$")) return (el as unknown as Record<string, Fiber>)[k] ?? null;
   }
   return null;
-}
-
-type Source = { file: string; line?: number };
-
-/** where this one fiber's JSX was written */
-function sourceAt(f: Fiber): Source | null {
-  if (f._debugSource?.fileName) return { file: f._debugSource.fileName, line: f._debugSource.lineNumber };
-  // React 19 dropped _debugSource; _debugStack frames carry served-module URLs
-  const stack = (f._debugStack as Error | undefined)?.stack;
-  if (stack) {
-    const m = stack.match(/https?:\/\/[^/]+(\/src\/[^)\s?]+)(?:\?[^:)\s]*)?:(\d+):\d+/);
-    if (m?.[1]) return { file: m[1], line: Number(m[2]) || undefined };
-  }
-  return null;
-}
-
-function sourceOf(fiber: Fiber | null): Source | null {
-  for (let f = fiber; f; f = f.return) {
-    const s = sourceAt(f);
-    if (s) return s;
-  }
-  return null;
-}
-
-/** Clicking a control in an app with a design system finds the shared component first (`<button>`
- * lives in ui/Button.tsx), which is rarely the file being edited: the interesting line is the
- * `<Button>` in the surface, and that is the component fiber's own JSX one frame up. Reading the
- * name and the call site off the *same* fiber is what keeps them talking about the same thing:
- * children handed to a shared component are written in the outer file, so a rule that just took
- * the next file up would answer `<Button>` with a line inside Button.tsx. */
-function pickedAt(fiber: Fiber | null): { src: Source | null; comp: string | null; call: Source | null } {
-  let src: Source | null = null;
-  let comp: string | null = null;
-  let call: Source | null = null;
-  for (let f = fiber; f; f = f.return) {
-    const s = sourceAt(f);
-    if (s && !src) src = s;
-    const t = f.type as { name?: string } | string | null;
-    const named = typeof t === "function" ? t.name || null : null;
-    if (!comp && named) {
-      comp = named;
-      call = s;
-      // a component boundary with no source of its own: the next one above is still its call site
-      if (call) break;
-    } else if (comp && s) {
-      call = s;
-      break;
-    }
-  }
-  // one source, named once: a plain element written where it renders has nowhere else to send you
-  if (call && src && call.file === src.file && call.line === src.line) call = null;
-  return { src, comp, call };
 }
 
 // ---- overlay (picker highlight + file highlight) ----
@@ -246,21 +188,14 @@ let shift = false;
 /** armed by ⌘I: the plain click opens the source, and alt is the way to the chat */
 let inspect = false;
 
-/** which file alt-clicking right now would open. The call site is the default because it is the
- * line you edit; shift asks for the JSX itself. Either falls back to the other, so a chain with
- * one source to give still honours the click. */
-function pickTarget(src: Source | null, call: Source | null): Source | null {
-  return (shift ? (src ?? call) : (call ?? src)) ?? null;
-}
-
 const at = (s: Source) => `${shortFile(s.file)}${s.line ? `:${s.line}` : ""}`;
 
 function paintPick(el: Element) {
   shownEl = el;
   clearOverlay();
-  const fiber = fiberOf(el);
-  const { src, comp, call } = pickedAt(fiber);
-  const target = pickTarget(src, call);
+  const picked = pickedAt(fiberOf(el));
+  const { src, comp, call } = picked;
+  const target = pickTarget(picked, shift);
   // the other source is offered under shift, in both directions: it is the same key back
   const other = target === src ? call : src;
   const code = alt !== inspect && !!target;
@@ -292,10 +227,10 @@ function onPickClick(e: MouseEvent) {
   e.preventDefault();
   e.stopPropagation();
   const el = shownEl ?? document.elementFromPoint(e.clientX, e.clientY);
-  const fiber = el ? fiberOf(el) : null;
-  const { src, comp, call } = pickedAt(fiber);
+  const picked = pickedAt(el ? fiberOf(el) : null);
+  const { src, comp, call } = picked;
   shift = e.shiftKey;
-  const target = pickTarget(src, call);
+  const target = pickTarget(picked, shift);
   // ⌘I's plain click only ever opens a file: on an element with none it stays armed and does
   // nothing, rather than quietly attaching to the chat someone reached past with ⌥
   if (inspect && !e.altKey && !target) return;

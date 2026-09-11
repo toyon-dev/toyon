@@ -27,7 +27,8 @@ export interface PickMeta {
   line: number | null;
   /** where the component holding it is written: for a `<button>` from a shared `<Button>`, `file`
    * is ui/Button.tsx and this the surface that writes `<Button>`. Null when the element's own JSX
-   * is already in the file that renders it. */
+   * is already that line, and when the component is mounted by the root render (the `<App />` in
+   * main.tsx). */
   callFile: string | null;
   callLine: number | null;
   tag: string;

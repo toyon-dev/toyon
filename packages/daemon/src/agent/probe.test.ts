@@ -59,7 +59,7 @@ function fakeAdapter(opts: { failNew?: boolean } = {}) {
 }
 
 function world(adapter: ReturnType<typeof fakeAdapter>, infos: AgentInfo[], known: string[] = []) {
-  const agents = fakeAgents();
+  const agents = fakeAgents("/nowhere");
   const learned: Array<[string, string, ModelChoice[]]> = [];
   const probe = new OptionProbe({
     infos: () => infos,

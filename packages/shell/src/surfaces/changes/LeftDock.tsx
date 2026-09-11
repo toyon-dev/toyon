@@ -233,10 +233,12 @@ export function LeftDock({ width }: { width: number }) {
         setTab("changes");
       }
     } else if (e.key === "Escape") {
-      // the app-wide Escape closes the diff pane, which is the thing this list just opened: here it
-      // only hands the keyboard back to the preview
+      // Escape closes what the list opened and leaves the keyboard here, so the arrows can open the
+      // next file straight away. Only a list with nothing open hands the keyboard back. It never
+      // reaches the app-wide ladder, which would close the terminal ahead of the diff.
       e.stopPropagation();
-      (document.activeElement as HTMLElement | null)?.blur();
+      if (openPath !== null) dispatch({ a: "close-diff" });
+      else (document.activeElement as HTMLElement | null)?.blur();
     }
   };
 

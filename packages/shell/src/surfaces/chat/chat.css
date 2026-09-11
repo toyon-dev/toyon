@@ -630,11 +630,8 @@
     }
   }
   /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
-  /* main's target row above the box: the draft strip's shape, inside the composer's frame */
+  /* main's target line above the box: a sentence, so it flows as text (TargetChip.tsx says why) */
   .composer-target {
-    display: flex;
-    align-items: center;
-    gap: 10px;
     margin-bottom: 8px;
   }
   .spawn-left {

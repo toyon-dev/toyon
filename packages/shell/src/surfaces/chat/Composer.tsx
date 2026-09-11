@@ -22,7 +22,7 @@ import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { ModelChip, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
-import { TargetChip } from "../chips/TargetChip.tsx";
+import { TargetLine } from "../chips/TargetChip.tsx";
 import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
@@ -286,16 +286,18 @@ export function Composer({
       : null;
   const ghost = argGhost ?? shellGhost;
   // the placeholder, and the quieter line under it while the box is empty: what the base leaves
-  // behind when there is something, else, on main's own fast path, what the draft tab adds
+  // behind when there is something, else, on main's own fast path, what the draft tab adds. Where
+  // the message goes is not the placeholder's to say when a line above the box already says it:
+  // main's target line, or the draft tab's lit row.
   const title = active?.worktree.title ?? "untitled";
   const placeholderText = !active
     ? "no worktree selected"
     : greenfield
       ? "describe the app; the agent scaffolds it here"
-      : drafting
-        ? "describe a change; an agent starts on it in a new worktree"
-        : spawning
-          ? `describe a change; starts an agent in a new worktree from ${title}`
+      : drafting || spawning
+        ? "describe a change"
+        : onMain
+          ? "message the agent; / for a command, ! for a shell command"
           : `message agent on ${title}; / for a command, ! for a shell command`;
   const subline =
     text !== "" || ghost || !active
@@ -449,14 +451,13 @@ export function Composer({
 
   return (
     <div className="composer chat-input">
-      {/* where a message from main goes, on its own row above the box the way the draft's birth-time
+      {/* where a message from main goes, as a line above the box the way the draft's birth-time
           choices sit above it: a worktree's messages only ever go to that worktree (a fork is the
           row menu's "new worktree from here"), so only main has the choice */}
       {onMain && !greenfield && !drafting && active && (
         <div className="hint composer-target">
-          <TargetChip
+          <TargetLine
             title={title}
-            main
             value={spawnNew ? "new" : "here"}
             onChange={(t) => setSpawnNew(t === "new")}
             onClose={refocus}

@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 import type { PickMeta } from "./events.ts";
-import { pickMetaSchema } from "./pick.ts";
+import { elementTraitsSchema, pickMetaSchema } from "./pick.ts";
 
 declare global {
   interface Window {
@@ -63,6 +63,8 @@ export const pickedElementSchema = pickMetaSchema.extend({
   text: z.string(),
   html: z.string(),
   route: z.string(),
+  /** what the source is searched for when the page recorded no file */
+  element: elementTraitsSchema,
 });
 export type PickedElement = z.infer<typeof pickedElementSchema>;
 

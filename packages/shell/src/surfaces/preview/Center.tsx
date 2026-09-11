@@ -1,6 +1,7 @@
 import { type ConnectFailure, isOwned, parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
+import { nextSeq } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
 import { openSource } from "../../state/openSource.ts";
@@ -187,10 +188,13 @@ export function Center() {
               site === "call" ? { file: pick.callFile, line: pick.callLine } : { file: pick.file, line: pick.line };
             // the source verb is navigation and nothing else: no chip, no chat. The frame has
             // already disarmed, so the store follows it
-            if (verb === "code" && from.file) {
+            if (verb === "code") {
               dispatch({ a: "set-picking", v: false });
               const wt = worktreeById(store.getState(), id)?.worktree;
-              openSource(store, sock, id, relFile(from.file, wt && wtDir(wt)), from.line ?? 1);
+              if (from.file) openSource(store, sock, id, relFile(from.file, wt && wtDir(wt)), from.line ?? 1);
+              // the page recorded no file: the daemon searches the source for what the element shows,
+              // and its answer carries this seq so a file opened meanwhile is not taken over
+              else sock?.send({ t: "find-element", worktreeId: id, seq: nextSeq(), element: pick.element });
             } else dispatch({ a: "picked", pick: { worktreeId: id, ...pick } });
             break;
           }

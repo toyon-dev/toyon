@@ -367,6 +367,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply({ t: "search-results", worktreeId: msg.worktreeId, query: msg.query, hits, truncated });
   },
 
+  async "find-element"(msg, ctx, s) {
+    const { hits, sure } = await s.files.findElement(msg.worktreeId, msg.element);
+    ctx.reply({ t: "element-sources", worktreeId: msg.worktreeId, seq: msg.seq, hits, sure });
+  },
+
   async "design-scan"(msg, ctx, s) {
     const index = await s.design.scan(msg.worktreeId);
     ctx.reply({ t: "design-index", worktreeId: msg.worktreeId, index });

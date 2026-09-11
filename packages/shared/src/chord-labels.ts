@@ -43,24 +43,27 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   zen: { label: "full-bleed preview", section: "Preview" },
   new: { label: "new worktree", section: "Worktrees", advertise: { key: "n", when: "pwa" } },
   worktree: { label: "switch worktree", section: "Worktrees" },
-  "wt-prev": { label: "previous worktree", section: "Worktrees" },
-  "wt-next": { label: "next worktree", section: "Worktrees" },
+  "wt-prev": { label: "previous worktree", section: "Worktrees", advertise: { key: "Tab", when: "pwa" } },
+  "wt-next": { label: "next worktree", section: "Worktrees", advertise: { key: "Tab", when: "pwa" } },
   "wt-unseen-prev": { label: "previous unseen worktree", section: "Worktrees", hidden: true },
   "wt-unseen-next": { label: "next unseen worktree", section: "Worktrees", hidden: true },
   project: { label: "open project", section: "Worktrees" },
   refs: { label: "open a branch or PR", section: "Worktrees" },
 };
 
-/** the arrow rows' keys as they are drawn: KeyboardEvent.key names them in words */
-const ARROWS: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓" };
+/** named keys as they are drawn: KeyboardEvent.key spells the arrows out, and Tab stays a word */
+const KEY_NAMES: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓", Tab: "Tab" };
 
 /** "⌘⇧P" style label, showing the chord's advertised alias when the environment calls for it
- * (⌘⇧E on Firefox, ⌘N in an installed PWA). Other aliases stay unadvertised. */
+ * (⌘⇧E on Firefox, ⌘N and ⌃Tab in an installed PWA). Other aliases stay unadvertised. */
 export function chordLabel(id: ChordId, env: ChordEnv = {}): string {
   const c = chordOf(id);
   const shown = CHORD_LABELS[id];
   const key = shown.advertise && env[shown.advertise.when] ? shown.advertise.key : c.key;
-  const text = key === "1-9" ? "1-9" : (ARROWS[key] ?? key.toUpperCase());
+  const text = key === "1-9" ? "1-9" : (KEY_NAMES[key] ?? key.toUpperCase());
+  // the ⌃ alias brings its own modifiers: ⌃⇧Tab is the previous worktree though ⌥↑ has no ⇧
+  const alias = key !== c.key && key === c.ctrlAlias?.key ? c.ctrlAlias : undefined;
+  if (alias) return `⌃${alias.shift ? "⇧" : ""}${text}`;
   return `${c.alt ? "⌥" : c.ctrl ? "⌃" : "⌘"}${c.shift ? "⇧" : ""}${text}`;
 }
 

@@ -64,13 +64,22 @@ describe("matchChord", () => {
     expect(matchChord(ev("ArrowUp", { meta: false }))).toBeNull();
     expect(matchChord(ev("ArrowUp"))).toBeNull();
   });
+  test("⌃Tab and ⌃⇧Tab walk the worktrees as they walk a terminal's tabs; ⌘ or ⌥ with Tab do not", () => {
+    expect(matchChord(ev("Tab", { meta: false, ctrl: true }))).toEqual({ id: "wt-next" });
+    expect(matchChord(ev("Tab", { meta: false, ctrl: true, shift: true }))).toEqual({ id: "wt-prev" });
+    expect(matchChord(ev("Tab"))).toBeNull(); // ⌘Tab is the app switcher
+    expect(matchChord(ev("Tab", { meta: false, alt: true }))).toBeNull();
+    expect(matchChord(ev("Tab", { meta: false }))).toBeNull(); // plain Tab moves focus
+  });
   test("keys the table doesn't own pass through", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find
     expect(matchChord(ev("w"))).toBeNull();
   });
   test("an advertised key is always one of the chord's aliases", () => {
     for (const [id, shown] of Object.entries(CHORD_LABELS)) {
-      if (shown.advertise) expect(chordOf(id as keyof typeof CHORD_LABELS).aliases).toContain(shown.advertise.key);
+      if (!shown.advertise) continue;
+      const c = chordOf(id as keyof typeof CHORD_LABELS);
+      expect([...(c.aliases ?? []), c.ctrlAlias?.key]).toContain(shown.advertise.key);
     }
   });
   // the table says what exists and the label map says how it reads; neither may drift from the other
@@ -83,6 +92,8 @@ describe("matchChord", () => {
       expect(
         matchChord(ev(c.key, { shift: !!c.shift, ctrl: !!c.ctrl, alt: !!c.alt, meta: !c.ctrl && !c.alt })),
       ).toEqual({ id: c.id });
+      const a = c.ctrlAlias;
+      if (a) expect(matchChord(ev(a.key, { shift: !!a.shift, ctrl: true, meta: false }))).toEqual({ id: c.id });
     }
   });
 });
@@ -103,6 +114,11 @@ describe("labels", () => {
     expect(chordLabel("wt-next")).toBe("⌥↓");
     expect(chordLabel("wt-unseen-prev")).toBe("⌥⇧↑");
     expect(chordLabel("wt-unseen-next")).toBe("⌥⇧↓");
+    // an installed app window has no tabs, so it lets ⌃Tab through; the ⇧ belongs to the alias
+    expect(chordLabel("wt-next", { pwa: true })).toBe("⌃Tab");
+    expect(chordLabel("wt-prev", { pwa: true })).toBe("⌃⇧Tab");
+    expect(chordLabel("wt-prev", { firefox: true })).toBe("⌥↑");
+    expect(chordLabel("wt-unseen-next", { pwa: true })).toBe("⌥⇧↓");
   });
   test("a hidden chord has wording but no row on the card", () => {
     expect(chordLabel("wt-unseen-next")).toBeTruthy();

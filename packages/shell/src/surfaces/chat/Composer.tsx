@@ -27,7 +27,7 @@ import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
-import { greenfieldContext, type Kind } from "../preview/kinds.ts";
+import { greenfieldContext } from "../preview/greenfield.ts";
 import { chord, commandSource, pickLabel, procTrouble, relFile } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl, nextImageNumber, nextPasteNumber } from "./images.ts";
@@ -93,9 +93,9 @@ export function Composer({
   /** the worktree, or the draft's base while drafting */
   active: OwnedWorktree | null;
   draft?: Draft | null;
-  /** rendered in the centre of an empty project: the chosen kind of thing rides with the first
+  /** rendered in the centre of an empty project: the scaffolding brief rides with the first
    * message, and the knobs that assume a preview or a second worktree stay out of the way */
-  greenfield?: { kind: Kind | null };
+  greenfield?: boolean;
 }) {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -133,11 +133,15 @@ export function Composer({
   const [spawnNew, setSpawnNew] = useState(spawnDefault);
   useOnChange([id], () => setSpawnNew(spawnDefault()));
   const spawning = drafting || (spawnNew && !greenfield);
+  // A main that has never run has no agent on its record, so its first message starts a fresh chat:
+  // the agent and model are chosen the way a new worktree's are, and the send stamps them.
+  const fresh = !spawning && !!active && !active.worktree.agent;
+  const choosing = spawning || fresh;
   // the agent a new worktree runs: the draft's choice, or the daemon's default on main's own fast
   // path; inherited from the base otherwise (a stacked worktree continues with its parent's agent)
   const spawnAgent = onMain ? (draft?.agent ?? defaultAgent) : (active?.worktree.agent ?? defaultAgent);
-  // the chips list what the agent in question advertised: the new worktree's, or this one's
-  const agentInfo = useStore((s) => s.agents.find((a) => a.id === (spawning ? spawnAgent : active?.worktree.agent)));
+  // the chips list what the agent in question advertised: the one being chosen, or this one's
+  const agentInfo = useStore((s) => s.agents.find((a) => a.id === (choosing ? spawnAgent : active?.worktree.agent)));
   const agentModels = agentInfo?.models ?? NO_CHOICES;
   const agentEfforts = agentInfo?.efforts ?? NO_CHOICES;
   const [newModel, setNewModel] = useNewWorktreeModel(spawnAgent);
@@ -378,7 +382,7 @@ export function Composer({
       );
     }
     const blocks: string[] = [];
-    if (greenfield) blocks.push(greenfieldContext(active.worktree.title, greenfield.kind));
+    if (greenfield) blocks.push(greenfieldContext(active.worktree.title));
     if (parts.length > 0)
       blocks.push(
         `[Live preview context, attached automatically. This is what the user is looking at right now:\n${parts.join("\n")}]`,
@@ -444,6 +448,12 @@ export function Composer({
         sock?.send({ t: "create-worktree", ...from, prompt });
       }
     } else {
+      // the session reads these when it opens, and the daemon handles frames in order, so they are
+      // on the record before the chat starts it; the agent is already the default the chip set
+      if (fresh) {
+        sock?.send({ t: "set-worktree-model", worktreeId: id, model: newModel });
+        sock?.send({ t: "set-worktree-effort", worktreeId: id, effort: newEffort });
+      }
       sock?.send({
         t: "chat",
         worktreeId: id,
@@ -675,7 +685,7 @@ export function Composer({
           back when it closes. */}
       <div className="hint composer-knobs">
         <span className="spawn-left">
-          {spawning ? (
+          {choosing ? (
             // a draft stacked on a worktree keeps that worktree's agent, so only main's list spans agents
             onMain && agents.length > 1 ? (
               <AgentModelChip
@@ -699,7 +709,7 @@ export function Composer({
               />
             )
           )}
-          {spawning ? (
+          {choosing ? (
             <EffortChip efforts={agentEfforts} value={newEffort} onChange={setNewEffort} onClose={refocus} />
           ) : (
             active && (

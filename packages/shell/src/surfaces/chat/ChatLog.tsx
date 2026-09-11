@@ -141,7 +141,8 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
             <Button
               variant="outline"
               tone="danger"
-              data-tip={`Stop the agent (context up to here is kept${queue.length ? "; queued messages dropped" : ""})`}
+              data-tip={`Stop the agent (context up to here is kept${queue.length ? "; queued messages go next" : ""})`}
+              data-tip-key="esc"
               onClick={() => sock?.send({ t: "stop-agent", worktreeId: active.worktree.id })}
             >
               <Icon name="stop" className="icon-inline" /> stop

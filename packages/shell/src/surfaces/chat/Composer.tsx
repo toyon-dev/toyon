@@ -625,6 +625,14 @@ export function Composer({
               walkTo({ walk: null, text: walk.from });
               return;
             }
+            if (e.key === "Escape" && midTurn && id && !drafting) {
+              // esc stops the turn, as it does in a terminal agent: what is typed stays, and what was
+              // queued or is sent next goes as the following turn. The app-wide esc would close a pane.
+              e.preventDefault();
+              e.stopPropagation();
+              sock?.send({ t: "stop-agent", worktreeId: id });
+              return;
+            }
             if (walk && CARET_KEYS.has(e.key)) keepRecalled();
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

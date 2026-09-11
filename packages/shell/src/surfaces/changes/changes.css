@@ -34,9 +34,14 @@
   }
 
   /* one commit: the subject takes the row, the age ends it where a file row ends with its counts.
-   An expanded commit has no mark of its own: the files listed under it are the mark, and a band
-   on the commit as well as on the file open under it read as two selections. */
+   Marked, it takes the same band and edge a file does: the list marks one row, where you are, and
+   a mark is always the pair. Being expanded is no mark at all; the files under it say so. */
   .log-row {
+    &[data-state~="current"] {
+      background: var(--element1);
+      color: var(--text0);
+    }
+    &[data-state~="current"],
     &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
     }

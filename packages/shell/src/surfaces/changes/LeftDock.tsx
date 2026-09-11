@@ -110,6 +110,10 @@ export function LeftDock({ width }: { width: number }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState(0);
   const [focused, setFocused] = useState(false);
+  // the list marks one row, and it is where you are: the cursor while the list has the keyboard,
+  // the file open in the editor while it does not. The cursor drawing an edge and the open file a
+  // band split one mark across two rows the moment the arrows left the open file, onto a commit.
+  const marked = (i: number, open: boolean) => (focused ? sel === i : open);
   useOnChange([activeId, tab], () => setSel(0));
 
   // the log is pulled, not pushed: reading it costs a git process, so a worktree nobody is
@@ -317,9 +321,15 @@ export function LeftDock({ width }: { width: number }) {
         // a click lands the keyboard on the list, never on the row it hit: a row is a button, and a
         // focused button that a later key unmounts (closing its commit, walking ← out to the other
         // tab) takes the focus down with it, and the panel is deaf until it is clicked again
+        // The mark moves on the press, not the release: taking the keyboard hands the mark to the
+        // cursor, and a cursor left on some other row would light for the length of the press.
+        // The options are rendered in row order, so their index is the row's.
         onMouseDown={(e) => {
           if (e.button !== 0) return;
           e.preventDefault();
+          const hit = (e.target as HTMLElement).closest('[role="option"]');
+          const i = hit ? Array.from(e.currentTarget.querySelectorAll('[role="option"]')).indexOf(hit) : -1;
+          if (i >= 0) setSel(i);
           listRef.current?.focus();
         }}
         // clicking one row and then another passes through here; only focus actually leaving the
@@ -336,7 +346,7 @@ export function LeftDock({ width }: { width: number }) {
               <GitFileRow
                 key={f.path}
                 f={f}
-                active={!openRef && f.path === openPath}
+                active={marked(i, !openRef && f.path === openPath)}
                 selected={focused && sel === i}
                 onOpen={clickRow}
                 menu={menuUncommitted}
@@ -358,7 +368,7 @@ export function LeftDock({ width }: { width: number }) {
               <GitFileRow
                 key={`c-${f.path}`}
                 f={f}
-                active={!openRef && f.path === openPath}
+                active={marked(files.length + i, !openRef && f.path === openPath)}
                 selected={focused && sel === files.length + i}
                 onOpen={clickRow}
                 menu={menuCommitted}
@@ -376,7 +386,7 @@ export function LeftDock({ width }: { width: number }) {
               {r.file ? (
                 <GitFileRow
                   f={r.file}
-                  active={openRef === r.commit.sha && r.file.path === openPath}
+                  active={marked(i, openRef === r.commit.sha && r.file.path === openPath)}
                   selected={focused && sel === i}
                   onOpen={clickHistFile}
                   menu={menuCommitted}

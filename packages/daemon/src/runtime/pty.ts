@@ -58,7 +58,14 @@ export class PtyStream implements PtyHandle {
     this.cols = opts.cols;
     this.rows = opts.rows;
     this.ring = opts.ring ?? DEFAULT_RING;
-    this.pty = spawn(opts.file, opts.args ?? [], {
+    // portable-pty tries a bare program name against the cwd before PATH, so a worktree with an
+    // `sh` at its root would run in place of the real one. A directory there is worse: exec fails
+    // after its pre_exec has closed the pipe std reports that on, and the forked child aborts.
+    const file = opts.file.includes("/")
+      ? opts.file
+      : Bun.which(opts.file, { PATH: opts.env.PATH ?? process.env.PATH });
+    if (!file) throw new Error(`${opts.file} is not on PATH`);
+    this.pty = spawn(file, opts.args ?? [], {
       name: "xterm-256color",
       cols: opts.cols,
       rows: opts.rows,

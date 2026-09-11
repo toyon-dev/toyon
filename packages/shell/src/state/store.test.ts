@@ -863,6 +863,14 @@ describe("the editor's open file", () => {
     expect(reducer(conflicted, opening({ path: "x.ts", seq: 2 })).editor?.conflict).toEqual(theirs);
     expect(reducer(conflicted, { a: "editor-conflict", file: x, theirs: null }).editor?.conflict).toBeNull();
   });
+
+  test("a worktrees frame that keeps the selection keeps the open file; one that moves it closes it", () => {
+    // a status read pushes the rows whenever a count moves, often while the file's own read is out
+    const s = run([hello(wt("a"), wt("b")), { a: "activate", id: "a" }, opening({ path: "x.ts", seq: 1 })]);
+    expect(reducer(s, worktrees(wt("a"), wt("b"))).editor).toMatchObject({ path: "x.ts", seq: 1 });
+    // the open row gone: the selection lands elsewhere, and the file went with its worktree
+    expect(reducer(s, worktrees(wt("b"))).editor).toBeNull();
+  });
 });
 
 // The shell is scoped to one project at a time while the daemon runs them all: `visible` is what

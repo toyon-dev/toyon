@@ -68,6 +68,7 @@ describe("create / remove", () => {
     expect(existsSync(join(wt.path, "README.md"))).toBe(true);
     expect(wt.linkPath).toBeUndefined(); // the directory already carries the title
     expect(w.agents.get(wt.id)?.sent[0]?.text).toBe("make the header sticky");
+    expect(wt.promptedAt).toBeGreaterThan(0);
     expect(wt.agent).toBe("claude");
     await settle();
     expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
@@ -655,6 +656,8 @@ describe("open a ref", () => {
     expect((await git(wt.path, "branch", "--show-current")).out).toBe("feat");
     expect(w.procs.get(wt.id)?.started.map((p) => p.name)).toEqual(["web"]);
     expect(w.agents.get(wt.id)?.sent ?? []).toEqual([]);
+    // nothing was sent, so it sorts by when it was made
+    expect(wt.promptedAt).toBeUndefined();
     // a branch has one worktree: opening it again says where it already is
     await expect(w.worktrees.openRef(repoId, "branch", "feat")).rejects.toBeInstanceOf(UserError);
   });
@@ -886,6 +889,8 @@ describe("unseen", () => {
     w.hub.emit("agentStatus", main.id, "working");
     w.hub.emit("agentStatus", main.id, "idle");
     expect(await unseenOf(main.id)).toBe(true);
+    // an agent finishing is not someone sending: the row keeps its place
+    expect(w.state.worktree(main.id)?.promptedAt).toBeUndefined();
     w.worktrees.markSeen(main.id);
     expect(await unseenOf(main.id)).toBeUndefined();
   });

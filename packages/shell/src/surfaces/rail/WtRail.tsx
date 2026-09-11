@@ -39,6 +39,9 @@ export function WtRail() {
   const dispatch = useDispatch();
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
+  // main leads and the new-worktree row sits under it, above the tasks (state/railOrder.ts)
+  const lead = worktrees[0] && isMain(worktrees[0].worktree) ? worktrees[0] : null;
+  const tasks = lead ? worktrees.slice(1) : worktrees;
   const greenfield = useGreenfield();
   // the draft tab: the new-worktree row is the selected one while a worktree is being drafted
   const draftOpen = useStore((s) => s.draft !== null);
@@ -117,6 +120,44 @@ export function WtRail() {
       ? worktreeItems(w, repoOf(w), { leftOpen, termOpen, shipping }, deps, { graft: graftWith })
       : discoveredItems(w, { termOpen, clientId }, deps);
 
+  /* Under main and above the tasks: a new worktree is the newest task, so it appears right below the
+   * row that made it. Not drawn on an empty project (see where it is placed). */
+  const newRow = (
+    <button
+      // a row like the worktree rows around it, since the draft tab it opens is one: the
+      // same seat under the pointer and the same edge and lift when it is the one picked
+      type="button"
+      className="row row-edge rail-new"
+      data-state={rowState({ current: draftOpen })}
+      data-tip={draftOpen ? "The worktree being drafted; esc leaves it" : "New worktree"}
+      data-tip-key={draftOpen ? undefined : chord("new")}
+      data-tip-placement="left"
+      onClick={() => dispatch({ a: "open-draft" })}
+      // between main and the tasks: up is main, down is the newest task, and the ends stop
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+        // a modified arrow is the global walk's, as on the rows
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        e.preventDefault();
+        const to = e.key === "ArrowUp" ? lead : tasks[0];
+        if (!to) return;
+        dispatch({ a: "activate", id: to.id });
+        e.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-wt="${to.id}"]`)?.focus();
+      }}
+    >
+      <span className="rail-gut">
+        <Icon name="plus" className="icon-inline" />
+      </span>
+      <span className="rail-label">new worktree</span>
+      <Kbd k={chord("new")} className="rail-new-kbd" />
+      {/* the strip has no left edge to show a plus on, so a second one waits in the dot
+          column and hands off to the one above as the panel opens */}
+      <span className="rail-glyph rail-new-strip">
+        <Icon name="plus" />
+      </span>
+    </button>
+  );
+
   /* The count columns are reserved list-wide, so a row with no dirty files still leaves the dirty
    * column empty and every number sits under the one above it. A column nobody uses is not drawn,
    * and the name takes its width. */
@@ -168,24 +209,26 @@ export function WtRail() {
             : tip(wtDirLabel(w), undefined, { placement: "left" }))}
         data-wt={id}
         // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
-        // is picked and takes the focus, so the next press keeps walking. Down from the last row
-        // is the new-worktree row, the ends stop the way a list's do, and the found list below is
-        // its own section. ⌥↑/↓ and ⌃Tab are the walk from anywhere, and that one wraps (app/keys.ts).
+        // is picked and takes the focus, so the next press keeps walking. The new-worktree row sits
+        // between main and the tasks, the ends stop the way a list's do, and the found list below
+        // is its own section. ⌥↑/↓ and ⌃Tab are the walk from anywhere, and that one wraps (app/keys.ts).
         onKeyDown={(e) => {
           if (!owned || graftMode || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
           // a modified arrow is the global walk's, which runs after this: stepping here too moved two rows
           if (e.altKey || e.ctrlKey || e.metaKey) return;
           e.preventDefault();
-          const list = e.currentTarget.parentElement;
+          const down = e.key === "ArrowDown";
           const at = worktrees.findIndex((w) => w.id === id);
-          const next = worktrees[at + (e.key === "ArrowDown" ? 1 : -1)];
-          if (next) {
-            dispatch({ a: "activate", id: next.id });
-            list?.querySelector<HTMLElement>(`[data-wt="${next.id}"]`)?.focus();
-          } else if (e.key === "ArrowDown" && !draftOpen) {
-            // the draft hands the keyboard to the composer, which is what it is for; ⌥↑ comes back
-            dispatch({ a: "open-draft" });
+          if (lead && !greenfield && at === (down ? 0 : 1)) {
+            // stepping onto the new-worktree row opens the draft, which hands the keyboard to the
+            // composer, which is what it is for; ⌥↑/↓ walks on from there
+            if (!draftOpen) dispatch({ a: "open-draft" });
+            return;
           }
+          const next = worktrees[at + (down ? 1 : -1)];
+          if (!next) return;
+          dispatch({ a: "activate", id: next.id });
+          e.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-wt="${next.id}"]`)?.focus();
         }}
         onClick={(e) => {
           // in graft mode the row you are on is the stock the others go onto, marked by its edge,
@@ -335,7 +378,11 @@ export function WtRail() {
         data-tip-placement="follow"
       >
         <div className="rail-list" ref={listRef}>
-          {worktrees.map(railRow)}
+          {lead && railRow(lead)}
+          {/* not on an empty project: a worktree off the root commit would take the scaffold to a
+              branch while main stayed blank, and the row comes back with the first message */}
+          {!graftMode && !greenfield && newRow}
+          {tasks.map(railRow)}
           {graftMode && (
             <div className="rail-graft">
               {(() => {
@@ -413,43 +460,7 @@ export function WtRail() {
               <IconButton icon="close" label="Cancel" hint="esc" onClick={cancelGraft} />
             </div>
           )}
-          {/* not on an empty project: a worktree off the root commit would take the scaffold to a
-              branch while main stayed blank, and the row comes back with the first message */}
-          {!graftMode && !greenfield && (
-            <button
-              // a row like the worktree rows above it, since the draft tab it opens is one: the
-              // same seat under the pointer and the same edge and lift when it is the one picked
-              className="row row-edge rail-new"
-              data-state={rowState({ current: draftOpen })}
-              data-tip={draftOpen ? "The worktree being drafted; esc leaves it" : "New worktree"}
-              data-tip-key={draftOpen ? undefined : chord("new")}
-              data-tip-placement="left"
-              onClick={() => dispatch({ a: "open-draft" })}
-              // the last stop on the walk: up is the last worktree, and down is the end
-              onKeyDown={(e) => {
-                if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-                // a modified arrow is the global walk's, as on the rows above
-                if (e.altKey || e.ctrlKey || e.metaKey) return;
-                e.preventDefault();
-                const last = worktrees[worktrees.length - 1];
-                if (e.key !== "ArrowUp" || !last) return;
-                dispatch({ a: "activate", id: last.id });
-                e.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-wt="${last.id}"]`)?.focus();
-              }}
-            >
-              <span className="rail-gut">
-                <Icon name="plus" className="icon-inline" />
-              </span>
-              <span className="rail-label">new worktree</span>
-              <Kbd k={chord("new")} className="rail-new-kbd" />
-              {/* the strip has no left edge to show a plus on, so a second one waits in the dot
-                  column and hands off to the one above as the panel opens */}
-              <span className="rail-glyph rail-new-strip">
-                <Icon name="plus" />
-              </span>
-            </button>
-          )}
-          {/* Below "new worktree", not above it: the whole section is hidden in the strip (see
+          {/* Last, below every worktree row: the whole section is hidden in the strip (see
               rail.css), so what appears when the panel opens pushes nothing anyone is aiming
               at. The rows are divs, not .rail-item buttons, so a shift-click never drags one into
               the graft selection. */}

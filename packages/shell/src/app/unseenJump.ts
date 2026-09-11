@@ -2,8 +2,8 @@
  * nobody has looked at, because the waiting one has stopped until someone answers while the finished
  * one can sit: the nearest waiting row in that direction, else the nearest unseen one, wrapping round
  * when the direction runs out. With neither anywhere the chord is the walk's end instead, the first
- * row going up and the draft going down, so it always does something. From a draft, "here" is past
- * the last row. */
+ * row going up and the draft going down, so it always does something. From a draft, "here" is its
+ * seat under the first row, where the rail draws it. */
 export type UnseenJump = { activate: string } | { draft: true } | null;
 
 type JumpRow = { id: string; unseen?: boolean; agent?: string };
@@ -14,7 +14,6 @@ export function unseenJump(
   drafting: boolean,
   dir: 1 | -1,
 ): UnseenJump {
-  const n = rows.length;
   // the row on screen is looked at by definition, so it is never the answer
   const marked = (hit: (w: JumpRow) => boolean) =>
     rows.map((w, i) => (hit(w) && w.id !== activeId ? i : -1)).filter((i) => i >= 0);
@@ -24,7 +23,8 @@ export function unseenJump(
     if (dir < 0) return rows[0] ? { activate: rows[0].id } : null;
     return drafting ? null : { draft: true };
   }
-  const at = drafting ? n : rows.findIndex((w) => w.id === activeId);
+  // between the first row and the second, so up from a draft still finds main
+  const at = drafting ? 0.5 : rows.findIndex((w) => w.id === activeId);
   const i =
     dir > 0
       ? (targets.find((k) => k > at) ?? targets[0])

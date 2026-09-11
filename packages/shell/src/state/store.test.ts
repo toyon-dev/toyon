@@ -13,6 +13,7 @@ import {
   type OpenFile,
   previewIdOf,
   reducer,
+  routeTarget,
   type State,
   type StoreServerMsg,
 } from "./store.ts";
@@ -488,6 +489,23 @@ describe("the draft tab", () => {
     );
     expect(localOf(paged, "sp1").page.url).toBe("http://x/about");
     expect(localOf(run([worktrees(...rows)], paged), "sp1").page.url).toBeUndefined();
+  });
+});
+
+// the address bar, ⌘G and ⌘P's `/` all send a path here, and all of them wait for an app to take it
+describe("where a typed path goes", () => {
+  const app = (w: WorktreeStatus, status: string): WorktreeStatus => ({
+    ...w,
+    procs: [{ name: "web", status } as WorktreeStatus["procs"][number]],
+  });
+
+  test("the active worktree's preview, while its app is running or on its way up", () => {
+    const s = run([helloIn([repo("r")], app(wt("main", "main"), "running"), app(wt("a"), "exited"), wt("b"))]);
+    expect(routeTarget(s)).toEqual({ worktreeId: "main", repoId: "r" });
+    expect(routeTarget(run([{ a: "activate", id: "a" }], s))).toBeNull();
+    expect(routeTarget(run([{ a: "activate", id: "b" }], s))).toBeNull();
+    const starting = run([worktrees(wt("main", "main"), app(wt("a"), "starting")), { a: "activate", id: "a" }], s);
+    expect(routeTarget(starting)).toEqual({ worktreeId: "a", repoId: "r" });
   });
 });
 

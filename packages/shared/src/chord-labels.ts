@@ -37,6 +37,7 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   terminal: { label: "terminal", section: "Panels" },
   design: { label: "design system", section: "Panels" },
   "term-tab": { label: "next terminal tab", section: "Panels" },
+  routes: { label: "go to page", section: "Preview" },
   pick: { label: "element to chat", section: "Preview" },
   inspect: { label: "element to code", section: "Preview" },
   zen: { label: "full-bleed preview", section: "Preview" },

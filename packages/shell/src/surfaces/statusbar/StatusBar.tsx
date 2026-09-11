@@ -5,6 +5,7 @@ import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useActive, useActiveRepo, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
+import { previewUp } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useOnChange, useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -40,7 +41,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
   const id = active?.worktree.id ?? null;
-  const ready = !!active && active.procs.some((p) => p.status === "running" || p.status === "starting");
+  const ready = !!active && previewUp(active);
   return (
     <div className="status-bar top-bar">
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "toyon"}</span>}
@@ -239,6 +240,7 @@ function RouteBar({
           onClick={openList}
           onFocus={openList}
           spellCheck={false}
+          {...tip("Go to a page", chord("routes"))}
         />
         {open && ready && id && repoId && <RoutePicker key={id} worktreeId={id} repoId={repoId} url={url} />}
       </span>

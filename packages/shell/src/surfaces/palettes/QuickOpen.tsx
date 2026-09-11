@@ -1,23 +1,31 @@
-import type { GitFileStatus } from "@toyon/shared";
+import { type GitFileStatus, routeKey } from "@toyon/shared";
 import { useCallback } from "react";
+import { previewBus } from "../../app/previewBus.ts";
 import { fileItems, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
-import { worktreeById } from "../../state/store.ts";
+import { routeTarget, worktreeById } from "../../state/store.ts";
 import { markHits } from "../../ui/highlight.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { LineCounts } from "../changes/GitFileRow.tsx";
+import { goVerb, narrowPage, pageMenu, pageRowTitle, RouteRow, usePageModel } from "../statusbar/RoutePicker.tsx";
+import { type Row as PageRow, completionOf as pageCompletion, rowsFor } from "../statusbar/routePicker.ts";
 import { wtDir, xyClass, xyLetter } from "../util.ts";
 import { commandRow } from "./CommandPalette.tsx";
 import { type Command, filterCommands, useCommands } from "./commands.ts";
 import { matchPositions, rankFiles, splitPath } from "./quickOpen.ts";
 
-type Row = { kind: "file"; path: string; status?: GitFileStatus } | { kind: "cmd"; c: Command };
+type Row =
+  | { kind: "file"; path: string; status?: GitFileStatus }
+  | { kind: "cmd"; c: Command }
+  | { kind: "page"; page: PageRow };
 const NONE: Row[] = [];
 const EMPTY_PATHS: string[] = [];
 const EMPTY_STATUS: GitFileStatus[] = [];
 
-/** ⌘P: fuzzy file jump; a leading `>` switches the same box to the command palette (editor convention) */
+/** ⌘P: fuzzy file jump. A leading `>` switches the same box to the command palette (editor
+ * convention), and a leading `/` to the preview's pages, the address bar's list: a worktree's file
+ * paths never start with a slash and a page's always does. */
 export function QuickOpen({ worktreeId }: { worktreeId: string }) {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -31,28 +39,44 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
     const w = worktreeById(s, worktreeId)?.worktree;
     return w ? wtDir(w) : null;
   });
+  const repoId = useStore((s) => worktreeById(s, worktreeId)?.repoId ?? null);
+  const live = useStore((s) => routeTarget(s)?.worktreeId === worktreeId);
+  const pages = usePageModel(worktreeId, repoId);
+  const here = local.page.url ? routeKey(local.page.url) : null;
 
   // changed files lead an empty query (same order as the changes panel); once typing, it's fuzzy
   // order with a small nudge for changed files
   const filter = useCallback(
-    (_items: Row[], q: string): Row[] =>
-      q.startsWith(">")
-        ? filterCommands(commands, q.slice(1)).map((c) => ({ kind: "cmd", c }))
-        : rankFiles(paths, status, q).rows.map((r) => ({ kind: "file", path: r.path, status: r.status })),
-    [commands, paths, status],
+    (_items: Row[], q: string): Row[] => {
+      if (q.startsWith(">")) return filterCommands(commands, q.slice(1)).map((c) => ({ kind: "cmd", c }));
+      // a bare slash is the address bar's untouched list: the pages you would expect to go to
+      if (q.startsWith("/")) {
+        return live ? rowsFor(pages, { query: q, current: "/", here }).map((page) => ({ kind: "page", page })) : NONE;
+      }
+      return rankFiles(paths, status, q).rows.map((r) => ({ kind: "file", path: r.path, status: r.status }));
+    },
+    [commands, paths, status, live, pages, here],
   );
 
   return (
     <ListPicker
       items={NONE}
       filter={filter}
-      keyOf={(r) => (r.kind === "cmd" ? `c:${r.c.id}` : `f:${r.path}`)}
-      rowClass={(r) => (r.kind === "cmd" ? "picker-row" : "qo-file")}
+      keyOf={(r) =>
+        r.kind === "cmd" ? `c:${r.c.id}` : r.kind === "page" ? `p:${r.page.kind}:${r.page.path}` : `f:${r.path}`
+      }
+      rowClass={(r) => (r.kind === "file" ? "qo-file" : "picker-row")}
+      rowTitle={(r) => (r.kind === "page" ? pageRowTitle(r.page) : undefined)}
+      completionOf={(r, q) => (r.kind === "page" ? pageCompletion(r.page, q) : null)}
+      narrowTo={(r, q) => (r.kind === "page" ? narrowPage(r.page, q) : null)}
       onPick={(r, q) => {
         if (r.kind === "cmd") {
           if (r.c.sub) dispatch({ a: "palette-return", v: { mode: "quick-open", q } });
           else dispatch({ a: "close" });
           r.c.run();
+        } else if (r.kind === "page") {
+          previewBus.post(worktreeId, { type: "navigate", path: r.page.path });
+          dispatch({ a: "close" });
         } else {
           // a jump is to the file, which may not have changed at all; its diff is a menu item away,
           // and the changes list is where diffs are read
@@ -62,13 +86,41 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
       }}
       onBack={() => dispatch({ a: "close" })}
       rowMenu={(r) =>
-        r.kind === "file" && dir ? fileItems({ id: worktreeId, dir }, r.path, {}, { sock, dispatch }) : []
+        r.kind === "file" && dir
+          ? fileItems({ id: worktreeId, dir }, r.path, {}, { sock, dispatch })
+          : r.kind === "page" && repoId
+            ? pageMenu(r.page, { worktreeId, repoId, dir }, { sock, dispatch })
+            : []
       }
-      placeholder="jump to file · type > for commands"
-      keys={{ pick: "opens", back: "closes" }}
+      placeholder="jump to file · type > for commands, / for pages"
+      keys={(active, q) =>
+        q.startsWith("/")
+          ? {
+              complete: "completes the path",
+              pick: active?.kind === "page" ? goVerb(active.page) : undefined,
+              back: "closes",
+            }
+          : { pick: "opens", back: "closes" }
+      }
       initialQuery={initialQuery}
-      empty={(q) => (q.startsWith(">") ? "no matching command" : "no matches")}
-      row={(r, _active, q) => (r.kind === "cmd" ? commandRow(r.c, q.slice(1)) : fileRow(r.path, r.status, q))}
+      empty={(q) =>
+        q.startsWith(">")
+          ? "no matching command"
+          : q.startsWith("/")
+            ? live
+              ? "no pages yet; type a path"
+              : "no preview running"
+            : "no matches"
+      }
+      row={(r, _active, q) =>
+        r.kind === "cmd" ? (
+          commandRow(r.c, q.slice(1))
+        ) : r.kind === "page" ? (
+          <RouteRow row={r.page} />
+        ) : (
+          fileRow(r.path, r.status, q)
+        )
+      }
     />
   );
 }

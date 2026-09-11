@@ -1,6 +1,7 @@
 import { type PageEntry, routeKey, templateText } from "@toyon/shared";
 import { type ReactNode, useCallback, useMemo } from "react";
 import { previewBus } from "../../app/previewBus.ts";
+import type { Deps } from "../../state/actions/deps.ts";
 import { fileItems } from "../../state/actions/file.ts";
 import { visitItems } from "../../state/actions/route.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
@@ -9,13 +10,26 @@ import { useLocalField } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
-import { SEP, tidy } from "../../ui/menu.ts";
+import { type MenuEntry, SEP, tidy } from "../../ui/menu.ts";
 import { wtDir } from "../util.ts";
-import { completionOf, fillTemplate, pageModel, pathOf, type Row, rowsFor } from "./routePicker.ts";
+import { completionOf, fillTemplate, type PageModel, pageModel, pathOf, type Row, rowsFor } from "./routePicker.ts";
 
 /** module constants, so a repo with no visits yet answers the selector with the same array */
 const NONE: PageEntry[] = [];
 const NO_ROWS: Row[] = [];
+
+/** What a list of pages is made from: the repo's history and the worktree's pages, and for an app no
+ * scan could read, the links its pages show, gathered from the page on screen as the list opens.
+ * The address bar's list and ⌘P's `/` both read it. */
+export function usePageModel(worktreeId: string, repoId: string | null): PageModel {
+  const history = useStore((s) => (repoId ? s.visits[repoId] : undefined) ?? NONE);
+  const pages = useLocalField(worktreeId, "pages");
+  const links = useLocalField(worktreeId, "links");
+  useOnChange([worktreeId], () => {
+    if (wantsLinks(pages)) previewBus.post(worktreeId, { type: "links" });
+  });
+  return useMemo(() => pageModel(history, pages, links), [history, pages, links]);
+}
 
 /** a row's path, a template's parameters drawn as the words to fill in */
 function RoutePath({ row }: { row: Row }) {
@@ -37,7 +51,7 @@ function RoutePath({ row }: { row: Row }) {
 }
 
 /** a route row: the page's name, its path a tier quieter, then what changed since you last had it open */
-function RouteRow({ row }: { row: Row }) {
+export function RouteRow({ row }: { row: Row }) {
   return (
     <>
       <span className="picker-label">{row.title}</span>
@@ -49,6 +63,30 @@ function RouteRow({ row }: { row: Row }) {
       ) : null}
     </>
   );
+}
+
+/** a page row's hover: the file that declares it, when one does */
+export const pageRowTitle = (row: Row) => (row.kind === "page" && row.file ? row.file : row.path);
+
+/** a template is not a place: enter puts its start in the field and shows the rest to fill in */
+export const narrowPage = (row: Row, q: string) =>
+  row.kind === "page" && row.template ? fillTemplate(row.path, q) : null;
+
+/** what enter does on a page row */
+export const goVerb = (row: Row) => (row.kind === "page" && row.template ? "fills in the parameter" : "goes there");
+
+/** a page names its file, which offers the file's own list, and a visited one can come off the history */
+export function pageMenu(
+  row: Row,
+  at: { worktreeId: string; repoId: string; dir: string | null },
+  deps: Deps,
+): MenuEntry[] {
+  if (row.kind !== "page") return [];
+  return tidy([
+    ...(row.file && at.dir ? fileItems({ id: at.worktreeId, dir: at.dir }, row.file, {}, deps) : []),
+    SEP,
+    ...(row.visited ? visitItems(at.repoId, row.path, deps) : []),
+  ]);
 }
 
 /** The route bar's list: what a person expects to see when they click the address. It opens in the
@@ -66,18 +104,11 @@ export function RoutePicker({
 }) {
   const dispatch = useDispatch();
   const sock = useSock();
-  const history = useStore((s) => s.visits[repoId] ?? NONE);
-  const pages = useLocalField(worktreeId, "pages");
-  const links = useLocalField(worktreeId, "links");
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId);
     return w ? wtDir(w.worktree) : null;
   });
-  // an app no scan could read offers its pages as links: this page's are gathered as the list opens
-  useOnChange([worktreeId], () => {
-    if (wantsLinks(pages)) previewBus.post(worktreeId, { type: "links" });
-  });
-  const model = useMemo(() => pageModel(history, pages, links), [history, pages, links]);
+  const model = usePageModel(worktreeId, repoId);
   const current = pathOf(url);
   const here = url ? routeKey(url) : null;
   const filter = useCallback(
@@ -101,29 +132,19 @@ export function RoutePicker({
       }}
       keyOf={(r) => `${r.kind}:${r.path}`}
       rowClass={() => "picker-row"}
-      rowTitle={(r) => (r.kind === "page" && r.file ? r.file : r.path)}
+      rowTitle={pageRowTitle}
       completionOf={(r, q) => (untouched(q) ? null : completionOf(r, q))}
-      // a template is not a place: enter puts its start in the field and shows the rest to fill in
-      narrowTo={(r, q) => (r.kind === "page" && r.template ? fillTemplate(r.path, q) : null)}
+      narrowTo={narrowPage}
       onPick={(r) => {
         previewBus.post(worktreeId, { type: "navigate", path: r.path });
         close();
       }}
       onBack={close}
-      // a page names its file, which offers the file's own list, and a visited one can come off the history
-      rowMenu={(r) =>
-        r.kind === "page"
-          ? tidy([
-              ...(r.file && dir ? fileItems({ id: worktreeId, dir }, r.file, {}, { sock, dispatch }) : []),
-              SEP,
-              ...(r.visited ? visitItems(repoId, r.path, { sock }) : []),
-            ])
-          : []
-      }
+      rowMenu={(r) => pageMenu(r, { worktreeId, repoId, dir }, { sock, dispatch })}
       placeholder="type a path"
       keys={(active) => ({
         complete: "completes the path",
-        pick: !active ? "reloads" : active.kind === "page" && active.template ? "fills in the parameter" : "goes there",
+        pick: active ? goVerb(active) : "reloads",
         back: "closes",
       })}
       empty="no pages yet; type a path"

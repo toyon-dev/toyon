@@ -26,7 +26,8 @@ export type ChordId =
   | "wt-unseen-next"
   | "mark-unread"
   | "project"
-  | "refs";
+  | "refs"
+  | "routes";
 
 /** what the shell knows about the browser it runs in; each flag can swap an advertised key */
 export interface ChordEnv {
@@ -137,6 +138,10 @@ export const CHORDS: readonly Chord[] = [
   // ⌘⇧G: a browser only uses it as find-previous while its find bar is open, which a page may
   // preempt; every other ⌘⇧ letter that reads as "go" or "git" is taken before the page sees it
   { id: "refs", key: "g", shift: true },
+  // ⌘G is the address bar's list, since ⌘L is the chat's: G for go, to a page here and to a branch on
+  // ⌘⇧G. A browser only uses ⌘G as find-next, which a page may preempt (vscode.dev does); a focused
+  // Monaco keeps it for the same (app/keys.ts), and ⌃G stays its go-to-line.
+  { id: "routes", key: "g" },
 ];
 
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };

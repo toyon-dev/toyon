@@ -72,7 +72,7 @@ export function ListPicker<T>({
   keyOf: (t: T) => string;
   row: (t: T, active: boolean, q: string) => ReactNode;
   rowClass?: (t: T) => string;
-  rowTitle?: (t: T) => string;
+  rowTitle?: (t: T) => string | undefined;
   onPick: (t: T, q: string) => void;
   /** esc / outside click */
   onBack: () => void;

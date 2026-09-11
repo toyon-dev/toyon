@@ -91,7 +91,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           <IconButton
             icon="chat"
             label="Chat panel"
-            hint={chord("right")}
+            hint={chord("composer")}
             tone="chrome"
             on={rightOpen}
             onClick={() => dispatch({ a: "toggle-right" })}

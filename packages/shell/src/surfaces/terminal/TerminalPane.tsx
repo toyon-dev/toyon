@@ -27,6 +27,7 @@ export function TerminalPane({
   const sock = useSock();
   const theme = useTheme();
   const connected = useStore((s) => s.connected);
+  const focusReq = useStore((s) => s.focusTerm);
   const active = useActive();
   const procs = active?.procs ?? [];
   const stream = useLocalField(worktreeId, "termStream");
@@ -82,6 +83,7 @@ export function TerminalPane({
               theme={theme}
               sock={sock}
               connected={connected}
+              focusReq={focusReq}
               onAlive={onAlive}
               onEscape={() => dispatch({ a: "toggle-terminal" })}
             />

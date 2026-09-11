@@ -428,6 +428,8 @@ export interface State {
   zen: boolean;
   /** the terminal pane under the preview (one per worktree; the shells keep running when hidden) */
   termOpen: boolean;
+  /** bumped to put the keyboard in the terminal */
+  focusTerm: number;
   /** the design pane: the worktree's own design system, beside the preview */
   designOpen: boolean;
   /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
@@ -524,6 +526,7 @@ export function initialState(opts: InitialOpts): State {
     leftAuto: true,
     zen: false,
     termOpen: false,
+    focusTerm: 0,
     designOpen: false,
     themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
@@ -739,6 +742,8 @@ export type Action =
   | { a: "toggle-discovered" }
   | { a: "toggle-zen" }
   | { a: "toggle-terminal" }
+  /** open the terminal pane if it is shut, and ask the terminal for the keyboard either way */
+  | { a: "focus-terminal" }
   | { a: "toggle-design" }
   /** show this worktree's stream in the terminal pane, opening the pane if it was hidden */
   | { a: "term-stream"; id: string; stream: string }
@@ -979,6 +984,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
     case "toggle-terminal":
       return { ...s, termOpen: !s.termOpen };
+    case "focus-terminal":
+      return { ...s, termOpen: true, focusTerm: s.focusTerm + 1 };
     case "toggle-design":
       return { ...s, designOpen: !s.designOpen };
     case "term-stream":

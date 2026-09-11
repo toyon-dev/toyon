@@ -9,7 +9,6 @@ export type ChordId =
   | "commands"
   | "search"
   | "left"
-  | "right"
   | "composer"
   | "rail"
   | "keys"
@@ -53,6 +52,11 @@ export interface Chord {
    * `hostOnly` leaves the alias to a guest keyboard (a terminal, a previewed page) that already has
    * a use for it, the way Zed's terminal keeps ⌃R. */
   ctrlAlias?: { key: string; shift?: true; hostOnly?: true };
+  /** the same chord again on ⌘⇧, for keys of its own: ⌘⇧[ and ⌘⇧] step through tabs in iTerm2,
+   * Ghostty and every editor. Both spellings of a bracket are listed because with ⇧ held a browser
+   * may report the shifted character, and the bridge forwards only `key`. A browser tab keeps both
+   * for its own tabs, so like ⌃Tab they reach the page in an installed app. Never advertised. */
+  cmdShiftAlias?: string[];
   /** other keys that fire the same chord. ⌘⇧E for the palette because Firefox owns ⌘⇧P; ⌘N for
    * new-worktree because it is the muscle-memory key, though only an installed PWA lets the page
    * see it (Chrome tabs, Safari and Firefox all take ⌘N as new window before the page). */
@@ -69,11 +73,11 @@ export const CHORDS: readonly Chord[] = [
   },
   { id: "search", key: "f", shift: true },
   { id: "left", key: "b" },
-  { id: "right", key: "j" },
-  // ⌘L is Cursor's key for the chat box, so it is the one a hand already reaches for. It puts the
-  // caret in the box, opening the chat panel if it must, and from the editor it brings the selection
-  // along as Cursor's does (the editor answers it there, since Monaco keeps the key); ⌘J is the
-  // toggle. A tab may lose it to the address bar, an installed app always sees it.
+  // ⌘L is Cursor's key for the chat, so it is the one a hand already reaches for, and the chat's only
+  // chord: from elsewhere it puts the caret in the box, opening the panel if it must, and from the
+  // box it closes the panel (app/keys.ts). From the editor it brings the selection along as Cursor's
+  // does (the editor answers it there, since Monaco keeps the key). A tab may lose it to the address
+  // bar, an installed app always sees it.
   { id: "composer", key: "l" },
   // ⌘⇧K next to ⌘K: one makes a worktree, the other shows the panel of them. Firefox takes ⌘⇧K
   // for the web console before the page sees it, so ⌘⇧L is the alias it advertises there
@@ -87,7 +91,10 @@ export const CHORDS: readonly Chord[] = [
   // well as in an installed app, so it is ours everywhere. ⌘/ is deliberately not bound: it is
   // toggle-comment in Monaco (and every editor), and the shell listens on window.
   { id: "keys", key: "," },
-  { id: "terminal", key: "`", ctrl: true },
+  // ⌘J is the bottom panel in VS Code, Cursor and Zed, and the terminal is what lives there. ⌃` is
+  // their terminal key as well and stays for the hand that knows it; a page reaches it from a tab
+  // and an app window alike, where ⌘` never arrives (macOS cycles windows with it).
+  { id: "terminal", key: "j", ctrlAlias: { key: "`" } },
   { id: "design", key: "d" },
   // a focused xterm swallows nearly everything, so tab cycling needs a chord matchChord catches
   { id: "term-tab", key: "`", ctrl: true, shift: true },
@@ -102,11 +109,17 @@ export const CHORDS: readonly Chord[] = [
     aliases: ["n"],
   },
   { id: "worktree", key: "1-9" },
-  // ⌥↑/↓ walk the rail the way ⌥↑/↓ walk Slack's channels, ⌃Tab the way it walks a terminal's
-  // tabs; ⌘1-9 jumps by position. A focused Monaco keeps the ⌥ form, where ⌥↑/↓ is move-line
-  // (app/keys.ts), so ⌃Tab is the walk that still works from inside the editor.
-  { id: "wt-prev", key: "ArrowUp", alt: true, ctrlAlias: { key: "Tab", shift: true } },
-  { id: "wt-next", key: "ArrowDown", alt: true, ctrlAlias: { key: "Tab" } },
+  // ⌥↑/↓ walk the rail the way ⌥↑/↓ walk Slack's channels, ⌃Tab and ⌘⇧[/] the way they walk a
+  // terminal's tabs; ⌘1-9 jumps by position. A focused Monaco keeps the ⌥ form, where ⌥↑/↓ is
+  // move-line (app/keys.ts), so ⌃Tab and ⌘⇧[/] are the walks that still work from inside the editor.
+  {
+    id: "wt-prev",
+    key: "ArrowUp",
+    alt: true,
+    ctrlAlias: { key: "Tab", shift: true },
+    cmdShiftAlias: ["[", "{"],
+  },
+  { id: "wt-next", key: "ArrowDown", alt: true, ctrlAlias: { key: "Tab" }, cmdShiftAlias: ["]", "}"] },
   // ⌥⇧↑/↓ is Slack's next-unread: the nearest worktree whose agent is waiting on you, else the
   // nearest with a turn nobody has looked at, and the walk's end (main, the draft) when there is
   // neither. Down is on the shortcuts card; up is for the hand that already knows it.
@@ -125,10 +138,10 @@ export const CHORDS: readonly Chord[] = [
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };
 
 /** Normalised chord detection for a keydown: ⌘ (no ⌃/⌥) for most rows, ⌃ alone for the rows that
- * ask for it and for a row's ⌃ alias, ⌥ alone for the arrow rows; letters case-insensitive so a
- * browser that reports "F" for ⌘⇧F and one that reports "f" agree; shift must match the table
- * exactly (⌘⇧B is not ⌘B). `guest` is a keydown from a keyboard with uses of its own (a terminal,
- * a previewed page), which keeps every `hostOnly` alias. */
+ * ask for it and for a row's ⌃ alias, ⌘⇧ for a row's ⌘⇧ alias, ⌥ alone for the arrow rows; letters
+ * case-insensitive so a browser that reports "F" for ⌘⇧F and one that reports "f" agree; shift must
+ * match the table exactly (⌘⇧B is not ⌘B). `guest` is a keydown from a keyboard with uses of its own
+ * (a terminal, a previewed page), which keeps every `hostOnly` alias. */
 export function matchChord(
   e: {
     key: string;
@@ -151,6 +164,7 @@ export function matchChord(
     if (c.id === "worktree") continue;
     const a = c.ctrlAlias;
     if (a && e.ctrlKey && a.key === key && !!a.shift === e.shiftKey && !(guest && a.hostOnly)) return { id: c.id };
+    if (e.metaKey && e.shiftKey && c.cmdShiftAlias?.includes(key)) return { id: c.id };
     if (c.alt) continue;
     // a ⌘ row never fires on ⌃; a ⌃ row fires on either
     if ((e.ctrlKey && !c.ctrl) || !!c.shift !== e.shiftKey) continue;

@@ -6,6 +6,9 @@ import { previewBus, togglePick } from "./previewBus.ts";
 import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
 
+/** the keyboard is somewhere inside `selector` */
+const inside = (selector: string) => !!document.activeElement?.closest(selector);
+
 /** the ⌘ chords a focused Monaco keeps for itself; it keeps every ⌥ one too (see useChords) */
 const MONACO_OWNS = new Set<ChordId>(["design", "new", "inspect"]);
 
@@ -96,30 +99,24 @@ export function useChords() {
           case "zen":
             dispatch({ a: "toggle-zen" });
             break;
-          // the panel chords are plain toggles: open it or shut it. Opening hands it the keyboard
-          // (the changes list, the composer, the current worktree row), but a second press closes
-          // it rather than stopping to focus a panel that is already on screen. ⌘L is the chord
-          // that only focuses.
+          // the panel chords answer where the keyboard is. From anywhere else they open the panel if
+          // it is shut and hand it the keyboard (the changes list, the chat box, the terminal, the
+          // current worktree row); from inside that spot they close it. A press that shut a panel
+          // already on screen took it from a hand that had come to type in it.
           case "left":
-            if (s.leftOpen) dispatch({ a: "toggle-left" });
-            else dispatch({ a: "focus-left" });
-            break;
-          case "right":
-            if (s.rightOpen) dispatch({ a: "toggle-right" });
-            else dispatch({ a: "focus-right" });
+            dispatch(s.leftOpen && inside(".changes-list") ? { a: "toggle-left" } : { a: "focus-left" });
             break;
           case "composer":
-            dispatch({ a: "focus-right" });
+            dispatch(s.rightOpen && inside(".chat-input") ? { a: "toggle-right" } : { a: "focus-right" });
             break;
           case "rail":
-            if (s.railOpen) dispatch({ a: "toggle-rail" });
-            else dispatch({ a: "focus-rail" });
+            dispatch(s.railOpen && inside(".rail-list") ? { a: "toggle-rail" } : { a: "focus-rail" });
             break;
           case "keys":
             dispatch({ a: "toggle", overlay: { kind: "keys" } });
             break;
           case "terminal":
-            dispatch({ a: "toggle-terminal" });
+            dispatch(s.termOpen && inside(".xterm") ? { a: "toggle-terminal" } : { a: "focus-terminal" });
             break;
           case "design":
             dispatch({ a: "toggle-design" });

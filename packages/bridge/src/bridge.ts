@@ -255,10 +255,10 @@ function onPickClick(e: MouseEvent) {
   // ⌘I's plain click only ever opens a file: on an element with none it stays armed and does
   // nothing, rather than quietly attaching to the chat someone reached past with ⌥
   if (inspect && !e.altKey && !target) return;
-  // opening the source is browsing, so it leaves the picker armed and the next element is one
-  // click away; attaching to the chat is a commit, and ends the mode
+  // a click that acts ends the mode either way: an armed crosshair left over the page after the
+  // file opened turns the next click on the app into another open
   const code = e.altKey !== inspect && !!target;
-  if (!code) stopPicking();
+  stopPicking();
   if (!el) return;
   post({
     type: "picked",

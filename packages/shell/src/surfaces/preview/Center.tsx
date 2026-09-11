@@ -185,9 +185,10 @@ export function Center() {
             // which of the two files the click asked for; the bridge already resolved the fallback
             const from =
               site === "call" ? { file: pick.callFile, line: pick.callLine } : { file: pick.file, line: pick.line };
-            // the source verb is navigation and nothing else: no chip, no chat, and the picker is
-            // still armed in the frame, so the next element is one click away
+            // the source verb is navigation and nothing else: no chip, no chat. The frame has
+            // already disarmed, so the store follows it
             if (verb === "code" && from.file) {
+              dispatch({ a: "set-picking", v: false });
               const wt = worktreeById(store.getState(), id)?.worktree;
               openSource(store, sock, id, relFile(from.file, wt && wtDir(wt)), from.line ?? 1);
             } else dispatch({ a: "picked", pick: { worktreeId: id, ...pick } });

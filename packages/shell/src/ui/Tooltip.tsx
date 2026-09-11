@@ -37,9 +37,16 @@ export type TipOptions = {
    * text: which thing this is and what it has cost, apart from what it is doing. A worktree row
    * puts `main` and its agent's spend here, with its path on the line under. */
   lead?: string;
+  /** the other verb of the same gesture, on a key of its own, as a row under the text in the quiet
+   * tier: the inspector's button says ⌘E adds the element to chat under its own ⌘I. The two keys
+   * stand in one column so the chords line up and read as a pair. A lead has no place in the grid
+   * and is not drawn beside it. */
+  also?: TipAlso;
 };
 
-export function tip(text: string, key?: string, { placement, detail, dot, lead }: TipOptions = {}) {
+export type TipAlso = { text: string; key: string };
+
+export function tip(text: string, key?: string, { placement, detail, dot, lead, also }: TipOptions = {}) {
   const line = lead ? `${lead} ${text}` : text;
   const label = detail ? `${line}, ${detail}` : line;
   return {
@@ -49,6 +56,9 @@ export function tip(text: string, key?: string, { placement, detail, dot, lead }
     "data-tip-detail": detail,
     "data-tip-dot": dot,
     "data-tip-lead": lead,
+    "data-tip-also": also?.text,
+    "data-tip-also-key": also?.key,
+    // the name stays this control's own: the other verb is a hint for the eye, not what it does
     "aria-label": key ? `${label} (${key})` : label,
   } as const;
 }
@@ -77,6 +87,7 @@ export type Anchor = {
   detail?: string;
   dot?: string;
   lead?: string;
+  also?: TipAlso;
   placement: TipPlacement;
 };
 type Point = { x: number; y: number };
@@ -171,6 +182,10 @@ export function Tooltips() {
         detail: el.dataset.tipDetail,
         dot: el.dataset.tipDot,
         lead: el.dataset.tipLead,
+        also:
+          el.dataset.tipAlso && el.dataset.tipAlsoKey
+            ? { text: el.dataset.tipAlso, key: el.dataset.tipAlsoKey }
+            : undefined,
         placement,
       });
     };
@@ -258,16 +273,28 @@ export function Tooltips() {
   }, [anchor]);
 
   if (!anchor) return null;
-  const head = (
+  const words = (
     <>
       {anchor.dot && <span className={`dot ${anchor.dot} tooltip-dot`} />}
       {anchor.text}
+    </>
+  );
+  const head = (
+    <>
+      {words}
       {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}
     </>
   );
   return createPortal(
     <div ref={box} className="tooltip" role="tooltip">
-      {anchor.lead ? (
+      {anchor.also ? (
+        <div className="tooltip-pair">
+          <span>{words}</span>
+          {anchor.key ? <Kbd k={anchor.key} className="tooltip-key" /> : <span />}
+          <span className="tooltip-also">{anchor.also.text}</span>
+          <Kbd k={anchor.also.key} className="tooltip-key" />
+        </div>
+      ) : anchor.lead ? (
         <div className="tooltip-line">
           <span className="tooltip-lead">{anchor.lead}</span>
           <span>{head}</span>

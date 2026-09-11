@@ -248,6 +248,8 @@ function RouteBar({
         icon="inspect"
         label="Pick an element to open its code"
         hint={chord("inspect")}
+        // the same pick with the chat as its landing: named here so the pair is learned together
+        also={{ text: "Add an element to chat", key: chord("pick") }}
         on={picking === "code"}
         disabled={!ready || !frameId}
         onClick={() => frameId && togglePick(frameId, picking, dispatch, "code")}

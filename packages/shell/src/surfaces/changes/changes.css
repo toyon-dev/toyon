@@ -33,15 +33,10 @@
     display: none;
   }
 
-  /* one commit: the subject takes the row, the age ends it where a file row ends with its counts */
-  /* expanded, so its files are the rows underneath: the same picked pair a file open in the editor
-   takes, because it is the same idea one level up */
+  /* one commit: the subject takes the row, the age ends it where a file row ends with its counts.
+   An expanded commit has no mark of its own: the files listed under it are the mark, and a band
+   on the commit as well as on the file open under it read as two selections. */
   .log-row {
-    &[data-state~="current"] {
-      background: var(--element1);
-      color: var(--text0);
-    }
-    &[data-state~="current"],
     &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
     }

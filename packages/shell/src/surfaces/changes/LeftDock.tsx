@@ -205,9 +205,11 @@ export function LeftDock({ width }: { width: number }) {
       else select(sel);
     } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       // ←/→ are both the tab strip's keys and a tree's, and with two tabs they can be both: the
-      // tree answers while it has something to say (expand, collapse, step to the parent) and the
-      // strip when it does not, so → from the changes list opens the history and ← on a closed
-      // commit walks back out. The history is only ever a tree one commit deep.
+      // tree answers while it has something to say (expand, collapse) and the strip when it does
+      // not, so → from the changes list opens the history and ← on a closed commit walks back
+      // out. The history is only ever a tree one commit deep, so ← anywhere inside a commit
+      // closes it and lands on it: a stop on the parent first is a step nobody asked for in a
+      // tree this shallow.
       e.preventDefault();
       const right = e.key === "ArrowRight";
       if (!hist) {
@@ -219,9 +221,9 @@ export function LeftDock({ width }: { width: number }) {
         if (!r || r.file) return;
         if (r.commit.sha !== openSha) toggleCommit(r.commit.sha);
         else if (histRows[sel + 1]?.file) moveHist(sel + 1);
-      } else if (r?.file) {
-        setSel(histRows.findIndex((x) => !x.file && x.commit.sha === r.commit.sha));
       } else if (r && r.commit.sha === openSha) {
+        // the commit's own row sits above its files, so its index survives the collapse
+        if (r.file) setSel(histRows.findIndex((x) => !x.file && x.commit.sha === r.commit.sha));
         toggleCommit(r.commit.sha);
       } else {
         setTab("changes");
@@ -381,12 +383,7 @@ export function LeftDock({ width }: { width: number }) {
                   onHover={noHover}
                 />
               ) : (
-                <CommitRow
-                  c={r.commit}
-                  open={r.commit.sha === openSha}
-                  selected={focused && sel === i}
-                  onToggle={clickCommit}
-                />
+                <CommitRow c={r.commit} selected={focused && sel === i} onToggle={clickCommit} />
               )}
             </Fragment>
           ))}

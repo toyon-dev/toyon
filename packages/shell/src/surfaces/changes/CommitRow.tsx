@@ -28,14 +28,13 @@ function ago(at: number): string {
  * for the same reason: the runs are contiguous, so saying it once costs no width at all. */
 export const CommitRow = memo(function CommitRow({
   c,
-  open,
   selected,
   onToggle,
 }: {
   c: CommitEntry;
-  /** expanded: this commit's files are listed under it */
-  open: boolean;
-  /** the keyboard selection, drawn only while the list has focus */
+  /** the keyboard selection, drawn only while the list has focus. Whether the commit is expanded
+   * is not a prop: its files listed under it say so, and a mark on the row as well made two picked
+   * rows, the commit and the file open under it, when the one thing to track is the cursor. */
   selected: boolean;
   onToggle: (sha: string) => void;
 }) {
@@ -43,7 +42,7 @@ export const CommitRow = memo(function CommitRow({
   return (
     <button
       className="row row-sm log-row row-edge"
-      data-state={rowState({ current: open, cursor: selected })}
+      data-state={rowState({ cursor: selected })}
       role="option"
       aria-selected={selected}
       // the list owns the keyboard, the same way the changed-files list does

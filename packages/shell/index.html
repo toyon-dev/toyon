@@ -20,7 +20,7 @@
         try {
           const token = (location.hash.match(/token=([a-f0-9]+)/) || [])[1] || localStorage.getItem("toyon-token");
           if (!token) return Promise.resolve(null);
-          return fetch("/bootstrap?token=" + token)
+          return fetch(`/bootstrap?token=${token}`)
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null);
         } catch {

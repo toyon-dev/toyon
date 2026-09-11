@@ -32,7 +32,8 @@ export const useActiveRow = (): WorktreeStatus | null => useStore((s) => rowById
 
 export const useRows = () => useStore((s) => s.rows);
 
-/** the active project's owned worktrees: what the rail lists and ⌘1–9 count over */
+/** the active project's owned worktrees in rail order (state/railOrder.ts): what the rail lists and
+ * ⌘1-9 count over */
 export const useVisibleWorktrees = () => useStore((s) => s.visible);
 
 /** the active project's worktrees that toyon did not create. A separate list from `visible` on

@@ -108,6 +108,10 @@ describe("active worktree", () => {
   test("hello picks the first worktree when nothing is active", () => {
     expect(run([hello(wt("main", "main"), wt("a"))]).activeId).toBe("main");
   });
+
+  test("with nothing remembered it lands on main, wherever the daemon lists it", () => {
+    expect(run([hello(wt("a"), wt("main", "main"))]).activeId).toBe("main");
+  });
   test("hello restores the worktree selected before a reload", () => {
     const s = run([hello(wt("main", "main"), wt("a"))], initialState({ clientId: ME, storedActive: "a" }));
     expect(s.activeId).toBe("a");
@@ -1115,6 +1119,23 @@ describe("discovered worktrees", () => {
     const from = initialState({ clientId: ME, storedDiscoveredOpen: { r: true, gone: true } });
     const s = run([helloR(wt("m1", "main"))], from);
     expect(s.discoveredOpen).toEqual({ r: true });
+  });
+});
+
+// The rail sorts `visible` (railOrder.ts has the rules); `rows` stays as the daemon sent it, since
+// the preview frames are keyed in that order and one moved in the DOM reloads.
+describe("rail order", () => {
+  const sent = (w: WorktreeStatus, promptedAt: number): WorktreeStatus => ({
+    ...w,
+    worktree: { ...w.worktree!, promptedAt },
+  });
+
+  test("a send moves its row to just under main, and the daemon's list keeps its order", () => {
+    const before = run([hello(wt("main", "main"), sent(wt("a"), 1), sent(wt("b"), 2))]);
+    expect(before.visible.map((w) => w.id)).toEqual(["main", "b", "a"]);
+    const s = run([worktrees(wt("main", "main"), sent(wt("a"), 3), sent(wt("b"), 2))], before);
+    expect(s.visible.map((w) => w.id)).toEqual(["main", "a", "b"]);
+    expect(s.rows.map((w) => w.id)).toEqual(["main", "a", "b"]);
   });
 });
 

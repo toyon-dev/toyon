@@ -305,6 +305,8 @@ describe("handlers", () => {
     };
     await dispatch({ t: "chat", worktreeId: main.id, text: "hi", context: "ctx", pick }, ctx, services);
     expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: "ctx", pick, images: undefined }]);
+    // a send is what moves a row up the rail
+    expect(services.state.worktree(main.id)?.promptedAt).toBeGreaterThan(0);
   });
 
   test("chat images reach the agent as sent; the schema refuses formats the models do not take", async () => {
@@ -493,6 +495,8 @@ describe("handlers", () => {
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
     const agent = agents.get(main.id)!;
     await dispatch({ t: "exec", worktreeId: main.id, command: "printf hi; pwd -P" }, ctx, services);
+    // a `!` command is working in the worktree too, so it counts as a send
+    expect(services.state.worktree(main.id)?.promptedAt).toBeGreaterThan(0);
     expect(agent.recorded[0]).toMatchObject({
       type: "tool-start",
       name: "shell",

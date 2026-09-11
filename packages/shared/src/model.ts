@@ -134,6 +134,10 @@ export interface WorktreeInfo {
   effort?: string;
   /** when the agent last finished a turn here. Absent until one has run. */
   lastTurnAt?: number;
+  /** when the person last sent something here, a chat message or a `!` command. The rail sorts on
+   * it, so a row rises because someone worked in it and never because its agent did. Absent on a
+   * row nothing has been sent to since the field landed. */
+  promptedAt?: number;
   /** when someone last looked at this worktree in a shell. Absent until it has been looked at
    * since the feature landed, which reads as "seen" so old rows do not all light up at once. */
   seenAt?: number;

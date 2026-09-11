@@ -52,6 +52,7 @@ import {
   SHELL_STREAM,
   toyonDark,
 } from "@toyon/shared";
+import { railOrder } from "./railOrder.ts";
 
 export type UsageFigures = { used: number; size: number; cost?: number };
 
@@ -349,9 +350,9 @@ export interface State {
    * The daemon keeps every repo's procs and agents running regardless; this is a view choice. */
   activeRepoId: string | null;
   /** the rows toyon owns in the active repo, minus `removing` (kept in step by the reducer so
-   * selectors stay stable). Owned only, and in the daemon's order: ⌘1-9 indexes this positionally,
-   * the palette numbers its "switch to" rows from it, and the project pill counts tasks as
-   * `length - 1`. A found row entering it would move all three silently. */
+   * selectors stay stable). Owned only, and in rail order (railOrder.ts): ⌘1-9 indexes this
+   * positionally, the palette numbers its "switch to" rows from it, and the project pill counts
+   * tasks as `length - 1`. A found row entering it would move all three silently. */
   visible: OwnedWorktree[];
   /** removes this tab has sent and the daemon has not yet confirmed. The row leaves the screen
    * on the click rather than when the daemon's next worktrees frame lands, which sits behind
@@ -601,12 +602,14 @@ export function previewIdOf(s: State): string | null {
   return draftSpareOf(s)?.id ?? s.draft.base;
 }
 
-/** the active repo's owned rows; every repo's when nothing is selected (a daemon with no repos).
- * A row whose remove is in flight is already gone from the person's point of view. */
+/** the active repo's owned rows in rail order; every repo's when nothing is selected (a daemon with
+ * no repos). A row whose remove is in flight is already gone from the person's point of view.
+ * Sorted here and never in `rows`: the preview frames are keyed children in `rows` order, and a
+ * frame moved in the DOM reloads. */
 function visibleOf(rows: WorktreeStatus[], repoId: string | null, removing: string[]): OwnedWorktree[] {
   const owned = rows.filter(isOwned);
   const shown = removing.length ? owned.filter((w) => !removing.includes(w.id)) : owned;
-  return repoId ? shown.filter((w) => w.repoId === repoId) : shown;
+  return railOrder(repoId ? shown.filter((w) => w.repoId === repoId) : shown);
 }
 
 /** the same narrowing for the rows toyon did not create */
@@ -615,16 +618,17 @@ function visibleDiscoveredOf(rows: WorktreeStatus[], repoId: string | null): Wor
   return repoId ? found.filter((d) => d.repoId === repoId) : found;
 }
 
-/** the worktree to land on in a repo: the one last selected there, else its first owned row
- * (main). Never a found row, which may be gone next push, and never a row whose remove is
- * pending: it is off screen, and landing on it would select nothing. */
+/** the worktree to land on in a repo: the one last selected there, else its main. Never a found
+ * row, which may be gone next push, and never a row whose remove is pending: it is off screen, and
+ * landing on it would select nothing. */
 function landingIn(s: State, repoId: string | null, rows = s.rows): string | null {
   const owned = rows.filter(isOwned);
   const live = s.removing.length ? owned.filter((w) => !s.removing.includes(w.id)) : owned;
-  if (!repoId) return live[0]?.id ?? null;
-  const last = s.lastActive[repoId];
+  const last = repoId ? s.lastActive[repoId] : undefined;
   if (last && live.some((w) => w.id === last)) return last;
-  return live.find((w) => w.repoId === repoId)?.id ?? null;
+  const mine = repoId ? live.filter((w) => w.repoId === repoId) : live;
+  // looked up, not taken from the top: the daemon lists rows in the order they were made
+  return (mine.find((w) => isMain(w.worktree)) ?? mine[0])?.id ?? null;
 }
 
 /** the four client messages that end in a `shipped` frame: the daemon's word for them */

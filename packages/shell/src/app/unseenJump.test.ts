@@ -31,10 +31,10 @@ describe("unseenJump", () => {
     expect(unseenJump(r, "w1", true, 1)).toBeNull();
     expect(unseenJump([], null, false, -1)).toBeNull();
   });
-  test("from a draft, here is past the last row", () => {
+  test("from a draft, here is its seat under the first row", () => {
     const r = rows(1, 0, 1);
-    expect(unseenJump(r, "w1", true, -1)).toEqual({ activate: "w2" });
-    expect(unseenJump(r, "w1", true, 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", true, -1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", true, 1)).toEqual({ activate: "w2" });
   });
   test("a waiting agent outranks a nearer unseen turn, in either direction", () => {
     const r = rows(1, 0, 0, "w", 1);
@@ -46,7 +46,8 @@ describe("unseenJump", () => {
     const r = rows("w", 0, "w", 0);
     expect(unseenJump(r, "w0", false, 1)).toEqual({ activate: "w2" });
     expect(unseenJump(r, "w2", false, 1)).toEqual({ activate: "w0" });
-    expect(unseenJump(r, "w3", true, -1)).toEqual({ activate: "w2" });
+    expect(unseenJump(r, "w3", true, -1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w3", true, 1)).toEqual({ activate: "w2" });
   });
   test("once the only waiting row is on screen, unseen ones are next", () => {
     const r = rows(1, "w", 0);

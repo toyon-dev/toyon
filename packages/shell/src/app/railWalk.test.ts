@@ -1,27 +1,30 @@
 import { describe, expect, test } from "bun:test";
 import { railWalk } from "./railWalk.ts";
 
-const owned = [{ id: "w0" }, { id: "w1" }, { id: "w2" }];
+const owned = [{ id: "main" }, { id: "w1" }, { id: "w2" }];
 const found = [{ id: "f0" }, { id: "f1" }];
 
 describe("railWalk", () => {
-  test("steps through the owned rows", () => {
+  test("steps through the tasks", () => {
     expect(railWalk(owned, found, "w1", false, 1)).toEqual({ activate: "w2" });
-    expect(railWalk(owned, found, "w1", false, -1)).toEqual({ activate: "w0" });
+    expect(railWalk(owned, found, "w2", false, -1)).toEqual({ activate: "w1" });
   });
-  test("down from the last owned row is the draft, never the found list", () => {
-    expect(railWalk(owned, found, "w2", false, 1)).toEqual({ draft: true });
-    expect(railWalk(owned, found, "w2", true, -1)).toEqual({ activate: "w2" });
+  test("the draft sits under main: down from main opens it, and down from it is the first task", () => {
+    expect(railWalk(owned, found, "main", false, 1)).toEqual({ draft: true });
+    expect(railWalk(owned, found, "main", true, 1)).toEqual({ activate: "w1" });
+    expect(railWalk(owned, found, "w1", false, -1)).toEqual({ draft: true });
+    expect(railWalk(owned, found, "w1", true, -1)).toEqual({ activate: "main" });
   });
-  test("the loop wraps through the draft: down from it is the top, up from the top is the draft", () => {
-    expect(railWalk(owned, found, "w2", true, 1)).toEqual({ activate: "w0" });
-    expect(railWalk(owned, found, "w0", false, -1)).toEqual({ draft: true });
-    const one = [{ id: "w0" }];
-    expect(railWalk(one, [], "w0", false, 1)).toEqual({ draft: true });
-    expect(railWalk(one, [], "w0", false, -1)).toEqual({ draft: true });
-    expect(railWalk(one, [], null, true, 1)).toEqual({ activate: "w0" });
+  test("the loop wraps: down from the last row is main, up from main is the last row", () => {
+    expect(railWalk(owned, found, "w2", false, 1)).toEqual({ activate: "main" });
+    expect(railWalk(owned, found, "main", false, -1)).toEqual({ activate: "w2" });
+    const one = [{ id: "main" }];
+    expect(railWalk(one, [], "main", false, 1)).toEqual({ draft: true });
+    expect(railWalk(one, [], "main", false, -1)).toEqual({ draft: true });
+    expect(railWalk(one, [], null, true, 1)).toEqual({ activate: "main" });
+    expect(railWalk(one, [], null, true, -1)).toEqual({ activate: "main" });
   });
-  test("a found row on screen walks the found rows", () => {
+  test("a found row on screen walks the found rows, never into the loop", () => {
     expect(railWalk(owned, found, "f0", false, 1)).toEqual({ activate: "f1" });
     expect(railWalk(owned, found, "f1", false, -1)).toEqual({ activate: "f0" });
     expect(railWalk(owned, found, "f1", false, 1)).toBeNull();

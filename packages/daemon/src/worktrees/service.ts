@@ -232,6 +232,8 @@ export class WorktreeService {
       if (claimed) {
         if (variant) claimed.variant = variant;
         if (opts.createdBy) claimed.createdBy = opts.createdBy;
+        // made from a prompt, which is a send
+        claimed.promptedAt = claimed.createdAt;
         // the spare's agent has no process yet; it reads the stamps on its first prompt
         claimed.agent = agent;
         if (opts.mode) claimed.mode = opts.mode;
@@ -265,6 +267,8 @@ export class WorktreeService {
       proxyPort: await allocateProxyPort(),
       title: slug,
       createdAt: Date.now(),
+      // made from a prompt, which is a send
+      promptedAt: Date.now(),
       agent,
       ...(variant ? { variant } : {}),
       ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
@@ -1207,6 +1211,16 @@ export class WorktreeService {
     if (!wt) return;
     if (wt.seenAt != null && wt.lastTurnAt != null && wt.seenAt >= wt.lastTurnAt) return;
     wt.seenAt = Date.now();
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+  }
+
+  /** someone sent something here, a chat message or a `!` command: the rail sorts on it */
+  markPrompted(worktreeId: string) {
+    const wt = this.d.state.worktree(worktreeId);
+    // a discovered worktree has no record, and the rail keeps those in a section of their own
+    if (!wt) return;
+    wt.promptedAt = Date.now();
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
   }

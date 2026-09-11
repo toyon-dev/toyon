@@ -167,10 +167,12 @@ export function WtRail() {
         data-wt={id}
         // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
         // is picked and takes the focus, so the next press keeps walking. Down from the last row
-        // is the new-worktree row, the ends stop rather than wrap, and the found list below is
-        // its own section. ⌥↑/↓ does the same from anywhere (app/keys.ts).
+        // is the new-worktree row, the ends stop the way a list's do, and the found list below is
+        // its own section. ⌥↑/↓ and ⌃Tab are the walk from anywhere, and that one wraps (app/keys.ts).
         onKeyDown={(e) => {
           if (!owned || graftMode || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+          // a modified arrow is the global walk's, which runs after this: stepping here too moved two rows
+          if (e.altKey || e.ctrlKey || e.metaKey) return;
           e.preventDefault();
           const list = e.currentTarget.parentElement;
           const at = worktrees.findIndex((w) => w.id === id);
@@ -424,6 +426,8 @@ export function WtRail() {
               // the last stop on the walk: up is the last worktree, and down is the end
               onKeyDown={(e) => {
                 if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+                // a modified arrow is the global walk's, as on the rows above
+                if (e.altKey || e.ctrlKey || e.metaKey) return;
                 e.preventDefault();
                 const last = worktrees[worktrees.length - 1];
                 if (e.key !== "ArrowUp" || !last) return;

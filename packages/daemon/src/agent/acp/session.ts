@@ -562,6 +562,13 @@ export class AcpSession implements AgentAdapter {
     await this.applyMode(live);
     await this.applyOption(live, "model");
     await this.applyOption(live, "thought_level");
+    // a stop that landed while the agent was starting or being set up had no turn to cancel, so the
+    // prompt must not go out at all: esc straight after a send would otherwise do nothing. Nothing
+    // runs between this check and the request being written, so a later stop's cancel follows it.
+    if (this.interrupted) {
+      this.emit({ type: "turn-end", stopReason: "interrupted", ts: Date.now() });
+      return;
+    }
     const carried = this.carriedImages(live, item.recorded.images);
     const prefix = live.prefixPending ? SYSTEM_APPEND : undefined;
     live.prefixPending = false;

@@ -1,4 +1,4 @@
-import type { PickMeta } from "@toyon/shared";
+import { attachmentLabel, type PickMeta } from "@toyon/shared";
 import { pickItems } from "../../state/actions/message.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -6,12 +6,15 @@ import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { pickLabel } from "../util.ts";
 
-/** a picked element as a chip: crosshair, <Component>, then file:line. Its paths are relative to the
- * checkout it was picked in, made so when it was attached. In the composer it can be removed; in
- * the chat it just highlights on hover. The file half is a link wherever there is somewhere to go:
- * a pick keeps pointing at its source long after the message it rode in on. */
+/** a picked element as a chip: crosshair, its number, <Component>, then file:line. The number is
+ * what the agent calls it ("Element 2"), so the chip carries it the way an image chip does. Its
+ * paths are relative to the checkout it was picked in, made so when it was attached. In the composer
+ * it can be removed; in the chat it just highlights on hover. The file half is a link wherever there
+ * is somewhere to go: a pick keeps pointing at its source long after the message it rode in on. */
 export function PickChip({
   pick,
+  n,
+  dir,
   tipText,
   onHover,
   onOpen,
@@ -19,6 +22,10 @@ export function PickChip({
   className = "",
 }: {
   pick: PickMeta;
+  /** its number in the worktree's session */
+  n: number;
+  /** the worktree the paths are read in, for the menu's editors, which want a file on disk */
+  dir: string | null;
   tipText?: string;
   onHover?: (entering: boolean) => void;
   /** open the source this element was rendered from, at the line the chip names */
@@ -49,10 +56,10 @@ export function PickChip({
       data-tip={tipText}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      {...cm.contextMenu(() => pickItems(pick, { remove: onRemove }))}
+      {...cm.contextMenu(() => pickItems(pick, { dir, remove: onRemove }))}
     >
       <span className="pick-target">
-        <Icon name="pick" className="icon-inline" /> {pickLabel(pick)}
+        <Icon name="pick" className="icon-inline" /> <b>{attachmentLabel("pick", n)}</b> {pickLabel(pick)}
         {lead && (
           <span className="pick-file">
             {" "}

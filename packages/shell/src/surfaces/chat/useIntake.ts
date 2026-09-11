@@ -1,7 +1,7 @@
-import { isLongPaste } from "@toyon/shared";
+import { isLongPaste, limitMessage } from "@toyon/shared";
 import { useEffect } from "react";
 import { readCopiedSource } from "../../app/copiedSource.ts";
-import { attachText, fullMessage, roomIn } from "../../state/attach.ts";
+import { attachText, roomIn } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
 import { useStoreInstance } from "../../state/context.tsx";
 import { composerBoxOf, worktreeById } from "../../state/store.ts";
@@ -70,7 +70,7 @@ async function attachImages(store: Store, boxId: string | null, files: File[]) {
   const failed = results.find((r) => r.status === "rejected");
   if (images.length) store.dispatch({ a: "attach", id: boxId, items: images });
   if (failed) toast(store, String((failed as PromiseRejectedResult).reason?.message ?? failed.reason));
-  else if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${fullMessage("image")}`);
+  else if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${limitMessage("image")}`);
 }
 
 /** a file that is not an image: attached as text under its own name, or refused by name */
@@ -83,7 +83,7 @@ async function attachTextFiles(store: Store, boxId: string | null, files: File[]
     if (text === null) toast(store, `${f.name}: not a text file`);
     else attachText(store, boxId, text, { name: f.name });
   }
-  if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${fullMessage("paste")}`);
+  if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${limitMessage("paste")}`);
 }
 
 /** the box a drop lands in: the one the composer on screen writes in, which while drafting is the

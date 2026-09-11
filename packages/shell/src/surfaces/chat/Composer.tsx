@@ -1,5 +1,5 @@
 import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree } from "@toyon/shared";
-import { canSync, DEFAULT_PERMISSION_MODE, isMain, nextNumbers } from "@toyon/shared";
+import { canSync, DEFAULT_PERMISSION_MODE, isMain, nextNumbers, numbered } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
@@ -29,7 +29,7 @@ import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
 import { greenfieldContext, type Kind } from "../preview/kinds.ts";
-import { chord, commandSource, pickLabel, procTrouble } from "../util.ts";
+import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl } from "./images.ts";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
@@ -365,6 +365,15 @@ export function Composer({
       setText("");
       return;
     }
+    // a batch splits the prompt into tasks and takes no attachments: refused rather than sent without
+    // them, since the draft closing would carry them out of sight
+    if (draft?.batch && attachments.length) {
+      dispatch({
+        a: "toast",
+        toast: { ok: false, message: "a batch takes no attachments; remove them or turn batch off" },
+      });
+      return;
+    }
     const prompt = text.trim();
     const context = buildContext();
     const sent = attachments.length ? attachments.map(toInput) : undefined;
@@ -406,8 +415,7 @@ export function Composer({
     } else {
       sock?.send({ t: "chat", worktreeId: id, text: prompt, context, attachments: sent });
     }
-    // a batch splits the prompt into tasks and carries no attachments, so they wait in the box
-    if (attachments.length && !draft?.batch) dispatch({ a: "clear-attachments", id: boxId });
+    if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
     setText("");
     // the reply lands in the dock, so the dock comes back with the message that started it
     if (greenfield) dispatch({ a: "show-right" });
@@ -438,9 +446,10 @@ export function Composer({
     if (boxId && walk) dispatch({ a: "walk", id: boxId, walk: null, text });
   };
 
-  // the number each chip's kind will give it on send, counting on from this session's: a message
+  // the number each chip will carry on send, counting each kind on from this session's: a message
   // that starts a worktree starts that worktree's session, so its count starts over
-  const next = nextNumbers(spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined)));
+  const sentBefore = spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined));
+  const dir = active ? wtDir(active.worktree) : null;
 
   return (
     <div className="composer chat-input">
@@ -458,8 +467,7 @@ export function Composer({
         </div>
       )}
       {boxId &&
-        attachments.map((item) => {
-          const n = next[item.kind]++;
+        numbered(attachments, nextNumbers(sentBefore)).map(([item, n]) => {
           const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
           if (item.kind === "image")
             return (
@@ -491,6 +499,8 @@ export function Composer({
             <PickChip
               key={item.key}
               pick={item}
+              n={n}
+              dir={dir}
               tipText={item.html}
               onHover={(entering) =>
                 frameId &&

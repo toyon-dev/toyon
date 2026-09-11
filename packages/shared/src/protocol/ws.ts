@@ -5,7 +5,7 @@
 // arrive from a browser (public internet in cloud mode) and are validated before any handler runs.
 
 import { z } from "zod";
-import { ATTACHMENT_LIMITS, ATTACHMENTS_PER_MESSAGE, KIND_NOUN, overLimit } from "../attachment.ts";
+import { ATTACHMENTS_PER_MESSAGE, limitMessage, overLimit } from "../attachment.ts";
 import type {
   AgentConfigInfo,
   AgentInfo,
@@ -247,8 +247,7 @@ const attachments = z
   .max(ATTACHMENTS_PER_MESSAGE)
   .superRefine((list, ctx) => {
     const over = overLimit(list);
-    if (over)
-      ctx.addIssue({ code: "custom", message: `at most ${ATTACHMENT_LIMITS[over]} ${KIND_NOUN[over]}s per message` });
+    if (over) ctx.addIssue({ code: "custom", message: limitMessage(over) });
   })
   .optional();
 

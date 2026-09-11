@@ -26,6 +26,7 @@ const pick = {
   text: "Save",
   html: "<button>Save</button>",
 };
+const image = { kind: "image" as const, ref, bytes: Buffer.from("abc") };
 /** each block's first line, or its type when it is not text */
 const heads = (blocks: ContentBlock[]) => blocks.map((b) => (b.type === "text" ? b.text.split("\n")[0] : b.type));
 
@@ -44,7 +45,7 @@ describe("buildPrompt", () => {
     ]);
   });
   test("images lead, each behind its numbered caption; the prefix stays on the text block", () => {
-    const blocks = buildPrompt("what is this", undefined, SYSTEM_APPEND, [{ ref, bytes: Buffer.from("abc") }]);
+    const blocks = buildPrompt("what is this", undefined, SYSTEM_APPEND, [image]);
     expect(blocks).toEqual([
       { type: "text", text: "Image 2: shot.png (10×5)" },
       { type: "image", mimeType: "image/png", data: "YWJj" },
@@ -53,7 +54,9 @@ describe("buildPrompt", () => {
   });
 
   test("a paste rides behind its caption, fenced so the model can see where it ends", () => {
-    const blocks = buildPrompt("fix this", undefined, undefined, [{ ref: paste, text: "line one\nline two" }]);
+    const blocks = buildPrompt("fix this", undefined, undefined, [
+      { kind: "paste", ref: paste, text: "line one\nline two" },
+    ]);
     expect(blocks).toEqual([
       {
         type: "text",
@@ -65,9 +68,9 @@ describe("buildPrompt", () => {
 
   test("attachments of every kind keep the order they were attached in", () => {
     const blocks = buildPrompt("do it", "[ctx]", undefined, [
-      { ref: pick },
-      { ref: paste, text: "a" },
-      { ref, bytes: Buffer.from("abc") },
+      { kind: "pick", ref: pick },
+      { kind: "paste", ref: paste, text: "a" },
+      image,
     ]);
     expect(heads(blocks)).toEqual([
       'Element 1 (an element the user picked in the preview): <Button> component used at src/pages/Home.tsx:40, its own JSX at src/ui/Button.tsx:12, text "Save"',
@@ -80,7 +83,9 @@ describe("buildPrompt", () => {
   });
 
   test("a paste from a file says so in the caption", () => {
-    const blocks = buildPrompt("x", undefined, undefined, [{ ref: { ...paste, name: "App.tsx" }, text: "a" }]);
+    const blocks = buildPrompt("x", undefined, undefined, [
+      { kind: "paste", ref: { ...paste, name: "App.tsx" }, text: "a" },
+    ]);
     expect((blocks[0] as { text: string }).text).toStartWith("Pasted text 1 (App.tsx, 2 lines,");
   });
 
@@ -115,7 +120,7 @@ describe("pickCaption", () => {
 // opens with one has to outrank the captions and the prefix that normally come first.
 describe("buildPrompt with a leading slash command", () => {
   test("the command is block 0, ahead of image captions and the prefix", () => {
-    const blocks = buildPrompt("/review the auth flow", "[ctx]", SYSTEM_APPEND, [{ ref, bytes: Buffer.from("abc") }]);
+    const blocks = buildPrompt("/review the auth flow", "[ctx]", SYSTEM_APPEND, [image]);
     expect(blocks).toEqual([
       { type: "text", text: "/review the auth flow" },
       { type: "text", text: SYSTEM_APPEND },

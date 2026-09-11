@@ -26,11 +26,12 @@ export function attachmentsDirFor(attachmentsDir: string, worktreeId: string): s
   return join(attachmentsDir, worktreeId);
 }
 
-/** an attachment once written: the ref the transcript keeps, and what the prompt needs that the ref
- * only points at */
+/** an attachment once written: its kind, the ref the transcript keeps, and what the prompt needs
+ * that the ref only points at (an image's decoded bytes, a paste's text) */
 export type Stored =
-  /** `bytes` decoded, for the image block */
-  { ref: ImageRef; bytes: Buffer } | { ref: PasteRef; text: string } | { ref: PickRef };
+  | { kind: "image"; ref: ImageRef; bytes: Buffer }
+  | { kind: "paste"; ref: PasteRef; text: string }
+  | { kind: "pick"; ref: PickRef };
 
 export class AttachmentStore {
   constructor(readonly dir: string) {}
@@ -44,7 +45,7 @@ export class AttachmentStore {
       case "paste":
         return this.putText(worktreeId, n, input);
       case "pick":
-        return { ref: { ...input, n } };
+        return { kind: "pick", ref: { ...input, n } };
     }
   }
 
@@ -54,6 +55,7 @@ export class AttachmentStore {
     const file = `${n}.${EXT[img.mimeType]}`;
     await this.write(worktreeId, file, bytes);
     return {
+      kind: "image",
       bytes,
       ref: {
         kind: "image",
@@ -73,6 +75,7 @@ export class AttachmentStore {
     const file = `${n}.txt`;
     await this.write(worktreeId, file, text);
     return {
+      kind: "paste",
       text,
       ref: { kind: "paste", n, ...(name ? { name } : {}), ...(source ? { source } : {}), ...pasteSummary(text), file },
     };

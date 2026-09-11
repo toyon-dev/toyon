@@ -56,7 +56,9 @@ export type PageLink = { path: string; text: string };
 
 const range = z.tuple([z.number(), z.number()]);
 
-/** a picked element: the PickMeta that travels with the chat message, plus display-only context */
+/** a picked element as the bridge reports it: the PickMeta, the text and markup that travel with it
+ * as a chat attachment, and what only the shell uses (its classes, the route, the traits a source
+ * search looks for) */
 export const pickedElementSchema = pickMetaSchema.extend({
   classes: z.string(),
   text: z.string(),

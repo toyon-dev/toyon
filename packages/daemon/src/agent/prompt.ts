@@ -84,11 +84,15 @@ export function buildPrompt(
 const textBlock = (text: string): ContentBlock => ({ type: "text", text });
 
 function attachmentBlocks(a: Stored): ContentBlock[] {
-  if ("bytes" in a)
-    return [
-      textBlock(imageCaption(a.ref)),
-      { type: "image", mimeType: a.ref.mimeType, data: a.bytes.toString("base64") },
-    ];
-  if ("text" in a) return [textBlock(`${pasteCaption(a.ref)}\n<pasted-text ${a.ref.n}>\n${a.text}\n</pasted-text>`)];
-  return [textBlock(pickCaption(a.ref))];
+  switch (a.kind) {
+    case "image":
+      return [
+        textBlock(imageCaption(a.ref)),
+        { type: "image", mimeType: a.ref.mimeType, data: a.bytes.toString("base64") },
+      ];
+    case "paste":
+      return [textBlock(`${pasteCaption(a.ref)}\n<pasted-text ${a.ref.n}>\n${a.text}\n</pasted-text>`)];
+    case "pick":
+      return [textBlock(pickCaption(a.ref))];
+  }
 }

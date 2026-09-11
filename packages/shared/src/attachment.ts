@@ -11,12 +11,17 @@ export const ATTACHMENT_LIMITS: Readonly<Record<AttachmentKind, number>> = { ima
 export const ATTACHMENTS_PER_MESSAGE = ATTACHMENT_KINDS.reduce((sum, k) => sum + ATTACHMENT_LIMITS[k], 0);
 
 /** what a person calls one of a kind, in a sentence */
-export const KIND_NOUN: Readonly<Record<AttachmentKind, string>> = { image: "image", paste: "paste", pick: "element" };
+const KIND_NOUN: Readonly<Record<AttachmentKind, string>> = { image: "image", paste: "paste", pick: "element" };
 
 const KIND_LABEL: Readonly<Record<AttachmentKind, string>> = { image: "Image", paste: "Pasted text", pick: "Element" };
 
 /** the name an attachment goes by on its chip and in the prompt, so the two always agree */
 export const attachmentLabel = (kind: AttachmentKind, n: number): string => `${KIND_LABEL[kind]} ${n}`;
+
+/** what a message holding too many of `kind` is told: by the composer before it sends, and by the
+ * schema if one arrives anyway */
+export const limitMessage = (kind: AttachmentKind): string =>
+  `at most ${ATTACHMENT_LIMITS[kind]} ${KIND_NOUN[kind]}s per message`;
 
 type Kinded = { readonly kind: AttachmentKind };
 
@@ -39,4 +44,14 @@ export function nextNumbers(
   const next: Record<AttachmentKind, number> = { image: 1, paste: 1, pick: 1 };
   for (const list of sent) for (const a of list ?? []) next[a.kind] = Math.max(next[a.kind], a.n + 1);
   return next;
+}
+
+/** each of `items` with the number it will take, counting each kind on from `next` in the order the
+ * items come: what a waiting chip shows before the daemon has numbered it */
+export function numbered<T extends Kinded>(
+  items: readonly T[],
+  next: Readonly<Record<AttachmentKind, number>>,
+): Array<[T, number]> {
+  const at = { ...next };
+  return items.map((item) => [item, at[item.kind]++]);
 }

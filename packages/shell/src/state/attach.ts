@@ -4,10 +4,9 @@
 // the wire.
 
 import {
-  ATTACHMENT_LIMITS,
   type AttachmentInput,
   type AttachmentKind,
-  KIND_NOUN,
+  limitMessage,
   PASTE_MAX_CHARS,
   type PasteSource,
   type PickedElement,
@@ -20,14 +19,10 @@ import { composerBoxOf, draftKey, type PendingAttachment, type State, worktreeBy
 
 const toast = (store: Store, message: string) => store.dispatch({ a: "toast", toast: { ok: false, message } });
 
-/** what a full box says, the same for every kind */
-export const fullMessage = (kind: AttachmentKind): string =>
-  `at most ${ATTACHMENT_LIMITS[kind]} ${KIND_NOUN[kind]}s per message`;
-
 /** how many more of `kind` box `boxId` takes; says so when that is none */
 export function roomIn(store: Store, boxId: string, kind: AttachmentKind): number {
   const room = roomFor(store.getState().local[boxId]?.attachments ?? [], kind);
-  if (room === 0) toast(store, fullMessage(kind));
+  if (room === 0) toast(store, limitMessage(kind));
   return room;
 }
 

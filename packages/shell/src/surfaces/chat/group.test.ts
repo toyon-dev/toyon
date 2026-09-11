@@ -157,13 +157,18 @@ describe("groupTools", () => {
     expect(open(items)).toBe(1);
   });
 
-  test("the open row: a read never opens, so the diff stays open over it after it is done", () => {
-    const items = [
-      tool("edit", "/wt/a.ts", { output: DIFF }),
-      text("Checking the caller."),
-      tool("read", "/wt/b.ts", { output: "x" }),
-    ];
-    expect(open(items)).toBe(0);
+  test("the open row: a read still going leaves the diff open, and closes it once it comes back", () => {
+    const edit = tool("edit", "/wt/a.ts", { output: DIFF });
+    expect(open([edit, tool("read", "/wt/b.ts", { done: false })])).toBe(0);
+    expect(open([edit, tool("read", "/wt/b.ts", { output: "x" })])).toBe(-1);
+  });
+
+  test("the open row: the agent's first words close it, a message or thought still empty does not", () => {
+    const edit = tool("edit", "/wt/a.ts", { output: DIFF });
+    expect(open([edit, text("")])).toBe(0);
+    expect(open([edit, { kind: "thinking", text: " " } as ChatItem])).toBe(0);
+    expect(open([edit, text("Checking the caller.")])).toBe(-1);
+    expect(open([edit, { kind: "thinking", text: "The caller next." } as ChatItem])).toBe(-1);
   });
 
   test("the open row: a run on one file stays open while its next call is pending", () => {

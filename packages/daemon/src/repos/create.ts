@@ -7,16 +7,17 @@
 // A non-recursive mkdir is what enforces it. The checks below exist to produce readable copy; the
 // syscall is the guarantee, and it also closes the gap between checking and creating.
 
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { projectNameError } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import { GIT, git, NO_PROMPT, runLive } from "../git/exec.ts";
-import { expandTilde } from "./browse.ts";
+import { expandTilde, holdsNothing } from "./browse.ts";
 
-export type CreateMode = "create" | "clone";
+/** `init` is the one exception to the new-leaf rule: an empty folder that is already there */
+export type CreateMode = "create" | "clone" | "init";
 
 export interface CreateOpts {
   parent: string;
@@ -41,18 +42,42 @@ export function isInside(dir: string, parent: string): boolean {
 export function planProject(opts: { parent: string; name: string }): Plan {
   const nameError = projectNameError(opts.name);
   if (nameError) throw new UserError(nameError);
-  const typed = expandTilde(opts.parent.trim());
-  if (!typed.startsWith("/")) throw new UserError(`${opts.parent} is not a folder path`);
-  if (!existsSync(typed)) throw new UserError(`${opts.parent} does not exist; make it first`);
-  if (!statSync(typed).isDirectory()) throw new UserError(`${opts.parent} is not a folder`);
+  const parent = resolveParent(opts.parent);
+  const dir = join(parent, opts.name.trim());
+  if (existsSync(dir)) throw new UserError(`${dir} already exists`);
+  return { parent, dir };
+}
+
+/** Where a project made in place would be: an empty folder that is already there, most likely one
+ * the person made in Finder for exactly this. The rule becomes one existing leaf that holds nothing.
+ * Its name is the folder's own, so the new-name rules do not apply: Finder allows a space, and
+ * refusing a folder someone already has over what it is called would help nobody. */
+export function planInPlace(opts: { parent: string; name: string }): Plan {
+  const name = opts.name.trim();
+  if (!name || name === "." || name === ".." || name.includes("/")) {
+    throw new UserError(`${opts.name} is not a folder name`);
+  }
+  const typed = join(resolveParent(opts.parent), name);
+  if (!existsSync(typed) || !statSync(typed).isDirectory()) throw new UserError(`${typed} is not a folder`);
+  // canonical for the same reason the parent is: a symlinked folder is judged where it really is
+  const dir = realpathSync(typed);
+  if (existsSync(join(dir, ".git"))) throw new UserError(`${dir} is already a project; open it instead`);
+  if (!holdsNothing(readdirSync(dir))) {
+    throw new UserError(`${dir} is not empty; only an empty folder can become a project where it is`);
+  }
+  return { parent: dirname(dir), dir };
+}
+
+function resolveParent(raw: string): string {
+  const typed = expandTilde(raw.trim());
+  if (!typed.startsWith("/")) throw new UserError(`${raw} is not a folder path`);
+  if (!existsSync(typed)) throw new UserError(`${raw} does not exist; make it first`);
+  if (!statSync(typed).isDirectory()) throw new UserError(`${raw} is not a folder`);
   // Canonical, because the containment check compares this against paths the registry stored, and
   // those came back through `repoRoot` with every symlink resolved. On macOS that alone is the
   // difference between /var and /private/var, which would let a project be made inside a managed
   // checkout reached by the other name.
-  const parent = realpathSync(typed);
-  const dir = join(parent, opts.name.trim());
-  if (existsSync(dir)) throw new UserError(`${dir} already exists`);
-  return { parent, dir };
+  return realpathSync(typed);
 }
 
 /**
@@ -70,16 +95,38 @@ export async function createRepoDir(opts: { parent: string; name: string }): Pro
   await requireGitIdentity(parent);
   await mkdir(dir); // NOT recursive: this call is the one-new-leaf rule
   try {
-    // no `-b`: the person's own init.defaultBranch decides, rather than "main" being imposed here
-    await ok(git(dir, "init", "-q"), "git init");
-    // gpgsign off for this commit only: a signing prompt would hang a git nobody can see, and an
-    // empty scaffolding commit is not the one worth a signature
-    await ok(git(dir, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "initial commit"), "git commit");
+    await initWithEmptyCommit(dir);
   } catch (e) {
     await undoCreate(dir);
     throw e;
   }
   return dir;
+}
+
+/**
+ * Make an empty folder that is already there the project, and hand back its path. The same empty
+ * commit as `createRepoDir`, for the same two reasons. What differs is the undo: the folder is the
+ * person's, so a failure takes back only the .git this made, which planInPlace established was not
+ * there before.
+ */
+export async function initRepoInPlace(opts: { parent: string; name: string }): Promise<string> {
+  const { dir } = planInPlace(opts);
+  await requireGitIdentity(dir);
+  try {
+    await initWithEmptyCommit(dir);
+  } catch (e) {
+    await undoInit(dir);
+    throw e;
+  }
+  return dir;
+}
+
+async function initWithEmptyCommit(dir: string): Promise<void> {
+  // no `-b`: the person's own init.defaultBranch decides, rather than "main" being imposed here
+  await ok(git(dir, "init", "-q"), "git init");
+  // gpgsign off for this commit only: a signing prompt would hang a git nobody can see, and an
+  // empty scaffolding commit is not the one worth a signature
+  await ok(git(dir, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "initial commit"), "git commit");
 }
 
 /**
@@ -134,6 +181,15 @@ async function undoCreate(dir: string): Promise<void> {
     // best effort: the throw that brought us here is the one worth reporting, but a leftover
     // half-made directory would register fine later and then fail to make worktrees, so say so
     log.warn(dir, "could not clean up a half-made project", e);
+  }
+}
+
+/** Undo an init in a folder we did not make: its .git and nothing else, never the folder itself */
+async function undoInit(dir: string): Promise<void> {
+  try {
+    await rm(join(dir, ".git"), { recursive: true, force: true });
+  } catch (e) {
+    log.warn(dir, "could not take back a half-made .git", e);
   }
 }
 

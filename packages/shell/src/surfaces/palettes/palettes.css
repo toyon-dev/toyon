@@ -8,6 +8,15 @@
     overflow-wrap: anywhere;
     padding-top: 5px;
   }
+  /* the name of an empty folder being made the project: it is that folder's, so it is read, not edited */
+  .new-project-name {
+    display: flex;
+    align-items: center;
+    min-height: var(--row-height);
+    font: var(--type-mono);
+    color: var(--text0);
+    overflow-wrap: anywhere;
+  }
   /* the form's location, read back with the way to change it beside it: it sits on the row slot
      the name field beside it does, so the label centres on it the same way */
   .new-project-where {

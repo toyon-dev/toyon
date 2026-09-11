@@ -6,7 +6,7 @@ import { existsSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { PathEntry, PathTarget } from "@toyon/shared";
+import type { ChosenFolder, PathEntry, PathTarget } from "@toyon/shared";
 
 /** a long directory (node_modules, /usr/bin) would flood the picker; the prefix narrows it anyway */
 const MAX_ENTRIES = 40;
@@ -20,6 +20,25 @@ export function expandTilde(raw: string): string {
 function collapseTilde(abs: string): string {
   const home = homedir();
   return abs === home || abs.startsWith(`${home}/`) ? `~${abs.slice(home.length)}` : abs;
+}
+
+/** Finder leaves a .DS_Store in any folder it has shown, so a folder made for a project and looked
+ * at once still holds nothing */
+export function holdsNothing(names: string[]): boolean {
+  return names.every((n) => n === ".DS_Store");
+}
+
+/** what a folder picked in the OS dialog is, for the new-project form to decide what to do with it */
+export async function describeFolder(abs: string): Promise<ChosenFolder> {
+  const path = collapseTilde(abs);
+  // .git is a directory in a checkout and a file in a linked worktree; both are projects already
+  if (existsSync(join(abs, ".git"))) return { path, kind: "project" };
+  try {
+    return { path, kind: holdsNothing(await readdir(abs)) ? "empty" : "folder" };
+  } catch {
+    // unreadable: not somewhere to make a project in place, and a create there will say why
+    return { path, kind: "folder" };
+  }
 }
 
 const NOWHERE: PathTarget = { exists: false, isDir: false, isRepo: false, parentExists: false };

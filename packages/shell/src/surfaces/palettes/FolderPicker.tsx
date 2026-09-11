@@ -45,7 +45,13 @@ export function FolderPicker({ form }: { form: NewProjectForm }) {
       completionOf={(r) => (r.kind === "dir" ? listing(r.entry.path) : null)}
       narrowTo={(r) => (r.kind === "dir" ? listing(r.entry.path) : r.kind === "up" ? listing(r.path) : null)}
       onPick={(r) => {
-        if (r.kind === "here") dispatch({ a: "open", overlay: { ...form, parent: r.path } });
+        // choosing a location is choosing to make a folder there, even after an empty one was picked
+        if (r.kind === "here") {
+          dispatch({
+            a: "open",
+            overlay: { ...form, mode: form.mode === "init" ? "create" : form.mode, parent: r.path },
+          });
+        }
       }}
       // esc reaches the reducer as a close with back, which does the same
       onBack={() => dispatch({ a: "open", overlay: form })}

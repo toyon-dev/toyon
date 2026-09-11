@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
-import { GIT } from "../git/exec.ts";
-import { cloneInto, createRepoDir, isInside, planProject } from "./create.ts";
+import { GIT, git } from "../git/exec.ts";
+import { cloneInto, createRepoDir, initRepoInPlace, isInside, planInPlace, planProject } from "./create.ts";
 
 // Identity comes from global git config, which the daemon reads and must not invent. Point git at
 // a config of our own so these tests neither depend on the developer's nor write to it.
@@ -151,6 +151,47 @@ describe("createRepoDir: clone", () => {
     const { parent, cleanup } = parentDir();
     mkdirSync(join(parent, "copy"));
     expect(() => planProject({ parent, name: "copy" })).toThrow(UserError);
+    cleanup();
+  });
+});
+
+describe("initRepoInPlace", () => {
+  test("makes an empty folder the project where it is, its name and Finder's litter left alone", async () => {
+    const { parent, cleanup } = parentDir();
+    const dir = join(parent, "My App");
+    mkdirSync(dir);
+    writeFileSync(join(dir, ".DS_Store"), "");
+    expect(await initRepoInPlace({ parent, name: "My App" })).toBe(dir);
+    expect((await git(dir, "rev-list", "--count", "HEAD")).out).toBe("1");
+    // the commit tracks nothing, so the litter is still there and still out of the history
+    expect(existsSync(join(dir, ".DS_Store"))).toBe(true);
+    expect((await git(dir, "ls-tree", "HEAD")).out).toBe("");
+    cleanup();
+  });
+
+  test("refuses a folder with anything in it, or one that is already a project, and touches neither", () => {
+    const { parent, cleanup } = parentDir();
+    mkdirSync(join(parent, "work"));
+    writeFileSync(join(parent, "work", "notes.txt"), "keep me");
+    mkdirSync(join(parent, "done", ".git"), { recursive: true });
+    expect(() => planInPlace({ parent, name: "work" })).toThrow(/not empty/);
+    expect(() => planInPlace({ parent, name: "done" })).toThrow(/already a project/);
+    expect(() => planInPlace({ parent, name: "missing" })).toThrow(UserError);
+    expect(() => planInPlace({ parent, name: "../work" })).toThrow(UserError);
+    expect(existsSync(join(parent, "work", ".git"))).toBe(false);
+    cleanup();
+  });
+
+  test("without a git identity it refuses, and the folder is left exactly as it was", async () => {
+    const { parent, cleanup } = parentDir();
+    mkdirSync(join(parent, "fresh"));
+    const file = join(configHome, "gitconfig");
+    writeFileSync(file, "[commit]\n\tgpgsign = false\n"); // no user.name or user.email
+    await expect(initRepoInPlace({ parent, name: "fresh" })).rejects.toBeInstanceOf(UserError);
+    // the folder was the person's before this ran, so a refusal must not take it
+    expect(existsSync(join(parent, "fresh"))).toBe(true);
+    expect(existsSync(join(parent, "fresh", ".git"))).toBe(false);
+    writeFileSync(file, "[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n");
     cleanup();
   });
 });

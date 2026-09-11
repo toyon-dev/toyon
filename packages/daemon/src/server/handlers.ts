@@ -15,7 +15,7 @@ import type { StateStore } from "../core/state.ts";
 import type { DesignService } from "../design/service.ts";
 import type { ExecService } from "../exec/service.ts";
 import type { FileService } from "../files/service.ts";
-import { browsePath } from "../repos/browse.ts";
+import { browsePath, describeFolder } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { RouteService } from "../routes/service.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
@@ -46,6 +46,8 @@ export interface Services {
   attachments: AttachmentStore;
   /** request → 1–5 independent tasks (the default agent by default; tests inject a stub) */
   planTasks: (prompt: string, cwd: string) => Promise<string[] | null>;
+  /** the OS folder dialog: the folder picked, or null when cancelled (tests inject a stub) */
+  chooseFolder: (start: string) => Promise<string | null>;
 }
 
 export interface HandlerCtx {
@@ -442,6 +444,18 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   async "browse-path"(msg, ctx, _s) {
     ctx.reply({ t: "path-entries", query: msg.path, ...(await browsePath(msg.path)) });
+  },
+
+  async "choose-folder"(msg, ctx, s) {
+    let path: string | null;
+    try {
+      path = await s.chooseFolder(msg.start);
+    } catch (e) {
+      // the form is waiting on an answer to stop looking busy; the throw still reaches it as a toast
+      ctx.reply({ t: "folder-chosen", folder: null });
+      throw e;
+    }
+    ctx.reply({ t: "folder-chosen", folder: path ? await describeFolder(path) : null });
   },
 
   async "forget-repo"(msg, ctx, s) {

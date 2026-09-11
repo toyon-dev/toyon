@@ -14,6 +14,7 @@ import { loadAgentRegistry } from "./agent/registry.ts";
 import { makePlanner } from "./agent/tasks.ts";
 import { locateAssets } from "./core/assets.ts";
 import { cloud } from "./core/cloud.ts";
+import { folderDialog } from "./core/dialog.ts";
 import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import { startLagSampler } from "./core/metrics.ts";
@@ -113,6 +114,7 @@ const { branded, stop: stopServer } = startServer({
     accounts,
     attachments,
     planTasks: makePlanner(agents, state),
+    chooseFolder: folderDialog(),
   },
 });
 

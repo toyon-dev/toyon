@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { browsePath } from "./browse.ts";
+import { browsePath, describeFolder } from "./browse.ts";
 
 // The project picker's completion: a prefix narrows, a trailing slash lists, repos sort ahead of
 // plain folders, and nothing here may throw on a path that is not there.
@@ -16,6 +16,22 @@ function tree(): { root: string; cleanup: () => void } {
   writeFileSync(join(root, "loose.txt"), "x");
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
+
+describe("describeFolder", () => {
+  test("names what a folder picked in the dialog is", async () => {
+    const { root, cleanup } = tree();
+    mkdirSync(join(root, "fresh"));
+    mkdirSync(join(root, "looked-at"));
+    writeFileSync(join(root, "looked-at", ".DS_Store"), "");
+    expect((await describeFolder(join(root, "cookbook"))).kind).toBe("project");
+    expect((await describeFolder(join(root, "cookbook-old"))).kind).toBe("project");
+    expect((await describeFolder(join(root, "fresh"))).kind).toBe("empty");
+    // Finder leaves this in any folder it has shown, and it is not content
+    expect((await describeFolder(join(root, "looked-at"))).kind).toBe("empty");
+    expect((await describeFolder(root)).kind).toBe("folder");
+    cleanup();
+  });
+});
 
 describe("browsePath", () => {
   test("a prefix narrows to matching directories and skips files", async () => {

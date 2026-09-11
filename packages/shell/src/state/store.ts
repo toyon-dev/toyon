@@ -13,6 +13,7 @@ import type {
   AskOutcome,
   AskQuestion,
   AuthMethodInfo,
+  ChosenFolder,
   CommitEntry,
   ConnectFailure,
   DesignIndex,
@@ -264,7 +265,8 @@ export type Overlay =
  * a location; `clone` has both derived from the URL and shows them so they can be changed. */
 export type NewProjectForm = {
   kind: "new-project";
-  mode: "create" | "clone";
+  /** `init` makes the empty folder at parent/name the project where it stands */
+  mode: "create" | "clone" | "init";
   name: string;
   parent: string;
   url?: string;
@@ -467,6 +469,11 @@ export interface State {
   paths: { query: string; entries: PathEntry[]; target: PathTarget | null };
   /** the daemon's home directory, for writing `~` paths the way a person would type them */
   home: string;
+  /** hello's `folderDialog`: whether "choose in Finder" would open where the person is */
+  folderDialog: boolean;
+  /** the last answer to `choose-folder`, numbered so the form that asked can tell a new answer from
+   * the one it already applied */
+  chosenFolder: { seq: number; folder: ChosenFolder | null } | null;
   /** clones in flight, held by the daemon so every tab sees them and a reload does not lose them */
   pending: PendingRepo[];
   /** the import being watched in the preview area, if any. Separate from `activeRepoId` because a
@@ -560,6 +567,8 @@ export function initialState(opts: InitialOpts): State {
     systemDark: opts.systemDark ?? true,
     paths: { query: "", entries: [], target: null },
     home: "",
+    folderDialog: false,
+    chosenFolder: null,
     pending: [],
     activeImportId: null,
     agents: [],
@@ -1132,6 +1141,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         agents: msg.agents,
         defaultAgent: msg.defaultAgent,
         home: msg.home,
+        folderDialog: msg.folderDialog,
         pending: msg.pending,
         visits: msg.visits,
         // an import this tab was watching may have finished while it was away
@@ -1169,6 +1179,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "path-entries":
       return { ...s, paths: { query: msg.query, entries: msg.entries, target: msg.target } };
+    case "folder-chosen":
+      return { ...s, chosenFolder: { seq: (s.chosenFolder?.seq ?? 0) + 1, folder: msg.folder } };
     case "refs":
       return { ...s, refs: { ...s.refs, [msg.repoId]: { query: msg.query, refs: msg.refs } } };
     case "archived":

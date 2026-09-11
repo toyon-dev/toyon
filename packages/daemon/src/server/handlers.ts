@@ -148,6 +148,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.worktrees.markUnread(msg.worktreeId);
   },
 
+  "refresh-git"(msg, _ctx, s) {
+    s.worktrees.recount(msg.repoId);
+  },
+
   async visit(msg, _ctx, s) {
     await s.routes.visit(msg.worktreeId, msg.path, msg.title);
   },

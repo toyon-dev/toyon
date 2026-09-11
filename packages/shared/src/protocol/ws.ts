@@ -390,6 +390,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("seen"), worktreeId: id }),
   /** put the ring back on a worktree to come back to; the next `seen` clears it */
   z.object({ t: z.literal("mark-unread"), worktreeId: id }),
+  /** the window came back from another app, where files may have changed: recount the project's
+   * rows and re-read its open changes lists */
+  z.object({ t: z.literal("refresh-git"), repoId: id }),
   /** the preview settled on a page (the shell waits out redirects): count it toward the repo's
    * list. `path` is the page's key (routeKey), which the daemon recomputes rather than trusts, and
    * `title` the document's when the dwell ended. */

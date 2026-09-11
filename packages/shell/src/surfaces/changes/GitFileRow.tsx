@@ -24,7 +24,8 @@ export const GitFileRow = memo(function GitFileRow({
   onHover,
 }: {
   f: GitFileStatus;
-  /** this file's diff is the one open in the editor */
+  /** the row the list marks, band and edge: where the cursor is while the list has the keyboard,
+   * and the file open in the editor while it does not */
   active: boolean;
   /** the keyboard selection, drawn only while the list has focus */
   selected: boolean;

@@ -32,9 +32,9 @@ export const CommitRow = memo(function CommitRow({
   onToggle,
 }: {
   c: CommitEntry;
-  /** the keyboard selection, drawn only while the list has focus. Whether the commit is expanded
-   * is not a prop: its files listed under it say so, and a mark on the row as well made two picked
-   * rows, the commit and the file open under it, when the one thing to track is the cursor. */
+  /** the keyboard selection, drawn only while the list has focus. It is the commit's only mark:
+   * nothing is open on a commit row, so it is marked exactly when you are on it. Whether it is
+   * expanded is not a prop, since the files listed under it say so. */
   selected: boolean;
   onToggle: (sha: string) => void;
 }) {
@@ -42,7 +42,7 @@ export const CommitRow = memo(function CommitRow({
   return (
     <button
       className="row row-sm log-row row-edge"
-      data-state={rowState({ cursor: selected })}
+      data-state={rowState({ current: selected, cursor: selected })}
       role="option"
       aria-selected={selected}
       // the list owns the keyboard, the same way the changed-files list does

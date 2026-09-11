@@ -56,7 +56,7 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
         } else {
           // a jump is to the file, which may not have changed at all; its diff is a menu item away,
           // and the changes list is where diffs are read
-          openFile({ sock, dispatch }, worktreeId, r.path, "file");
+          openFile({ sock, dispatch }, { worktreeId, path: r.path, view: "file" });
           dispatch({ a: "close" });
         }
       }}

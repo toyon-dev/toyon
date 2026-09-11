@@ -41,9 +41,8 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       rowClass={() => "search-hit"}
       rowTitle={(h) => `${h.path}:${h.line}`}
       onPick={(hit) => {
-        dispatch({ a: "goto-line", v: { worktreeId, path: hit.path, line: hit.line } });
         // a hit is a line in the file, as a ⌘P jump is a file: neither is a question about a diff
-        openFile({ sock, dispatch }, worktreeId, hit.path, "file");
+        openFile({ sock, dispatch }, { worktreeId, path: hit.path, view: "file", line: { n: hit.line } });
         if (!leftOpen) dispatch({ a: "toggle-left" });
         dispatch({ a: "close" });
       }}

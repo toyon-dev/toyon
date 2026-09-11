@@ -20,7 +20,7 @@ export async function statusFiles(worktreePath: string, ...only: string[]): Prom
 }
 
 /** `git status --porcelain` (v1) → entries. Renames/copies (`R  old -> new`) report the NEW path:
- * that is the file that exists on disk, and what file-diff / discard act on. Quoted paths are unquoted. */
+ * that is the file that exists on disk, and what read-file / discard act on. Quoted paths are unquoted. */
 export function parsePorcelain(out: string): GitFileStatus[] {
   const unquote = (p: string) => (p.startsWith('"') && p.endsWith('"') ? JSON.parse(p) : p);
   return out

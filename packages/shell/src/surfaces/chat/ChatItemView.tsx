@@ -3,6 +3,7 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
+import { openFile } from "../../state/actions/file.ts";
 import { blockedItems, messageItems } from "../../state/actions/message.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
@@ -109,6 +110,7 @@ function paintBlocks(blocks: OutputBlock[], path: string) {
  * coloured by line rather than printed as backticks. */
 function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: string; worktreeId?: string | null }) {
   const sock = useSock();
+  const dispatch = useDispatch();
   return (
     <div className="tool-out">
       {blocks.map((b, i) =>
@@ -134,7 +136,7 @@ function ToolOut({ blocks, path, worktreeId }: { blocks: PaintedBlock[]; path: s
                 className="dl more"
                 disabled={!path || !worktreeId}
                 data-tip={path && worktreeId ? "Open this file's diff" : undefined}
-                onClick={() => worktreeId && sock?.send({ t: "read-file", worktreeId, path, seq: 0 })}
+                onClick={() => worktreeId && openFile({ sock, dispatch }, { worktreeId, path, view: "diff" })}
               >
                 {b.lines.length - DIFF_LINES} more lines
               </button>

@@ -1,11 +1,11 @@
 import { lazy, Suspense, useEffect } from "react";
 import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
-import { fileItems } from "../../state/actions/file.ts";
+import { fileItems, nextSeq } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useTheme } from "../../state/selectors.ts";
-import { localOf, type State, worktreeById } from "../../state/store.ts";
+import { type EditorFile, localOf, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
@@ -25,7 +25,7 @@ export function EditorPane({
   onToggleFull,
   onDragStart,
 }: {
-  editor: NonNullable<State["editor"]>;
+  editor: EditorFile;
   height: number | string;
   full: boolean;
   onToggleFull: () => void;
@@ -50,8 +50,12 @@ export function EditorPane({
     if (!cached && !history) sock?.send({ t: "changed-ranges", worktreeId: editor.worktreeId, path: editor.path });
   }, [editor.worktreeId, editor.path, cached, history, sock]);
   const lineOff = cached?.offset ?? 0;
-  const view = editor.view;
+  const disk = editor.disk;
+  // until the first read decides, the toggle offers the file, as it does from a diff
+  const view = editor.view ?? "diff";
   const other = view === "file" ? "diff" : "file";
+  // a line the page reported is only placed once its offset is known
+  const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   return (
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%
     <Pane
@@ -67,7 +71,7 @@ export function EditorPane({
           ? fileItems(
               { id: editor.worktreeId, dir: wtPath },
               editor.path,
-              { discard: !history, ref: editor.ref, showing: view },
+              { discard: !history, ref: editor.ref, showing: editor.view ?? undefined },
               { sock, dispatch },
             )
           : []
@@ -96,66 +100,70 @@ export function EditorPane({
       }
     >
       <div className="editor-body">
-        <ErrorBoundary pane>
-          <Suspense fallback={<div className="empty">loading {view}…</div>}>
-            <Editor
-              before={editor.before}
-              after={editor.after}
-              path={editor.path}
-              line={editor.line}
-              view={view}
-              theme={theme}
-              readOnly={history || !editor.writable}
-              onSave={(path, content) =>
-                sock?.send({
-                  t: "write-file",
-                  worktreeId: editor.worktreeId,
-                  path,
-                  content,
-                  base: editor.version,
-                  seq: 0,
-                })
-              }
-              // the editor knows the lines; whose file they are, and at which commit, is the pane's
-              onCopy={(path, lines, clipboard) =>
-                writeCopiedSource(clipboard, {
-                  worktreeId: editor.worktreeId,
-                  path,
-                  ...lines,
-                  ...(editor.ref ? { ref: editor.ref } : {}),
-                })
-              }
-              onChat={(path, taken) =>
-                addToChat(
-                  store,
-                  taken && {
+        {disk ? (
+          <ErrorBoundary pane>
+            <Suspense fallback={<div className="empty">loading {view}…</div>}>
+              <Editor
+                before={disk.before}
+                after={disk.after}
+                path={editor.path}
+                line={line}
+                view={view}
+                theme={theme}
+                readOnly={history || !disk.writable}
+                onSave={(path, content) =>
+                  sock?.send({
+                    t: "write-file",
                     worktreeId: editor.worktreeId,
-                    text: taken.text,
-                    source: {
-                      path,
-                      startLine: taken.startLine,
-                      endLine: taken.endLine,
-                      ...(editor.ref ? { ref: editor.ref } : {}),
+                    path,
+                    content,
+                    base: disk.version,
+                    seq: nextSeq(),
+                  })
+                }
+                // the editor knows the lines; whose file they are, and at which commit, is the pane's
+                onCopy={(path, lines, clipboard) =>
+                  writeCopiedSource(clipboard, {
+                    worktreeId: editor.worktreeId,
+                    path,
+                    ...lines,
+                    ...(editor.ref ? { ref: editor.ref } : {}),
+                  })
+                }
+                onChat={(path, taken) =>
+                  addToChat(
+                    store,
+                    taken && {
+                      worktreeId: editor.worktreeId,
+                      text: taken.text,
+                      source: {
+                        path,
+                        startLine: taken.startLine,
+                        endLine: taken.endLine,
+                        ...(editor.ref ? { ref: editor.ref } : {}),
+                      },
                     },
-                  },
-                )
-              }
-              onLineHover={
-                history
-                  ? undefined
-                  : (line) => {
-                      if (line == null) previewBus.post(editor.worktreeId, { type: "highlight-clear" });
-                      else
-                        previewBus.post(editor.worktreeId, {
-                          type: "highlight-file",
-                          path: editor.path,
-                          ranges: [[line + lineOff, line + lineOff]],
-                        });
-                    }
-              }
-            />
-          </Suspense>
-        </ErrorBoundary>
+                  )
+                }
+                onLineHover={
+                  history
+                    ? undefined
+                    : (line) => {
+                        if (line == null) previewBus.post(editor.worktreeId, { type: "highlight-clear" });
+                        else
+                          previewBus.post(editor.worktreeId, {
+                            type: "highlight-file",
+                            path: editor.path,
+                            ranges: [[line + lineOff, line + lineOff]],
+                          });
+                      }
+                }
+              />
+            </Suspense>
+          </ErrorBoundary>
+        ) : (
+          <div className="empty">loading {editor.path}…</div>
+        )}
       </div>
     </Pane>
   );

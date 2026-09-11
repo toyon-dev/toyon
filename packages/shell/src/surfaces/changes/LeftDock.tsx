@@ -2,7 +2,7 @@ import type { CommitEntry, GitFileStatus } from "@toyon/shared";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
-import { fileItems } from "../../state/actions/file.ts";
+import { fileItems, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive, useActiveId, useActiveRow, useGreenfield, useLocalField } from "../../state/selectors.ts";
 import { repoById } from "../../state/store.ts";
@@ -85,9 +85,10 @@ export function LeftDock({ width }: { width: number }) {
     if (cached) previewBus.post(activeId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
   }, [ranges, activeId]);
 
+  // walking the list opens each file as it arrives, and the keyboard stays here for the next arrow
   const open = useCallback(
-    (path: string) => activeId && sock?.send({ t: "read-file", worktreeId: activeId, path, seq: 0 }),
-    [activeId, sock],
+    (path: string) => activeId && openFile({ sock, dispatch }, { worktreeId: activeId, path, focus: false }),
+    [activeId, sock, dispatch],
   );
 
   // one flat order across both sections, so ↑↓ crosses the section titles the way the eye does
@@ -171,9 +172,9 @@ export function LeftDock({ width }: { width: number }) {
   const openAt = useCallback(
     (path: string) => {
       const ref = openShaRef.current;
-      if (activeId && ref) sock?.send({ t: "read-file", worktreeId: activeId, path, ref, seq: 0 });
+      if (activeId && ref) openFile({ sock, dispatch }, { worktreeId: activeId, path, ref, focus: false });
     },
-    [activeId, sock],
+    [activeId, sock, dispatch],
   );
   // arrows only move over a commit: expanding every row they crossed would push the list around
   // under the person walking it. A file row opens on arrival, the way the changes list does.

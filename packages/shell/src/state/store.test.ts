@@ -9,6 +9,7 @@ import {
   initialState,
   isGreenfield,
   localOf,
+  type OpenFile,
   previewIdOf,
   reducer,
   type State,
@@ -51,9 +52,20 @@ function wt(
 
 const initial = initialState({ clientId: ME });
 const server = (msg: StoreServerMsg): Action => ({ a: "server", msg });
-/** a file-read answer, with the fields a test does not care about filled in */
-const fileRead = (m: { worktreeId: string; path: string; before: string; after: string; ref?: string }): Action =>
-  server({ t: "file-read", seq: 0, version: null, writable: true, binary: false, tooLarge: false, ...m });
+/** a file-read answer on worktree `a`, with the fields a test does not care about filled in */
+const fileRead = (m: {
+  path: string;
+  seq: number;
+  before: string;
+  after: string;
+  worktreeId?: string;
+  error?: string;
+}) => server({ t: "file-read", worktreeId: "a", version: "v1", writable: true, binary: false, tooLarge: false, ...m });
+/** what openFile dispatches, on worktree `a` unless the test says otherwise */
+const opening = (v: Partial<OpenFile> & { path: string; seq: number }): Action => ({
+  a: "open-file",
+  v: { worktreeId: "a", focus: true, ...v },
+});
 const repo = (id: string): RepoInfo => ({
   id,
   path: `/p/${id}`,
@@ -116,10 +128,9 @@ describe("active worktree", () => {
     expect(run([worktrees(wt("main", "main"))], s).activeId).toBe("main");
   });
   test("activate closes the open file", () => {
-    const s = run([hello(wt("main", "main"), wt("a"))]);
-    const withDiff = reducer(s, fileRead({ worktreeId: "main", path: "x", before: "", after: "" }));
-    expect(withDiff.editor).not.toBeNull();
-    expect(reducer(withDiff, { a: "activate", id: "a" }).editor).toBeNull();
+    const s = run([hello(wt("main", "main"), wt("a")), opening({ worktreeId: "main", path: "x", seq: 1 })]);
+    expect(s.editor).not.toBeNull();
+    expect(reducer(s, { a: "activate", id: "a" }).editor).toBeNull();
   });
 });
 
@@ -718,91 +729,112 @@ describe("streams and notices", () => {
     expect(on.termOpen).toBe(true);
     expect(reducer(on, { a: "toggle-terminal" }).termOpen).toBe(false);
   });
-  test("a file read carries the pending goto line only for the file it was asked for", () => {
+});
+
+// The shell opens a file before the daemon answers, so the pane can tell the answer it is waiting
+// on from one that lands late for a file the person has already moved past.
+describe("the editor's open file", () => {
+  test("an open shows the file loading until its own read answers", () => {
+    const opened = run([hello(wt("a")), opening({ path: "x.ts", seq: 1 })]);
+    expect(opened.editor).toMatchObject({ path: "x.ts", seq: 1, view: null, disk: null, focus: true });
+    const read = reducer(opened, fileRead({ path: "x.ts", seq: 1, before: "a", after: "b" }));
+    expect(read.editor).toMatchObject({
+      view: "diff",
+      disk: { before: "a", after: "b", version: "v1", writable: true },
+    });
+  });
+
+  test("an answer that lands after the list moved on, or after the pane closed, opens nothing", () => {
+    // arrowing down the changes list: the first file's read comes back last
+    const moved = run([
+      hello(wt("a")),
+      opening({ path: "a.ts", seq: 1 }),
+      opening({ path: "b.ts", seq: 2 }),
+      fileRead({ path: "b.ts", seq: 2, before: "", after: "b" }),
+      fileRead({ path: "a.ts", seq: 1, before: "", after: "a" }),
+    ]);
+    expect(moved.editor).toMatchObject({ path: "b.ts", disk: { after: "b" } });
+    const closed = run([
+      hello(wt("a")),
+      opening({ path: "a.ts", seq: 1 }),
+      { a: "close-editor" },
+      fileRead({ path: "a.ts", seq: 1, before: "", after: "a" }),
+    ]);
+    expect(closed.editor).toBeNull();
+  });
+
+  test("with no view asked for, a changed file opens on its diff and an unchanged one as the file", () => {
+    const viewOf = (before: string, after: string, view?: "file") =>
+      run([hello(wt("a")), opening({ path: "x.ts", seq: 1, view }), fileRead({ path: "x.ts", seq: 1, before, after })])
+        .editor?.view;
+    expect(viewOf("a", "b")).toBe("diff");
+    expect(viewOf("a", "a")).toBe("file");
+    expect(viewOf("a", "b", "file")).toBe("file");
+  });
+
+  test("opening the open file again keeps its text on screen while the fresh read is out", () => {
     const s = run([
       hello(wt("a")),
-      { a: "goto-line", v: { worktreeId: "a", path: "x.ts", line: 7 } },
-      fileRead({ worktreeId: "a", path: "y.ts", before: "", after: "" }),
+      opening({ path: "x.ts", seq: 1 }),
+      fileRead({ path: "x.ts", seq: 1, before: "a", after: "b" }),
+      opening({ path: "x.ts", seq: 2, focus: false }),
     ]);
-    expect(s.editor?.line).toBeUndefined();
-    expect(s.gotoLine).toBeNull();
+    expect(s.editor).toMatchObject({ seq: 2, view: "diff", disk: { after: "b" }, focus: false });
+    expect(reducer(s, opening({ path: "y.ts", seq: 3 })).editor).toMatchObject({
+      path: "y.ts",
+      view: null,
+      disk: null,
+    });
+    // a commit's copy of the same path is a different file
+    expect(reducer(s, opening({ path: "x.ts", ref: "abc1234", seq: 4 })).editor?.disk).toBeNull();
   });
+
   test("a line the page reported waits for the offset that maps it back to the file", () => {
-    // what openSource dispatches: the goto and the file view, on a file with edits
-    const opened = run([
-      hello(wt("a")),
-      { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55, fiber: true } },
-      { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
-      fileRead({ worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
-    ]);
-    // the file is open, but revealing 55 now would land three lines past the element
-    expect(opened.editor).toMatchObject({ path: "x.tsx", view: "file" });
-    expect(opened.editor?.line).toBeUndefined();
-    expect(opened.gotoLine?.line).toBe(55);
-
-    const placed = reducer(
-      opened,
-      server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
-    );
-    expect(placed.editor).toMatchObject({ view: "file", line: 52 });
-    expect(placed.gotoLine).toBeNull();
+    const line = { n: 55, fiber: true };
+    const ranges = server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 });
+    // revealing 55 before the offset is known would land three lines past the element
+    const waiting = run([hello(wt("a")), opening({ path: "x.tsx", seq: 1, view: "file", line })]);
+    expect(waiting.editor?.line).toEqual(line);
+    expect(reducer(waiting, ranges).editor?.line).toEqual({ n: 52 });
+    // an offset already known places it as the file opens; a search hit is a file line already
+    const known = run([hello(wt("a")), ranges, opening({ path: "x.tsx", seq: 1, line })]);
+    expect(known.editor?.line).toEqual({ n: 52 });
+    expect(reducer(known, opening({ path: "x.tsx", seq: 2, line: { n: 55 } })).editor?.line).toEqual({ n: 55 });
   });
-  test("a known offset places the line as the file opens", () => {
+
+  test("switching view keeps the file and spends the line it jumped to", () => {
     const s = run([
       hello(wt("a")),
-      server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
-      { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55, fiber: true } },
-      fileRead({ worktreeId: "a", path: "x.tsx", before: "", after: "" }),
+      opening({ path: "x.tsx", seq: 1, view: "file", line: { n: 9 } }),
+      fileRead({ path: "x.tsx", seq: 1, before: "a", after: "b" }),
     ]);
-    expect(s.editor?.line).toBe(52);
-    expect(s.gotoLine).toBeNull();
-  });
-  test("a search hit is a file line already, and no offset is taken off it", () => {
-    const s = run([
-      hello(wt("a")),
-      server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
-      { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55 } },
-      fileRead({ worktreeId: "a", path: "x.tsx", before: "", after: "" }),
-    ]);
-    expect(s.editor?.line).toBe(55);
-  });
-  test("a file asked for as the file opens without its diff, and only that file", () => {
-    const asked = run([
-      hello(wt("a")),
-      { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
-      fileRead({ worktreeId: "a", path: "x.tsx", before: "", after: "" }),
-    ]);
-    expect(asked.editor?.view).toBe("file");
-    expect(asked.openView).toBeNull();
-
-    // the changes list or a chat link sends no view: a changed file opens on its diff
-    const next = reducer(asked, fileRead({ worktreeId: "a", path: "x.tsx", before: "a", after: "b" }));
-    expect(next.editor?.view).toBe("diff");
-
-    const stale = run([
-      hello(wt("a")),
-      { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
-      fileRead({ worktreeId: "a", path: "y.tsx", before: "a", after: "b" }),
-    ]);
-    expect(stale.editor?.view).toBe("diff");
-    expect(stale.openView).toBeNull();
-  });
-  test("a file with nothing changed opens as the file when no view was asked for", () => {
-    const s = run([hello(wt("a")), fileRead({ worktreeId: "a", path: "x.tsx", before: "a", after: "a" })]);
-    expect(s.editor?.view).toBe("file");
-  });
-  test("the open file switches view in place, and the line it jumped to is spent", () => {
-    const s = run([
-      hello(wt("a")),
-      { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 9 } },
-      { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
-      fileRead({ worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
-    ]);
-    expect(s.editor).toMatchObject({ view: "file", line: 9 });
     const diff = reducer(s, { a: "editor-view", v: "diff" });
-    expect(diff.editor).toMatchObject({ path: "x.tsx", view: "diff", after: "b" });
+    expect(diff.editor).toMatchObject({ path: "x.tsx", view: "diff", disk: { after: "b" } });
     expect(diff.editor?.line).toBeUndefined();
     expect(reducer(initial, { a: "editor-view", v: "file" }).editor).toBeNull();
+  });
+
+  test("a read that failed closes the pane and says why", () => {
+    const s = run([
+      hello(wt("a")),
+      opening({ path: "../x", seq: 1 }),
+      fileRead({ path: "../x", seq: 1, before: "", after: "", error: "path escapes worktree" }),
+    ]);
+    expect(s.editor).toBeNull();
+    expect(s.toast).toMatchObject({ ok: false, message: "path escapes worktree" });
+  });
+
+  test("a save's answer moves the version the next save names, and a refusal says so", () => {
+    const s = run([
+      hello(wt("a")),
+      opening({ path: "x.ts", seq: 1 }),
+      fileRead({ path: "x.ts", seq: 1, before: "", after: "a" }),
+    ]);
+    const written = { t: "file-written", worktreeId: "a", path: "x.ts", seq: 2 } as const;
+    expect(reducer(s, server({ ...written, ok: true, version: "v2" })).editor?.disk?.version).toBe("v2");
+    const changed = reducer(s, server({ ...written, ok: false, reason: "changed", version: "v9" }));
+    expect(changed.editor?.disk?.version).toBe("v1");
+    expect(changed.toast?.message).toContain("changed on disk");
   });
 });
 

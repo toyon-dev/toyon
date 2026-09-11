@@ -1,5 +1,6 @@
 import { copyText, type Deps } from "../../state/actions/deps.ts";
 import { editorItems } from "../../state/actions/editor.ts";
+import { openFile } from "../../state/actions/file.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { ToolItem } from "./group.ts";
 import { callPath, relPath, toolLabel } from "./toolCall.ts";
@@ -12,19 +13,21 @@ export function toolRowItems(
   tools: ToolItem[],
   roots: string[],
   wt: { id: string; dir: string } | null,
-  { sock }: Deps,
+  deps: Deps,
   ui: { open: boolean; toggle: () => void },
 ): MenuEntry[] {
+  const { sock } = deps;
   const head = tools[0];
   if (!head) return [];
   const open: MenuItem[] = [];
   const rel = relPath(callPath(head), roots);
   if (rel && !rel.startsWith("/") && wt) {
     // a read or a search has nothing to diff, so the pane is just the file for those
+    const view = head.toolKind === "edit" ? "diff" : "file";
     open.push({
       id: "open-diff",
-      label: head.toolKind === "edit" ? "open diff" : "open file",
-      onClick: () => sock?.send({ t: "file-diff", worktreeId: wt.id, path: rel }),
+      label: `open ${view}`,
+      onClick: () => openFile(deps, wt.id, rel, view),
     });
     open.push(...editorItems(`${wt.dir}/${rel}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel })));
   }

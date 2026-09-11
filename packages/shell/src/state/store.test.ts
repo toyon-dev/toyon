@@ -714,13 +714,15 @@ describe("streams and notices", () => {
     expect(s.gotoLine).toBeNull();
   });
   test("a line the page reported waits for the offset that maps it back to the file", () => {
+    // what openSource dispatches: the goto and the file view, on a file with edits
     const opened = run([
       hello(wt("a")),
       { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55, fiber: true } },
-      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
+      { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
     ]);
     // the file is open, but revealing 55 now would land three lines past the element
-    expect(opened.diff?.path).toBe("x.tsx");
+    expect(opened.diff).toMatchObject({ path: "x.tsx", view: "file" });
     expect(opened.diff?.line).toBeUndefined();
     expect(opened.gotoLine?.line).toBe(55);
 
@@ -728,7 +730,7 @@ describe("streams and notices", () => {
       opened,
       server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
     );
-    expect(placed.diff?.line).toBe(52);
+    expect(placed.diff).toMatchObject({ view: "file", line: 52 });
     expect(placed.gotoLine).toBeNull();
   });
   test("a known offset places the line as the file opens", () => {
@@ -759,26 +761,36 @@ describe("streams and notices", () => {
     expect(asked.diff?.view).toBe("file");
     expect(asked.openView).toBeNull();
 
-    // the changes list, a chat link or a search hit sends no view: those open the diff
-    const next = reducer(asked, server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }));
+    // the changes list or a chat link sends no view: a changed file opens on its diff
+    const next = reducer(asked, server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }));
     expect(next.diff?.view).toBe("diff");
 
     const stale = run([
       hello(wt("a")),
       { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
-      server({ t: "file-diff", worktreeId: "a", path: "y.tsx", before: "", after: "" }),
+      server({ t: "file-diff", worktreeId: "a", path: "y.tsx", before: "a", after: "b" }),
     ]);
     expect(stale.diff?.view).toBe("diff");
     expect(stale.openView).toBeNull();
   });
-  test("the open file switches view in place, keeping its line", () => {
+  test("a file with nothing changed opens as the file when no view was asked for", () => {
+    const s = run([
+      hello(wt("a")),
+      server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "a" }),
+    ]);
+    expect(s.diff?.view).toBe("file");
+  });
+  test("the open file switches view in place, and the line it jumped to is spent", () => {
     const s = run([
       hello(wt("a")),
       { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 9 } },
+      { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
       server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
-      { a: "editor-view", v: "file" },
     ]);
-    expect(s.diff).toMatchObject({ path: "x.tsx", view: "file", line: 9, after: "b" });
+    expect(s.diff).toMatchObject({ view: "file", line: 9 });
+    const diff = reducer(s, { a: "editor-view", v: "diff" });
+    expect(diff.diff).toMatchObject({ path: "x.tsx", view: "diff", after: "b" });
+    expect(diff.diff?.line).toBeUndefined();
     expect(reducer(initial, { a: "editor-view", v: "file" }).diff).toBeNull();
   });
   test("a discard refreshes the pane showing that file, closes it when the file is gone, and opens none", () => {

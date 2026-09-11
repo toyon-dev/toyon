@@ -1,4 +1,4 @@
-import type { ShellToBridgeMsg } from "@toyon/shared";
+import type { PickVerb, ShellToBridgeMsg } from "@toyon/shared";
 import type { Action } from "../state/store.ts";
 
 /** Posts typed commands into preview iframes. Center registers the implementations once it owns
@@ -8,8 +8,15 @@ export const previewBus = {
   broadcast: (_msg: ShellToBridgeMsg) => {},
 };
 
-/** arm or disarm the element picker in a preview and mirror it in the store */
-export function togglePick(worktreeId: string, picking: boolean, dispatch: (a: Action) => void) {
-  previewBus.post(worktreeId, { type: picking ? "pick-cancel" : "pick-start" });
-  dispatch({ a: "set-picking", v: !picking });
+/** arm the element picker in a preview with a verb, or disarm it, and mirror it in the store. The
+ * verb already armed disarms; the other one swaps in place, so ⌘E and ⌘I never stack. */
+export function togglePick(
+  worktreeId: string,
+  picking: PickVerb | false,
+  dispatch: (a: Action) => void,
+  verb: PickVerb,
+) {
+  const off = picking === verb;
+  previewBus.post(worktreeId, off ? { type: "pick-cancel" } : { type: "pick-start", verb });
+  dispatch({ a: "set-picking", v: off ? false : verb });
 }

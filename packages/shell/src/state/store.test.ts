@@ -511,7 +511,7 @@ describe("overlays", () => {
   test("a picked element clears picking mode and opens the chat dock", () => {
     const s = run([
       { a: "toggle-right" },
-      { a: "set-picking", v: true },
+      { a: "set-picking", v: "chat" },
       {
         a: "picked",
         pick: {

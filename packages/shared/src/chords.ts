@@ -14,6 +14,7 @@ export type ChordId =
   | "rail"
   | "keys"
   | "pick"
+  | "inspect"
   | "zen"
   | "new"
   | "terminal"
@@ -84,6 +85,9 @@ export const CHORDS: readonly Chord[] = [
   // a focused xterm swallows nearly everything, so tab cycling needs a chord matchChord catches
   { id: "term-tab", key: "`", ctrl: true, shift: true },
   { id: "pick", key: "e" },
+  // ⌘I is the same picker with the source as the click and ⌥ back to the chat: ⌘E adds an element
+  // to the message, ⌘I jumps to its code, a key short of the browser's ⌘⌥I
+  { id: "inspect", key: "i" },
   { id: "zen", key: "." },
   {
     id: "new",

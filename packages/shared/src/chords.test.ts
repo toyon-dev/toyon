@@ -30,6 +30,7 @@ describe("matchChord", () => {
   test("shift must match the table: ⌘⇧B is not ⌘B, ⌘E is not ⌘⇧E", () => {
     expect(matchChord(ev("b", { shift: true }))).toBeNull();
     expect(matchChord(ev("e"))).toEqual({ id: "pick" });
+    expect(matchChord(ev("i"))).toEqual({ id: "inspect" });
     expect(matchChord(ev("e", { shift: true }))).toEqual({ id: "commands" });
   });
   test("digits switch worktrees; shifted digits do not", () => {

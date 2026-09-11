@@ -7,7 +7,15 @@ import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
 
 /** the chords a focused Monaco keeps for itself (see the check in useChords) */
-const MONACO_OWNS = new Set<ChordId>(["design", "new", "wt-prev", "wt-next", "wt-unseen-prev", "wt-unseen-next"]);
+const MONACO_OWNS = new Set<ChordId>([
+  "design",
+  "new",
+  "inspect",
+  "wt-prev",
+  "wt-next",
+  "wt-unseen-prev",
+  "wt-unseen-next",
+]);
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
  * the handler so the listener is installed once instead of re-subscribing on every state change. */
@@ -23,7 +31,7 @@ export function useChords() {
       // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
       // picker holds shell focus, so those keep the full ladder or there is no way back out.
       if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
-      // ⌘D and ⌘K are Monaco's (add cursor, chord prefix) while it has the keyboard, and so are
+      // ⌘D, ⌘K and ⌘I are Monaco's (add cursor, chord prefix, suggest) while it has the keyboard, and so are
       // ⌥↑/↓ (move line) and ⌥⇧↑/↓ (copy line); taking them from a focused editor made a design
       // scan out of a second cursor, and would make a worktree switch out of a line move. ⌘L is
       // taken from it anyway: expand-line-selection is the loss, and a hand in the editor that
@@ -74,10 +82,11 @@ export function useChords() {
               dispatch({ a: "open", overlay: { kind: "quick-open" } });
             }
             break;
-          case "pick": {
+          case "pick":
+          case "inspect": {
             // the frame on screen, which while drafting is the base's preview rather than the row's
             const id = previewIdOf(s);
-            if (id) togglePick(id, s.picking, dispatch);
+            if (id) togglePick(id, s.picking, dispatch, chord.id === "pick" ? "chat" : "code");
             break;
           }
           case "search":

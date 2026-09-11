@@ -171,7 +171,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     requireRun(s, msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
-    agent.send(msg.text, { context: msg.context, pick: msg.pick, images: msg.images, pastes: msg.pastes });
+    agent.send(msg.text, { context: msg.context, attachments: msg.attachments });
     // the stamp the rail sorts on; its frame also carries the queued count the send may have changed
     s.worktrees.markPrompted(msg.worktreeId);
   },
@@ -182,9 +182,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       baseWorktreeId: msg.baseWorktreeId,
       variant: msg.variant,
       context: msg.context,
-      pick: msg.pick,
-      images: msg.images,
-      pastes: msg.pastes,
+      attachments: msg.attachments,
       agent: msg.agent,
       profile: msg.profile,
       mode: msg.mode,

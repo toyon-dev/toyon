@@ -2,6 +2,7 @@ import { type ConnectFailure, isOwned, parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { nextSeq } from "../../state/actions/file.ts";
+import { attachPick } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { STORAGE } from "../../state/keys.ts";
 import { openSource } from "../../state/openSource.ts";
@@ -195,7 +196,7 @@ export function Center() {
               // the page recorded no file: the daemon searches the source for what the element shows,
               // and its answer carries this seq so a file opened meanwhile is not taken over
               else sock?.send({ t: "find-element", worktreeId: id, seq: nextSeq(), element: pick.element });
-            } else dispatch({ a: "picked", pick: { worktreeId: id, ...pick } });
+            } else attachPick(store, id, pick);
             break;
           }
           case "pick-cancel":

@@ -6,7 +6,6 @@
 // dispatching (and the schema strips the marker and anything else unexpected).
 
 import { z } from "zod";
-import type { PickMeta } from "./events.ts";
 import { elementTraitsSchema, pickMetaSchema } from "./pick.ts";
 
 declare global {
@@ -57,7 +56,9 @@ export type PageLink = { path: string; text: string };
 
 const range = z.tuple([z.number(), z.number()]);
 
-/** a picked element: the PickMeta that travels with the chat message, plus display-only context */
+/** a picked element as the bridge reports it: the PickMeta, the text and markup that travel with it
+ * as a chat attachment, and what only the shell uses (its classes, the route, the traits a source
+ * search looks for) */
 export const pickedElementSchema = pickMetaSchema.extend({
   classes: z.string(),
   text: z.string(),
@@ -125,17 +126,4 @@ export type BridgeToShellMsg = z.infer<typeof bridgeToShellSchema>;
 export function parseBridgeMsg(raw: unknown): BridgeToShellMsg | null {
   const r = bridgeToShellSchema.safeParse(raw);
   return r.success ? r.data : null;
-}
-
-/** the chat-message subset of a picked element */
-export function pickMetaOf(p: PickedElement): PickMeta {
-  return {
-    component: p.component,
-    file: p.file,
-    line: p.line,
-    callFile: p.callFile,
-    callLine: p.callLine,
-    tag: p.tag,
-    selector: p.selector,
-  };
 }

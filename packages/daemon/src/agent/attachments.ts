@@ -1,12 +1,14 @@
-// What the user attaches to a message: images, and text long enough that the composer collapsed
-// it into a chip. Both are written once under ~/.toyon/attachments/<worktreeId>/<n>.<ext> and
-// referenced from then on (the transcript holds an ImageRef or a PasteRef, the shell fetches
+// What the user attaches to a message. Images, and text long enough that the composer collapsed
+// it into a chip, are written once under ~/.toyon/attachments/<worktreeId>/<n>.<ext> and
+// referenced from then on (the transcript holds the ref, the shell fetches
 // /attachments/<worktreeId>/<file>), so the JSONL stays small and a resumed session still shows
-// what was sent. Images and pastes are numbered separately; the extension keeps them apart.
+// what was sent. Each kind is numbered on its own; the extension keeps an image and a paste with the
+// same number apart. A picked element is a few hundred bytes with nothing to fetch, so its ref is
+// the whole of it.
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ImageInput, ImageRef, PasteInput, PasteRef } from "@toyon/shared";
+import type { AttachmentInput, ImageInput, ImageRef, PasteInput, PasteRef, PickRef } from "@toyon/shared";
 import { pasteSummary } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 
@@ -24,32 +26,39 @@ export function attachmentsDirFor(attachmentsDir: string, worktreeId: string): s
   return join(attachmentsDir, worktreeId);
 }
 
-export interface StoredImage {
-  ref: ImageRef;
-  /** the decoded bytes, for the prompt that carries this image */
-  bytes: Buffer;
-}
-
-export interface StoredPaste {
-  ref: PasteRef;
-  /** the text, for the prompt that carries this paste */
-  text: string;
-}
+/** an attachment once written: its kind, the ref the transcript keeps, and what the prompt needs
+ * that the ref only points at (an image's decoded bytes, a paste's text) */
+export type Stored =
+  | { kind: "image"; ref: ImageRef; bytes: Buffer }
+  | { kind: "paste"; ref: PasteRef; text: string }
+  | { kind: "pick"; ref: PickRef };
 
 export class AttachmentStore {
   constructor(readonly dir: string) {}
 
-  async putImage(worktreeId: string, n: number, img: ImageInput): Promise<StoredImage> {
+  /** write one attachment as number `n` of its kind */
+  async put(worktreeId: string, n: number, input: AttachmentInput): Promise<Stored> {
     if (!ID.test(worktreeId)) throw new UserError("bad worktree id");
+    switch (input.kind) {
+      case "image":
+        return this.putImage(worktreeId, n, input);
+      case "paste":
+        return this.putText(worktreeId, n, input);
+      case "pick":
+        return { kind: "pick", ref: { ...input, n } };
+    }
+  }
+
+  private async putImage(worktreeId: string, n: number, img: ImageInput): Promise<Stored> {
     const bytes = Buffer.from(img.data, "base64");
     if (bytes.length === 0) throw new UserError(`${img.name}: empty image`);
     const file = `${n}.${EXT[img.mimeType]}`;
-    const wtDir = attachmentsDirFor(this.dir, worktreeId);
-    await mkdir(wtDir, { recursive: true });
-    await writeFile(join(wtDir, file), bytes);
+    await this.write(worktreeId, file, bytes);
     return {
+      kind: "image",
       bytes,
       ref: {
+        kind: "image",
         n,
         name: img.name,
         mimeType: img.mimeType,
@@ -61,19 +70,21 @@ export class AttachmentStore {
     };
   }
 
-  async putText(
-    worktreeId: string,
-    n: number,
-    text: string,
-    { name, source }: Pick<PasteInput, "name" | "source"> = {},
-  ): Promise<StoredPaste> {
-    if (!ID.test(worktreeId)) throw new UserError("bad worktree id");
+  private async putText(worktreeId: string, n: number, { text, name, source }: PasteInput): Promise<Stored> {
     if (text.length === 0) throw new UserError("empty paste");
     const file = `${n}.txt`;
+    await this.write(worktreeId, file, text);
+    return {
+      kind: "paste",
+      text,
+      ref: { kind: "paste", n, ...(name ? { name } : {}), ...(source ? { source } : {}), ...pasteSummary(text), file },
+    };
+  }
+
+  private async write(worktreeId: string, file: string, data: Buffer | string) {
     const wtDir = attachmentsDirFor(this.dir, worktreeId);
     await mkdir(wtDir, { recursive: true });
-    await writeFile(join(wtDir, file), text, "utf8");
-    return { text, ref: { n, ...(name ? { name } : {}), ...(source ? { source } : {}), ...pasteSummary(text), file } };
+    await writeFile(join(wtDir, file), data);
   }
 
   /** the path behind a shell request, or null when the segments are not ones we would have made

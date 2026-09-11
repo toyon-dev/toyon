@@ -36,9 +36,9 @@ export interface PickMeta {
 }
 
 /** an image the user attached. The bytes live in the daemon's attachment store; the shell fetches
- * them by worktree id + file. `n` counts per worktree session, not per message: the model keeps
- * earlier images in context, so "image 2" two turns later must still mean the same image. */
+ * them by worktree id + file. `n` counts per kind across the worktree session (see nextNumbers). */
 export interface ImageRef {
+  kind: "image";
   n: number;
   name: string;
   mimeType: string;
@@ -62,8 +62,9 @@ export interface PasteSource {
 
 /** a long paste the shell collapsed into a chip rather than dropping into the textarea. The text
  * lives in the daemon's attachment store like an image, so a 100k paste does not ride in every
- * backfill; `n` counts per worktree session, same rule as ImageRef. */
+ * backfill; `n` counts per kind, same rule as ImageRef. */
 export interface PasteRef {
+  kind: "paste";
   n: number;
   /** set when the paste came from a file rather than a text selection */
   name?: string;
@@ -76,6 +77,20 @@ export interface PasteRef {
   /** basename under the store's <worktreeId>/ directory */
   file: string;
 }
+
+/** an element picked in the preview. Nothing is stored for it, so the ref is the whole of it. Its
+ * paths are relative to the checkout it was picked in, which makes them read the same in any
+ * worktree of the repo the message goes to. `text` and `html` are what the bridge captured, at the
+ * bridge's own caps. */
+export interface PickRef extends PickMeta {
+  kind: "pick";
+  n: number;
+  text: string;
+  html: string;
+}
+
+/** what a sent message carried, in the order it was attached */
+export type AttachmentRef = ImageRef | PasteRef | PickRef;
 
 /** one slash command the worktree's agent session advertises. `name` is verbatim as the agent
  * gave it: the Claude adapter re-expands `/mcp:server:cmd` on the way back, so normalising it
@@ -143,7 +158,7 @@ export interface AskChoice {
 export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
 
 export type AgentEvent =
-  | { type: "user-message"; text: string; ts: number; pick?: PickMeta; images?: ImageRef[]; pastes?: PasteRef[] }
+  | { type: "user-message"; text: string; ts: number; attachments?: AttachmentRef[] }
   | { type: "turn-start"; ts: number }
   | { type: "text-delta"; text: string }
   | { type: "thinking-delta"; text: string }

@@ -378,7 +378,9 @@ describe("AcpSession", () => {
     w.session.send("two");
     await Bun.sleep(20);
     expect(fake.steers).toHaveLength(1);
-    expect(w.session.queueItems).toEqual(["two"]);
+    // waiting, but already a bubble in the log, so not drawn as queued
+    expect(w.session.queueLength).toBe(1);
+    expect(w.session.queueItems).toEqual([]);
     release();
     await w.idle();
     expect(fake.prompts.map((p) => (p.prompt[0] as { text: string }).text)).toEqual(["one", "two"]);
@@ -405,7 +407,8 @@ describe("AcpSession", () => {
     await Bun.sleep(20);
     w.session.send("two");
     await Bun.sleep(20);
-    expect(w.session.queueItems).toEqual(["two"]);
+    expect(w.session.queueLength).toBe(1);
+    expect(w.session.queueItems).toEqual([]);
     release();
     await w.idle();
     expect(fake.prompts.map((p) => (p.prompt[0] as { text: string }).text)).toEqual(["one", "two"]);
@@ -476,6 +479,23 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a stop before the prompt has gone out keeps it from going, and the queue still runs", async () => {
+    const stopping = untilCancelled();
+    const w = world(stopping);
+    w.session.send("go");
+    w.session.send("later");
+    // the agent is still starting: there is no turn on its side for a cancel to reach
+    w.session.stop();
+    await w.idle();
+    expect(promptTexts(stopping)).toEqual(["later"]);
+    expect(w.events.filter((e) => e.type === "turn-end")).toMatchObject([
+      { stopReason: "interrupted" },
+      { stopReason: "end_turn" },
+    ]);
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
   test("a message sent while a stop settles runs once the turn has ended, not into the cancelled one", async () => {
     const stopping = untilCancelled({ steering: true });
     const w = world(stopping);
@@ -501,11 +521,30 @@ describe("AcpSession", () => {
     w.session.send("then");
     await Bun.sleep(30);
     w.session.stop();
+    // both are bubbles in the log already, so neither is drawn as queued while it waits
+    expect(w.session.queueLength).toBe(2);
+    expect(w.session.queueItems).toEqual([]);
     await w.idle();
     // in the order they were sent, the bubbles where they already are
     expect(promptTexts(stopping)).toEqual(["go", "also", "then"]);
     expect(w.types().filter((t) => t === "user-message")).toHaveLength(3);
     expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
+  test("beside a handed-back steer, a message sent after the stop is the queued one, and unqueue takes it", async () => {
+    const stopping = untilCancelled({ steering: true });
+    const w = world(stopping);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.send("also");
+    await Bun.sleep(30);
+    w.session.stop();
+    w.session.send("next");
+    expect(w.session.queueItems).toEqual(["next"]);
+    w.session.unqueue(0);
+    await w.idle();
+    expect(promptTexts(stopping)).toEqual(["go", "also"]);
     await w.session.close();
   });
 
@@ -878,24 +917,38 @@ describe("AcpSession", () => {
   });
 
   const png = {
+    kind: "image" as const,
     name: "shot.png",
     mimeType: "image/png" as const,
     data: Buffer.from("PNG").toString("base64"),
     width: 8,
     height: 4,
   };
+  const paste = (text: string, name?: string) => ({ kind: "paste" as const, text, ...(name ? { name } : {}) });
+  const pick = {
+    kind: "pick" as const,
+    component: "Button",
+    file: "src/ui/Button.tsx",
+    line: 3,
+    callFile: null,
+    callLine: null,
+    tag: "button",
+    selector: "main > button",
+    text: "Save",
+    html: "<button>Save</button>",
+  };
 
   test("images: stored, numbered per session, captioned ahead of the text; numbering survives a restart", async () => {
     const fake = fakeAgent(say("ok"), { images: true });
     const w = world(fake);
-    w.session.send("what is this", { context: "ctx", images: [png, { ...png, name: "two.png" }] });
+    w.session.send("what is this", { context: "ctx", attachments: [png, { ...png, name: "two.png" }] });
     await w.idle();
     expect(w.events[0]).toMatchObject({
       type: "user-message",
       text: "what is this",
-      images: [
-        { n: 1, name: "shot.png", file: "1.png", bytes: 3, width: 8, height: 4 },
-        { n: 2, name: "two.png", file: "2.png" },
+      attachments: [
+        { kind: "image", n: 1, name: "shot.png", file: "1.png", bytes: 3, width: 8, height: 4 },
+        { kind: "image", n: 2, name: "two.png", file: "2.png" },
       ],
     });
     expect(fake.prompts[0]!.prompt).toEqual([
@@ -910,23 +963,48 @@ describe("AcpSession", () => {
     await w.session.close();
     // a new AcpSession over the same transcript continues the count: "image 3" is unambiguous
     const w2 = world(fake, claudeSpec, 60_000, w.id);
-    w2.session.send("and this", { images: [png] });
+    w2.session.send("and this", { attachments: [png] });
     await w2.idle();
-    expect(w2.events[0]).toMatchObject({ type: "user-message", images: [{ n: 3, file: "3.png" }] });
+    expect(w2.events[0]).toMatchObject({ type: "user-message", attachments: [{ kind: "image", n: 3, file: "3.png" }] });
     await w2.session.close();
+  });
+
+  test("kinds are numbered apart and keep the order they were attached in, in the bubble and the prompt", async () => {
+    const fake = fakeAgent(say("ok"), { images: true });
+    const w = world(fake);
+    w.session.send("this one", { attachments: [pick, paste("a"), { ...pick, selector: "nav" }, png] });
+    await w.idle();
+    expect(w.events[0]).toMatchObject({
+      type: "user-message",
+      attachments: [
+        { kind: "pick", n: 1, selector: "main > button" },
+        { kind: "paste", n: 1, file: "1.txt" },
+        { kind: "pick", n: 2, selector: "nav" },
+        { kind: "image", n: 1, file: "1.png" },
+      ],
+    });
+    const heads = (fake.prompts[0]!.prompt as Array<{ type: string; text?: string }>).map(
+      (b) =>
+        b.text?.match(/^(An element the user picked in the preview: <\w+ \/>|Pasted text \d+|Image \d+)/)?.[0] ??
+        b.text ??
+        b.type,
+    );
+    const element = "An element the user picked in the preview: <Button />";
+    expect(heads).toEqual([element, "Pasted text 1", element, "Image 1", "image", "this one"]);
+    await w.session.close();
   });
 
   test("pastes: stored as .txt, numbered per session, fenced ahead of the text", async () => {
     const fake = fakeAgent(say("ok"));
     const w = world(fake);
-    w.session.send("fix this", { pastes: [{ text: "one\ntwo" }, { text: "x", name: "App.tsx" }] });
+    w.session.send("fix this", { attachments: [paste("one\ntwo"), paste("x", "App.tsx")] });
     await w.idle();
     expect(w.events[0]).toMatchObject({
       type: "user-message",
       text: "fix this",
-      pastes: [
-        { n: 1, chars: 7, lines: 2, preview: "one", file: "1.txt" },
-        { n: 2, name: "App.tsx", file: "2.txt" },
+      attachments: [
+        { kind: "paste", n: 1, chars: 7, lines: 2, preview: "one", file: "1.txt" },
+        { kind: "paste", n: 2, name: "App.tsx", file: "2.txt" },
       ],
     });
     expect(readFileSync(join(home, "attachments", w.id, "1.txt"), "utf8")).toBe("one\ntwo");
@@ -938,16 +1016,16 @@ describe("AcpSession", () => {
     // numbering continues over a restart, so "pasted text 3" still means the same block
     await w.session.close();
     const w2 = world(fake, claudeSpec, 60_000, w.id);
-    w2.session.send("and this", { pastes: [{ text: "z" }] });
+    w2.session.send("and this", { attachments: [paste("z")] });
     await w2.idle();
-    expect(w2.events[0]).toMatchObject({ type: "user-message", pastes: [{ n: 3, file: "3.txt" }] });
+    expect(w2.events[0]).toMatchObject({ type: "user-message", attachments: [{ kind: "paste", n: 3, file: "3.txt" }] });
     await w2.session.close();
   });
 
   test("an agent without image support gets the text only, and the person is told", async () => {
     const fake = fakeAgent(say("ok"));
     const w = world(fake);
-    w.session.send("look", { images: [png] });
+    w.session.send("look", { attachments: [png] });
     await w.idle();
     expect(w.types()).toEqual(["user-message", "turn-start", "session-info", "agent-error", "text-delta", "turn-end"]);
     expect(w.events[3]).toMatchObject({ message: "Claude does not accept images; the message went without it" });

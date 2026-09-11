@@ -60,7 +60,7 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
     id: "project",
     label: s.repos.length > 1 ? "switch project…" : "open project…",
     key: chord("project"),
-    onClick: () => dispatch({ a: "open", overlay: { kind: "projects" } }),
+    onClick: () => dispatch({ a: "open", overlay: { kind: "projects", form: "center" } }),
   });
   const panels: MenuItem[] = [
     {

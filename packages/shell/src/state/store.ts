@@ -251,9 +251,7 @@ export type Overlay =
   | { kind: "agent-page"; agent: string }
   /** the setup pane for a repo that is already configured (install + start commands) */
   | { kind: "setup"; repoId: string }
-  /** the project switcher: pick a registered repo, or type a path to open another. It hangs off
-   * the pill in the bar; `dialog` is the roomier centered form its browse button opens. */
-  | { kind: "projects"; dialog?: boolean }
+  | ProjectsOverlay
   | NewProjectForm
   /** the new-project form's location, walked to rather than typed. It carries the form and reopens
    * it: with the folder filled in on a pick, or as it was when backed out of. */
@@ -262,6 +260,12 @@ export type Overlay =
   | { kind: "routes" }
   /** the lines a picked element with no recorded source may be written on, when none is clearly it */
   | { kind: "element-sources"; worktreeId: string; hits: SearchHit[] };
+
+/** the project switcher: pick a registered repo, or type a path to open another. `pill` hangs off
+ * the pill in the bar, for a click on it; `center` is the same switcher over the preview, for a key
+ * or the palette, since the pill is at the far edge of the screen; `disk` is the roomier centered
+ * path browser its folder button opens. */
+export type ProjectsOverlay = { kind: "projects"; form: "pill" | "center" | "disk" };
 
 /** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
  * a location; `clone` has both derived from the URL and shows them so they can be changed. */

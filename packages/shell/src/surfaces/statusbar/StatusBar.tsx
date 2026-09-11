@@ -128,18 +128,18 @@ function ProjectPill() {
           id: "project",
           label: repos.length > 1 ? "switch project…" : "open project…",
           key: chord("project"),
-          onClick: () => dispatch({ a: "open", overlay: { kind: "projects" } }),
+          onClick: () => dispatch({ a: "open", overlay: { kind: "projects", form: "pill" } }),
         },
         {
           id: "project-disk",
           label: "find a project on disk…",
-          onClick: () => dispatch({ a: "open", overlay: { kind: "projects", dialog: true } }),
+          onClick: () => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } }),
         },
       ],
       repo ? projectItems(repo, repo.id, { sock, dispatch }) : [],
     ]);
-  // the dialog form draws over the preview instead; this is only the panel that drops out of here
-  const open = useStore((s) => s.overlay?.kind === "projects" && !s.overlay.dialog);
+  // the other forms draw over the preview instead; this is only the panel that drops out of here
+  const open = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");
   const busyElsewhere = useStore((s) => s.rows.some((w) => isBusy(w) && w.repoId !== s.activeRepoId));
   // "open project" is what an empty daemon deserves, not what a page that has not heard from its
   // daemon should guess: until hello the pill keeps its box and says nothing
@@ -151,7 +151,7 @@ function ProjectPill() {
         className="bar-pill"
         on={open}
         {...tip(repos.length > 1 ? "Switch project" : "Open a project", chord("project"))}
-        onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects" } })}
+        onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects", form: "pill" } })}
         {...cm.contextMenu(pillMenu)}
       >
         <span className="bar-project-name">{repo?.name ?? (heard ? "open project" : "")}</span>

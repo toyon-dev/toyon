@@ -2,6 +2,7 @@ import { isOwned, type RepoInfo } from "@toyon/shared";
 import { useCallback } from "react";
 import { importItems, projectItems } from "../../state/actions/project.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import type { ProjectsOverlay } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -16,18 +17,20 @@ import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker
  * plain folders are drilled into (enter or tab), so a nested checkout is reachable without typing
  * it out, and a name or a git URL matching nothing becomes an offer to create or clone.
  *
- * Three forms, one component. Normally it drops out of the pill and takes the bar over the way a
- * browser's address bar does: the open project becomes a chip in the field, the caret sits after
- * it, and the rows are the projects you could switch to. `dialog` is the centered form the field's
- * folder button opens, which starts in the home directory: more room for walking the filesystem,
- * where the anchored one would run out of screen. `embedded` is the same dropdown hanging off ⌘K's
- * repo chip, inside an overlay that is already open and has to survive the switch. */
+ * Three forms, one component. A click on the pill drops it out of the pill (`pill`) and takes the
+ * bar over the way a browser's address bar does: the open project becomes a chip in the field, the
+ * caret sits after it, and the rows are the projects you could switch to. A key or the palette opens
+ * the same switcher over the preview (`center`), where the eyes are when nothing was clicked; the
+ * pill sits at the far edge of the screen. `disk` is the centered form the field's folder button
+ * opens, which starts in the home directory: more room for walking the filesystem, where the
+ * anchored one would run out of screen. `embedded` is the dropdown hanging off ⌘K's repo chip,
+ * inside an overlay that is already open and has to survive the switch. */
 export function ProjectPicker({
-  dialog = false,
+  form = "pill",
   embedded = false,
   onDone,
 }: {
-  dialog?: boolean;
+  form?: ProjectsOverlay["form"];
   /** mounted inside another overlay (⌘K's repo chip) rather than owning the screen: closing is the
    * host's to define, since dispatching `close` here would take the host down with it */
   embedded?: boolean;
@@ -114,21 +117,21 @@ export function ProjectPicker({
 
   return (
     <ListPicker<Row>
-      anchored={!dialog}
-      initialQuery={dialog ? "~/" : ""}
-      // the chip says what you are switching away from, which is only true of the bar panel: the
-      // dialog is a path browser and nothing in it is scoped to the open project
+      anchored={form === "pill"}
+      initialQuery={form === "disk" ? "~/" : ""}
+      // the chip says what you are switching away from, which is true of either switcher: the disk
+      // form is a path browser and nothing in it is scoped to the open project
       lead={
-        dialog ? undefined : (
+        form === "disk" ? undefined : (
           <span className="picker-chip">{repos.find((r) => r.id === current)?.name ?? "no project"}</span>
         )
       }
       trailing={
-        dialog || embedded ? undefined : (
+        form === "disk" || embedded ? undefined : (
           <IconButton
             icon="folder"
             label="Find a project on disk"
-            onClick={() => dispatch({ a: "open", overlay: { kind: "projects", dialog: true } })}
+            onClick={() => dispatch({ a: "open", overlay: { kind: "projects", form: "disk" } })}
           />
         )
       }

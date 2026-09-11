@@ -16,8 +16,8 @@ import { SearchPalette } from "./SearchPalette.tsx";
 import { ThemePicker } from "./ThemePicker.tsx";
 import "./palettes.css";
 
-/** whichever overlay is open (they are mutually exclusive). The project picker is here only in
- * its dialog form: normally it hangs off its pill in the top bar, where the click already is. */
+/** whichever overlay is open (they are mutually exclusive). The project picker's pill form is not
+ * here: it hangs off its pill in the top bar, where the click already is. */
 export function Overlays() {
   const overlay = useOverlay();
   const activeId = useActiveId();
@@ -35,7 +35,11 @@ export function Overlays() {
       {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "agent-page" && <AgentPage agentId={overlay.agent} />}
       {overlay?.kind === "commands" && <CommandPalette />}
-      {overlay?.kind === "projects" && overlay.dialog && <ProjectPicker dialog />}
+      {/* keyed by form: the folder button swaps center for disk in this same slot, and the disk form
+          has to mount fresh to start in the home directory with the caret in it */}
+      {overlay?.kind === "projects" && overlay.form !== "pill" && (
+        <ProjectPicker key={overlay.form} form={overlay.form} />
+      )}
       {overlay?.kind === "new-project" && <NewProjectOverlay overlay={overlay} />}
       {overlay?.kind === "choose-folder" && <FolderPicker form={overlay.form} />}
     </>

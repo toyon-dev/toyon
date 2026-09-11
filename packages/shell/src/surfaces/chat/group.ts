@@ -1,5 +1,5 @@
 import type { ChatItem } from "../../state/store.ts";
-import { toolLabel } from "./toolCall.ts";
+import { AUTO_OPEN, toolBlocks, toolLabel } from "./toolCall.ts";
 
 /** An agent working through one file writes it in several calls, one hunk each, and the transcript
  * printed a line per call: four rows reading "edit menu.ts" with nothing to tell them apart. A run
@@ -80,4 +80,36 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
  * without this a streamed token into the message above re-renders every call in the turn */
 export function sameTools(a: ToolItem[], b: ToolItem[]): boolean {
   return a.length === b.length && a.every((item, i) => item === b[i]);
+}
+
+/** Which row of the turn has its output open while the agent works, or -1. It is the newest call
+ * that opens itself and has something to show, rather than the newest call: a call lands a moment
+ * before anything it prints, and handing the open row to it then closed the diff you were reading
+ * onto a spinner with nothing under it. A read or a run never opens itself, so a diff stays open
+ * over them until the next change has a diff of its own, or the turn ends. The search stops at the
+ * message that started the turn, since a diff from the turn before is not the work in hand. */
+export function openRow(entries: ChatEntry[], roots: string[]): number {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i]!;
+    if (!("tools" in entry)) {
+      if (entry.item.kind === "user") return -1;
+      continue;
+    }
+    if (AUTO_OPEN.has(entry.tools[0]?.toolKind ?? "other") && entry.tools.some((t) => shows(t, roots))) return i;
+  }
+  return -1;
+}
+
+/** the log asks this of the open row on every streamed token, and a call's item is replaced
+ * whenever it changes, so the answer is kept per item rather than parsing a whole diff each time */
+const showing = new WeakMap<ToolItem, boolean>();
+
+/** whether the panel under a call would draw anything: the same test ToolPart makes */
+function shows(item: ToolItem, roots: string[]): boolean {
+  let yes = showing.get(item);
+  if (yes === undefined) {
+    yes = !!toolLabel(item, roots).command || toolBlocks(item, item.output ?? "").length > 0;
+    showing.set(item, yes);
+  }
+  return yes;
 }

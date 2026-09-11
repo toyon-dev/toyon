@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import { groupTools, RAILS, railSlots } from "./group.ts";
+import { groupTools, openRow, RAILS, railSlots } from "./group.ts";
 
 let n = 0;
 const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): ChatItem =>
@@ -17,6 +17,11 @@ const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): Chat
   }) as ChatItem;
 
 const text = (t: string): ChatItem => ({ kind: "assistant", text: t });
+
+const DIFF = "@@ -1 +1 @@\n-a\n+b";
+
+/** which entry the log opens while the agent works */
+const open = (items: ChatItem[]) => openRow(groupTools(items, ["/wt"]), ["/wt"]);
 
 /** what each entry stands for: the first item's index, and how many calls are on the row */
 const shape = (items: ChatItem[], roots: string[] = []) =>
@@ -140,6 +145,35 @@ describe("groupTools", () => {
       0,
       1,
     ]);
+  });
+
+  test("the open row: a call that has printed nothing yet leaves the diff above it open", () => {
+    const items = [tool("edit", "/wt/a.ts", { output: DIFF }), tool("edit", "/wt/b.ts", { done: false })];
+    expect(open(items)).toBe(0);
+  });
+
+  test("the open row: the next change takes it once its diff arrives", () => {
+    const items = [tool("edit", "/wt/a.ts", { output: DIFF }), tool("edit", "/wt/b.ts", { output: DIFF })];
+    expect(open(items)).toBe(1);
+  });
+
+  test("the open row: a read never opens, so the diff stays open over it after it is done", () => {
+    const items = [
+      tool("edit", "/wt/a.ts", { output: DIFF }),
+      text("Checking the caller."),
+      tool("read", "/wt/b.ts", { output: "x" }),
+    ];
+    expect(open(items)).toBe(0);
+  });
+
+  test("the open row: a run on one file stays open while its next call is pending", () => {
+    const items = [tool("edit", "/wt/a.ts", { output: DIFF }), tool("edit", "/wt/a.ts", { done: false })];
+    expect(open(items)).toBe(0);
+  });
+
+  test("the open row: a diff from before the last message is not reopened", () => {
+    const items = [tool("edit", "/wt/a.ts", { output: DIFF }), { kind: "user", text: "and the tests" } as ChatItem];
+    expect(open(items)).toBe(-1);
   });
 
   test("two subagents reading one file do not fold into each other's row", () => {

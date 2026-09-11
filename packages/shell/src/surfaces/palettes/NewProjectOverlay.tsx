@@ -1,13 +1,13 @@
 import { projectNameError } from "@toyon/shared";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { NewProjectForm } from "../../state/store.ts";
-import { Button } from "../../ui/Button.tsx";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { Field } from "../../ui/Field.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
-import { defaultParent, destination, expandHome, splitTypedPath } from "./projectPicker.ts";
+import { destination, expandHome, splitTypedPath } from "./projectPicker.ts";
 
 /** The form behind a create or clone row, and behind the project list's standing "new project" row.
  * It appears exactly where something would otherwise be guessed: a bare name has no location, and a
@@ -15,13 +15,14 @@ import { defaultParent, destination, expandHome, splitTypedPath } from "./projec
  * that row creates without stopping here.
  *
  * The location is read, not typed: it starts where the other projects already live, which is
- * usually right, and `change` walks to another folder in the chooser. Nobody has to know how to
- * write a path to put a project somewhere.
+ * usually right, and the folder button beside it picks another. Nobody has to know how to write a
+ * path to put a project somewhere.
  *
- * Where the daemon can open the OS folder dialog in front of the person, `choose in Finder` is the
- * other way to say where, and what comes back decides the rest. An ordinary folder is the location.
- * An empty one, most likely made right there with New Folder, becomes the project itself. One that
- * is already a project is offered for opening, since nesting a new one inside it is never the intent.
+ * Where the daemon can open the OS folder dialog in front of the person, that button is Finder, and
+ * what comes back decides the rest. An ordinary folder is the location. An empty one, most likely
+ * made right there with New Folder, becomes the project itself. One that is already a project is
+ * offered for opening, since nesting a new one inside it is never the intent. Anywhere else the
+ * button walks to a folder in the chooser.
  *
  * Built from the same FormRow as the setup pane, because a project made here opens straight into
  * that pane asking how it runs, and the two are read one after the other. */
@@ -29,21 +30,26 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProjectForm }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const repos = useStore((s) => s.repos);
-  const current = useStore((s) => s.activeRepoId);
   const home = useStore((s) => s.home);
   const canAskFinder = useStore((s) => s.folderDialog);
+  const asking = useStore((s) => s.choosingFolder);
   const chosen = useStore((s) => s.chosenFolder);
   const [name, setName] = useState(overlay.name);
-  const [asking, setAsking] = useState(false);
   /** a folder picked in Finder that is already a project */
   const [existing, setExisting] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const { parent } = overlay;
   const clone = overlay.mode === "clone";
   const inPlace = overlay.mode === "init";
   // a folder made the project where it stands keeps the name it already has, spaces and all
   const nameError = inPlace ? null : projectNameError(name);
   const ready = !nameError && parent.trim().length > 0;
-  const close = () => dispatch({ a: "close" });
+
+  // leaving the form while the dialog is up takes the dialog with it
+  const close = () => {
+    if (asking) sock?.send({ t: "cancel-folder" });
+    dispatch({ a: "close" });
+  };
 
   const submit = () => {
     if (!ready) return;
@@ -73,17 +79,27 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProjectForm }) {
     close();
   };
 
-  const askFinder = () => {
-    setAsking(true);
-    sock?.send({ t: "choose-folder", start: parent });
+  const chooseFolder = () => {
+    if (canAskFinder) {
+      dispatch({ a: "choosing-folder", v: true });
+      sock?.send({ t: "choose-folder", start: parent });
+    } else {
+      // the chooser replaces this form while it is open, so the name typed so far rides along
+      dispatch({ a: "open", overlay: { kind: "choose-folder", form: { ...overlay, name } } });
+    }
   };
 
-  // the answer arrives as a store change; only the form that asked acts on it
+  // The answer arrives as a store change, and only the form that asked acts on it. The flag is
+  // cleared here rather than by the answer: cleared first, this would read it as not asked.
   useOnChange([chosen?.seq], () => {
     if (!asking || !chosen) return;
-    setAsking(false);
+    dispatch({ a: "choosing-folder", v: false });
     const picked = chosen.folder;
-    if (!picked) return; // cancelled: the form stays as it was
+    // the dialog had the keyboard, and the name field is where it goes back to
+    if (!picked) {
+      nameRef.current?.focus();
+      return;
+    }
     setExisting(picked.kind === "project" ? picked.path : null);
     if (picked.kind === "project") return;
     // a clone needs a folder that is not there yet, so for one an empty folder is only a location
@@ -94,6 +110,7 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProjectForm }) {
       return;
     }
     dispatch({ a: "open", overlay: { ...overlay, mode: clone ? "clone" : "create", parent: picked.path, name } });
+    nameRef.current?.focus();
   });
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -102,12 +119,6 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProjectForm }) {
       submit();
     }
   };
-
-  const whereHint = existing
-    ? "the folder you chose is already a project: open it, or choose another"
-    : repos.length > 0 && parent === defaultParent(repos, current, home)
-      ? "where your other projects live"
-      : undefined;
 
   return (
     <Overlay onClose={close}>
@@ -134,6 +145,7 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProjectForm }) {
           <span className="new-project-name">{name}</span>
         ) : (
           <Field
+            ref={nameRef}
             size="md"
             autoFocus
             value={name}
@@ -144,23 +156,21 @@ export function NewProjectOverlay({ overlay }: { overlay: NewProjectForm }) {
         )}
       </FormRow>
 
-      <FormRow label="in" hint={whereHint}>
+      <FormRow
+        label="in"
+        hint={existing ? "the folder you chose is already a project: open it, or choose another" : undefined}
+      >
         <div className="new-project-where">
           <span className="new-project-parent">
             <bdi>{parent}</bdi>
           </span>
-          {/* the chooser replaces this form while it is open, so the name typed so far rides along */}
-          <Button
-            className="new-project-change"
-            onClick={() => dispatch({ a: "open", overlay: { kind: "choose-folder", form: { ...overlay, name } } })}
-          >
-            change
-          </Button>
-          {canAskFinder && (
-            <Button className="new-project-change" busy={asking} onClick={askFinder}>
-              choose in Finder
-            </Button>
-          )}
+          <IconButton
+            icon="folder"
+            label={canAskFinder ? "Choose in Finder" : "Choose a folder"}
+            className="new-project-folder"
+            on={asking}
+            onClick={chooseFolder}
+          />
         </div>
       </FormRow>
 

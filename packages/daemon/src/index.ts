@@ -114,7 +114,7 @@ const { branded, stop: stopServer } = startServer({
     accounts,
     attachments,
     planTasks: makePlanner(agents, state),
-    chooseFolder: folderDialog(),
+    folderDialog: folderDialog(),
   },
 });
 

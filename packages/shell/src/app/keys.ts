@@ -148,7 +148,12 @@ export function useChords() {
           }
         }
       } else if (e.key === "Escape") {
-        if (s.overlay) {
+        // The Finder dialog is another app's window. An Escape that reaches the page while it is up
+        // was meant for it, so it closes the dialog and leaves the form it was opened from alone.
+        if (s.choosingFolder) {
+          sock?.send({ t: "cancel-folder" });
+          dispatch({ a: "choosing-folder", v: false });
+        } else if (s.overlay) {
           // sub-pickers go back to the palette they came from; everything else just closes
           dispatch({ a: "close", back: isSubPicker(s.overlay) });
         } else if (s.picking) {

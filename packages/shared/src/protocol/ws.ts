@@ -443,9 +443,11 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("cancel-import"), id }),
   /** what directories could complete this partial path (project picker autocomplete) */
   z.object({ t: z.literal("browse-path"), path: z.string().max(4_000) }),
-  /** open the OS folder dialog at `start` (the new-project form's "choose in Finder"); answered
-   * with `folder-chosen` */
+  /** open the OS folder dialog at `start` (the new-project form's folder button); answered with
+   * `folder-chosen` */
   z.object({ t: z.literal("choose-folder"), start: z.string().max(4_000) }),
+  /** close the dialog `choose-folder` opened: Escape in the shell while it is up, or the form closing */
+  z.object({ t: z.literal("cancel-folder") }),
   /** drop a repo from the daemon; refused while it still has task worktrees */
   z.object({ t: z.literal("forget-repo"), repoId: id }),
   z.object({ t: z.literal("set-theme"), prefs: themePrefsSchema }),

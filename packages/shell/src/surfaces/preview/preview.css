@@ -61,11 +61,6 @@
     font: var(--type-ui-lg);
     color: var(--text1);
   }
-  .greenfield-stacks {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
   /* the dock's composer fills the panel below the transcript; here it is a box on a page, so it
    takes a frame of its own and a height that reads as a box rather than a panel */
   .greenfield-pane .composer {

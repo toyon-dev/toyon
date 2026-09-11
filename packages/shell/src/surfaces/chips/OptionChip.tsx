@@ -36,7 +36,8 @@ export function OptionChip({
 }) {
   if (choices.length === 0) return null;
   const { rows, shown } = choiceRows(choices, value, current, { label: defaultLabel, description: defaultDescription });
-  const label = rows.find((o) => o.id === shown)?.label ?? shown;
+  const row = rows.find((o) => o.id === shown);
+  const label = row?.chip ?? row?.label ?? shown;
   return (
     <ChipPicker
       value={shown}

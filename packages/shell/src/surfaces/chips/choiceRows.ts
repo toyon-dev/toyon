@@ -4,13 +4,23 @@ import type { ChipOption } from "../../ui/ChipPicker.tsx";
 /** the empty id: the agent's own default, which is what a worktree runs until a value is named */
 export const DEFAULT_OPTION = "";
 
-/** A choice's words, split the way the picker draws them. Claude names a model "Opus (1M context)"
- * and describes it "Opus 5 with 1M context · Best for everyday, complex tasks": the name, a version
- * and a qualifier, then what it is for. The row says "Opus" with "5" after it, and the line under it
- * keeps only what the name does not ("1M context · Best for everyday, complex tasks"). A choice
- * whose description does not open with its own name and a version (Codex's "GPT-5.6-Terra", every
- * effort level) is left as the agent wrote it. */
+/** A choice's words, split the way the picker draws them: a label, a version a tier quieter after
+ * it, and a line under it keeping only what the name does not say. The two builtin agents spell a
+ * model two ways. Claude names one "Opus (1M context)" and describes it "Opus 5 with 1M context ·
+ * Best for everyday, complex tasks", so the row says "Opus 5" over "1M context · Best for everyday,
+ * complex tasks". Codex puts the version inside the name, "GPT-5.6-Sol", and its description never
+ * repeats it, so the row says "Sol 5.6", or "GPT 5.5" for a model with no codename. Anything else
+ * (every effort level, a name with more parts than that) is left as the agent wrote it. */
 export function modelWords(c: ModelChoice): { label: string; version?: string; description?: string } {
+  // only a capitalised word counts as a codename, so a slug like "gemini-2.5-pro" stays whole
+  const dashed = c.name.match(/^([A-Za-z]+)-(\d+(?:\.\d+)*)(?:-([A-Z][a-z]+))?$/);
+  if (dashed?.[1] && dashed[2]) {
+    return {
+      label: dashed[3] ?? dashed[1],
+      version: dashed[2],
+      ...(c.description ? { description: c.description } : {}),
+    };
+  }
   const [head = "", ...rest] = (c.description ?? "").split(" · ");
   const base = c.name.replace(/\s*\([^)]*\)$/, "");
   const m = head.match(/^(.+?) (\d+(?:\.\d+)*)(?: with (.+))?$/);
@@ -28,8 +38,10 @@ export function modelWords(c: ModelChoice): { label: string; version?: string; d
  * option and no second "default" is drawn beside it. When that row only names another (Claude's
  * "Default" is "Opus"), the named row is drawn in place of both and marked recommended, so one
  * model is never two rows; not picking still follows the agent, picking it pins it. Names are
- * split by `modelWords`, unless two rows would then read the same (an "Opus" beside an "Opus (1M
- * context)"), when both keep the agent's own words so the chip can tell them apart. */
+ * split by `modelWords`, unless two rows would then read the same, label and version both (an "Opus
+ * 5" beside an "Opus (1M context)" that is also 5), when both keep the agent's own words so the chip
+ * can tell them apart. Rows that share only a label ("GPT 5.5" beside "GPT 5.2") keep the split,
+ * and their chip carries the version, since the chip otherwise shows the label alone. */
 export function choiceRows(
   choices: ModelChoice[],
   value: string,
@@ -44,17 +56,18 @@ export function choiceRows(
   const shown = named && requested === own?.id ? named.id : requested;
   const listed = named ? choices.filter((c) => c !== own) : choices;
   const known = listed.some((c) => c.id === shown);
-  const split = listed.map(modelWords);
-  const labels = split.map((w) => w.label);
+  const split = listed.map((c) => ({ c, words: modelWords(c) }));
+  const reads = (w: { label: string; version?: string }) => [w.label, w.version].filter(Boolean).join(" ");
   const rows: ChipOption<string>[] = [
     ...(own ? [] : [{ id: DEFAULT_OPTION, label: empty.label, description: empty.description }]),
-    ...listed.map((c, i) => {
-      const w = labels.indexOf(labels[i] ?? "") === labels.lastIndexOf(labels[i] ?? "") ? split[i] : undefined;
+    ...split.map(({ c, words }) => {
+      const w = split.filter((o) => reads(o.words) === reads(words)).length === 1 ? words : undefined;
       const description = w ? w.description : c.description;
       return {
         id: c.id,
         label: w ? w.label : c.name,
         ...(w?.version ? { suffix: w.version } : {}),
+        ...(w?.version && split.some((o) => o.c !== c && o.words.label === w.label) ? { chip: reads(w) } : {}),
         description: c === named ? ["recommended", description].filter(Boolean).join(" · ") : description,
       };
     }),

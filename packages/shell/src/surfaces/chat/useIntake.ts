@@ -91,11 +91,16 @@ async function attachImages(store: Store, boxId: string | null, files: File[]) {
 
 /** a file that is not an image: attached as text under its own name, or refused by name */
 async function attachTextFiles(store: Store, boxId: string | null, files: File[]) {
-  for (const f of files.slice(0, PASTES_PER_MESSAGE)) {
+  if (!boxId || files.length === 0) return;
+  const room = PASTES_PER_MESSAGE - (store.getState().local[boxId]?.pastes.length ?? 0);
+  if (room <= 0) return toast(store, `at most ${PASTES_PER_MESSAGE} pastes per message`);
+  for (const f of files.slice(0, room)) {
     const text = await readText(f);
     if (text === null) toast(store, `${f.name}: not a text file`);
     else attachText(store, boxId, text, { name: f.name });
   }
+  if (files.length > room)
+    toast(store, `kept ${room} of ${files.length}: at most ${PASTES_PER_MESSAGE} pastes per message`);
 }
 
 /** the box a drop lands in: the one the composer on screen writes in, which while drafting is the

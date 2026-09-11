@@ -550,13 +550,10 @@
       color: var(--yellow);
     }
   }
-  /* the graft divider is the blocked row's box with the accent's edge: both are one line the
-   daemon wrote into the transcript, and only the second is good news */
+  /* the graft divider is the blocked row's box with the accent's edge: both are the daemon writing
+   into the transcript itself, and only the second is good news */
   .blocked-row,
   .graft-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     padding: 4px 8px;
     font: var(--type-mono);
     color: var(--text1);
@@ -570,6 +567,19 @@
     & .tool-name {
       color: var(--text1);
     }
+  }
+  .graft-row,
+  .blocked-row .blocked-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  /* Toyon's rule, under the call it refused. The agent is told only that its request was refused,
+   so it reports one as the person declining; this line is where the person reads otherwise, and it
+   wraps rather than truncating, since it is the whole reason the block is here */
+  .blocked-row .blocked-why {
+    margin-top: 2px;
+    font: var(--type-ui-sm);
   }
   .graft-row {
     border-left-color: var(--accent);

@@ -1202,6 +1202,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
           activeId,
         ),
         draft: draftAfter(s, msg.rows, !!fresh),
+        // activate closes the file because choosing a row is leaving it, but a frame that keeps the
+        // selection chose nothing: status reads push one whenever a count moves, and one landing
+        // between a file opening and its read closed the pane under the person who opened it
+        editor: activeId === s.activeId ? s.editor : null,
       };
     }
     case "proc": {

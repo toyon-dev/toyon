@@ -1126,6 +1126,17 @@ describe("discovered worktrees", () => {
     const s = run([helloR(wt("m1", "main"))], from);
     expect(s.discoveredOpen).toEqual({ r: true });
   });
+
+  test("the archived section keeps its own open state, per project, with the same lifetime", () => {
+    const shut = run([helloR(wt("main", "main"))]);
+    expect(shut.archivedOpen.r).toBeUndefined();
+    const open = run([{ a: "toggle-archived" }], shut);
+    expect(open.archivedOpen.r).toBe(true);
+    // one section's toggle leaves the other alone
+    expect(open.discoveredOpen.r).toBeUndefined();
+    const from = initialState({ clientId: ME, storedArchivedOpen: { r: true, gone: true } });
+    expect(run([helloR(wt("m1", "main"))], from).archivedOpen).toEqual({ r: true });
+  });
 });
 
 // The rail sorts `visible` (railOrder.ts has the rules); `rows` stays as the daemon sent it, since

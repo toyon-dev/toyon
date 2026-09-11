@@ -49,7 +49,8 @@ describe("a worktree's actions", () => {
       "merge into main",
       "push + PR",
       "|",
-      "remove…",
+      // nothing written, so the remove asks nothing and loses its ellipsis
+      "remove",
     ]);
     const busy = worktreeItems(
       owned({ agent: "working", dirty: 2, behind: 3 }),

@@ -26,6 +26,10 @@ export function shipOp(sock: DaemonSocket | null, dispatch: Dispatch, msg: Extra
   sock?.send(msg);
 }
 
+/** uncommitted files or commits ahead of main, or counts not in yet, which could be either: the
+ * worktrees whose remove still asks first */
+const hasWork = (w: WorktreeStatus) => w.dirty === undefined || w.ahead === undefined || w.dirty > 0 || w.ahead > 0;
+
 /** send the removes and take the rows off screen in the same breath: the daemon confirms by
  * dropping them from its next snapshot, or an error frame puts them back with a toast */
 export function removeWorktrees(sock: DaemonSocket | null, dispatch: Dispatch, ids: string[]) {
@@ -68,6 +72,8 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
     },
     remove(w: OwnedWorktree) {
       if (!canRemove(w.worktree)) return;
+      // nothing written: the chat is archived and the toast brings it back, so there is nothing to ask
+      if (!hasWork(w)) return removeWorktrees(sock, dispatch, [w.worktree.id]);
       const ok = window.confirm(
         `Remove worktree "${w.worktree.title}"?\n\nIts directory and branch (${w.worktree.branch}) go. The chat, the commits and any uncommitted changes are archived, and the project menu can restore it.`,
       );
@@ -178,7 +184,10 @@ export function worktreeItems(
       onClick: () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }),
     });
   }
-  if (canRemove(w.worktree)) gone.push({ id: "remove", label: "remove…", danger: true, onClick: () => acts.remove(w) });
+  // the ellipsis is the promise of a question, so a remove that asks nothing drops it
+  if (canRemove(w.worktree)) {
+    gone.push({ id: "remove", label: hasWork(w) ? "remove…" : "remove", danger: true, onClick: () => acts.remove(w) });
+  }
   return grouped([stop, look, spawn, run, change, land, gone]);
 }
 

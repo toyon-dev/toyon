@@ -1,5 +1,13 @@
-import { canGraft, isMain, isOwned, type OwnedWorktree, type WorktreeStatus } from "@toyon/shared";
+import {
+  type ArchivedWorktree,
+  canGraft,
+  isMain,
+  isOwned,
+  type OwnedWorktree,
+  type WorktreeStatus,
+} from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
+import { archivedHint, archivedItems, restoreArchived } from "../../state/actions/archive.ts";
 import {
   discoveredItems,
   removeWorktrees,
@@ -12,9 +20,11 @@ import { profileOf } from "../../state/profiles.ts";
 import { sentAt } from "../../state/railOrder.ts";
 import {
   useActiveId,
+  useArchivedOpen,
   useDiscoveredOpen,
   useGreenfield,
   useOffline,
+  useVisibleArchived,
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
@@ -54,7 +64,16 @@ export function WtRail() {
   const draftOpen = useStore((s) => s.draft !== null);
   const discovered = useVisibleDiscovered();
   const discOpen = useDiscoveredOpen();
+  const archived = useVisibleArchived();
+  const archOpen = useArchivedOpen();
   const clientId = useStore((s) => s.clientId);
+  const activeRepoId = useStore((s) => s.activeRepoId);
+  const connected = useStore((s) => s.connected);
+  // the section's count is on the rail before anyone opens it, so ask for the list on the way in;
+  // the daemon pushes it again whenever a worktree is archived, restored or deleted
+  useEffect(() => {
+    if (sock && connected && activeRepoId) sock.send({ t: "list-archived", repoId: activeRepoId });
+  }, [sock, connected, activeRepoId]);
   const activeId = useActiveId();
   // the list only dims: what the socket is doing is the bar's to say, not the rail's
   const offline = useOffline();
@@ -163,6 +182,44 @@ export function WtRail() {
       <span className="rail-glyph rail-new-strip">
         <Icon name="plus" />
       </span>
+    </button>
+  );
+
+  /** A removed worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
+   * row and has no dot; the gutter says how long ago it was archived. A click brings it back, which
+   * is the one thing it is for, and its menu (the kebab or a right-click) has the rest. */
+  const archivedRow = (a: ArchivedWorktree) => (
+    <button
+      key={a.id}
+      type="button"
+      className={cx(
+        "row row-edge row-quiet rail-disc-item",
+        menu?.owner === "rail" && menu.key === a.id && "menu-open",
+      )}
+      {...tip(a.restorable ? "Restore" : "Its commits were not kept", undefined, {
+        placement: "left",
+        detail: archivedHint(a),
+      })}
+      onClick={() => {
+        if (a.restorable) restoreArchived(sock, a.id, clientId);
+      }}
+      {...cm.contextMenu(() => archivedItems(a, clientId, deps), a.id)}
+    >
+      <span className="rail-gut">
+        <span className="rail-at row-dim">{ago(a.archivedAt)}</span>
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu carries the same actions for the keyboard */}
+        <span
+          className="rail-more"
+          {...tip("Actions")}
+          onClick={(e) => {
+            e.stopPropagation();
+            cm.openUnder(e.currentTarget, () => archivedItems(a, clientId, deps), a.id);
+          }}
+        >
+          <Icon name="more" />
+        </span>
+      </span>
+      <span className="branch">{a.title}</span>
     </button>
   );
 
@@ -458,11 +515,11 @@ export function WtRail() {
                 size="md"
                 tone="danger"
                 disabled={sel.length === 0}
-                data-tip="Remove all selected worktrees (branches and changes deleted)"
+                data-tip="Remove all selected worktrees (their chats and work are archived)"
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Remove ${sel.length} worktree(s)?\n\nTheir directories and branches are deleted. Unmerged changes are lost.`,
+                      `Remove ${sel.length} worktree(s)?\n\nTheir directories and branches go. The chats, commits and any uncommitted changes are archived, and each can be restored.`,
                     )
                   ) {
                     removeWorktrees(sock, dispatch, sel);
@@ -497,6 +554,28 @@ export function WtRail() {
                 <span className="rail-label">discovered · {discovered.length}</span>
               </button>
               {discOpen && discovered.map(railRow)}
+            </>
+          )}
+          {/* Under discovered, for the same reason: hidden in the strip, and nothing aimed at sits below it */}
+          {!graftMode && archived.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="rail-disc-head"
+                aria-expanded={archOpen}
+                {...tip(
+                  `${archived.length} removed worktree${archived.length === 1 ? "" : "s"}, kept with ${archived.length === 1 ? "its chat" : "their chats"}`,
+                  undefined,
+                  { placement: "left" },
+                )}
+                onClick={() => dispatch({ a: "toggle-archived" })}
+              >
+                <span className="rail-gut">
+                  <Icon name="caret" className={cx("icon-inline rail-disc-caret", !archOpen && "shut")} />
+                </span>
+                <span className="rail-label">archived · {archived.length}</span>
+              </button>
+              {archOpen && archived.map(archivedRow)}
             </>
           )}
         </div>

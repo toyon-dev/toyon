@@ -55,6 +55,7 @@ export function App() {
   const panels = useStore((s) => s.panels);
   const lastActive = useStore((s) => s.lastActive);
   const discoveredOpen = useStore((s) => s.discoveredOpen);
+  const archivedOpen = useStore((s) => s.archivedOpen);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
   const toast = useStore((s) => s.toast);
@@ -165,6 +166,12 @@ export function App() {
       localStorage.setItem(STORAGE.discoveredOpen, JSON.stringify(discoveredOpen));
     } catch {}
   }, [discoveredOpen]);
+  // and so is the archived section, for the same reason
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.archivedOpen, JSON.stringify(archivedOpen));
+    } catch {}
+  }, [archivedOpen]);
 
   useChords();
   // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the

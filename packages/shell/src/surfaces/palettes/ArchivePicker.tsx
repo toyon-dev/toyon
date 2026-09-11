@@ -1,23 +1,14 @@
 import type { ArchivedWorktree } from "@toyon/shared";
 import { useCallback, useEffect } from "react";
-import { archivedItems, restoreArchived } from "../../state/actions/archive.ts";
+import { archivedHint, archivedItems, restoreArchived } from "../../state/actions/archive.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { ListPicker } from "../../ui/ListPicker.tsx";
-import { ago } from "../util.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 
 const NONE: ArchivedWorktree[] = [];
 
 const matches = (a: ArchivedWorktree, needle: string) =>
   [a.title, a.branch, a.prompt ?? ""].some((field) => field.toLowerCase().includes(needle));
-
-/** what a row says beside its title: how it ended, what came with it, and how long ago */
-function hint(a: ArchivedWorktree): string {
-  const parts = [a.landed ? "merged" : a.uncommitted ? "uncommitted changes" : null];
-  if (!a.restorable) parts.push("commits not kept");
-  parts.push(ago(a.archivedAt));
-  return parts.filter(Boolean).join(" · ");
-}
 
 /** A project's removed worktrees. Removing archives rather than deletes, so this is where a remove
  * is undone and where a landed branch's conversation comes back to be read. Enter restores the
@@ -58,7 +49,7 @@ export function ArchivePicker({ repoId }: { repoId: string }) {
             ? "no archived worktree matches"
             : "nothing archived: removed worktrees land here"
       }
-      row={(a) => <PaletteRow label={a.title} hint={hint(a)} />}
+      row={(a) => <PaletteRow label={a.title} hint={archivedHint(a)} />}
     />
   );
 }

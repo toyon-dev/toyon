@@ -380,10 +380,12 @@ export interface State {
   /** per repo: has the discovered section been opened. Collapsed is the default, so the common
    * case (a repo with nothing stray) costs nothing and never surprises anyone. */
   discoveredOpen: Record<string, boolean>;
+  /** per repo: has the rail's archived section been opened; collapsed by default, like discovered */
+  archivedOpen: Record<string, boolean>;
   /** per repo: the ref palette's last reply, with the query it answered so a stale one is told
    * from the one the person is waiting on. Repo-scoped, since a ref is not a worktree's. */
   refs: Record<string, { query: string; refs: RefHit[] }>;
-  /** per repo: its archived worktrees, newest first; absent until the archive picker first asks */
+  /** per repo: its archived worktrees, newest first; absent until the rail or the archive picker asks */
   archived: Record<string, ArchivedWorktree[]>;
   /** the worktree last selected in each repo: switching back to a project lands where you left it.
    * Persisted (App.tsx), so it survives a reload the same way the panel layout does. */
@@ -491,6 +493,8 @@ export interface InitialOpts {
   storedLastActive?: Record<string, string>;
   /** which projects had the discovered section open, so it does not re-collapse on every reload */
   storedDiscoveredOpen?: Record<string, boolean>;
+  /** which projects had the archived section open, for the same reason */
+  storedArchivedOpen?: Record<string, boolean>;
 }
 
 export function initialState(opts: InitialOpts): State {
@@ -506,6 +510,7 @@ export function initialState(opts: InitialOpts): State {
     shipping: {},
     visibleDiscovered: [],
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
+    archivedOpen: opts.storedArchivedOpen ?? {},
     refs: {},
     archived: {},
     lastActive: opts.storedLastActive ?? {},
@@ -754,6 +759,8 @@ export type Action =
   | { a: "focus-rail" }
   /** open or close the active project's discovered section */
   | { a: "toggle-discovered" }
+  /** open or close the active project's archived section */
+  | { a: "toggle-archived" }
   | { a: "toggle-zen" }
   | { a: "toggle-terminal" }
   /** open the terminal pane if it is shut, and ask the terminal for the keyboard either way */
@@ -1003,6 +1010,11 @@ function reduce(s: State, action: Action): State {
       if (!repoId) return s;
       return { ...s, discoveredOpen: { ...s.discoveredOpen, [repoId]: !s.discoveredOpen[repoId] } };
     }
+    case "toggle-archived": {
+      const repoId = s.activeRepoId;
+      if (!repoId) return s;
+      return { ...s, archivedOpen: { ...s.archivedOpen, [repoId]: !s.archivedOpen[repoId] } };
+    }
     case "toggle-zen":
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
     case "toggle-terminal":
@@ -1083,6 +1095,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         local: pruneLocal(s.local, msg.rows, msg.spares),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
+        archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
         refs: pruneByRepo(s.refs, msg.repos),
         archived: pruneByRepo(s.archived, msg.repos),
         themes: msg.themes ?? s.themes,

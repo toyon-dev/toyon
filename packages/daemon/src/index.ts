@@ -31,6 +31,7 @@ import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
 import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
+import { TurnService } from "./worktrees/turns.ts";
 
 // Bun exits the process on an unhandled rejection or exception. For a daemon that owns every
 // dev server and agent session, staying up and logging beats taking them all down.
@@ -83,6 +84,8 @@ const runtime = new RuntimeRegistry({
   bridgeScript: () => bridge.get(),
 });
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
+// before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
+const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
 const files = new FileService(state, runtime, (id) => worktrees.readable(id));
 const design = new DesignService((id) => worktrees.readable(id));
 const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
@@ -103,6 +106,7 @@ const { branded, stop: stopServer } = startServer({
     hub,
     repos,
     worktrees,
+    turns,
     files,
     design,
     routes,

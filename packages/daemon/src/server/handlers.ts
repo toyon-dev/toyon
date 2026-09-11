@@ -23,12 +23,15 @@ import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import type { ThemeStore } from "../themes/store.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
+import type { TurnService } from "../worktrees/turns.ts";
 
 export interface Services {
   state: StateStore;
   hub: Hub;
   repos: RepoRegistry;
   worktrees: WorktreeService;
+  /** how each worktree's agent last stopped, and whether anyone has looked since */
+  turns: TurnService;
   files: FileService;
   /** the worktree's own design system, scanned from its source */
   design: DesignService;
@@ -144,11 +147,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   seen(msg, _ctx, s) {
-    s.worktrees.markSeen(msg.worktreeId);
+    s.turns.markSeen(msg.worktreeId);
   },
 
   "mark-unread"(msg, _ctx, s) {
-    s.worktrees.markUnread(msg.worktreeId);
+    s.turns.markUnread(msg.worktreeId);
   },
 
   "refresh-git"(msg, _ctx, s) {
@@ -379,6 +382,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "stop-agent"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
+    s.turns.stoppedByPerson(msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.stop();
   },
 

@@ -11,6 +11,7 @@ import { git } from "../git/exec.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { WorktreeService } from "./service.ts";
+import { TurnService } from "./turns.ts";
 
 // Real git in a throwaway repo; fake agent/procs/proxy so nothing is spawned and no SDK is called.
 
@@ -23,8 +24,9 @@ function world() {
   const agents = fakeAgents();
   const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
+  const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
-  return { ...t, state, hub, runtime, worktrees, repos, registry: agents, ...f };
+  return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, ...f };
 }
 
 let w: World;
@@ -945,9 +947,9 @@ describe("unseen", () => {
   test("marking unread rings a row nothing has run in, and looking at it clears the mark", async () => {
     await registered();
     const main = w.state.worktrees.find((x) => x.kind === "main")!;
-    w.worktrees.markUnread(main.id);
+    w.turns.markUnread(main.id);
     expect(await unseenOf(main.id)).toBe(true);
-    w.worktrees.markSeen(main.id);
+    w.turns.markSeen(main.id);
     expect(await unseenOf(main.id)).toBeUndefined();
     expect(w.state.worktree(main.id)?.unread).toBeUndefined();
   });
@@ -957,9 +959,9 @@ describe("unseen", () => {
     const main = w.state.worktrees.find((x) => x.kind === "main")!;
     w.hub.emit("agentStatus", main.id, "working");
     w.hub.emit("agentStatus", main.id, "idle");
-    w.worktrees.markSeen(main.id);
+    w.turns.markSeen(main.id);
     expect(await unseenOf(main.id)).toBeUndefined();
-    w.worktrees.markUnread(main.id);
+    w.turns.markUnread(main.id);
     expect(await unseenOf(main.id)).toBe(true);
   });
 
@@ -977,7 +979,7 @@ describe("unseen", () => {
     expect(await unseenOf(main.id)).toBe(true);
     // an agent finishing is not someone sending: the row keeps its place
     expect(w.state.worktree(main.id)?.promptedAt).toBeUndefined();
-    w.worktrees.markSeen(main.id);
+    w.turns.markSeen(main.id);
     expect(await unseenOf(main.id)).toBeUndefined();
   });
 
@@ -1005,7 +1007,7 @@ describe("unseen", () => {
     const main = w.state.worktrees.find((x) => x.kind === "main")!;
     w.hub.emit("agentStatus", main.id, "working");
     w.hub.emit("agentStatus", main.id, "idle");
-    w.worktrees.markSeen(main.id);
+    w.turns.markSeen(main.id);
     // the clock is coarse enough that a second turn inside the same millisecond would look seen
     w.state.worktree(main.id)!.seenAt = Date.now() - 1_000;
     w.hub.emit("agentStatus", main.id, "working");

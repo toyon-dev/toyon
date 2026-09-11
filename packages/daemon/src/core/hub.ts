@@ -2,7 +2,7 @@
 // push to which client. Synchronous on purpose: an AcpSession emit runs the hub and then git
 // status inline today, and changing that backpressure is a later job, not this file's.
 
-import type { AgentCommand, AgentEvent, AgentStatus, ProcState } from "@toyon/shared";
+import type { AgentCommand, AgentEvent, AgentStatus, LastTurn, ProcState } from "@toyon/shared";
 import { log } from "./log.ts";
 
 export interface HubEvents {
@@ -10,6 +10,8 @@ export interface HubEvents {
   log: (worktreeId: string, proc: string, line: string) => void;
   agent: (worktreeId: string, seq: number, event: AgentEvent) => void;
   agentStatus: (worktreeId: string, status: AgentStatus) => void;
+  /** the agent stopped (finished, was stopped, failed, or is blocked asking) and the record says how */
+  turnSettled: (worktreeId: string, turn: LastTurn) => void;
   queue: (worktreeId: string, items: string[]) => void;
   /** the worktree's agent advertised a new slash-command list */
   agentCommands: (worktreeId: string, commands: AgentCommand[]) => void;

@@ -23,6 +23,11 @@ const row = (id: string, w: Partial<WorktreeInfo> = {}): OwnedWorktree => ({
   },
 });
 const ids = (rows: OwnedWorktree[]) => railOrder(rows).map((r) => r.id);
+const turned = (at: number): WorktreeInfo["lastTurn"] => ({
+  at,
+  end: "done",
+  facts: { turns: 1, edits: 0, toolErrors: 0 },
+});
 
 describe("railOrder", () => {
   test("main leads, then the most recently sent to, then landed work", () => {
@@ -36,7 +41,7 @@ describe("railOrder", () => {
   });
 
   test("an agent finishing a turn never outranks a send", () => {
-    expect(ids([row("sent", { promptedAt: 5 }), row("busy", { promptedAt: 1, lastTurnAt: 99 })])).toEqual([
+    expect(ids([row("sent", { promptedAt: 5 }), row("busy", { promptedAt: 1, lastTurn: turned(99) })])).toEqual([
       "sent",
       "busy",
     ]);
@@ -45,7 +50,7 @@ describe("railOrder", () => {
   test("a row from before sends were stamped falls back to its last turn, then to when it was made", () => {
     const rows = [
       row("made", { createdAt: 3 }),
-      row("turned", { createdAt: 1, lastTurnAt: 4 }),
+      row("turned", { createdAt: 1, lastTurn: turned(4) }),
       row("sent", { promptedAt: 2 }),
     ];
     expect(ids(rows)).toEqual(["turned", "made", "sent"]);

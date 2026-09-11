@@ -18,6 +18,7 @@ import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
 import { RefSearch } from "../worktrees/refs.ts";
 import { WorktreeService } from "../worktrees/service.ts";
+import { TurnService } from "../worktrees/turns.ts";
 import { dispatch, type HandlerCtx, handlers, type Services } from "./handlers.ts";
 
 let cleanup = () => {};
@@ -58,6 +59,7 @@ function make() {
     ...f.factories,
   });
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
+  const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees });
   const files = new FileService(state, runtime, (id) => worktrees.readable(id));
   const design = new DesignService((id) => worktrees.readable(id));
@@ -80,6 +82,7 @@ function make() {
     hub,
     repos,
     worktrees,
+    turns,
     files,
     design,
     routes,

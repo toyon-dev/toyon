@@ -10,6 +10,7 @@ export type ChordId =
   | "search"
   | "left"
   | "right"
+  | "composer"
   | "rail"
   | "keys"
   | "pick"
@@ -62,6 +63,10 @@ export const CHORDS: readonly Chord[] = [
   { id: "search", key: "f", shift: true },
   { id: "left", key: "b" },
   { id: "right", key: "j" },
+  // ⌘L is Cursor's key for the chat box, so it is the one a hand already reaches for. It only ever
+  // puts the caret in the box, opening the chat panel if it must; ⌘J is the toggle. A tab may lose
+  // it to the address bar, an installed app always sees it.
+  { id: "composer", key: "l" },
   // ⌘⇧K next to ⌘K: one makes a worktree, the other shows the panel of them. Firefox takes ⌘⇧K
   // for the web console before the page sees it, so ⌘⇧L is the alias it advertises there
   {

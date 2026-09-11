@@ -17,6 +17,8 @@ describe("matchChord", () => {
     expect(matchChord(ev("p"))).toEqual({ id: "quick-open" });
     expect(matchChord(ev("."))).toEqual({ id: "zen" });
     expect(matchChord(ev(","))).toEqual({ id: "keys" }); // macOS preferences key
+    expect(matchChord(ev("l"))).toEqual({ id: "composer" });
+    expect(matchChord(ev("L", { shift: true }))).toEqual({ id: "rail" }); // shift keeps the rail's Firefox alias apart
     expect(matchChord(ev("/"))).toBeNull(); // left to Monaco's toggle-comment
   });
   test("shift chords match whether the browser reports upper or lower case", () => {

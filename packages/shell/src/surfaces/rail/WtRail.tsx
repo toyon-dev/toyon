@@ -1,5 +1,5 @@
 import { canGraft, isMain, isOwned, type OwnedWorktree, type WorktreeStatus } from "@toyon/shared";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   discoveredItems,
   removeWorktrees,
@@ -50,6 +50,19 @@ export function WtRail() {
   const offline = useOffline();
   const leftOpen = useStore((s) => s.leftOpen);
   const railOpen = useStore((s) => s.railOpen);
+  // ⌘⇧K hands the keyboard to the row marked current (the active worktree, or the new-worktree row
+  // while drafting) so ↑↓ walk on from there; only a bump seen after mount counts
+  const focusReq = useStore((s) => s.focusRail);
+  const answered = useRef(focusReq);
+  const listRef = useRef<HTMLDivElement>(null);
+  useOnChange([focusReq], () => {
+    if (focusReq === answered.current) return;
+    answered.current = focusReq;
+    const f = requestAnimationFrame(() =>
+      listRef.current?.querySelector<HTMLElement>('[data-state~="current"]')?.focus(),
+    );
+    return () => cancelAnimationFrame(f);
+  });
   const termOpen = useStore((s) => s.termOpen);
   const repos = useStore((s) => s.repos);
   const shipping = useStore((s) => s.shipping);
@@ -317,7 +330,7 @@ export function WtRail() {
         data-tip={offline ? "Lost the daemon; retrying" : undefined}
         data-tip-placement="follow"
       >
-        <div className="rail-list">
+        <div className="rail-list" ref={listRef}>
           {worktrees.map(railRow)}
           {graftMode && (
             <div className="rail-graft">

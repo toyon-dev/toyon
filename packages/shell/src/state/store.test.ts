@@ -628,6 +628,16 @@ describe("git status", () => {
     // take focus the first time
     expect(reducer(once, { a: "focus-left" }).focusLeft).toBe(once.focusLeft + 1);
   });
+  test("focus-right and focus-rail open their panels and ask for the keyboard every time", () => {
+    const s = run([hello(wt("main", "main"))]);
+    const shut = reducer(reducer(s, { a: "toggle-right" }), { a: "toggle-rail" });
+    const right = reducer(shut, { a: "focus-right" });
+    expect([shut.rightOpen, right.rightOpen, right.focusRight]).toEqual([false, true, shut.focusRight + 1]);
+    expect(reducer(right, { a: "focus-right" }).focusRight).toBe(right.focusRight + 1);
+    const rail = reducer({ ...shut, railOpen: false }, { a: "focus-rail" });
+    expect([rail.railOpen, rail.focusRail]).toEqual([true, shut.focusRail + 1]);
+    expect(reducer(rail, { a: "focus-rail" }).focusRail).toBe(rail.focusRail + 1);
+  });
 });
 
 describe("terminal tabs", () => {

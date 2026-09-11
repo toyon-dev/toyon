@@ -82,22 +82,29 @@ export function sameTools(a: ToolItem[], b: ToolItem[]): boolean {
   return a.length === b.length && a.every((item, i) => item === b[i]);
 }
 
-/** Which row of the turn has its output open while the agent works, or -1. It is the newest call
- * that opens itself and has something to show, rather than the newest call: a call lands a moment
- * before anything it prints, and handing the open row to it then closed the diff you were reading
- * onto a spinner with nothing under it. A read or a run never opens itself, so a diff stays open
- * over them until the next change has a diff of its own, or the turn ends. The search stops at the
- * message that started the turn, since a diff from the turn before is not the work in hand. */
+/** Which row of the turn has its output open while the agent works, or -1. A diff stays open until
+ * something after it has something to show: the agent's words, a call that has come back, or the
+ * next change's own diff. Handing the open row to the newest call instead closed the diff the moment
+ * a call started, a beat before that call had anything in it, onto a spinner with nothing under it.
+ * Any message ends the search, the one that started the turn included, so a diff from the turn
+ * before is never reopened. */
 export function openRow(entries: ChatEntry[], roots: string[]): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i]!;
     if (!("tools" in entry)) {
-      if (entry.item.kind === "user") return -1;
+      if (says(entry.item)) return -1;
       continue;
     }
     if (AUTO_OPEN.has(entry.tools[0]?.toolKind ?? "other") && entry.tools.some((t) => shows(t, roots))) return i;
+    if (entry.tools.some((t) => t.done)) return -1;
   }
   return -1;
+}
+
+/** a message or a thought still waiting for its first words has nothing to read yet; every other
+ * item is there to be read the moment it lands */
+function says(item: Exclude<ChatItem, { kind: "tool" }>): boolean {
+  return item.kind === "assistant" || item.kind === "thinking" ? !!item.text.trim() : true;
 }
 
 /** the log asks this of the open row on every streamed token, and a call's item is replaced

@@ -685,6 +685,8 @@ export class WorktreeService {
       path,
       branch,
       proxyPort: await allocateProxyPort(),
+      // bringing it back is going back to work in it, so it sits with what you last sent to
+      promptedAt: Date.now(),
       ...(createdBy ? { createdBy } : {}),
     };
     try {

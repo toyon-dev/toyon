@@ -65,12 +65,12 @@ function storedLastActive(): Record<string, string> {
   return out;
 }
 
-/** which projects had the discovered section open. Anything that is not a boolean is dropped: the
- * cost of a bad value is a section that starts collapsed, which is the default anyway. */
-function storedDiscoveredOpen(): Record<string, boolean> {
+/** which projects had one of the rail's sections open. Anything that is not a boolean is dropped:
+ * the cost of a bad value is a section that starts collapsed, which is the default anyway. */
+function storedSectionOpen(key: string): Record<string, boolean> {
   const out: Record<string, boolean> = {};
   try {
-    const raw: unknown = JSON.parse(read(localStorage, STORAGE.discoveredOpen) ?? "{}");
+    const raw: unknown = JSON.parse(read(localStorage, key) ?? "{}");
     if (!raw || typeof raw !== "object") return out;
     for (const [repoId, open] of Object.entries(raw as Record<string, unknown>)) {
       if (typeof open === "boolean") out[repoId] = open;
@@ -99,7 +99,8 @@ const store = createStore(
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",
     storedPanels: storedPanels(),
     storedLastActive: storedLastActive(),
-    storedDiscoveredOpen: storedDiscoveredOpen(),
+    storedDiscoveredOpen: storedSectionOpen(STORAGE.discoveredOpen),
+    storedArchivedOpen: storedSectionOpen(STORAGE.archivedOpen),
     clientId: clientId(),
   }),
 );

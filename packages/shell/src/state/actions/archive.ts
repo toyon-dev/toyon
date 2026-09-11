@@ -1,7 +1,17 @@
 import type { ArchivedWorktree } from "@toyon/shared";
+import { ago } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { copyText, type Deps } from "./deps.ts";
+
+/** what an archived worktree's row says beside its title, in the picker and on the rail: how it
+ * ended, what came with it, and how long ago */
+export function archivedHint(a: ArchivedWorktree): string {
+  const parts = [a.landed ? "merged" : a.uncommitted ? "uncommitted changes" : null];
+  if (!a.restorable) parts.push("commits not kept");
+  parts.push(ago(a.archivedAt));
+  return parts.filter(Boolean).join(" · ");
+}
 
 /** bring an archived worktree back; this tab focuses its row when the daemon lists it */
 export function restoreArchived(sock: DaemonSocket | null, archiveId: string, clientId: string) {

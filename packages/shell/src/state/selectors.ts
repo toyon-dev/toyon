@@ -1,7 +1,7 @@
 // Selector hooks. Each returns a field or a stable constant so a component re-renders only when
 // what it reads changes (useSyncExternalStore compares by identity: never build a fresh object here).
 
-import type { OwnedWorktree, RepoInfo, WorktreeStatus } from "@toyon/shared";
+import type { ArchivedWorktree, OwnedWorktree, RepoInfo, WorktreeStatus } from "@toyon/shared";
 import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
 import {
@@ -43,6 +43,16 @@ export const useVisibleDiscovered = () => useStore((s) => s.visibleDiscovered);
 /** has the discovered section been opened in this project (collapsed by default) */
 export const useDiscoveredOpen = (): boolean =>
   useStore((s) => (s.activeRepoId ? (s.discoveredOpen[s.activeRepoId] ?? false) : false));
+
+const NO_ARCHIVED: ArchivedWorktree[] = [];
+
+/** the active project's archived worktrees, newest first; the same empty list until the daemon answers */
+export const useVisibleArchived = (): ArchivedWorktree[] =>
+  useStore((s) => (s.activeRepoId ? (s.archived[s.activeRepoId] ?? NO_ARCHIVED) : NO_ARCHIVED));
+
+/** has the archived section been opened in this project (collapsed by default) */
+export const useArchivedOpen = (): boolean =>
+  useStore((s) => (s.activeRepoId ? (s.archivedOpen[s.activeRepoId] ?? false) : false));
 
 /** the project the shell is scoped to (an element of the repos array, so its identity is stable) */
 export const useActiveRepo = (): RepoInfo | null => useStore((s) => repoById(s, s.activeRepoId));

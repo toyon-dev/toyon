@@ -180,6 +180,8 @@ describe("archive", () => {
     const back = await w.worktrees.restore(wt.id, "tab-1");
     await settle();
     expect(back).toMatchObject({ id: wt.id, path: wt.path, branch: wt.branch, createdBy: "tab-1" });
+    // back to work in it: the rail puts it with what was last sent to
+    expect(back.promptedAt).toBeGreaterThan(wt.promptedAt ?? 0);
     expect(sh(back.path, "git", "rev-parse", "HEAD")).toBe(head);
     expect(readFileSync(join(back.path, "README.md"), "utf8")).toBe("edited\n");
     expect(readFileSync(join(back.path, "wip.txt"), "utf8")).toBe("untracked\n");

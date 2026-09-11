@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { ghostOf, jumpTo, sectionStarts, step } from "./listNav.ts";
+import { asNarrow, ghostOf, jumpTo, sectionStarts, step } from "./listNav.ts";
+
+test("a narrowing row's answer is a query, and may carry the range of it to select", () => {
+  expect(asNarrow("/a")).toEqual({ q: "/a" });
+  expect(asNarrow({ q: "/users/[id]", select: [7, 11] })).toEqual({ q: "/users/[id]", select: [7, 11] });
+});
 
 test("a rule starts where the group changes, never above the first row", () => {
   const rows = [

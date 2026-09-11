@@ -40,6 +40,15 @@ export function sectionStarts<T>(results: T[], groupOf?: (t: T) => string): bool
   return results.map((t, i) => i > 0 && groupOf(t) !== groupOf(results[i - 1]!));
 }
 
+/** what a row that narrows the search leaves in the field: the query it becomes, and a range of it
+ * to select, so the next keystroke replaces that part (a template's parameter) */
+export type Narrow = { q: string; select?: [number, number] };
+
+/** a narrowTo answer in one shape: a bare string is a query with nothing selected */
+export function asNarrow(next: string | Narrow): Narrow {
+  return typeof next === "string" ? { q: next } : next;
+}
+
 export interface ListNav<T> {
   /** already clamped: results can shrink under the highlight when the source is async */
   index: number;
@@ -62,13 +71,16 @@ export function useListNav<T>(opts: {
   onActive?: (t: T | null) => void;
   onSide?: (t: T, dir: -1 | 1) => void;
   completionOf?: (t: T, q: string) => string | null;
-  narrowTo?: (t: T, q: string) => string | null;
+  narrowTo?: (t: T, q: string) => string | Narrow | null;
+  /** a row narrowed the query, which is already set: for a host that selects part of it */
+  onNarrow?: (n: Narrow) => void;
   setQ?: (q: string) => void;
   initialIndex?: (results: T[]) => number;
   /** tab picks the row instead of completing the query: for a host with no ghost to align to */
   tabPicks?: boolean;
 }): ListNav<T> {
-  const { results, keyOf, q, onPick, listRef, onActive, onSide, completionOf, narrowTo, setQ, tabPicks } = opts;
+  const { results, keyOf, q, onPick, listRef, onActive, onSide, completionOf, narrowTo, onNarrow, setQ, tabPicks } =
+    opts;
   const [idx, setIdx] = useState(() => Math.max(0, opts.initialIndex?.(results) ?? 0));
   // keyed on the row's key, not the results array: parents rebuild items every render, and a
   // re-report on identity change would reset any state they keep for the active row (←→ peek)
@@ -89,8 +101,10 @@ export function useListNav<T>(opts: {
   const pick = (t: T) => {
     const next = narrowTo?.(t, q);
     if (next == null) return onPick(t, q);
-    setQ?.(next);
+    const n = asNarrow(next);
+    setQ?.(n.q);
     setIdx(0);
+    onNarrow?.(n);
   };
 
   const onKeyDown = (e: { key: string; preventDefault: () => void }): boolean => {

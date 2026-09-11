@@ -25,6 +25,7 @@ import type {
   WorktreeStatus,
 } from "../model.ts";
 import { SHELL_STREAM } from "../model.ts";
+import type { RouteInfo } from "../routes.ts";
 import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta } from "./events.ts";
 import {
   FILE_MAX_CHARS,
@@ -70,6 +71,8 @@ export type ServerMsg =
   | { t: "repos"; repos: RepoInfo[] }
   /** one repo's most used preview pages, sent when their order changes */
   | { t: "visits"; repoId: string; paths: string[] }
+  /** the pages a worktree's files define: the reply to the route bar's list opening */
+  | { t: "routes"; worktreeId: string; routes: RouteInfo[] }
   /** clones in flight: shown in the switcher and watched in the import pane */
   | { t: "pending-repos"; pending: PendingRepo[] }
   /** directories matching what the project picker has typed so far, plus what the typed path
@@ -368,6 +371,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("visit"), worktreeId: id, path: routePath }),
   /** take a page off the repo's list */
   z.object({ t: z.literal("forget-visit"), repoId: id, path: routePath }),
+  /** the pages the worktree's files define, for the route bar's list; replies `routes` */
+  z.object({ t: z.literal("routes"), worktreeId: id }),
   z.object({ t: z.literal("pick-variant"), worktreeId: id }),
   z.object({ t: z.literal("unqueue"), worktreeId: id, index: z.number().int().min(0) }),
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),

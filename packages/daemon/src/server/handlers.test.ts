@@ -193,6 +193,22 @@ describe("handlers", () => {
     expect(Object.keys(new StateStore(paths).visitsOf(r.id) ?? {})).toEqual(["/about"]);
   });
 
+  test("routes replies with the pages a Next app's files define, uncommitted ones included", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await Bun.write(`${main.path}/package.json`, JSON.stringify({ dependencies: { next: "15.0.0" } }));
+    for (const f of ["app/page.tsx", "app/(marketing)/about/page.tsx", "app/users/[id]/page.tsx"]) {
+      await Bun.write(`${main.path}/${f}`, "export default function Page() {\n  return null;\n}\n");
+    }
+    await dispatch({ t: "routes", worktreeId: main.id }, ctx, services);
+    const reply = replies.at(-1);
+    if (reply?.t !== "routes") throw new Error("expected a routes reply");
+    expect(reply.routes.map((x) => x.path)).toEqual(["/", "/about", "/users/[id]"]);
+    expect(reply.routes.at(-1)).toMatchObject({ source: "next", file: "app/users/[id]/page.tsx", dynamic: true });
+    await expect(dispatch({ t: "routes", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+  });
+
   test("subscribe registers the socket and replies backfill + queue + commands + git-status to the caller only", async () => {
     const { services, ctx, replies, broadcasts, subs, repo } = make();
     const r = await services.repos.register(repo);

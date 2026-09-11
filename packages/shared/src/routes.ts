@@ -4,6 +4,22 @@
 
 const BASE = "http://preview.invalid";
 
+/** the router whose file layout a page was read from */
+export type RouteSource = "next" | "nuxt" | "sveltekit" | "remix" | "astro" | "solid" | "tanstack";
+
+/** a page, or an endpoint, that a worktree's files define under a file-based router */
+export interface RouteInfo {
+  /** in the router's own syntax for a parameter: `/users/[id]`, `/users/:id`, `/users/$id` */
+  path: string;
+  source: RouteSource;
+  /** the file that defines it, relative to the worktree */
+  file: string;
+  /** has a parameter, so it is a template to fill in rather than a place */
+  dynamic: boolean;
+  /** answers requests rather than drawing a page: a Next route handler, a SvelteKit +server */
+  endpoint: boolean;
+}
+
 /**
  * The page an address names, as the route bar lists it: the path, plus the hash when the app routes
  * on it (`#/about`). The query is dropped, inside a hash route too: `?tab=2` would split one page

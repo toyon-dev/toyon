@@ -107,6 +107,21 @@ interface Instance {
   dispose(): void;
 }
 
+/** One open of this file: its text, and what has already been handed to whichever editor shows it.
+ * Everything that describes the open lives here rather than in a ref of its own, so it is made and
+ * thrown away with the open. StrictMode's rehearsal ends the open and starts it again on the same
+ * component, and the new one starts clean with nothing left over to reset. */
+interface Session {
+  modified: monaco.editor.ITextModel;
+  original: monaco.editor.ITextModel;
+  /** where the last editor over this file left off, for the next view to pick up */
+  place: monaco.editor.ICodeEditorViewState | null;
+  /** the open whose line has been revealed: the same line on a later render is not another request */
+  revealedFor: number | null;
+  /** the open that has been given the keyboard */
+  focusedFor: number | null;
+}
+
 export default function Editor({
   file,
   disk,
@@ -158,14 +173,10 @@ export default function Editor({
   readOnlyRef.current = readOnly;
   const lineRef = useRef(line);
   lineRef.current = line;
-  const models = useRef<{ modified: monaco.editor.ITextModel; original: monaco.editor.ITextModel } | null>(null);
+  const session = useRef<Session | null>(null);
   const instance = useRef<Instance | null>(null);
-  /** where the last editor over this file left off, for the next view to pick up */
-  const place = useRef<monaco.editor.ICodeEditorViewState | null>(null);
-  const revealedFor = useRef<number | null>(null);
-  const focusedFor = useRef<number | null>(null);
 
-  // The models, for as long as this file is open: the pane keys this component by file, so another
+  // The session, for as long as this file is open: the pane keys this component by file, so another
   // file is another mount. `sync` is taken once here, so an edit still owed to disk on the way out
   // goes to this file whatever the props say by then.
   useOnChange([file.worktreeId, file.path, file.ref], () => {
@@ -175,7 +186,7 @@ export default function Editor({
     const scope = `/${file.worktreeId}/${file.ref ?? "work"}`;
     const modified = monaco.editor.createModel(disk.after, undefined, monaco.Uri.file(`${scope}/after/${file.path}`));
     const original = monaco.editor.createModel(disk.before, undefined, monaco.Uri.file(`${scope}/before/${file.path}`));
-    models.current = { modified, original };
+    session.current = { modified, original, place: null, revealedFor: null, focusedFor: null };
     let applying = false;
     const buffer: SyncBuffer = {
       text: () => modified.getValue(),
@@ -222,7 +233,7 @@ export default function Editor({
       el.removeEventListener("focusout", onFocusOut);
       instance.current?.dispose();
       instance.current = null;
-      models.current = null;
+      session.current = null;
       modified.dispose();
       original.dispose();
       // and only into a page where nothing else has taken the keyboard since
@@ -233,16 +244,16 @@ export default function Editor({
 
   // the diff's other side is history nobody edits, so a fresh read simply replaces it
   useOnChange([disk.before], () => {
-    const m = models.current;
+    const m = session.current;
     if (m && m.original.getValue() !== disk.before) m.original.setValue(disk.before);
   });
 
   // one editor per view, over the same models
   useOnChange([view], () => {
     const el = ref.current;
-    const m = models.current;
+    const m = session.current;
     if (!el || !m) return;
-    const restored = place.current;
+    const restored = m.place;
     const unchanged = m.original.getValue() === m.modified.getValue();
     const options = editorOptions(readOnlyRef.current);
     let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
@@ -378,7 +389,7 @@ export default function Editor({
     return () => {
       // the models' own teardown may have got here first
       if (instance.current !== mine) return;
-      place.current = code.saveViewState();
+      m.place = code.saveViewState();
       mine.dispose();
       instance.current = null;
     };
@@ -391,9 +402,10 @@ export default function Editor({
   // a jump is made once per open: the same line on a later render is not another request to go there
   useOnChange([openSeq, line], () => {
     const code = instance.current?.code;
-    const model = models.current?.modified;
-    if (!code || !model || line === undefined || revealedFor.current === openSeq) return;
-    revealedFor.current = openSeq;
+    const s = session.current;
+    if (!code || !s || line === undefined || s.revealedFor === openSeq) return;
+    s.revealedFor = openSeq;
+    const model = s.modified;
     const ln = Math.max(1, Math.min(line, model.getLineCount()));
     // on the line's first character rather than its indent: for a picked element that is the tag
     // itself. A blank line has no first character and reports 0.
@@ -403,8 +415,9 @@ export default function Editor({
 
   // the keyboard follows a file opened on purpose, once per open; one walked to in a list stays there
   useOnChange([openSeq], () => {
-    if (!focus || focusedFor.current === openSeq) return;
-    focusedFor.current = openSeq;
+    const s = session.current;
+    if (!focus || !s || s.focusedFor === openSeq) return;
+    s.focusedFor = openSeq;
     instance.current?.code.focus();
   });
 

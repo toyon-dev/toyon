@@ -59,6 +59,9 @@ export type ServerMsg =
       /** the daemon can open the OS folder dialog where the person is: a macOS daemon running
        * locally. Anywhere else the dialog would open on a screen nobody at this shell can see. */
       folderDialog: boolean;
+      /** git has a name and email to commit with. Making a project commits, and someone who has
+       * never used git has neither, so the new-project page asks for them when this is false. */
+      gitIdentity: boolean;
       /** each repo's remembered preview pages, best first, with their titles: the route bar's
        * history, there on first paint */
       visits: Record<string, PageEntry[]>;
@@ -449,19 +452,32 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
       name: z.string().min(1).max(100),
       /** clone only: what to clone from. Any git remote, not just GitHub */
       url: z.string().min(1).max(2_000).optional(),
+      /** git's name and email, written to the global config before the first commit, for someone
+       * whose git has none (hello's `gitIdentity`) */
+      identity: z
+        .object({ name: z.string().trim().min(1).max(200), email: z.string().trim().min(1).max(254) })
+        .optional(),
     })
     .superRefine((m, ctx) => {
       if (m.mode === "clone" && !m.url) ctx.addIssue({ code: "custom", path: ["url"], message: "a clone needs a url" });
       if (m.mode !== "clone" && m.url)
         ctx.addIssue({ code: "custom", path: ["url"], message: "only a clone takes a url" });
     }),
+  /** take back a project toyon made (`RepoInfo.made`) that is still exactly as it was made: forget it
+   * and remove what was made, so the new-project page can make it again under another name or place */
+  z.object({ t: z.literal("unmake-repo"), repoId: id }),
   /** stop a clone that is still running and forget it; the half-made folder goes with it */
   z.object({ t: z.literal("cancel-import"), id }),
   /** what directories could complete this partial path (project picker autocomplete) */
   z.object({ t: z.literal("browse-path"), path: z.string().max(4_000) }),
-  /** open the OS folder dialog at `start` (the new-project form's folder button); answered with
+  /** open the OS folder dialog at `start`, for where a new project goes or for a project folder to
+   * open (the new-project page's two folder controls, which the dialog's prompt names); answered with
    * `folder-chosen` */
-  z.object({ t: z.literal("choose-folder"), start: z.string().max(4_000) }),
+  z.object({
+    t: z.literal("choose-folder"),
+    start: z.string().max(4_000),
+    purpose: z.enum(["location", "open"]),
+  }),
   /** close the dialog `choose-folder` opened: Escape in the shell while it is up, or the form closing */
   z.object({ t: z.literal("cancel-folder") }),
   /** drop a repo from the daemon; refused while it still has task worktrees */

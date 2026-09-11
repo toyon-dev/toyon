@@ -9,8 +9,9 @@
 
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { appendFile, mkdir, rm } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { projectNameError } from "@toyon/shared";
+import { PROJECTS_FOLDER, projectNameError } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import { GIT, git, NO_PROMPT, runLive } from "../git/exec.ts";
@@ -27,8 +28,11 @@ export interface CreateOpts {
   url?: string;
 }
 
-/** where a project is going: both modes need one new leaf under a parent that is already there */
-export type Plan = { parent: string; dir: string };
+/** where a project is going: both modes need one new leaf under a parent that is already there.
+ * `makeParent` is the one exception, a first project's `~/Projects` (see `firstProjectsFolder`). */
+export type Plan = { parent: string; dir: string; makeParent: boolean };
+
+export type GitIdentity = { name: string; email: string };
 
 /** `dir` is `parent` or sits under it. Compared on segment boundaries, so `/a/bc` is not inside
  * `/a/b`, which a plain `startsWith` would get wrong. */
@@ -39,13 +43,25 @@ export function isInside(dir: string, parent: string): boolean {
 
 /** Where a new project would go, once its name and location are known to be usable. Split out from
  * the making so the rules can be tested without touching a filesystem more than they must. */
-export function planProject(opts: { parent: string; name: string }): Plan {
+export function planProject(opts: { parent: string; name: string }, home = homedir()): Plan {
   const nameError = projectNameError(opts.name);
   if (nameError) throw new UserError(nameError);
-  const parent = resolveParent(opts.parent);
+  const first = firstProjectsFolder(opts.parent, home);
+  const parent = first ?? resolveParent(opts.parent);
   const dir = join(parent, opts.name.trim());
   if (existsSync(dir)) throw new UserError(`${dir} already exists`);
-  return { parent, dir };
+  return { parent, dir, makeParent: first !== null };
+}
+
+/** The one parent that may be missing: `~/Projects`, which is where the new-project page puts a
+ * first project when there are no others to put it beside, and which a person who has never kept
+ * projects anywhere does not have. Named rather than allowed by a recursive mkdir, so the rule keeps
+ * exactly one exception and a typo'd parent is still refused. */
+function firstProjectsFolder(raw: string, home: string): string | null {
+  const typed = expandTilde(raw.trim()).replace(/\/+$/, "");
+  if (typed !== join(home, PROJECTS_FOLDER) || existsSync(typed) || !existsSync(home)) return null;
+  // canonical for the containment check, the way resolveParent's answer is
+  return join(realpathSync(home), PROJECTS_FOLDER);
 }
 
 /** Where a project made in place would be: an empty folder that is already there, most likely one
@@ -65,7 +81,7 @@ export function planInPlace(opts: { parent: string; name: string }): Plan {
   if (!holdsNothing(readdirSync(dir))) {
     throw new UserError(`${dir} is not empty; only an empty folder can become a project where it is`);
   }
-  return { parent: dirname(dir), dir };
+  return { parent: dirname(dir), dir, makeParent: false };
 }
 
 function resolveParent(raw: string): string {
@@ -89,11 +105,13 @@ function resolveParent(raw: string): string {
  * the directory empty, which is the only state scaffolders like create-vite will run in, so the
  * first thing the person does here is not blocked by a README we left them.
  */
-export async function createRepoDir(opts: { parent: string; name: string }): Promise<string> {
-  const { parent, dir } = planProject(opts);
+export async function createRepoDir(opts: { parent: string; name: string }, home = homedir()): Promise<string> {
+  const { parent, dir, makeParent } = planProject(opts, home);
   // checked before anything is made, so the commonest failure has nothing to roll back
-  await requireGitIdentity(parent);
-  await mkdir(dir); // NOT recursive: this call is the one-new-leaf rule
+  await requireGitIdentity(makeParent ? home : parent);
+  // NOT recursive, either of them: these two calls are the one-new-leaf rule and its one exception
+  if (makeParent) await mkdir(parent);
+  await mkdir(dir);
   try {
     await initWithEmptyCommit(dir);
   } catch (e) {
@@ -161,6 +179,7 @@ export async function cloneInto(
   opts: { onLine?: (line: string) => void; signal?: AbortSignal } = {},
 ): Promise<void> {
   if (!url) throw new UserError("a clone needs a url");
+  if (plan.makeParent) await mkdir(plan.parent);
   // No --depth: a shallow clone cannot be branched from usefully, and land, sync and graft all
   // assume real history. NO_PROMPT is what stops a credential-less URL hanging forever.
   // --progress because git only draws it when stderr is a terminal, and here it never is.
@@ -210,13 +229,37 @@ async function undoInit(dir: string): Promise<void> {
   }
 }
 
-/** git refuses to commit without an identity, and the daemon must not invent one */
-async function requireGitIdentity(cwd: string): Promise<void> {
+/** Take back a project this module made, once the registry has established it is untouched: the
+ * folder when it was made here, only its .git when the folder was already the person's. Unlike the
+ * undo after a failed create, a failure is the answer here, since the person asked for it. */
+export async function unmakeProject(dir: string, made: "folder" | "git"): Promise<void> {
+  const target = made === "folder" ? dir : join(dir, ".git");
+  try {
+    await rm(target, { recursive: true, force: true });
+  } catch (e) {
+    throw new UserError(`could not remove ${target}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** git has a name and an email to commit with, from wherever its config puts them */
+export async function hasGitIdentity(cwd: string): Promise<boolean> {
   const [email, name] = await Promise.all([
     git(cwd, "config", "--get", "user.email"),
     git(cwd, "config", "--get", "user.name"),
   ]);
-  if (!email.out || !name.out) {
+  return !!email.out && !!name.out;
+}
+
+/** The person's own name and email, typed on the new-project page, into their global config. The
+ * daemon still never invents one; this writes what someone told it, where a terminal would have. */
+export async function setGitIdentity(identity: GitIdentity): Promise<void> {
+  await ok(git(homedir(), "config", "--global", "user.name", identity.name.trim()), "git config");
+  await ok(git(homedir(), "config", "--global", "user.email", identity.email.trim()), "git config");
+}
+
+/** git refuses to commit without an identity, and the daemon must not invent one */
+async function requireGitIdentity(cwd: string): Promise<void> {
+  if (!(await hasGitIdentity(cwd))) {
     throw new UserError(
       "git needs your name and email before it can commit: set user.name and user.email in your git config",
     );

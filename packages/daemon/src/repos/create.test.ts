@@ -49,6 +49,26 @@ describe("planProject", () => {
   });
 });
 
+describe("a first project's Projects folder", () => {
+  test("is the one missing parent that gets made, and only directly under home", async () => {
+    const { parent: home, cleanup } = parentDir();
+    const projects = join(home, "Projects");
+    expect(planProject({ parent: projects, name: "first" }, home)).toEqual({
+      parent: projects,
+      dir: join(projects, "first"),
+      makeParent: true,
+    });
+    // any other missing parent is still a typo to refuse
+    expect(() => planProject({ parent: join(home, "Projcts"), name: "first" }, home)).toThrow(UserError);
+    expect(() => planProject({ parent: join(home, "work", "Projects"), name: "first" }, home)).toThrow(UserError);
+    const dir = await createRepoDir({ parent: projects, name: "first" }, home);
+    expect(sh(dir, GIT, "rev-list", "--count", "HEAD")).toBe("1");
+    // and once it is there it is an ordinary parent
+    expect(planProject({ parent: projects, name: "second" }, home).makeParent).toBe(false);
+    cleanup();
+  });
+});
+
 describe("isInside", () => {
   test("compares on segment boundaries, so a shared prefix is not containment", () => {
     expect(isInside("/a/b/c", "/a/b")).toBe(true);

@@ -2,6 +2,11 @@
 // picker offers a row, the form disables a button, and the daemon throws on the same input. Two
 // copies of these rules would disagree the first time either changed.
 
+/** The folder under home a first project goes in when there are no others to put it beside. The
+ * shell offers `~/Projects` and the daemon makes this one missing parent, so the two must name it
+ * the same way. */
+export const PROJECTS_FOLDER = "Projects";
+
 /** Control characters and DEL. `\s` does not cover them and a filesystem will happily take one, so
  * a name carrying one would render as something other than what it is everywhere it appeared.
  * Written as a code-point scan rather than a regex: the character class would need literal control

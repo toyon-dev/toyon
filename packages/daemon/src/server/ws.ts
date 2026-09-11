@@ -284,6 +284,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
+      gitIdentity: await s.repos.gitIdentity(),
       pending: s.repos.pending,
       visits: s.routes.historyAll(),
     }) satisfies ServerMsg;

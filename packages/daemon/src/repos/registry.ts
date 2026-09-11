@@ -2,13 +2,14 @@
 // persisted repo and worktree back up).
 
 import { existsSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { PendingRepo, RepoInfo, ToyonConfig, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
-import { defaultBranch, isGitRepo, repoRoot } from "../git/exec.ts";
+import { defaultBranch, git, isGitRepo, repoRoot } from "../git/exec.ts";
 import { statusFiles, treeEmpty } from "../git/status.ts";
 import { allocateProxyPort, releasePort, reservePort } from "../runtime/ports.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
@@ -20,11 +21,15 @@ import {
   type CreateOpts,
   cloneInto,
   createRepoDir,
+  type GitIdentity,
+  hasGitIdentity,
   initRepoInPlace,
   isInside,
   type Plan,
   planInPlace,
   planProject,
+  setGitIdentity,
+  unmakeProject,
 } from "./create.ts";
 import { watchConfigFile, watchDefaultBranch, watchWorktreeDir } from "./watcher.ts";
 
@@ -45,6 +50,9 @@ export class RepoRegistry {
   private imports = new Map<string, { pending: PendingRepo; abort: AbortController }>();
   /** repos whose worktrees have been started this daemon run; the rest are cold */
   private warmed = new Set<string>();
+  /** whether git can commit without asking, for hello. Kept, since hello goes out on every page
+   * load; a create reads it again, being the one thing in here that changes it. */
+  private identity: Promise<boolean> | null = null;
 
   constructor(private d: RepoRegistryDeps) {
     // A scaffold lands during a turn, and the repo it landed in was registered while empty, so
@@ -108,11 +116,52 @@ export class RepoRegistry {
 
   /** Make a project and open it. The containment check lives here rather than in `create.ts`
    * because it is the only part that needs daemon state: see `refuseIfManaged`. */
-  async create(opts: CreateOpts): Promise<RepoInfo> {
+  async create(opts: CreateOpts & { identity?: GitIdentity }): Promise<RepoInfo> {
     const inPlace = opts.mode === "init";
     const { dir } = inPlace ? planInPlace(opts) : planProject(opts);
     this.refuseIfManaged(dir);
-    return this.register(await (inPlace ? initRepoInPlace(opts) : createRepoDir(opts)));
+    try {
+      // after the plan, so a refused name or place writes nothing to the person's git config
+      if (opts.identity) await setGitIdentity(opts.identity);
+      const path = await (inPlace ? initRepoInPlace(opts) : createRepoDir(opts));
+      return await this.register(path, inPlace ? "git" : "folder");
+    } finally {
+      this.identity = null;
+    }
+  }
+
+  gitIdentity(): Promise<boolean> {
+    this.identity ??= hasGitIdentity(homedir());
+    return this.identity;
+  }
+
+  /** Take back a project made here, for the way back from its first-run screen to the new-project
+   * page. Only one still exactly as it was made: every sign of use is read again from disk and git
+   * rather than trusted from a record, since what a wrong answer here deletes is the person's work. */
+  async unmake(repoId: string): Promise<void> {
+    const repo = this.d.state.requireRepo(repoId);
+    const { made } = repo;
+    if (!made) throw new UserError(`${repo.name} was opened, not made here, so toyon will not remove it`);
+    const used = await this.usedSign(repo);
+    if (used) throw new UserError(`${used}, so it can't be renamed or moved from here`);
+    await this.forget(repoId);
+    await unmakeProject(repo.path, made);
+  }
+
+  /** the first sign that a project has been used since it was made, as the words that say so */
+  private async usedSign(repo: RepoInfo): Promise<string | null> {
+    const mine = this.d.state.worktrees.filter((w) => w.repoId === repo.id);
+    const main = mine.find((w) => w.kind === "main");
+    if (!main || mine.length > 1) return `${repo.name} has worktrees now`;
+    if (!repo.needsSetup) return `${repo.name} is set up now`;
+    if (main.promptedAt || main.lastTurnAt) return `${repo.name} has a chat now`;
+    // an adapter writes its settings here on its first spawn, which is excluded from git's view
+    if (existsSync(join(repo.path, ".claude"))) return `an agent has already run in ${repo.name}`;
+    if ((await statusFiles(repo.path)).length > 0 || !(await treeEmpty(repo.path))) {
+      return `${repo.name} has files in it now`;
+    }
+    if ((await git(repo.path, "rev-list", "--count", "HEAD")).out !== "1") return `${repo.name} has commits now`;
+    return null;
   }
 
   /** A project nested inside a repo or worktree toyon already manages is the thing to prevent, and
@@ -196,7 +245,7 @@ export class RepoRegistry {
     }
   }
 
-  async register(rawPath: string): Promise<RepoInfo> {
+  async register(rawPath: string, made?: RepoInfo["made"]): Promise<RepoInfo> {
     // typed into the project picker: "~/x" is how people write paths, and a shell never expanded it
     const path = expandTilde(rawPath);
     if (!existsSync(path)) throw new UserError(`${path} does not exist`);
@@ -218,6 +267,7 @@ export class RepoRegistry {
       config: detected.config,
       needsSetup: detected.needsSetup,
       guess: detected.from,
+      ...(made ? { made } : {}),
     };
     this.d.state.addRepo(repo);
 

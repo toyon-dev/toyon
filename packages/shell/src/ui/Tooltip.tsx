@@ -33,8 +33,9 @@ export type TipOptions = {
    * tip that names a dot's state, so the colour and the word sit together even when the dot
    * itself is at the other end of the row. */
   dot?: string;
-  /** a word ahead of the text on its line, in the quiet tier: which thing this is, before what
-   * it is doing. The main checkout says `main` here, with its path on the line under. */
+  /** the aside on the text's line, in the quiet tier and held against the box's far edge from the
+   * text: which thing this is and what it has cost, apart from what it is doing. A worktree row
+   * puts `main` and its agent's spend here, with its path on the line under. */
   lead?: string;
 };
 
@@ -257,12 +258,23 @@ export function Tooltips() {
   }, [anchor]);
 
   if (!anchor) return null;
-  return createPortal(
-    <div ref={box} className="tooltip" role="tooltip">
-      {anchor.lead && <span className="tooltip-lead">{anchor.lead}</span>}
+  const head = (
+    <>
       {anchor.dot && <span className={`dot ${anchor.dot} tooltip-dot`} />}
       {anchor.text}
       {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}
+    </>
+  );
+  return createPortal(
+    <div ref={box} className="tooltip" role="tooltip">
+      {anchor.lead ? (
+        <div className="tooltip-line">
+          <span className="tooltip-lead">{anchor.lead}</span>
+          <span>{head}</span>
+        </div>
+      ) : (
+        head
+      )}
       {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
     </div>,
     document.body,

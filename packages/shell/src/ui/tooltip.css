@@ -46,10 +46,18 @@
     margin-left: 12px;
     color: var(--text1);
   }
-  /* the word ahead of the text, set apart the way the key is after it */
+  /* a line with a lead spans the box, lead at the start and text at the end: the text stays against
+   the row it describes, and the lead sits clear of it rather than reading as the start of a phrase.
+   The gap is the key's, the least the two ever get when the line is the widest one. */
+  .tooltip-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
   .tooltip-lead {
-    margin-right: 12px;
     color: var(--text1);
+    text-align: left;
   }
   /* the line under the text, a tier under it: the key's tier, since both are the aside */
   .tooltip-detail {

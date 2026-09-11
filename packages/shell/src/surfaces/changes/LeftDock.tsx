@@ -85,9 +85,10 @@ export function LeftDock({ width }: { width: number }) {
     if (cached) previewBus.post(activeId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
   }, [ranges, activeId]);
 
-  // walking the list opens each file as it arrives, and the keyboard stays here for the next arrow
+  // walking the list opens each file as it arrives, and the keyboard stays here for the next arrow;
+  // Enter is the one that takes it into the file
   const open = useCallback(
-    (path: string) => activeId && openFile({ sock, dispatch }, { worktreeId: activeId, path, focus: false }),
+    (path: string, focus = false) => activeId && openFile({ sock, dispatch }, { worktreeId: activeId, path, focus }),
     [activeId, sock, dispatch],
   );
 
@@ -159,20 +160,20 @@ export function LeftDock({ width }: { width: number }) {
 
   // moving the selection opens the diff, and lights the preview the way hovering the row does
   const select = useCallback(
-    (i: number) => {
+    (i: number, focus = false) => {
       const f = rows[i];
       if (!f) return;
       setSel(i);
-      open(f.path);
+      open(f.path, focus);
       hoverFile(f.path, true);
     },
     [rows, open, hoverFile],
   );
   /** open a file as one commit left it. The sha is the expanded commit's: only one is ever open. */
   const openAt = useCallback(
-    (path: string) => {
+    (path: string, focus = false) => {
       const ref = openShaRef.current;
-      if (activeId && ref) openFile({ sock, dispatch }, { worktreeId: activeId, path, ref, focus: false });
+      if (activeId && ref) openFile({ sock, dispatch }, { worktreeId: activeId, path, ref, focus });
     },
     [activeId, sock, dispatch],
   );
@@ -192,7 +193,7 @@ export function LeftDock({ width }: { width: number }) {
       const r = histRows[i];
       if (!r) return;
       setSel(i);
-      if (r.file) openAt(r.file.path);
+      if (r.file) openAt(r.file.path, true);
       else toggleCommit(r.commit.sha);
     },
     [histRows, openAt, toggleCommit],
@@ -205,9 +206,10 @@ export function LeftDock({ width }: { width: number }) {
       if (hist) moveHist(i);
       else select(i);
     } else if (e.key === "Enter") {
+      // the arrows preview; Enter opens the file with the keyboard in it, and Esc there comes back here
       e.preventDefault();
       if (hist) enterHist(sel);
-      else select(sel);
+      else select(sel, true);
     } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       // ←/→ are both the tab strip's keys and a tree's, and with two tabs they can be both: the
       // tree answers while it has something to say (expand, collapse) and the strip when it does

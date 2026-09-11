@@ -5,6 +5,8 @@ import { AgentPicker } from "./AgentPicker.tsx";
 import { AppearancePicker } from "./AppearancePicker.tsx";
 import { ArchivePicker } from "./ArchivePicker.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
+import { ElementSources } from "./ElementSources.tsx";
+import { FolderPicker } from "./FolderPicker.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
 import { NewProjectOverlay } from "./NewProjectOverlay.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
@@ -24,6 +26,7 @@ export function Overlays() {
     <>
       {overlay?.kind === "quick-open" && activeId && <QuickOpen worktreeId={activeId} />}
       {overlay?.kind === "search" && activeId && <SearchPalette worktreeId={activeId} />}
+      {overlay?.kind === "element-sources" && <ElementSources worktreeId={overlay.worktreeId} hits={overlay.hits} />}
       {overlay?.kind === "refs" && activeRepoId && <RefPicker repoId={activeRepoId} />}
       {overlay?.kind === "archived" && <ArchivePicker repoId={overlay.repoId} />}
       {overlay?.kind === "keys" && <KeysHelp />}
@@ -34,6 +37,7 @@ export function Overlays() {
       {overlay?.kind === "commands" && <CommandPalette />}
       {overlay?.kind === "projects" && overlay.dialog && <ProjectPicker dialog />}
       {overlay?.kind === "new-project" && <NewProjectOverlay overlay={overlay} />}
+      {overlay?.kind === "choose-folder" && <FolderPicker form={overlay.form} />}
     </>
   );
 }

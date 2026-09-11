@@ -139,7 +139,9 @@ export function attachPick(store: Store, frameId: string, picked: PickedElement)
   const s = store.getState();
   const boxId = pickBox(s, frameId);
   if (!boxId) return;
-  const { classes: _classes, route: _route, ...meta } = picked;
+  // what the page showed of the element is for searching the source when it recorded no file; the
+  // agent reads the pick's markup instead
+  const { classes: _classes, route: _route, element: _element, ...meta } = picked;
   const roots = checkoutOf(s, frameId);
   const pick = { ...meta, file: inside(meta.file, roots), callFile: inside(meta.callFile, roots) };
   const waiting = (s.local[boxId]?.attachments ?? []).some((a) => a.kind === "pick" && a.selector === pick.selector);

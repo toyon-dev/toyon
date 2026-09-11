@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { clientMsgSchema, FILE_MAX_CHARS, type ServerMsg, SHELL_STREAM, streamKey } from "@toyon/shared";
 import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
@@ -73,6 +73,7 @@ function make() {
   const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, t.paths.themesDir);
   const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
   const planned: string[][] = [];
+  const chosen: Array<string | null> = [];
   const services: Services = {
     state,
     hub,
@@ -89,6 +90,7 @@ function make() {
     accounts,
     attachments,
     planTasks: async () => planned.shift() ?? null,
+    folderDialog: { choose: async () => chosen.shift() ?? null, cancel: () => {} },
   };
   const replies: ServerMsg[] = [];
   const broadcasts: ServerMsg[] = [];
@@ -106,7 +108,7 @@ function make() {
     watchTerminal: (id, stream) => terms.add(streamKey(id, stream)),
     unwatchTerminal: (id, stream) => terms.delete(streamKey(id, stream)),
   };
-  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, ...f };
+  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, chosen, ...f };
 }
 
 /** the repo registered, and its main row, which the file tests read and write through */
@@ -722,6 +724,60 @@ describe("handlers", () => {
     await dispatch({ t: "register-repo", path: repo }, ctx, services);
     await expect(
       dispatch({ t: "create-repo", mode: "create", parent: repo, name: "nested" }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("choose-folder says what the picked folder is, and a cancel is an answer too", async () => {
+    const { services, ctx, replies, repo, chosen } = make();
+    const root = dirname(repo);
+    const fresh = join(root, "made-in-finder");
+    mkdirSync(fresh);
+    writeFileSync(join(fresh, ".DS_Store"), "");
+    chosen.push(fresh, repo, root, null);
+    const kinds: Array<string | null> = [];
+    for (let i = 0; i < 4; i++) {
+      await dispatch({ t: "choose-folder", start: "~" }, ctx, services);
+      kinds.push(lastOf(replies, "folder-chosen")?.folder?.kind ?? null);
+    }
+    expect(kinds).toEqual(["empty", "project", "folder", null]);
+  });
+
+  test("a dialog that fails still answers, so the form stops waiting", async () => {
+    const { services, ctx, replies } = make();
+    services.folderDialog = {
+      choose: async () => {
+        throw new UserError("no dialog here");
+      },
+      cancel: () => {},
+    };
+    await expect(dispatch({ t: "choose-folder", start: "~" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+    expect(lastOf(replies, "folder-chosen")).toEqual({ t: "folder-chosen", folder: null });
+  });
+
+  test("cancel-folder closes the dialog that is up", async () => {
+    const { services, ctx } = make();
+    let cancels = 0;
+    services.folderDialog = { choose: async () => null, cancel: () => cancels++ };
+    await dispatch({ t: "cancel-folder" }, ctx, services);
+    expect(cancels).toBe(1);
+  });
+
+  test("create-repo init makes an empty folder the project where it stands, name and all", async () => {
+    const { services, ctx, replies, repo } = make();
+    const parent = dirname(repo);
+    mkdirSync(join(parent, "My App"));
+    writeFileSync(join(parent, "My App", ".DS_Store"), "");
+    await dispatch({ t: "create-repo", mode: "init", parent, name: "My App" }, ctx, services);
+    const made = services.state.repos.find((r) => r.path.endsWith("/My App"));
+    expect(made).toBeDefined();
+    expect(lastToast(replies)).toBe("created My App");
+    // Finder's litter must not cost it the first-run screen, which waits for main to read as empty
+    expect(services.state.worktrees.find((w) => w.repoId === made?.id && w.kind === "main")?.empty).toBe(true);
+    // an empty folder inside a project toyon manages is still inside it
+    mkdirSync(join(repo, "inner"));
+    await dispatch({ t: "register-repo", path: repo }, ctx, services);
+    await expect(
+      dispatch({ t: "create-repo", mode: "init", parent: repo, name: "inner" }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
   });
 

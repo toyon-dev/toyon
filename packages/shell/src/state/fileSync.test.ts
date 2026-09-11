@@ -81,6 +81,7 @@ function harness() {
     agents: [],
     defaultAgent: "claude",
     home: "/h",
+    folderDialog: false,
     pending: [],
     visits: {},
   });

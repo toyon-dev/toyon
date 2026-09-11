@@ -5,7 +5,7 @@
 import { spawn } from "node:child_process";
 import type { Stats } from "node:fs";
 import { stat, unlink } from "node:fs/promises";
-import { FILE_MAX_CHARS, type SearchHit } from "@toyon/shared";
+import { type ElementTraits, FILE_MAX_CHARS, type SearchHit } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, git, run } from "../git/exec.ts";
@@ -16,9 +16,28 @@ import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { resolveInside } from "../worktrees/paths.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
 import { decodeText, encodeText, hasBom, looksBinary, versionOf } from "./content.ts";
+import { type ElementSources, needlesOf, rankElementSources } from "./elementSource.ts";
 import { viteLineOffset } from "./vite-offset.ts";
 
 const SEARCH_MAX = 300;
+/** rows an element search reads before ranking; its traits are rare by the time they count */
+const FIND_ROWS_MAX = 5000;
+/** files that carry an element's names without writing the element */
+const NOT_WHERE_WRITTEN = [
+  ":!*.css",
+  ":!*.scss",
+  ":!*.sass",
+  ":!*.less",
+  ":!*.styl",
+  ":!*.map",
+  ":!*.min.*",
+  ":!*.lock",
+  ":!package-lock.json",
+  ":!pnpm-lock.yaml",
+  ":!*.md",
+  ":!*.test.*",
+  ":!*.spec.*",
+];
 
 /** a file as the editor may open it */
 export interface FileRead {
@@ -186,6 +205,39 @@ export class FileService {
       hits.push({ path: m[1]!, line: Number(m[2]), text: m[3]!.trim().slice(0, 200) });
     }
     return { hits, truncated };
+  }
+
+  /** Where an element no framework recorded is written: a grep for the traits it shows, ranked by
+   * elementSource.ts. Case matters, as it does in markup, and the files that repeat an element's
+   * names without writing it (style sheets, maps, lockfiles, docs, tests) are left out. */
+  async findElement(worktreeId: string, element: ElementTraits): Promise<ElementSources> {
+    const { path: cwd } = this.require(worktreeId);
+    const needles = needlesOf(element);
+    if (!needles.length) return { hits: [], sure: false };
+    const r = await run(
+      GIT,
+      [
+        "grep",
+        "-n",
+        "-I",
+        "-F",
+        "--untracked",
+        "--no-color",
+        `--max-count=${SEARCH_MAX}`,
+        ...needles.flatMap((n) => ["-e", n.text]),
+        "--",
+        ...NOT_WHERE_WRITTEN,
+      ],
+      cwd,
+    );
+    const rows: SearchHit[] = [];
+    for (const row of r.rawOut.split("\n")) {
+      const m = /^(.+?):(\d+):(.*)$/.exec(row);
+      if (!m) continue;
+      rows.push({ path: m[1]!, line: Number(m[2]), text: m[3]! });
+      if (rows.length >= FIND_ROWS_MAX) break;
+    }
+    return rankElementSources(element, rows);
   }
 
   async changedRanges(

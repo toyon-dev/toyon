@@ -30,7 +30,7 @@
     font: var(--type-ui);
   }
   /* no box: the region around it is the field. The composer carries the sunken ground for the
-     whole panel, and an anchored picker's strip is a row of the bar it drops out of. */
+     whole panel, and a picker's strip carries it across the top of its panel. */
   .field-bare {
     background: none;
     border: none;

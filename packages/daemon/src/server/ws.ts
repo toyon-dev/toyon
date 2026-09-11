@@ -283,6 +283,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       agents: agentInfos(),
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
       home: homedir(),
+      folderDialog: process.platform === "darwin" && !cloud.enabled,
       pending: s.repos.pending,
       visits: s.routes.historyAll(),
     }) satisfies ServerMsg;

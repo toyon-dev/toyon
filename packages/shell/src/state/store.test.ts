@@ -9,6 +9,7 @@ import {
   EMPTY_LOCAL,
   initialState,
   isGreenfield,
+  isSubPicker,
   localOf,
   type OpenFile,
   previewIdOf,
@@ -93,6 +94,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     agents: [],
     defaultAgent: "claude",
     home: "/home/t",
+    folderDialog: false,
     pending: [],
     visits: {},
   });
@@ -533,6 +535,29 @@ describe("overlays", () => {
     expect(s.overlay).toEqual({ kind: "commands" });
     expect(s.paletteReturn?.q).toBe("the");
   });
+  test("backing out of the folder chooser returns to the new-project form it came from", () => {
+    const form = { kind: "new-project", mode: "create", name: "my-app", parent: "~/Projects" } as const;
+    const choosing = run([{ a: "open", overlay: { kind: "choose-folder", form } }]);
+    expect(isSubPicker(choosing.overlay ?? { kind: "keys" })).toBe(true);
+    expect(reducer(choosing, { a: "close", back: true }).overlay).toEqual(form);
+    // a plain close still closes, since the form was already left for the chooser
+    expect(reducer(choosing, { a: "close" }).overlay).toBeNull();
+  });
+  test("each folder-chosen answer is numbered, so the form can tell a new one from the last", () => {
+    const answer = (path: string | null): Action =>
+      server({ t: "folder-chosen", folder: path ? { path, kind: "empty" } : null });
+    const s = run([answer("~/a"), answer(null)]);
+    expect(s.chosenFolder).toEqual({ seq: 2, folder: null });
+  });
+  test("closing the form forgets a Finder dialog it was waiting on", () => {
+    const form = { kind: "new-project", mode: "create", name: "my-app", parent: "~/Projects" } as const;
+    const s = run([
+      { a: "open", overlay: form },
+      { a: "choosing-folder", v: true },
+    ]);
+    expect(s.choosingFolder).toBe(true);
+    expect(reducer(s, { a: "close" }).choosingFolder).toBe(false);
+  });
   test("a plain close forgets the return; opening a palette does too", () => {
     const s = run([
       { a: "palette-return", v: { mode: "keys", q: "x" } },
@@ -848,6 +873,35 @@ describe("the editor's open file", () => {
     expect(reducer(conflicted, opening({ path: "x.ts", seq: 2 })).editor?.conflict).toEqual(theirs);
     expect(reducer(conflicted, { a: "editor-conflict", file: x, theirs: null }).editor?.conflict).toBeNull();
   });
+
+  test("a worktrees frame that keeps the selection keeps the open file; one that moves it closes it", () => {
+    // a status read pushes the rows whenever a count moves, often while the file's own read is out
+    const s = run([hello(wt("a"), wt("b")), { a: "activate", id: "a" }, opening({ path: "x.ts", seq: 1 })]);
+    expect(reducer(s, worktrees(wt("a"), wt("b"))).editor).toMatchObject({ path: "x.ts", seq: 1 });
+    // the open row gone: the selection lands elsewhere, and the file went with its worktree
+    expect(reducer(s, worktrees(wt("b"))).editor).toBeNull();
+  });
+
+  test("an element found in the source opens when one line is clearly it, lists when not, and says when none", () => {
+    const hit = (path: string, line: number) => ({ path, line, text: "<header>" });
+    const sources = (seq: number, hits: ReturnType<typeof hit>[], sure: boolean) =>
+      server({ t: "element-sources", worktreeId: "a", seq, hits, sure });
+    const booted = run([hello(wt("a"))]);
+    const closed = booted.leftOpen ? reducer(booted, { a: "toggle-left" }) : booted;
+    const sure = reducer(closed, sources(5, [hit("src/render.ts", 33)], true));
+    expect(sure.editor).toMatchObject({ path: "src/render.ts", view: "file", line: { n: 33 }, seq: 5, focus: true });
+    expect(sure.leftOpen).toBe(true);
+    const listed = reducer(closed, sources(5, [hit("src/a.ts", 3), hit("src/b.ts", 7)], false));
+    expect(listed.editor).toBeNull();
+    expect(listed.overlay).toMatchObject({
+      kind: "element-sources",
+      hits: [{ path: "src/a.ts" }, { path: "src/b.ts" }],
+    });
+    expect(reducer(closed, sources(5, [], false)).toast).toMatchObject({ ok: false });
+    // a file opened after the pick was made is the one the person chose
+    const later = run([opening({ path: "x.ts", seq: 9 })], closed);
+    expect(reducer(later, sources(5, [hit("src/render.ts", 33)], true))).toBe(later);
+  });
 });
 
 // The shell is scoped to one project at a time while the daemon runs them all: `visible` is what
@@ -936,6 +990,15 @@ describe("projects", () => {
     expect(s.activeRepoId).toBe("r3");
     // and the flag is spent: the next repo to arrive does not steal the scope again
     expect(reducer(s, repos(repo("r1"), repo("r2"), repo("r3"), repo("r4"))).activeRepoId).toBe("r3");
+  });
+
+  test("a project arriving from this tab leaves a draft open in the last one behind", () => {
+    let s = run([two(), { a: "open-draft" }, { a: "open-repo" }]);
+    expect(s.draft).not.toBeNull();
+    s = reducer(s, repos(repo("r1"), repo("r2"), repo("r3")));
+    expect(s.activeRepoId).toBe("r3");
+    // kept, it would surface in the new project once its first-run screen gave way
+    expect(s.draft).toBeNull();
   });
 
   test("forgetting the active project moves the scope to a remaining one", () => {
@@ -1368,6 +1431,7 @@ describe("attach a pick", () => {
     text: "Save",
     html: "<button>Save</button>",
     route: "/",
+    element: { tag: "button", id: "", classes: [], text: "Save", attrs: [] },
   };
 
   test("the element joins its frame's box with paths relative to that checkout, once, and picking ends", () => {

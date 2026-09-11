@@ -10,6 +10,8 @@ import { matchChord } from "@toyon/shared/chords";
 import type { BridgeToShellMsg, ShellToBridgeMsg } from "@toyon/shared/protocol/bridge";
 import { type Fiber, pickedAt, pickTarget, type Source, sourceOf } from "./fiber.ts";
 
+type PickedTraits = Extract<BridgeToShellMsg, { type: "picked" }>["element"];
+
 declare global {
   interface Window {
     __toyonShellOrigins?: string[];
@@ -219,20 +221,47 @@ function paintPick(el: Element) {
   const target = pickTarget(picked, shift);
   // the other source is offered under shift, in both directions: it is the same key back
   const other = target === src ? call : src;
-  const code = alt !== inspect && !!target;
-  // a hint never advertises a dead end: an element with no fiber source says nothing about opening
-  // one. Under ⌘I its plain click does nothing, so the one thing it can offer is ⌥ for the chat.
-  const label =
-    code && target
-      ? chip(
-          `open ${at(target)}`,
-          [other && `⇧ ${at(other)}`, inspect && "⌥ chat"].filter(Boolean).join("  ") || undefined,
-        )
-      : chip(
-          comp ? `<${comp}>${target ? ` · ${at(target)}` : ""}` : el.tagName.toLowerCase(),
-          target && !inspect ? "⌥ code" : inspect && !alt ? "⌥ chat" : undefined,
-        );
+  const code = alt !== inspect;
+  // an element with no fiber source still goes to its code: the shell searches the source for what
+  // it shows, so the chip says it will look rather than naming a file
+  const hints = (...h: Array<string | false | null>) => h.filter(Boolean).join("  ") || undefined;
+  const label = code
+    ? target
+      ? chip(`open ${at(target)}`, hints(other && `⇧ ${at(other)}`, inspect && "⌥ chat"))
+      : chip(`find ${named(el)}`, hints(inspect && "⌥ chat"))
+    : chip(comp ? `<${comp}>${target ? ` · ${at(target)}` : ""}` : named(el), hints(!inspect && "⌥ code"));
   drawBox(el.getBoundingClientRect(), label, code);
+}
+
+/** the element as a selector reads: its tag with the id, or else the first class */
+function named(el: Element): string {
+  const tag = el.tagName.toLowerCase();
+  const first = el.classList[0];
+  return (el.id ? `${tag}#${el.id}` : first ? `${tag}.${first}` : tag).slice(0, 48);
+}
+
+// attributes people type out literally, so they read the same on the page as in the source
+const WRITTEN = new Set(["name", "placeholder", "aria-label", "title", "alt", "for", "href", "type", "role", "src"]);
+
+/** what the element shows of itself, for the search that stands in for a fiber source */
+function traitsOf(el: Element): PickedTraits {
+  let text = "";
+  for (const n of Array.from(el.childNodes)) if (n.nodeType === Node.TEXT_NODE) text += n.textContent ?? "";
+  const attrs: Array<[string, string]> = [];
+  for (const a of Array.from(el.attributes)) {
+    if (attrs.length === 12) break;
+    if (a.value && (WRITTEN.has(a.name) || a.name.startsWith("data-")))
+      attrs.push([a.name.slice(0, 40), a.value.slice(0, 200)]);
+  }
+  return {
+    tag: el.tagName.toLowerCase().slice(0, 40),
+    id: el.id.slice(0, 200),
+    classes: Array.from(el.classList)
+      .slice(0, 16)
+      .map((c) => c.slice(0, 120)),
+    text: text.replace(/\s+/g, " ").trim().slice(0, 200),
+    attrs,
+  };
 }
 
 function onPickMove(e: MouseEvent) {
@@ -252,13 +281,11 @@ function onPickClick(e: MouseEvent) {
   const { src, comp, call } = picked;
   shift = e.shiftKey;
   const target = pickTarget(picked, shift);
-  // ⌘I's plain click only ever opens a file: on an element with none it stays armed and does
-  // nothing, rather than quietly attaching to the chat someone reached past with ⌥
-  if (inspect && !e.altKey && !target) return;
-  // opening the source is browsing, so it leaves the picker armed and the next element is one
-  // click away; attaching to the chat is a commit, and ends the mode
-  const code = e.altKey !== inspect && !!target;
-  if (!code) stopPicking();
+  // a click ends the mode either way: an armed crosshair left over the page after the file opened
+  // turns the next click on the app into another open. With no fiber source the code verb still
+  // stands, and the shell searches the source for the traits sent below.
+  const code = e.altKey !== inspect;
+  stopPicking();
   if (!el) return;
   post({
     type: "picked",
@@ -277,6 +304,7 @@ function onPickClick(e: MouseEvent) {
     text: el.textContent?.trim().slice(0, 120) ?? "",
     html: el.outerHTML.slice(0, 600),
     route: location.pathname + location.search,
+    element: traitsOf(el),
   });
 }
 

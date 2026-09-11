@@ -14,6 +14,7 @@ import type {
   AskQuestion,
   AttachmentRef,
   AuthMethodInfo,
+  ChosenFolder,
   CommitEntry,
   ConnectFailure,
   DesignIndex,
@@ -242,11 +243,25 @@ export type Overlay =
   /** the project switcher: pick a registered repo, or type a path to open another. It hangs off
    * the pill in the bar; `dialog` is the roomier centered form its browse button opens. */
   | { kind: "projects"; dialog?: boolean }
-  /** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
-   * a location; `clone` has both derived from the URL and shows them so they can be changed. */
-  | { kind: "new-project"; mode: "create" | "clone"; name: string; parent: string; url?: string }
+  | NewProjectForm
+  /** the new-project form's location, walked to rather than typed. It carries the form and reopens
+   * it: with the folder filled in on a pick, or as it was when backed out of. */
+  | { kind: "choose-folder"; form: NewProjectForm }
   /** the route bar's list of pages, opened over the address field */
-  | { kind: "routes" };
+  | { kind: "routes" }
+  /** the lines a picked element with no recorded source may be written on, when none is clearly it */
+  | { kind: "element-sources"; worktreeId: string; hits: SearchHit[] };
+
+/** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
+ * a location; `clone` has both derived from the URL and shows them so they can be changed. */
+export type NewProjectForm = {
+  kind: "new-project";
+  /** `init` makes the empty folder at parent/name the project where it stands */
+  mode: "create" | "clone" | "init";
+  name: string;
+  parent: string;
+  url?: string;
+};
 
 /** which docks and panes a project is left with. The layout is remembered per project, so a reload
  * comes back to it and switching projects carries each one's own back (zen is deliberately not in
@@ -444,6 +459,13 @@ export interface State {
   paths: { query: string; entries: PathEntry[]; target: PathTarget | null };
   /** the daemon's home directory, for writing `~` paths the way a person would type them */
   home: string;
+  /** hello's `folderDialog`: whether the form's folder button opens Finder where the person is */
+  folderDialog: boolean;
+  /** the Finder dialog is up for the new-project form: Escape is its, and closing the form closes it */
+  choosingFolder: boolean;
+  /** the last answer to `choose-folder`, numbered so the form that asked can tell a new answer from
+   * the one it already applied */
+  chosenFolder: { seq: number; folder: ChosenFolder | null } | null;
   /** clones in flight, held by the daemon so every tab sees them and a reload does not lose them */
   pending: PendingRepo[];
   /** the import being watched in the preview area, if any. Separate from `activeRepoId` because a
@@ -536,6 +558,9 @@ export function initialState(opts: InitialOpts): State {
     systemDark: opts.systemDark ?? true,
     paths: { query: "", entries: [], target: null },
     home: "",
+    folderDialog: false,
+    choosingFolder: false,
+    chosenFolder: null,
     pending: [],
     activeImportId: null,
     agents: [],
@@ -682,7 +707,11 @@ function draftAfter(s: State, rows: WorktreeStatus[], created: boolean): Draft |
 }
 
 export const isSubPicker = (o: Overlay) =>
-  o.kind === "theme" || o.kind === "appearance" || o.kind === "agent" || o.kind === "agent-page";
+  o.kind === "theme" ||
+  o.kind === "appearance" ||
+  o.kind === "agent" ||
+  o.kind === "agent-page" ||
+  o.kind === "choose-folder";
 
 /** what reaches the reducer: terminal frames are routed to the pane, and file answers to fileSync,
  * before dispatch (main.tsx) */
@@ -739,6 +768,7 @@ export type Action =
   | { a: "open"; overlay: Overlay }
   /** close the open overlay; with `back`, reopen the palette a sub-picker came from */
   | { a: "close"; back?: boolean }
+  | { a: "choosing-folder"; v: boolean }
   | { a: "toggle"; overlay: Overlay }
   | { a: "palette-return"; v: State["paletteReturn"] }
   | { a: "toggle-left" }
@@ -968,8 +998,13 @@ function reduce(s: State, action: Action): State {
         previewTheme: null,
         paletteReturn: isSubPicker(action.overlay) ? s.paletteReturn : null,
       };
+    case "choosing-folder":
+      return { ...s, choosingFolder: action.v };
     case "close":
-      return { ...s, previewTheme: null, ...paletteBack(s, action.back) };
+      // the folder chooser is a step inside the new-project form, so backing out of it is the form
+      if (action.back && s.overlay?.kind === "choose-folder") return { ...s, overlay: s.overlay.form };
+      // a Finder dialog the form was waiting on goes with it (the form sends the cancel)
+      return { ...s, previewTheme: null, choosingFolder: false, ...paletteBack(s, action.back) };
     case "toggle":
       return s.overlay?.kind === action.overlay.kind
         ? reducer(s, { a: "close" })
@@ -1090,6 +1125,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         agents: msg.agents,
         defaultAgent: msg.defaultAgent,
         home: msg.home,
+        folderDialog: msg.folderDialog,
         pending: msg.pending,
         visits: msg.visits,
         // an import this tab was watching may have finished while it was away
@@ -1127,6 +1163,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "path-entries":
       return { ...s, paths: { query: msg.query, entries: msg.entries, target: msg.target } };
+    case "folder-chosen":
+      return { ...s, chosenFolder: { seq: (s.chosenFolder?.seq ?? 0) + 1, folder: msg.folder } };
     case "refs":
       return { ...s, refs: { ...s.refs, [msg.repoId]: { query: msg.query, refs: msg.refs } } };
     case "archived":
@@ -1145,7 +1183,18 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeRepoId = msg.repos[0]?.id ?? null;
       }
       if (activeRepoId === s.activeRepoId) return { ...s, repos: msg.repos, pendingOpen };
-      return { ...s, repos: msg.repos, pendingOpen, activeRepoId, activeId: landingIn(s, activeRepoId), editor: null };
+      // A draft is for a worktree in the project it was opened in. Carried into this one, it hides
+      // behind a new project's first-run screen and takes over the moment that screen gives way,
+      // with the other project's preview behind it.
+      return {
+        ...s,
+        repos: msg.repos,
+        pendingOpen,
+        activeRepoId,
+        activeId: landingIn(s, activeRepoId),
+        editor: null,
+        draft: null,
+      };
     }
     case "worktrees": {
       let activeId = s.activeId;
@@ -1177,6 +1226,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
           activeId,
         ),
         draft: draftAfter(s, msg.rows, !!fresh),
+        // activate closes the file because choosing a row is leaving it, but a frame that keeps the
+        // selection chose nothing: status reads push one whenever a count moves, and one landing
+        // between a file opening and its read closed the pane under the person who opened it
+        editor: activeId === s.activeId ? s.editor : null,
       };
     }
     case "proc": {
@@ -1279,6 +1332,31 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ...l,
         search: { query: msg.query, hits: msg.hits, truncated: msg.truncated },
       }));
+    case "element-sources": {
+      // a file opened since the pick was made is an answer the person already chose
+      if (s.editor && s.editor.seq > msg.seq) return s;
+      const [first] = msg.hits;
+      if (!first) return { ...s, toast: { ok: false, message: "nothing in the source matches this element" } };
+      if (!msg.sure) {
+        return reducer(s, {
+          a: "open",
+          overlay: { kind: "element-sources", worktreeId: msg.worktreeId, hits: msg.hits },
+        });
+      }
+      // opened the way a pick with a recorded file is (openSource): the file, and the panel beside it
+      const opened = reducer(s, {
+        a: "open-file",
+        v: {
+          worktreeId: msg.worktreeId,
+          path: first.path,
+          view: "file",
+          line: { n: first.line },
+          focus: true,
+          seq: msg.seq,
+        },
+      });
+      return opened.leftOpen ? opened : reducer(opened, { a: "toggle-left" });
+    }
     case "design-index":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, design: msg.index }));
     case "routes":

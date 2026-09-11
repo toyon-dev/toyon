@@ -313,14 +313,15 @@ function Fold({
  * its colour. The line is one word, the way a call's is a path: its first sentence was a sentence
  * of prose in a column of file names, and the wrong tier of thing to be ellipsised. Open while it
  * streams, since a thought arriving is the only sign the agent is working, and closed by whatever
- * comes next. The body is the message's markdown, not a call's mono: it is prose. */
+ * comes next. It waits for its first words before it opens: an empty panel under a spinner says
+ * less than the spinner alone. The body is the message's markdown, not a call's mono: it is prose. */
 export const ThoughtRow = memo(function ThoughtRow({ item, live }: { item: ThinkingItem; live?: boolean }) {
   const html = useThrottledMarkdown(item.text);
   const word = live ? "Thinking" : "Thought";
   return (
     <Fold
       className="tool-row"
-      auto={!!live}
+      auto={!!live && !!item.text.trim()}
       label={word}
       menu={(fold) =>
         grouped([
@@ -373,9 +374,9 @@ export const ToolRow = memo(
       () => (live ? null : netOfCalls(tools.map((t) => toolBlocks(t, t.output ?? "")))),
       [tools, live],
     );
-    // the row the agent is on opens itself, but only where its output is worth watching arrive: a
-    // read or a search is a file you asked for, and having each one throw a panel open walks the
-    // message you were reading off the top of the log. A command the person ran themselves is
+    // the live row (openRow in group.ts) opens itself, but only where its output is worth watching
+    // arrive: a read or a search is a file you asked for, and having each one throw a panel open
+    // walks the message you were reading off the top of the log. A command the person ran themselves is
     // open from the start, since what it printed is the reason they ran it, and the next one
     // closes it: a series of `!` commands is a prompt, not a stack of listings.
     const auto = !!live && (head.name === SHELL_TOOL || AUTO_OPEN.has(head.toolKind ?? "other"));

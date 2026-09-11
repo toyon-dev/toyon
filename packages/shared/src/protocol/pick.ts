@@ -20,3 +20,17 @@ export const pickMetaSchema = z.object({
   tag: z.string(),
   selector: z.string(),
 });
+
+/** What an element shows of itself that a person also typed into the source. A page no framework
+ * records sources on is searched for these to find where the element is written. Bounded, since the
+ * page is untrusted. */
+export const elementTraitsSchema = z.object({
+  tag: z.string().max(40),
+  id: z.string().max(200),
+  classes: z.array(z.string().max(120)).max(16),
+  /** the element's own text, not its children's */
+  text: z.string().max(200),
+  /** attributes written out by hand (placeholder, aria-label, href and the like), as name and value */
+  attrs: z.array(z.tuple([z.string().max(40), z.string().max(200)])).max(12),
+});
+export type ElementTraits = z.infer<typeof elementTraitsSchema>;

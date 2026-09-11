@@ -60,6 +60,15 @@ export interface PathTarget {
   parentExists: boolean;
 }
 
+/** a folder picked in the OS dialog, and what it is, which decides what the new-project form does
+ * with it: an ordinary folder is where the project goes, an empty one can become the project, and
+ * one that is already a project is opened rather than nested into */
+export interface ChosenFolder {
+  /** absolute, tilde-collapsed like PathEntry.path */
+  path: string;
+  kind: "folder" | "empty" | "project";
+}
+
 /** A project being cloned: it has no RepoInfo yet (no path, no branch, no config), but it is a real
  * thing the person started and should be able to watch and stop. Held by the daemon rather than the
  * tab that asked, so every tab sees it and a reload does not lose it. */

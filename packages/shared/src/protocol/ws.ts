@@ -10,6 +10,7 @@ import type {
   AgentConfigInfo,
   AgentInfo,
   ArchivedWorktree,
+  ChosenFolder,
   CommitEntry,
   DesignIndex,
   GitFileStatus,
@@ -30,7 +31,7 @@ import { SHELL_STREAM } from "../model.ts";
 import type { PageEntry, WorktreePages } from "../routes.ts";
 import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta, PickRef } from "./events.ts";
 import { FILE_MAX_CHARS, IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, IMAGE_MIME_TYPES, PASTE_MAX_CHARS } from "./limits.ts";
-import { pickMetaSchema } from "./pick.ts";
+import { elementTraitsSchema, pickMetaSchema } from "./pick.ts";
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -55,6 +56,9 @@ export type ServerMsg =
       /** the daemon's home directory. RepoInfo.path is absolute while PathEntry.path is
        * tilde-collapsed daemon side, so without this the shell cannot write a `~` path of its own */
       home: string;
+      /** the daemon can open the OS folder dialog where the person is: a macOS daemon running
+       * locally. Anywhere else the dialog would open on a screen nobody at this shell can see. */
+      folderDialog: boolean;
       /** each repo's remembered preview pages, best first, with their titles: the route bar's
        * history, there on first paint */
       visits: Record<string, PageEntry[]>;
@@ -75,6 +79,8 @@ export type ServerMsg =
    * itself is: an empty `entries` means "nothing matches here" and "there is no here" alike, and
    * only `target` separates the two */
   | { t: "path-entries"; query: string; entries: PathEntry[]; target: PathTarget }
+  /** the answer to `choose-folder`: null when the dialog was cancelled or could not open */
+  | { t: "folder-chosen"; folder: ChosenFolder | null }
   /** One array, owned and found rows alike: take-over turns a row owned, and were the two kinds
    * to travel in separate frames the rail would show it twice or not at all in between. The
    * spares ride beside the rows rather than among them: see SpareInfo. */
@@ -137,6 +143,9 @@ export type ServerMsg =
     }
   | { t: "files"; worktreeId: string; paths: string[] }
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
+  /** where a picked element with no recorded source may be written, best first; `sure` when the first
+   * is clearly it. `seq` is the find-element's, so a file opened since is not taken over. */
+  | { t: "element-sources"; worktreeId: string; seq: number; hits: SearchHit[]; sure: boolean }
   /** the ref palette's rows for a query; `query` is echoed so a stale reply is told from a fresh one */
   | { t: "refs"; repoId: string; query: string; refs: RefHit[] }
   /** a project's archived worktrees, newest first: the reply to list-archived, and pushed to every
@@ -399,6 +408,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * commands it has. Answered by an `agent-commands` push, or by nothing if it will not start. */
   z.object({ t: z.literal("list-commands"), worktreeId: id }),
   z.object({ t: z.literal("search"), worktreeId: id, query: z.string().max(500) }),
+  /** a ⌘I pick on a page that recorded no file: find the element in the source by what it shows.
+   * Answered by one `element-sources`. */
+  z.object({ t: z.literal("find-element"), worktreeId: id, seq, element: elementTraitsSchema }),
   z.object({ t: z.literal("design-scan"), worktreeId: id }),
   z.object({ t: z.literal("discard-file"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),
@@ -425,14 +437,15 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("confirm-config"), repoId: id, config: toyonConfigSchema }),
   /** open another repo in this daemon (the project switcher's "open folder"); `~` is expanded */
   z.object({ t: z.literal("register-repo"), path: z.string().min(1).max(4_000) }),
-  /** make a project where there was not one and open it: a new folder, or a clone of a remote.
-   * `parent` and `name` stay apart because the rule is structural (exactly one new leaf under a
-   * parent that already exists), and rebuilding it by splitting a joined string daemon side would
-   * let the row promise something the daemon then refuses. `~` is expanded daemon side. */
+  /** make a project where there was not one and open it: a new folder, a clone of a remote, or an
+   * empty folder that is already there (`init`, where `name` is that folder's own name). `parent`
+   * and `name` stay apart because the rule is structural (exactly one leaf under a parent that
+   * already exists), and rebuilding it by splitting a joined string daemon side would let the row
+   * promise something the daemon then refuses. `~` is expanded daemon side. */
   z
     .object({
       t: z.literal("create-repo"),
-      mode: z.enum(["create", "clone"]),
+      mode: z.enum(["create", "clone", "init"]),
       parent: z.string().min(1).max(4_000),
       name: z.string().min(1).max(100),
       /** clone only: what to clone from. Any git remote, not just GitHub */
@@ -447,6 +460,11 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("cancel-import"), id }),
   /** what directories could complete this partial path (project picker autocomplete) */
   z.object({ t: z.literal("browse-path"), path: z.string().max(4_000) }),
+  /** open the OS folder dialog at `start` (the new-project form's folder button); answered with
+   * `folder-chosen` */
+  z.object({ t: z.literal("choose-folder"), start: z.string().max(4_000) }),
+  /** close the dialog `choose-folder` opened: Escape in the shell while it is up, or the form closing */
+  z.object({ t: z.literal("cancel-folder") }),
   /** drop a repo from the daemon; refused while it still has task worktrees */
   z.object({ t: z.literal("forget-repo"), repoId: id }),
   z.object({ t: z.literal("set-theme"), prefs: themePrefsSchema }),
@@ -513,13 +531,25 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
 
 export type ClientMsg = z.infer<typeof clientMsgSchema>;
 
+/** a failed parse as one line: where, then why. Zod wraps the issue a record key or an array element
+ * raised in a generic one ("Invalid key in record"), which is all a toast would say about a proc
+ * named "shell", so the reason is read from the innermost issue and the paths are joined on the way. */
+export function issueReason(error: z.ZodError, fallback: string): string {
+  let issue = error.issues[0];
+  let path: PropertyKey[] = issue?.path ?? [];
+  while (issue && (issue.code === "invalid_key" || issue.code === "invalid_element") && issue.issues[0]) {
+    issue = issue.issues[0];
+    path = [...path, ...issue.path];
+  }
+  const where = path.length ? `${path.map(String).join(".")}: ` : "";
+  return `${where}${issue?.message ?? fallback}`;
+}
+
 /** parse one inbound frame; returns the message or a one-line reason */
 export function parseClientMsg(raw: unknown): { ok: true; msg: ClientMsg } | { ok: false; reason: string } {
   const r = clientMsgSchema.safeParse(raw);
   if (r.success) return { ok: true, msg: r.data };
-  const issue = r.error.issues[0];
-  const where = issue?.path.length ? `${issue.path.join(".")}: ` : "";
-  return { ok: false, reason: `${where}${issue?.message ?? "invalid message"}` };
+  return { ok: false, reason: issueReason(r.error, "invalid message") };
 }
 
 // The hand-written interfaces in model.ts / events.ts and the schemas above must describe the same

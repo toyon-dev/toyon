@@ -653,9 +653,12 @@
     }
   }
   /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
-  /* main's target line above the box: a sentence, so it flows as text (TargetChip.tsx says why) */
+  /* main's target line, outside the box on the panel's ground, where the draft tab's birth-time row
+   sits: inside it, it took the top of the typing surface and the placeholder read as the second
+   line. Indented to the textarea's own left edge, not the panel's, so the sentence and the
+   placeholder start on one column. A sentence, so it flows as text (TargetChip.tsx says why) */
   .composer-target {
-    margin-bottom: 8px;
+    padding: 0 10px 8px;
   }
   /* the recap above the box: plain text that wraps, spaced from what sits under it like the target line */
   .composer-recap {

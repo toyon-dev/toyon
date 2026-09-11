@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { realpathSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { IPty } from "bun-pty";
 import { type PtySpawn, PtyStream } from "./pty.ts";
 
@@ -77,12 +78,18 @@ describe("PtyStream", () => {
     expect(t.exits()).toBe(1);
   });
 
-  test("runs in the given directory with a 256-color TERM", async () => {
-    const cwd = realpathSync(tmpdir());
-    const t = run("echo $TERM; pwd", cwd);
-    await t.exited;
-    expect(t.out()).toContain("xterm-256color");
-    expect(t.out()).toContain(cwd);
+  // an `sh` directory in the cwd is what portable-pty would try to exec for a bare "sh"
+  test("runs in the given directory with a 256-color TERM, whatever that directory holds", async () => {
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "toyon-pty-")));
+    mkdirSync(join(cwd, "sh"));
+    try {
+      const t = run("echo $TERM; pwd", cwd);
+      await t.exited;
+      expect(t.out()).toContain("xterm-256color");
+      expect(t.out()).toContain(cwd);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   test("kill() ends the process, fires onExit once, and later writes are no-ops", async () => {

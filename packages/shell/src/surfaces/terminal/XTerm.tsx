@@ -1,4 +1,4 @@
-// Lazy-loaded xterm.js terminal for one of a worktree's streams (React.lazy, like MonacoDiff: the
+// Lazy-loaded xterm.js terminal for one of a worktree's streams (React.lazy, like the editor: the
 // bundle only downloads when a pane is first opened). Frames come straight off the socket via terminalBus.
 
 import { hex8, matchChord, streamKey, type Theme } from "@toyon/shared";

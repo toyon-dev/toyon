@@ -5,17 +5,22 @@ import { join } from "node:path";
 import type { GitFileStatus } from "@toyon/shared";
 import { git, gitRaw } from "./exec.ts";
 
-export async function statusFiles(worktreePath: string): Promise<GitFileStatus[]> {
+/** `only` narrows the status to those exact paths: a question about one file should not walk the tree */
+export async function statusFiles(worktreePath: string, ...only: string[]): Promise<GitFileStatus[]> {
   // -uall, because the default collapses a wholly-untracked directory into a single `dir/` entry:
   // not a path the panel can diff, count lines for, or discard. .gitignore still applies, so the
-  // set of files this adds is the set a commit would have taken anyway.
-  const r = await gitRaw(worktreePath, "status", "--porcelain", "-uall");
+  // set of files this adds is the set a commit would have taken anyway. Literal pathspecs, so a
+  // file named with a `*` is that file and not a glob.
+  const args = ["status", "--porcelain", "-uall"];
+  const r = only.length
+    ? await gitRaw(worktreePath, "--literal-pathspecs", ...args, "--", ...only)
+    : await gitRaw(worktreePath, ...args);
   if (!r.ok) throw new Error(`git status failed: ${r.err}`);
   return parsePorcelain(r.out);
 }
 
 /** `git status --porcelain` (v1) → entries. Renames/copies (`R  old -> new`) report the NEW path:
- * that is the file that exists on disk, and what file-diff / discard act on. Quoted paths are unquoted. */
+ * that is the file that exists on disk, and what read-file / discard act on. Quoted paths are unquoted. */
 export function parsePorcelain(out: string): GitFileStatus[] {
   const unquote = (p: string) => (p.startsWith('"') && p.endsWith('"') ? JSON.parse(p) : p);
   return out
@@ -114,7 +119,7 @@ export async function changedRanges(
   defaultBr: string,
   file: string,
 ): Promise<Array<[number, number]>> {
-  const status = (await statusFiles(worktreePath)).find((f) => f.path === file);
+  const status = (await statusFiles(worktreePath, file)).find((f) => f.path === file);
   if (status?.xy === "??") return [[1, 1_000_000]];
   const base = await git(worktreePath, "merge-base", "HEAD", defaultBr);
   const ref = base.ok && base.out ? base.out : "HEAD";

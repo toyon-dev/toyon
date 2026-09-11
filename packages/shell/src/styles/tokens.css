@@ -152,7 +152,7 @@
    *
    * A suffix on --type-* is therefore always a tier, never a different species.
    *
-   * MonacoDiff.tsx and XTerm.tsx read --face-mono off the root because their editors want a string.
+   * Editor.tsx and XTerm.tsx read --face-mono off the root because their editors want a string.
    * -apple-system already resolves optical sizing on Apple platforms; naming "SF Pro Text"
    * explicitly pins the Text cut and defeats the switch to Display at larger sizes. */
     --face-ui: -apple-system, "Segoe UI", sans-serif;

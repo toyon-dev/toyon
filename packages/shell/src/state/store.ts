@@ -15,6 +15,7 @@ import type {
   CommitEntry,
   ConnectFailure,
   DesignIndex,
+  FileServerMsg,
   GitFileStatus,
   ImageInput,
   ImageRef,
@@ -274,6 +275,62 @@ function applyPanels(s: State, p: Panels): State {
 /** what the editor pane draws for its file: the diff against main, or the file with none over it */
 export type EditorView = "diff" | "file";
 
+/** the file as the editor last read or saved it */
+export interface EditorDisk {
+  before: string;
+  after: string;
+  /** names the bytes on disk; a save names it back as the version it replaces */
+  version: string | null;
+  writable: boolean;
+  binary: boolean;
+  tooLarge: boolean;
+}
+
+/** A jump to a line once the file shows. `fiber` is a line the running page reported, counted
+ * against the served module rather than the file, which the changed-ranges offset maps back. */
+export interface EditorLine {
+  n: number;
+  fiber?: boolean;
+}
+
+/** what a caller opens */
+export interface OpenFile {
+  worktreeId: string;
+  path: string;
+  /** a commit's copy: history, so the editor opens it read-only */
+  ref?: string;
+  view?: EditorView;
+  line?: EditorLine;
+  /** the keyboard follows the file into the editor */
+  focus: boolean;
+  /** names this open: a line to reveal and the keyboard are handed over once per open */
+  seq: number;
+}
+
+/** a file the editor can have open: a working-tree path, or a commit's copy of one */
+export type FileRef = Pick<OpenFile, "worktreeId" | "path" | "ref">;
+
+export const sameFile = (a: FileRef, b: FileRef) =>
+  a.worktreeId === b.worktreeId && a.path === b.path && a.ref === b.ref;
+
+/** The file the editor pane has open. The pane shows it before the daemon has read it; fileSync
+ * reads it and keeps what the pane shows in step with the disk. */
+export interface EditorFile extends Omit<OpenFile, "view"> {
+  /** null until the first read decides: a changed file opens on its diff, an unchanged one as the file */
+  view: EditorView | null;
+  /** null while the first read is out */
+  disk: EditorDisk | null;
+  /** the file changed on disk under unsaved edits: what is there now, until reload or keep mine settles it */
+  conflict: { after: string; version: string | null } | null;
+}
+
+/** a line the page reported, mapped back to the file once the offset for its path is known */
+function placeLine(s: State, worktreeId: string, path: string, line: EditorLine): EditorLine {
+  if (!line.fiber) return line;
+  const offset = localOf(s, worktreeId).changedRanges[path]?.offset;
+  return offset === undefined ? line : { n: line.n - offset };
+}
+
 export interface State {
   connected: boolean;
   /** why the socket is down, once the shell has worked it out; null while connected or still probing */
@@ -328,16 +385,8 @@ export interface State {
    * before that is nothing, not a placeholder for an empty daemon */
   heard: boolean;
   local: Record<string, WorktreeLocal>;
-  /** `ref` set means this is a commit's diff: history, so the editor opens it read-only */
-  diff: {
-    worktreeId: string;
-    path: string;
-    before: string;
-    after: string;
-    line?: number;
-    ref?: string;
-    view: EditorView;
-  } | null;
+  /** the file the editor pane has open; null when the pane is closed */
+  editor: EditorFile | null;
   toast: { ok: boolean; message: string; url?: string; removeIds?: string[] } | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
@@ -346,13 +395,6 @@ export interface State {
   /** the armed element picker's verb (⌘E's chat, ⌘I's code) + last picked element (pending chat attachment) */
   picking: PickVerb | false;
   pick: (PickedElement & { worktreeId: string }) | null;
-  /** a search hit or a picked element: reveal this line once its file-diff arrives. `fiber` marks
-   * a line the running page reported, counted against the served module rather than the file, and
-   * mapped back by the changed-ranges offset for that path. */
-  gotoLine: { worktreeId: string; path: string; line: number; fiber?: boolean } | null;
-  /** the view a file was asked for in, held until its file-diff arrives; a reply for any other file
-   * opens as a diff, which is what every other way into the pane wants */
-  openView: { worktreeId: string; path: string; view: EditorView } | null;
   overlay: Overlay | null;
   /** a sub-picker (theme, appearance) was opened from a palette: esc goes back there with the query restored */
   paletteReturn: { mode: "commands" | "quick-open" | "keys"; q: string } | null;
@@ -453,14 +495,12 @@ export function initialState(opts: InitialOpts): State {
     storedRepo: opts.storedRepo ?? null,
     heard: false,
     local: {},
-    diff: null,
-    openView: null,
+    editor: null,
     toast: null,
     reloadReq: null,
     dragFiles: false,
     picking: false,
     pick: null,
-    gotoLine: null,
     overlay: null,
     paletteReturn: null,
     incompatible: false,
@@ -601,7 +641,7 @@ function activate(s: State, id: string | null): State {
   const lastActive = row && isOwned(row) ? { ...s.lastActive, [row.repoId]: row.id } : s.lastActive;
   // choosing a row is leaving the draft, the base's own row included: a snapshot that only
   // re-asserts the selection puts the draft back itself (see the worktrees frame)
-  return { ...s, activeId: id, activeRepoId, lastActive, diff: null, draft: null };
+  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, draft: null };
 }
 
 /** the draft after a frame: kept while its base is still listed, dropped once the worktree it was
@@ -614,8 +654,9 @@ function draftAfter(s: State, rows: WorktreeStatus[], created: boolean): Draft |
 export const isSubPicker = (o: Overlay) =>
   o.kind === "theme" || o.kind === "appearance" || o.kind === "agent" || o.kind === "agent-page";
 
-/** what reaches the reducer: terminal frames are routed to the pane before dispatch (main.tsx) */
-export type StoreServerMsg = Exclude<ServerMsg, TermServerMsg>;
+/** what reaches the reducer: terminal frames are routed to the pane, and file answers to fileSync,
+ * before dispatch (main.tsx) */
+export type StoreServerMsg = Exclude<ServerMsg, TermServerMsg | FileServerMsg>;
 
 export type Action =
   | { a: "server"; msg: StoreServerMsg }
@@ -639,9 +680,13 @@ export type Action =
   | { a: "open-repo" }
   /** show a clone's progress in the preview area (null stops watching) */
   | { a: "watch-import"; id: string | null }
-  | { a: "close-diff" }
-  /** a file-diff is going out for this file, and it should open in this view */
-  | { a: "open-view"; v: { worktreeId: string; path: string; view: EditorView } }
+  | { a: "close-editor" }
+  /** the editor pane opens this file now; fileSync reads it */
+  | { a: "open-file"; v: OpenFile }
+  /** fileSync: what a read of the open file found, or why it could not read it */
+  | { a: "editor-read"; file: FileRef; disk: EditorDisk | null; error?: string }
+  /** fileSync: the file changed on disk under unsaved edits (what is there now), or that was settled */
+  | { a: "editor-conflict"; file: FileRef; theirs: EditorFile["conflict"] }
   /** switch the open file between its diff and the file */
   | { a: "editor-view"; v: EditorView }
   | { a: "dismiss-toast" }
@@ -654,7 +699,6 @@ export type Action =
   | { a: "add-paste"; id: string; paste: PendingPaste }
   | { a: "remove-paste"; id: string; key: string }
   | { a: "clear-pastes"; id: string }
-  | { a: "goto-line"; v: State["gotoLine"] }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
   | { a: "drag-files"; v: boolean }
@@ -794,14 +838,49 @@ function reduce(s: State, action: Action): State {
       return { ...s, pendingOpen: true };
     case "watch-import":
       return { ...s, activeImportId: action.id };
-    case "close-diff":
-      return { ...s, diff: null };
-    case "open-view":
-      return { ...s, openView: action.v };
+    case "close-editor":
+      return { ...s, editor: null };
+    case "open-file": {
+      const v = action.v;
+      const e = s.editor;
+      // the file already open keeps its text and view on screen while its fresh read is out
+      const same = e && e.worktreeId === v.worktreeId && e.path === v.path && e.ref === v.ref ? e : null;
+      const line = v.line && placeLine(s, v.worktreeId, v.path, v.line);
+      return {
+        ...s,
+        editor: {
+          worktreeId: v.worktreeId,
+          path: v.path,
+          ...(v.ref ? { ref: v.ref } : {}),
+          view: v.view ?? same?.view ?? null,
+          seq: v.seq,
+          disk: same?.disk ?? null,
+          ...(line ? { line } : {}),
+          focus: v.focus,
+          conflict: same?.conflict ?? null,
+        },
+      };
+    }
+    case "editor-read": {
+      const e = s.editor;
+      if (!e || !sameFile(e, action.file)) return s;
+      const disk = action.disk;
+      if (!disk) {
+        const toast = { ok: false, message: action.error ?? `could not read ${e.path}` };
+        // a pane with nothing in it yet has nothing to show; one with text keeps it and says why
+        return e.disk ? { ...s, toast } : { ...s, editor: null, toast };
+      }
+      // with no view asked for, a changed file opens on its diff and an unchanged one has none to show
+      return { ...s, editor: { ...e, view: e.view ?? (disk.before === disk.after ? "file" : "diff"), disk } };
+    }
+    case "editor-conflict": {
+      const e = s.editor;
+      return e && sameFile(e, action.file) ? { ...s, editor: { ...e, conflict: action.theirs } } : s;
+    }
     case "editor-view":
       // the line was a one-time jump; past a switch the editor carries its own place, and a line
       // kept for the diff view would land inside a collapsed region the next time the file is read
-      return s.diff ? { ...s, diff: { ...s.diff, view: action.v, line: undefined } } : s;
+      return s.editor ? { ...s, editor: { ...s.editor, view: action.v, line: undefined } } : s;
     case "dismiss-toast":
       return { ...s, toast: null };
     case "set-draft":
@@ -828,8 +907,6 @@ function reduce(s: State, action: Action): State {
       return withLocal(s, action.id, (l) => ({ ...l, pastes: l.pastes.filter((p) => p.key !== action.key) }));
     case "clear-pastes":
       return withLocal(s, action.id, (l) => (l.pastes.length ? { ...l, pastes: [] } : l));
-    case "goto-line":
-      return { ...s, gotoLine: action.v };
     case "hmr":
       return withLocal(s, action.id, (l) => ({ ...l, turn: { ...l.turn, hmr: true } }));
     case "page":
@@ -1022,7 +1099,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeRepoId = msg.repos[0]?.id ?? null;
       }
       if (activeRepoId === s.activeRepoId) return { ...s, repos: msg.repos, pendingOpen };
-      return { ...s, repos: msg.repos, pendingOpen, activeRepoId, activeId: landingIn(s, activeRepoId), diff: null };
+      return { ...s, repos: msg.repos, pendingOpen, activeRepoId, activeId: landingIn(s, activeRepoId), editor: null };
     }
     case "worktrees": {
       let activeId = s.activeId;
@@ -1127,37 +1204,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ...l,
         changedRanges: { ...l.changedRanges, [msg.path]: { ranges: msg.ranges, offset: msg.lineOffset } },
       }));
-      // the offset this reply carries is what a held fiber line was waiting for
-      const g = s.gotoLine;
-      if (!g?.fiber || g.worktreeId !== msg.worktreeId || g.path !== msg.path) return next;
-      if (next.diff?.worktreeId !== msg.worktreeId || next.diff.path !== msg.path) return next;
-      return { ...next, diff: { ...next.diff, line: g.line - msg.lineOffset }, gotoLine: null };
-    }
-    case "file-diff": {
-      if (msg.discarded) {
-        const d = s.diff;
-        // a commit's copy is history the discard never touched
-        if (!d || d.ref !== undefined || d.worktreeId !== msg.worktreeId || d.path !== msg.path) return s;
-        return { ...s, diff: msg.discarded === "removed" ? null : { ...d, before: msg.before, after: msg.after } };
-      }
-      const o = s.openView;
-      // with no view asked for, a changed file opens on its diff and an unchanged one has none to show
-      const asked = o && o.worktreeId === msg.worktreeId && o.path === msg.path ? o.view : undefined;
-      const view = asked ?? (msg.before === msg.after ? "file" : "diff");
-      const opened = { ...msg, view };
-      const g = s.gotoLine;
-      if (!g || g.worktreeId !== msg.worktreeId || g.path !== msg.path)
-        return { ...s, diff: opened, gotoLine: null, openView: null };
-      const offset = localOf(s, msg.worktreeId).changedRanges[msg.path]?.offset;
-      // hold the goto rather than reveal the wrong line: without the offset a preamble-shifted
-      // file lands a few lines off, and changed-ranges (which DiffView asks for on mount) places it
-      if (g.fiber && offset === undefined) return { ...s, diff: opened, openView: null };
-      return {
-        ...s,
-        diff: { ...opened, line: g.line - (g.fiber ? (offset ?? 0) : 0) },
-        gotoLine: null,
-        openView: null,
-      };
+      // the offset this reply carries is what a jump to a line the page reported was waiting for
+      const e = next.editor;
+      if (!e?.line?.fiber || e.worktreeId !== msg.worktreeId || e.path !== msg.path) return next;
+      return { ...next, editor: { ...e, line: placeLine(next, e.worktreeId, e.path, e.line) } };
     }
     case "shipped": {
       // a suggestion lands in that worktree's composer and focuses it

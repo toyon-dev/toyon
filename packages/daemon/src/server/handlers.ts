@@ -74,6 +74,8 @@ const toast = (
   extra: Partial<Extract<ServerMsg, { t: "shipped" }>> = {},
 ) => ({ t: "shipped", worktreeId, ok, message, ...extra }) satisfies ServerMsg;
 
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
 const gitStatus = async (s: Services, ctx: HandlerCtx, worktreeId: string) => {
   const info = await s.worktrees.gitStatus(worktreeId);
   if (info) ctx.reply({ t: "git-status", worktreeId, ...info });
@@ -228,9 +230,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     await gitStatus(s, ctx, msg.worktreeId);
   },
 
-  async "file-diff"(msg, ctx, s) {
-    const { before, after } = await s.files.diff(msg.worktreeId, msg.path, msg.ref);
-    ctx.reply({ t: "file-diff", worktreeId: msg.worktreeId, path: msg.path, before, after, ref: msg.ref });
+  async "read-file"(msg, ctx, s) {
+    const head = { t: "file-read", worktreeId: msg.worktreeId, path: msg.path, ref: msg.ref, seq: msg.seq } as const;
+    try {
+      ctx.reply({ ...head, ...(await s.files.read(msg.worktreeId, msg.path, msg.ref)) });
+    } catch (e) {
+      // answered either way: the shell holds one request per open file until this comes back
+      if (!(e instanceof UserError)) log.error(msg.worktreeId, "read-file failed", e);
+      const nothing = { before: "", after: "", version: null, writable: false, binary: false, tooLarge: false };
+      ctx.reply({ ...head, ...nothing, error: errorText(e) });
+    }
   },
 
   async "git-log"(msg, ctx, s) {
@@ -344,20 +353,25 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "discard-file"(msg, ctx, s) {
-    const discarded = await s.files.discard(msg.worktreeId, msg.path);
-    // An editor pane on this file still holds the text it opened with, and its next keystroke would
-    // autosave the discarded change back. The shell cannot ask for a fresh read itself: the socket
-    // runs messages concurrently, so a file-diff sent beside the discard may read before checkout.
-    const { before, after } =
-      discarded === "restored" ? await s.files.diff(msg.worktreeId, msg.path) : { before: "", after: "" };
-    ctx.reply({ t: "file-diff", worktreeId: msg.worktreeId, path: msg.path, before, after, discarded });
-    await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, true, `discarded ${msg.path}`));
+    await s.files.discard(msg.worktreeId, msg.path);
+    ctx.reply(toast(msg.worktreeId, true, `discarded ${msg.path}`));
+    // every tab's changes list re-reads from the git-status this pushes, and an editor open on the
+    // file re-reads the file from that
+    s.hub.emit("filesChanged", msg.worktreeId);
   },
 
   async "write-file"(msg, ctx, s) {
-    await s.files.write(msg.worktreeId, msg.path, msg.content);
-    // no toast: autosave fires constantly; the changes list is the feedback
-    await gitStatus(s, ctx, msg.worktreeId);
+    const head = { t: "file-written", worktreeId: msg.worktreeId, path: msg.path, seq: msg.seq } as const;
+    try {
+      const written = await s.files.write(msg.worktreeId, msg.path, msg.content, msg.base);
+      ctx.reply({ ...head, ...written });
+      // no toast: autosave fires constantly; the changes list is the feedback, on every tab
+      if (written.ok) s.hub.emit("filesChanged", msg.worktreeId);
+    } catch (e) {
+      // answered either way, as a read is: an unanswered write would hold the file's next save forever
+      if (!(e instanceof UserError)) log.error(msg.worktreeId, "write-file failed", e);
+      ctx.reply({ ...head, ok: false, reason: "refused", version: null, message: errorText(e) });
+    }
   },
 
   "confirm-config"(msg, _ctx, s) {

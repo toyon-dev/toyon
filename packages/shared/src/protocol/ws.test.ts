@@ -70,7 +70,7 @@ describe("parseClientMsg", () => {
     const r = parseClientMsg({ t: "confirm-config", repoId: "r", config: {} });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toMatch(/config\.procs/);
-    const w = parseClientMsg({ t: "write-file", worktreeId: "a", path: "", content: "" });
+    const w = parseClientMsg({ t: "write-file", worktreeId: "a", path: "", content: "", base: null, seq: 0 });
     if (!w.ok) expect(w.reason).toMatch(/^path/);
     const a = parseClientMsg({ t: "agent-answer", worktreeId: "a", askId: "k", answers: [{ selected: "one" }] });
     expect(a.ok).toBe(false);

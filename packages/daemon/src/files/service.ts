@@ -1,20 +1,72 @@
-// Files inside a worktree, as the shell sees them: diff vs main, autosave, discard, quick-open
-// listing, content search, changed-line ranges. Every client path goes through resolveInside.
+// Files inside a worktree, as the shell sees them: the editor's versioned read and guarded write,
+// discard, quick-open listing, content search, changed-line ranges. Every client path goes through
+// resolveInside.
 
 import { spawn } from "node:child_process";
-import { unlinkSync } from "node:fs";
-import type { SearchHit } from "@toyon/shared";
+import type { Stats } from "node:fs";
+import { stat, unlink } from "node:fs/promises";
+import { FILE_MAX_CHARS, type SearchHit } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, git, run } from "../git/exec.ts";
+import { fileLockKey, withLock } from "../git/lock.ts";
 import { fileAtCommit } from "../git/log.ts";
 import { changedRanges, fileBefore, statusFiles } from "../git/status.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { resolveInside } from "../worktrees/paths.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
+import { decodeText, encodeText, hasBom, looksBinary, versionOf } from "./content.ts";
 import { viteLineOffset } from "./vite-offset.ts";
 
 const SEARCH_MAX = 300;
+
+/** a file as the editor may open it */
+export interface FileRead {
+  /** the file at the merge-base with main, or in the commit's first parent for a commit's copy */
+  before: string;
+  after: string;
+  /** names the bytes on disk; null when there is no file, and for a commit's copy, which never
+   * changes and is never written */
+  version: string | null;
+  /** a text file small enough to open, in a worktree toyon runs, and not a commit's copy */
+  writable: boolean;
+  /** bytes the editor could not save back unchanged; neither side carries text */
+  binary: boolean;
+  tooLarge: boolean;
+}
+
+/** a write lands only over the version it names; otherwise `version` is what is there now */
+export type FileWrite = { ok: true; version: string } | { ok: false; reason: "changed"; version: string | null };
+
+const NO_TEXT = { before: "", after: "" };
+
+async function statFile(target: string): Promise<Stats | null> {
+  const st = await stat(target).catch((e: NodeJS.ErrnoException) => {
+    if (e.code === "ENOENT") return null;
+    throw e;
+  });
+  if (st && !st.isFile()) throw new UserError("not a file");
+  return st;
+}
+
+/** null when nothing is there, including a file removed between the stat and the read */
+async function readBytes(target: string): Promise<Uint8Array | null> {
+  try {
+    return new Uint8Array(await Bun.file(target).arrayBuffer());
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
+  }
+}
+
+/** both sides as the editor gets them: no text at all when either is binary or over the cap */
+function sides(before: string, after: string) {
+  if (looksBinary(before) || looksBinary(after)) return { ...NO_TEXT, binary: true, tooLarge: false };
+  if (before.length > FILE_MAX_CHARS || after.length > FILE_MAX_CHARS) {
+    return { ...NO_TEXT, binary: false, tooLarge: true };
+  }
+  return { before, after, binary: false, tooLarge: false };
+}
 
 export class FileService {
   constructor(
@@ -34,16 +86,30 @@ export class FileService {
 
   /** With `ref`, the file on either side of that commit (history, read-only in the editor);
    * without it, the working tree against the merge-base with main. */
-  async diff(worktreeId: string, path: string, ref?: string): Promise<{ before: string; after: string }> {
+  async read(worktreeId: string, path: string, ref?: string): Promise<FileRead> {
     const r = this.require(worktreeId);
     // the ref side never opens the file, but the path is still the client's: bound it the same
     // way, then hand git the relative form it wants
     const target = resolveInside(r.path, path);
-    if (ref) return fileAtCommit(r.path, ref, path);
+    if (ref) {
+      const { before, after } = await fileAtCommit(r.path, ref, path);
+      return { ...sides(before, after), version: null, writable: false };
+    }
     const before = await fileBefore(r.path, r.defaultBranch, path);
-    const afterFile = Bun.file(target);
-    const after = (await afterFile.exists()) ? await afterFile.text() : "";
-    return { before, after };
+    const st = await statFile(target);
+    if (st && st.size > FILE_MAX_CHARS) {
+      // never read whole: a version off the stat is enough for a file nothing will write
+      return { ...NO_TEXT, version: `${st.size}-${st.mtimeMs}`, writable: false, binary: false, tooLarge: true };
+    }
+    const bytes = st ? await readBytes(target) : null;
+    const after = bytes ? decodeText(bytes) : "";
+    const text = after === null ? { ...NO_TEXT, binary: true, tooLarge: false } : sides(before, after);
+    const owned = !!this.state.worktree(worktreeId) && !r.locked;
+    return {
+      ...text,
+      version: bytes && versionOf(bytes),
+      writable: owned && !text.binary && !text.tooLarge,
+    };
   }
 
   /** the writes, unlike the reads, want a worktree toyon actually runs. Autosave and discard fire
@@ -56,23 +122,39 @@ export class FileService {
     return this.state.requireWorktree(worktreeId);
   }
 
-  async write(worktreeId: string, path: string, content: string): Promise<void> {
+  /** Save `content` over the file only if the file is still `base` (null: no file). An agent or
+   * another tab that wrote since gets `changed` back instead of its edit overwritten. */
+  async write(worktreeId: string, path: string, content: string, base: string | null): Promise<FileWrite> {
     const wt = this.requireOwned(worktreeId);
-    await Bun.write(resolveInside(wt.path, path), content);
+    const target = resolveInside(wt.path, path);
+    return withLock(fileLockKey(target), async () => {
+      const current = await readBytes(target);
+      if (current && decodeText(current) === null) throw new UserError("not saved: the file is not text");
+      const next = encodeText(content, current !== null && hasBom(current));
+      const version = versionOf(next);
+      const now = current && versionOf(current);
+      // a write that already landed, sent again after its answer was lost to a reconnect
+      if (now === version) return { ok: true, version };
+      if (now !== base) return { ok: false, reason: "changed", version: now };
+      await Bun.write(target, next);
+      return { ok: true, version };
+    });
   }
 
   /** drop uncommitted changes to one file: back to HEAD, or deleted if untracked */
   async discard(worktreeId: string, path: string): Promise<"restored" | "removed"> {
     const wt = this.requireOwned(worktreeId);
     const target = resolveInside(wt.path, path);
-    const entry = (await statusFiles(wt.path)).find((f) => f.path === path);
-    if (!entry) throw new UserError("file has no uncommitted changes");
-    if (entry.xy === "??") {
-      unlinkSync(target);
-      return "removed";
-    }
-    await git(wt.path, "checkout", "HEAD", "--", path);
-    return "restored";
+    return withLock(fileLockKey(target), async () => {
+      const entry = (await statusFiles(wt.path, path)).find((f) => f.path === path);
+      if (!entry) throw new UserError("file has no uncommitted changes");
+      if (entry.xy === "??") {
+        await unlink(target);
+        return "removed";
+      }
+      await git(wt.path, "checkout", "HEAD", "--", path);
+      return "restored";
+    });
   }
 
   /** tracked + untracked (respecting .gitignore) */

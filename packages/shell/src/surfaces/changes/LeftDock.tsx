@@ -2,7 +2,7 @@ import type { CommitEntry, GitFileStatus } from "@toyon/shared";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
-import { fileItems } from "../../state/actions/file.ts";
+import { fileItems, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive, useActiveId, useActiveRow, useGreenfield, useLocalField } from "../../state/selectors.ts";
 import { repoById } from "../../state/store.ts";
@@ -39,9 +39,9 @@ export function LeftDock({ width }: { width: number }) {
   const greenfield = useGreenfield();
   const focusReq = useStore((s) => s.focusLeft);
   const gitInfo = useLocalField(activeId, "git");
-  // the row whose diff is open in the editor; plain strings so the selectors stay identity-stable
-  const openPath = useStore((s) => (s.diff && s.diff.worktreeId === activeId ? s.diff.path : null));
-  const openRef = useStore((s) => (s.diff && s.diff.worktreeId === activeId ? (s.diff.ref ?? null) : null));
+  // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
+  const openPath = useStore((s) => (s.editor && s.editor.worktreeId === activeId ? s.editor.path : null));
+  const openRef = useStore((s) => (s.editor && s.editor.worktreeId === activeId ? (s.editor.ref ?? null) : null));
   const files = gitInfo?.files ?? NO_FILES;
   const committed = gitInfo?.committed ?? NO_FILES;
   const clean = files.length === 0;
@@ -85,9 +85,11 @@ export function LeftDock({ width }: { width: number }) {
     if (cached) previewBus.post(activeId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
   }, [ranges, activeId]);
 
+  // walking the list opens each file as it arrives, and the keyboard stays here for the next arrow;
+  // Enter is the one that takes it into the file
   const open = useCallback(
-    (path: string) => activeId && sock?.send({ t: "file-diff", worktreeId: activeId, path }),
-    [activeId, sock],
+    (path: string, focus = false) => activeId && openFile({ sock, dispatch }, { worktreeId: activeId, path, focus }),
+    [activeId, sock, dispatch],
   );
 
   // one flat order across both sections, so ↑↓ crosses the section titles the way the eye does
@@ -158,22 +160,22 @@ export function LeftDock({ width }: { width: number }) {
 
   // moving the selection opens the diff, and lights the preview the way hovering the row does
   const select = useCallback(
-    (i: number) => {
+    (i: number, focus = false) => {
       const f = rows[i];
       if (!f) return;
       setSel(i);
-      open(f.path);
+      open(f.path, focus);
       hoverFile(f.path, true);
     },
     [rows, open, hoverFile],
   );
   /** open a file as one commit left it. The sha is the expanded commit's: only one is ever open. */
   const openAt = useCallback(
-    (path: string) => {
+    (path: string, focus = false) => {
       const ref = openShaRef.current;
-      if (activeId && ref) sock?.send({ t: "file-diff", worktreeId: activeId, path, ref });
+      if (activeId && ref) openFile({ sock, dispatch }, { worktreeId: activeId, path, ref, focus });
     },
-    [activeId, sock],
+    [activeId, sock, dispatch],
   );
   // arrows only move over a commit: expanding every row they crossed would push the list around
   // under the person walking it. A file row opens on arrival, the way the changes list does.
@@ -191,7 +193,7 @@ export function LeftDock({ width }: { width: number }) {
       const r = histRows[i];
       if (!r) return;
       setSel(i);
-      if (r.file) openAt(r.file.path);
+      if (r.file) openAt(r.file.path, true);
       else toggleCommit(r.commit.sha);
     },
     [histRows, openAt, toggleCommit],
@@ -204,9 +206,10 @@ export function LeftDock({ width }: { width: number }) {
       if (hist) moveHist(i);
       else select(i);
     } else if (e.key === "Enter") {
+      // the arrows preview; Enter opens the file with the keyboard in it, and Esc there comes back here
       e.preventDefault();
       if (hist) enterHist(sel);
-      else select(sel);
+      else select(sel, true);
     } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       // ←/→ are both the tab strip's keys and a tree's, and with two tabs they can be both: the
       // tree answers while it has something to say (expand, collapse) and the strip when it does
@@ -237,7 +240,7 @@ export function LeftDock({ width }: { width: number }) {
       // next file straight away. Only a list with nothing open hands the keyboard back. It never
       // reaches the app-wide ladder, which would close the terminal ahead of the diff.
       e.stopPropagation();
-      if (openPath !== null) dispatch({ a: "close-diff" });
+      if (openPath !== null) dispatch({ a: "close-editor" });
       else (document.activeElement as HTMLElement | null)?.blur();
     }
   };

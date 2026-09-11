@@ -27,7 +27,7 @@ export function toolRowItems(
     open.push({
       id: "open-diff",
       label: `open ${view}`,
-      onClick: () => openFile(deps, wt.id, rel, view),
+      onClick: () => openFile(deps, { worktreeId: wt.id, path: rel, view }),
     });
     open.push(...editorItems(`${wt.dir}/${rel}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path: rel })));
   }

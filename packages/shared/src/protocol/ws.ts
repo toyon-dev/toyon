@@ -27,6 +27,7 @@ import type {
 import { SHELL_STREAM } from "../model.ts";
 import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta } from "./events.ts";
 import {
+  FILE_MAX_CHARS,
   IMAGE_MAX_BYTES,
   IMAGE_MAX_EDGE,
   IMAGE_MIME_TYPES,
@@ -98,17 +99,31 @@ export type ServerMsg =
   | { t: "git-log"; worktreeId: string; commits: CommitEntry[] }
   /** the files one commit touched; the reply to picking a commit in the history list */
   | { t: "git-commit"; worktreeId: string; sha: string; files: GitFileStatus[] }
-  /** `ref` set means the diff is a commit's, and the editor opens it read-only. `discarded` marks
-   * the file as a discard left it: it refreshes a pane already showing that file and opens none */
+  /** The answer to read-file, with its `seq`. `version` names the bytes on disk (null: no file
+   * there), and a write names it back as its base. A binary or too-large file carries no text, and
+   * neither it, a commit's copy (`ref`), nor a worktree toyon does not run is writable. A read that
+   * failed is still answered, with `error`: the shell holds one request per open file until it is. */
   | {
-      t: "file-diff";
+      t: "file-read";
       worktreeId: string;
       path: string;
+      ref?: string;
+      seq: number;
       before: string;
       after: string;
-      ref?: string;
-      discarded?: "restored" | "removed";
+      version: string | null;
+      writable: boolean;
+      binary: boolean;
+      tooLarge: boolean;
+      error?: string;
     }
+  /** The answer to write-file, exactly one per write. `changed`: the file on disk is not the base
+   * the write named, and `version` is what is there now (null: nothing is). `refused`: the write
+   * was not allowed at all, and `message` says why. */
+  | ({ t: "file-written"; worktreeId: string; path: string; seq: number } & (
+      | { ok: true; version: string }
+      | { ok: false; reason: "changed" | "refused"; version: string | null; message?: string }
+    ))
   | {
       t: "shipped";
       worktreeId: string;
@@ -138,6 +153,8 @@ export type ServerMsg =
 
 /** the terminal stream: bytes for xterm, which the shell routes around its store */
 export type TermServerMsg = Extract<ServerMsg, { t: "term-data" | "term-snapshot" | "term-exit" }>;
+/** the editor's file answers, which the shell's file sync pairs with its requests */
+export type FileServerMsg = Extract<ServerMsg, { t: "file-read" | "file-written" }>;
 
 // ---- client → daemon: schemas are the source of truth ----
 
@@ -148,6 +165,8 @@ const relPath = z.string().min(1).max(4096);
 /** a commit the shell is echoing back from a git-log it was sent. Hex-only, so it can never carry
  * an option or a revision expression into the `git show` that reads it. */
 const sha = z.string().regex(/^[0-9a-f]{4,40}$/);
+/** a request the shell pairs with its answer, which echoes it */
+const seq = z.number().int().min(0);
 /** a chat message or its ambient context */
 const prose = z.string().max(200_000);
 const prompt = z.string().max(20_000);
@@ -307,8 +326,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     worktreeId: id,
   }),
   z.object({ t: z.literal("git-status"), worktreeId: id }),
-  /** `ref` reads the file as of that commit instead of the working tree */
-  z.object({ t: z.literal("file-diff"), worktreeId: id, path: relPath, ref: sha.optional() }),
+  /** the file as the working tree has it, beside what it was at the merge-base with main; `ref`
+   * reads it as that commit left it instead. Answered by exactly one `file-read`. */
+  z.object({ t: z.literal("read-file"), worktreeId: id, path: relPath, ref: sha.optional(), seq }),
   /** the branch's commits for the history tab */
   z.object({ t: z.literal("git-log"), worktreeId: id }),
   /** the files one commit touched, on expanding it in the history tab */
@@ -322,7 +342,16 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("sync-main"), worktreeId: id }),
   /** fast-forward the main checkout (`worktreeId` is main's row) to its upstream */
   z.object({ t: z.literal("pull-main"), worktreeId: id }),
-  z.object({ t: z.literal("write-file"), worktreeId: id, path: relPath, content: z.string().max(10_000_000) }),
+  /** save the editor's text only over `base`, the version it was read or last saved as (null: no
+   * file). Answered by exactly one `file-written`. */
+  z.object({
+    t: z.literal("write-file"),
+    worktreeId: id,
+    path: relPath,
+    content: z.string().max(FILE_MAX_CHARS),
+    base: z.string().max(64).nullable(),
+    seq,
+  }),
   z.object({ t: z.literal("list-files"), worktreeId: id }),
   /** open the `/` menu on a worktree whose agent has not run yet: start it so it says what
    * commands it has. Answered by an `agent-commands` push, or by nothing if it will not start. */

@@ -276,7 +276,7 @@ function markWords(lines: DiffLine[]): void {
     // change entire and carries no marks: the band says that already, and marking every character
     // as well is the same tint painted twice, which is what turns a newly added file into the
     // loudest thing in the window. The diff pane draws its character ranges under its line tint for
-    // exactly this reason (see MonacoDiff). A mark is for placing an edit among lines that carried
+    // exactly this reason (see editor/Editor.tsx). A mark is for placing an edit among lines that carried
     // over, so a line wholly rewritten inside such a run does keep one.
     for (const line of [...dels, ...adds]) line.spans ??= [];
     i = end;

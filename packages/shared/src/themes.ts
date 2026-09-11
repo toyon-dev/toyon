@@ -968,7 +968,7 @@ export function sunkenFloorOf(theme: Theme): string {
 /** The characters an edit touched, inside a line whose band already says it changed. Both surfaces
  * that show a diff paint this over the line tint, so it is a fraction of that tint rather than a
  * colour of its own: at full strength the two composite to nearly twice the wash and a block of
- * added lines becomes the loudest thing in the window (see MonacoDiff, which draws its line and
+ * added lines becomes the loudest thing in the window (see the editor pane's Monaco diff, which draws its line and
  * character ranges as separate elements). A theme moves the tint and both weights follow. */
 export function wordTint(lineTint: string): string {
   return scaleAlpha(lineTint, 0.55);

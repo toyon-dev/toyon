@@ -1,9 +1,10 @@
-import { isTermMsg, PROTOCOL_VERSION, type ServerMsg } from "@toyon/shared";
+import { isFileMsg, isTermMsg, PROTOCOL_VERSION, type ServerMsg } from "@toyon/shared";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
 import { terminalBus } from "./app/terminalBus.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
+import { FileSync } from "./state/fileSync.ts";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
 import { defaultPanels, initialState, type Panels } from "./state/store.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
@@ -116,10 +117,23 @@ const sock = new DaemonSocket(
       terminalBus.deliver(msg);
       return;
     }
+    if (isFileMsg(msg)) {
+      files.receive(msg);
+      return;
+    }
     store.dispatch({ a: "server", msg });
   },
   (v, failure) => store.dispatch({ a: "connected", v, failure }),
 );
+
+// the open file's reads and saves, each paired with its answer and kept in step with the disk
+const files = new FileSync({
+  store,
+  send: (msg) => sock.send(msg),
+  timers: { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id as ReturnType<typeof setTimeout>) },
+  win: window,
+});
+files.start();
 
 // a rebuilt shell rotates every hashed chunk name, so a tab open across a rebuild imports a URL the
 // daemon no longer has. Vite fires this before the rejection reaches render: flag it and let it
@@ -161,7 +175,7 @@ booted.then(() =>
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <StoreProvider store={store} sock={sock}>
+        <StoreProvider store={store} sock={sock} files={files}>
           <App />
         </StoreProvider>
       </ErrorBoundary>

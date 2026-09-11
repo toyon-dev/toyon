@@ -12,6 +12,7 @@ import type { DesignClass, DesignComponent, DesignIndex, DesignToken } from "@to
 import { useEffect } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { designRowItems, designTokenItems } from "../../state/actions/design.ts";
+import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
@@ -54,7 +55,7 @@ export function DesignPane({
   const live = {
     outline: (msg: Parameters<typeof previewBus.post>[1]) => previewBus.post(worktreeId, msg),
     clear: () => previewBus.post(worktreeId, { type: "highlight-clear" }),
-    open: (path: string) => sock?.send({ t: "file-diff", worktreeId, path }),
+    open: (path: string) => openFile({ sock, dispatch }, { worktreeId, path }),
   };
 
   return (

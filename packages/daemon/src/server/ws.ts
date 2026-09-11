@@ -191,6 +191,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     sendTo(worktreeId, { t: "agent", worktreeId, seq, event });
     if (event.type === "tool-end" || event.type === "turn-end") refreshGitStatus(worktreeId);
   });
+  // a save or a discard in one tab: the writer's changes list and every other tab's follow from the
+  // same push, and an editor open on the file re-reads it from there
+  s.hub.on("filesChanged", refreshGitStatus);
   const pushGitStatus = async (worktreeId: string) => {
     if (![...sockets].some((ws) => ws.data.subs.has(worktreeId))) return;
     const info = await s.worktrees.gitStatus(worktreeId);

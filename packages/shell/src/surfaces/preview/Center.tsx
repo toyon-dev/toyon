@@ -36,9 +36,9 @@ const CONNECT_TEXT: Record<ConnectFailure | "probing", string> = {
   unauthorized: "this page's token is not the running daemon's.\nrun `toyon` again and open the link it prints",
 };
 
-import { DiffView } from "../changes/DiffView.tsx";
 import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
+import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, isBusy, previewUrl, relFile, wtDir } from "../util.ts";
@@ -72,7 +72,7 @@ export function Center() {
   const connected = useStore((s) => s.connected);
   const heard = useStore((s) => s.heard);
   const connectFailure = useStore((s) => s.connectFailure);
-  const diff = useStore((s) => s.diff);
+  const editor = useStore((s) => s.editor);
   // an empty project asks what to build before it asks how to start; the panes a previous project
   // left open (a project never laid out adopts what is on screen) hide, not close, until then
   const greenfield = useGreenfield();
@@ -257,7 +257,7 @@ export function Center() {
 
   // editor pane: draggable height + full-height toggle, persisted
   const centerRef = useRef<HTMLDivElement>(null);
-  const [diffH, setDiffH] = usePersisted(STORAGE.diffHeight, 0, (raw) => {
+  const [editorH, setEditorH] = usePersisted(STORAGE.editorHeight, 0, (raw) => {
     const n = Number(raw);
     return Number.isFinite(n) && n >= 120 ? n : 0; // 0 = default 45%
   });
@@ -268,7 +268,7 @@ export function Center() {
   const [designFull, setDesignFull] = usePersisted(STORAGE.designFull, false, (raw) =>
     raw === null ? undefined : raw === "1",
   );
-  const [diffFull, setDiffFull] = usePersisted(STORAGE.diffFull, false, (raw) =>
+  const [editorFull, setEditorFull] = usePersisted(STORAGE.editorFull, false, (raw) =>
     raw === null ? undefined : raw === "1",
   );
   // terminal pane: below the editor pane, same drag, its own persisted height
@@ -291,7 +291,7 @@ export function Center() {
     const room = Math.max(center.clientHeight - fixed - 80, min);
     return Math.min(Math.max(pane.getBoundingClientRect().bottom - ev.clientY, min), room);
   };
-  const startDiffDrag = useDragResize(measurePane(120), (h) => setDiffH(Math.round(h)));
+  const startEditorDrag = useDragResize(measurePane(120), (h) => setEditorH(Math.round(h)));
   const startDesignDrag = useDragResize(measurePane(160), (h) => setDesignH(Math.round(h)));
   const startTermDrag = useDragResize(measurePane(140), (h) => setTermH(Math.round(h)));
 
@@ -299,7 +299,7 @@ export function Center() {
     <div className="center" ref={centerRef}>
       <div
         className="preview-area"
-        style={{ display: (diff && diffFull) || (designOpen && designFull) ? "none" : undefined }}
+        style={{ display: (editor && editorFull) || (designOpen && designFull) ? "none" : undefined }}
       >
         <div className="frames-wrap">
           {frames.map((f) => (
@@ -385,13 +385,13 @@ export function Center() {
             )}
         </div>
       </div>
-      {diff && (
-        <DiffView
-          diff={diff}
-          height={diffFull ? "100%" : diffH > 0 ? diffH : "45%"}
-          full={diffFull}
-          onToggleFull={() => setDiffFull(!diffFull)}
-          onDragStart={startDiffDrag}
+      {editor && (
+        <EditorPane
+          editor={editor}
+          height={editorFull ? "100%" : editorH > 0 ? editorH : "45%"}
+          full={editorFull}
+          onToggleFull={() => setEditorFull(!editorFull)}
+          onDragStart={startEditorDrag}
         />
       )}
       {/* the panes remount per worktree, and they are siblings in one children array: a key both

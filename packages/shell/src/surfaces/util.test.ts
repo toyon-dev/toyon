@@ -1,12 +1,29 @@
 import { describe, expect, test } from "bun:test";
-import type { ProcState, WorktreeStatus } from "@toyon/shared";
-import { commandSource, procTrouble, splitPath, stateLabel } from "./util.ts";
+import type { ProcState, RepoInfo, WorktreeStatus } from "@toyon/shared";
+import { commandSource, procTrouble, rowLabel, splitPath, stateLabel } from "./util.ts";
 
 const proc = (name: string, status: ProcState["status"], port = 3000): ProcState => ({
   name,
   command: `run ${name}`,
   port,
   status,
+});
+
+describe("rowLabel", () => {
+  const row = (kind: "main" | "worktree", name: string) =>
+    ({ id: name, repoId: "r", path: "/p", name, worktree: { kind } }) as unknown as WorktreeStatus;
+  const repo = { name: "toyon", defaultBranch: "trunk" } as unknown as RepoInfo;
+
+  test("main goes by the branch the others come from, not the folder", () => {
+    expect(rowLabel(row("main", "toyon"), repo)).toBe("trunk");
+  });
+  test("a task keeps its title, and a found row its name", () => {
+    expect(rowLabel(row("worktree", "fix-header"), repo)).toBe("fix-header");
+    expect(rowLabel({ id: "d", name: "stray" } as unknown as WorktreeStatus, repo)).toBe("stray");
+  });
+  test("with no project to read a branch from, main keeps its title", () => {
+    expect(rowLabel(row("main", "toyon"), null)).toBe("toyon");
+  });
 });
 
 describe("splitPath", () => {

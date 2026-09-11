@@ -4,6 +4,7 @@ import {
   isMain,
   isOwned,
   type ProcState,
+  type RepoInfo,
   type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
@@ -157,6 +158,13 @@ export function pickLabel(p: { component: string | null; tag: string }): string 
 /** the path to show people for a worktree: the title-named link when the directory itself is a
  * claimed spare's, else the directory (git and the procs always use `path`) */
 export const wtDir = (w: WorktreeInfo) => w.linkPath ?? w.path;
+
+/** what a worktree row is called: main by its branch (main, master, trunk), since it is the base
+ * every other row branches from and the project's own name is already on the pill; every other
+ * row by its title */
+export function rowLabel(w: WorktreeStatus, repo: RepoInfo | null): string {
+  return w.worktree && isMain(w.worktree) && repo ? repo.defaultBranch : w.name;
+}
 
 /** Coarse on purpose: the question an age in a row answers is "how long ago", and a narrow row has
  * no space for a date the reader would have to parse anyway. */

@@ -24,7 +24,7 @@ import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { dollars, tokens } from "../chat/usage.ts";
-import { chord, dotClass, procTrouble, stateLabel } from "../util.ts";
+import { chord, dotClass, procTrouble, rowLabel, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -78,12 +78,13 @@ export function WtRail() {
   const home = useStore((s) => s.home);
   const wtDirLabel = (d: WorktreeStatus) =>
     home && d.path.startsWith(`${home}/`) ? `~${d.path.slice(home.length)}` : d.path;
-  // the tip's lead: which checkout this is when it is main, then what its agent has cost and filled
-  // so far. Kept off the path's line so the path reads whole and the figures are found in one place.
-  const leadOf = (d: WorktreeStatus, main: boolean) => {
+  // the tip's lead: the project's name on main, whose row goes by its branch, then what its agent has
+  // cost and filled so far. Kept off the path's line so the path reads whole and the figures are
+  // found in one place.
+  const leadOf = (d: WorktreeStatus, project: string | null) => {
     const u = d.usage;
     const parts = [
-      main ? "main" : null,
+      project,
       u?.cost !== undefined ? dollars(u.cost) : null,
       u ? `${tokens(u.used)} of ${tokens(u.size)}` : null,
     ].filter(Boolean);
@@ -195,14 +196,14 @@ export function WtRail() {
         // crosses the panel.
         // Badges and the crashed dot keep their own, since those are what a hover over them is
         // asking about. A found row has no state to name, so the path is its text, unless
-        // something holds it. The main checkout is named in the lead, at the far start of the
-        // state's line: its path alone reads as one more worktree.
+        // something holds it. Main's lead names the project, at the far start of the state's line,
+        // since its row goes by its branch and its path alone reads as one more worktree.
         {...(owned
           ? tip(stateLabel(w, repoOf(owned)?.needsSetup), undefined, {
               placement: "left",
               detail: wtDirLabel(w),
               dot: dotClass(w),
-              lead: leadOf(w, isMain(owned.worktree)),
+              lead: leadOf(w, isMain(owned.worktree) ? (repoOf(owned)?.name ?? null) : null),
             })
           : w.locked
             ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, { placement: "left", detail: wtDirLabel(w) })
@@ -263,7 +264,7 @@ export function WtRail() {
             )
           )}
         </span>
-        <span className="branch">{w.name}</span>
+        <span className="branch">{rowLabel(w, owned ? repoOf(owned) : null)}</span>
         {owned?.worktree.mode && owned.worktree.mode !== "auto" && (
           // auto is the default and says nothing; ask and plan change what happens when you look away
           <span className="rail-badge badge-mode" data-tip={`${owned.worktree.mode} mode: the agent waits for you`}>

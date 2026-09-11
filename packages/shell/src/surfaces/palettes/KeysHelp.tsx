@@ -40,7 +40,7 @@ export function KeysHelp() {
         <div>
           {/* the current project first, as its own section: how it installs and starts
               (toyon.json); the pane replaces the preview. Other projects are a switch away
-              (⌘⇧O), not rows here. A long process list truncates rather than widening the column. */}
+              (⌘O), not rows here. A long process list truncates rather than widening the column. */}
           {repo && (
             <>
               <div className="section-title keys-h">{repo.name}</div>

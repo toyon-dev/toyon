@@ -19,6 +19,8 @@ describe("matchChord", () => {
     expect(matchChord(ev(","))).toEqual({ id: "keys" }); // macOS preferences key
     expect(matchChord(ev("l"))).toEqual({ id: "composer" });
     expect(matchChord(ev("L", { shift: true }))).toEqual({ id: "rail" }); // shift keeps the rail's Firefox alias apart
+    expect(matchChord(ev("o"))).toEqual({ id: "project" }); // VS Code's open key
+    expect(matchChord(ev("O", { shift: true }))).toBeNull(); // left to go-to-symbol
     expect(matchChord(ev("/"))).toBeNull(); // left to Monaco's toggle-comment
   });
   test("shift chords match whether the browser reports upper or lower case", () => {
@@ -70,6 +72,15 @@ describe("matchChord", () => {
     expect(matchChord(ev("Tab"))).toBeNull(); // ⌘Tab is the app switcher
     expect(matchChord(ev("Tab", { meta: false, alt: true }))).toBeNull();
     expect(matchChord(ev("Tab", { meta: false }))).toBeNull(); // plain Tab moves focus
+  });
+  test("⌃R opens a project as open-recent does, except in a terminal or a page, which keep it", () => {
+    expect(matchChord(ev("r", { meta: false, ctrl: true }))).toEqual({ id: "project" });
+    expect(matchChord(ev("r", { meta: false, ctrl: true }), { guest: true })).toBeNull(); // history search
+    expect(matchChord(ev("o"), { guest: true })).toEqual({ id: "project" });
+    expect(matchChord(ev("r"))).toBeNull(); // ⌘R reloads
+    expect(matchChord(ev("R", { meta: false, ctrl: true, shift: true }))).toBeNull();
+    // an alias that is not hostOnly still reaches a guest: ⌃Tab walks from inside the terminal
+    expect(matchChord(ev("Tab", { meta: false, ctrl: true }), { guest: true })).toEqual({ id: "wt-next" });
   });
   test("keys the table doesn't own pass through", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find

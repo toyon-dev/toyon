@@ -8,7 +8,7 @@ import { isBusy } from "../util.ts";
 import { PaletteRow } from "./PaletteRow.tsx";
 import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker.ts";
 
-/** ⌘⇧O / the top-left pill: switch the shell to another registered repo, type a path to open one,
+/** ⌘O / the top-left pill: switch the shell to another registered repo, type a path to open one,
  * or make one that is not there yet. The daemon keeps every project's procs running; switching only
  * changes what is on screen. Typing a path completes against the filesystem: repos are openable,
  * plain folders are drilled into (enter or tab), so a nested checkout is reachable without typing

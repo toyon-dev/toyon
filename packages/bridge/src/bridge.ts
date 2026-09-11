@@ -77,7 +77,8 @@ window.addEventListener(
     // a shell framed as a preview keeps its own keyboard: forwarding from here would leave the
     // inner shell dead to every chord and act on keys meant for it
     if (window.__toyonShell) return;
-    const chord = matchChord(e);
+    // the page is a guest keyboard: an alias it may use itself (⌃R in a web terminal) stays its own
+    const chord = matchChord(e, { guest: true });
     // in zen only the chord that leaves zen is ours: a flow under test that uses Escape or ⌘E
     // has to reach the page, and the shell has no visible chrome for the rest to act on anyway
     if (zen) {

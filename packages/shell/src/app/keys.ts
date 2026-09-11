@@ -18,7 +18,9 @@ export function useChords() {
     const onKey = (e: KeyboardEvent) => {
       const s = store.getState();
       const { dispatch } = store;
-      const chord = matchChord(e);
+      // a key xterm let through for the program in it can still bubble here, so a focused terminal
+      // is matched as the guest keyboard it is and keeps its ⌃R
+      const chord = matchChord(e, { guest: !!document.activeElement?.closest(".xterm") });
       // zen mirrors the bridge: the preview owns the keyboard and only the chord that leaves zen
       // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
       // picker holds shell focus, so those keep the full ladder or there is no way back out.

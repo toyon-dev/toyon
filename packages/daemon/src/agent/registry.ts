@@ -24,6 +24,9 @@ export type Confinement =
 export interface AgentSpec {
   id: string;
   name: string;
+  /** the word a model row starts with where several agents' models share one list ("Claude Fable"
+   * rather than "Claude Code Fable"); `name` when absent */
+  short?: string;
   builtin: boolean;
   run:
     | { kind: "npm-bin"; pkg: string; version: string; bin: string; args?: string[] }
@@ -45,6 +48,7 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
   {
     id: "claude",
     name: "Claude Code",
+    short: "Claude",
     builtin: true,
     run: { kind: "npm-bin", pkg: "@agentclientprotocol/claude-agent-acp", version: "0.75.1", bin: "claude-agent-acp" },
     confinement: "claude-settings",
@@ -228,6 +232,7 @@ export class AgentRegistry {
       return {
         id: spec.id,
         name: spec.name,
+        ...(spec.short ? { short: spec.short } : {}),
         available: !reason,
         ...(reason ? { reason } : {}),
         ...(this.installing.has(spec.id) ? { installing: true } : {}),

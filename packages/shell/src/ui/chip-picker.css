@@ -75,6 +75,11 @@
   .chip-option-name {
     color: var(--text0);
   }
+  /* what follows the name (a model's version): still the name, so a tier quieter than it and a tier
+   above the line under it */
+  .chip-option-suffix {
+    color: var(--text1);
+  }
   .chip-option-desc {
     font: var(--type-ui-sm);
     white-space: normal;

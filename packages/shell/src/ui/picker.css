@@ -146,11 +146,6 @@
       padding-inline: var(--picker-inset, 10px);
     }
   }
-  /* a heading over a run of rows (the agent a model belongs to), on the rows' text column; it is not
-   a row, so it takes no seat and no hover */
-  .picker-group {
-    padding: 6px var(--picker-inset, 10px) 2px;
-  }
   /* selection, one idiom everywhere: a 2px bar down the leading edge and a seat that stays neutral.
    The accent never colours the content, so a marked row, an open panel's button and a picked value
    all say the same thing and none of them borrows the shape of an error. */

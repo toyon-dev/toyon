@@ -26,7 +26,7 @@ import { cx } from "../ui/cx.ts";
 /** the worktree rail: the strip it keeps when it peeks, and the column it takes when kept open
  *  (both also in rail.css, as the rail's width and --rail-width) */
 const RAIL_PX = 40;
-const RAIL_OPEN_PX = 232;
+const RAIL_OPEN_PX = 280;
 const MRU_SUBSCRIPTIONS = 3;
 /** how long a worktree stays on screen, with the window focused, before its unseen ring clears */
 const SEEN_AFTER_MS = 2000;
@@ -50,7 +50,9 @@ export function App() {
   const connected = useStore((s) => s.connected);
   const zen = useStore((s) => s.zen);
   const greenfield = useGreenfield();
-  // both docks are hidden, not closed, while the composer sits in the centre of an empty project
+  // both docks are hidden, not closed, while the composer sits in the centre of an empty project.
+  // So is the rail: its only row is main, which is already the one open, and it cannot offer a new
+  // worktree, since one off the root commit would take the scaffold to a branch while main stayed blank.
   const leftOpen = useStore((s) => s.leftOpen) && !greenfield;
   const rightOpen = useStore((s) => s.rightOpen) && !greenfield;
   const railOpen = useStore((s) => s.railOpen);
@@ -240,7 +242,7 @@ export function App() {
   const dragLeft = useDragResize((ev) => clampW(ev.clientX, 220), setLeftW);
   // keeping the rail open takes its width out of the row, so the docks have to know about it: the
   // chat's drag and the status bar both measure back from the window edge
-  const railPx = railOpen ? RAIL_OPEN_PX : RAIL_PX;
+  const railPx = greenfield ? 0 : railOpen ? RAIL_OPEN_PX : RAIL_PX;
   const dragRight = useDragResize((ev) => clampW(window.innerWidth - railPx - ev.clientX, 380), setRightW);
 
   // a right-click nothing else answered: bare chrome opens the app's own menu, so the gesture
@@ -266,7 +268,7 @@ export function App() {
         <Center />
         {rightOpen && <div className="dock-resize right" onPointerDown={dragRight} />}
         <RightDock width={rightW} />
-        <WtRail />
+        {!greenfield && <WtRail />}
       </div>
       {toast && (
         <div className={cx("toast", !toast.ok && "err")} role="status">

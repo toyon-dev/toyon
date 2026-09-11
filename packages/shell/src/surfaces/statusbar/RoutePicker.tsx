@@ -8,23 +8,15 @@ import { useLocalField } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
-import type { Narrow } from "../../ui/listNav.ts";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { wtDir } from "../util.ts";
-import { changedRoutes, completionFor, paramRange, pathOf, type Row, rowsFor } from "./routePicker.ts";
+import { changedRoutes, completionFor, pathOf, type Row, rowsFor } from "./routePicker.ts";
 
 /** module constants, so a repo with no visits yet answers the selector with the same array */
 const NONE: string[] = [];
 const NO_ROWS: Row[] = [];
 
 const isTemplate = (r: Row) => r.kind === "changed" && r.dynamic;
-
-/** a template is not a place: enter puts it in the field with its parameter selected, to type over */
-function fillIn(r: Row): Narrow | null {
-  if (!isTemplate(r)) return null;
-  const range = paramRange(r.path);
-  return range ? { q: r.path, select: range } : { q: r.path };
-}
 
 /** The route bar's list: the pages this branch changed, then the pages the project's previews are
  * used on, most used first. It opens over the address field the way the project switcher opens over
@@ -66,14 +58,14 @@ export function RoutePicker({
       filter={filter}
       initialQuery={current}
       selectOnMount
-      groupOf={(r) => r.kind}
       keyOf={(r) => `${r.kind}:${r.path}`}
       rowClass={() => "picker-row"}
       rowTitle={(r) => (r.kind === "changed" ? r.file : r.path)}
       // the untouched address is what is on screen, not the start of a path, so it completes to
       // nothing; nor does a template, whose parameter is filled in rather than completed
       completionOf={(r, q) => (r.kind === "go" || isTemplate(r) || q === current ? null : completionFor(r.path, q))}
-      narrowTo={fillIn}
+      // a template is not a place: enter puts it in the field to be filled in
+      narrowTo={(r) => (isTemplate(r) ? r.path : null)}
       onPick={(r) => {
         previewBus.post(worktreeId, { type: "navigate", path: r.path });
         close();

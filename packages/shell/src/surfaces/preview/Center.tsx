@@ -49,6 +49,7 @@ import { ImportPane } from "./ImportPane.tsx";
 import { NoPreviewPane } from "./NoPreviewPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 import "./preview.css";
+import { wantsLinks } from "../../state/links.ts";
 import { VisitTracker } from "../../state/visits.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 
@@ -65,7 +66,11 @@ export function Center() {
   const [visits] = useState(
     () =>
       new VisitTracker(
-        (worktreeId, path, title) => sockRef.current?.send({ t: "visit", worktreeId, path, title }),
+        (worktreeId, path, title) => {
+          sockRef.current?.send({ t: "visit", worktreeId, path, title });
+          // an app no scan could read offers its pages as links: gather this page's while it is on screen
+          if (wantsLinks(store.getState().local[worktreeId]?.pages)) previewBus.post(worktreeId, { type: "links" });
+        },
         (worktreeId, path, title) => sockRef.current?.send({ t: "page-title", worktreeId, path, title }),
       ),
   );
@@ -166,6 +171,9 @@ export function Center() {
           case "title":
             dispatch({ a: "page", id, title: d.title });
             visits.title(id, d.title);
+            break;
+          case "links":
+            dispatch({ a: "links", id, links: d.links });
             break;
           case "page-error": {
             const where = d.source ? ` (${relFile(d.source)}:${d.line ?? "?"})` : "";

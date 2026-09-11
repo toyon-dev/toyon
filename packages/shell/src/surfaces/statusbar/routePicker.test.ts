@@ -89,6 +89,25 @@ describe("the untouched list", () => {
     const routes = [route("/users/[id]")];
     expect(untouched([entry("/users/42"), entry("/users/43")], routes, {}, "/users/42")).toEqual(["Users /users/43"]);
   });
+
+  test("an app with no route table lists the links its pages showed, by what they say", () => {
+    const links = [
+      { path: "/", text: "Home" },
+      { path: "/pricing", text: "Plans and pricing" },
+      { path: "/contact", text: "" },
+    ];
+    const m = pageModel([entry("/pricing")], { routes: [], unseen: {} }, links);
+    // the page you visited is named by its link, the page on screen is left out, and a link that
+    // says nothing is named from its path
+    expect(show(rowsFor(m, { query: "/", current: "/", here: "/" }))).toEqual([
+      "Plans and pricing /pricing",
+      "Contact /contact",
+    ]);
+    expect(show(rowsFor(m, { query: "plans", current: "/", here: "/" }))).toEqual([
+      "go /plans",
+      "Plans and pricing /pricing",
+    ]);
+  });
 });
 
 describe("typing", () => {

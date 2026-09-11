@@ -10,6 +10,7 @@ import {
   compileRoute,
   type PageBadge,
   type PageEntry,
+  type PageLink,
   type RouteInfo,
   type Template,
   templateFor,
@@ -52,9 +53,11 @@ export interface PageModel {
   templateRoutes: Map<string, RouteInfo>;
   unseen: Record<string, PageBadge>;
   titles: Map<string, string>;
+  /** links the preview's pages showed, by path to what they said: an app with no route table's pages */
+  links: Map<string, string>;
 }
 
-export function pageModel(history: PageEntry[], pages: WorktreePages | undefined): PageModel {
+export function pageModel(history: PageEntry[], pages: WorktreePages | undefined, links: PageLink[] = []): PageModel {
   const statics = new Map<string, RouteInfo>();
   const templates: Template[] = [];
   const templateRoutes = new Map<string, RouteInfo>();
@@ -66,7 +69,15 @@ export function pageModel(history: PageEntry[], pages: WorktreePages | undefined
       templateRoutes.set(route.path, route);
     } else statics.set(route.path, route);
   }
-  return { history, statics, templates, templateRoutes, unseen: pages?.unseen ?? {}, titles: pageTitles(history) };
+  return {
+    history,
+    statics,
+    templates,
+    templateRoutes,
+    unseen: pages?.unseen ?? {},
+    titles: pageTitles(history),
+    links: new Map(links.map((l) => [l.path, l.text])),
+  };
 }
 
 /** the address as the bar shows it: path, query and hash, since a hash router's route is its hash */
@@ -215,7 +226,8 @@ function pageRow(m: PageModel, path: string, rank: number): Candidate {
   return {
     kind: "page",
     path,
-    title: m.titles.get(path) ?? humanize(path),
+    // the page's own title, else what a link to it said, else a word from its path
+    title: m.titles.get(path) || m.links.get(path) || humanize(path),
     template: false,
     visited: rank < Number.POSITIVE_INFINITY,
     ...(file ? { file } : {}),
@@ -276,7 +288,8 @@ function untouchedRows(m: PageModel, here: string | null): Row[] {
   const rows = badged.slice(0, UNTOUCHED_MAX - Math.min(HISTORY_RESERVE, plain.length));
   for (const c of plain) if (rows.length < UNTOUCHED_MAX) rows.push(c);
   const shown = new Set(rows.map((r) => r.path));
-  const fill = [...m.statics.keys()]
+  // the app's pages, and then, for an app with no route table, the pages its links led to
+  const fill = [...m.statics.keys(), ...[...m.links.keys()].filter((path) => !m.statics.has(path))]
     .filter((path) => path !== here && !shown.has(path) && !listed.has(path))
     .sort((a, b) => depth(a) - depth(b) || (a < b ? -1 : a > b ? 1 : 0));
   for (const path of fill) {
@@ -293,7 +306,7 @@ function typedRows(m: PageModel, query: string, here: string | null): Row[] {
   m.history.forEach((entry, rank) => {
     if (entry.path !== here) pages.set(entry.path, pageRow(m, entry.path, rank));
   });
-  for (const path of m.statics.keys()) {
+  for (const path of [...m.statics.keys(), ...m.links.keys()]) {
     if (path !== here && !pages.has(path)) pages.set(path, pageRow(m, path, Number.POSITIVE_INFINITY));
   }
   const scored: Candidate[] = [];

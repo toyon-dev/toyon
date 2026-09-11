@@ -4,8 +4,10 @@ import { previewBus } from "../../app/previewBus.ts";
 import { fileItems } from "../../state/actions/file.ts";
 import { visitItems } from "../../state/actions/route.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { wantsLinks } from "../../state/links.ts";
 import { useLocalField } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
+import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { SEP, tidy } from "../../ui/menu.ts";
 import { wtDir } from "../util.ts";
@@ -66,11 +68,16 @@ export function RoutePicker({
   const sock = useSock();
   const history = useStore((s) => s.visits[repoId] ?? NONE);
   const pages = useLocalField(worktreeId, "pages");
+  const links = useLocalField(worktreeId, "links");
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId);
     return w ? wtDir(w.worktree) : null;
   });
-  const model = useMemo(() => pageModel(history, pages), [history, pages]);
+  // an app no scan could read offers its pages as links: this page's are gathered as the list opens
+  useOnChange([worktreeId], () => {
+    if (wantsLinks(pages)) previewBus.post(worktreeId, { type: "links" });
+  });
+  const model = useMemo(() => pageModel(history, pages, links), [history, pages, links]);
   const current = pathOf(url);
   const here = url ? routeKey(url) : null;
   const filter = useCallback(

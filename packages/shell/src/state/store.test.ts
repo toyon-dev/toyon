@@ -1361,4 +1361,14 @@ describe("routes", () => {
     const s = run([hello(wt("a")), server({ t: "routes", worktreeId: "a", routes, unseen })]);
     expect(localOf(s, "a").pages).toEqual({ routes, unseen });
   });
+
+  test("links a page showed join the worktree's, and nothing new leaves its record alone", () => {
+    const first = run([
+      hello(wt("a")),
+      { a: "links", id: "a", links: [{ path: "/pricing?ref=nav", text: "Pricing" }] },
+    ]);
+    expect(localOf(first, "a").links).toEqual([{ path: "/pricing", text: "Pricing" }]);
+    const again = reducer(first, { a: "links", id: "a", links: [{ path: "/pricing", text: "Plans" }] });
+    expect(localOf(again, "a")).toBe(localOf(first, "a"));
+  });
 });

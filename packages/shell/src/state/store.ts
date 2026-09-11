@@ -23,6 +23,7 @@ import type {
   LogLine,
   OwnedWorktree,
   PageEntry,
+  PageLink,
   PasteInput,
   PasteRef,
   PathEntry,
@@ -53,6 +54,7 @@ import {
   SHELL_STREAM,
   toyonDark,
 } from "@toyon/shared";
+import { mergeLinks } from "./links.ts";
 import { railOrder } from "./railOrder.ts";
 
 export type UsageFigures = { used: number; size: number; cost?: number };
@@ -145,6 +147,8 @@ export interface WorktreeLocal {
   /** the pages this worktree's files define and which changed since you last had them open, pushed
    * with its git status; undefined until the first push */
   pages?: WorktreePages;
+  /** links this worktree's preview pages showed, for an app with no route table; this session only */
+  links?: PageLink[];
   /** the composer's unsent text; survives switching worktrees, and is where the daemon's
    * conflict-resolution suggestion lands */
   draft: string;
@@ -725,6 +729,8 @@ export type Action =
   | { a: "clear-pastes"; id: string }
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
+  /** links a preview's page showed, for an app with no route table */
+  | { a: "links"; id: string; links: PageLink[] }
   | { a: "drag-files"; v: boolean }
   | { a: "set-picking"; v: PickVerb | false }
   | { a: "picked"; pick: NonNullable<State["pick"]> }
@@ -946,6 +952,11 @@ function reduce(s: State, action: Action): State {
           errors: action.fresh ? [] : action.error ? [...l.page.errors.slice(-2), action.error] : l.page.errors,
         },
       }));
+    case "links":
+      return withLocal(s, action.id, (l) => {
+        const links = mergeLinks(l.links ?? [], action.links);
+        return links === l.links ? l : { ...l, links };
+      });
     case "drag-files":
       return s.dragFiles === action.v ? s : { ...s, dragFiles: action.v };
     case "set-picking":

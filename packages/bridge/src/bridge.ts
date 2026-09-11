@@ -418,6 +418,22 @@ window.addEventListener("message", (e) => {
     case "forward":
       history.forward();
       break;
+    case "links": {
+      // the pages an app with no route table offers from here: same-origin links a click would follow
+      const seen = new Set<string>();
+      const links: Array<{ path: string; text: string }> = [];
+      for (const a of Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+        if (a.origin !== location.origin || a.target === "_blank" || a.hasAttribute("download")) continue;
+        const path = a.pathname + (a.hash.startsWith("#/") ? a.hash : "");
+        if (path.startsWith("/__toyon") || seen.has(path)) continue;
+        seen.add(path);
+        const text = (a.textContent || a.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+        links.push({ path, text: text.slice(0, 80) });
+        if (links.length >= 200) break;
+      }
+      post({ type: "links", links });
+      break;
+    }
     case "pick-start":
       startPicking(d.verb === "code");
       break;

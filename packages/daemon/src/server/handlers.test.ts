@@ -250,6 +250,8 @@ describe("handlers", () => {
     await Bun.write(`${main.path}/app/pricing/page.tsx`, "export default () => 'plans';\n");
     expect((await pages()).unseen).toEqual({ "app/pricing/page.tsx": "changed" });
     expect(services.state.seenOf(main.id)?.here).toBe("app/page.tsx");
+    // written now, rather than by a timer that would outlive this test's temp directory
+    services.routes.flush();
   });
 
   test("a manifest is read again only when it changes", async () => {

@@ -122,15 +122,16 @@
    docks collapse/resize (chrome that shifts underfoot reads as breakage) */
   .bar-center {
     position: absolute;
-    transform: translateX(-50%);
     display: flex;
     align-items: center;
     gap: 4px;
     width: min(520px, 40vw);
+    /* centred on `left` by half its width in margin rather than translateX(-50%): a transform makes
+     the cluster a stacking context, so the route list's rung would count only inside it, and the
+     rung the cluster then needs ties with the project panel beside it and paints the address over
+     that panel. Without one, both lists stand on the same ladder. */
+    margin-left: calc(min(520px, 40vw) / -2);
     transition: left 0.15s ease;
-    /* the transform above makes this a stacking context, so the route list's own z-index only
-     counts in here; without the anchored picker's rung on the cluster, the preview paints over it */
-    z-index: 40;
   }
   /* while a dock is being dragged the centre tracks the pointer, and easing there reads as lag */
   body.resizing .bar-center {

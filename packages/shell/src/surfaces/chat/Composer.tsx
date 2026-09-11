@@ -6,7 +6,7 @@ import { terminalItems } from "../../state/actions/proc.ts";
 import { shipOp } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
-import { useLocalField, usePreviewId } from "../../state/selectors.ts";
+import { useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
 import { type Draft, draftKey } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -231,6 +231,20 @@ export function Composer({
     const f = requestAnimationFrame(() => composerRef.current?.focus());
     return () => cancelAnimationFrame(f);
   }, [drafting]);
+  // ⌘J, ⌘K and ⌘L ask for the box by bumping a counter; focus is the DOM's. Only a bump seen after
+  // mount counts, or a box mounting later (an empty project's) would take a request long answered.
+  // On an empty project the dock's copy is hidden, so the centre's answers.
+  const focusReq = useStore((s) => s.focusRight);
+  const answered = useRef(focusReq);
+  const centred = !!useGreenfield();
+  useOnChange([focusReq], () => {
+    if (focusReq === answered.current) return;
+    answered.current = focusReq;
+    if (centred !== !!greenfield) return;
+    // next frame: the dock may be re-appearing
+    const f = requestAnimationFrame(() => composerRef.current?.focus());
+    return () => cancelAnimationFrame(f);
+  });
 
   const nav = useListNav<Row>({
     results: rows,

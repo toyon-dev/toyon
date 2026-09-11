@@ -329,8 +329,12 @@ export interface State {
   /** bumped to put the keyboard in the changes list; focus is the DOM's, so this only asks */
   focusLeft: number;
   rightOpen: boolean;
+  /** bumped to put the keyboard in the composer, the same way */
+  focusRight: number;
   /** the worktree panel is kept open, instead of peeking on hover and collapsing to the strip */
   railOpen: boolean;
+  /** bumped to put the keyboard on the rail's current row */
+  focusRail: number;
   /** the layout each project was last left in; the active one's is what the flags above hold */
   panels: Record<string, Panels>;
   /** one-shot: auto-close the changes panel if the session starts on a clean main, unless the
@@ -427,7 +431,9 @@ export function initialState(opts: InitialOpts): State {
     leftOpen: true,
     focusLeft: 0,
     rightOpen: true,
+    focusRight: 0,
     railOpen: opts.storedRailOpen ?? false,
+    focusRail: 0,
     panels: opts.storedPanels ?? {},
     leftAuto: true,
     zen: false,
@@ -622,9 +628,13 @@ export type Action =
   /** open the changes panel if it is shut, and ask it for the keyboard either way */
   | { a: "focus-left" }
   | { a: "toggle-right" }
+  /** open the chat panel if it is shut, and ask the composer for the keyboard either way */
+  | { a: "focus-right" }
   /** the first greenfield message was sent: the chat goes back to its dock */
   | { a: "show-right" }
   | { a: "toggle-rail" }
+  /** pin the worktree panel if it is not, and ask its current row for the keyboard either way */
+  | { a: "focus-rail" }
   /** open or close the active project's discovered section */
   | { a: "toggle-discovered" }
   | { a: "toggle-zen" }
@@ -807,10 +817,14 @@ function reduce(s: State, action: Action): State {
       return { ...s, leftOpen: true, leftAuto: false, focusLeft: s.focusLeft + 1 };
     case "toggle-right":
       return { ...s, rightOpen: !s.rightOpen };
+    case "focus-right":
+      return { ...s, rightOpen: true, focusRight: s.focusRight + 1 };
     case "show-right":
       return s.rightOpen ? s : { ...s, rightOpen: true };
     case "toggle-rail":
       return { ...s, railOpen: !s.railOpen };
+    case "focus-rail":
+      return { ...s, railOpen: true, focusRail: s.focusRail + 1 };
     case "toggle-discovered": {
       const repoId = s.activeRepoId;
       if (!repoId) return s;

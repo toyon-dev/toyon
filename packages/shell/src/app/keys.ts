@@ -25,7 +25,9 @@ export function useChords() {
       if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
       // ⌘D and ⌘K are Monaco's (add cursor, chord prefix) while it has the keyboard, and so are
       // ⌥↑/↓ (move line) and ⌥⇧↑/↓ (copy line); taking them from a focused editor made a design
-      // scan out of a second cursor, and would make a worktree switch out of a line move
+      // scan out of a second cursor, and would make a worktree switch out of a line move. ⌘L is
+      // taken from it anyway: expand-line-selection is the loss, and a hand in the editor that
+      // wants to answer the agent is who the chord is for.
       const monaco = !!document.activeElement?.closest(".monaco-editor");
       if (monaco && chord && MONACO_OWNS.has(chord.id)) return;
       if (chord) {
@@ -56,11 +58,8 @@ export function useChords() {
             // already open it keeps the draft and puts the caret back in it, so a hand that has
             // not looked is never dropped back on the row it left. The rail's row still toggles,
             // since a click on the picked row is a deliberate second look; Escape is the way back.
-            if (s.draft) {
-              if (!s.rightOpen) dispatch({ a: "show-right" });
-              // next frame: the dock may be re-appearing
-              requestAnimationFrame(() => document.querySelector<HTMLElement>(".chat-input textarea")?.focus());
-            } else dispatch({ a: "open-draft" });
+            if (s.draft) dispatch({ a: "focus-right" });
+            else dispatch({ a: "open-draft" });
             break;
           case "project":
             // the picker hangs off the pill, and zen hides the bar it lives in: leave zen first
@@ -93,17 +92,24 @@ export function useChords() {
           case "zen":
             dispatch({ a: "toggle-zen" });
             break;
+          // the panel chords are plain toggles: open it or shut it. Opening hands it the keyboard
+          // (the changes list, the composer, the current worktree row), but a second press closes
+          // it rather than stopping to focus a panel that is already on screen. ⌘L is the chord
+          // that only focuses.
           case "left":
-            // a plain toggle: open it or shut it. Opening hands it the keyboard, but a second
-            // press closes it rather than stopping to focus a panel that is already on screen.
             if (s.leftOpen) dispatch({ a: "toggle-left" });
             else dispatch({ a: "focus-left" });
             break;
           case "right":
-            dispatch({ a: "toggle-right" });
+            if (s.rightOpen) dispatch({ a: "toggle-right" });
+            else dispatch({ a: "focus-right" });
+            break;
+          case "composer":
+            dispatch({ a: "focus-right" });
             break;
           case "rail":
-            dispatch({ a: "toggle-rail" });
+            if (s.railOpen) dispatch({ a: "toggle-rail" });
+            else dispatch({ a: "focus-rail" });
             break;
           case "keys":
             dispatch({ a: "toggle", overlay: { kind: "keys" } });

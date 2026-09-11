@@ -2,7 +2,7 @@
 // identifiers, and string-literal prop unions. Nothing here touches the filesystem, so the service
 // stays a thin shell around `git ls-files` and these.
 
-import type { DesignToken, DesignTokenKind, DesignVariant } from "@toyon/shared";
+import type { DesignLiteral, DesignLiteralRole, DesignToken, DesignTokenKind, DesignVariant } from "@toyon/shared";
 
 // color-mix and light-dark before the comma rule below, or a `color-mix(in srgb, …)` is filed as a
 // font stack on the strength of its commas and shown as a type specimen
@@ -309,4 +309,263 @@ export function resolveAliases(tokens: DesignToken[]): DesignToken[] {
     if (value === t.value) return t;
     return { ...t, resolved: value, kind: tokenKind(value) };
   });
+}
+
+/** One style rule: the selector it applies to, with nesting and at-rules flattened away. */
+export interface CssRule {
+  selector: string;
+  decls: Array<[prop: string, value: string]>;
+}
+
+/** Blocks whose declarations describe something other than an element. A `font-family` inside
+ * `@font-face` names a font rather than using one, and a keyframe's `from` is not a selector. */
+const DESCRIPTOR_BLOCK = /^@(?:-webkit-)?(?:font-face|keyframes|property|counter-style|page|font-feature-values)\b/i;
+
+/** `//` comments, which Sass, Less and Stylus allow and CSS does not. The character in front rules
+ * out a URL (`https://`, `url(//cdn)`), where the two slashes are not a comment. */
+const stripLineComments = (css: string) => css.replace(/(^|[^:(\w"'])\/\/[^\n]*/g, "$1");
+
+/**
+ * Every style rule a stylesheet writes, each with the selector a nested rule actually applies to.
+ *
+ * A walk rather than a regex, because what is read here is which rule a declaration sits in: the
+ * font a whole page inherits and the `font-size` on one heading are the same text otherwise.
+ * Semicolons and braces inside parentheses or quotes belong to a value
+ * (`url(data:image/png;base64,...)`), so those are stepped over.
+ */
+export function cssRules(css: string): CssRule[] {
+  const text = stripLineComments(stripComments(css));
+  const out: CssRule[] = [];
+  const stack: Array<{ rule: CssRule | null; selector: string | null; skip: boolean }> = [
+    { rule: null, selector: null, skip: false },
+  ];
+  const top = () => stack[stack.length - 1]!;
+  let buf = "";
+  let depth = 0;
+  let quote = "";
+
+  const declare = () => {
+    const m = /^([a-zA-Z-][\w-]*)\s*:\s*([\s\S]+)$/.exec(buf.trim());
+    const { rule, skip } = top();
+    if (m && rule && !skip) rule.decls.push([m[1]!.toLowerCase(), m[2]!.trim()]);
+    buf = "";
+  };
+  const open = () => {
+    const prelude = buf.trim().replace(/\s+/g, " ");
+    buf = "";
+    const parent = top();
+    if (parent.skip || DESCRIPTOR_BLOCK.test(prelude)) {
+      stack.push({ rule: null, selector: null, skip: true });
+    } else if (!prelude || prelude.startsWith("@")) {
+      // @media, @supports, @layer and @container wrap rules without being one, so a declaration
+      // directly inside one still belongs to the rule around it
+      stack.push({ ...parent });
+    } else {
+      const outer = parent.selector;
+      const selector =
+        outer === null ? prelude : prelude.includes("&") ? prelude.replace(/&/g, () => outer) : `${outer} ${prelude}`;
+      const rule: CssRule = { selector, decls: [] };
+      out.push(rule);
+      stack.push({ rule, selector, skip: false });
+    }
+  };
+
+  for (const ch of text) {
+    if (quote) {
+      if (ch === quote) quote = "";
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === "(") {
+      depth++;
+    } else if (ch === ")") {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0 && ch === ";") {
+      declare();
+      continue;
+    } else if (depth === 0 && ch === "{") {
+      open();
+      continue;
+    } else if (depth === 0 && ch === "}") {
+      declare();
+      if (stack.length > 1) stack.pop();
+      continue;
+    }
+    buf += ch;
+  }
+  return out;
+}
+
+/** the face and leading type inherits, where a rule sets them */
+export interface FontContext {
+  family?: string;
+  lead?: string;
+}
+
+const FONT_LENGTH = /^[\d.]+(?:px|rem|em|pt|%)$/;
+const LEAD = /^(?:[\d.]+(?:px|rem|em|%)?|normal)$/;
+const WIDE_KEYWORD = /^(?:inherit|initial|unset|revert|revert-layer)$/i;
+/** `font: italic 600 13px/1.5 Inter, sans-serif`: the size is the first length, an optional
+ * `/leading` follows it, and the family list runs from there to the end */
+const FONT_PARTS = /(?:^|\s)([\d.]+(?:px|rem|em|pt|%))(?:\s*\/\s*(\S+))?\s+(\S[\s\S]*)$/;
+
+function fontParts(value: string): { size: string; lead?: string; family: string } | null {
+  const m = FONT_PARTS.exec(value);
+  return m ? { size: m[1]!, lead: m[2], family: m[3]!.trim() } : null;
+}
+
+/** a family worth naming: `var(--face)` is a token's, and `inherit` is nobody's */
+const literalFamily = (v: string | undefined) => (v && !WIDE_KEYWORD.test(v) && !v.includes("var(") ? v : undefined);
+
+/** a rule's own face and leading, later declarations winning the way the cascade reads a rule */
+function ruleFont(rule: CssRule): FontContext {
+  const out: FontContext = {};
+  for (const [prop, value] of rule.decls) {
+    if (prop === "font-family") out.family = literalFamily(value) ?? out.family;
+    else if (prop === "line-height" && LEAD.test(value)) out.lead = value;
+    else if (prop === "font") {
+      const parts = fontParts(value);
+      out.family = literalFamily(parts?.family) ?? out.family;
+      out.lead = parts?.lead ?? out.lead;
+    }
+  }
+  return out;
+}
+
+const ROOT_SELECTOR = /^(?:html|body|:root|\*)$/;
+const isRoot = (selector: string) => selector.split(",").every((s) => ROOT_SELECTOR.test(s.trim()));
+
+/** How close a root rule sits to the text: `*` sets every element directly and beats inheritance,
+ * body is what the text inherits from, and html and :root are one step further out. */
+const rootRank = (selector: string) => (selector.includes("*") ? 3 : /\bbody\b/.test(selector) ? 2 : 1);
+
+/** The face and leading a size inherits when its own rule names neither: whatever the page root
+ * sets, the root closest to the text winning. */
+export function rootFont(rules: CssRule[]): FontContext {
+  const out: FontContext = {};
+  const rank = { family: 0, lead: 0 };
+  for (const rule of rules) {
+    if (!isRoot(rule.selector)) continue;
+    const font = ruleFont(rule);
+    const r = rootRank(rule.selector);
+    if (font.family && r > rank.family) [out.family, rank.family] = [font.family, r];
+    if (font.lead && r > rank.lead) [out.lead, rank.lead] = [font.lead, r];
+  }
+  return out;
+}
+
+/** one declaration's worth of a written-out value, before the stylesheets are folded together */
+export interface LiteralHit {
+  role: DesignLiteralRole;
+  value: string;
+  selector: string;
+  family?: string;
+  lead?: string;
+  ground?: boolean;
+}
+
+/** a colour written as itself. Only spellings that cannot be anything else: a named colour is also
+ * a word, and `transparent` or `currentColor` are not palette entries. */
+const HEX_LITERAL = /#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})\b/gi;
+const COLOR_FN_LITERAL = /\b(?:rgba?|hsla?|hwb|oklch|oklab|lab|lch|color)\([^()]*\)/gi;
+const RADIUS_PROP = /^border(?:-(?:top|bottom|start|end)-(?:left|right|start|end))?-radius$/;
+const RADIUS_VALUE = /^[\d.]+(?:px|rem|em|%)?(?:\s+[\d.]+(?:px|rem|em|%)?){0,3}$/;
+
+function colorsIn(value: string): string[] {
+  // a url() holds fragment ids (`url(#grad)`) and a string holds anything; neither is a colour
+  const bare = value.replace(/url\([^)]*\)/gi, " ").replace(/"[^"]*"|'[^']*'/g, " ");
+  return [...bare.matchAll(HEX_LITERAL), ...bare.matchAll(COLOR_FN_LITERAL)].map((m) => m[0]);
+}
+
+/**
+ * The colours, faces, sizes, radii and shadows a stylesheet writes out in place. A reference to a
+ * variable is skipped wherever it sits: that value has a name, and the tokens already show it.
+ *
+ * A shadow's colour is not taken as a palette entry. It is nearly always black at some alpha, and
+ * a row of those beside the brand colours buries them.
+ */
+export function cssLiterals(rules: CssRule[], root: FontContext): LiteralHit[] {
+  const out: LiteralHit[] = [];
+  for (const rule of rules) {
+    const own = ruleFont(rule);
+    const add = (hit: Omit<LiteralHit, "selector">) => out.push({ ...hit, selector: rule.selector });
+    const size = (value: string) =>
+      add({ role: "size", value, family: own.family ?? root.family, lead: own.lead ?? root.lead });
+    for (const [prop, value] of rule.decls) {
+      if (prop.startsWith("--")) continue;
+      if (prop === "box-shadow" || prop === "text-shadow") {
+        if (!/^none$/i.test(value) && !value.includes("var(")) add({ role: "shadow", value });
+        continue;
+      }
+      if (prop !== "filter" && prop !== "backdrop-filter") {
+        const ground = isRoot(rule.selector) && /^background(?:-color)?$/.test(prop);
+        for (const color of colorsIn(value)) add({ role: "color", value: color, ground });
+      }
+      if (prop === "font-family" && literalFamily(value)) add({ role: "family", value });
+      if (prop === "font") {
+        const parts = fontParts(value);
+        if (parts && literalFamily(parts.family)) add({ role: "family", value: parts.family });
+        if (parts) size(parts.size);
+      }
+      if (prop === "font-size" && FONT_LENGTH.test(value)) size(value);
+      // a zero radius is a reset, not a rung on the scale
+      if (RADIUS_PROP.test(prop) && RADIUS_VALUE.test(value) && /[1-9]/.test(value)) add({ role: "radius", value });
+    }
+  }
+  return out;
+}
+
+/** How two spellings of one value are told from two values: `#FFF` and `#ffffff` are one colour,
+ * and `'Inter', sans-serif` and `"Inter",sans-serif` are one stack. */
+export function literalKey(role: DesignLiteralRole, value: string): string {
+  const v = value.trim().toLowerCase();
+  if (role === "color") {
+    const short = /^#([0-9a-f]{3,4})$/.exec(v);
+    return short ? `#${[...short[1]!].map((c) => c + c).join("")}` : v.replace(/\s+/g, "");
+  }
+  if (role === "family") return v.replace(/'/g, '"').replace(/\s*,\s*/g, ",");
+  return v.replace(/\s+/g, " ");
+}
+
+/** enough to say where a value lives without shipping every rule of a large stylesheet */
+const MAX_SELECTORS = 6;
+
+/** Every stylesheet's hits folded into one entry per value, in the order the files are given. */
+export function mergeLiterals(files: Array<{ path: string; hits: LiteralHit[] }>): DesignLiteral[] {
+  // one stack spelled two ways is one face, so a size names its face the way the family entry does
+  const faces = new Map<string, string>();
+  for (const { hits } of files) {
+    for (const hit of hits) {
+      const key = literalKey("family", hit.value);
+      if (hit.role === "family" && !faces.has(key)) faces.set(key, hit.value);
+    }
+  }
+
+  const out = new Map<string, DesignLiteral>();
+  for (const { path, hits } of files) {
+    for (const hit of hits) {
+      const family = hit.family === undefined ? undefined : (faces.get(literalKey("family", hit.family)) ?? hit.family);
+      const key = [
+        hit.role,
+        literalKey(hit.role, hit.value),
+        family ? literalKey("family", family) : "",
+        hit.lead ?? "",
+      ];
+      const id = key.join("\n");
+      const seen = out.get(id);
+      if (seen) {
+        seen.uses++;
+        if (seen.selectors.length < MAX_SELECTORS && !seen.selectors.includes(hit.selector)) {
+          seen.selectors.push(hit.selector);
+        }
+        if (hit.ground) seen.ground = true;
+        continue;
+      }
+      const literal: DesignLiteral = { value: hit.value, role: hit.role, uses: 1, selectors: [hit.selector], path };
+      if (family !== undefined) literal.family = family;
+      if (hit.lead !== undefined) literal.lead = hit.lead;
+      if (hit.ground) literal.ground = true;
+      out.set(id, literal);
+    }
+  }
+  return [...out.values()];
 }

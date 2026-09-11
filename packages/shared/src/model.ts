@@ -495,6 +495,34 @@ export interface DesignToken {
   kind: DesignTokenKind;
 }
 
+/** What a written-out value is doing, read off the property it sits on: `13px` is type on a
+ * `font-size` and a radius on a `border-radius`, and the value alone cannot say which. */
+export type DesignLiteralRole = "color" | "family" | "size" | "radius" | "shadow";
+
+/**
+ * A value a stylesheet writes out where it is used instead of naming it. A project with no custom
+ * properties still has a palette and a type scale; they are spelled in place, rule by rule, and
+ * these are what the pane shows when there are no tokens to show.
+ */
+export interface DesignLiteral {
+  /** the first spelling seen, which is what a search of the source will find */
+  value: string;
+  role: DesignLiteralRole;
+  /** declarations that write it */
+  uses: number;
+  /** the rules that write it, the first few, in stylesheet order */
+  selectors: string[];
+  /** the stylesheet that writes it first */
+  path: string;
+  /** a size's face and leading: its own rule's, else whatever the page root sets. A size alone
+   * would render in the pane's face, which is not the one the project reads it in. */
+  family?: string;
+  lead?: string;
+  /** set as a background on html, body or :root: the page's own ground, and so what contrast is
+   * measured against */
+  ground?: boolean;
+}
+
 /** a string-literal union prop: the values a component says it allows */
 export interface DesignVariant {
   prop: string;
@@ -557,6 +585,8 @@ export interface DesignIndex {
   /** the project shipped a typescript the daemon could parse prop unions with */
   typed: boolean;
   tokens: DesignToken[];
+  /** colours and sizes the stylesheets write out rather than name */
+  literals: DesignLiteral[];
   components: DesignComponent[];
   classes: DesignClass[];
   coverage: DesignCoverage;

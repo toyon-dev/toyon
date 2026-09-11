@@ -8,17 +8,26 @@
 // by selector, a component by the file its fibers came from), and clicking one opens its source.
 // That is the whole reason this sits beside the preview rather than in a docs tab.
 
-import type { DesignClass, DesignComponent, DesignIndex, DesignToken } from "@toyon/shared";
+import type {
+  DesignClass,
+  DesignComponent,
+  DesignCoverage,
+  DesignIndex,
+  DesignLiteral,
+  DesignLiteralRole,
+  DesignToken,
+  DesignTokenKind,
+} from "@toyon/shared";
 import { useEffect } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { designRowItems, designTokenItems } from "../../state/actions/design.ts";
+import { designLiteralItems, designRowItems, designTokenItems } from "../../state/actions/design.ts";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
-import { useContextMenu } from "../../ui/menu.ts";
+import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { wtDir } from "../util.ts";
@@ -82,7 +91,11 @@ export function DesignPane({
     >
       {index ? (
         <div className="design-body" style={LAYOUT} onMouseLeave={live.clear}>
-          <Tokens tokens={index.tokens} outline={live.outline} clear={live.clear} />
+          {index.tokens.length === 0 && index.literals.length > 0 ? (
+            <Values literals={index.literals} outline={live.outline} clear={live.clear} />
+          ) : (
+            <Tokens tokens={index.tokens} coverage={index.coverage} outline={live.outline} clear={live.clear} />
+          )}
           <Components index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
           <Classes index={index} outline={live.outline} clear={live.clear} onOpen={live.open} />
         </div>
@@ -115,6 +128,8 @@ function reach(index: DesignIndex): string {
   const sheets = index.coverage.stylesheets;
   return `${files} file${files === 1 ? "" : "s"} read, ${sheets} stylesheet${sheets === 1 ? "" : "s"}`;
 }
+
+const uses = (n: number) => `${n} use${n === 1 ? "" : "s"}`;
 
 function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
@@ -158,11 +173,32 @@ function groundOf(tokens: DesignToken[]): DesignToken | undefined {
   return tokens.find((t) => t.kind === "color" && parseHex(t.resolved ?? t.value) !== null);
 }
 
+/** Why there is nothing to show, from what the scan read. Sass and Less are named only for a
+ * project that has them, since for any other project that sentence points at the wrong cause. */
+function noTokens(coverage: DesignCoverage): string {
+  if (coverage.stylesheets === 0) return "No stylesheet was read, so there is no palette or type scale to show.";
+  const f = coverage.files;
+  const preprocessed = (f.scss ?? 0) + (f.sass ?? 0) + (f.less ?? 0) + (f.styl ?? 0);
+  const none = "No custom properties, and no colors or sizes written out in the stylesheets.";
+  return preprocessed > 0 ? `${none} Sass, Less and Stylus variables are not read yet.` : none;
+}
+
 // `index.live` is deliberately unread: it is false for every scan until the live half lands, and a
 // header saying "declared, not resolved" on every scan tells a reader nothing. When the two can
 // differ, the difference is worth a word and this is where it goes.
-function Tokens({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Outline; clear: () => void }) {
+function Tokens({
+  tokens,
+  coverage,
+  outline,
+  clear,
+}: {
+  tokens: DesignToken[];
+  coverage: DesignCoverage;
+  outline: Outline;
+  clear: () => void;
+}) {
   const ground = groundOf(tokens);
+  const groundValue = ground && (ground.resolved ?? ground.value);
   /* Which other tokens carry this one's value. Built once for the whole set rather than per swatch,
      because every swatch would otherwise walk every token. */
   const byValue = new Map<string, string[]>();
@@ -175,33 +211,40 @@ function Tokens({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Ou
   return (
     <Section title="Tokens">
       {tokens.length === 0 ? (
-        <Gap>
-          No custom properties found. A project on Sass or Less variables keeps its scale somewhere this scan does not
-          read yet.
-        </Gap>
+        <Gap>{noTokens(coverage)}</Gap>
       ) : (
         GROUPS.map(({ kind, label }) => {
           const group = tokens.filter((t) => t.kind === kind);
           if (group.length === 0) return null;
+          const largest = largestIn(group.map((t) => t.value));
           return (
             <div key={kind} className="design-group">
               {kind !== "font" && <span className="design-group-name">{label}</span>}
               {kind === "font" ? (
-                <Faces tokens={group} outline={outline} clear={clear} />
+                <Faces groups={tokenFaces(group)} outline={outline} clear={clear} />
               ) : (
                 <div className="design-breakout" style={breakout(group.length)}>
                   <div className="design-grid">
-                    {group.map((t) => (
-                      <Swatch
-                        key={t.name}
-                        token={t}
-                        ground={ground}
-                        largest={largestIn(group)}
-                        outline={outline}
-                        clear={clear}
-                        sharing={sharesWith(t)}
-                      />
-                    ))}
+                    {group.map((t) => {
+                      // what it resolves to is what to paint and measure; what it says is what to go and edit
+                      const actual = t.resolved ?? t.value;
+                      const ratio = t.kind === "color" && groundValue ? contrastRatio(actual, groundValue) : null;
+                      return (
+                        <Swatch
+                          key={t.name}
+                          kind={t.kind}
+                          name={t.name}
+                          lines={t.resolved ? [t.value, t.resolved] : [t.value]}
+                          actual={actual}
+                          ratio={ratio}
+                          largest={largest}
+                          tipText={describe(t, ratio, ground, sharesWith(t))}
+                          menu={() => designTokenItems(t.name, actual)}
+                          outline={outline}
+                          clear={clear}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -209,6 +252,69 @@ function Tokens({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Ou
           );
         })
       )}
+    </Section>
+  );
+}
+
+/** The written-out groups, in the order the token groups run. A size is type, so it is not here:
+ * it sits under its face with the type group. */
+const VALUE_GROUPS: Array<{ role: DesignLiteralRole; kind: DesignTokenKind; label: string }> = [
+  { role: "color", kind: "color", label: "color" },
+  { role: "radius", kind: "length", label: "radius" },
+  { role: "shadow", kind: "shadow", label: "shadow" },
+];
+
+/**
+ * For a project with no custom properties: the questions tokens answer (which colours, which
+ * sizes) asked of the rules that spell the values out. A cell is headed by the value itself, since
+ * it has no name, and says how many declarations write it.
+ *
+ * Contrast is measured against the page's own background when a root rule sets one. Without one
+ * there is no ratio: the default ground depends on the colour scheme, and a guessed ratio is worse
+ * than none.
+ */
+function Values({ literals, outline, clear }: { literals: DesignLiteral[]; outline: Outline; clear: () => void }) {
+  const ground = literals.find((l) => l.ground && parseHex(l.value) !== null);
+  const faces = literalFaces(literals);
+  return (
+    <Section title="Values" note="written out in the rules; no custom properties">
+      {faces.length > 0 && (
+        <div className="design-group">
+          <Faces groups={faces} outline={outline} clear={clear} />
+        </div>
+      )}
+      {VALUE_GROUPS.map(({ role, kind, label }) => {
+        const group = literals.filter((l) => l.role === role);
+        if (group.length === 0) return null;
+        const largest = largestIn(group.map((l) => l.value));
+        return (
+          <div key={role} className="design-group">
+            <span className="design-group-name">{label}</span>
+            <div className="design-breakout" style={breakout(group.length)}>
+              <div className="design-grid">
+                {group.map((l) => {
+                  const ratio = kind === "color" && ground ? contrastRatio(l.value, ground.value) : null;
+                  return (
+                    <Swatch
+                      key={l.value}
+                      kind={kind}
+                      name={l.value}
+                      lines={[uses(l.uses)]}
+                      actual={l.value}
+                      ratio={ratio}
+                      largest={largest}
+                      tipText={describeLiteral(l, ratio, ground)}
+                      menu={() => designLiteralItems(l.value)}
+                      outline={outline}
+                      clear={clear}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </Section>
   );
 }
@@ -234,8 +340,8 @@ function breakout(count: number): React.CSSProperties {
 }
 
 /** the biggest length in a group, so the scale bars can be drawn relative to their own scale */
-function largestIn(group: DesignToken[]): number {
-  return group.reduce((max, t) => Math.max(max, Math.abs(Number.parseFloat(t.value)) || 0), 0);
+function largestIn(values: string[]): number {
+  return values.reduce((max, v) => Math.max(max, Math.abs(Number.parseFloat(v)) || 0), 0);
 }
 
 /** A colour lands on a background, a border or the text itself, so any of these matching is a use.
@@ -278,6 +384,119 @@ function parseFace(v: string): { family: string; size: number | null; lead: numb
   return { family: firstFamily(m[4] ?? ""), size, lead };
 }
 
+/** a written-out size in px, for ordering and for multiplying a leading out. rem and em are taken
+ * at the 16px default, which is right for ordering and close enough for a specimen's label. */
+function px(value: string): number {
+  const n = Number.parseFloat(value);
+  if (value.endsWith("em")) return n * 16;
+  if (value.endsWith("pt")) return (n * 4) / 3;
+  if (value.endsWith("%")) return (n / 100) * 16;
+  return n;
+}
+
+function leadPx(lead: string | undefined, size: number): number | null {
+  if (!lead) return null;
+  const n = Number.parseFloat(lead);
+  const out = /^[\d.]+$/.test(lead) ? size * n : lead.endsWith("px") ? n : null;
+  return out === null ? null : Math.round(out * 100) / 100;
+}
+
+/** one block of the type group: a face, and the sizes cut from it */
+interface FaceGroup {
+  family: string;
+  /** the whole stack the heading is set in */
+  stack: string;
+  /** beside the heading: the stack token's name, or how often a written-out face is used */
+  name?: string;
+  /** what the outline in the preview is labelled */
+  label: string;
+  tipText?: string;
+  menu: () => MenuEntry[];
+  rows: FaceRow[];
+}
+
+interface FaceRow {
+  key: string;
+  sample: string;
+  style: React.CSSProperties;
+  name: string;
+  label: string;
+  tipText: string;
+  menu: () => MenuEntry[];
+}
+
+/** Token faces: a stack token heads its family, and each `font` shorthand in that family sits
+ * under it, large to small. */
+function tokenFaces(tokens: DesignToken[]): FaceGroup[] {
+  const rows = tokens.map((t) => ({ token: t, actual: t.resolved ?? t.value, ...parseFace(t.resolved ?? t.value) }));
+  return [...new Set(rows.map((r) => r.family))].map((family) => {
+    const group = rows.filter((r) => r.family === family);
+    // the stack token, if the project declares one. A project can set a family inline in every
+    // rule and never name it, and then the heading is the family with no token to point at.
+    const face = group.find((r) => r.size === null);
+    return {
+      family,
+      stack: face ? face.actual : family,
+      name: face?.token.name,
+      label: face ? face.token.name : family,
+      tipText: face ? `${face.token.name}\n${face.actual}` : undefined,
+      menu: () => (face ? designTokenItems(face.token.name, face.actual) : []),
+      rows: group
+        .filter((r) => r.size !== null)
+        .sort((a, b) => (b.size ?? 0) - (a.size ?? 0))
+        .map((r) => ({
+          key: r.token.name,
+          sample: `${r.family} ${r.size}${r.lead === null ? "" : `/${r.lead}`}`,
+          style: { font: r.actual },
+          name: r.token.name,
+          label: r.token.name,
+          tipText: `${r.token.name}\n${r.actual}`,
+          menu: () => designTokenItems(r.token.name, r.actual),
+        })),
+    };
+  });
+}
+
+/**
+ * Written-out faces: each stack heads its block and the sizes read in it sit under it, large to
+ * small. A size's face is the one its own rule sets, or the page root's; a size with neither is
+ * read in the browser's default face, which is what `initial` sets its specimen in.
+ */
+function literalFaces(literals: DesignLiteral[]): FaceGroup[] {
+  const faces = literals.filter((l) => l.role === "family");
+  const sizes = literals.filter((l) => l.role === "size");
+  const stacks = [...new Set([...faces.map((f) => f.value), ...sizes.map((s) => s.family ?? "initial")])];
+  return stacks.map((stack) => {
+    const face = faces.find((f) => f.value === stack);
+    const family = stack === "initial" ? "default face" : firstFamily(stack);
+    return {
+      family,
+      stack,
+      name: face ? uses(face.uses) : undefined,
+      label: family,
+      tipText: face ? `${face.value}\n${uses(face.uses)}: ${face.selectors.join(", ")}` : undefined,
+      menu: () => (face ? designLiteralItems(face.value) : []),
+      rows: sizes
+        .filter((s) => (s.family ?? "initial") === stack)
+        .sort((a, b) => px(b.value) - px(a.value))
+        .map((s) => {
+          const size = px(s.value);
+          const lead = leadPx(s.lead, size);
+          const shown = s.value.endsWith("px") ? `${size}` : s.value;
+          return {
+            key: `${s.value}/${s.lead ?? ""}`,
+            sample: `${family} ${shown}${lead === null ? "" : `/${lead}`}`,
+            style: { fontFamily: stack, fontSize: s.value, lineHeight: s.lead },
+            name: uses(s.uses),
+            label: s.value,
+            tipText: `${s.value}${s.lead ? ` / ${s.lead}` : ""}\n${uses(s.uses)}: ${s.selectors.join(", ")}`,
+            menu: () => designLiteralItems(s.value),
+          };
+        }),
+    };
+  });
+}
+
 /**
  * The type group reads down the column rather than across a lattice of chips. A colour is one value
  * and fits in a swatch; a type token is a face, a size and a leading at once, and none of those are
@@ -287,7 +506,7 @@ function parseFace(v: string): { family: string; size: number | null; lead: numb
  * heading, because that is what a face token is: the thing the sizes under it are cut from. The
  * sizes then run large to small, each rendered in itself, so the scale is a scale on screen.
  */
-function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Outline; clear: () => void }) {
+function Faces({ groups, outline, clear }: { groups: FaceGroup[]; outline: Outline; clear: () => void }) {
   /* A face is a family and nothing else, so it matches on family alone: hover the heading and every
      element set in that face lights up, whatever size it is. A sized token matches on all three,
      because a face, a size and a leading only name a tier together. */
@@ -301,90 +520,84 @@ function Faces({ tokens, outline, clear }: { tokens: DesignToken[]; outline: Out
       match: "all",
       label,
     });
-  const rows = tokens.map((t) => ({ token: t, actual: t.resolved ?? t.value, ...parseFace(t.resolved ?? t.value) }));
-  const families = [...new Set(rows.map((r) => r.family))];
   const cm = useContextMenu("design");
   return (
     <div className="design-faces">
-      {families.map((family) => {
-        const group = rows.filter((r) => r.family === family);
-        // the stack token, if the project declares one. A project can set a family inline in every
-        // rule and never name it, and then the heading is the family with no token to point at.
-        const face = group.find((r) => r.size === null);
-        const sized = group.filter((r) => r.size !== null).sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
-        return (
-          <div key={family} className="design-face-group">
-            <div
-              className="design-face-head row-edge"
-              onMouseEnter={(e) => hover(e, false, face ? face.token.name : family)}
-              onMouseLeave={clear}
-              {...cm.contextMenu(() => (face ? designTokenItems(face.token.name, face.actual) : []))}
-              {...(face ? tip(`${face.token.name}\n${face.actual}`, undefined, { placement: "follow" }) : {})}
-            >
-              {/* the whole stack, not the first name in it: `ui-monospace` on its own resolves to
-                  nothing here and falls back to the default serif, so the mono heading rendered in
-                  a face that appears nowhere in the project */}
-              <span
-                className="design-face-sample design-face-family"
-                style={{ fontFamily: face ? face.actual : family }}
-              >
-                {family}
-              </span>
-              {face && <span className="design-face-name row-dim">{face.token.name}</span>}
-            </div>
-            {sized.map((r) => (
-              <div
-                key={r.token.name}
-                className="design-face row-edge"
-                onMouseEnter={(e) => hover(e, true, r.token.name)}
-                onMouseLeave={clear}
-                {...cm.contextMenu(() => designTokenItems(r.token.name, r.actual))}
-                {...tip(`${r.token.name}\n${r.actual}`, undefined, { placement: "follow" })}
-              >
-                <span className="design-face-sample" style={{ font: r.actual }}>
-                  {`${r.family} ${r.size}${r.lead === null ? "" : `/${r.lead}`}`}
-                </span>
-                <span className="design-face-name row-dim">{r.token.name}</span>
-              </div>
-            ))}
+      {groups.map((g) => (
+        <div key={g.stack} className="design-face-group">
+          <div
+            className="design-face-head row-edge"
+            onMouseEnter={(e) => hover(e, false, g.label)}
+            onMouseLeave={clear}
+            {...cm.contextMenu(g.menu)}
+            {...(g.tipText ? tip(g.tipText, undefined, { placement: "follow" }) : {})}
+          >
+            {/* the whole stack, not the first name in it: `ui-monospace` on its own resolves to
+                nothing here and falls back to the default serif, so the mono heading rendered in
+                a face that appears nowhere in the project */}
+            <span className="design-face-sample design-face-family" style={{ fontFamily: g.stack }}>
+              {g.family}
+            </span>
+            {g.name && <span className="design-face-name row-dim">{g.name}</span>}
           </div>
-        );
-      })}
+          {g.rows.map((r) => (
+            <div
+              key={r.key}
+              className="design-face row-edge"
+              onMouseEnter={(e) => hover(e, true, r.label)}
+              onMouseLeave={clear}
+              {...cm.contextMenu(r.menu)}
+              {...tip(r.tipText, undefined, { placement: "follow" })}
+            >
+              <span className="design-face-sample" style={r.style}>
+                {r.sample}
+              </span>
+              <span className="design-face-name row-dim">{r.name}</span>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
 
 function Swatch({
-  token,
-  ground,
+  kind,
+  name,
+  lines,
+  actual,
+  ratio,
   largest,
+  tipText,
+  menu,
   outline,
   clear,
-  sharing,
 }: {
-  token: DesignToken;
-  ground: DesignToken | undefined;
+  kind: DesignTokenKind;
+  /** the cell's heading: a token's name, or a written-out value's own text */
+  name: string;
+  /** one to a line under the heading; a contrast ratio rides on the first */
+  lines: string[];
+  /** what to paint and measure */
+  actual: string;
+  ratio: string | null;
   largest: number;
+  tipText: string;
+  menu: () => MenuEntry[];
   outline: Outline;
   clear: () => void;
-  sharing: string[];
 }) {
-  // what it resolves to is what to paint and measure; what it says is what to go and edit
-  const actual = token.resolved ?? token.value;
-  const groundValue = ground && (ground.resolved ?? ground.value);
-  const ratio = token.kind === "color" && groundValue ? contrastRatio(actual, groundValue) : null;
   // Painting a value nothing can resolve would paint it with the *shell's* token of that name.
   // A translucent colour still paints; it just has no ratio to print.
-  const paintable = token.kind === "color" && parseHex(actual) !== null;
-  const sample = token.kind === "color";
-  const size = token.kind === "length" ? Number.parseFloat(actual) : Number.NaN;
+  const paintable = kind === "color" && parseHex(actual) !== null;
+  const size = kind === "length" ? Number.parseFloat(actual) : Number.NaN;
   const cm = useContextMenu("design");
 
   return (
     <div
       className="design-cell"
-      data-kind={token.kind}
-      {...cm.contextMenu(() => designTokenItems(token.name, actual))}
+      data-kind={kind}
+      {...cm.contextMenu(menu)}
       onMouseEnter={
         paintable
           ? (e) => {
@@ -394,30 +607,27 @@ function Swatch({
                 type: "highlight-computed",
                 props: COLOR_PROPS.map((p) => [p, bg]),
                 match: "any",
-                label: token.name,
+                label: name,
               });
             }
           : undefined
       }
       onMouseLeave={paintable ? clear : undefined}
-      {...tip(describe(token, ratio, ground, sharing))}
+      {...tip(tipText)}
     >
-      {sample && (
+      {kind === "color" && (
         <div className="design-sample">
           {paintable && <span className="design-fill" style={{ background: actual }} />}
         </div>
       )}
       <div className="design-plate">
-        <span className="design-cell-name">{token.name}</span>
-        <span className="design-cell-line">
-          <span className="design-cell-value">{token.value}</span>
-          {ratio && <span className="design-cell-note">{ratio}</span>}
-        </span>
-        {token.resolved && (
-          <span className="design-cell-line">
-            <span className="design-cell-value">{token.resolved}</span>
+        <span className="design-cell-name">{name}</span>
+        {lines.map((line, i) => (
+          <span key={line} className="design-cell-line">
+            <span className="design-cell-value">{line}</span>
+            {i === 0 && ratio && <span className="design-cell-note">{ratio}</span>}
           </span>
-        )}
+        ))}
         {Number.isFinite(size) && largest > 0 && (
           <span className="design-scale" style={{ width: `${Math.max(2, (Math.abs(size) / largest) * 100)}%` }} />
         )}
@@ -449,6 +659,42 @@ function describe(
     lines.push(self ? "the ground these ratios are measured against" : `${ratio} against ${ground.name}`);
   }
   return lines.join("\n");
+}
+
+/** a written-out value's chip: the value in full, the rules that write it, and its contrast */
+function describeLiteral(literal: DesignLiteral, ratio: string | null, ground: DesignLiteral | undefined): string {
+  const lines = [literal.value, `${uses(literal.uses)}: ${literal.selectors.join(", ")}`];
+  if (ratio && ground) {
+    lines.push(
+      literal === ground
+        ? "the page background these ratios are measured against"
+        : `${ratio} against the page background`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The reuse split: what two or more places reach for, then the long tail folded under a count.
+ * With nothing reused there is no split to make, so the tail is the list and it stays open; folded,
+ * the section would be a heading over one closed row.
+ */
+function Inventory({ shared, rest }: { shared: React.ReactNode[]; rest: React.ReactNode[] }) {
+  if (shared.length === 0) return <ul className="design-rows">{rest}</ul>;
+  return (
+    <>
+      <ul className="design-rows">{shared}</ul>
+      {rest.length > 0 && (
+        <details className="design-tail">
+          <summary className="row-edge">
+            <span className="design-count row-dim">{rest.length}</span>
+            used once or never
+          </summary>
+          <ul className="design-rows">{rest}</ul>
+        </details>
+      )}
+    </>
+  );
 }
 
 function Components({
@@ -499,16 +745,7 @@ function Components({
   return (
     <Section title="Components" note={`${shared.length} reused of ${components.length}`}>
       {!typed && <Gap>No TypeScript in this project, so the values each prop allows are not listed.</Gap>}
-      <ul className="design-rows">{shared.map(row)}</ul>
-      {rest.length > 0 && (
-        <details className="design-tail">
-          <summary className="row-edge">
-            <span className="design-count row-dim">{rest.length}</span>
-            used once or never
-          </summary>
-          <ul className="design-rows">{rest.map(row)}</ul>
-        </details>
-      )}
+      <Inventory shared={shared.map(row)} rest={rest.map(row)} />
     </Section>
   );
 }
@@ -536,6 +773,7 @@ function Classes({
     ? `${shared.length} reused of ${classes.length}` +
       (unwrapped ? `, ${unwrapped} with no component of their name` : "")
     : undefined;
+  const row = (c: DesignClass) => <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />;
   return (
     <Section title="Classes" note={note}>
       {classes.length === 0 ? (
@@ -547,26 +785,7 @@ function Classes({
             : "No class attribute anywhere in the source that was read. The markup may live in a file type this scan does not open."}
         </Gap>
       ) : (
-        <>
-          <ul className="design-rows">
-            {shared.map((c) => (
-              <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
-            ))}
-          </ul>
-          {rest.length > 0 && (
-            <details className="design-tail">
-              <summary className="row-edge">
-                <span className="design-count row-dim">{rest.length}</span>
-                used once or never
-              </summary>
-              <ul className="design-rows">
-                {rest.map((c) => (
-                  <ClassRow key={c.name} cls={c} outline={outline} clear={clear} onOpen={onOpen} />
-                ))}
-              </ul>
-            </details>
-          )}
-        </>
+        <Inventory shared={shared.map(row)} rest={rest.map(row)} />
       )}
     </Section>
   );

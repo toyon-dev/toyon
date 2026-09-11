@@ -159,6 +159,25 @@ describe("DesignService.scan", () => {
     expect(index.components.find((c) => c.name === "Button")?.variants).toEqual([]);
   });
 
+  test("reads the values a project writes out when it declares no custom properties", async () => {
+    write(
+      "src/style.css",
+      `body { font: 16px/1.6 system-ui, sans-serif; background: #faf7f0 }\n.a { color: #b5651d; font-size: 13px }`,
+    );
+    write("src/extra.css", `.b { color: #B5651D; border-radius: 8px }`);
+
+    const index = await w.design.scan("w1");
+    expect(index.tokens).toEqual([]);
+    // one colour in two files and two spellings
+    expect(index.literals.find((l) => l.role === "color" && l.value === "#b5651d")?.uses).toBe(2);
+    expect(index.literals.find((l) => l.ground)?.value).toBe("#faf7f0");
+    // declared on .a with no face of its own, so it is read in the face body sets
+    expect(index.literals.find((l) => l.role === "size" && l.value === "13px")).toMatchObject({
+      family: "system-ui, sans-serif",
+      lead: "1.6",
+    });
+  });
+
   test("reads a worktree toyon found but does not run, the same as one it does", async () => {
     write("src/styles.css", ":root { --accent: red }");
     const index = await w.design.scan("found");

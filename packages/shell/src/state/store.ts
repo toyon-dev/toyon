@@ -241,7 +241,9 @@ export type Overlay =
   | { kind: "projects"; dialog?: boolean }
   /** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
    * a location; `clone` has both derived from the URL and shows them so they can be changed. */
-  | { kind: "new-project"; mode: "create" | "clone"; name: string; parent: string; url?: string };
+  | { kind: "new-project"; mode: "create" | "clone"; name: string; parent: string; url?: string }
+  /** the route bar's list of pages, opened over the address field */
+  | { kind: "routes" };
 
 /** which docks and panes a project is left with. The layout is remembered per project, so a reload
  * comes back to it and switching projects carries each one's own back (zen is deliberately not in
@@ -405,6 +407,8 @@ export interface State {
   /** every repo's warm spare, as the daemon last listed them: the preview behind a draft from
    * main, and nothing else. Can shrink between frames (a warm-up rolled back). */
   spares: SpareInfo[];
+  /** each repo's most used preview pages, best first, as the daemon ranks them: the route bar's list */
+  visits: Record<string, string[]>;
 }
 
 export interface InitialOpts {
@@ -484,6 +488,7 @@ export function initialState(opts: InitialOpts): State {
     agentConfigs: {},
     draft: null,
     spares: [],
+    visits: {},
   };
   // paint the last project's layout before the daemon's hello names it, so a reload does not
   // flash the docks open and then shut them
@@ -965,10 +970,13 @@ function onServer(s: State, msg: StoreServerMsg): State {
         defaultAgent: msg.defaultAgent,
         home: msg.home,
         pending: msg.pending,
+        visits: msg.visits,
         // an import this tab was watching may have finished while it was away
         activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
       };
     }
+    case "visits":
+      return { ...s, visits: { ...s.visits, [msg.repoId]: msg.paths } };
     case "themes":
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
     case "agents":

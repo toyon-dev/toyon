@@ -228,6 +228,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
+  s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, paths: s.routes.ranked(repoId) }));
 
   // What a page learns first, over the socket or over the bootstrap fetch that precedes it. Quick
   // rows: the frame goes out from what is known and the counts follow, rather than every page
@@ -246,6 +247,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
       home: homedir(),
       pending: s.repos.pending,
+      visits: s.routes.rankedAll(),
     }) satisfies ServerMsg;
 
   let branded = false;

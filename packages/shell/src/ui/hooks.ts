@@ -37,14 +37,22 @@ export function useDismissOutside(box: RefObject<HTMLElement | null>, onOutside:
 }
 
 /** Focus on mount — a chord may arrive while the preview iframe or Monaco holds focus, and
- * autoFocus alone loses that race, so take it explicitly on the next frame too. */
-export function useFocusOnMount<T extends HTMLElement>(): RefObject<T> {
+ * autoFocus alone loses that race, so take it explicitly on the next frame too. `select` also
+ * selects an input's text, and only when focus is actually taken: selecting again on the next
+ * frame would swallow a keystroke typed in between. */
+export function useFocusOnMount<T extends HTMLElement>(select = false): RefObject<T> {
   const ref = useRef<T>(null);
   useEffect(() => {
-    ref.current?.focus();
-    const f = requestAnimationFrame(() => ref.current?.focus());
+    const take = () => {
+      const el = ref.current;
+      if (!el || document.activeElement === el) return;
+      el.focus();
+      if (select && el instanceof HTMLInputElement) el.select();
+    };
+    take();
+    const f = requestAnimationFrame(take);
     return () => cancelAnimationFrame(f);
-  }, []);
+  }, [select]);
   return ref;
 }
 

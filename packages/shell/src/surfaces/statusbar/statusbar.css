@@ -12,6 +12,30 @@
       color: var(--text0);
     }
   }
+  /* The address field is the route list's trigger, and the list opens in the field's own box, the
+   way an address bar expands in place. The strip takes the field's padding, so the panel's border
+   lands on the field's and the typed path on the address: nothing moves when it opens. Any wider
+   and it would cover the edges of the nav buttons, which sit 4px either side. The rows share the
+   strip's inset, so the list reads down from the address in one column. */
+  .bar-route {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    & .overlay-box.anchored {
+      top: 0;
+      left: 0;
+      width: 100%;
+      --picker-inset: 10px;
+    }
+    & .overlay-box.anchored .picker-input {
+      padding: 3px 10px;
+    }
+    /* the project panel's budget: hanging off the bar, half the viewport would bury the preview */
+    & .overlay-box .picker-list {
+      max-height: min(340px, 50vh);
+    }
+  }
 
   /* ---- status bar ---- */
   .status-bar {
@@ -84,6 +108,9 @@
     gap: 4px;
     width: min(520px, 40vw);
     transition: left 0.15s ease;
+    /* the transform above makes this a stacking context, so the route list's own z-index only
+     counts in here; without the anchored picker's rung on the cluster, the preview paints over it */
+    z-index: 40;
   }
   /* while a dock is being dragged the centre tracks the pointer, and easing there reads as lag */
   body.resizing .bar-center {

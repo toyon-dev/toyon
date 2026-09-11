@@ -27,6 +27,8 @@ export interface HubEvents {
   themesChanged: () => void;
   /** the default agent (or the registry) changed */
   agentsChanged: () => void;
+  /** the order of a repo's most used preview pages changed */
+  visitsChanged: (repoId: string) => void;
 }
 
 type Listener<K extends keyof HubEvents> = HubEvents[K];

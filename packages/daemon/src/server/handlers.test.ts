@@ -12,6 +12,7 @@ import { DesignService } from "../design/service.ts";
 import { ExecService } from "../exec/service.ts";
 import { FileService } from "../files/service.ts";
 import { RepoRegistry } from "../repos/registry.ts";
+import { RouteService } from "../routes/service.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
 import { RefSearch } from "../worktrees/refs.ts";
@@ -69,6 +70,7 @@ function make() {
     },
   });
   const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, t.paths.themesDir);
+  const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
   const planned: string[][] = [];
   const services: Services = {
     state,
@@ -77,6 +79,7 @@ function make() {
     worktrees,
     files,
     design,
+    routes,
     runtime,
     exec,
     refs,
@@ -133,6 +136,49 @@ describe("handlers", () => {
     if (reply?.t !== "design-index") throw new Error("expected a design-index reply");
     expect(reply.index.tokens.map((t) => t.name)).toEqual(["--accent"]);
     expect(reply.index.classes.map((c) => c.name)).toEqual(["btn"]);
+  });
+
+  test("visits from any worktree of a repo make one list, most used first, and a page can come off it", async () => {
+    const { services, ctx, repo, paths } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    // a worktree toyon only found on disk runs a preview too, and has no record in the store
+    sh(repo, "git", "worktree", "add", "-q", "-b", "their-branch", join(dirname(repo), "theirs"), "main");
+    services.worktrees.invalidateDiscovered();
+    const found = (await services.worktrees.discovered())[0]!;
+    const changed: string[] = [];
+    services.hub.on("visitsChanged", (id) => changed.push(id));
+    // a second apart each, so recency decides what a single visit each cannot: four visits inside
+    // one millisecond tie, and the order would be the insertion order
+    let now = 0;
+    services.routes = new RouteService({
+      state: services.state,
+      hub: services.hub,
+      readable: (id) => services.worktrees.readable(id),
+      now: () => (now += 1000),
+    });
+
+    await dispatch({ t: "visit", worktreeId: main.id, path: "/pricing" }, ctx, services);
+    await dispatch({ t: "visit", worktreeId: found.id, path: "/about" }, ctx, services);
+    await dispatch({ t: "visit", worktreeId: found.id, path: "/pricing?tab=2" }, ctx, services);
+    await dispatch({ t: "visit", worktreeId: main.id, path: "/pricing/" }, ctx, services);
+    expect(services.routes.ranked(r.id)).toEqual(["/pricing", "/about"]);
+    expect(services.routes.rankedAll()).toEqual({ [r.id]: ["/pricing", "/about"] });
+    // the last visit left the order as it was, so it announced nothing
+    expect(changed).toEqual([r.id, r.id, r.id]);
+
+    // a frame whose worktree has gone is dropped without a toast
+    await dispatch({ t: "visit", worktreeId: "gone", path: "/x" }, ctx, services);
+    expect(services.routes.ranked(r.id)).toEqual(["/pricing", "/about"]);
+
+    await dispatch({ t: "forget-visit", repoId: r.id, path: "/pricing" }, ctx, services);
+    expect(services.routes.ranked(r.id)).toEqual(["/about"]);
+    await expect(dispatch({ t: "forget-visit", repoId: "nope", path: "/a" }, ctx, services)).rejects.toBeInstanceOf(
+      UserError,
+    );
+
+    services.routes.flush();
+    expect(Object.keys(new StateStore(paths).visitsOf(r.id) ?? {})).toEqual(["/about"]);
   });
 
   test("subscribe registers the socket and replies backfill + queue + commands + git-status to the caller only", async () => {

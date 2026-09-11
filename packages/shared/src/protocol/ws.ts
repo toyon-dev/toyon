@@ -59,12 +59,16 @@ export type ServerMsg =
       /** the daemon's home directory. RepoInfo.path is absolute while PathEntry.path is
        * tilde-collapsed daemon side, so without this the shell cannot write a `~` path of its own */
       home: string;
+      /** each repo's most used preview pages, best first: the route bar's list, there on first paint */
+      visits: Record<string, string[]>;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
   /** the files an agent reads and the MCP servers it will load, on request from settings */
   | ({ t: "agent-config" } & AgentConfigInfo)
   | { t: "repos"; repos: RepoInfo[] }
+  /** one repo's most used preview pages, sent when their order changes */
+  | { t: "visits"; repoId: string; paths: string[] }
   /** clones in flight: shown in the switcher and watched in the import pane */
   | { t: "pending-repos"; pending: PendingRepo[] }
   /** directories matching what the project picker has typed so far, plus what the typed path
@@ -153,6 +157,8 @@ const termSize = z.number().int().min(1).max(500);
 const termInput = z.string().max(65_536);
 /** which of a worktree's streams: SHELL_STREAM, or a proc named in toyon.json */
 const streamName = z.string().min(1).max(100);
+/** a preview page as the route bar keys it: a path and maybe a hash route, never a whole URL */
+const routePath = z.string().min(1).max(2_000);
 
 /** an image as the shell sends it: already downscaled, base64 so it rides in the JSON frame */
 export const imageInputSchema = z.object({
@@ -328,6 +334,11 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
   /** the person is looking at this worktree right now: clears the rail's unseen ring */
   z.object({ t: z.literal("seen"), worktreeId: id }),
+  /** the preview settled on a page (the shell waits out redirects): count it toward the repo's
+   * list. `path` is the page's key (routeKey), which the daemon recomputes rather than trusts. */
+  z.object({ t: z.literal("visit"), worktreeId: id, path: routePath }),
+  /** take a page off the repo's list */
+  z.object({ t: z.literal("forget-visit"), repoId: id, path: routePath }),
   z.object({ t: z.literal("pick-variant"), worktreeId: id }),
   z.object({ t: z.literal("unqueue"), worktreeId: id, index: z.number().int().min(0) }),
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),

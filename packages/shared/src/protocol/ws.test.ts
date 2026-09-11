@@ -52,6 +52,8 @@ describe("parseClientMsg", () => {
       { t: "term-resize", worktreeId: "a", stream: "web", cols: 1, rows: 500 },
       { t: "term-restart", worktreeId: "a", stream: "web" },
       { t: "term-close", worktreeId: "a", stream: "shell" },
+      { t: "visit", worktreeId: "a", path: "/pricing" },
+      { t: "forget-visit", repoId: "r", path: "/#/about" },
     ]) {
       const r = parseClientMsg(msg);
       expect(r.ok, JSON.stringify(msg)).toBe(true);
@@ -127,6 +129,12 @@ describe("parseClientMsg", () => {
     expect(parseClientMsg({ t: "term-input", worktreeId: "a", stream: "shell", data: "x".repeat(65_537) }).ok).toBe(
       false,
     );
+  });
+
+  test("a visit names a page, and a page is bounded", () => {
+    expect(parseClientMsg({ t: "visit", worktreeId: "a", path: "" }).ok).toBe(false);
+    expect(parseClientMsg({ t: "visit", worktreeId: "a", path: `/${"x".repeat(2_000)}` }).ok).toBe(false);
+    expect(parseClientMsg({ t: "forget-visit", repoId: "r" }).ok).toBe(false);
   });
 
   test("unknown extra fields are dropped, not rejected", () => {

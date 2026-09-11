@@ -1,5 +1,17 @@
 import { expect, test } from "bun:test";
-import { ghostOf, jumpTo, step } from "./listNav.ts";
+import { ghostOf, jumpTo, sectionStarts, step } from "./listNav.ts";
+
+test("a rule starts where the group changes, never above the first row", () => {
+  const rows = [
+    { g: "go", p: "/x" },
+    { g: "page", p: "/a" },
+    { g: "page", p: "/b" },
+    { g: "go", p: "/y" },
+  ];
+  expect(sectionStarts(rows, (r) => r.g)).toEqual([false, true, false, true]);
+  expect(sectionStarts(rows)).toEqual([false, false, false, false]);
+  expect(sectionStarts([], (r: { g: string }) => r.g)).toEqual([]);
+});
 
 test("a letter jumps to the next row starting with it, wrapping, and repeats walk the matches", () => {
   const rows = ["take over", "open a shell here", "reveal in Finder", "copy path", "Remove…"];

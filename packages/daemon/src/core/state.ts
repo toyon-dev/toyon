@@ -25,6 +25,16 @@ export interface PersistedState {
   theme?: ThemePrefs;
   /** registry id new worktrees get when the prompt does not pick one */
   defaultAgent?: string;
+  /** each repo's preview pages and how much they are used (routes/frecency.ts), by repo id then
+   * page. Beside the repo rather than on RepoInfo, which is broadcast whole on every config change
+   * and would carry this to every tab each time. */
+  visits?: Record<string, Record<string, PageVisit>>;
+}
+
+/** one page's standing in a repo's list: a count that decays, as of `last` */
+export interface PageVisit {
+  score: number;
+  last: number;
 }
 
 const empty: PersistedState = { repos: [], worktrees: [], sessions: {} };
@@ -142,10 +152,22 @@ export class StateStore {
     this.state.repos.push(repo);
     this.save();
   }
-  /** drops the repo record only; the caller has removed its worktrees and stopped its runtimes */
+  /** drops the repo record and its page list; the caller has removed its worktrees and stopped its runtimes */
   removeRepo(id: string) {
     this.state.repos = this.state.repos.filter((r) => r.id !== id);
+    if (this.state.visits) delete this.state.visits[id];
     this.save();
+  }
+
+  /** a repo's page list, live like every record here; undefined until its first visit */
+  visitsOf(repoId: string): Record<string, PageVisit> | undefined {
+    return this.state.visits?.[repoId];
+  }
+  /** the same list, made on first use. No save: the route service decides when a visit is written */
+  visitsFor(repoId: string): Record<string, PageVisit> {
+    this.state.visits ??= {};
+    this.state.visits[repoId] ??= {};
+    return this.state.visits[repoId];
   }
   addWorktree(wt: WorktreeInfo) {
     this.state.worktrees.push(wt);

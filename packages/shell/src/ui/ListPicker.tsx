@@ -1,9 +1,9 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { cx } from "./cx.ts";
 import { Field } from "./Field.tsx";
 import { useFocusOnMount } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
-import { useListNav } from "./listNav.ts";
+import { sectionStarts, useListNav } from "./listNav.ts";
 import { type MenuEntry, menuStore, useContextMenu } from "./menu.ts";
 import { Overlay } from "./Overlay.tsx";
 import "./picker.css";
@@ -37,6 +37,8 @@ export function ListPicker<T>({
   placeholder,
   initialQuery = "",
   initialIndex,
+  selectOnMount = false,
+  groupOf,
   anchored = false,
   lead,
   trailing,
@@ -70,6 +72,12 @@ export function ListPicker<T>({
   initialQuery?: string;
   /** where the highlight starts (mount only); default 0 */
   initialIndex?: (results: T[]) => number;
+  /** open with `initialQuery` selected, so the first keystroke replaces it: an address that is
+   * shown for reading and typed over to go somewhere else */
+  selectOnMount?: boolean;
+  /** which section a row belongs to; a rule is drawn where it changes. Rules sit between rows,
+   * never among them, so ↑↓ and the highlight only ever land on a row. */
+  groupOf?: (t: T) => string;
   /** shown when there are no rows; a function sees the query */
   empty?: string | ((q: string) => string);
   /** below the rows (result counts, hints) */
@@ -94,8 +102,9 @@ export function ListPicker<T>({
   const cm = useContextMenu("picker");
   const [q, setQ] = useState(initialQuery);
   const results = useMemo(() => filter(items, q), [items, q, filter]);
+  const starts = useMemo(() => sectionStarts(results, groupOf), [results, groupOf]);
   const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useFocusOnMount<HTMLInputElement>();
+  const inputRef = useFocusOnMount<HTMLInputElement>(selectOnMount);
   useEffect(() => {
     if (!onQuery) return;
     const h = setTimeout(() => onQuery(q), 150);
@@ -171,18 +180,20 @@ export function ListPicker<T>({
   const listEl = (
     <div className="picker-list" ref={listRef}>
       {results.map((t, i) => (
-        <button
-          key={keyOf(t)}
-          className={cx("picker-item", rowClass?.(t))}
-          data-state={rowState({ cursor: i === clamped })}
-          title={rowTitle?.(t)}
-          // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
-          onMouseMove={() => i !== clamped && nav.setIndex(i)}
-          onClick={() => nav.pick(t)}
-          {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
-        >
-          {row(t, i === clamped, q)}
-        </button>
+        <Fragment key={keyOf(t)}>
+          {starts[i] && <div className="picker-sep" aria-hidden="true" />}
+          <button
+            className={cx("picker-item", rowClass?.(t))}
+            data-state={rowState({ cursor: i === clamped })}
+            title={rowTitle?.(t)}
+            // mousemove, not mouseenter: rows scrolling under a stationary pointer must not steal the highlight
+            onMouseMove={() => i !== clamped && nav.setIndex(i)}
+            onClick={() => nav.pick(t)}
+            {...cm.contextMenu(() => rowMenu?.(t) ?? [])}
+          >
+            {row(t, i === clamped, q)}
+          </button>
+        </Fragment>
       ))}
       {results.length === 0 && <div className="empty">{typeof empty === "function" ? empty(q) : empty}</div>}
       {footer?.(q, results)}

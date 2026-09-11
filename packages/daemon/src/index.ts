@@ -23,6 +23,7 @@ import { DesignService } from "./design/service.ts";
 import { ExecService } from "./exec/service.ts";
 import { FileService } from "./files/service.ts";
 import { RepoRegistry } from "./repos/registry.ts";
+import { RouteService } from "./routes/service.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
@@ -83,6 +84,7 @@ const runtime = new RuntimeRegistry({
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
 const files = new FileService(state, runtime, (id) => worktrees.readable(id));
 const design = new DesignService((id) => worktrees.readable(id));
+const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
 const exec = new ExecService({ state, runtime });
 const refs = new RefSearch({ state });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees });
@@ -102,6 +104,7 @@ const { branded, stop: stopServer } = startServer({
     worktrees,
     files,
     design,
+    routes,
     runtime,
     exec,
     refs,
@@ -185,6 +188,8 @@ async function shutdown(signal: string) {
   repos.stopWatchers();
   stopLagSampler();
   stopServer();
+  // the visits still waiting on their coalesced write; a clean stop should not lose them
+  routes.flush();
   const deadline = new Promise<void>((resolve) => setTimeout(resolve, 5000));
   await Promise.race([runtime.shutdown(), deadline]);
   // a crash leaves the file behind on purpose: `toyon stop` checks the pid is alive before trusting it

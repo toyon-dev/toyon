@@ -184,25 +184,36 @@ export default function Editor({
     const edits = modified.onDidChangeContent(() => {
       if (!applying) s.edited();
     });
-    // where the keyboard came from, so closing the pane from inside the editor can hand it back
+    // Where the keyboard came from, so closing the pane from inside the editor can hand it back. It
+    // is tracked as it moves rather than read at teardown: this cleanup runs after React has taken
+    // the editor out of the page, and by then the browser has already dropped the focus to the body.
     let cameFrom: HTMLElement | null = null;
-    const noteFrom = (e: FocusEvent) => {
+    let holding = false;
+    const onFocusIn = (e: FocusEvent) => {
+      holding = true;
       if (e.relatedTarget instanceof HTMLElement && !el.contains(e.relatedTarget)) cameFrom = e.relatedTarget;
     };
-    el.addEventListener("focusin", noteFrom);
+    // only a move to somewhere else lets go; a window losing focus, or the editor leaving the page, does not
+    const onFocusOut = (e: FocusEvent) => {
+      if (e.relatedTarget instanceof Node && !el.contains(e.relatedTarget)) holding = false;
+    };
+    el.addEventListener("focusin", onFocusIn);
+    el.addEventListener("focusout", onFocusOut);
     s.attach(buffer);
     return () => {
-      const hadKeyboard = el.contains(document.activeElement);
       // let go of the buffer first: an edit not yet saved is read out of the model on the way
       s.attach(null);
       edits.dispose();
-      el.removeEventListener("focusin", noteFrom);
+      el.removeEventListener("focusin", onFocusIn);
+      el.removeEventListener("focusout", onFocusOut);
       instance.current?.dispose();
       instance.current = null;
       models.current = null;
       modified.dispose();
       original.dispose();
-      if (hadKeyboard && cameFrom?.isConnected) cameFrom.focus();
+      // and only into a page where nothing else has taken the keyboard since
+      const dropped = document.activeElement === null || document.activeElement === document.body;
+      if (holding && dropped && cameFrom?.isConnected) cameFrom.focus();
     };
   });
 

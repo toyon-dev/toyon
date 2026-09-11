@@ -499,7 +499,6 @@ export function Composer({
             <PickChip
               key={item.key}
               pick={item}
-              n={n}
               dir={dir}
               tipText={item.html}
               onHover={(entering) =>

@@ -13,10 +13,12 @@ export const ATTACHMENTS_PER_MESSAGE = ATTACHMENT_KINDS.reduce((sum, k) => sum +
 /** what a person calls one of a kind, in a sentence */
 const KIND_NOUN: Readonly<Record<AttachmentKind, string>> = { image: "image", paste: "paste", pick: "element" };
 
-const KIND_LABEL: Readonly<Record<AttachmentKind, string>> = { image: "Image", paste: "Pasted text", pick: "Element" };
+const KIND_LABEL = { image: "Image", paste: "Pasted text" } as const;
 
-/** the name an attachment goes by on its chip and in the prompt, so the two always agree */
-export const attachmentLabel = (kind: AttachmentKind, n: number): string => `${KIND_LABEL[kind]} ${n}`;
+/** the name an image or a paste goes by on its chip and in the prompt, so the two always agree. Only
+ * these are named by number, since nothing else names them: a screenshot is `pasted.png` and a paste
+ * has no name at all, where a picked element is its component and file. */
+export const attachmentLabel = (kind: keyof typeof KIND_LABEL, n: number): string => `${KIND_LABEL[kind]} ${n}`;
 
 /** what a message holding too many of `kind` is told: by the composer before it sends, and by the
  * schema if one arrives anyway */

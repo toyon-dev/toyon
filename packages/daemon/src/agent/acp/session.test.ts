@@ -852,9 +852,13 @@ describe("AcpSession", () => {
       ],
     });
     const heads = (fake.prompts[0]!.prompt as Array<{ type: string; text?: string }>).map(
-      (b) => b.text?.match(/^(Element|Pasted text|Image) \d+/)?.[0] ?? b.text ?? b.type,
+      (b) =>
+        b.text?.match(/^(An element the user picked in the preview: <\w+ \/>|Pasted text \d+|Image \d+)/)?.[0] ??
+        b.text ??
+        b.type,
     );
-    expect(heads).toEqual(["Element 1", "Pasted text 1", "Element 2", "Image 1", "image", "this one"]);
+    const element = "An element the user picked in the preview: <Button />";
+    expect(heads).toEqual([element, "Pasted text 1", element, "Image 1", "image", "this one"]);
     await w.session.close();
   });
 

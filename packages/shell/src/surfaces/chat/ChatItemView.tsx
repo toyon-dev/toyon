@@ -569,7 +569,6 @@ export const ChatItemView = memo(function ChatItemView({
                   <PickChip
                     key={`${a.kind}-${a.n}`}
                     pick={a}
-                    n={a.n}
                     dir={dirOf()}
                     className="in-chat"
                     tipText="Hover to highlight on the page"

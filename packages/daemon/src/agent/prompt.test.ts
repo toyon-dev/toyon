@@ -27,6 +27,7 @@ const pick = {
   html: "<button>Save</button>",
 };
 const image = { kind: "image" as const, ref, bytes: Buffer.from("abc") };
+const picked = "An element the user picked in the preview:";
 /** each block's first line, or its type when it is not text */
 const heads = (blocks: ContentBlock[]) => blocks.map((b) => (b.type === "text" ? b.text.split("\n")[0] : b.type));
 
@@ -73,7 +74,7 @@ describe("buildPrompt", () => {
       image,
     ]);
     expect(heads(blocks)).toEqual([
-      'Element 1 (an element the user picked in the preview): <Button> component used at src/pages/Home.tsx:40, its own JSX at src/ui/Button.tsx:12, text "Save"',
+      `${picked} <Button /> used at src/pages/Home.tsx:40, its own JSX at src/ui/Button.tsx:12, text "Save"`,
       "Pasted text 1 (2 lines, 17 chars), begins: line one",
       "Image 2: shot.png (10×5)",
       "image",
@@ -99,20 +100,23 @@ describe("buildPrompt", () => {
 });
 
 describe("pickCaption", () => {
-  test("names both files and which is which, then the markup on a line of its own", () => {
+  test("names the element, both files and which is which, then the markup on a line of its own", () => {
     expect(pickCaption(pick).split("\n")).toEqual([
-      'Element 1 (an element the user picked in the preview): <Button> component used at src/pages/Home.tsx:40, its own JSX at src/ui/Button.tsx:12, text "Save"',
+      `${picked} <Button /> used at src/pages/Home.tsx:40, its own JSX at src/ui/Button.tsx:12, text "Save"`,
       "its HTML: <button>Save</button>",
     ]);
   });
+  test("carries no number, since the chip shows none", () => {
+    expect(pickCaption({ ...pick, n: 7 })).toBe(pickCaption(pick));
+  });
   test("an element whose JSX is the file that renders it names one file", () => {
     expect(pickCaption({ ...pick, callFile: null, callLine: null })).toStartWith(
-      "Element 1 (an element the user picked in the preview): <Button> component defined at src/ui/Button.tsx:12,",
+      `${picked} <Button /> defined at src/ui/Button.tsx:12,`,
     );
   });
   test("an element with no source and no text is its tag", () => {
     const bare = { ...pick, component: null, file: null, line: null, callFile: null, callLine: null, text: "" };
-    expect(pickCaption(bare).split("\n")[0]).toBe("Element 1 (an element the user picked in the preview): <button>");
+    expect(pickCaption(bare).split("\n")[0]).toBe(`${picked} <button>`);
   });
 });
 

@@ -38,18 +38,19 @@ export function pasteCaption(ref: PasteRef): string {
   return `${label} (${from}${ref.lines} lines, ${ref.chars} chars), begins: ${ref.preview}`;
 }
 
-/** the same for an element picked in the preview. Both files, and which is which: the JSX alone
- * sends the agent into the shared component when the line to change is the one that writes it. */
+/** the same for an element picked in the preview, named the way its chip names it rather than
+ * numbered: a component and its file are already a name. Both files, and which is which: the JSX
+ * alone sends the agent into the shared component when the line to change is the one that writes it. */
 export function pickCaption(ref: PickRef): string {
   const at = (file: string, line: number | null) => `${file}${line ? `:${line}` : ""}`;
-  const what = ref.component ? `<${ref.component}> component` : `<${ref.tag}>`;
+  const what = ref.component ? `<${ref.component} />` : `<${ref.tag}>`;
   const where = ref.callFile
     ? ` used at ${at(ref.callFile, ref.callLine)}${ref.file ? `, its own JSX at ${at(ref.file, ref.line)}` : ""}`
     : ref.file
       ? ` defined at ${at(ref.file, ref.line)}`
       : "";
   const text = ref.text ? `, text "${ref.text}"` : "";
-  return `${attachmentLabel("pick", ref.n)} (an element the user picked in the preview): ${what}${where}${text}\nits HTML: ${ref.html}`;
+  return `An element the user picked in the preview: ${what}${where}${text}\nits HTML: ${ref.html}`;
 }
 
 // An agent only dispatches a slash command when it leads the first text block, so a message that

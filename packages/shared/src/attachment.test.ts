@@ -53,8 +53,8 @@ describe("nextNumbers", () => {
 describe("numbered", () => {
   test("numbers waiting attachments in their order, each kind counting on from the session", () => {
     const items = [...of("pick", 1), ...of("paste", 1), ...of("pick", 1), ...of("image", 1)];
-    const labels = numbered(items, { image: 3, paste: 1, pick: 1 }).map(([a, n]) => attachmentLabel(a.kind, n));
-    expect(labels).toEqual(["Element 1", "Pasted text 1", "Element 2", "Image 3"]);
+    const numbers = numbered(items, { image: 3, paste: 1, pick: 1 }).map(([a, n]) => `${a.kind} ${n}`);
+    expect(numbers).toEqual(["pick 1", "paste 1", "pick 2", "image 3"]);
   });
   test("leaves the counts it started from as they were", () => {
     const next = { image: 1, paste: 1, pick: 1 };
@@ -64,11 +64,7 @@ describe("numbered", () => {
 });
 
 describe("attachmentLabel", () => {
-  test("names each kind the way its chip and its caption both do", () => {
-    expect([attachmentLabel("image", 2), attachmentLabel("paste", 1), attachmentLabel("pick", 3)]).toEqual([
-      "Image 2",
-      "Pasted text 1",
-      "Element 3",
-    ]);
+  test("names an image and a paste by number, the way their chips and captions both do", () => {
+    expect([attachmentLabel("image", 2), attachmentLabel("paste", 1)]).toEqual(["Image 2", "Pasted text 1"]);
   });
 });

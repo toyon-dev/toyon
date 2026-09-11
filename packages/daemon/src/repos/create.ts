@@ -8,8 +8,8 @@
 // syscall is the guarantee, and it also closes the gap between checking and creating.
 
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { appendFile, mkdir, rm } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { projectNameError } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
@@ -124,6 +124,15 @@ export async function initRepoInPlace(opts: { parent: string; name: string }): P
 async function initWithEmptyCommit(dir: string): Promise<void> {
   // no `-b`: the person's own init.defaultBranch decides, rather than "main" being imposed here
   await ok(git(dir, "init", "-q"), "git init");
+  // Finder writes a .DS_Store into any folder it has shown, and an untracked one makes the project
+  // read as changed, which costs it the first-run screen: that waits for a tree git sees as empty.
+  // Excluded locally rather than in a .gitignore, since it is a fact about this Mac, and a committed
+  // file would leave the tree too full for a scaffolder to run in.
+  const exclude = await git(dir, "rev-parse", "--git-path", "info/exclude");
+  if (!exclude.ok) throw new UserError(`git rev-parse failed: ${exclude.err}`);
+  const excludePath = resolve(dir, exclude.out);
+  await mkdir(dirname(excludePath), { recursive: true });
+  await appendFile(excludePath, "\n.DS_Store\n");
   // gpgsign off for this commit only: a signing prompt would hang a git nobody can see, and an
   // empty scaffolding commit is not the one worth a signature
   await ok(git(dir, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "initial commit"), "git commit");

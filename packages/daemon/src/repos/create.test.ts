@@ -166,6 +166,8 @@ describe("initRepoInPlace", () => {
     // the commit tracks nothing, so the litter is still there and still out of the history
     expect(existsSync(join(dir, ".DS_Store"))).toBe(true);
     expect((await git(dir, "ls-tree", "HEAD")).out).toBe("");
+    // and excluded locally, so the project reads as untouched and still gets its first-run screen
+    expect((await git(dir, "status", "--porcelain", "-uall")).out).toBe("");
     cleanup();
   });
 

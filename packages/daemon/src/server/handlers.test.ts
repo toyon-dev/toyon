@@ -745,9 +745,13 @@ describe("handlers", () => {
     const { services, ctx, replies, repo } = make();
     const parent = dirname(repo);
     mkdirSync(join(parent, "My App"));
+    writeFileSync(join(parent, "My App", ".DS_Store"), "");
     await dispatch({ t: "create-repo", mode: "init", parent, name: "My App" }, ctx, services);
-    expect(services.state.repos.some((r) => r.path.endsWith("/My App"))).toBe(true);
+    const made = services.state.repos.find((r) => r.path.endsWith("/My App"));
+    expect(made).toBeDefined();
     expect(lastToast(replies)).toBe("created My App");
+    // Finder's litter must not cost it the first-run screen, which waits for main to read as empty
+    expect(services.state.worktrees.find((w) => w.repoId === made?.id && w.kind === "main")?.empty).toBe(true);
     // an empty folder inside a project toyon manages is still inside it
     mkdirSync(join(repo, "inner"));
     await dispatch({ t: "register-repo", path: repo }, ctx, services);

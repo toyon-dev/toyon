@@ -496,13 +496,25 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
 
 export type ClientMsg = z.infer<typeof clientMsgSchema>;
 
+/** a failed parse as one line: where, then why. Zod wraps the issue a record key or an array element
+ * raised in a generic one ("Invalid key in record"), which is all a toast would say about a proc
+ * named "shell", so the reason is read from the innermost issue and the paths are joined on the way. */
+export function issueReason(error: z.ZodError, fallback: string): string {
+  let issue = error.issues[0];
+  let path: PropertyKey[] = issue?.path ?? [];
+  while (issue && (issue.code === "invalid_key" || issue.code === "invalid_element") && issue.issues[0]) {
+    issue = issue.issues[0];
+    path = [...path, ...issue.path];
+  }
+  const where = path.length ? `${path.map(String).join(".")}: ` : "";
+  return `${where}${issue?.message ?? fallback}`;
+}
+
 /** parse one inbound frame; returns the message or a one-line reason */
 export function parseClientMsg(raw: unknown): { ok: true; msg: ClientMsg } | { ok: false; reason: string } {
   const r = clientMsgSchema.safeParse(raw);
   if (r.success) return { ok: true, msg: r.data };
-  const issue = r.error.issues[0];
-  const where = issue?.path.length ? `${issue.path.join(".")}: ` : "";
-  return { ok: false, reason: `${where}${issue?.message ?? "invalid message"}` };
+  return { ok: false, reason: issueReason(r.error, "invalid message") };
 }
 
 // The hand-written interfaces in model.ts / events.ts and the schemas above must describe the same

@@ -329,7 +329,7 @@ export interface State {
   heard: boolean;
   local: Record<string, WorktreeLocal>;
   /** `ref` set means this is a commit's diff: history, so the editor opens it read-only */
-  diff: {
+  editor: {
     worktreeId: string;
     path: string;
     before: string;
@@ -453,7 +453,7 @@ export function initialState(opts: InitialOpts): State {
     storedRepo: opts.storedRepo ?? null,
     heard: false,
     local: {},
-    diff: null,
+    editor: null,
     openView: null,
     toast: null,
     reloadReq: null,
@@ -601,7 +601,7 @@ function activate(s: State, id: string | null): State {
   const lastActive = row && isOwned(row) ? { ...s.lastActive, [row.repoId]: row.id } : s.lastActive;
   // choosing a row is leaving the draft, the base's own row included: a snapshot that only
   // re-asserts the selection puts the draft back itself (see the worktrees frame)
-  return { ...s, activeId: id, activeRepoId, lastActive, diff: null, draft: null };
+  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, draft: null };
 }
 
 /** the draft after a frame: kept while its base is still listed, dropped once the worktree it was
@@ -639,7 +639,7 @@ export type Action =
   | { a: "open-repo" }
   /** show a clone's progress in the preview area (null stops watching) */
   | { a: "watch-import"; id: string | null }
-  | { a: "close-diff" }
+  | { a: "close-editor" }
   /** a file-diff is going out for this file, and it should open in this view */
   | { a: "open-view"; v: { worktreeId: string; path: string; view: EditorView } }
   /** switch the open file between its diff and the file */
@@ -794,14 +794,14 @@ function reduce(s: State, action: Action): State {
       return { ...s, pendingOpen: true };
     case "watch-import":
       return { ...s, activeImportId: action.id };
-    case "close-diff":
-      return { ...s, diff: null };
+    case "close-editor":
+      return { ...s, editor: null };
     case "open-view":
       return { ...s, openView: action.v };
     case "editor-view":
       // the line was a one-time jump; past a switch the editor carries its own place, and a line
       // kept for the diff view would land inside a collapsed region the next time the file is read
-      return s.diff ? { ...s, diff: { ...s.diff, view: action.v, line: undefined } } : s;
+      return s.editor ? { ...s, editor: { ...s.editor, view: action.v, line: undefined } } : s;
     case "dismiss-toast":
       return { ...s, toast: null };
     case "set-draft":
@@ -1022,7 +1022,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeRepoId = msg.repos[0]?.id ?? null;
       }
       if (activeRepoId === s.activeRepoId) return { ...s, repos: msg.repos, pendingOpen };
-      return { ...s, repos: msg.repos, pendingOpen, activeRepoId, activeId: landingIn(s, activeRepoId), diff: null };
+      return { ...s, repos: msg.repos, pendingOpen, activeRepoId, activeId: landingIn(s, activeRepoId), editor: null };
     }
     case "worktrees": {
       let activeId = s.activeId;
@@ -1130,15 +1130,15 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // the offset this reply carries is what a held fiber line was waiting for
       const g = s.gotoLine;
       if (!g?.fiber || g.worktreeId !== msg.worktreeId || g.path !== msg.path) return next;
-      if (next.diff?.worktreeId !== msg.worktreeId || next.diff.path !== msg.path) return next;
-      return { ...next, diff: { ...next.diff, line: g.line - msg.lineOffset }, gotoLine: null };
+      if (next.editor?.worktreeId !== msg.worktreeId || next.editor.path !== msg.path) return next;
+      return { ...next, editor: { ...next.editor, line: g.line - msg.lineOffset }, gotoLine: null };
     }
     case "file-diff": {
       if (msg.discarded) {
-        const d = s.diff;
+        const d = s.editor;
         // a commit's copy is history the discard never touched
         if (!d || d.ref !== undefined || d.worktreeId !== msg.worktreeId || d.path !== msg.path) return s;
-        return { ...s, diff: msg.discarded === "removed" ? null : { ...d, before: msg.before, after: msg.after } };
+        return { ...s, editor: msg.discarded === "removed" ? null : { ...d, before: msg.before, after: msg.after } };
       }
       const o = s.openView;
       // with no view asked for, a changed file opens on its diff and an unchanged one has none to show
@@ -1147,14 +1147,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const opened = { ...msg, view };
       const g = s.gotoLine;
       if (!g || g.worktreeId !== msg.worktreeId || g.path !== msg.path)
-        return { ...s, diff: opened, gotoLine: null, openView: null };
+        return { ...s, editor: opened, gotoLine: null, openView: null };
       const offset = localOf(s, msg.worktreeId).changedRanges[msg.path]?.offset;
       // hold the goto rather than reveal the wrong line: without the offset a preamble-shifted
-      // file lands a few lines off, and changed-ranges (which DiffView asks for on mount) places it
-      if (g.fiber && offset === undefined) return { ...s, diff: opened, openView: null };
+      // file lands a few lines off, and changed-ranges (which EditorPane asks for on mount) places it
+      if (g.fiber && offset === undefined) return { ...s, editor: opened, openView: null };
       return {
         ...s,
-        diff: { ...opened, line: g.line - (g.fiber ? (offset ?? 0) : 0) },
+        editor: { ...opened, line: g.line - (g.fiber ? (offset ?? 0) : 0) },
         gotoLine: null,
         openView: null,
       };

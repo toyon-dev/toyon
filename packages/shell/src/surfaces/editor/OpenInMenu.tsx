@@ -3,9 +3,9 @@ import { Button } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 
-/** the "open in" editor menu for the file in the diff pane */
+/** the "open in" editor menu for the file in the editor pane */
 export function OpenInMenu({ absPath, onReveal }: { absPath: string; onReveal?: () => void }) {
-  const cm = useContextMenu("diff");
+  const cm = useContextMenu("editor");
   return (
     <Button
       variant="outline"

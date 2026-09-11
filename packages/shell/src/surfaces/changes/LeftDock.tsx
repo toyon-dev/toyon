@@ -39,9 +39,9 @@ export function LeftDock({ width }: { width: number }) {
   const greenfield = useGreenfield();
   const focusReq = useStore((s) => s.focusLeft);
   const gitInfo = useLocalField(activeId, "git");
-  // the row whose diff is open in the editor; plain strings so the selectors stay identity-stable
-  const openPath = useStore((s) => (s.diff && s.diff.worktreeId === activeId ? s.diff.path : null));
-  const openRef = useStore((s) => (s.diff && s.diff.worktreeId === activeId ? (s.diff.ref ?? null) : null));
+  // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
+  const openPath = useStore((s) => (s.editor && s.editor.worktreeId === activeId ? s.editor.path : null));
+  const openRef = useStore((s) => (s.editor && s.editor.worktreeId === activeId ? (s.editor.ref ?? null) : null));
   const files = gitInfo?.files ?? NO_FILES;
   const committed = gitInfo?.committed ?? NO_FILES;
   const clean = files.length === 0;
@@ -237,7 +237,7 @@ export function LeftDock({ width }: { width: number }) {
       // next file straight away. Only a list with nothing open hands the keyboard back. It never
       // reaches the app-wide ladder, which would close the terminal ahead of the diff.
       e.stopPropagation();
-      if (openPath !== null) dispatch({ a: "close-diff" });
+      if (openPath !== null) dispatch({ a: "close-editor" });
       else (document.activeElement as HTMLElement | null)?.blur();
     }
   };

@@ -14,8 +14,8 @@ export const STORAGE = {
   theme: "toyon-theme",
   leftWidth: "toyon-lw",
   rightWidth: "toyon-rw",
-  diffHeight: "toyon-dh",
-  diffFull: "toyon-dfull",
+  editorHeight: "toyon-dh",
+  editorFull: "toyon-dfull",
   designHeight: "toyon-dsh",
   designFull: "toyon-dsfull",
   termHeight: "toyon-th",
@@ -39,7 +39,7 @@ export const STORAGE = {
 const LEGACY_PREFIX = "orch-";
 export function migrateStorage() {
   for (const [storage, keys] of [
-    [localStorage, ["active", "token", "theme", "leftWidth", "rightWidth", "diffHeight", "diffFull"]],
+    [localStorage, ["active", "token", "theme", "leftWidth", "rightWidth", "editorHeight", "editorFull"]],
     [sessionStorage, ["client"]],
   ] as const) {
     for (const k of keys) {

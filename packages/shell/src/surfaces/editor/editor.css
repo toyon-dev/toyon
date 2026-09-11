@@ -1,0 +1,35 @@
+/* The editor pane: the open file, as its diff against main or on its own. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  /* the bottom panes add only their own height and layout: the border, ground, position and the
+   title's face are .pane's, and each pane restating them was three copies to keep in step */
+  .editor-pane {
+    height: 45%;
+    min-height: 120px;
+    /* a column, so the body takes whatever the head leaves: the head's height is the token's,
+     and restating it here as an offset is a second copy that drifts when the token moves */
+    display: flex;
+    flex-direction: column;
+    &.full {
+      flex: 1;
+      min-height: 0;
+      height: auto;
+    }
+    /* monaco sets the collapsed-region band in its own 13px; the pane's chrome is the shell's, so the
+   "N hidden lines" line matches the file path above it rather than the editor it came with */
+    & .monaco-editor .diff-hidden-lines .center {
+      font: var(--type-ui-sm);
+    }
+  }
+  .editor-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+  }
+  /* monaco measures its container (automaticLayout), so the box has to be a definite size rather
+   than one its own content would grow */
+  .editor-monaco {
+    position: absolute;
+    inset: 0;
+  }
+}

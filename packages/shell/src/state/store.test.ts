@@ -112,11 +112,11 @@ describe("active worktree", () => {
     const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
     expect(run([worktrees(wt("main", "main"))], s).activeId).toBe("main");
   });
-  test("activate clears an open diff", () => {
+  test("activate closes the open file", () => {
     const s = run([hello(wt("main", "main"), wt("a"))]);
     const withDiff = reducer(s, server({ t: "file-diff", worktreeId: "main", path: "x", before: "", after: "" }));
-    expect(withDiff.diff).not.toBeNull();
-    expect(reducer(withDiff, { a: "activate", id: "a" }).diff).toBeNull();
+    expect(withDiff.editor).not.toBeNull();
+    expect(reducer(withDiff, { a: "activate", id: "a" }).editor).toBeNull();
   });
 });
 
@@ -721,7 +721,7 @@ describe("streams and notices", () => {
       { a: "goto-line", v: { worktreeId: "a", path: "x.ts", line: 7 } },
       server({ t: "file-diff", worktreeId: "a", path: "y.ts", before: "", after: "" }),
     ]);
-    expect(s.diff?.line).toBeUndefined();
+    expect(s.editor?.line).toBeUndefined();
     expect(s.gotoLine).toBeNull();
   });
   test("a line the page reported waits for the offset that maps it back to the file", () => {
@@ -733,15 +733,15 @@ describe("streams and notices", () => {
       server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
     ]);
     // the file is open, but revealing 55 now would land three lines past the element
-    expect(opened.diff).toMatchObject({ path: "x.tsx", view: "file" });
-    expect(opened.diff?.line).toBeUndefined();
+    expect(opened.editor).toMatchObject({ path: "x.tsx", view: "file" });
+    expect(opened.editor?.line).toBeUndefined();
     expect(opened.gotoLine?.line).toBe(55);
 
     const placed = reducer(
       opened,
       server({ t: "changed-ranges", worktreeId: "a", path: "x.tsx", ranges: [], lineOffset: 3 }),
     );
-    expect(placed.diff).toMatchObject({ view: "file", line: 52 });
+    expect(placed.editor).toMatchObject({ view: "file", line: 52 });
     expect(placed.gotoLine).toBeNull();
   });
   test("a known offset places the line as the file opens", () => {
@@ -751,7 +751,7 @@ describe("streams and notices", () => {
       { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55, fiber: true } },
       server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
     ]);
-    expect(s.diff?.line).toBe(52);
+    expect(s.editor?.line).toBe(52);
     expect(s.gotoLine).toBeNull();
   });
   test("a search hit is a file line already, and no offset is taken off it", () => {
@@ -761,7 +761,7 @@ describe("streams and notices", () => {
       { a: "goto-line", v: { worktreeId: "a", path: "x.tsx", line: 55 } },
       server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
     ]);
-    expect(s.diff?.line).toBe(55);
+    expect(s.editor?.line).toBe(55);
   });
   test("a file asked for as the file opens without its diff, and only that file", () => {
     const asked = run([
@@ -769,19 +769,19 @@ describe("streams and notices", () => {
       { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
       server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "", after: "" }),
     ]);
-    expect(asked.diff?.view).toBe("file");
+    expect(asked.editor?.view).toBe("file");
     expect(asked.openView).toBeNull();
 
     // the changes list or a chat link sends no view: a changed file opens on its diff
     const next = reducer(asked, server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }));
-    expect(next.diff?.view).toBe("diff");
+    expect(next.editor?.view).toBe("diff");
 
     const stale = run([
       hello(wt("a")),
       { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
       server({ t: "file-diff", worktreeId: "a", path: "y.tsx", before: "a", after: "b" }),
     ]);
-    expect(stale.diff?.view).toBe("diff");
+    expect(stale.editor?.view).toBe("diff");
     expect(stale.openView).toBeNull();
   });
   test("a file with nothing changed opens as the file when no view was asked for", () => {
@@ -789,7 +789,7 @@ describe("streams and notices", () => {
       hello(wt("a")),
       server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "a" }),
     ]);
-    expect(s.diff?.view).toBe("file");
+    expect(s.editor?.view).toBe("file");
   });
   test("the open file switches view in place, and the line it jumped to is spent", () => {
     const s = run([
@@ -798,11 +798,11 @@ describe("streams and notices", () => {
       { a: "open-view", v: { worktreeId: "a", path: "x.tsx", view: "file" } },
       server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "b" }),
     ]);
-    expect(s.diff).toMatchObject({ view: "file", line: 9 });
+    expect(s.editor).toMatchObject({ view: "file", line: 9 });
     const diff = reducer(s, { a: "editor-view", v: "diff" });
-    expect(diff.diff).toMatchObject({ path: "x.tsx", view: "diff", after: "b" });
-    expect(diff.diff?.line).toBeUndefined();
-    expect(reducer(initial, { a: "editor-view", v: "file" }).diff).toBeNull();
+    expect(diff.editor).toMatchObject({ path: "x.tsx", view: "diff", after: "b" });
+    expect(diff.editor?.line).toBeUndefined();
+    expect(reducer(initial, { a: "editor-view", v: "file" }).editor).toBeNull();
   });
   test("a discard refreshes the pane showing that file, closes it when the file is gone, and opens none", () => {
     const open = run([
@@ -814,7 +814,7 @@ describe("streams and notices", () => {
       open,
       server({ t: "file-diff", worktreeId: "a", path: "x.tsx", before: "a", after: "a", discarded: "restored" }),
     );
-    expect(restored.diff).toMatchObject({ path: "x.tsx", view: "file", before: "a", after: "a" });
+    expect(restored.editor).toMatchObject({ path: "x.tsx", view: "file", before: "a", after: "a" });
 
     const removed = server({
       t: "file-diff",
@@ -824,7 +824,7 @@ describe("streams and notices", () => {
       after: "",
       discarded: "removed",
     });
-    expect(reducer(open, removed).diff).toBeNull();
+    expect(reducer(open, removed).editor).toBeNull();
 
     const other = server({
       t: "file-diff",
@@ -835,7 +835,7 @@ describe("streams and notices", () => {
       discarded: "restored",
     });
     expect(reducer(open, other)).toBe(open);
-    expect(reducer(run([hello(wt("a"))]), removed).diff).toBeNull();
+    expect(reducer(run([hello(wt("a"))]), removed).editor).toBeNull();
 
     const history = run([
       hello(wt("a")),

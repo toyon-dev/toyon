@@ -1,4 +1,4 @@
-/* The changes panel: file rows, the history, the commit box, the diff pane. */
+/* The changes panel: file rows, the history, the commit box. */
 @layer tokens, base, surfaces;
 @layer surfaces {
   /* ---- left dock ---- */
@@ -137,23 +137,6 @@
       color: var(--red);
     }
   }
-  /* the three bottom panes add only their own height and layout: the border, ground, position and
-   the title's face are .pane's, and each pane restating them was three copies to keep in step */
-  .diff-pane {
-    height: 45%;
-    min-height: 120px;
-    &.full {
-      flex: 1;
-      min-height: 0;
-      height: auto;
-    }
-    /* monaco sets the collapsed-region band in its own 13px; the pane's chrome is the shell's, so the
-   "N hidden lines" line matches the file path above it rather than the editor it came with */
-    & .monaco-editor .diff-hidden-lines .center {
-      font: var(--type-ui-sm);
-    }
-  }
-
   /* ---- commit box ---- */
 
   /* the message box only appears when there is something to commit, so on a clean tree this is the

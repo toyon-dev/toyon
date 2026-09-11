@@ -155,7 +155,7 @@ export function useChords() {
         // bottom panes, terminal first (a full-screen program in it keeps Escape for itself).
         // Zen is not on this ladder: it only leaves on ⌘., so Escape stays the page's own key
         else if (s.termOpen) dispatch({ a: "toggle-terminal" });
-        else if (s.diff) dispatch({ a: "close-diff" });
+        else if (s.editor) dispatch({ a: "close-editor" });
         else if (s.designOpen) dispatch({ a: "toggle-design" });
       }
     };

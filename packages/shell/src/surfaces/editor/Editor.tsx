@@ -69,7 +69,7 @@ interface Carry {
   top: number;
 }
 
-export default function MonacoDiff({
+export default function Editor({
   before,
   after,
   path,
@@ -321,5 +321,5 @@ export default function MonacoDiff({
     };
   }, [before, after, path, focusLine, readOnly, view]);
 
-  return <div ref={ref} style={{ position: "absolute", inset: "33px 0 0 0" }} />;
+  return <div ref={ref} className="editor-monaco" />;
 }

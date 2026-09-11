@@ -75,14 +75,16 @@ export function WtRail() {
   const home = useStore((s) => s.home);
   const wtDirLabel = (d: WorktreeStatus) =>
     home && d.path.startsWith(`${home}/`) ? `~${d.path.slice(home.length)}` : d.path;
-  // the tip's second line: where the worktree is, and what its agent has cost and filled so far
-  const detailOf = (d: WorktreeStatus) => {
+  // the tip's lead: which checkout this is when it is main, then what its agent has cost and filled
+  // so far. Kept off the path's line so the path reads whole and the figures are found in one place.
+  const leadOf = (d: WorktreeStatus, main: boolean) => {
     const u = d.usage;
-    if (!u) return wtDirLabel(d);
-    const figures = [u.cost !== undefined ? dollars(u.cost) : null, `${tokens(u.used)} of ${tokens(u.size)}`].filter(
-      Boolean,
-    );
-    return `${wtDirLabel(d)} · ${figures.join(" · ")}`;
+    const parts = [
+      main ? "main" : null,
+      u?.cost !== undefined ? dollars(u.cost) : null,
+      u ? `${tokens(u.used)} of ${tokens(u.size)}` : null,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(" · ") : undefined;
   };
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
@@ -152,14 +154,14 @@ export function WtRail() {
         // crosses the panel.
         // Badges and the crashed dot keep their own, since those are what a hover over them is
         // asking about. A found row has no state to name, so the path is its text, unless
-        // something holds it. The main checkout is named ahead of its state: its path alone reads
-        // as one more worktree.
+        // something holds it. The main checkout is named in the lead, at the far start of the
+        // state's line: its path alone reads as one more worktree.
         {...(owned
           ? tip(stateLabel(w, repoOf(owned)?.needsSetup), undefined, {
               placement: "left",
-              detail: detailOf(w),
+              detail: wtDirLabel(w),
               dot: dotClass(w),
-              lead: isMain(owned.worktree) ? "main" : undefined,
+              lead: leadOf(w, isMain(owned.worktree)),
             })
           : w.locked
             ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, { placement: "left", detail: wtDirLabel(w) })

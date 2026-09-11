@@ -5,7 +5,7 @@
 const BASE = "http://preview.invalid";
 
 /** the router whose file layout a page was read from */
-export type RouteSource = "next" | "nuxt" | "sveltekit" | "remix" | "astro" | "solid" | "tanstack";
+export type RouteSource = "next" | "nuxt" | "sveltekit" | "remix" | "astro" | "solid" | "tanstack" | "react-router";
 
 /** a page, or an endpoint, that a worktree's files define under a file-based router */
 export interface RouteInfo {

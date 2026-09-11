@@ -284,6 +284,43 @@ describe("handlers", () => {
     expect(manifestReads()).toBe(2);
   });
 
+  test("a React Router app's pages come from its code, each named for the module it renders", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await Bun.write(`${main.path}/package.json`, JSON.stringify({ dependencies: { "react-router-dom": "7.0.0" } }));
+    await Bun.write(
+      `${main.path}/src/main.tsx`,
+      [
+        'import { createBrowserRouter } from "react-router-dom";',
+        'import Home from "./pages/Home";',
+        'import About from "./pages/About";',
+        "export const router = createBrowserRouter([",
+        '  { path: "/", element: <Home /> },',
+        '  { path: "about", element: <About /> },',
+        '  { path: "users/:id", lazy: () => import("./pages/User") },',
+        "]);",
+      ].join("\n"),
+    );
+    for (const page of ["Home", "About", "User"]) {
+      await Bun.write(`${main.path}/src/pages/${page}.tsx`, "export default () => null;\n");
+    }
+    await dispatch({ t: "subscribe", worktreeId: main.id }, ctx, services);
+    const reply = replies.at(-1);
+    if (reply?.t !== "routes") throw new Error("expected the pages after git status");
+    expect(reply.routes.map((x) => `${x.path} ${x.file} ${x.source}`)).toEqual([
+      "/ src/pages/Home.tsx react-router",
+      "/about src/pages/About.tsx react-router",
+      "/users/:id src/pages/User.tsx react-router",
+    ]);
+    // each page is its own module, so each new one says so
+    expect(reply.unseen).toEqual({
+      "src/pages/Home.tsx": "new",
+      "src/pages/About.tsx": "new",
+      "src/pages/User.tsx": "new",
+    });
+  });
+
   test("subscribe registers the socket and replies backfill + queue + commands + git-status to the caller only", async () => {
     const { services, ctx, replies, broadcasts, subs, repo } = make();
     const r = await services.repos.register(repo);

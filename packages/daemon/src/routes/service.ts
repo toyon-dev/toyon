@@ -15,8 +15,9 @@ import { log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import { git } from "../git/exec.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
-import { fileRoutes, frameworksOf, isManifest, type Manifest } from "./fileRouters.ts";
+import { fileRoutes, frameworksOf, isManifest, isSkipped, type Manifest, mergeRoutes } from "./fileRouters.ts";
 import { bump, entries, retitle } from "./frecency.ts";
+import { ROUTER_MARKER, reactRoutes, type SourceFile } from "./reactRouter.ts";
 import { badgeCandidates, unseenOf } from "./seen.ts";
 
 /** state.json is written whole and synchronously, and a page that rewrites its address as it
@@ -32,6 +33,12 @@ const MAX_HASHED = 64;
 const HASH_WHOLE_BYTES = 1024 * 1024;
 /** page files remembered per worktree */
 const SEEN_FILES = 500;
+/** script files a React Router app may declare routes in, per root */
+const MAX_CODE_FILES = 3000;
+/** past this a script file is generated or vendored, not a route table */
+const MAX_CODE_BYTES = 400 * 1024;
+const CODE_FILE = /\.(tsx|jsx|ts|js|mts)$/;
+const NOT_ROUTES = /\.(test|spec|stories)\.|\.d\.ts$/;
 
 /** how the service reads the worktree's files, so a test can count the reads */
 export interface RouteFs {
@@ -72,6 +79,9 @@ export interface RouteDeps {
   saveDelayMs?: number;
 }
 
+/** a file read before, and what it held, kept until its size or time moves */
+type Cached<T> = { sig: string; value: T };
+
 /** one worktree's scan and what was last sent from it */
 interface Scan {
   root: string;
@@ -80,8 +90,10 @@ interface Scan {
   rerun: boolean;
   routes: RouteInfo[] | null;
   templates: Template[];
-  /** each manifest's dependencies, read again only when its size or time moves */
-  manifests: Map<string, { sig: string; deps: string[] | null }>;
+  /** each manifest's dependencies */
+  manifests: Map<string, Cached<string[] | null>>;
+  /** each script file's text, for the ones that name a router; null for the rest */
+  code: Map<string, Cached<string | null>>;
   git: WorktreeGit | null;
   pages: WorktreePages | null;
 }
@@ -92,7 +104,8 @@ const signatureOf = (list: PageEntry[]) => list.map((e) => `${e.path}\t${e.title
 
 /** The route bar's list: which preview pages each project is used on, counted per repo so a new
  * worktree starts out knowing the pages you already use; the pages a worktree's own files define,
- * read off its file layout; and which of those changed since you last had them open there. */
+ * read off its file layout or its React Router code; and which of those changed since you last had
+ * them open there. */
 export class RouteService {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   /** the list last announced per repo, so a visit that leaves order and titles alone broadcasts nothing */
@@ -159,7 +172,7 @@ export class RouteService {
   }
 
   /** A worktree's pages with their badges, for its git status as it stands. Scans, or joins a scan
-   * already running, and reads only the changed page files. */
+   * already running, and reads only the files that moved since the last one. */
   async pages(worktreeId: string, git: WorktreeGit): Promise<WorktreePages> {
     const wt = this.d.readable(worktreeId);
     if (!wt) return { routes: [], unseen: {} };
@@ -244,6 +257,7 @@ export class RouteService {
       routes: null,
       templates: [],
       manifests: new Map(),
+      code: new Map(),
       git: null,
       pages: null,
     };
@@ -290,24 +304,60 @@ export class RouteService {
     }
     const paths = listed.out.split("\n").filter(Boolean);
     const manifests: Manifest[] = [];
-    const kept = new Map<string, { sig: string; deps: string[] | null }>();
+    const keptManifests = new Map<string, Cached<string[] | null>>();
     for (const p of paths.filter(isManifest).slice(0, MAX_MANIFESTS)) {
-      const abs = join(scan.root, p);
-      const stat = await this.fs.stat(abs);
-      if (!stat) continue;
-      const sig = `${stat.mtimeMs}:${stat.size}`;
-      const had = scan.manifests.get(p);
-      const entry = had?.sig === sig ? had : { sig, deps: await this.depsOf(abs, p) };
-      kept.set(p, entry);
-      if (entry.deps) manifests.push({ dir: p.slice(0, -"package.json".length), deps: entry.deps });
+      const deps = await this.cachedRead(scan.root, p, scan.manifests, keptManifests, (bytes) => this.depsOf(bytes, p));
+      if (deps) manifests.push({ dir: p.slice(0, -"package.json".length), deps });
     }
-    scan.manifests = kept;
-    return fileRoutes(paths, frameworksOf(paths, manifests));
+    scan.manifests = keptManifests;
+    const roots = frameworksOf(paths, manifests);
+    const code: RouteInfo[] = [];
+    const keptCode = new Map<string, Cached<string | null>>();
+    for (const [dir, source] of roots) {
+      if (source !== "react-router") continue;
+      const under = paths
+        .filter((p) => p.startsWith(dir) && CODE_FILE.test(p) && !NOT_ROUTES.test(p) && !isSkipped(p))
+        .slice(0, MAX_CODE_FILES);
+      const files: SourceFile[] = [];
+      for (const p of under) {
+        const text = await this.cachedRead(scan.root, p, scan.code, keptCode, (bytes) => {
+          if (bytes.length > MAX_CODE_BYTES) return null;
+          const text = new TextDecoder().decode(bytes);
+          return ROUTER_MARKER.test(text) ? text : null;
+        });
+        if (text !== null) files.push({ path: p.slice(dir.length), text });
+      }
+      const rel = under.map((p) => p.slice(dir.length));
+      for (const r of reactRoutes(files, rel)) code.push({ ...r, file: dir + r.file, source });
+    }
+    scan.code = keptCode;
+    return mergeRoutes(fileRoutes(paths, roots), code);
   }
 
-  private async depsOf(abs: string, p: string): Promise<string[] | null> {
+  /** a file's reading, from the cache while its size and time hold, else read afresh */
+  private async cachedRead<T>(
+    root: string,
+    path: string,
+    had: Map<string, Cached<T | null>>,
+    kept: Map<string, Cached<T | null>>,
+    decode: (bytes: Uint8Array) => T | null,
+  ): Promise<T | null> {
+    const abs = join(root, path);
+    const stat = await this.fs.stat(abs);
+    if (!stat) return null;
+    const sig = `${stat.mtimeMs}:${stat.size}`;
+    const hit = had.get(path);
+    if (hit?.sig === sig) {
+      kept.set(path, hit);
+      return hit.value;
+    }
     const bytes = await this.fs.read(abs);
-    if (!bytes) return null;
+    const value = bytes ? decode(bytes) : null;
+    kept.set(path, { sig, value });
+    return value;
+  }
+
+  private depsOf(bytes: Uint8Array, p: string): string[] | null {
     try {
       const pkg = JSON.parse(new TextDecoder().decode(bytes)) as {
         dependencies?: Record<string, string>;

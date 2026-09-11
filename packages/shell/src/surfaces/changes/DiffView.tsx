@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
+import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
 import { fileItems } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
@@ -102,6 +103,15 @@ export function DiffView({
             theme={theme}
             readOnly={history}
             onSave={(path, content) => sock?.send({ t: "write-file", worktreeId: diff.worktreeId, path, content })}
+            // the editor knows the lines; whose file they are, and at which commit, is the pane's
+            onCopy={(path, lines, clipboard) =>
+              writeCopiedSource(clipboard, {
+                worktreeId: diff.worktreeId,
+                path,
+                ...lines,
+                ...(diff.ref ? { ref: diff.ref } : {}),
+              })
+            }
             onLineHover={
               history
                 ? undefined

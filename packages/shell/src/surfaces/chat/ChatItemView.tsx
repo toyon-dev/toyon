@@ -543,6 +543,7 @@ export const ChatItemView = memo(function ChatItemView({
                   className="in-chat"
                   n={p.n}
                   name={p.name}
+                  source={p.source}
                   lines={p.lines}
                   chars={p.chars}
                   preview={p.preview}

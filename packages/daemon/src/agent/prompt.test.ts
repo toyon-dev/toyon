@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildPrompt, SYSTEM_APPEND } from "./prompt.ts";
+import { buildPrompt, pasteCaption, SYSTEM_APPEND } from "./prompt.ts";
 
 const ref = { n: 2, name: "shot.png", mimeType: "image/png", bytes: 3, width: 10, height: 5, file: "2.png" };
 const paste = { n: 1, chars: 17, lines: 2, preview: "line one", file: "1.txt" };
@@ -41,6 +41,14 @@ describe("buildPrompt", () => {
   test("a paste from a file says so in the caption", () => {
     const blocks = buildPrompt("x", undefined, undefined, [], [{ ref: { ...paste, name: "App.tsx" }, text: "a" }]);
     expect((blocks[0] as { text: string }).text).toStartWith("Pasted text 1 (App.tsx, 2 lines,");
+  });
+
+  test("a paste copied in the editor names its file and lines, and the commit when it is history", () => {
+    const source = { path: "src/App.tsx", startLine: 12, endLine: 30 };
+    expect(pasteCaption({ ...paste, source })).toBe("Pasted text 1 (copied from lines 12-30 of src/App.tsx)");
+    expect(pasteCaption({ ...paste, source: { ...source, endLine: 12, ref: "3de79ed0aa" } })).toBe(
+      "Pasted text 1 (copied from line 12 of src/App.tsx at commit 3de79ed)",
+    );
   });
 });
 

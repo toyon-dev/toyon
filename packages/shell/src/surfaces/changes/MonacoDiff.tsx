@@ -9,6 +9,7 @@ import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import { useEffect, useRef } from "react";
+import { selectedLines } from "../../app/copiedSource.ts";
 import type { EditorView } from "../../state/store.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
 
@@ -78,6 +79,7 @@ export default function MonacoDiff({
   readOnly = false,
   onSave,
   onLineHover,
+  onCopy,
 }: {
   before: string;
   after: string;
@@ -91,6 +93,8 @@ export default function MonacoDiff({
   readOnly?: boolean;
   onSave: (path: string, content: string) => void;
   onLineHover?: (line: number | null) => void;
+  /** a copy out of the editor, in either view: the lines it took, and the clipboard to say so on */
+  onCopy?: (path: string, lines: { startLine: number; endLine: number }, clipboard: DataTransfer) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // setTheme is global: every editor follows, including ones created before the change
@@ -102,6 +106,8 @@ export default function MonacoDiff({
   saveRef.current = onSave;
   const hoverRef = useRef(onLineHover);
   hoverRef.current = onLineHover;
+  const copyRef = useRef(onCopy);
+  copyRef.current = onCopy;
   // A view switch rebuilds the editor from props, and the props are the file as it was opened. The
   // text has to come from the editor being torn down instead: from the props, edits autosaved since
   // would show as undone, and the next keystroke would save over them.
@@ -238,11 +244,26 @@ export default function MonacoDiff({
       lastLine = null;
       hoverRef.current?.(null);
     });
+
+    // Both views copy out of `code`: the file view is that editor, and the diff view's deleted lines
+    // are zones in it that a selection cannot take, so the lines a copy names are the file's own.
+    // Capture phase: monaco may stop the event at its own input, and it only ever adds flavours, so
+    // one set ahead of it survives.
+    const tagCopy = (e: ClipboardEvent) => {
+      const [sel, ...more] = code.getSelections() ?? [];
+      // several cursors copy lines that no single range names
+      if (!e.clipboardData || !sel || more.length > 0 || !code.hasTextFocus()) return;
+      copyRef.current?.(path, selectedLines(sel), e.clipboardData);
+    };
+    el.addEventListener("copy", tagCopy, true);
+    el.addEventListener("cut", tagCopy, true);
     return () => {
       clearTimeout(safety);
       sub2?.dispose();
       subMove.dispose();
       subLeave.dispose();
+      el.removeEventListener("copy", tagCopy, true);
+      el.removeEventListener("cut", tagCopy, true);
       // a keystroke inside the debounce is still owed to disk when the pane closes or the view
       // switches; the path is this editor's, since the props may already name the next file
       if (saveTimer) {

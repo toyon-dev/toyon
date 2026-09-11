@@ -4,6 +4,7 @@
 
 import type { ContentBlock } from "@agentclientprotocol/sdk";
 import type { ImageRef, PasteRef } from "@toyon/shared";
+import { lineSpan } from "@toyon/shared";
 
 export const SYSTEM_APPEND = [
   "You are working inside a dedicated git worktree managed by Toyon.",
@@ -22,8 +23,15 @@ export function imageCaption(ref: ImageRef): string {
   return `Image ${ref.n}: ${ref.name} (${ref.width}×${ref.height})`;
 }
 
-/** the same for a paste: its number, its size, and enough of the first line to tell two apart */
+/** the same for a paste: its number, then where it was copied from or, for text with no file
+ * behind it, its size and enough of the first line to tell two apart */
 export function pasteCaption(ref: PasteRef): string {
+  const s = ref.source;
+  if (s) {
+    const lines = `${s.startLine === s.endLine ? "line" : "lines"} ${lineSpan(s)}`;
+    const at = s.ref ? ` at commit ${s.ref.slice(0, 7)}` : "";
+    return `Pasted text ${ref.n} (copied from ${lines} of ${s.path}${at})`;
+  }
   const from = ref.name ? `${ref.name}, ` : "";
   return `Pasted text ${ref.n} (${from}${ref.lines} lines, ${ref.chars} chars), begins: ${ref.preview}`;
 }

@@ -6,7 +6,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ImageInput, ImageRef, PasteRef } from "@toyon/shared";
+import type { ImageInput, ImageRef, PasteInput, PasteRef } from "@toyon/shared";
 import { pasteSummary } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 
@@ -61,14 +61,19 @@ export class AttachmentStore {
     };
   }
 
-  async putText(worktreeId: string, n: number, text: string, name?: string): Promise<StoredPaste> {
+  async putText(
+    worktreeId: string,
+    n: number,
+    text: string,
+    { name, source }: Pick<PasteInput, "name" | "source"> = {},
+  ): Promise<StoredPaste> {
     if (!ID.test(worktreeId)) throw new UserError("bad worktree id");
     if (text.length === 0) throw new UserError("empty paste");
     const file = `${n}.txt`;
     const wtDir = attachmentsDirFor(this.dir, worktreeId);
     await mkdir(wtDir, { recursive: true });
     await writeFile(join(wtDir, file), text, "utf8");
-    return { text, ref: { n, ...(name ? { name } : {}), ...pasteSummary(text), file } };
+    return { text, ref: { n, ...(name ? { name } : {}), ...(source ? { source } : {}), ...pasteSummary(text), file } };
   }
 
   /** the path behind a shell request, or null when the segments are not ones we would have made

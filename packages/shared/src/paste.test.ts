@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isLongPaste, pasteSummary, stripAnsi } from "./paste.ts";
+import { isLongPaste, pasteSummary, sourceLabel, stripAnsi } from "./paste.ts";
 import { PASTE_MIN_CHARS, PASTE_MIN_LINES } from "./protocol/limits.ts";
 
 describe("pasteSummary", () => {
@@ -30,6 +30,15 @@ describe("isLongPaste", () => {
     expect(isLongPaste("src/App.tsx")).toBe(false);
     expect(isLongPaste("https://example.com/a/b?c=d")).toBe(false);
     expect(isLongPaste("a\nb\nc")).toBe(false);
+  });
+});
+
+describe("sourceLabel", () => {
+  test("names the file and its lines the way an editor does", () => {
+    expect(sourceLabel({ path: "packages/shell/src/Composer.tsx", startLine: 262, endLine: 277 })).toBe(
+      "Composer.tsx (262-277)",
+    );
+    expect(sourceLabel({ path: "README.md", startLine: 17, endLine: 17 })).toBe("README.md (17)");
   });
 });
 

@@ -25,7 +25,7 @@ import type {
   WorktreeStatus,
 } from "../model.ts";
 import { SHELL_STREAM } from "../model.ts";
-import type { AgentCommand, AgentEvent, AskAnswer, PickMeta } from "./events.ts";
+import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta } from "./events.ts";
 import {
   IMAGE_MAX_BYTES,
   IMAGE_MAX_EDGE,
@@ -166,11 +166,20 @@ export const imageInputSchema = z.object({
 export type ImageInput = z.infer<typeof imageInputSchema>;
 const images = z.array(imageInputSchema).max(IMAGES_PER_MESSAGE).optional();
 
+/** the file and lines a selection copied in the editor came from */
+const pasteSourceSchema = z.object({
+  path: z.string().min(1).max(4096),
+  startLine: z.number().int().min(1),
+  endLine: z.number().int().min(1),
+  ref: z.string().max(64).optional(),
+});
+
 /** a paste as the shell sends it; the daemon derives the counts rather than trusting them */
 export const pasteInputSchema = z.object({
   text: z.string().min(1).max(PASTE_MAX_CHARS),
   /** the file it came from, when it was pasted or dropped as one */
   name: z.string().max(200).optional(),
+  source: pasteSourceSchema.optional(),
 });
 export type PasteInput = z.infer<typeof pasteInputSchema>;
 const pastes = z.array(pasteInputSchema).max(PASTES_PER_MESSAGE).optional();
@@ -431,7 +440,9 @@ const _config: Same<z.infer<typeof toyonConfigSchema>, ToyonConfig> = true;
 const _prefs: Same<z.infer<typeof themePrefsSchema>, ThemePrefs> = true;
 const _variant: Same<z.infer<typeof variantSchema>, NonNullable<WorktreeInfo["variant"]>> = true;
 const _askAnswer: Same<z.infer<typeof askAnswerSchema>, AskAnswer> = true;
+const _pasteSource: Same<z.infer<typeof pasteSourceSchema>, PasteSource> = true;
 void _pickMeta;
+void _pasteSource;
 void _config;
 void _prefs;
 void _variant;

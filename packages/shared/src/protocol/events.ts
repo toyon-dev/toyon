@@ -48,6 +48,17 @@ export interface ImageRef {
   file: string;
 }
 
+/** where a paste was copied from, when the shell's own editor copied it: the lines as they were
+ * numbered at the moment of the copy, which later edits to the file do not move */
+export interface PasteSource {
+  /** relative to the worktree */
+  path: string;
+  startLine: number;
+  endLine: number;
+  /** the commit whose copy of the file it was; absent for the working tree */
+  ref?: string;
+}
+
 /** a long paste the shell collapsed into a chip rather than dropping into the textarea. The text
  * lives in the daemon's attachment store like an image, so a 100k paste does not ride in every
  * backfill; `n` counts per worktree session, same rule as ImageRef. */
@@ -55,6 +66,8 @@ export interface PasteRef {
   n: number;
   /** set when the paste came from a file rather than a text selection */
   name?: string;
+  /** set when the paste is a selection copied in the editor, from either of its views */
+  source?: PasteSource;
   chars: number;
   lines: number;
   /** first non-empty line, trimmed and capped: the chip's label and the prompt's header */

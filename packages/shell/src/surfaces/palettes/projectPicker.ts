@@ -74,7 +74,6 @@ export function destination(parent: string, name: string): string {
 export function rowsFor(input: {
   query: string;
   repos: RepoInfo[];
-  activeRepoId: string | null;
   pending: PendingRepo[];
   entries: PathEntry[];
   target: PathTarget | null;
@@ -85,9 +84,7 @@ export function rowsFor(input: {
   const dirRows = (): Row[] => input.entries.map((entry): Row => ({ kind: "dir", entry }));
 
   if (!looksLikePath(q)) {
-    const repos = input.repos
-      .filter((r) => r.id !== input.activeRepoId && byName(q, r.name, r.path))
-      .map((repo): Row => ({ kind: "repo", repo }));
+    const repos = input.repos.filter((r) => byName(q, r.name, r.path)).map((repo): Row => ({ kind: "repo", repo }));
     // an import is a project you are getting, so it belongs in the list of projects rather than
     // somewhere separate; it sorts after the real ones because you cannot open it yet
     const pending = input.pending

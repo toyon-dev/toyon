@@ -19,7 +19,7 @@ import { defaultParent, looksLikePath, type Row, rowsFor } from "./projectPicker
  *
  * Three forms, one component. A click on the pill drops it out of the pill (`pill`) and takes the
  * bar over the way a browser's address bar does: the open project becomes a chip in the field, the
- * caret sits after it, and the rows are the projects you could switch to. A key or the palette opens
+ * caret sits after it, and the rows are every project, the open one marked. A key or the palette opens
  * the same switcher over the preview (`center`), where the eyes are when nothing was clicked; the
  * pill sits at the far edge of the screen. `disk` is the centered form the field's folder button
  * opens, which starts in the home directory: more room for walking the filesystem, where the
@@ -48,7 +48,6 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       rowsFor({
         query: q,
         repos,
-        activeRepoId: current,
         pending,
         // the daemon already matched these against the path; re-filtering here would only fight the
         // debounce and blank the list between keystrokes. Repos lead: they are what you came for.
@@ -56,7 +55,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
         target: paths.target,
         answered: paths.query,
       }),
-    [repos, current, paths, pending],
+    [repos, paths, pending],
   );
 
   const hintFor = (r: RepoInfo) => {
@@ -125,6 +124,9 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       }
       items={[]}
       filter={filter}
+      // a switcher opens on somewhere to go: enter straight away leaves the open project, as ⌘Tab
+      // does, and the open one stays listed for its hint and its right-click
+      initialIndex={(rs) => rs.findIndex((r) => !(r.kind === "repo" && r.repo.id === current))}
       keyOf={(r) =>
         r.kind === "repo"
           ? r.repo.id
@@ -194,7 +196,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       empty="nothing here; keep typing a path (~/… or /…)"
       row={(r) =>
         r.kind === "repo" ? (
-          <PaletteRow label={r.repo.name} hint={hintFor(r.repo)} />
+          <PaletteRow label={r.repo.name} current={r.repo.id === current} hint={hintFor(r.repo)} />
         ) : r.kind === "pending" ? (
           <PaletteRow label={r.pending.name} hint={r.pending.error ? "import failed" : "importing…"} />
         ) : r.kind === "dir" ? (

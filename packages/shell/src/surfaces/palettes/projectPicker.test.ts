@@ -33,7 +33,6 @@ function rows(query: string, over: Partial<Parameters<typeof rowsFor>[0]> = {}) 
   return rowsFor({
     query,
     repos: [],
-    activeRepoId: null,
     pending: [],
     entries: [],
     target: target({}),
@@ -112,8 +111,6 @@ describe("rowsFor: a name", () => {
   test("a project already called exactly that is the project, not an offer to make another", () => {
     const repos = [repo("toyon", "/Users/k/Projects/toyon"), repo("toyon-site", "/Users/k/Projects/toyon-site")];
     expect(rows("Toyon", { repos }).some((r) => r.kind === "create")).toBe(false);
-    // the open project is not listed, and is still taken
-    expect(rows("toyon", { repos, activeRepoId: "toyon" }).map((r) => r.kind)).toEqual(["repo"]);
   });
 
   test("offers nothing for a name no folder could have", () => {

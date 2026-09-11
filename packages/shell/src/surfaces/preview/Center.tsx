@@ -49,6 +49,7 @@ import { ImportPane } from "./ImportPane.tsx";
 import { NoPreviewPane } from "./NoPreviewPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 import "./preview.css";
+import { VisitTracker } from "../../state/visits.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 
 /** the preview column: one persistent iframe per visited worktree (switching is a display toggle,
@@ -57,6 +58,14 @@ export function Center() {
   const dispatch = useDispatch();
   const store = useStoreInstance();
   const sock = useSock();
+  // a preview settling on a page counts toward the route bar's list; the tracker decides when. One
+  // for the component's life, reading the socket through a ref, so a reconnect keeps what was sent.
+  const sockRef = useRef(sock);
+  sockRef.current = sock;
+  const [visits] = useState(
+    () => new VisitTracker((worktreeId, path) => sockRef.current?.send({ t: "visit", worktreeId, path })),
+  );
+  useEffect(() => () => visits.dispose(), [visits]);
   const rows = useRows();
   const activeId = useActiveId();
   const active = useActive();
@@ -144,9 +153,11 @@ export function Center() {
             previewBus.post(id, { type: "zen", on: zenRef.current });
             dispatch({ a: "hmr", id });
             dispatch({ a: "page", id, url: d.url, title: d.title, fresh: true });
+            visits.note(id, d.url);
             break;
           case "navigated":
             dispatch({ a: "page", id, url: d.url });
+            visits.note(id, d.url);
             break;
           case "page-error": {
             const where = d.source ? ` (${relFile(d.source)}:${d.line ?? "?"})` : "";
@@ -191,7 +202,7 @@ export function Center() {
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [dispatch, store, sock]);
+  }, [dispatch, store, sock, visits]);
 
   // in zen the page under test owns the keyboard: tell every bridge to stop taking chords
   // (broadcast, not just the active frame, so a background preview isn't left holding them)

@@ -73,6 +73,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     defaultAgent: "claude",
     home: "/home/t",
     pending: [],
+    visits: {},
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, spares: [] });
@@ -1297,5 +1298,17 @@ describe("add to chat", () => {
     const store = storeOn();
     addToChat(store, { worktreeId: "b", source, text: "x" });
     expect(store.getState().local.a?.pastes ?? []).toHaveLength(0);
+  });
+});
+
+describe("visits", () => {
+  test("hello brings every repo's list and a visits frame replaces one of them", () => {
+    const h = helloIn([repo("r"), repo("q")]);
+    if (h.a !== "server" || h.msg.t !== "hello") throw new Error("expected a hello");
+    const s = run([
+      server({ ...h.msg, visits: { r: ["/a"], q: ["/b"] } }),
+      server({ t: "visits", repoId: "r", paths: ["/c", "/a"] }),
+    ]);
+    expect(s.visits).toEqual({ r: ["/c", "/a"], q: ["/b"] });
   });
 });

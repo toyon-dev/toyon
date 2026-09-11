@@ -33,6 +33,13 @@ export function ghostOf(completion: string | null | undefined, q: string): strin
     : null;
 }
 
+/** where a section rule goes: true at a row whose group differs from the row above it. The first
+ * row never starts one, since a rule with nothing above it separates nothing. */
+export function sectionStarts<T>(results: T[], groupOf?: (t: T) => string): boolean[] {
+  if (!groupOf) return results.map(() => false);
+  return results.map((t, i) => i > 0 && groupOf(t) !== groupOf(results[i - 1]!));
+}
+
 export interface ListNav<T> {
   /** already clamped: results can shrink under the highlight when the source is async */
   index: number;

@@ -17,6 +17,7 @@ import type { ExecService } from "../exec/service.ts";
 import type { FileService } from "../files/service.ts";
 import { browsePath } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
+import type { RouteService } from "../routes/service.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import type { ThemeStore } from "../themes/store.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
@@ -30,6 +31,8 @@ export interface Services {
   files: FileService;
   /** the worktree's own design system, scanned from its source */
   design: DesignService;
+  /** the route bar's list: which preview pages each repo is used on */
+  routes: RouteService;
   runtime: RuntimeRegistry;
   /** one-off commands from the composer's `!` mode */
   exec: ExecService;
@@ -129,6 +132,14 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   seen(msg, _ctx, s) {
     s.worktrees.markSeen(msg.worktreeId);
+  },
+
+  visit(msg, _ctx, s) {
+    s.routes.visit(msg.worktreeId, msg.path);
+  },
+
+  "forget-visit"(msg, _ctx, s) {
+    s.routes.forget(msg.repoId, msg.path);
   },
 
   chat(msg, _ctx, s) {

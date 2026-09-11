@@ -15,6 +15,7 @@ export * from "./protocol/events.ts";
 export * from "./protocol/limits.ts";
 export * from "./protocol/pick.ts";
 export * from "./protocol/ws.ts";
+export * from "./routes.ts";
 export * from "./themes.ts";
 export * from "./vscode-theme.ts";
 export * from "./worktree-caps.ts";

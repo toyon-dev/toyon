@@ -26,7 +26,7 @@ import { cx } from "../ui/cx.ts";
 /** the worktree rail: the strip it keeps when it peeks, and the column it takes when kept open
  *  (both also in rail.css, as the rail's width and --rail-width) */
 const RAIL_PX = 40;
-const RAIL_OPEN_PX = 232;
+const RAIL_OPEN_PX = 280;
 const MRU_SUBSCRIPTIONS = 3;
 /** how long a worktree stays on screen, with the window focused, before its unseen ring clears */
 const SEEN_AFTER_MS = 2000;

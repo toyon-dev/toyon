@@ -185,10 +185,6 @@
     flex-shrink: 0;
   }
   .picker-item {
-    &[data-state~="cursor"] .search-loc,
-    &[data-state~="cursor"] .search-text {
-      color: var(--text0);
-    }
     /* the matched characters take the accent, so they are the same colour as the bar marking the row
    you are on: one idea, why this row is here and which one is current, said in one colour. A
    highlight inside a word is emphasis rather than status, so it never reads as a fault the way a

@@ -26,9 +26,8 @@ const ROW_AT_REST = [
   ".menu button.disabled",
 ];
 
-/** a child that lifts, but to a tier of its own: the transcript reads its hint up to text0, and a
- * search hit's location goes with the code line it labels, which is the thing you are reading */
-const LIFTS_ELSEWHERE = [".tool-row .tool-name", ".tool-row .tool-icon", ".tool-row .tool-hint", ".search-loc"];
+/** a child that lifts, but to a tier of its own: the transcript reads its hint up to text0 */
+const LIFTS_ELSEWHERE = [".tool-row .tool-name", ".tool-row .tool-icon", ".tool-row .tool-hint"];
 
 /** the token as a colour rather than as a tier. A status dot that shifted under the pointer would
  * read as the proc changing state, so these three must not ride the seat */

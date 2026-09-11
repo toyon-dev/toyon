@@ -2,7 +2,7 @@ import { isMain, type OwnedWorktree, type WorktreeInfo } from "@toyon/shared";
 
 /** when someone last put work into a row: what they sent, else its agent's last turn for a row from
  * before sends were stamped, else when it was made */
-const sentAt = (w: WorktreeInfo) => w.promptedAt ?? w.lastTurnAt ?? w.createdAt;
+export const sentAt = (w: WorktreeInfo) => w.promptedAt ?? w.lastTurnAt ?? w.createdAt;
 
 /** The rail's order: main, then the rows most recently sent to, then landed ones. Only a send moves
  * a row, never an agent finishing or asking, so a row does not slide out from under the pointer

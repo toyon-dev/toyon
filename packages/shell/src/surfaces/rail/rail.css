@@ -47,7 +47,8 @@
 
   /* The control column. Every label in the panel starts at its right edge, and what sits in it says
    what the row is: the plus on "new worktree", the caret on "discovered", the kebab on a worktree
-   row while the pointer is on it, the checkbox while a graft is being picked. It is also as far as
+   row while the pointer is on it, the checkbox while a graft is being picked, and at rest the time
+   since anyone sent something there, which costs the name no width. It is also as far as
    the row gets from the dot, which matters: the peek unfurls from under a pointer resting on the
    dot, and this is where a control can sit without a small drift landing on it.
    It is the row's left padding with the glyph laid over it, not a flex item: as an item the row's
@@ -132,21 +133,30 @@
       display: inline;
     }
     & .rail-more {
-      visibility: hidden;
+      display: none;
       padding: 2px;
       border-radius: var(--radius-xs);
-      /* a box around the glyph, so its dots sit on the column's centre line with the plus */
+    }
+    /* a box around the glyph, so its dots sit on the column's centre line with the plus. Shown by
+       display rather than visibility, since at rest the time holds the same seat */
+    &:hover .rail-more {
       display: flex;
     }
-    &:hover .rail-more {
-      visibility: visible;
+    & .rail-at {
+      font: var(--type-mono-sm);
+      /* the time ticks; `font` resets the variant */
+      font-variant-numeric: tabular-nums;
+    }
+    &:hover .rail-at,
+    &.menu-open .rail-at {
+      display: none;
     }
     &.menu-open {
       background: var(--element1);
       --dot-gap: var(--element1);
     }
     &.menu-open .rail-more {
-      visibility: visible;
+      display: flex;
       color: var(--text0);
       background: var(--element1);
     }

@@ -1,7 +1,8 @@
 import type { ModelChoice } from "@toyon/shared";
 import { STORAGE } from "../../state/keys.ts";
 import { usePersisted } from "../../ui/hooks.ts";
-import { DEFAULT_OPTION, OptionChip } from "./OptionChip.tsx";
+import { DEFAULT_OPTION } from "./choiceRows.ts";
+import { OptionChip } from "./OptionChip.tsx";
 
 /** the effort level a new worktree of this agent asks for: remembered per agent in this browser */
 export function useNewWorktreeEffort(agentId: string | undefined): [string, (e: string) => void] {

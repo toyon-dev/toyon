@@ -48,17 +48,24 @@ export function useFocusOnMount<T extends HTMLElement>(): RefObject<T> {
   return ref;
 }
 
-/** useState backed by localStorage (per browser); `parse` validates/clamps what was stored */
+/** useState backed by localStorage (per browser); `parse` validates/clamps what was stored. The
+ * value is held with its key, so a key that changes (the model remembered per agent, when the
+ * draft's agent does) reads its own entry instead of keeping the last key's value. */
 export function usePersisted<T>(key: string, fallback: T, parse: (raw: string | null) => T | undefined) {
-  const [value, setValue] = useState<T>(() => {
+  const read = (): T => {
     try {
       return parse(localStorage.getItem(key)) ?? fallback;
     } catch {
       return fallback;
     }
-  });
+  };
+  const [held, setHeld] = useState(() => ({ key, value: read() }));
+  // state adjusted during render, React's pattern for state that follows a prop: the next render
+  // holds the new key's entry, and this one reads it directly
+  if (held.key !== key) setHeld({ key, value: read() });
+  const value = held.key === key ? held.value : read();
   const set = (v: T) => {
-    setValue(v);
+    setHeld({ key, value: v });
     try {
       localStorage.setItem(key, typeof v === "boolean" ? (v ? "1" : "0") : String(v));
     } catch {}

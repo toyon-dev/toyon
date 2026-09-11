@@ -262,6 +262,16 @@ export function agentDefault(choices: ModelChoice[]): ModelChoice | undefined {
   return choices.find((c) => c.id === "default");
 }
 
+/** The row the agent's default only names. Claude's model select leads with "Default
+ * (recommended)", described as "Opus (1M context)", which is the next row's name: two rows for
+ * one model. The picker draws the named row in place of both. Nothing when the description names
+ * no row (Claude's effort default carries none), and the default row stays. */
+export function defaultStandsFor(choices: ModelChoice[]): ModelChoice | undefined {
+  const own = agentDefault(choices);
+  if (!own?.description) return undefined;
+  return choices.find((c) => c !== own && c.name === own.description);
+}
+
 /** The pre-warmed worktree a repo's next task will claim. Never a rail row: nobody works in it,
  * and the rail's ⌘1-9 must not count it. Its preview is what a draft tab shows while the prompt
  * is still being typed, since it is the code the task starts from; on claim the same id becomes

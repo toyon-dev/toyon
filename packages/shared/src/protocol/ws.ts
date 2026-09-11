@@ -265,7 +265,15 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     /** one of the agent's advertised effort levels; its own default when absent */
     effort: z.string().max(100).optional(),
   }),
-  z.object({ t: z.literal("batch-worktrees"), repoId: id, prompt, agent: id.optional() }),
+  z.object({
+    t: z.literal("batch-worktrees"),
+    repoId: id,
+    prompt,
+    agent: id.optional(),
+    /** as on create-worktree; every planned worktree asks for the same model and effort */
+    model: z.string().max(200).optional(),
+    effort: z.string().max(100).optional(),
+  }),
   /** change what the agent may do here without asking; takes effect on its next turn */
   z.object({ t: z.literal("set-worktree-mode"), worktreeId: id, mode: permissionModeSchema }),
   /** ask the agent to run another of its models here; takes effect on its next turn */

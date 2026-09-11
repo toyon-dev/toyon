@@ -40,6 +40,9 @@ export interface AgentSpec {
   /** the agent's ids for toyon's plan and build modes (agent/modes.ts); guessed from the
    * advertised list when absent */
   modes?: { plan?: string; build?: string };
+  /** `_meta` on session/new for a side session (a question toyon asks for itself): whatever this
+   * adapter needs to run one bare, without the chat's tools or a saved conversation */
+  sideMeta?: Record<string, unknown>;
   /** what the person reads when the agent answers a prompt with "not logged in" and offers no way in */
   loginHint: string;
 }
@@ -56,6 +59,10 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     // "default" is Claude's ask-before-changes mode: every write and command reaches the policy,
     // which is what lets toyon decide. Its own "auto" would decide without us.
     modes: { plan: "plan", build: "default" },
+    // spread into the SDK's query options: without `tools` every side question carries the whole
+    // tool preset's definitions, and without `persistSession` each one is saved under
+    // ~/.claude/projects and listed by `claude --resume` in the worktree
+    sideMeta: { claudeCode: { options: { tools: [], persistSession: false } } },
     loginHint: "Claude is not logged in",
   },
   {

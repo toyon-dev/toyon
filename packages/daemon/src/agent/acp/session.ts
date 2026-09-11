@@ -27,7 +27,7 @@ import type { AuthObservation } from "../accounts.ts";
 import type { AgentAdapter, AskReply, AuthOutcome, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan } from "../modes.ts";
-import { decide, pickOption } from "../policy.ts";
+import { decide, decideUnattended, pickOption } from "../policy.ts";
 import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, worktreeBounds, writeClaudeLocalSettings } from "../sandbox.ts";
@@ -100,6 +100,8 @@ interface Conn {
   authMethods: acp.AuthMethod[];
   loadSession: boolean;
   closeSupported: boolean;
+  /** session/delete: a side session is removed once its answer is in */
+  deleteSupported: boolean;
   /** promptCapabilities.image from initialize: whether image blocks may go in a prompt */
   acceptsImages: boolean;
   /** `_meta.steering` from initialize: whether a message may join the turn already running */
@@ -453,9 +455,13 @@ export class AcpSession implements AgentAdapter {
         spec: conn.spec,
         route: (id, onText) => {
           conn.side.set(id, onText);
-          return () => conn.side.delete(id);
+          return () => {
+            conn.side.delete(id);
+            // the command list it pushed at birth goes with it
+            conn.commands.delete(id);
+          };
         },
-        closeSupported: conn.closeSupported,
+        caps: { close: conn.closeSupported, delete: conn.deleteSupported },
         tag: this.d.worktreeId,
       });
     } catch (e) {
@@ -619,6 +625,7 @@ export class AcpSession implements AgentAdapter {
         authMethods: init.authMethods ?? [],
         loadSession: !!init.agentCapabilities?.loadSession,
         closeSupported: !!init.agentCapabilities?.sessionCapabilities?.close,
+        deleteSupported: !!init.agentCapabilities?.sessionCapabilities?.delete,
         acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
         steering: supportsSteering(init),
         side,
@@ -803,6 +810,10 @@ export class AcpSession implements AgentAdapter {
     params: acp.RequestPermissionRequest,
     bounds: Bounds,
   ): acp.RequestPermissionResponse | Promise<acp.RequestPermissionResponse> {
+    // a side session shares this connection but has no chat: its requests are never a card or a
+    // blocked row in the worktree's transcript, the same way its elicitations are declined
+    const live = this.live;
+    if (!live || params.sessionId !== live.sessionId) return decideUnattended(params, bounds, this.d.cwd);
     const verdict = decide(params, bounds, this.d.cwd, this.mode());
     if (verdict.kind === "prompt") return this.askPermission(params);
     if (verdict.kind === "reject") {

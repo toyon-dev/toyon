@@ -5,18 +5,22 @@
 // a harvest off the running preview and merges in on top; `live: false` says it has not.
 
 import { join } from "node:path";
-import type { DesignClass, DesignComponent, DesignIndex, DesignToken } from "@toyon/shared";
+import type { DesignClass, DesignComponent, DesignIndex, DesignLiteral, DesignToken } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import { git } from "../git/exec.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
 import {
   appliedClasses,
   cssClasses,
+  cssLiterals,
+  cssRules,
   cssTokens,
   exportedComponents,
   importedNames,
+  mergeLiterals,
   propUnions,
   resolveAliases,
+  rootFont,
 } from "./scan.ts";
 
 /** Enough for a large app, small enough that a scan of a repo with a vendored tree stays quick. */
@@ -53,6 +57,7 @@ export class DesignService {
     const srcFiles = await readAll(wt.path, srcPaths);
 
     const tokens = collectTokens(cssFiles);
+    const literals = collectLiterals(cssFiles);
     const ts = await loadProjectTypescript(wt.path);
     const importers = collectImporters(srcFiles);
     const components = collectComponents(srcFiles, ts, importers);
@@ -63,6 +68,7 @@ export class DesignService {
       live: false,
       typed: ts !== null,
       tokens,
+      literals,
       components,
       classes,
       coverage: {
@@ -107,6 +113,17 @@ function collectTokens(css: SourceFile[]): DesignToken[] {
     for (const token of cssTokens(file.text)) if (!out.has(token.name)) out.set(token.name, token);
   }
   return resolveAliases([...out.values()]);
+}
+
+/** The values the stylesheets write out in place. The root's face and leading are read across every
+ * file first, because a size in one stylesheet inherits from a body rule in another. The file that
+ * writes the most leads, for the same reason the token file does: it is the one holding the
+ * palette. */
+function collectLiterals(css: SourceFile[]): DesignLiteral[] {
+  const parsed = css.map((file) => ({ path: file.path, rules: cssRules(file.text) }));
+  const root = rootFont(parsed.flatMap((f) => f.rules));
+  const files = parsed.map((f) => ({ path: f.path, hits: cssLiterals(f.rules, root) }));
+  return mergeLiterals(files.sort((a, b) => b.hits.length - a.hits.length));
 }
 
 /** Which files import each name. The set of *files* is what ranks a component; where those files

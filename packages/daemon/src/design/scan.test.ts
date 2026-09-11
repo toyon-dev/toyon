@@ -2,12 +2,16 @@ import { describe, expect, test } from "bun:test";
 import {
   appliedClasses,
   cssClasses,
+  cssLiterals,
+  cssRules,
   cssTokens,
   exportedComponents,
   importedNames,
+  mergeLiterals,
   moduleImports,
   propUnions,
   resolveAliases,
+  rootFont,
   tokenFamily,
   tokenKind,
 } from "./scan.ts";
@@ -228,5 +232,116 @@ describe("resolveAliases", () => {
   test("leaves anything the cascade has to work out alone", () => {
     const [calc] = resolveAliases([tok("--w", "calc(var(--rail) - 1px)"), tok("--rail", "232px")]);
     expect(calc?.resolved).toBeUndefined();
+  });
+});
+
+describe("cssRules", () => {
+  test("gives a nested rule the selector it applies to, through at-rules", () => {
+    const rules = cssRules(
+      `.card { color: #111; &:hover { color: #222 } .title { font-size: 14px } }\n@media (min-width: 1px) { .x { gap: 1px } }`,
+    );
+    expect(rules.map((r) => [r.selector, r.decls])).toEqual([
+      [".card", [["color", "#111"]]],
+      [".card:hover", [["color", "#222"]]],
+      [".card .title", [["font-size", "14px"]]],
+      [".x", [["gap", "1px"]]],
+    ]);
+  });
+
+  test("steps over semicolons and braces in a value, and drops comments of both kinds", () => {
+    const rules = cssRules(
+      [
+        "/* .no { color: #000 } */",
+        ".a { background: url(data:image/png;base64,AA{}) #fff } // .b { color: #000 }",
+        `.c { content: "a;b}"; background: url(https://x.test/a.png) }`,
+      ].join("\n"),
+    );
+    expect(rules.map((r) => [r.selector, r.decls])).toEqual([
+      [".a", [["background", "url(data:image/png;base64,AA{}) #fff"]]],
+      [
+        ".c",
+        [
+          ["content", `"a;b}"`],
+          ["background", "url(https://x.test/a.png)"],
+        ],
+      ],
+    ]);
+  });
+
+  test("a descriptor block is not a rule", () => {
+    expect(cssRules(`@font-face { font-family: Brand } @keyframes pulse { from { color: #000 } }`)).toEqual([]);
+  });
+});
+
+describe("cssLiterals", () => {
+  const literals = (css: string) => {
+    const rules = cssRules(css);
+    return cssLiterals(rules, rootFont(rules));
+  };
+
+  test("reads a colour off any property, but not off a shadow or a fragment reference", () => {
+    const hits = literals(
+      `.a { color: #B5651D; border: 1px solid rgba(0, 0, 0, 0.1); fill: url(#grad); box-shadow: 0 2px 6px #0006 }`,
+    );
+    expect(hits.map((h) => [h.role, h.value])).toEqual([
+      ["color", "#B5651D"],
+      ["color", "rgba(0, 0, 0, 0.1)"],
+      ["shadow", "0 2px 6px #0006"],
+    ]);
+  });
+
+  test("splits a font shorthand, and a size takes the face and leading the page root sets", () => {
+    const hits = literals(
+      [
+        `body { font: 16px/1.6 -apple-system, "Segoe UI", sans-serif }`,
+        `.h { font-size: 22px }`,
+        `.code { font-family: ui-monospace, monospace; font-size: 12px; line-height: 18px }`,
+      ].join("\n"),
+    );
+    const page = `-apple-system, "Segoe UI", sans-serif`;
+    expect(hits.map(({ role, value, family, lead }) => ({ role, value, family, lead }))).toEqual([
+      { role: "family", value: page, family: undefined, lead: undefined },
+      { role: "size", value: "16px", family: page, lead: "1.6" },
+      { role: "size", value: "22px", family: page, lead: "1.6" },
+      { role: "family", value: "ui-monospace, monospace", family: undefined, lead: undefined },
+      { role: "size", value: "12px", family: "ui-monospace, monospace", lead: "18px" },
+    ]);
+  });
+
+  test("a variable is a token's value, and a zero radius is a reset", () => {
+    const hits = literals(
+      `.a { font-family: var(--face); font-size: var(--size); border-radius: 0; color: var(--x) } .b { border-radius: 8px }`,
+    );
+    expect(hits.map((h) => [h.role, h.value])).toEqual([["radius", "8px"]]);
+  });
+
+  test("marks the page's own background as the ground, and a card's as not", () => {
+    const hits = literals(`body { background: #faf7f0 } .card { background: #fff }`);
+    expect(hits.map((h) => [h.value, h.ground])).toEqual([
+      ["#faf7f0", true],
+      ["#fff", false],
+    ]);
+  });
+});
+
+describe("mergeLiterals", () => {
+  test("folds the spellings of one value into one entry and counts every declaration", () => {
+    const hits = (css: string) => cssLiterals(cssRules(css), {});
+    const merged = mergeLiterals([
+      { path: "a.css", hits: hits(`.a { color: #FFF } .b { color: #ffffff; font-family: 'Inter', sans-serif }`) },
+      { path: "b.css", hits: hits(`.c { color: #fff; font: 13px "Inter",sans-serif }`) },
+    ]);
+    expect(merged.find((l) => l.role === "color")).toEqual({
+      value: "#FFF",
+      role: "color",
+      uses: 3,
+      selectors: [".a", ".b", ".c"],
+      path: "a.css",
+    });
+    expect(merged.filter((l) => l.role === "family").map((l) => [l.value, l.uses])).toEqual([
+      ["'Inter', sans-serif", 2],
+    ]);
+    // the size is named by the family entry's spelling, so the pane can put it under that face
+    expect(merged.find((l) => l.role === "size")?.family).toBe("'Inter', sans-serif");
   });
 });

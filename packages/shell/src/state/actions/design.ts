@@ -11,6 +11,11 @@ export function designTokenItems(name: string, value: string): MenuEntry[] {
   ];
 }
 
+/** a value the stylesheets write out in place: it has no name, so the value is all there is to paste */
+export function designLiteralItems(value: string): MenuEntry[] {
+  return [{ id: "copy-value", label: "copy value", detail: value, onClick: () => copyText(value) }];
+}
+
 /** a row of the design pane's inventory: the file it came from, opened here or elsewhere */
 export function designRowItems(
   wt: { id: string; dir: string },

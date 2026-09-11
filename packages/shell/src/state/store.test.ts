@@ -571,6 +571,7 @@ describe("overlays", () => {
           html: "",
           route: "/",
           selector: "div",
+          element: { tag: "div", id: "", classes: [], text: "", attrs: [] },
         },
       },
     ]);
@@ -870,6 +871,27 @@ describe("the editor's open file", () => {
     expect(reducer(s, worktrees(wt("a"), wt("b"))).editor).toMatchObject({ path: "x.ts", seq: 1 });
     // the open row gone: the selection lands elsewhere, and the file went with its worktree
     expect(reducer(s, worktrees(wt("b"))).editor).toBeNull();
+  });
+
+  test("an element found in the source opens when one line is clearly it, lists when not, and says when none", () => {
+    const hit = (path: string, line: number) => ({ path, line, text: "<header>" });
+    const sources = (seq: number, hits: ReturnType<typeof hit>[], sure: boolean) =>
+      server({ t: "element-sources", worktreeId: "a", seq, hits, sure });
+    const booted = run([hello(wt("a"))]);
+    const closed = booted.leftOpen ? reducer(booted, { a: "toggle-left" }) : booted;
+    const sure = reducer(closed, sources(5, [hit("src/render.ts", 33)], true));
+    expect(sure.editor).toMatchObject({ path: "src/render.ts", view: "file", line: { n: 33 }, seq: 5, focus: true });
+    expect(sure.leftOpen).toBe(true);
+    const listed = reducer(closed, sources(5, [hit("src/a.ts", 3), hit("src/b.ts", 7)], false));
+    expect(listed.editor).toBeNull();
+    expect(listed.overlay).toMatchObject({
+      kind: "element-sources",
+      hits: [{ path: "src/a.ts" }, { path: "src/b.ts" }],
+    });
+    expect(reducer(closed, sources(5, [], false)).toast).toMatchObject({ ok: false });
+    // a file opened after the pick was made is the one the person chose
+    const later = run([opening({ path: "x.ts", seq: 9 })], closed);
+    expect(reducer(later, sources(5, [hit("src/render.ts", 33)], true))).toBe(later);
   });
 });
 

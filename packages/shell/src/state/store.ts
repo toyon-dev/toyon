@@ -257,7 +257,9 @@ export type Overlay =
    * a location; `clone` has both derived from the URL and shows them so they can be changed. */
   | { kind: "new-project"; mode: "create" | "clone"; name: string; parent: string; url?: string }
   /** the route bar's list of pages, opened over the address field */
-  | { kind: "routes" };
+  | { kind: "routes" }
+  /** the lines a picked element with no recorded source may be written on, when none is clearly it */
+  | { kind: "element-sources"; worktreeId: string; hits: SearchHit[] };
 
 /** which docks and panes a project is left with. The layout is remembered per project, so a reload
  * comes back to it and switching projects carries each one's own back (zen is deliberately not in
@@ -1308,6 +1310,31 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ...l,
         search: { query: msg.query, hits: msg.hits, truncated: msg.truncated },
       }));
+    case "element-sources": {
+      // a file opened since the pick was made is an answer the person already chose
+      if (s.editor && s.editor.seq > msg.seq) return s;
+      const [first] = msg.hits;
+      if (!first) return { ...s, toast: { ok: false, message: "nothing in the source matches this element" } };
+      if (!msg.sure) {
+        return reducer(s, {
+          a: "open",
+          overlay: { kind: "element-sources", worktreeId: msg.worktreeId, hits: msg.hits },
+        });
+      }
+      // opened the way a pick with a recorded file is (openSource): the file, and the panel beside it
+      const opened = reducer(s, {
+        a: "open-file",
+        v: {
+          worktreeId: msg.worktreeId,
+          path: first.path,
+          view: "file",
+          line: { n: first.line },
+          focus: true,
+          seq: msg.seq,
+        },
+      });
+      return opened.leftOpen ? opened : reducer(opened, { a: "toggle-left" });
+    }
     case "design-index":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, design: msg.index }));
     case "routes":

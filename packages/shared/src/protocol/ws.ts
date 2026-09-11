@@ -37,7 +37,7 @@ import {
   PASTE_MAX_CHARS,
   PASTES_PER_MESSAGE,
 } from "./limits.ts";
-import { pickMetaSchema } from "./pick.ts";
+import { elementTraitsSchema, pickMetaSchema } from "./pick.ts";
 
 /** one content-search match: path + 1-based line + the (trimmed) line text */
 export type SearchHit = { path: string; line: number; text: string };
@@ -144,6 +144,9 @@ export type ServerMsg =
     }
   | { t: "files"; worktreeId: string; paths: string[] }
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
+  /** where a picked element with no recorded source may be written, best first; `sure` when the first
+   * is clearly it. `seq` is the find-element's, so a file opened since is not taken over. */
+  | { t: "element-sources"; worktreeId: string; seq: number; hits: SearchHit[]; sure: boolean }
   /** the ref palette's rows for a query; `query` is echoed so a stale reply is told from a fresh one */
   | { t: "refs"; repoId: string; query: string; refs: RefHit[] }
   /** a project's archived worktrees, newest first: the reply to list-archived, and pushed to every
@@ -382,6 +385,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * commands it has. Answered by an `agent-commands` push, or by nothing if it will not start. */
   z.object({ t: z.literal("list-commands"), worktreeId: id }),
   z.object({ t: z.literal("search"), worktreeId: id, query: z.string().max(500) }),
+  /** a ⌘I pick on a page that recorded no file: find the element in the source by what it shows.
+   * Answered by one `element-sources`. */
+  z.object({ t: z.literal("find-element"), worktreeId: id, seq, element: elementTraitsSchema }),
   z.object({ t: z.literal("design-scan"), worktreeId: id }),
   z.object({ t: z.literal("discard-file"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),

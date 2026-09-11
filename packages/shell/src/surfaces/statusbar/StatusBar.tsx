@@ -12,7 +12,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../palettes/ProjectPicker.tsx";
-import { chord, isBusy, isInstalledApp } from "../util.ts";
+import { chord, isInstalledApp } from "../util.ts";
 import "./statusbar.css";
 import { Field } from "../../ui/Field.tsx";
 import { RoutePicker } from "./RoutePicker.tsx";
@@ -111,8 +111,9 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
 }
 
 /** Zed-style, next to the changes toggle: the project the shell is scoped to; opens the switcher
- * as a dropdown right under itself, so the list appears where the click already was. A dot means
- * an agent is working in a project that is not on screen. */
+ * as a dropdown right under itself, so the list appears where the click already was. It carries no
+ * mark for activity in other projects: beside the name, a mark reads as being about this project,
+ * and the switcher's rows already say which project is working. */
 function ProjectPill() {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -140,7 +141,6 @@ function ProjectPill() {
     ]);
   // the dialog form draws over the preview instead; this is only the panel that drops out of here
   const open = useStore((s) => s.overlay?.kind === "projects" && !s.overlay.dialog);
-  const busyElsewhere = useStore((s) => s.rows.some((w) => isBusy(w) && w.repoId !== s.activeRepoId));
   // "open project" is what an empty daemon deserves, not what a page that has not heard from its
   // daemon should guess: until hello the pill keeps its box and says nothing
   const heard = useStore((s) => s.heard);
@@ -155,7 +155,6 @@ function ProjectPill() {
         {...cm.contextMenu(pillMenu)}
       >
         <span className="bar-project-name">{repo?.name ?? (heard ? "open project" : "")}</span>
-        {busyElsewhere && <span className="bar-project-dot" {...tip("An agent is working in another project")} />}
       </Button>
       {open && <ProjectPicker />}
     </span>

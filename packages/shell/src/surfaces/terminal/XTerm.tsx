@@ -113,8 +113,9 @@ export default function XTerm({
         term.clear();
         return false;
       }
-      // a toyon chord is the shell's: xterm skips it and the event bubbles up to useChords
-      if (matchChord(e)) return false;
+      // a toyon chord is the shell's: xterm skips it and the event bubbles up to useChords. The
+      // terminal is a guest keyboard, so ⌃R stays the shell program's history search.
+      if (matchChord(e, { guest: true })) return false;
       // a full-screen program (vim, less) is on the alternate buffer and owns Escape
       if (e.key === "Escape" && term.buffer.active.type !== "alternate") {
         e.preventDefault();

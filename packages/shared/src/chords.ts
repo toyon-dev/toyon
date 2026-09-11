@@ -49,8 +49,10 @@ export interface Chord {
   alt?: true;
   /** the same chord again on ⌃, with a key and ⇧ of its own: ⌃Tab and ⌃⇧Tab walk the worktrees
    * the way they walk a terminal's tabs. Every browser tab takes ⌃Tab before the page; an
-   * installed app window has no tabs and hands it over, so that is where it is advertised. */
-  ctrlAlias?: { key: string; shift?: true };
+   * installed app window has no tabs and hands it over, so that is where it is advertised.
+   * `hostOnly` leaves the alias to a guest keyboard (a terminal, a previewed page) that already has
+   * a use for it, the way Zed's terminal keeps ⌃R. */
+  ctrlAlias?: { key: string; shift?: true; hostOnly?: true };
   /** other keys that fire the same chord. ⌘⇧E for the palette because Firefox owns ⌘⇧P; ⌘N for
    * new-worktree because it is the muscle-memory key, though only an installed PWA lets the page
    * see it (Chrome tabs, Safari and Firefox all take ⌘N as new window before the page). */
@@ -109,9 +111,11 @@ export const CHORDS: readonly Chord[] = [
   // the walk's end (main, the draft) when there is none. Off the shortcuts card on purpose.
   { id: "wt-unseen-prev", key: "ArrowUp", alt: true, shift: true },
   { id: "wt-unseen-next", key: "ArrowDown", alt: true, shift: true },
-  // ⌘⇧O: Zed's recent-projects key is ⌘⌥O, but ⌥ is how macOS types symbols and matchChord
-  // refuses it; ⇧O is free in every browser we run in
-  { id: "project", key: "o", shift: true },
+  // ⌘O is "Open..." in VS Code on macOS and in vscode.dev, which takes it from the browser's own
+  // open-file dialog the same way. ⌘⇧O stays free because it is go-to-symbol in VS Code and Monaco.
+  // ⌃R is open-recent in VS Code and Zed, and reverse history search in every shell, so a focused
+  // terminal keeps it, and so does a previewed page, which may be a terminal of its own.
+  { id: "project", key: "o", ctrlAlias: { key: "r", hostOnly: true } },
   // ⌘⇧G: a browser only uses it as find-previous while its find bar is open, which a page may
   // preempt; every other ⌘⇧ letter that reads as "go" or "git" is taken before the page sees it
   { id: "refs", key: "g", shift: true },
@@ -122,14 +126,18 @@ export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"
 /** Normalised chord detection for a keydown: ⌘ (no ⌃/⌥) for most rows, ⌃ alone for the rows that
  * ask for it and for a row's ⌃ alias, ⌥ alone for the arrow rows; letters case-insensitive so a
  * browser that reports "F" for ⌘⇧F and one that reports "f" agree; shift must match the table
- * exactly (⌘⇧B is not ⌘B). */
-export function matchChord(e: {
-  key: string;
-  metaKey: boolean;
-  shiftKey: boolean;
-  ctrlKey?: boolean;
-  altKey?: boolean;
-}): ChordMatch | null {
+ * exactly (⌘⇧B is not ⌘B). `guest` is a keydown from a keyboard with uses of its own (a terminal,
+ * a previewed page), which keeps every `hostOnly` alias. */
+export function matchChord(
+  e: {
+    key: string;
+    metaKey: boolean;
+    shiftKey: boolean;
+    ctrlKey?: boolean;
+    altKey?: boolean;
+  },
+  { guest = false }: { guest?: boolean } = {},
+): ChordMatch | null {
   if (e.altKey) {
     if (e.metaKey || e.ctrlKey) return null;
     const c = CHORDS.find((c) => c.alt && c.key === e.key && !!c.shift === e.shiftKey);
@@ -141,7 +149,7 @@ export function matchChord(e: {
   for (const c of CHORDS) {
     if (c.id === "worktree") continue;
     const a = c.ctrlAlias;
-    if (a && e.ctrlKey && a.key === key && !!a.shift === e.shiftKey) return { id: c.id };
+    if (a && e.ctrlKey && a.key === key && !!a.shift === e.shiftKey && !(guest && a.hostOnly)) return { id: c.id };
     if (c.alt) continue;
     // a ⌘ row never fires on ⌃; a ⌃ row fires on either
     if ((e.ctrlKey && !c.ctrl) || !!c.shift !== e.shiftKey) continue;

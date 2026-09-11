@@ -389,9 +389,6 @@ describe("chat folding", () => {
     s = reducer(reducer(s, { a: "activate", id: "a" }), { a: "set-draft", id: "a", text: "" });
     s = reducer(reducer(s, { a: "arrive", id: "a" }), { a: "activate", id: "b" });
     expect(latched(s, "a")).toBeUndefined();
-
-    s = reducer(reducer(s, { a: "arrive", id: "b" }), { a: "recap-dismiss", id: "b" });
-    expect(latched(s, "b")).toBeUndefined();
   });
 
   test("hello and prefs carry the daemon's preferences", () => {

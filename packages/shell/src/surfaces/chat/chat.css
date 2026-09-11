@@ -660,10 +660,6 @@
   .composer-target {
     padding: 0 10px 8px;
   }
-  /* the recap above the box: plain text that wraps, spaced from what sits under it like the target line */
-  .composer-recap {
-    margin-bottom: 8px;
-  }
   .spawn-left {
     display: flex;
     align-items: center;

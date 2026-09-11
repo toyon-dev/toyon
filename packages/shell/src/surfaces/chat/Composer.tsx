@@ -3,7 +3,6 @@ import { canSync, DEFAULT_PERMISSION_MODE, isMain, nextNumbers, numbered } from 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
-import { recapsItem } from "../../state/actions/settings.ts";
 import { shipOp } from "../../state/actions/worktree.ts";
 import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
@@ -205,7 +204,6 @@ export function Composer({
   // what happened while you were away: the stop this tab arrived to, until you write or it runs again
   const lastTurn = active?.worktree.lastTurn;
   const recapFor = useLocalField(id, "recapFor");
-  const prefs = useStore((s) => s.prefs);
   const blank = !text.trim() && attachments.length === 0;
   const recap = !drafting && !greenfield && recapShown(lastTurn, recapFor, blank, midTurn) ? lastTurn : undefined;
   const compactable = canCompact && !midTurn;
@@ -320,18 +318,23 @@ export function Composer({
   // behind when there is something, else, on main's own fast path, what the draft tab adds. Where
   // the message goes is not the placeholder's to say when a line above the box already says it:
   // main's target line, or the draft tab's lit row.
+  // The recap takes the placeholder outright while it stands. It is about the box you are looking
+  // at, it goes when you type as a placeholder does, and as a line of its own above the box it was
+  // a second block of grey text saying something the box already said.
   const title = active?.worktree.title ?? "untitled";
   const placeholderText = !active
     ? "no worktree selected"
-    : greenfield
-      ? "describe the app; the agent scaffolds it here"
-      : drafting || spawning
-        ? "describe a change"
-        : onMain
-          ? "message the agent; / for a command, ! for a shell command"
-          : `message agent on ${title}; / for a command, ! for a shell command`;
+    : recap
+      ? recapLine(recap)
+      : greenfield
+        ? "describe the app; the agent scaffolds it here"
+        : drafting || spawning
+          ? "describe a change"
+          : onMain
+            ? "message the agent; / for a command, ! for a shell command"
+            : `message agent on ${title}; / for a command, ! for a shell command`;
   const subline =
-    text !== "" || ghost || !active
+    text !== "" || ghost || !active || recap
       ? null
       : note
         ? note
@@ -497,18 +500,6 @@ export function Composer({
         </div>
       )}
       <div className="composer chat-input">
-        {/* first in the box: it is about what already happened, and the box is for the message not yet written */}
-        {recap && id && (
-          <div
-            className="hint composer-recap"
-            {...cm.contextMenu(() => [
-              recapsItem({ prefs }, { sock }),
-              { id: "recap-hide", label: "hide", onClick: () => dispatch({ a: "recap-dismiss", id }) },
-            ])}
-          >
-            {recapLine(recap)}
-          </div>
-        )}
         {boxId &&
           numbered(attachments, nextNumbers(sentBefore)).map(([item, n]) => {
             const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });

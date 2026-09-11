@@ -107,8 +107,9 @@ export const CHORDS: readonly Chord[] = [
   // (app/keys.ts), so ⌃Tab is the walk that still works from inside the editor.
   { id: "wt-prev", key: "ArrowUp", alt: true, ctrlAlias: { key: "Tab", shift: true } },
   { id: "wt-next", key: "ArrowDown", alt: true, ctrlAlias: { key: "Tab" } },
-  // ⌥⇧↑/↓ is Slack's next-unread: the nearest worktree with a turn nobody has looked at, and
-  // the walk's end (main, the draft) when there is none. Off the shortcuts card on purpose.
+  // ⌥⇧↑/↓ is Slack's next-unread: the nearest worktree whose agent is waiting on you, else the
+  // nearest with a turn nobody has looked at, and the walk's end (main, the draft) when there is
+  // neither. Down is on the shortcuts card; up is for the hand that already knows it.
   { id: "wt-unseen-prev", key: "ArrowUp", alt: true, shift: true },
   { id: "wt-unseen-next", key: "ArrowDown", alt: true, shift: true },
   // ⌘O is "Open..." in VS Code on macOS and in vscode.dev, which takes it from the browser's own

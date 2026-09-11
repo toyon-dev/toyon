@@ -53,7 +53,10 @@ export class RepoRegistry {
    * starts on its own when it is opened after that (`touch`). */
   async boot(): Promise<void> {
     const { state } = this.d;
-    state.pruneWorktrees((wt) => existsSync(wt.path) && state.repos.some((r) => r.id === wt.repoId));
+    // a worktree whose directory or project went while the daemon was down leaves the way a remove
+    // would have taken it, rather than leaving its transcript behind with nothing pointing at it
+    const gone = state.worktrees.filter((wt) => !existsSync(wt.path) || !state.repos.some((r) => r.id === wt.repoId));
+    for (const wt of gone) await this.d.worktrees.forgetGone(wt);
     // toyon.json may have been edited while the daemon was down
     for (const repo of state.repos) this.applyConfigFile(repo, false);
     for (const wt of state.worktrees) reservePort(wt.proxyPort);
@@ -245,10 +248,12 @@ export class RepoRegistry {
       );
     }
     this.stopWatcher(repoId);
-    for (const wt of mine.filter((w) => w.kind === "spare")) await this.d.worktrees.remove(wt.id, true);
+    for (const wt of mine.filter((w) => w.kind === "spare")) await this.d.worktrees.remove(wt.id, { spare: true });
     for (const wt of mine.filter((w) => w.kind === "main")) {
       await this.d.runtime.stop(wt.id);
       this.d.state.removeWorktree(wt.id);
+      // main's chat has nowhere to come back to: opening the project again makes a new main
+      this.d.worktrees.deleteChat(wt.id);
       releasePort(wt.proxyPort);
     }
     this.d.state.removeRepo(repoId);

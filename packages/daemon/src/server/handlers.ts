@@ -222,8 +222,28 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     );
   },
 
-  async "remove-worktree"(msg, _ctx, s) {
-    await s.worktrees.remove(msg.worktreeId);
+  async "remove-worktree"(msg, ctx, s) {
+    const archived = await s.worktrees.remove(msg.worktreeId);
+    // the toast is where a remove says it can be undone
+    if (archived) {
+      ctx.reply(
+        toast(msg.worktreeId, true, `removed ${archived.title}: archived`, {
+          ...(archived.restorable ? { restoreId: archived.id } : {}),
+        }),
+      );
+    }
+  },
+
+  "list-archived"(msg, ctx, s) {
+    ctx.reply({ t: "archived", repoId: msg.repoId, items: s.worktrees.archived(msg.repoId) });
+  },
+
+  async "restore-worktree"(msg, _ctx, s) {
+    await s.worktrees.restore(msg.archiveId, msg.clientId);
+  },
+
+  async "delete-archived"(msg, _ctx, s) {
+    await s.worktrees.deleteArchived(msg.archiveId);
   },
 
   async "adopt-worktree"(msg, _ctx, s) {

@@ -232,6 +232,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
   s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, paths: s.routes.ranked(repoId) }));
+  s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));
 
   // What a page learns first, over the socket or over the bootstrap fetch that precedes it. Quick
   // rows: the frame goes out from what is known and the counts follow, rather than every page

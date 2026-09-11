@@ -3,21 +3,7 @@ import { memo } from "react";
 import { commitItems } from "../../state/actions/commit.ts";
 import { useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
-
-/** Coarse on purpose: the question a history row answers is "how long ago", and a row this narrow
- * has no space for a date the reader would have to parse anyway. */
-function ago(at: number): string {
-  const secs = Math.max(0, (Date.now() - at) / 1000);
-  if (secs < 60) return "now";
-  const mins = secs / 60;
-  if (mins < 60) return `${Math.floor(mins)}m`;
-  const hours = mins / 60;
-  if (hours < 24) return `${Math.floor(hours)}h`;
-  const days = hours / 24;
-  if (days < 7) return `${Math.floor(days)}d`;
-  if (days < 365) return `${Math.floor(days / 7)}w`;
-  return `${Math.floor(days / 365)}y`;
-}
+import { ago } from "../util.ts";
 
 /** one row of the history list: the subject, and how long ago it landed.
  *

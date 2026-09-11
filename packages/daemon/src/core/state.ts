@@ -179,12 +179,6 @@ export class StateStore {
     delete this.state.sessions[id];
     this.save();
   }
-  /** keep only the worktrees the predicate accepts (boot-time pruning) */
-  pruneWorktrees(keep: (wt: WorktreeInfo) => boolean) {
-    this.state.worktrees = this.state.worktrees.filter(keep);
-    this.save();
-  }
-
   session(worktreeId: string): string | undefined {
     return this.state.sessions[worktreeId];
   }

@@ -49,7 +49,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
       const others = v.of - 1;
       if (
         window.confirm(
-          `Keep "${w.worktree.title}" and remove ${others} sibling variant(s)? Their branches and changes are deleted.`,
+          `Keep "${w.worktree.title}" and remove ${others} sibling variant(s)? Their directories and branches go; their chats and changes are archived.`,
         )
       ) {
         sock?.send({ t: "pick-variant", worktreeId: w.worktree.id });
@@ -62,7 +62,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
     remove(w: OwnedWorktree) {
       if (!canRemove(w.worktree)) return;
       const ok = window.confirm(
-        `Remove worktree "${w.worktree.title}"?\n\nThis deletes its directory and branch (${w.worktree.branch}). Unmerged changes are lost.`,
+        `Remove worktree "${w.worktree.title}"?\n\nIts directory and branch (${w.worktree.branch}) go. The chat, the commits and any uncommitted changes are archived, and the project menu can restore it.`,
       );
       if (ok) removeWorktrees(sock, dispatch, [w.worktree.id]);
     },

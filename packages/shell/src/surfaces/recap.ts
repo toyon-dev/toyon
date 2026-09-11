@@ -1,5 +1,5 @@
-// The recap line: what happened while you were away, as when it stopped and the agent's own
-// sentence about it. The composer opens on it as its placeholder, and the rail row's tip carries it.
+// The recap line: what happened while you were away, as the agent's own sentence about it. The
+// composer opens on it as its placeholder, and the rail row's tip carries it.
 
 import type { LastTurn, TurnFacts } from "@toyon/shared";
 import { ago } from "./util.ts";
@@ -25,14 +25,12 @@ function facts(end: LastTurn["end"], f: TurnFacts, age: string): string {
   }
 }
 
-/** The time leads and the sentence follows it, because the sentence already says how it ended:
- * whoever reads this is deciding what to type next, and how long ago is the one fact it cannot
- * tell them. */
+/** The sentence is the whole line when there is one: the rail row beside it carries the time, and
+ * how it ended is what the sentence says. Without one, the facts are all there is, and they lead
+ * with how long ago because nothing else would say it. */
 export function recapLine(turn: LastTurn): string {
-  const age = ago(turn.at);
   const text = turn.recap?.text;
-  if (!text) return facts(turn.end, turn.facts, age);
-  return `${age === "now" ? "Just now" : `${age} ago`}. ${ended(text)}`;
+  return text ? ended(text) : facts(turn.end, turn.facts, ago(turn.at));
 }
 
 /** The line is for the stop this tab arrived to, and only while the box is empty and the agent is

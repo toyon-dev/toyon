@@ -26,10 +26,10 @@ describe("recapLine", () => {
     for (const [t, line] of lines) expect(recapLine(t)).toBe(line);
   });
 
-  test("a sentence takes the line, behind the time and nothing else", () => {
+  test("a sentence is the whole line: the rail row beside it says how long ago", () => {
     const t = turn("done", { edits: 4 }, 12, "Adding a sticky header; check the page next.");
-    expect(recapLine(t)).toBe("12m ago. Adding a sticky header; check the page next.");
-    expect(recapLine(turn("stopped", {}, 0, "Sticky header half done"))).toBe("Just now. Sticky header half done.");
+    expect(recapLine(t)).toBe("Adding a sticky header; check the page next.");
+    expect(recapLine(turn("stopped", {}, 0, "Sticky header half done"))).toBe("Sticky header half done.");
   });
 
   test("no line carries a dash or an arrow", () => {

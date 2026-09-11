@@ -145,9 +145,9 @@ export default function MonacoDiff({
       code = monaco.editor.create(el, { ...base, model: modified });
     } else {
       original = monaco.editor.createModel(before, undefined, monaco.Uri.file(`/before/${path}`));
-      // a targeted line may sit inside an unchanged region — don't collapse those, or it'd be
-      // hidden; a carried place is the same kind of target
-      const keepAll = unchanged || focusLine != null || kept != null;
+      // a carried place may sit inside an unchanged region, and collapsing would hide it. A line to
+      // reveal never reaches this view: the store drops it when the view switches to the diff.
+      const keepAll = unchanged || kept != null;
       diffEditor = monaco.editor.createDiffEditor(el, {
         ...base,
         originalEditable: false,
@@ -169,6 +169,7 @@ export default function MonacoDiff({
     // diff computation is async: the editor first paints unfolded, then collapses, and the deleted
     // lines arrive as zones that push the modified ones down. Stay invisible until the first diff
     // pass so it appears already settled, then place the viewport against the final layout.
+    let safety: ReturnType<typeof setTimeout> | undefined;
     const settle = (place: () => void) => {
       if (!diffEditor || unchanged) {
         place();
@@ -181,8 +182,9 @@ export default function MonacoDiff({
         place();
         reveal();
       });
-      // safety: never stay hidden if the diff event doesn't fire
-      setTimeout(() => reveal(), 400);
+      // never stay hidden if the diff event doesn't fire. The container outlives this editor, so a
+      // teardown cancels it: left running, it would show the next editor before its own diff settled.
+      safety = setTimeout(() => reveal(), 400);
     };
     if (kept) {
       if (kept.position) code.setPosition(kept.position);
@@ -200,7 +202,6 @@ export default function MonacoDiff({
         code.revealLineInCenter(first?.modifiedStartLineNumber || first?.modifiedEndLineNumber || 1);
       });
     } else {
-      code.setScrollTop(0);
       reveal();
     }
 
@@ -238,6 +239,7 @@ export default function MonacoDiff({
       hoverRef.current?.(null);
     });
     return () => {
+      clearTimeout(safety);
       sub2?.dispose();
       subMove.dispose();
       subLeave.dispose();

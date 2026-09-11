@@ -776,7 +776,9 @@ function reduce(s: State, action: Action): State {
     case "open-view":
       return { ...s, openView: action.v };
     case "editor-view":
-      return s.diff ? { ...s, diff: { ...s.diff, view: action.v } } : s;
+      // the line was a one-time jump; past a switch the editor carries its own place, and a line
+      // kept for the diff view would land inside a collapsed region the next time the file is read
+      return s.diff ? { ...s, diff: { ...s.diff, view: action.v, line: undefined } } : s;
     case "dismiss-toast":
       return { ...s, toast: null };
     case "set-draft":
@@ -1107,7 +1109,9 @@ function onServer(s: State, msg: StoreServerMsg): State {
         return { ...s, diff: msg.discarded === "removed" ? null : { ...d, before: msg.before, after: msg.after } };
       }
       const o = s.openView;
-      const view = o && o.worktreeId === msg.worktreeId && o.path === msg.path ? o.view : "diff";
+      // with no view asked for, a changed file opens on its diff and an unchanged one has none to show
+      const asked = o && o.worktreeId === msg.worktreeId && o.path === msg.path ? o.view : undefined;
+      const view = asked ?? (msg.before === msg.after ? "file" : "diff");
       const opened = { ...msg, view };
       const g = s.gotoLine;
       if (!g || g.worktreeId !== msg.worktreeId || g.path !== msg.path)

@@ -57,7 +57,8 @@ export interface Chord {
   /** the same chord again on ⌘⇧, for keys of its own: ⌘⇧[ and ⌘⇧] step through tabs in iTerm2,
    * Ghostty and every editor. Both spellings of a bracket are listed because with ⇧ held a browser
    * may report the shifted character, and the bridge forwards only `key`. A browser tab keeps both
-   * for its own tabs, so like ⌃Tab they reach the page in an installed app. Never advertised. */
+   * for its own tabs, so like ⌃Tab they reach the page in an installed app. A letter is listed once:
+   * the matcher lower-cases it. Never advertised. */
   cmdShiftAlias?: string[];
   /** other keys that fire the same chord. ⌘⇧E for the palette because Firefox owns ⌘⇧P; ⌘N for
    * new-worktree because it is the muscle-memory key, though only an installed PWA lets the page
@@ -131,10 +132,11 @@ export const CHORDS: readonly Chord[] = [
   // Monaco binds only ⌘U (cursor undo) and ⌘K ⌘U, so a focused editor lets it through.
   { id: "mark-unread", key: "u", shift: true },
   // ⌘O is "Open..." in VS Code on macOS and in vscode.dev, which takes it from the browser's own
-  // open-file dialog the same way. ⌘⇧O stays free because it is go-to-symbol in VS Code and Monaco.
+  // open-file dialog the same way. ⌘⇧O opens it too. It is go-to-symbol in VS Code and Monaco, and a
+  // focused editor still answers it that way, because Monaco stops the keydown for a key it binds.
   // ⌃R is open-recent in VS Code and Zed, and reverse history search in every shell, so a focused
   // terminal keeps it, and so does a previewed page, which may be a terminal of its own.
-  { id: "project", key: "o", ctrlAlias: { key: "r", hostOnly: true } },
+  { id: "project", key: "o", ctrlAlias: { key: "r", hostOnly: true }, cmdShiftAlias: ["o"] },
   // ⌘⇧G: a browser only uses it as find-previous while its find bar is open, which a page may
   // preempt; every other ⌘⇧ letter that reads as "go" or "git" is taken before the page sees it
   { id: "refs", key: "g", shift: true },

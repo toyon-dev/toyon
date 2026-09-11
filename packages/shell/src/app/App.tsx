@@ -194,7 +194,7 @@ export function App() {
   useChords();
   // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the
   // browser's own answer to a stray file drop is to navigate the tab to it, session and all
-  useFileDrop(activeId);
+  useFileDrop();
 
   // ship results: open PR/compare URLs, auto-dismiss toasts
   const openedRef = useRef<string | null>(null);

@@ -56,7 +56,7 @@ export function ModelChip({
 }
 
 /** Which agent, and which of its models, a worktree that does not exist yet runs: every agent's
- * models in one list under each agent's name, so there is no agent to pick before the model. A
+ * models in one list, each row led by its agent, so there is no agent to pick before the model. A
  * worktree's agent is fixed at birth, so once it exists (or for a draft stacked on one) the chip is
  * `ModelChip`, listing that agent's models only. */
 export function AgentModelChip({
@@ -74,8 +74,9 @@ export function AgentModelChip({
 }) {
   const { rows, shown } = agentModelRows(agents, agent, model);
   if (rows.length === 0) return null;
-  const label = rows.find((o) => o.id === shown)?.label ?? model;
-  const name = agents.find((a) => a.id === agent)?.name ?? agent;
+  // the chip names only the model, so the tooltip carries the whole row: "Claude Fable 5.1"
+  const row = rows.find((o) => o.id === shown);
+  const full = row ? [row.prefix, row.label, row.suffix].filter(Boolean).join(" ") : model;
   return (
     <ChipPicker
       value={shown}
@@ -86,7 +87,7 @@ export function AgentModelChip({
       }}
       onClose={onClose}
       className="model-chip"
-      hint={`${label === name ? name : `${name} on ${label}`} works on the new worktree; click to change`}
+      hint={`${full} works on the new worktree; click to change`}
       placeholder="which agent and model work on it"
     />
   );

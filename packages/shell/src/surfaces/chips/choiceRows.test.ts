@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentInfo } from "@toyon/shared";
-import { agentModelKey, agentModelRows, choiceRows, splitAgentModel } from "./choiceRows.ts";
+import { agentModelKey, agentModelRows, choiceRows, modelWords, splitAgentModel } from "./choiceRows.ts";
 
 const empty = { label: "default model", description: "whatever the agent runs" };
 const claudeModels = [
   { id: "default", name: "Default (recommended)", description: "Opus (1M context)" },
-  { id: "opus[1m]", name: "Opus (1M context)", description: "Opus 5 with 1M context" },
+  { id: "opus[1m]", name: "Opus (1M context)", description: "Opus 5 with 1M context · Best for everyday" },
   { id: "sonnet", name: "Sonnet", description: "Sonnet 5" },
 ];
 const codexModels = [
@@ -13,12 +13,58 @@ const codexModels = [
   { id: "gpt-b", name: "gpt-b" },
 ];
 
+describe("modelWords", () => {
+  test("a name and version at the head of the description become the label and its suffix", () => {
+    expect(modelWords({ id: "f", name: "Fable", description: "Fable 5.1 · Most capable" })).toEqual({
+      label: "Fable",
+      version: "5.1",
+      description: "Most capable",
+    });
+  });
+  test("the qualifier moves out of the name into the line under it", () => {
+    expect(modelWords(claudeModels[1]!)).toEqual({
+      label: "Opus",
+      version: "5",
+      description: "1M context · Best for everyday",
+    });
+    // a name's parentheses are kept when the description does not repeat them
+    expect(modelWords({ id: "s", name: "Sonnet (1M context)", description: "Sonnet 5 · Efficient" })).toEqual({
+      label: "Sonnet",
+      version: "5",
+      description: "1M context · Efficient",
+    });
+  });
+  test("left alone when the description does not open with the same name and a version", () => {
+    const gpt = { id: "g", name: "GPT-5.6-Terra", description: "Balanced agentic coding model." };
+    expect(modelWords(gpt)).toEqual({ label: gpt.name, description: gpt.description });
+    const effort = { id: "low", name: "Low", description: "Fast responses with lighter reasoning" };
+    expect(modelWords(effort)).toEqual({ label: "Low", description: effort.description });
+    expect(modelWords({ id: "x", name: "Fable", description: "Opus 5" })).toEqual({
+      label: "Fable",
+      description: "Opus 5",
+    });
+  });
+});
+
 describe("choiceRows", () => {
   test("a default that names a row is drawn once, as that row, marked recommended", () => {
     const { rows, shown } = choiceRows(claudeModels, "", undefined, empty);
-    expect(rows.map((r) => r.id)).toEqual(["opus[1m]", "sonnet"]);
-    expect(rows[0]?.description).toBe("recommended · Opus 5 with 1M context");
+    expect(rows).toEqual([
+      { id: "opus[1m]", label: "Opus", suffix: "5", description: "recommended · 1M context · Best for everyday" },
+      { id: "sonnet", label: "Sonnet", suffix: "5" },
+    ]);
     expect(shown).toBe("opus[1m]");
+  });
+  test("two rows that would read the same keep the agent's own names", () => {
+    const both = [
+      { id: "opus", name: "Opus", description: "Opus 5 · Everyday" },
+      { id: "opus[1m]", name: "Opus (1M context)", description: "Opus 5 with 1M context · Everyday" },
+    ];
+    expect(choiceRows(both, "", undefined, empty).rows.map((r) => [r.label, r.suffix])).toEqual([
+      ["default model", undefined],
+      ["Opus", undefined],
+      ["Opus (1M context)", undefined],
+    ]);
   });
   test("the default's id, reported or asked for, reads as the row it names", () => {
     expect(choiceRows(claudeModels, "", "default", empty).shown).toBe("opus[1m]");
@@ -58,20 +104,19 @@ describe("agentModelRows", () => {
     expect(splitAgentModel(agentModelKey("claude", "opus[1m]"))).toEqual({ agent: "claude", model: "opus[1m]" });
     expect(splitAgentModel(agentModelKey("codex", ""))).toEqual({ agent: "codex", model: "" });
   });
-  test("every agent's models under its name, the chosen one marked", () => {
+  test("every agent's models, each row led by its agent's short name, the chosen one marked", () => {
     const agents = [
-      agent({ id: "claude", name: "Claude Code", models: claudeModels }),
+      agent({ id: "claude", name: "Claude Code", short: "Claude", models: claudeModels }),
       agent({ id: "codex", name: "Codex", models: codexModels }),
     ];
     const { rows, shown } = agentModelRows(agents, "codex", "gpt-b");
-    expect(rows.map((r) => [r.group, r.id])).toEqual([
-      ["Claude Code", "claude opus[1m]"],
-      ["Claude Code", "claude sonnet"],
-      ["Codex", "codex "],
-      ["Codex", "codex gpt-a"],
-      ["Codex", "codex gpt-b"],
+    expect(rows.map((r) => [r.prefix, r.label, r.suffix, r.id])).toEqual([
+      ["Claude", "Opus", "5", "claude opus[1m]"],
+      ["Claude", "Sonnet", "5", "claude sonnet"],
+      [undefined, "Codex default", undefined, "codex "],
+      ["Codex", "gpt-a", undefined, "codex gpt-a"],
+      ["Codex", "gpt-b", undefined, "codex gpt-b"],
     ]);
-    expect(rows[2]?.label).toBe("Codex default");
     expect(shown).toBe("codex gpt-b");
   });
   test("an agent with nothing to pick from is still one row: dimmed when not installed", () => {
@@ -82,13 +127,12 @@ describe("agentModelRows", () => {
     ];
     const { rows } = agentModelRows(agents, "claude", "");
     expect(rows.slice(2)).toEqual([
-      { id: "codex ", label: "Codex", description: "not installed: installing", disabled: true, group: "Codex" },
+      { id: "codex ", label: "Codex", description: "not installed: installing", disabled: true },
       {
         id: "mine ",
         label: "Mine",
         description: "its own default model; the rest are listed once it has run",
         disabled: false,
-        group: "Mine",
       },
     ]);
   });
@@ -96,8 +140,8 @@ describe("agentModelRows", () => {
     const agents = [agent({ id: "claude", models: claudeModels }), agent({ id: "codex" })];
     expect(agentModelRows(agents, "codex", "gpt-b").shown).toBe("codex ");
   });
-  test("one agent: no headings", () => {
-    const { rows } = agentModelRows([agent({ id: "claude", models: claudeModels })], "claude", "");
-    expect(rows.every((r) => r.group === undefined)).toBe(true);
+  test("one agent: no row takes its name", () => {
+    const { rows } = agentModelRows([agent({ id: "claude", short: "Claude", models: claudeModels })], "claude", "");
+    expect(rows.every((r) => r.prefix === undefined)).toBe(true);
   });
 });

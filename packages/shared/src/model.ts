@@ -206,6 +206,8 @@ export interface AuthStatus {
 export interface AgentInfo {
   id: string;
   name: string;
+  /** the word its models' rows start with in a list that spans agents ("Claude"); `name` when absent */
+  short?: string;
   /** its launch command resolves on this machine (auth is only discovered on the first prompt) */
   available: boolean;
   /** why not, when unavailable */

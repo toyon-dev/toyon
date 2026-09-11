@@ -13,15 +13,17 @@ export type ChipOption<T extends string> = {
   description?: string;
   /** listed but not pickable, with the description saying why (an agent that is not installed) */
   disabled?: boolean;
-  /** the heading it is listed under (the agent a model belongs to); rows sharing one are adjacent */
-  group?: string;
+  /** before the label on the row only (the agent a model belongs to): the chip names the value, the
+   * row says which one among similar ones */
+  prefix?: string;
+  /** after the label on the row only, a tier quieter (a model's version) */
+  suffix?: string;
 };
 
 /** the panel's footprint before it is on screen, for deciding which way it opens: the width is
- * chip-picker.css's, the height is the field strip, a two-line row per option and a heading per
- * group */
+ * chip-picker.css's, the height is the field strip and a two-line row per option */
 const PANEL_W = 360;
-const panelH = (rows: number, groups: number) => 68 + 38 * rows + 24 * groups;
+const panelH = (rows: number) => 68 + 38 * rows;
 
 /** which way the panel opens: over the chip unless that runs off the screen, then above it, or
  * hung from the chip's right edge */
@@ -90,9 +92,7 @@ export function ChipPicker<T extends string>({
           if (open) return close();
           const r = e.currentTarget.getBoundingClientRect();
           setOpen({
-            up:
-              r.top - 6 + panelH(options.length, new Set(options.flatMap((o) => o.group ?? [])).size) >
-              window.innerHeight - 8,
+            up: r.top - 6 + panelH(options.length) > window.innerHeight - 8,
             right: r.left - 9 + PANEL_W > window.innerWidth - 8,
           });
         }}
@@ -104,15 +104,14 @@ export function ChipPicker<T extends string>({
           anchored
           items={options}
           filter={(os, q) => {
-            // each word against the name and its heading, so "codex" or "claude sonnet" narrows
+            // each word against the whole name the row shows, so "codex" or "claude sonnet" narrows
             const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
             return os.filter((o) => {
-              const hay = `${o.group ?? ""} ${o.label ?? o.id}`.toLowerCase();
+              const hay = `${o.prefix ?? ""} ${o.label ?? o.id} ${o.suffix ?? ""}`.toLowerCase();
               return words.every((w) => hay.includes(w));
             });
           }}
           keyOf={(o) => o.id}
-          groupOf={(o) => o.group}
           initialIndex={(os) =>
             Math.max(
               0,
@@ -130,7 +129,11 @@ export function ChipPicker<T extends string>({
             <>
               {o.id === value && <span className="row-current" aria-hidden="true" />}
               <span className={cx("chip-option", o.disabled && "chip-option-off")} aria-disabled={o.disabled}>
-                <span className="chip-option-name">{o.label ?? o.id}</span>
+                <span className="chip-option-name">
+                  {o.prefix ? `${o.prefix} ` : null}
+                  {o.label ?? o.id}
+                  {o.suffix ? <span className="chip-option-suffix">{` ${o.suffix}`}</span> : null}
+                </span>
                 {o.description && <span className="chip-option-desc row-dim">{o.description}</span>}
               </span>
             </>

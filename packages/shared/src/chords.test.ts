@@ -45,13 +45,37 @@ describe("matchChord", () => {
     expect(matchChord(ev("k", { meta: false, ctrl: true }))).toBeNull();
     expect(matchChord(ev("k", { alt: true }))).toBeNull();
   });
-  test("a ⌃ row matches ⌃ alone or ⌘ alone (⌘` reaches the page only in an app window), never both", () => {
+  test("⌘J and ⌃` both reach the terminal, as they do in VS Code, Cursor and Zed", () => {
+    expect(matchChord(ev("j"))).toEqual({ id: "terminal" });
     expect(matchChord(ev("`", { meta: false, ctrl: true }))).toEqual({ id: "terminal" });
-    expect(matchChord(ev("`"))).toEqual({ id: "terminal" });
+    // from inside the terminal too: ⌃` is not an alias a shell program has a use for
+    expect(matchChord(ev("`", { meta: false, ctrl: true }), { guest: true })).toEqual({ id: "terminal" });
+    expect(matchChord(ev("j"), { guest: true })).toEqual({ id: "terminal" });
+    expect(matchChord(ev("`"))).toBeNull(); // ⌘` cycles windows before a page sees it
     expect(matchChord(ev("`", { ctrl: true }))).toBeNull();
+    expect(matchChord(ev("j", { meta: false, ctrl: true }))).toBeNull(); // ⌃J is Monaco's join lines
+  });
+  test("a ⌃ row matches ⌃ alone or ⌘ alone, never both", () => {
     // ⇧ is its own row (cycle the terminal pane's tabs), not a miss on the toggle
     expect(matchChord(ev("`", { meta: false, ctrl: true, shift: true }))).toEqual({ id: "term-tab" });
+    expect(matchChord(ev("`", { shift: true }))).toEqual({ id: "term-tab" });
+    expect(matchChord(ev("`", { ctrl: true, shift: true }))).toBeNull();
     expect(matchChord(ev("1", { meta: false, ctrl: true }))).toBeNull();
+  });
+  test("the chat has one chord: ⌘L", () => {
+    expect(matchChord(ev("l"))).toEqual({ id: "composer" });
+    expect(Object.keys(CHORD_LABELS)).not.toContain("right");
+  });
+  test("⌘⇧[ and ⌘⇧] walk the worktrees as they walk tabs, whichever bracket the browser reports", () => {
+    expect(matchChord(ev("[", { shift: true }))).toEqual({ id: "wt-prev" });
+    expect(matchChord(ev("{", { shift: true }))).toEqual({ id: "wt-prev" });
+    expect(matchChord(ev("]", { shift: true }))).toEqual({ id: "wt-next" });
+    expect(matchChord(ev("}", { shift: true }))).toEqual({ id: "wt-next" });
+    // not a hostOnly alias: the walk works from inside the terminal and the preview
+    expect(matchChord(ev("}", { shift: true }), { guest: true })).toEqual({ id: "wt-next" });
+    expect(matchChord(ev("["))).toBeNull(); // ⌘[ is Monaco's outdent
+    expect(matchChord(ev("[", { meta: false, ctrl: true, shift: true }))).toBeNull();
+    expect(matchChord(ev("[", { meta: false, shift: true }))).toBeNull();
   });
   test("⌥ alone matches the arrow rows and nothing else", () => {
     expect(matchChord(ev("ArrowUp", { meta: false, alt: true }))).toEqual({ id: "wt-prev" });
@@ -105,6 +129,7 @@ describe("matchChord", () => {
       ).toEqual({ id: c.id });
       const a = c.ctrlAlias;
       if (a) expect(matchChord(ev(a.key, { shift: !!a.shift, ctrl: true, meta: false }))).toEqual({ id: c.id });
+      for (const k of c.cmdShiftAlias ?? []) expect(matchChord(ev(k, { shift: true }))).toEqual({ id: c.id });
     }
   });
 });
@@ -119,7 +144,8 @@ describe("labels", () => {
     expect(chordLabel("keys")).toBe("⌘,");
     expect(chordLabel("search")).toBe("⌘⇧F");
     expect(chordLabel("zen")).toBe("⌘.");
-    expect(chordLabel("terminal")).toBe("⌃`");
+    expect(chordLabel("terminal")).toBe("⌘J");
+    expect(chordLabel("composer")).toBe("⌘L");
     expect(chordLabel("worktree")).toBe("⌘1-9");
     expect(chordLabel("wt-prev")).toBe("⌥↑");
     expect(chordLabel("wt-next")).toBe("⌥↓");

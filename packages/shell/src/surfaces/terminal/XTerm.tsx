@@ -7,6 +7,7 @@ import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
 import { terminalBus } from "../../app/terminalBus.ts";
+import { useOnChange } from "../../ui/hooks.ts";
 import type { DaemonSocket } from "../../ws.ts";
 
 /** a paste arrives as one onData; the protocol caps a term-input frame at 64K */
@@ -61,6 +62,7 @@ export default function XTerm({
   theme,
   sock,
   connected,
+  focusReq,
   onAlive,
   onEscape,
 }: {
@@ -70,6 +72,8 @@ export default function XTerm({
   theme: Theme;
   sock: DaemonSocket | null;
   connected: boolean;
+  /** the store's focusTerm: a bump asks for the keyboard */
+  focusReq: number;
   /** the shell's state as the daemon reports it: alive after a snapshot, dead (with its code) on exit */
   onAlive: (alive: boolean, exitCode?: number) => void;
   /** Escape at the prompt (xterm stops propagation on every key it consumes, so the window
@@ -177,6 +181,15 @@ export default function XTerm({
   useEffect(() => {
     if (termRef.current) termRef.current.options.theme = toXtermTheme(theme);
   }, [theme]);
+
+  // ⌘J from outside an open pane asks for the keyboard by bumping a counter. Only a bump seen after
+  // mount counts: the press that opened the pane is already answered by the focus on mount.
+  const answered = useRef(focusReq);
+  useOnChange([focusReq], () => {
+    if (focusReq === answered.current) return;
+    answered.current = focusReq;
+    termRef.current?.focus();
+  });
 
   return <div className="term-host" ref={box} />;
 }

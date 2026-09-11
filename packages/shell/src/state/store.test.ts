@@ -672,6 +672,12 @@ describe("git status", () => {
     expect([rail.railOpen, rail.focusRail]).toEqual([true, shut.focusRail + 1]);
     expect(reducer(rail, { a: "focus-rail" }).focusRail).toBe(rail.focusRail + 1);
   });
+  test("focus-terminal opens the pane and asks for the keyboard every time", () => {
+    const s = run([hello(wt("main", "main"))]);
+    const once = reducer(s, { a: "focus-terminal" });
+    expect([s.termOpen, once.termOpen, once.focusTerm]).toEqual([false, true, s.focusTerm + 1]);
+    expect(reducer(once, { a: "focus-terminal" }).focusTerm).toBe(once.focusTerm + 1);
+  });
 });
 
 describe("terminal tabs", () => {

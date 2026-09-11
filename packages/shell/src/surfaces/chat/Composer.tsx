@@ -252,7 +252,7 @@ export function Composer({
     const f = requestAnimationFrame(() => composerRef.current?.focus());
     return () => cancelAnimationFrame(f);
   }, [drafting]);
-  // ⌘J, ⌘K and ⌘L ask for the box by bumping a counter; focus is the DOM's. Only a bump seen after
+  // ⌘K and ⌘L ask for the box by bumping a counter; focus is the DOM's. Only a bump seen after
   // mount counts, or a box mounting later (an empty project's) would take a request long answered.
   // On an empty project the dock's copy is hidden, so the centre's answers.
   const focusReq = useStore((s) => s.focusRight);

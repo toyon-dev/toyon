@@ -64,7 +64,7 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
     {
       id: "right",
       label: `${show(s.rightOpen)} chat panel`,
-      key: chord("right"),
+      key: chord("composer"),
       onClick: () => dispatch({ a: "toggle-right" }),
     },
     {

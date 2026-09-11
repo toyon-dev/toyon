@@ -1,6 +1,3 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { AgentCommand, AgentEvent, AgentStatus, LogLine, ProcState, WorktreeInfo } from "@toyon/shared";
 import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
 import type { AgentAdapter, AskOpts, AskReply, SendOpts } from "../../src/agent/adapter.ts";
@@ -174,8 +171,11 @@ export class FakeTerminal implements PtyHandle {
   }
 }
 
-/** two always-launchable agents (the command is `true`), so services validate ids without npm */
-export function fakeAgents(): AgentRegistry {
+/** two always-launchable agents (the command is `true`), so services validate ids without npm.
+ * `dir` is where a package agent would be installed, and these are commands, so nothing is written
+ * there: a caller with a temp home passes its agentsDir so its cleanup takes it, and one without
+ * passes a path that does not exist */
+export function fakeAgents(dir: string): AgentRegistry {
   const spec = (id: string, extra: Partial<AgentSpec> = {}): AgentSpec => ({
     id,
     name: id,
@@ -186,10 +186,7 @@ export function fakeAgents(): AgentRegistry {
     loginHint: `${id}: log in`,
     ...extra,
   });
-  return new AgentRegistry(
-    [spec("claude"), spec("codex", { mode: "agent" })],
-    mkdtempSync(join(tmpdir(), "toyon-agents-")),
-  );
+  return new AgentRegistry([spec("claude"), spec("codex", { mode: "agent" })], dir);
 }
 
 /** Nothing to connect to by default: a test that reads the cache needs no adapter, and one that

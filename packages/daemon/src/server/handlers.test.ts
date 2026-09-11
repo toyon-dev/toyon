@@ -45,7 +45,7 @@ function make() {
   const state = new StateStore(t.paths);
   const hub = new Hub();
   const f = fakeFactories();
-  const agents = fakeAgents();
+  const agents = fakeAgents(t.paths.agentsDir);
   const accounts = fakeAccounts(agents);
   const attachments = new AttachmentStore(t.paths.attachmentsDir);
   const runtime = new RuntimeRegistry({

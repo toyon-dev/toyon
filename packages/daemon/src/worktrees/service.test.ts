@@ -21,7 +21,7 @@ function world() {
   const state = new StateStore(t.paths);
   const hub = new Hub();
   const f = fakeFactories();
-  const agents = fakeAgents();
+  const agents = fakeAgents(t.paths.agentsDir);
   const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });

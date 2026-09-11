@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultThemePrefs, gruvboxLight, type ThemePrefs } from "@toyon/shared";
@@ -10,6 +10,7 @@ process.env.TOYON_THEME_DIRS = join(import.meta.dir, "../../test/fixtures/extens
 const home = mkdtempSync(join(tmpdir(), "toyon-themes-"));
 const themesDir = join(home, "themes");
 mkdirSync(themesDir, { recursive: true });
+afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 function makeStore() {
   let prefs: ThemePrefs | undefined;

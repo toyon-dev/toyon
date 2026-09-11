@@ -4,10 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { detectConfig, procCommand, readConfigFile } from "./config.ts";
 
-let dir = "";
-afterEach(() => dir && rmSync(dir, { recursive: true, force: true }));
+// a test can make several repos, so each one is kept for cleanup, not only the last
+let dirs: string[] = [];
+afterEach(() => {
+  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  dirs = [];
+});
 function repo(files: Record<string, string>): string {
-  dir = mkdtempSync(join(tmpdir(), "toyon-cfg-"));
+  const dir = mkdtempSync(join(tmpdir(), "toyon-cfg-"));
+  dirs.push(dir);
   for (const [name, body] of Object.entries(files)) {
     if (name.endsWith("/")) mkdirSync(join(dir, name));
     else writeFileSync(join(dir, name), body);

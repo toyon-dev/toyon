@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +11,7 @@ const wt = join(root, "wt");
 mkdirSync(join(wt, "src"), { recursive: true });
 mkdirSync(join(root, "outside"));
 symlinkSync(join(root, "outside"), join(wt, "escape"));
-process.on("exit", () => rmSync(root, { recursive: true, force: true }));
+afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const bounds: Bounds = {
   root: wt,

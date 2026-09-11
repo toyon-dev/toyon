@@ -166,20 +166,20 @@
       color: var(--accent);
     }
   }
-  /* search hits: location on top, matched line beneath */
+  /* search hits: location on top, matched line beneath. The location reads on the scan tier with
+   the line, not the skip tier: when a picked element has several candidate sources their lines are
+   often the same text, and the path is then the only thing telling the rows apart. The line number
+   is part of the path and takes its colour: the accent is 1.9:1 on the row you are on. */
   .search-hit {
     white-space: normal;
     padding: 5px var(--picker-inset, 10px);
   }
   .search-loc {
     display: block;
-    color: var(--text2);
+    color: var(--text1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .search-line {
-    color: var(--accent);
   }
   .search-text {
     display: block;
@@ -187,6 +187,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* the row you are on lifts both lines to the reading tier. It sits here and not beside the
+   picker's cursor rule because that is the base layer, which loses to the resting colours above
+   whatever its specificity */
+  .search-hit[data-state~="cursor"] {
+    & .search-loc,
+    & .search-text {
+      color: var(--text0);
+    }
   }
   /* ⌘⇧G ref rows: the kind's icon rides inside the label, so the label is a flex line rather than
    text; the icon says branch, remote or PR where a word would have cost the name its width */

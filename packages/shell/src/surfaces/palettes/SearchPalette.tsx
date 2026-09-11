@@ -59,8 +59,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       row={(h) => (
         <>
           <span className="search-loc">
-            {h.path}
-            <span className="search-line">:{h.line}</span>
+            {h.path}:{h.line}
           </span>
           <span className="search-text">{h.text}</span>
         </>

@@ -39,8 +39,7 @@ export function ElementSources({ worktreeId, hits }: { worktreeId: string; hits:
       row={(h) => (
         <>
           <span className="search-loc">
-            {h.path}
-            <span className="search-line">:{h.line}</span>
+            {h.path}:{h.line}
           </span>
           <span className="search-text">{h.text}</span>
         </>

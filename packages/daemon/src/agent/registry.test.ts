@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,9 +23,14 @@ function fakeInstaller(fail = new Set<string>()): { installer: Installer; calls:
   return { installer, calls };
 }
 
+const dirs: string[] = [];
+afterAll(() => {
+  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+});
+
 function tmp() {
   const dir = mkdtempSync(join(tmpdir(), "toyon-registry-"));
-  process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
+  dirs.push(dir);
   return dir;
 }
 

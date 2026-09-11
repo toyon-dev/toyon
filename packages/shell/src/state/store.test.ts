@@ -8,9 +8,12 @@ import {
   type EditorDisk,
   EMPTY_LOCAL,
   initialState,
+  isFirstRun,
   isGreenfield,
   isSubPicker,
   localOf,
+  type NewProject,
+  newProjectPage,
   type OpenFile,
   previewIdOf,
   reducer,
@@ -95,6 +98,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     defaultAgent: "claude",
     home: "/home/t",
     folderDialog: false,
+    gitIdentity: true,
     pending: [],
     visits: {},
   });
@@ -535,28 +539,22 @@ describe("overlays", () => {
     expect(s.overlay).toEqual({ kind: "commands" });
     expect(s.paletteReturn?.q).toBe("the");
   });
-  test("backing out of the folder chooser returns to the new-project form it came from", () => {
-    const form = { kind: "new-project", mode: "create", name: "my-app", parent: "~/Projects" } as const;
-    const choosing = run([{ a: "open", overlay: { kind: "choose-folder", form } }]);
+  test("the folder chooser opens over the new-project page and backs out onto it, unchanged", () => {
+    const page = newProjectPage({ mode: "create", name: "my-app", parent: "~/Projects" });
+    const choosing = run([
+      { a: "new-project", v: page },
+      { a: "open", overlay: { kind: "choose-folder" } },
+    ]);
     expect(isSubPicker(choosing.overlay ?? { kind: "keys" })).toBe(true);
-    expect(reducer(choosing, { a: "close", back: true }).overlay).toEqual(form);
-    // a plain close still closes, since the form was already left for the chooser
-    expect(reducer(choosing, { a: "close" }).overlay).toBeNull();
+    const back = reducer(choosing, { a: "close", back: true });
+    expect(back.overlay).toBeNull();
+    expect(back.newProject).toEqual(page);
   });
   test("each folder-chosen answer is numbered, so the form can tell a new one from the last", () => {
     const answer = (path: string | null): Action =>
       server({ t: "folder-chosen", folder: path ? { path, kind: "empty" } : null });
     const s = run([answer("~/a"), answer(null)]);
     expect(s.chosenFolder).toEqual({ seq: 2, folder: null });
-  });
-  test("closing the form forgets a Finder dialog it was waiting on", () => {
-    const form = { kind: "new-project", mode: "create", name: "my-app", parent: "~/Projects" } as const;
-    const s = run([
-      { a: "open", overlay: form },
-      { a: "choosing-folder", v: true },
-    ]);
-    expect(s.choosingFolder).toBe(true);
-    expect(reducer(s, { a: "close" }).choosingFolder).toBe(false);
   });
   test("a plain close forgets the return; opening a palette does too", () => {
     const s = run([
@@ -1011,6 +1009,105 @@ describe("projects", () => {
   test("the first repo the daemon ever reports becomes the scope without an open request", () => {
     const s = reducer(run([hello()]), repos(repo("r1")));
     expect(s.activeRepoId).toBe("r1");
+  });
+});
+
+describe("new-project page", () => {
+  const one = () => helloIn([repo("r1")], wt("m1", "main", undefined, "r1"));
+  const page = (over: Partial<NewProject> = {}): NewProject => ({
+    ...newProjectPage({ mode: "create", name: "my-app", parent: "~/Projects" }),
+    ...over,
+  });
+  const made = (): RepoInfo => ({ ...repo("r2"), path: "/p/my-app", name: "my-app", needsSetup: true, made: "folder" });
+  const creating = (over: Partial<NewProject> = {}): Action[] => [
+    one(),
+    { a: "new-project", v: page(over) },
+    { a: "open-repo" },
+    { a: "new-project-set", v: { phase: "creating" } },
+  ];
+
+  test("with no project anywhere the page is what there is, offering ~/Projects", () => {
+    const s = run([hello()]);
+    expect(s.newProject).toEqual(newProjectPage({ mode: "create", name: "", parent: "~/Projects" }));
+    expect(isFirstRun(s)).toBe(true);
+    // with no project behind it, leaving it has nowhere to go
+    expect(reducer(s, { a: "close-new-project" }).newProject).not.toBeNull();
+    // and forgetting the last project brings it back
+    expect(run([one(), repos()]).newProject?.parent).toBe("~/Projects");
+  });
+
+  test("opening it closes the picker, and leaving it lands on the project behind it", () => {
+    const s = run([
+      one(),
+      { a: "open", overlay: { kind: "projects", form: "center" } },
+      { a: "new-project", v: page() },
+    ]);
+    expect(s.overlay).toBeNull();
+    expect(s.newProject?.name).toBe("my-app");
+    const left = reducer(s, { a: "close-new-project" });
+    expect(left.newProject).toBeNull();
+    expect(left.activeId).toBe("m1");
+    // choosing a project from the picker over the page leaves it too, the one behind it included
+    expect(reducer(s, { a: "activate-repo", id: "r1" }).newProject).toBeNull();
+  });
+
+  test("nothing drafts from it, and a Finder dialog it asked for goes with it", () => {
+    const s = run([one(), { a: "new-project", v: page() }, { a: "choosing-folder", v: "location" }]);
+    expect(reducer(s, { a: "open-draft" }).draft).toBeNull();
+    expect(reducer(s, { a: "close-new-project" }).choosingFolder).toBe(false);
+  });
+
+  test("it holds until the project it made has a main row, then gives way with what was typed", () => {
+    let s: State = { ...run(creating({ prompt: "a todo list" })), gitIdentity: false };
+    s = reducer(s, repos(repo("r1"), made()));
+    // listed with no rows yet: the page stays rather than flash a project with nothing in it
+    expect(s.activeRepoId).toBe("r2");
+    expect(s.newProject).toMatchObject({ phase: "creating", repoId: "r2" });
+    // made from nothing means committed to, so a way back to the page does not ask for git's name again
+    expect(s.gitIdentity).toBe(true);
+    s = reducer(s, worktrees(wt("m1", "main", undefined, "r1"), wt("m2", "main", undefined, "r2")));
+    expect(s.newProject).toBeNull();
+    expect(s.activeId).toBe("m2");
+    expect(localOf(s, "m2").draft).toBe("a todo list");
+  });
+
+  test("a refused create comes back to the page, and a refused take-back to the project", () => {
+    const refused = reducer(run(creating()), server({ t: "error", message: "my-app already exists" }));
+    expect(refused.newProject?.phase).toBe("editing");
+    // left armed, the flag would hand this tab the next project anyone opened
+    expect(refused.pendingOpen).toBe(false);
+    const unmaking = run([one(), { a: "new-project", v: page({ phase: "unmaking", repoId: "r1" }) }]);
+    expect(reducer(unmaking, server({ t: "error", message: "my-app has files in it now" })).newProject).toBeNull();
+  });
+
+  test("a project taken back leaves the page to the person, name and all", () => {
+    let s = run([one(), { a: "new-project", v: page({ phase: "unmaking", repoId: "r1" }) }]);
+    s = reducer(s, repos(repo("r1")));
+    expect(s.newProject?.phase).toBe("unmaking");
+    s = reducer(s, repos());
+    expect(s.newProject).toEqual(page());
+  });
+
+  test("a clone it started is watched in the import pane instead", () => {
+    let s = run(creating({ mode: "clone", url: "https://example.com/my-app.git" }));
+    s = reducer(
+      s,
+      server({
+        t: "pending-repos",
+        pending: [
+          {
+            id: "p1",
+            name: "my-app",
+            parent: "~/Projects",
+            url: "https://example.com/my-app.git",
+            startedAt: 0,
+            lines: [],
+          },
+        ],
+      }),
+    );
+    expect(s.newProject).toBeNull();
+    expect(s.activeImportId).toBe("p1");
   });
 });
 

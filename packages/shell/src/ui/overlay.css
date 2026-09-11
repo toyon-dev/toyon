@@ -32,9 +32,4 @@
       box-shadow: var(--elevation-float);
     }
   }
-  /* the line above a prompt's field saying what the box is for */
-  .overlay-title {
-    color: var(--text2);
-    margin-bottom: 8px;
-  }
 }

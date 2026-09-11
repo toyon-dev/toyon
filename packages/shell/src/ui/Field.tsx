@@ -8,10 +8,11 @@ import "./field.css";
  * The face follows the size unless told otherwise: an identifier box (sm, md) holds a path, a
  * branch, a command, which are literals the person also types elsewhere, so it is mono; a prose
  * box (lg) holds what they write, so it is ui. A picker's filter says `font="mono"` because a filter
- * is an identifier, and the ask note says `font="ui"` on its small box.
+ * is an identifier, and the ask note says `font="ui"` on its small box. `lead` is the one question a
+ * page asks, typed at the size its answer is read at afterwards: the new-project page's name.
  */
 export type FieldSize = "sm" | "md" | "lg";
-export type FieldFont = "mono" | "ui";
+export type FieldFont = "mono" | "ui" | "lead";
 
 const SIZE: Record<FieldSize, string> = {
   /** an identifier in a row: the auth key, the address strip */
@@ -33,7 +34,14 @@ type Shared = {
 
 function classes({ size = "sm", font, bare, className }: Shared): string {
   const face = font ?? (size === "lg" ? "ui" : "mono");
-  return cx("field", SIZE[size], face === "ui" && "field-ui", bare && "field-bare", className);
+  return cx(
+    "field",
+    SIZE[size],
+    face === "ui" && "field-ui",
+    face === "lead" && "field-lead",
+    bare && "field-bare",
+    className,
+  );
 }
 
 // forwardRef, because on React 18 a function component is handed no `ref` at all: it is not in

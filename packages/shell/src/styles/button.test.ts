@@ -29,6 +29,7 @@ const PRIMITIVES = new Set([
   ".btn-icon",
   ".btn-outline",
   ".btn-field",
+  ".btn-inline",
   ".btn-mono",
   ".tone-primary",
   ".tone-quiet",
@@ -38,6 +39,7 @@ const PRIMITIVES = new Set([
   ".field-md",
   ".field-lg",
   ".field-ui",
+  ".field-lead",
   ".field-bare",
 ]);
 

@@ -4,7 +4,7 @@ import { previewItems } from "../../state/actions/preview.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
-import { useActive, useActiveRepo, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
+import { useActive, useActiveRepo, useFirstRun, useLocalField, usePreviewId } from "../../state/selectors.ts";
 import { previewUp } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useOnChange, useWindowWidth } from "../../ui/hooks.ts";
@@ -36,7 +36,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const zen = useStore((s) => s.zen);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
-  const greenfield = useGreenfield();
+  const firstRun = useFirstRun();
   const designOpen = useStore((s) => s.designOpen);
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
@@ -45,9 +45,9 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   return (
     <div className="status-bar top-bar">
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "toyon"}</span>}
-      {/* the panel toggles leave the bar on an empty project: their panes are hidden there, and a
+      {/* the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
           disabled button still lights and explains itself on hover as if it might do something */}
-      {!greenfield && (
+      {!firstRun && (
         <IconButton
           icon="branch"
           label="Changes panel"
@@ -78,7 +78,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
           {...cm.contextMenu(() => settingsItems(store.getState(), { sock, dispatch }))}
         />
-        {!greenfield && (
+        {!firstRun && (
           <IconButton
             icon="palette"
             label="Design system"
@@ -88,7 +88,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
             onClick={() => dispatch({ a: "toggle-design" })}
           />
         )}
-        {!greenfield && (
+        {!firstRun && (
           <IconButton
             icon="chat"
             label="Chat panel"
@@ -144,6 +144,8 @@ function ProjectPill() {
   // "open project" is what an empty daemon deserves, not what a page that has not heard from its
   // daemon should guess: until hello the pill keeps its box and says nothing
   const heard = useStore((s) => s.heard);
+  // the page is about a project that is not the one behind it, so the pill does not name that one
+  const page = useStore((s) => s.newProject !== null);
   return (
     <span className="bar-project">
       <Button
@@ -154,7 +156,7 @@ function ProjectPill() {
         onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects", form: "pill" } })}
         {...cm.contextMenu(pillMenu)}
       >
-        <span className="bar-project-name">{repo?.name ?? (heard ? "open project" : "")}</span>
+        <span className="bar-project-name">{page ? "new project" : (repo?.name ?? (heard ? "open project" : ""))}</span>
       </Button>
       {open && <ProjectPicker form="pill" />}
     </span>

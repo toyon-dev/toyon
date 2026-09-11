@@ -2,7 +2,7 @@ import { isOwned, type RepoInfo } from "@toyon/shared";
 import { useCallback } from "react";
 import { importItems, projectItems } from "../../state/actions/project.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import type { ProjectsOverlay } from "../../state/store.ts";
+import { newProjectPage, type ProjectsOverlay } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -28,7 +28,8 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const repos = useStore((s) => s.repos);
-  const current = useStore((s) => s.activeRepoId);
+  // over the new-project page no project is the open one, so none is marked
+  const current = useStore((s) => (s.newProject ? null : s.activeRepoId));
   const rows = useStore((s) => s.rows);
   const paths = useStore((s) => s.paths);
   const home = useStore((s) => s.home);
@@ -88,18 +89,17 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
     sock?.send({ t: "create-repo", mode: "create", parent, name });
   };
 
-  /** the form, for the rows where something would otherwise be guessed */
+  /** the new-project page, for the rows where something would otherwise be guessed */
   const ask = (mode: "create" | "clone", name: string, url?: string) =>
     dispatch({
-      a: "open",
-      overlay: {
-        kind: "new-project",
+      a: "new-project",
+      v: newProjectPage({
         mode,
         name,
         // a bare name says nothing about location: offer wherever the other projects already live
         parent: defaultParent(repos, current, home),
         ...(url ? { url } : {}),
-      },
+      }),
     });
 
   return (
@@ -149,8 +149,8 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
       // a plain folder is a step on the way, not a project: descend and keep the picker up
       narrowTo={(r) => (r.kind === "dir" && !r.entry.isRepo ? `${r.entry.path}/` : null)}
       onPick={(r) => {
-        // `ask` opens the form, which *replaces* this overlay: closing after it would close the
-        // form too, so those branches return rather than falling through to the close below
+        // `ask` opens the page, which closes this overlay itself, so those branches return rather
+        // than falling through to the close below
         if (r.kind === "clone") return ask("clone", r.name, r.url);
         if (r.kind === "create" && !r.parent) return ask("create", r.name);
         if (r.kind === "new") return ask("create", "");

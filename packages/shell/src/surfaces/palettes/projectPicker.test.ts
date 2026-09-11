@@ -78,8 +78,8 @@ describe("defaultParent", () => {
     expect(defaultParent(repos, null, HOME)).toBe("/opt/x"); // first by name, not by registration order
   });
 
-  test("falls back to home when there is nothing to learn from", () => {
-    expect(defaultParent([], null, HOME)).toBe("~");
+  test("with no project to learn from, offers the Projects folder a first project goes in", () => {
+    expect(defaultParent([], null, HOME)).toBe("~/Projects");
   });
 });
 

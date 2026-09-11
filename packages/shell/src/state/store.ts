@@ -49,6 +49,7 @@ import {
   isEditTool,
   isMain,
   isOwned,
+  PROJECTS_FOLDER,
   resolveTheme,
   SHELL_STREAM,
   toyonDark,
@@ -241,10 +242,8 @@ export type Overlay =
   /** the setup pane for a repo that is already configured (install + start commands) */
   | { kind: "setup"; repoId: string }
   | ProjectsOverlay
-  | NewProjectForm
-  /** the new-project form's location, walked to rather than typed. It carries the form and reopens
-   * it: with the folder filled in on a pick, or as it was when backed out of. */
-  | { kind: "choose-folder"; form: NewProjectForm }
+  /** the new-project page's location, walked to rather than typed, over the page it fills in */
+  | { kind: "choose-folder" }
   /** the route bar's list of pages, opened over the address field */
   | { kind: "routes" }
   /** the lines a picked element with no recorded source may be written on, when none is clearly it */
@@ -256,16 +255,35 @@ export type Overlay =
  * path browser its folder button opens. */
 export type ProjectsOverlay = { kind: "projects"; form: "pill" | "center" | "disk" };
 
-/** the new-project form, carrying whatever the picker row already knew. `create` needs a name and
- * a location; `clone` has both derived from the URL and shows them so they can be changed. */
-export type NewProjectForm = {
-  kind: "new-project";
+/** The new-project page: a project that does not exist yet, named and placed on the page in the
+ * preview slot rather than in a form over it. Its second step is the first-run composer of the
+ * project it makes. `creating` runs from Enter until that project's main row is listed, so nothing
+ * flashes in between (a clone's import pane takes over as soon as the clone starts); `unmaking` is a
+ * made project being taken back here, still listed until the daemon forgets it. */
+export interface NewProject {
   /** `init` makes the empty folder at parent/name the project where it stands */
   mode: "create" | "clone" | "init";
   name: string;
   parent: string;
+  /** clone only: what it is cloned from */
   url?: string;
-};
+  phase: "editing" | "creating" | "unmaking";
+  /** the project the page is waiting on: the one it made, once listed, or the one it is taking back */
+  repoId: string | null;
+  /** what was typed in the first-run box before coming back here, for the next project's box */
+  prompt: string;
+}
+
+/** the page with what a picker row or a way back already knew filled in */
+export const newProjectPage = (v: Pick<NewProject, "mode" | "name" | "parent" | "url">): NewProject => ({
+  ...v,
+  phase: "editing",
+  repoId: null,
+  prompt: "",
+});
+
+/** with no project anywhere, the page is what there is, and a first project goes in ~/Projects */
+const firstPage = () => newProjectPage({ mode: "create", name: "", parent: `~/${PROJECTS_FOLDER}` });
 
 /** which docks and panes a project is left with. The layout is remembered per project, so a reload
  * comes back to it and switching projects carries each one's own back (zen is deliberately not in
@@ -463,10 +481,15 @@ export interface State {
   paths: { query: string; entries: PathEntry[]; target: PathTarget | null };
   /** the daemon's home directory, for writing `~` paths the way a person would type them */
   home: string;
-  /** hello's `folderDialog`: whether the form's folder button opens Finder where the person is */
+  /** hello's `folderDialog`: whether the page's folder buttons open Finder where the person is */
   folderDialog: boolean;
-  /** the Finder dialog is up for the new-project form: Escape is its, and closing the form closes it */
-  choosingFolder: boolean;
+  /** hello's `gitIdentity`: git can commit without asking, so the new-project page need not */
+  gitIdentity: boolean;
+  /** the Finder dialog is up, and which of the new-project page's controls asked for it: where the
+   * project goes, or a folder to open. Escape is the dialog's while it is up. */
+  choosingFolder: false | "location" | "open";
+  /** the new-project page, while it is up */
+  newProject: NewProject | null;
   /** the last answer to `choose-folder`, numbered so the form that asked can tell a new answer from
    * the one it already applied */
   chosenFolder: { seq: number; folder: ChosenFolder | null } | null;
@@ -563,7 +586,10 @@ export function initialState(opts: InitialOpts): State {
     paths: { query: "", entries: [], target: null },
     home: "",
     folderDialog: false,
+    // the page never shows before hello, which is what says otherwise
+    gitIdentity: true,
     choosingFolder: false,
+    newProject: null,
     chosenFolder: null,
     pending: [],
     activeImportId: null,
@@ -609,6 +635,12 @@ export function isGreenfield(s: State): boolean {
   if (!wt || !isMain(wt.worktree) || wt.agent !== "idle" || wt.worktree.empty !== true) return false;
   const repo = repoById(s, wt.repoId);
   return !!repo?.needsSetup && localOf(s, wt.id).chat.length === 0;
+}
+
+/** Either first-run screen: the new-project page, or a project nobody has spoken to yet. The docks,
+ * the rail and the panes hide for both, since neither has anything for them to show. */
+export function isFirstRun(s: State): boolean {
+  return s.newProject !== null || isGreenfield(s);
 }
 
 export function repoById(s: State, id: string | null | undefined): RepoInfo | null {
@@ -743,6 +775,12 @@ export type Action =
   | { a: "shipping"; id: string; op: ShipOp }
   /** an "open project" request went to the daemon: adopt the repo it adds */
   | { a: "open-repo" }
+  /** open the new-project page with what is known; closes any overlay */
+  | { a: "new-project"; v: NewProject }
+  /** change what the page holds: a name typed, a folder chosen, a phase moved */
+  | { a: "new-project-set"; v: Partial<NewProject> }
+  /** leave the page for the project behind it; with no project there is nowhere to go */
+  | { a: "close-new-project" }
   /** show a clone's progress in the preview area (null stops watching) */
   | { a: "watch-import"; id: string | null }
   | { a: "close-editor" }
@@ -772,7 +810,7 @@ export type Action =
   | { a: "open"; overlay: Overlay }
   /** close the open overlay; with `back`, reopen the palette a sub-picker came from */
   | { a: "close"; back?: boolean }
-  | { a: "choosing-folder"; v: boolean }
+  | { a: "choosing-folder"; v: State["choosingFolder"] }
   | { a: "toggle"; overlay: Overlay }
   | { a: "palette-return"; v: State["paletteReturn"] }
   | { a: "toggle-left" }
@@ -858,8 +896,8 @@ function reduce(s: State, action: Action): State {
       return activate(s, action.id);
     case "open-draft": {
       // not on an empty project: a worktree off the root commit would take the scaffold to a
-      // branch while main stayed blank
-      if (isGreenfield(s)) return s;
+      // branch while main stayed blank. Nor from the new-project page, over a project not on screen.
+      if (isFirstRun(s)) return s;
       const base = action.base ?? mainOf(s, s.activeRepoId)?.id ?? null;
       if (!base || !worktreeById(s, base)) return s;
       if (s.draft?.base === base) return { ...s, draft: null };
@@ -898,14 +936,32 @@ function reduce(s: State, action: Action): State {
       return { ...s, shipping: { ...s.shipping, [action.id]: action.op } };
     }
     case "activate-repo": {
-      if (action.id === s.activeRepoId || !repoById(s, action.id)) return s;
-      const id = landingIn(s, action.id);
+      if (!repoById(s, action.id)) return s;
+      // choosing a project is leaving the new-project page for it, the one behind the page included
+      const left = s.newProject ? { ...s, newProject: null } : s;
+      if (action.id === s.activeRepoId) return left;
+      const id = landingIn(left, action.id);
       // an explicit switch beats a pending one: a clone can take minutes, and its repo arriving
       // afterwards must not yank the person out of whatever they moved to in the meantime
-      return { ...activate(s, id), activeRepoId: action.id, pendingOpen: false };
+      return { ...activate(left, id), activeRepoId: action.id, pendingOpen: false };
     }
     case "open-repo":
       return { ...s, pendingOpen: true };
+    case "new-project":
+      return {
+        ...s,
+        newProject: action.v,
+        overlay: null,
+        paletteReturn: null,
+        previewTheme: null,
+        draft: null,
+        editor: null,
+      };
+    case "new-project-set":
+      return s.newProject ? { ...s, newProject: { ...s.newProject, ...action.v } } : s;
+    case "close-new-project":
+      // with no project behind it, the page is the only thing there is to show
+      return s.newProject && s.repos.length > 0 ? { ...s, newProject: null, choosingFolder: false } : s;
     case "watch-import":
       return { ...s, activeImportId: action.id };
     case "close-editor":
@@ -1005,10 +1061,7 @@ function reduce(s: State, action: Action): State {
     case "choosing-folder":
       return { ...s, choosingFolder: action.v };
     case "close":
-      // the folder chooser is a step inside the new-project form, so backing out of it is the form
-      if (action.back && s.overlay?.kind === "choose-folder") return { ...s, overlay: s.overlay.form };
-      // a Finder dialog the form was waiting on goes with it (the form sends the cancel)
-      return { ...s, previewTheme: null, choosingFolder: false, ...paletteBack(s, action.back) };
+      return { ...s, previewTheme: null, ...paletteBack(s, action.back) };
     case "toggle":
       return s.overlay?.kind === action.overlay.kind
         ? reducer(s, { a: "close" })
@@ -1091,6 +1144,17 @@ function pruneByRepo<T>(flags: Record<string, T>, repos: RepoInfo[]): Record<str
   return Object.fromEntries(Object.entries(flags).filter(([id]) => keep.has(id)));
 }
 
+/** the new-project page, once the project it made has its main row: it gives way to that row's
+ * first-run screen, carrying what was typed there before the way back */
+function settlePage(s: State): State {
+  const page = s.newProject;
+  if (page?.phase !== "creating" || !page.repoId) return s;
+  const main = mainOf(s, page.repoId);
+  if (!main) return s;
+  const seeded = page.prompt ? withLocal(s, main.id, (l) => ({ ...l, draft: page.prompt })) : s;
+  return { ...seeded, newProject: null };
+}
+
 function onServer(s: State, msg: StoreServerMsg): State {
   switch (msg.t) {
     case "hello": {
@@ -1130,6 +1194,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         defaultAgent: msg.defaultAgent,
         home: msg.home,
         folderDialog: msg.folderDialog,
+        gitIdentity: msg.gitIdentity,
+        newProject:
+          s.newProject ??
+          (msg.repos.length === 0 && msg.rows.length === 0 && msg.pending.length === 0 ? firstPage() : null),
         pending: msg.pending,
         visits: msg.visits,
         // an import this tab was watching may have finished while it was away
@@ -1163,6 +1231,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
         pending: msg.pending,
         activeImportId: stillThere ? watch : null,
         pendingOpen: failed ? false : s.pendingOpen,
+        // a clone the page started is watched in the import pane from here, which takes the slot
+        newProject: started && s.pendingOpen && s.newProject?.phase === "creating" ? null : s.newProject,
       };
     }
     case "path-entries":
@@ -1178,27 +1248,42 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const added = msg.repos.find((r) => !known.has(r.id));
       let activeRepoId = s.activeRepoId;
       let pendingOpen = s.pendingOpen;
+      let newProject = s.newProject;
       if (added && (pendingOpen || !activeRepoId)) {
         // the project this tab asked to open (or the daemon's first repo ever): switch to it; its
         // worktrees frame follows and the landing rule below picks its main row
         activeRepoId = added.id;
         pendingOpen = false;
+        // the page stays up until that main row is listed (see settlePage), or the moment between
+        // the two frames would show the project with nothing in it
+        if (newProject && newProject.phase !== "unmaking") {
+          newProject = { ...newProject, phase: "creating", repoId: added.id };
+        }
       } else if (!msg.repos.some((r) => r.id === activeRepoId)) {
         activeRepoId = msg.repos[0]?.id ?? null;
       }
-      if (activeRepoId === s.activeRepoId) return { ...s, repos: msg.repos, pendingOpen };
+      // a project taken back is gone: the page is the person's again, with its name still in it
+      if (newProject?.phase === "unmaking" && !msg.repos.some((r) => r.id === newProject?.repoId)) {
+        newProject = { ...newProject, phase: "editing", repoId: null };
+      }
+      if (msg.repos.length === 0 && !newProject) newProject = firstPage();
+      // a project made from nothing was committed to, so git has a name and email now, whoever typed them
+      const gitIdentity = s.gitIdentity || msg.repos.some((r) => r.made && !known.has(r.id));
+      if (activeRepoId === s.activeRepoId) return { ...s, repos: msg.repos, pendingOpen, newProject, gitIdentity };
       // A draft is for a worktree in the project it was opened in. Carried into this one, it hides
       // behind a new project's first-run screen and takes over the moment that screen gives way,
       // with the other project's preview behind it.
-      return {
+      return settlePage({
         ...s,
         repos: msg.repos,
         pendingOpen,
+        newProject,
+        gitIdentity,
         activeRepoId,
         activeId: landingIn(s, activeRepoId),
         editor: null,
         draft: null,
-      };
+      });
     }
     case "worktrees": {
       let activeId = s.activeId;
@@ -1217,7 +1302,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // a pending remove is done once the daemon stops listing the row; one it still lists is
       // still in flight (this frame is as likely another worktree's proc event as the reply)
       const removing = s.removing.filter((id) => msg.rows.some((w) => w.id === id));
-      return {
+      return settlePage({
         ...activate(
           {
             ...s,
@@ -1234,7 +1319,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // selection chose nothing: status reads push one whenever a count moves, and one landing
         // between a file opening and its read closed the pane under the person who opened it
         editor: activeId === s.activeId ? s.editor : null,
-      };
+      });
     }
     case "proc": {
       const rows = s.rows.map((w) => (w.id === msg.worktreeId ? { ...w, procs: upsertProc(w.procs, msg.proc) } : w));
@@ -1378,15 +1463,22 @@ function onServer(s: State, msg: StoreServerMsg): State {
         ...l,
         commitFiles: { ...l.commitFiles, [msg.sha]: msg.files },
       }));
-    case "error":
-      // the frame carries no worktree id, so every pending remove comes back (the daemon's next
-      // snapshot re-hides any that did in fact go through) and every landing op comes to rest
+    case "error": {
+      // The frame carries no worktree id, so every pending remove comes back (the daemon's next
+      // snapshot re-hides any that did in fact go through) and every landing op comes to rest. So
+      // does the new-project page: a create not yet answered by its repo is the one refused, and a
+      // project it was taking back stays, so the page gives way to its first-run screen again.
+      const page = s.newProject;
+      const refused = page?.phase === "creating" && !page.repoId;
       return {
         ...s,
         toast: { ok: false, message: msg.message },
         removing: s.removing.length ? [] : s.removing,
         shipping: retireShipping(s.shipping, () => true),
+        newProject: refused ? { ...page, phase: "editing" } : page?.phase === "unmaking" ? null : page,
+        pendingOpen: refused ? false : s.pendingOpen,
       };
+    }
     default: {
       // exhaustive at compile time, but a daemon one version ahead can still send a `t` this
       // build has never heard of, and returning undefined here blanks the tab on the next read

@@ -13,6 +13,10 @@ const inside = (selector: string) => !!document.activeElement?.closest(selector)
 /** the ⌘ chords a focused Monaco keeps for itself; it keeps every ⌥ one too (see useChords) */
 const MONACO_OWNS = new Set<ChordId>(["design", "new", "routes"]);
 
+/** the chords that answer on the new-project page: the rest act on a worktree, and the page is about
+ * a project that has none yet, over one that is not on screen */
+const PAGE_CHORDS = new Set<ChordId>(["project", "commands", "keys", "zen"]);
+
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
  * the handler so the listener is installed once instead of re-subscribing on every state change. */
 export function useChords() {
@@ -40,6 +44,7 @@ export function useChords() {
       if (monaco && chord && (e.altKey || MONACO_OWNS.has(chord.id))) return;
       if (chord) {
         e.preventDefault();
+        if (s.newProject && !PAGE_CHORDS.has(chord.id)) return;
         switch (chord.id) {
           case "worktree": {
             const i = worktreeIndex(chord.digit, s.visible.length);
@@ -155,6 +160,10 @@ export function useChords() {
         } else if (s.overlay) {
           // sub-pickers go back to the palette they came from; everything else just closes
           dispatch({ a: "close", back: isSubPicker(s.overlay) });
+        }
+        // the new-project page: back to the project behind it, unless the page is waiting on an answer
+        else if (s.newProject) {
+          if (s.newProject.phase === "editing") dispatch({ a: "close-new-project" });
         } else if (s.picking) {
           // (while picking, the bridge cancels on its own Escape; this covers focus in the shell)
           const id = previewIdOf(s);

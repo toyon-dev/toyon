@@ -4,7 +4,7 @@ import { restoreArchived } from "../state/actions/archive.ts";
 import { removeWorktrees } from "../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
-import { useActive, useActiveId, useActiveRow, useGreenfield, useRows, useTheme } from "../state/selectors.ts";
+import { useActive, useActiveId, useActiveRow, useFirstRun, useRows, useTheme } from "../state/selectors.ts";
 import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
 import { RightDock } from "../surfaces/chat/RightDock.tsx";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
@@ -49,12 +49,13 @@ export function App() {
   const activeRow = useActiveRow();
   const connected = useStore((s) => s.connected);
   const zen = useStore((s) => s.zen);
-  const greenfield = useGreenfield();
-  // both docks are hidden, not closed, while the composer sits in the centre of an empty project.
-  // So is the rail: its only row is main, which is already the one open, and it cannot offer a new
-  // worktree, since one off the root commit would take the scaffold to a branch while main stayed blank.
-  const leftOpen = useStore((s) => s.leftOpen) && !greenfield;
-  const rightOpen = useStore((s) => s.rightOpen) && !greenfield;
+  const firstRun = useFirstRun();
+  // both docks are hidden, not closed, on the new-project page and while the composer sits in the
+  // centre of an empty project. So is the rail: on the page it lists a project that is not the one
+  // being made, and on an empty project its only row is main, already open, with no new worktree to
+  // offer, since one off the root commit would take the scaffold to a branch while main stayed blank.
+  const leftOpen = useStore((s) => s.leftOpen) && !firstRun;
+  const rightOpen = useStore((s) => s.rightOpen) && !firstRun;
   const railOpen = useStore((s) => s.railOpen);
   const panels = useStore((s) => s.panels);
   const lastActive = useStore((s) => s.lastActive);
@@ -242,7 +243,7 @@ export function App() {
   const dragLeft = useDragResize((ev) => clampW(ev.clientX, 220), setLeftW);
   // keeping the rail open takes its width out of the row, so the docks have to know about it: the
   // chat's drag and the status bar both measure back from the window edge
-  const railPx = greenfield ? 0 : railOpen ? RAIL_OPEN_PX : RAIL_PX;
+  const railPx = firstRun ? 0 : railOpen ? RAIL_OPEN_PX : RAIL_PX;
   const dragRight = useDragResize((ev) => clampW(window.innerWidth - railPx - ev.clientX, 380), setRightW);
 
   // a right-click nothing else answered: bare chrome opens the app's own menu, so the gesture
@@ -268,7 +269,7 @@ export function App() {
         <Center />
         {rightOpen && <div className="dock-resize right" onPointerDown={dragRight} />}
         <RightDock width={rightW} />
-        {!greenfield && <WtRail />}
+        {!firstRun && <WtRail />}
       </div>
       {toast && (
         <div className={cx("toast", !toast.ok && "err")} role="status">

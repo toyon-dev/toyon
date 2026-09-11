@@ -29,6 +29,10 @@
   .field-ui {
     font: var(--type-ui);
   }
+  /* the lead face: a page's one question, typed at the size its answer is read at afterwards */
+  .field-lead {
+    font: var(--type-ui-lg);
+  }
   /* no box: the region around it is the field. The composer carries the sunken ground for the
      whole panel, and a picker's strip carries it across the top of its panel. */
   .field-bare {

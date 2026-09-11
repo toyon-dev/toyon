@@ -4,8 +4,10 @@
 
 import * as acp from "@agentclientprotocol/sdk";
 import { fireAndForget, log } from "../../core/log.ts";
+import type { Quick } from "../adapter.ts";
 import { agentModeFor } from "../modes.ts";
 import type { AgentSpec } from "../registry.ts";
+import { readOptions } from "./options.ts";
 
 export interface Ask {
   cwd: string;
@@ -18,6 +20,8 @@ export interface Ask {
   /** what initialize advertised. Nothing of a side session should outlive its answer: an adapter
    * that keeps its conversations would otherwise list every question in its own resume picker. */
   caps: { close: boolean; delete: boolean };
+  /** absent asks on whatever model the agent opens a session on */
+  quick?: Quick;
   tag: string;
 }
 
@@ -34,6 +38,23 @@ export async function askOnce(ctx: acp.ClientContext, a: Ask): Promise<string | 
     text += t;
   });
   try {
+    if (a.quick) {
+      const model = readOptions(s.configOptions).get("model");
+      const quick = a.spec.quickModel;
+      if (quick && model?.ids.includes(quick)) {
+        // before the mode: Claude reconciles its permission mode against the model it is moved to
+        if (model.current !== quick) {
+          await ctx.request(acp.methods.agent.session.setConfigOption, {
+            sessionId: s.sessionId,
+            configId: model.id,
+            value: quick,
+          });
+        }
+      } else if (a.quick === "require") {
+        log.debug(a.tag, `ask: ${a.spec.id} offers no quick model; not asked`);
+        return null;
+      }
+    }
     if (s.modes) {
       const readOnly = agentModeFor(
         a.spec,

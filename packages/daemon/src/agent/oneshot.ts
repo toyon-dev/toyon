@@ -5,6 +5,7 @@ import * as acp from "@agentclientprotocol/sdk";
 import { log } from "../core/log.ts";
 import { askOnce } from "./acp/ask.ts";
 import { spawnAcp } from "./acp/transport.ts";
+import type { AskOpts } from "./adapter.ts";
 import { decideUnattended } from "./policy.ts";
 import type { AgentRegistry } from "./registry.ts";
 import { worktreeBounds } from "./sandbox.ts";
@@ -15,6 +16,7 @@ export async function askFreshAgent(
   cwd: string,
   system: string,
   prompt: string,
+  opts: AskOpts = {},
 ): Promise<string | null> {
   const spec = agents.require(agentId);
   const bounds = await worktreeBounds(cwd);
@@ -45,6 +47,7 @@ export async function askFreshAgent(
       system,
       prompt,
       spec,
+      ...(opts.quick ? { quick: opts.quick } : {}),
       route: (id, onText) => {
         listeners.set(id, onText);
         return () => listeners.delete(id);

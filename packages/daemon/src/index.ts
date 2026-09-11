@@ -113,7 +113,7 @@ const { branded, stop: stopServer } = startServer({
     agents,
     accounts,
     attachments,
-    planTasks: makePlanner(agents, state),
+    planTasks: makePlanner(agents),
     folderDialog: folderDialog(),
   },
 });

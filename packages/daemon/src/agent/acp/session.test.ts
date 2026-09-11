@@ -64,8 +64,9 @@ interface FakeAgent {
   script: PromptScript;
   loadSession: boolean;
   failLoad: boolean;
-  /** session/close and session/delete as `<method> <sessionId>`, in the order they arrived */
-  ends: string[];
+  /** what a side question asks for besides new and prompt, in the order it arrived:
+   * `config <id>=<value>`, `mode <id>`, `close <sessionId>`, `delete <sessionId>` */
+  calls: string[];
 }
 
 function fakeAgent(
@@ -105,7 +106,7 @@ function fakeAgent(
     script,
     loadSession: opts.loadSession ?? true,
     failLoad: false,
-    ends: [],
+    calls: [],
     app: null!,
   };
   let n = 0;
@@ -204,10 +205,12 @@ function fakeAgent(
     })
     .onRequest(acp.methods.agent.session.setMode, (c) => {
       f.modes.push(c.params.modeId);
+      f.calls.push(`mode ${c.params.modeId}`);
       return {};
     })
     .onRequest(acp.methods.agent.session.setConfigOption, (c) => {
       f.configs.push(`${c.params.configId}=${String(c.params.value)}`);
+      f.calls.push(`config ${c.params.configId}=${String(c.params.value)}`);
       if (c.params.configId === "model") f.model = String(c.params.value);
       else f.effort = String(c.params.value);
       // the reply is the whole list, rebuilt: a model without effort takes that option away
@@ -218,11 +221,11 @@ function fakeAgent(
       return f.script(c.params, c.client);
     })
     .onRequest(acp.methods.agent.session.close, (c) => {
-      f.ends.push(`close ${c.params.sessionId}`);
+      f.calls.push(`close ${c.params.sessionId}`);
       return {};
     })
     .onRequest(acp.methods.agent.session.delete, (c) => {
-      f.ends.push(`delete ${c.params.sessionId}`);
+      f.calls.push(`delete ${c.params.sessionId}`);
       return {};
     })
     .onNotification(acp.methods.agent.session.cancel, () => {
@@ -1115,8 +1118,8 @@ describe("AcpSession", () => {
     const w = world(fake, { ...claudeSpec, sideMeta });
     expect(await w.session.ask("You name things.", "Name this")).toBe("sticky-header");
     expect(fake.newSessions[0]!._meta).toEqual({ ...sideMeta, systemPrompt: "You name things." });
-    for (let i = 0; i < 100 && fake.ends.length < 2; i++) await Bun.sleep(5);
-    expect(fake.ends).toEqual(["close s1", "delete s1"]);
+    for (let i = 0; i < 100 && fake.calls.length < 2; i++) await Bun.sleep(5);
+    expect(fake.calls).toEqual(["close s1", "delete s1"]);
     await w.session.close();
   });
 
@@ -1125,7 +1128,7 @@ describe("AcpSession", () => {
     const w = world(fake, codexSpec);
     expect(await w.session.ask("sys", "q")).toBe("ok");
     await Bun.sleep(20);
-    expect(fake.ends).toEqual([]);
+    expect(fake.calls).toEqual([]);
     // a prompt-prefix agent with no side _meta sends none at all
     expect(fake.newSessions[0]!._meta).toBeUndefined();
     await w.session.close();
@@ -1604,6 +1607,26 @@ describe("AcpSession options", () => {
     w.session.send("four");
     await w.idle();
     expect(fake.configs).toEqual(["model=big-model"]);
+    await w.session.close();
+  });
+
+  test("a side question on the agent's quick model sets it before the read-only mode", async () => {
+    const fake = fakeAgent(say("sticky-header"), { withModes: true, currentMode: "agent" });
+    const w = world(fake, { ...claudeSpec, quickModel: "big-model" });
+    expect(await w.session.ask("sys", "name this", { quick: "prefer" })).toBe("sticky-header");
+    expect(fake.calls).toEqual(["config model=big-model", "mode read-only"]);
+    await w.session.close();
+  });
+
+  test("with the quick model gone, prefer asks on the default and require asks nothing", async () => {
+    const fake = fakeAgent(say("ok"), { caps: { close: true } });
+    const w = world(fake, { ...claudeSpec, quickModel: "retired-model" });
+    expect(await w.session.ask("sys", "name this", { quick: "prefer" })).toBe("ok");
+    expect(await w.session.ask("sys", "recap this", { quick: "require" })).toBeNull();
+    // the second session opened and was cleaned up, but never saw a prompt or a model switch
+    expect(fake.prompts).toHaveLength(1);
+    for (let i = 0; i < 100 && fake.calls.length < 2; i++) await Bun.sleep(5);
+    expect(fake.calls).toEqual(["close s1", "close s2"]);
     await w.session.close();
   });
 

@@ -74,6 +74,7 @@ function make() {
   const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
   const planned: string[][] = [];
   const chosen: Array<string | null> = [];
+  const planArgs: Array<[prompt: string, cwd: string, agent: string]> = [];
   const services: Services = {
     state,
     hub,
@@ -89,7 +90,10 @@ function make() {
     agents,
     accounts,
     attachments,
-    planTasks: async () => planned.shift() ?? null,
+    planTasks: async (prompt, cwd, agent) => {
+      planArgs.push([prompt, cwd, agent]);
+      return planned.shift() ?? null;
+    },
     folderDialog: { choose: async () => chosen.shift() ?? null, cancel: () => {} },
   };
   const replies: ServerMsg[] = [];
@@ -108,7 +112,7 @@ function make() {
     watchTerminal: (id, stream) => terms.add(streamKey(id, stream)),
     unwatchTerminal: (id, stream) => terms.delete(streamKey(id, stream)),
   };
-  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, chosen, ...f };
+  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, chosen, planArgs, ...f };
 }
 
 /** the repo registered, and its main row, which the file tests read and write through */
@@ -541,7 +545,7 @@ describe("handlers", () => {
   });
 
   test("batch-worktrees plans with the injected planner and creates one worktree per task", async () => {
-    const { services, ctx, replies, planned, repo } = make();
+    const { services, ctx, replies, planned, planArgs, repo } = make();
     const r = await services.repos.register(repo);
     r.needsSetup = false;
     planned.push(["first task", "second task"]);
@@ -556,6 +560,8 @@ describe("handlers", () => {
     // the model the picker chose rides with every planned worktree, as it does on create-worktree
     expect(made.map((x) => x.model)).toEqual(["gpt-b", "gpt-b"]);
     expect(replies.at(-1)).toMatchObject({ t: "shipped", ok: true, message: "batch: 2 worktree(s) started" });
+    // the request is split by the agent that will run the tasks, not by the default one
+    expect(planArgs.map((a) => a[2])).toEqual(["codex"]);
   });
 
   test("read-file and write-file refuse paths outside the worktree, and still answer", async () => {

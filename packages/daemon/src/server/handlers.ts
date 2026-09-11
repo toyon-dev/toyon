@@ -19,7 +19,7 @@ import type { FileService } from "../files/service.ts";
 import { browsePath, describeFolder } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { RouteService } from "../routes/service.ts";
-import type { RuntimeRegistry } from "../runtime/registry.ts";
+import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import type { ThemeStore } from "../themes/store.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
@@ -45,8 +45,8 @@ export interface Services {
   accounts: AgentAccounts;
   /** images attached to chat messages; the http layer serves them back to the shell */
   attachments: AttachmentStore;
-  /** request → 1–5 independent tasks (the default agent by default; tests inject a stub) */
-  planTasks: (prompt: string, cwd: string) => Promise<string[] | null>;
+  /** request → 1–5 independent tasks, asked of the agent that will run them (tests inject a stub) */
+  planTasks: (prompt: string, cwd: string, agentId: string) => Promise<string[] | null>;
   /** the OS folder dialog behind the new-project form's folder button (tests inject a stub) */
   folderDialog: FolderDialog;
 }
@@ -215,7 +215,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     fireAndForget(
       msg.repoId,
       (async () => {
-        const tasks = (await s.planTasks(msg.prompt, repo.path)) ?? [msg.prompt];
+        const agent = msg.agent ?? s.state.defaultAgent ?? DEFAULT_AGENT_ID;
+        const tasks = (await s.planTasks(msg.prompt, repo.path, agent)) ?? [msg.prompt];
         let failed = 0;
         for (const task of tasks) {
           try {

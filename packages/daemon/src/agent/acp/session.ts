@@ -24,7 +24,7 @@ import { DEFAULT_PERMISSION_MODE, nextNumbers } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { AuthObservation } from "../accounts.ts";
-import type { AgentAdapter, AskReply, AuthOutcome, SendOpts } from "../adapter.ts";
+import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, SendOpts } from "../adapter.ts";
 import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan } from "../modes.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
@@ -442,7 +442,7 @@ export class AcpSession implements AgentAdapter {
     }
   }
 
-  async ask(system: string, prompt: string): Promise<string | null> {
+  async ask(system: string, prompt: string, opts: AskOpts = {}): Promise<string | null> {
     if (this.stopped) return null;
     this.asking++;
     this.clearReaper();
@@ -453,6 +453,7 @@ export class AcpSession implements AgentAdapter {
         system,
         prompt,
         spec: conn.spec,
+        ...(opts.quick ? { quick: opts.quick } : {}),
         route: (id, onText) => {
           conn.side.set(id, onText);
           return () => {

@@ -1,11 +1,11 @@
-// The two small questions toyon asks an agent on its own behalf: name a task, split a request into
+// The small questions toyon asks an agent on its own behalf: name a task, split a request into
 // tasks. Prompts and answer parsing live here; asking goes through the worktree's own agent
-// (AcpSession.ask) or a throwaway one (oneshot.ts), so the daemon carries no vendor SDK.
+// (AcpSession.ask) or a throwaway one (oneshot.ts), so the daemon carries no vendor SDK. Both
+// prefer the agent's quick model and fall back to its default: a worktree still wants a name, and a
+// batch still wants splitting, on an agent that offers no small model.
 
 import type { WorktreeInfo } from "@toyon/shared";
-import type { StateStore } from "../core/state.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
-import { DEFAULT_AGENT_ID } from "../runtime/registry.ts";
 import { askFreshAgent } from "./oneshot.ts";
 import type { AgentRegistry } from "./registry.ts";
 
@@ -58,13 +58,11 @@ export function parsePlan(text: string | null): string[] | null {
 /** names a task on the worktree's own agent (the adapter it already runs, a side session) */
 export function makeNamer(runtime: RuntimeRegistry) {
   return async (task: string, wt: WorktreeInfo): Promise<string | null> =>
-    parseName(await runtime.ensureAgent(wt).agent.ask(NAME_SYSTEM, namePrompt(task)));
+    parseName(await runtime.ensureAgent(wt).agent.ask(NAME_SYSTEM, namePrompt(task), { quick: "prefer" }));
 }
 
-/** plans a batch on the default agent, spawned for the question (no worktree exists yet) */
-export function makePlanner(agents: AgentRegistry, state: StateStore) {
-  return async (request: string, cwd: string): Promise<string[] | null> =>
-    parsePlan(
-      await askFreshAgent(agents, state.defaultAgent ?? DEFAULT_AGENT_ID, cwd, PLAN_SYSTEM, planPrompt(request)),
-    );
+/** plans a batch on the agent the batch will run, spawned for the question (no worktree exists yet) */
+export function makePlanner(agents: AgentRegistry) {
+  return async (request: string, cwd: string, agentId: string): Promise<string[] | null> =>
+    parsePlan(await askFreshAgent(agents, agentId, cwd, PLAN_SYSTEM, planPrompt(request), { quick: "prefer" }));
 }

@@ -324,7 +324,7 @@ export function Composer({
   const placeholderText = !active
     ? "no worktree selected"
     : greenfield
-      ? "describe the app; the agent scaffolds it here"
+      ? `describe ${title}…`
       : drafting || spawning
         ? "describe a change"
         : onMain

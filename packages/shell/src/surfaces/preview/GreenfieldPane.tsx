@@ -43,16 +43,14 @@ export function GreenfieldPane({ active }: { active: OwnedWorktree }) {
 
   return (
     <div className="greenfield-pane">
-      <p className="greenfield-lead">
-        what should{" "}
+      <p className="greenfield-title">
         {repo?.made ? (
           <Button variant="inline" onClick={back} {...tip("Rename or move this project")}>
             {title}
           </Button>
         ) : (
           title
-        )}{" "}
-        become?
+        )}
       </p>
       <Composer active={active} greenfield />
     </div>

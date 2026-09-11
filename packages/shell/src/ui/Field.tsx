@@ -28,11 +28,14 @@ type Shared = {
   font?: FieldFont;
   /** no box of its own, because the region it sits in is the box: the composer, a picker's strip */
   bare?: boolean;
+  /** a line under it instead of a box, for a form that has to read as a page rather than a form:
+   * the new-project page's name and email. `bare` is the same idea with nothing left at all. */
+  rule?: boolean;
   /** how the field sits in its parent (flex, width, margin). Never its box or its face. */
   className?: string;
 };
 
-function classes({ size = "sm", font, bare, className }: Shared): string {
+function classes({ size = "sm", font, bare, rule, className }: Shared): string {
   const face = font ?? (size === "lg" ? "ui" : "mono");
   return cx(
     "field",
@@ -40,6 +43,7 @@ function classes({ size = "sm", font, bare, className }: Shared): string {
     face === "ui" && "field-ui",
     face === "lead" && "field-lead",
     bare && "field-bare",
+    rule && "field-rule",
     className,
   );
 }
@@ -48,15 +52,15 @@ function classes({ size = "sm", font, bare, className }: Shared): string {
 // the props, so spreading `...rest` onto the element drops it without a type error. The picker's
 // focus-on-mount, the composer's caret placement and the prompt's field all reach in this way.
 export const Field = forwardRef<HTMLInputElement, Omit<ComponentProps<"input">, "size"> & Shared>(function Field(
-  { size, font, bare, className, ...rest },
+  { size, font, bare, rule, className, ...rest },
   ref,
 ) {
-  return <input ref={ref} className={classes({ size, font, bare, className })} {...rest} />;
+  return <input ref={ref} className={classes({ size, font, bare, rule, className })} {...rest} />;
 });
 
 export const TextArea = forwardRef<HTMLTextAreaElement, ComponentProps<"textarea"> & Shared>(function TextArea(
-  { size, font, bare, className, ...rest },
+  { size, font, bare, rule, className, ...rest },
   ref,
 ) {
-  return <textarea ref={ref} className={classes({ size, font, bare, className })} {...rest} />;
+  return <textarea ref={ref} className={classes({ size, font, bare, rule, className })} {...rest} />;
 });

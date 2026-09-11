@@ -40,6 +40,7 @@ const PRIMITIVES = new Set([
   ".field-lg",
   ".field-ui",
   ".field-lead",
+  ".field-rule",
   ".field-bare",
 ]);
 

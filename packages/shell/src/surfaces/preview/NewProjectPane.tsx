@@ -224,6 +224,7 @@ export function NewProjectPane({ page }: { page: NewProject }) {
             <Field
               size="md"
               font="ui"
+              rule
               value={identity.name}
               placeholder="Your name"
               autoComplete="name"
@@ -234,6 +235,7 @@ export function NewProjectPane({ page }: { page: NewProject }) {
             <Field
               size="md"
               font="ui"
+              rule
               type="email"
               value={identity.email}
               placeholder="Email"

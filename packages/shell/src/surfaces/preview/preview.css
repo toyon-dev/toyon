@@ -40,10 +40,12 @@
       padding: 24px;
     }
   }
-  /* ---- first run: the new-project page, and the empty project's composer it gives way to ----
-     One column, and both hold their first line at the same height, so the name typed on the page is
-     where "what should it become?" reads a moment later. Centred, each would sit by half of whatever
-     is under its first line, and the two have different things under them. */
+  /* ---- first run: the new-project page, and the empty project it gives way to ----
+     One column, written rather than filled in: the name is a title with no box, what it needs is on
+     rules under it, and the box it becomes is a page to write on. Both screens hold their first line
+     at the same height and the same size, so the name typed on the page is exactly where the
+     project's title reads a moment later. Centred, each would sit by half of whatever is under its
+     first line, and the two have different things under them. */
   .greenfield-pane,
   .new-project-pane {
     height: 100%;
@@ -63,7 +65,7 @@
   /* an empty folder made the project keeps its own name, so it is read at the field's size, not edited */
   .new-project-name {
     margin: 0;
-    font: var(--type-ui-lg);
+    font: var(--type-ui-xl);
     color: var(--text0);
     overflow-wrap: anywhere;
   }
@@ -113,17 +115,22 @@
     align-self: flex-start;
     margin-left: calc(-1 * var(--btn-pad-x));
   }
-  .greenfield-lead {
+  /* the project's own name, where the field that typed it was: a title, not a question about it */
+  .greenfield-title {
     margin: 0;
-    font: var(--type-ui-lg);
-    color: var(--text1);
+    font: var(--type-ui-xl);
+    color: var(--text0);
+    overflow-wrap: anywhere;
   }
-  /* the dock's composer fills the panel below the transcript; here it is a box on a page, so it
-   takes a frame of its own and a height that reads as a box rather than a panel */
+  /* The dock's composer is a region at the foot of a panel, so it carries a ground, an edge and its
+   own inset. Here it is the page under the title, and all three have to go: a box drawn around the
+   first thing anyone writes reads as a form to fill in rather than a page to write on, and the
+   inset would leave the first line sitting a few pixels right of the name above it. */
   .greenfield-pane .composer {
-    border: 1px solid var(--border0);
-    border-radius: var(--radius-md);
     min-height: 120px;
+    background: none;
+    border-top: none;
+    padding: 0;
   }
 
   /* ---- repo setup pane (replaces the preview while a repo's config is unconfirmed) ----

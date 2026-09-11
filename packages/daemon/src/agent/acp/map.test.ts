@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
-import { mapCommands, mapStopReason, mapUpdate, summarizeToolOutput, type ToolMemos, truncate } from "./map.ts";
+import type { RequestPermissionRequest, RequestPermissionResponse, SessionUpdate } from "@agentclientprotocol/sdk";
+import {
+  endOfAsk,
+  mapCommands,
+  mapStopReason,
+  mapUpdate,
+  summarizeToolOutput,
+  type ToolMemos,
+  truncate,
+} from "./map.ts";
 
 const run = (updates: SessionUpdate[], memos: ToolMemos = new Map()) =>
   updates.flatMap((u) => mapUpdate(u, memos, "t"));
@@ -291,6 +299,66 @@ describe("summarizeToolOutput / truncate / stop reasons", () => {
   test("cancelled reads as interrupted, others pass through", () => {
     expect(mapStopReason("cancelled")).toBe("interrupted");
     expect(mapStopReason("end_turn")).toBe("end_turn");
+  });
+});
+
+describe("network asks", () => {
+  const call = (name: string): SessionUpdate => ({
+    sessionUpdate: "tool_call",
+    toolCallId: "n1",
+    name,
+    title: name,
+    kind: "other",
+    status: "pending",
+    rawInput: { host: "fonts.googleapis.com" },
+  });
+  const ask = (name = "SandboxNetworkAccess"): RequestPermissionRequest => ({
+    sessionId: "s",
+    toolCall: { toolCallId: "n1", name, title: "fonts.googleapis.com", kind: "other" },
+    options: [
+      { optionId: "yes", name: "Yes", kind: "allow_once" },
+      { optionId: "no", name: "No", kind: "reject_once" },
+    ],
+  });
+  const chose = (optionId: string): RequestPermissionResponse => ({ outcome: { outcome: "selected", optionId } });
+
+  test("the row reads as a fetch of the host, not as the check's name", () => {
+    expect(run([call("SandboxNetworkAccess")])).toEqual([
+      {
+        type: "tool-start",
+        toolId: "n1",
+        name: "network",
+        input: { host: "fonts.googleapis.com" },
+        kind: "fetch",
+        title: "fonts.googleapis.com",
+      },
+    ]);
+  });
+
+  test("the answer ends the row once: allowed, or refused as an error", () => {
+    const memos: ToolMemos = new Map();
+    run([call("SandboxNetworkAccess")], memos);
+    expect(endOfAsk(ask(), chose("yes"), memos)).toEqual({
+      type: "tool-end",
+      toolId: "n1",
+      output: "allowed",
+      isError: false,
+    });
+    expect(endOfAsk(ask(), chose("yes"), memos)).toBeNull();
+
+    const refused: ToolMemos = new Map();
+    run([call("SandboxNetworkAccess")], refused);
+    expect(endOfAsk(ask(), chose("no"), refused)).toMatchObject({ output: "refused", isError: true });
+    const cancelled: ToolMemos = new Map();
+    run([call("SandboxNetworkAccess")], cancelled);
+    expect(endOfAsk(ask(), { outcome: { outcome: "cancelled" } }, cancelled)).toMatchObject({ isError: true });
+  });
+
+  test("any other request leaves its call to the tool that runs it", () => {
+    const memos: ToolMemos = new Map();
+    run([call("Bash")], memos);
+    expect(endOfAsk(ask("Bash"), chose("yes"), memos)).toBeNull();
+    expect(memos.get("n1")?.ended).toBe(false);
   });
 });
 

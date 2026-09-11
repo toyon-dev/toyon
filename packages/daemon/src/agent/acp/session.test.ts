@@ -548,6 +548,41 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a network ask's row ends with its answer, since no tool runs behind it to end it", async () => {
+    const host = "registry.npmjs.org";
+    const fake = fakeAgent(async (p, client) => {
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: p.sessionId,
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "n1",
+          name: "SandboxNetworkAccess",
+          title: "SandboxNetworkAccess",
+          kind: "other",
+          status: "pending",
+          rawInput: { host },
+        },
+      });
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: { toolCallId: "n1", name: "SandboxNetworkAccess", title: host, kind: "other", rawInput: { host } },
+        options: [
+          { optionId: "yes", name: "Yes", kind: "allow_once" },
+          { optionId: "no", name: "No", kind: "reject_once" },
+        ],
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake);
+    w.session.send("install");
+    await w.idle();
+    expect(w.events.filter((e) => "toolId" in e && e.toolId === "n1")).toEqual([
+      { type: "tool-start", toolId: "n1", name: "network", input: { host }, kind: "fetch", title: host },
+      { type: "tool-end", toolId: "n1", output: "allowed", isError: false },
+    ]);
+    await w.session.close();
+  });
+
   test("prompt-prefix agents get SYSTEM_APPEND on the first prompt of a new session only, and their mode set", async () => {
     const fake = fakeAgent(say("ok"), { withModes: true });
     const w = world(fake, codexSpec);

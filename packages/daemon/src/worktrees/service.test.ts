@@ -48,6 +48,15 @@ async function registered(): Promise<string> {
 
 const settle = () => new Promise((r) => setTimeout(r, 50));
 
+/** wait for background work to reach a state, where a fixed settle loses the race under load */
+async function until(done: () => boolean, ms = 15_000): Promise<void> {
+  const stop = Date.now() + ms;
+  while (!done()) {
+    if (Date.now() > stop) throw new Error("timed out waiting");
+    await Bun.sleep(10);
+  }
+}
+
 describe("register", () => {
   test("creates the main pseudo-worktree with an agent and running procs", async () => {
     const repoId = await registered();
@@ -626,6 +635,9 @@ describe("landing", () => {
   test("sync and commit refresh the badge counts at once and push a worktrees frame", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
+    // create's setup and procs run behind it, and runtime.start emits once the proxy is up; a frame
+    // from that landing inside a sync or commit below would be counted as theirs
+    await until(() => w.runtime.get(wt.id)?.proxy != null);
     let frames = 0;
     w.hub.on("worktreesChanged", () => frames++);
     const row = async () => (await w.worktrees.rows()).find((s) => s.id === wt.id)!;

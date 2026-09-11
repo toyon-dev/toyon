@@ -20,7 +20,6 @@ describe("matchChord", () => {
     expect(matchChord(ev("l"))).toEqual({ id: "composer" });
     expect(matchChord(ev("L", { shift: true }))).toEqual({ id: "rail" }); // shift keeps the rail's Firefox alias apart
     expect(matchChord(ev("o"))).toEqual({ id: "project" }); // VS Code's open key
-    expect(matchChord(ev("O", { shift: true }))).toBeNull(); // left to go-to-symbol
     expect(matchChord(ev("/"))).toBeNull(); // left to Monaco's toggle-comment
   });
   test("shift chords match whether the browser reports upper or lower case", () => {
@@ -101,6 +100,9 @@ describe("matchChord", () => {
     expect(matchChord(ev("r", { meta: false, ctrl: true }))).toEqual({ id: "project" });
     expect(matchChord(ev("r", { meta: false, ctrl: true }), { guest: true })).toBeNull(); // history search
     expect(matchChord(ev("o"), { guest: true })).toEqual({ id: "project" });
+    expect(matchChord(ev("O", { shift: true }))).toEqual({ id: "project" });
+    expect(matchChord(ev("o", { shift: true }))).toEqual({ id: "project" });
+    expect(matchChord(ev("O", { meta: false, ctrl: true, shift: true }))).toBeNull();
     expect(matchChord(ev("r"))).toBeNull(); // ⌘R reloads
     expect(matchChord(ev("R", { meta: false, ctrl: true, shift: true }))).toBeNull();
     // an alias that is not hostOnly still reaches a guest: ⌃Tab walks from inside the terminal

@@ -22,7 +22,6 @@ import {
   useActiveId,
   useArchivedOpen,
   useDiscoveredOpen,
-  useGreenfield,
   useOffline,
   useVisibleArchived,
   useVisibleDiscovered,
@@ -59,7 +58,6 @@ export function WtRail() {
     const t = setInterval(() => setMinute((n) => n + 1), 60_000);
     return () => clearInterval(t);
   }, []);
-  const greenfield = useGreenfield();
   // the draft tab: the new-worktree row is the selected one while a worktree is being drafted
   const draftOpen = useStore((s) => s.draft !== null);
   const discovered = useVisibleDiscovered();
@@ -148,7 +146,7 @@ export function WtRail() {
       : discoveredItems(w, { termOpen, clientId }, deps);
 
   /* Under main and above the tasks: a new worktree is the newest task, so it appears right below the
-   * row that made it. Not drawn on an empty project (see where it is placed). */
+   * row that made it. */
   const newRow = (
     <button
       // a row like the worktree rows around it, since the draft tab it opens is one: the
@@ -284,7 +282,7 @@ export function WtRail() {
           e.preventDefault();
           const down = e.key === "ArrowDown";
           const at = worktrees.findIndex((w) => w.id === id);
-          if (lead && !greenfield && at === (down ? 0 : 1)) {
+          if (lead && at === (down ? 0 : 1)) {
             // stepping onto the new-worktree row opens the draft, which hands the keyboard to the
             // composer, which is what it is for; ⌥↑/↓ walks on from there
             if (!draftOpen) dispatch({ a: "open-draft" });
@@ -451,9 +449,7 @@ export function WtRail() {
       >
         <div className="rail-list" ref={listRef}>
           {lead && railRow(lead)}
-          {/* not on an empty project: a worktree off the root commit would take the scaffold to a
-              branch while main stayed blank, and the row comes back with the first message */}
-          {!graftMode && !greenfield && newRow}
+          {!graftMode && newRow}
           {tasks.map(railRow)}
           {graftMode && (
             <div className="rail-graft">

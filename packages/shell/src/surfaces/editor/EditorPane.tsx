@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
-import { fileItems, nextSeq } from "../../state/actions/file.ts";
+import { fileItems } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
-import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import { useDispatch, useFileSync, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
+import type { EditorSync } from "../../state/fileSync.ts";
 import { useTheme } from "../../state/selectors.ts";
 import { type EditorFile, localOf, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
@@ -16,6 +17,9 @@ import { OpenInMenu } from "./OpenInMenu.tsx";
 import "./editor.css";
 
 const Editor = lazy(() => import("./Editor.tsx"));
+
+/** an editor with nothing behind it (no daemon in a test): it holds the text and saves nowhere */
+const NO_SYNC: EditorSync = { attach: () => {}, edited: () => {}, saveNow: () => {} };
 
 /** the editor pane: the open file as its diff against main or on its own, with autosave, line-hover → preview highlight */
 export function EditorPane({
@@ -34,21 +38,27 @@ export function EditorPane({
   const dispatch = useDispatch();
   const store = useStoreInstance();
   const sock = useSock();
+  const files = useFileSync();
   const theme = useTheme();
+  const { worktreeId, path, ref } = editor;
   const wtPath = useStore((s) => {
-    const w = worktreeById(s, editor.worktreeId)?.worktree;
+    const w = worktreeById(s, worktreeId)?.worktree;
     return w && wtDir(w);
   });
-  const absPath = wtPath ? `${wtPath}/${editor.path}` : editor.path;
+  const absPath = wtPath ? `${wtPath}/${path}` : path;
   // a commit's copy: read-only, and none of the working-tree wiring below applies to it
-  const history = editor.ref !== undefined;
-  const cached = useStore((s) => localOf(s, editor.worktreeId).changedRanges[editor.path]);
+  const history = ref !== undefined;
+  const sync = useMemo(
+    () => files?.bind({ worktreeId, path, ...(ref ? { ref } : {}) }) ?? NO_SYNC,
+    [files, worktreeId, path, ref],
+  );
+  const cached = useStore((s) => localOf(s, worktreeId).changedRanges[path]);
   // warm the line-offset/ranges cache so line-hover highlights align; a git-status wipes the
   // cache, so `cached` is a dependency and the request re-fires. Ranges are measured against the
   // working tree, so for a commit they would light up lines the page never rendered.
   useEffect(() => {
-    if (!cached && !history) sock?.send({ t: "changed-ranges", worktreeId: editor.worktreeId, path: editor.path });
-  }, [editor.worktreeId, editor.path, cached, history, sock]);
+    if (!cached && !history) sock?.send({ t: "changed-ranges", worktreeId, path });
+  }, [worktreeId, path, cached, history, sock]);
   const lineOff = cached?.offset ?? 0;
   const disk = editor.disk;
   // until the first read decides, the toggle offers the file, as it does from a diff
@@ -63,15 +73,15 @@ export function EditorPane({
       height={full ? undefined : height}
       resizable={!full}
       onDragStart={onDragStart}
-      title={history ? `${editor.path} at ${editor.ref?.slice(0, 7)}` : editor.path}
+      title={history ? `${path} at ${ref?.slice(0, 7)}` : path}
       // the header names the file, so it answers with the file's actions, the same list its row in
       // the changes panel has; a commit's copy is read-only, so no discard
       menu={() =>
         wtPath
           ? fileItems(
-              { id: editor.worktreeId, dir: wtPath },
-              editor.path,
-              { discard: !history, ref: editor.ref, showing: editor.view ?? undefined },
+              { id: worktreeId, dir: wtPath },
+              path,
+              { discard: !history, ref, showing: editor.view ?? undefined },
               { sock, dispatch },
             )
           : []
@@ -92,10 +102,7 @@ export function EditorPane({
           >
             <Icon name={other === "diff" ? "diff" : "text"} className="icon-inline" /> {other}
           </Button>
-          <OpenInMenu
-            absPath={absPath}
-            onReveal={() => sock?.send({ t: "reveal", worktreeId: editor.worktreeId, path: editor.path })}
-          />
+          <OpenInMenu absPath={absPath} onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />
         </>
       }
     >
@@ -104,43 +111,37 @@ export function EditorPane({
           <ErrorBoundary pane>
             <Suspense fallback={<div className="empty">loading {view}…</div>}>
               <Editor
-                before={disk.before}
-                after={disk.after}
-                path={editor.path}
-                line={line}
+                // one mount per file: the models it holds are that file's
+                key={`${worktreeId}\n${ref ?? ""}\n${path}`}
+                file={{ worktreeId, path, ...(ref ? { ref } : {}) }}
+                disk={disk}
                 view={view}
-                theme={theme}
+                openSeq={editor.seq}
+                line={line}
+                focus={editor.focus}
                 readOnly={history || !disk.writable}
-                onSave={(path, content) =>
-                  sock?.send({
-                    t: "write-file",
-                    worktreeId: editor.worktreeId,
-                    path,
-                    content,
-                    base: disk.version,
-                    seq: nextSeq(),
-                  })
-                }
+                theme={theme}
+                sync={sync}
                 // the editor knows the lines; whose file they are, and at which commit, is the pane's
-                onCopy={(path, lines, clipboard) =>
+                onCopy={(copied, lines, clipboard) =>
                   writeCopiedSource(clipboard, {
-                    worktreeId: editor.worktreeId,
-                    path,
+                    worktreeId,
+                    path: copied,
                     ...lines,
-                    ...(editor.ref ? { ref: editor.ref } : {}),
+                    ...(ref ? { ref } : {}),
                   })
                 }
-                onChat={(path, taken) =>
+                onChat={(taken, selection) =>
                   addToChat(
                     store,
-                    taken && {
-                      worktreeId: editor.worktreeId,
-                      text: taken.text,
+                    selection && {
+                      worktreeId,
+                      text: selection.text,
                       source: {
-                        path,
-                        startLine: taken.startLine,
-                        endLine: taken.endLine,
-                        ...(editor.ref ? { ref: editor.ref } : {}),
+                        path: taken,
+                        startLine: selection.startLine,
+                        endLine: selection.endLine,
+                        ...(ref ? { ref } : {}),
                       },
                     },
                   )
@@ -148,13 +149,13 @@ export function EditorPane({
                 onLineHover={
                   history
                     ? undefined
-                    : (line) => {
-                        if (line == null) previewBus.post(editor.worktreeId, { type: "highlight-clear" });
+                    : (hovered) => {
+                        if (hovered == null) previewBus.post(worktreeId, { type: "highlight-clear" });
                         else
-                          previewBus.post(editor.worktreeId, {
+                          previewBus.post(worktreeId, {
                             type: "highlight-file",
-                            path: editor.path,
-                            ranges: [[line + lineOff, line + lineOff]],
+                            path,
+                            ranges: [[hovered + lineOff, hovered + lineOff]],
                           });
                       }
                 }
@@ -162,7 +163,7 @@ export function EditorPane({
             </Suspense>
           </ErrorBoundary>
         ) : (
-          <div className="empty">loading {editor.path}…</div>
+          <div className="empty">loading {path}…</div>
         )}
       </div>
     </Pane>

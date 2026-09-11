@@ -15,6 +15,7 @@ import type {
   CommitEntry,
   ConnectFailure,
   DesignIndex,
+  FileServerMsg,
   GitFileStatus,
   ImageInput,
   ImageRef,
@@ -292,7 +293,7 @@ export interface EditorLine {
   fiber?: boolean;
 }
 
-/** what a caller opens, and the read whose answer fills it */
+/** what a caller opens */
 export interface OpenFile {
   worktreeId: string;
   path: string;
@@ -302,16 +303,25 @@ export interface OpenFile {
   line?: EditorLine;
   /** the keyboard follows the file into the editor */
   focus: boolean;
+  /** names this open: a line to reveal and the keyboard are handed over once per open */
   seq: number;
 }
 
-/** The file the editor pane has open. The shell opens it before the daemon answers, so a read that
- * lands after the person has moved on is told apart by its seq and dropped. */
+/** a file the editor can have open: a working-tree path, or a commit's copy of one */
+export type FileRef = Pick<OpenFile, "worktreeId" | "path" | "ref">;
+
+export const sameFile = (a: FileRef, b: FileRef) =>
+  a.worktreeId === b.worktreeId && a.path === b.path && a.ref === b.ref;
+
+/** The file the editor pane has open. The pane shows it before the daemon has read it; fileSync
+ * reads it and keeps what the pane shows in step with the disk. */
 export interface EditorFile extends Omit<OpenFile, "view"> {
   /** null until the first read decides: a changed file opens on its diff, an unchanged one as the file */
   view: EditorView | null;
   /** null while the first read is out */
   disk: EditorDisk | null;
+  /** the file changed on disk under unsaved edits: what is there now, until reload or keep mine settles it */
+  conflict: { after: string; version: string | null } | null;
 }
 
 /** a line the page reported, mapped back to the file once the offset for its path is known */
@@ -644,8 +654,9 @@ function draftAfter(s: State, rows: WorktreeStatus[], created: boolean): Draft |
 export const isSubPicker = (o: Overlay) =>
   o.kind === "theme" || o.kind === "appearance" || o.kind === "agent" || o.kind === "agent-page";
 
-/** what reaches the reducer: terminal frames are routed to the pane before dispatch (main.tsx) */
-export type StoreServerMsg = Exclude<ServerMsg, TermServerMsg>;
+/** what reaches the reducer: terminal frames are routed to the pane, and file answers to fileSync,
+ * before dispatch (main.tsx) */
+export type StoreServerMsg = Exclude<ServerMsg, TermServerMsg | FileServerMsg>;
 
 export type Action =
   | { a: "server"; msg: StoreServerMsg }
@@ -670,8 +681,12 @@ export type Action =
   /** show a clone's progress in the preview area (null stops watching) */
   | { a: "watch-import"; id: string | null }
   | { a: "close-editor" }
-  /** the editor pane opens this file now; the read carrying its `seq` fills it */
+  /** the editor pane opens this file now; fileSync reads it */
   | { a: "open-file"; v: OpenFile }
+  /** fileSync: what a read of the open file found, or why it could not read it */
+  | { a: "editor-read"; file: FileRef; disk: EditorDisk | null; error?: string }
+  /** fileSync: the file changed on disk under unsaved edits (what is there now), or that was settled */
+  | { a: "editor-conflict"; file: FileRef; theirs: EditorFile["conflict"] }
   /** switch the open file between its diff and the file */
   | { a: "editor-view"; v: EditorView }
   | { a: "dismiss-toast" }
@@ -842,8 +857,25 @@ function reduce(s: State, action: Action): State {
           disk: same?.disk ?? null,
           ...(line ? { line } : {}),
           focus: v.focus,
+          conflict: same?.conflict ?? null,
         },
       };
+    }
+    case "editor-read": {
+      const e = s.editor;
+      if (!e || !sameFile(e, action.file)) return s;
+      const disk = action.disk;
+      if (!disk) {
+        const toast = { ok: false, message: action.error ?? `could not read ${e.path}` };
+        // a pane with nothing in it yet has nothing to show; one with text keeps it and says why
+        return e.disk ? { ...s, toast } : { ...s, editor: null, toast };
+      }
+      // with no view asked for, a changed file opens on its diff and an unchanged one has none to show
+      return { ...s, editor: { ...e, view: e.view ?? (disk.before === disk.after ? "file" : "diff"), disk } };
+    }
+    case "editor-conflict": {
+      const e = s.editor;
+      return e && sameFile(e, action.file) ? { ...s, editor: { ...e, conflict: action.theirs } } : s;
     }
     case "editor-view":
       // the line was a one-time jump; past a switch the editor carries its own place, and a line
@@ -1176,30 +1208,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const e = next.editor;
       if (!e?.line?.fiber || e.worktreeId !== msg.worktreeId || e.path !== msg.path) return next;
       return { ...next, editor: { ...e, line: placeLine(next, e.worktreeId, e.path, e.line) } };
-    }
-    case "file-written": {
-      const e = s.editor;
-      if (!e?.disk || e.worktreeId !== msg.worktreeId || e.path !== msg.path) return s;
-      if (msg.ok) return { ...s, editor: { ...e, disk: { ...e.disk, version: msg.version } } };
-      const message = msg.reason === "changed" ? `not saved: ${msg.path} changed on disk` : msg.message;
-      return { ...s, toast: { ok: false, message: message ?? `not saved: ${msg.path}` } };
-    }
-    case "file-read": {
-      const e = s.editor;
-      // the answer to the read this open is waiting on, and to nothing else: one for a file the list
-      // has moved past, or for a pane since closed, would open what nobody is looking at
-      if (!e || msg.seq !== e.seq || msg.worktreeId !== e.worktreeId || msg.path !== e.path) return s;
-      if (msg.error) return { ...s, editor: null, toast: { ok: false, message: msg.error } };
-      const { before, after, version, writable, binary, tooLarge } = msg;
-      return {
-        ...s,
-        editor: {
-          ...e,
-          // with no view asked for, a changed file opens on its diff and an unchanged one has none to show
-          view: e.view ?? (before === after ? "file" : "diff"),
-          disk: { before, after, version, writable, binary, tooLarge },
-        },
-      };
     }
     case "shipped": {
       // a suggestion lands in that worktree's composer and focuses it

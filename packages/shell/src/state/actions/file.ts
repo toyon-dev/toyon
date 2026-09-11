@@ -13,12 +13,10 @@ export const nextSeq = () => ++lastSeq;
 export type OpenRequest = Omit<OpenFile, "seq" | "focus"> & { focus?: boolean };
 
 /** Open a file in the editor pane: as its diff or as the file (unsaid, the read decides), at a
- * line, or as a commit left it (`ref`). The pane opens now, loading, and only this read's answer
- * fills it, so an answer that lands after the person has moved on opens nothing. */
-export function openFile({ sock, dispatch }: Deps, { focus = true, ...target }: OpenRequest) {
-  const seq = nextSeq();
-  dispatch({ a: "open-file", v: { ...target, focus, seq } });
-  sock?.send({ t: "read-file", worktreeId: target.worktreeId, path: target.path, ref: target.ref, seq });
+ * line, or as a commit left it (`ref`). The pane opens now, loading; fileSync sees the open, reads
+ * the file and keeps it in step with the disk from there. */
+export function openFile({ dispatch }: Deps, { focus = true, ...target }: OpenRequest) {
+  dispatch({ a: "open-file", v: { ...target, focus, seq: nextSeq() } });
 }
 
 /** a file in the changes panel: show it in the editor pane as its diff or as the file, open it

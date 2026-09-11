@@ -153,6 +153,8 @@ export type ServerMsg =
 
 /** the terminal stream: bytes for xterm, which the shell routes around its store */
 export type TermServerMsg = Extract<ServerMsg, { t: "term-data" | "term-snapshot" | "term-exit" }>;
+/** the editor's file answers, which the shell's file sync pairs with its requests */
+export type FileServerMsg = Extract<ServerMsg, { t: "file-read" | "file-written" }>;
 
 // ---- client → daemon: schemas are the source of truth ----
 

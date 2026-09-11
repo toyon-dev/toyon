@@ -5,7 +5,7 @@
 // through ws.ts drags all of zod into the shell. ws.ts imports them back, so the schemas stay the
 // source of truth for the shapes they bound.
 
-import type { ServerMsg, TermServerMsg } from "./ws.ts";
+import type { FileServerMsg, ServerMsg, TermServerMsg } from "./ws.ts";
 
 /**
  * Bump when a ServerMsg/ClientMsg shape changes incompatibly; the shell compares it on hello and
@@ -42,4 +42,9 @@ export const PASTES_PER_MESSAGE = 4;
  * import above erases, so this file reaches nothing at runtime. */
 export function isTermMsg(m: ServerMsg): m is TermServerMsg {
   return m.t === "term-data" || m.t === "term-snapshot" || m.t === "term-exit";
+}
+
+/** the editor's file answers, which go to the shell's file sync rather than through the store */
+export function isFileMsg(m: ServerMsg): m is FileServerMsg {
+  return m.t === "file-read" || m.t === "file-written";
 }

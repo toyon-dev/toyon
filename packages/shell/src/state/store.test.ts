@@ -5,6 +5,7 @@ import { createStore } from "./context.tsx";
 import {
   type Action,
   draftKey,
+  type EditorDisk,
   EMPTY_LOCAL,
   initialState,
   isGreenfield,
@@ -52,15 +53,19 @@ function wt(
 
 const initial = initialState({ clientId: ME });
 const server = (msg: StoreServerMsg): Action => ({ a: "server", msg });
-/** a file-read answer on worktree `a`, with the fields a test does not care about filled in */
-const fileRead = (m: {
-  path: string;
-  seq: number;
-  before: string;
-  after: string;
-  worktreeId?: string;
-  error?: string;
-}) => server({ t: "file-read", worktreeId: "a", version: "v1", writable: true, binary: false, tooLarge: false, ...m });
+/** what fileSync hands the store once a read of `path` on worktree `a` lands */
+const readInto = (
+  path: string,
+  disk: Partial<EditorDisk> = {},
+  more: { ref?: string; error?: string } = {},
+): Action => ({
+  a: "editor-read",
+  file: { worktreeId: "a", path, ...(more.ref ? { ref: more.ref } : {}) },
+  disk: more.error
+    ? null
+    : { before: "", after: "", version: "v1", writable: true, binary: false, tooLarge: false, ...disk },
+  ...(more.error ? { error: more.error } : {}),
+});
 /** what openFile dispatches, on worktree `a` unless the test says otherwise */
 const opening = (v: Partial<OpenFile> & { path: string; seq: number }): Action => ({
   a: "open-file",
@@ -731,42 +736,30 @@ describe("streams and notices", () => {
   });
 });
 
-// The shell opens a file before the daemon answers, so the pane can tell the answer it is waiting
-// on from one that lands late for a file the person has already moved past.
+// The pane opens a file before the daemon has read it; fileSync reads it and hands the store what
+// it found, for the file the pane has open and no other.
 describe("the editor's open file", () => {
-  test("an open shows the file loading until its own read answers", () => {
+  test("an open shows the file loading until a read of it lands", () => {
     const opened = run([hello(wt("a")), opening({ path: "x.ts", seq: 1 })]);
-    expect(opened.editor).toMatchObject({ path: "x.ts", seq: 1, view: null, disk: null, focus: true });
-    const read = reducer(opened, fileRead({ path: "x.ts", seq: 1, before: "a", after: "b" }));
+    expect(opened.editor).toMatchObject({ path: "x.ts", seq: 1, view: null, disk: null, focus: true, conflict: null });
+    const read = reducer(opened, readInto("x.ts", { before: "a", after: "b" }));
     expect(read.editor).toMatchObject({
       view: "diff",
       disk: { before: "a", after: "b", version: "v1", writable: true },
     });
   });
 
-  test("an answer that lands after the list moved on, or after the pane closed, opens nothing", () => {
-    // arrowing down the changes list: the first file's read comes back last
-    const moved = run([
-      hello(wt("a")),
-      opening({ path: "a.ts", seq: 1 }),
-      opening({ path: "b.ts", seq: 2 }),
-      fileRead({ path: "b.ts", seq: 2, before: "", after: "b" }),
-      fileRead({ path: "a.ts", seq: 1, before: "", after: "a" }),
-    ]);
-    expect(moved.editor).toMatchObject({ path: "b.ts", disk: { after: "b" } });
-    const closed = run([
-      hello(wt("a")),
-      opening({ path: "a.ts", seq: 1 }),
-      { a: "close-editor" },
-      fileRead({ path: "a.ts", seq: 1, before: "", after: "a" }),
-    ]);
-    expect(closed.editor).toBeNull();
+  test("a read of a file that is not the open one changes nothing", () => {
+    const s = run([hello(wt("a")), opening({ path: "b.ts", seq: 2 })]);
+    expect(reducer(s, readInto("a.ts", { after: "a" }))).toBe(s);
+    // a commit's copy of the same path is a different file
+    expect(reducer(s, readInto("b.ts", { after: "b" }, { ref: "abc1234" }))).toBe(s);
+    expect(run([{ a: "close-editor" }, readInto("b.ts")], s).editor).toBeNull();
   });
 
   test("with no view asked for, a changed file opens on its diff and an unchanged one as the file", () => {
     const viewOf = (before: string, after: string, view?: "file") =>
-      run([hello(wt("a")), opening({ path: "x.ts", seq: 1, view }), fileRead({ path: "x.ts", seq: 1, before, after })])
-        .editor?.view;
+      run([hello(wt("a")), opening({ path: "x.ts", seq: 1, view }), readInto("x.ts", { before, after })]).editor?.view;
     expect(viewOf("a", "b")).toBe("diff");
     expect(viewOf("a", "a")).toBe("file");
     expect(viewOf("a", "b", "file")).toBe("file");
@@ -776,7 +769,7 @@ describe("the editor's open file", () => {
     const s = run([
       hello(wt("a")),
       opening({ path: "x.ts", seq: 1 }),
-      fileRead({ path: "x.ts", seq: 1, before: "a", after: "b" }),
+      readInto("x.ts", { before: "a", after: "b" }),
       opening({ path: "x.ts", seq: 2, focus: false }),
     ]);
     expect(s.editor).toMatchObject({ seq: 2, view: "diff", disk: { after: "b" }, focus: false });
@@ -806,7 +799,7 @@ describe("the editor's open file", () => {
     const s = run([
       hello(wt("a")),
       opening({ path: "x.tsx", seq: 1, view: "file", line: { n: 9 } }),
-      fileRead({ path: "x.tsx", seq: 1, before: "a", after: "b" }),
+      readInto("x.tsx", { before: "a", after: "b" }),
     ]);
     const diff = reducer(s, { a: "editor-view", v: "diff" });
     expect(diff.editor).toMatchObject({ path: "x.tsx", view: "diff", disk: { after: "b" } });
@@ -814,27 +807,33 @@ describe("the editor's open file", () => {
     expect(reducer(initial, { a: "editor-view", v: "file" }).editor).toBeNull();
   });
 
-  test("a read that failed closes the pane and says why", () => {
-    const s = run([
+  test("a read that failed closes a pane with nothing in it, and over text only says why", () => {
+    const empty = run([
       hello(wt("a")),
       opening({ path: "../x", seq: 1 }),
-      fileRead({ path: "../x", seq: 1, before: "", after: "", error: "path escapes worktree" }),
+      readInto("../x", {}, { error: "path escapes worktree" }),
     ]);
-    expect(s.editor).toBeNull();
-    expect(s.toast).toMatchObject({ ok: false, message: "path escapes worktree" });
-  });
-
-  test("a save's answer moves the version the next save names, and a refusal says so", () => {
-    const s = run([
+    expect(empty.editor).toBeNull();
+    expect(empty.toast).toMatchObject({ ok: false, message: "path escapes worktree" });
+    const shown = run([
       hello(wt("a")),
       opening({ path: "x.ts", seq: 1 }),
-      fileRead({ path: "x.ts", seq: 1, before: "", after: "a" }),
+      readInto("x.ts", { after: "a" }),
+      readInto("x.ts", {}, { error: "not a file" }),
     ]);
-    const written = { t: "file-written", worktreeId: "a", path: "x.ts", seq: 2 } as const;
-    expect(reducer(s, server({ ...written, ok: true, version: "v2" })).editor?.disk?.version).toBe("v2");
-    const changed = reducer(s, server({ ...written, ok: false, reason: "changed", version: "v9" }));
-    expect(changed.editor?.disk?.version).toBe("v1");
-    expect(changed.toast?.message).toContain("changed on disk");
+    expect(shown.editor?.disk?.after).toBe("a");
+    expect(shown.toast?.message).toBe("not a file");
+  });
+
+  test("a conflict lands on its own file, survives opening it again, and clears", () => {
+    const s = run([hello(wt("a")), opening({ path: "x.ts", seq: 1 }), readInto("x.ts", { after: "a" })]);
+    const theirs = { after: "agent", version: "v2" };
+    const x = { worktreeId: "a", path: "x.ts" };
+    const conflicted = reducer(s, { a: "editor-conflict", file: x, theirs });
+    expect(conflicted.editor?.conflict).toEqual(theirs);
+    expect(reducer(s, { a: "editor-conflict", file: { ...x, path: "y.ts" }, theirs })).toBe(s);
+    expect(reducer(conflicted, opening({ path: "x.ts", seq: 2 })).editor?.conflict).toEqual(theirs);
+    expect(reducer(conflicted, { a: "editor-conflict", file: x, theirs: null }).editor?.conflict).toBeNull();
   });
 });
 

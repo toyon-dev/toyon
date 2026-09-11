@@ -5,6 +5,7 @@
 
 import { createContext, type ReactNode, useContext, useSyncExternalStore } from "react";
 import type { DaemonSocket } from "../ws.ts";
+import type { FileSync } from "./fileSync.ts";
 import { type Action, reducer, type State } from "./store.ts";
 
 export interface Store {
@@ -33,19 +34,24 @@ export function createStore(initial: State): Store {
 
 const StoreContext = createContext<Store | null>(null);
 const SockContext = createContext<DaemonSocket | null>(null);
+const FilesContext = createContext<FileSync | null>(null);
 
 export function StoreProvider({
   store,
   sock,
+  files,
   children,
 }: {
   store: Store;
   sock: DaemonSocket | null;
+  files: FileSync | null;
   children: ReactNode;
 }) {
   return (
     <StoreContext.Provider value={store}>
-      <SockContext.Provider value={sock}>{children}</SockContext.Provider>
+      <SockContext.Provider value={sock}>
+        <FilesContext.Provider value={files}>{children}</FilesContext.Provider>
+      </SockContext.Provider>
     </StoreContext.Provider>
   );
 }
@@ -68,4 +74,9 @@ export function useDispatch(): Store["dispatch"] {
 /** the daemon socket (null only in tests without a connection) */
 export function useSock(): DaemonSocket | null {
   return useContext(SockContext);
+}
+
+/** what keeps the open file in step with the disk (null only in tests without a daemon) */
+export function useFileSync(): FileSync | null {
+  return useContext(FilesContext);
 }

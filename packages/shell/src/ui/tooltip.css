@@ -55,6 +55,25 @@
     align-items: baseline;
     gap: 12px;
   }
+  /* two verbs of one gesture: the keys take a column of their own, started at its left edge, so
+   the two ⌘ glyphs stand one over the other whatever the letters after them measure, and each
+   verb ends against its key so the eye runs straight from the words to the chord */
+  .tooltip-pair {
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 12px;
+    align-items: baseline;
+    & > span {
+      text-align: right;
+    }
+    & .tooltip-key {
+      margin-left: 0;
+    }
+  }
+  /* the other verb, a tier under this button's own */
+  .tooltip-also {
+    color: var(--text1);
+  }
   .tooltip-lead {
     color: var(--text1);
     text-align: left;

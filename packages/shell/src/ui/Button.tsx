@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
 import { cx } from "./cx.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { Spinner } from "./Spinner.tsx";
-import { tip } from "./Tooltip.tsx";
+import { type TipAlso, tip } from "./Tooltip.tsx";
 import "./button.css";
 
 /**
@@ -116,6 +116,8 @@ type IconProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "ari
     hint?: string;
     /** a second line under the tooltip's text: the figures behind a gauge */
     detail?: string;
+    /** the sibling verb and its key, a row under the tooltip's text */
+    also?: TipAlso;
     /** a mark over the glyph's corner, positioned by the caller's class: the composer's terminal
      * button wears a dot while a proc is down. A slot rather than children, so the glyph stays the
      * one thing an icon button draws. */
@@ -128,6 +130,7 @@ export function IconButton({
   label,
   hint,
   detail,
+  also,
   badge,
   tone,
   on,
@@ -137,7 +140,7 @@ export function IconButton({
 }: IconProps) {
   const cls = cx("btn-icon", tone && TONE[tone], on && "on", className);
   return (
-    <button className={cls} type={type} {...tip(label, hint, { detail })} {...rest}>
+    <button className={cls} type={type} {...tip(label, hint, { detail, also })} {...rest}>
       {typeof icon === "string" ? <Icon name={icon} /> : icon}
       {badge}
     </button>

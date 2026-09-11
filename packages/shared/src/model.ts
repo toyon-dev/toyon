@@ -141,8 +141,9 @@ export interface WorktreeInfo {
   /** the effort level the agent is asked to run at here (one of its advertised choices, which
    * depend on the model); its own default when absent */
   effort?: string;
-  /** when the agent last finished a turn here. Absent until one has run. */
-  lastTurnAt?: number;
+  /** how the agent last stopped here, and what the turns since someone looked did. Absent until a
+   * turn has run. The rail's ring and the recap both read it. */
+  lastTurn?: LastTurn;
   /** when the person last sent something here, a chat message or a `!` command. The rail sorts on
    * it, so a row rises because someone worked in it and never because its agent did. Absent on a
    * row nothing has been sent to since the field landed. */
@@ -156,6 +157,38 @@ export interface WorktreeInfo {
    * picker looks like until something is scaffolded into it. Kept current by every git status
    * read, and stored so the first frame of a page load can say so without asking git. */
   empty?: boolean;
+}
+
+/** how an agent stopped: it finished, someone stopped it, it failed, or it is blocked asking you */
+export type TurnEnd = "done" | "stopped" | "failed" | "asking";
+
+/** what the turns since someone last looked did, read off the transcript when the agent stopped.
+ * A lower bound once the transcript has been compacted past them. */
+export interface TurnFacts {
+  /** turns in the window, at least one */
+  turns: number;
+  /** file writes: edit, delete and move calls. Shell commands are not counted. */
+  edits: number;
+  /** tool calls that came back as errors */
+  toolErrors: number;
+  /** why it failed, when it did */
+  error?: string;
+  /** it failed for want of a login */
+  auth?: true;
+  /** a stop reason other than finishing or being stopped (max_tokens, refusal) */
+  cut?: string;
+  /** what it is asking, while it is blocked on you */
+  ask?: string;
+}
+
+export interface LastTurn {
+  at: number;
+  end: TurnEnd;
+  facts: TurnFacts;
+  /** set once the stop has stayed unseen for the recap delay, so the line is due. `text` is the
+   * agent's one-sentence summary: absent while it is written, when recaps show facts only, or when
+   * none came back. */
+  recap?: { at: number; text?: string };
 }
 
 /** the branch is toyon's to manage: made by create or a spare claim, so removing the
@@ -485,6 +518,14 @@ export interface ThemePrefs {
   light: string;
   dark: string;
 }
+
+/** preferences the daemon holds for every browser that connects. `recaps`: whether coming back to
+ * a worktree also asks its agent's quick model for a sentence, or shows the facts alone. */
+export interface Prefs {
+  recaps: "summarize" | "facts";
+}
+
+export const DEFAULT_PREFS: Prefs = { recaps: "summarize" };
 
 // ---- Design system ----
 

@@ -5,7 +5,8 @@ import * as acp from "@agentclientprotocol/sdk";
 import { log } from "../core/log.ts";
 import { askOnce } from "./acp/ask.ts";
 import { spawnAcp } from "./acp/transport.ts";
-import { decide, pickOption } from "./policy.ts";
+import type { AskOpts } from "./adapter.ts";
+import { decideUnattended } from "./policy.ts";
 import type { AgentRegistry } from "./registry.ts";
 import { worktreeBounds } from "./sandbox.ts";
 
@@ -15,6 +16,7 @@ export async function askFreshAgent(
   cwd: string,
   system: string,
   prompt: string,
+  opts: AskOpts = {},
 ): Promise<string | null> {
   const spec = agents.require(agentId);
   const bounds = await worktreeBounds(cwd);
@@ -23,19 +25,10 @@ export async function askFreshAgent(
     .client({ name: "toyon" })
     // read-only mode should mean none arrive; if one does, the worktree rules still apply.
     // Nothing here can ask a person: this runs before a worktree exists, so there is no chat to
-    // draw a card in and a `prompt` verdict becomes a refusal. For the same reason the client
-    // capabilities below stay as they are: without `elicitation.form` the Claude adapter drops
-    // AskUserQuestion from the tool list, so the namer and the batch planner cannot ask either.
-    .onRequest(acp.methods.client.session.requestPermission, (c) => {
-      const verdict = decide(c.params, bounds, cwd);
-      if (verdict.kind !== "prompt") return pickOption(c.params.options, verdict);
-      return pickOption(c.params.options, {
-        kind: "reject",
-        tool: c.params.toolCall.name ?? "tool",
-        path: "",
-        reason: "nobody is watching this session",
-      });
-    })
+    // draw a card in. For the same reason the client capabilities below stay as they are: without
+    // `elicitation.form` the Claude adapter drops AskUserQuestion from the tool list, so the namer
+    // and the batch planner cannot ask either.
+    .onRequest(acp.methods.client.session.requestPermission, (c) => decideUnattended(c.params, bounds, cwd))
     .onNotification(acp.methods.client.session.update, (c) => {
       const u = c.params.update;
       if (u.sessionUpdate === "agent_message_chunk" && u.content.type === "text") {
@@ -54,11 +47,15 @@ export async function askFreshAgent(
       system,
       prompt,
       spec,
+      ...(opts.quick ? { quick: opts.quick } : {}),
       route: (id, onText) => {
         listeners.set(id, onText);
         return () => listeners.delete(id);
       },
-      closeSupported: !!init.agentCapabilities?.sessionCapabilities?.close,
+      caps: {
+        close: !!init.agentCapabilities?.sessionCapabilities?.close,
+        delete: !!init.agentCapabilities?.sessionCapabilities?.delete,
+      },
       tag: `ask:${agentId}`,
     });
   } catch (e) {

@@ -19,16 +19,19 @@ import type { FileService } from "../files/service.ts";
 import { browsePath, describeFolder } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { RouteService } from "../routes/service.ts";
-import type { RuntimeRegistry } from "../runtime/registry.ts";
+import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import type { ThemeStore } from "../themes/store.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
+import type { TurnService } from "../worktrees/turns.ts";
 
 export interface Services {
   state: StateStore;
   hub: Hub;
   repos: RepoRegistry;
   worktrees: WorktreeService;
+  /** how each worktree's agent last stopped, and whether anyone has looked since */
+  turns: TurnService;
   files: FileService;
   /** the worktree's own design system, scanned from its source */
   design: DesignService;
@@ -45,8 +48,8 @@ export interface Services {
   accounts: AgentAccounts;
   /** images attached to chat messages; the http layer serves them back to the shell */
   attachments: AttachmentStore;
-  /** request → 1–5 independent tasks (the default agent by default; tests inject a stub) */
-  planTasks: (prompt: string, cwd: string) => Promise<string[] | null>;
+  /** request → 1–5 independent tasks, asked of the agent that will run them (tests inject a stub) */
+  planTasks: (prompt: string, cwd: string, agentId: string) => Promise<string[] | null>;
   /** the OS folder dialog behind the new-project form's folder button (tests inject a stub) */
   folderDialog: FolderDialog;
 }
@@ -144,11 +147,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   seen(msg, _ctx, s) {
-    s.worktrees.markSeen(msg.worktreeId);
+    s.turns.markSeen(msg.worktreeId);
   },
 
   "mark-unread"(msg, _ctx, s) {
-    s.worktrees.markUnread(msg.worktreeId);
+    s.turns.markUnread(msg.worktreeId);
   },
 
   "refresh-git"(msg, _ctx, s) {
@@ -215,7 +218,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     fireAndForget(
       msg.repoId,
       (async () => {
-        const tasks = (await s.planTasks(msg.prompt, repo.path)) ?? [msg.prompt];
+        const agent = msg.agent ?? s.state.defaultAgent ?? DEFAULT_AGENT_ID;
+        const tasks = (await s.planTasks(msg.prompt, repo.path, agent)) ?? [msg.prompt];
         let failed = 0;
         for (const task of tasks) {
           try {
@@ -378,6 +382,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "stop-agent"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
+    s.turns.stoppedByPerson(msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.stop();
   },
 
@@ -538,6 +543,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.agents.require(msg.agent);
     s.state.setDefaultAgent(msg.agent);
     s.hub.emit("agentsChanged");
+  },
+
+  "set-prefs"(msg, _ctx, s) {
+    s.state.setPrefs(msg.prefs);
+    s.hub.emit("prefsChanged");
   },
 
   "rescan-themes"(_msg, _ctx, s) {

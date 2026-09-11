@@ -6,7 +6,6 @@ import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync,
 import { basename, dirname, join } from "node:path";
 import {
   type AgentEvent,
-  type AgentStatus,
   type ArchivedWorktree,
   type AttachmentInput,
   type CommitEntry,
@@ -58,6 +57,7 @@ import { type ArchiveRecord, type ChatFiles, firstPrompt, summarize, WorktreeArc
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
 import { SparePool } from "./spare.ts";
+import { isUnseen } from "./turns.ts";
 
 /** Gitignored local config a worktree needs and git will never bring over. Absent secrets fail
  * deep inside app code rather than as missing config (an empty AUTH_SECRET reads as a zero-length
@@ -146,8 +146,6 @@ export class WorktreeService {
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
   /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
   private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
-  /** the agent status each worktree last reported, so a turn's end is an edge and not a level */
-  private lastAgentStatus = new Map<string, AgentStatus>();
   /** the last usage figures per worktree: live from the stream, else read once from the transcript
    * on disk (null: read, and there were none) */
   private usage = new Map<string, WorktreeStatus["usage"] | null>();
@@ -168,31 +166,21 @@ export class WorktreeService {
     });
     // worktrees claimed before links existed get theirs at boot
     for (const wt of d.state.worktrees) this.refreshLink(wt);
-    // The rail rings a worktree whose turn ended while nobody was looking, so the edge into idle
-    // is the moment worth recording. Only a busy → idle edge counts: a session reports idle at
-    // birth too, and stamping that would ring every worktree the daemon has ever started.
-    // Subscribed here rather than in the ws layer because this listener has to run before the one
-    // that broadcasts statuses, and services are constructed before the server.
     d.hub.on("agent", (worktreeId, _seq, event) => {
       if (event.type !== "usage") return;
       const { used, size, cost } = event;
       this.usage.set(worktreeId, { used, size, ...(cost !== undefined ? { cost } : {}) });
     });
-    d.hub.on("agentStatus", (worktreeId, status) => {
-      const prev = this.lastAgentStatus.get(worktreeId) ?? "idle";
-      this.lastAgentStatus.set(worktreeId, status);
-      if (status !== "idle" || (prev !== "working" && prev !== "waiting")) return;
-      const wt = d.state.worktree(worktreeId);
-      // gone already if the worktree was removed mid-turn; nothing to stamp
-      if (!wt) return;
-      wt.lastTurnAt = Date.now();
-      d.state.save();
-      // what the turn wrote is the count the rail should show now, not whenever its cache runs out;
-      // dropped before the status frame this same event pushes (the ws listener runs after this one)
+    // turnSettled is emitted from inside the agentStatus dispatch, ahead of the ws layer's listener
+    // on that event, so what is dropped here is gone before the status frame goes out
+    d.hub.on("turnSettled", (worktreeId, turn) => {
+      // what the turn wrote is the count the rail should show now, not whenever its cache runs out
       this.countsCache.delete(worktreeId);
       // A proc that crashed or never answered gets another go once the agent has had a turn: the
       // boot pane's "ask the agent to fix it" ends here, and a fix nobody restarts after is not a
-      // fix. A proc that is fine, or one you stopped yourself, is left alone.
+      // fix. A proc that is fine, or one you stopped yourself, is left alone, and so is one whose
+      // agent is still mid-turn waiting on you.
+      if (turn.end !== "done" && turn.end !== "stopped") return;
       for (const p of d.runtime.get(worktreeId)?.procs?.states() ?? []) {
         if (p.status !== "crashed" && p.status !== "unreachable") continue;
         d.hub.emit("log", worktreeId, p.name, "restarting after the agent's turn");
@@ -1231,28 +1219,6 @@ export class WorktreeService {
     return r ? readCommitFiles(r.path, sha) : [];
   }
 
-  /** someone is looking at this worktree right now: clear its unseen ring */
-  markSeen(worktreeId: string) {
-    const wt = this.d.state.worktree(worktreeId);
-    // a discovered worktree has no turns, so nothing to have missed
-    if (!wt) return;
-    if (!wt.unread && wt.seenAt != null && wt.lastTurnAt != null && wt.seenAt >= wt.lastTurnAt) return;
-    wt.unread = undefined;
-    wt.seenAt = Date.now();
-    this.d.state.save();
-    this.d.hub.emit("worktreesChanged");
-  }
-
-  /** the person wants to come back to this worktree: ring it until they next look at it */
-  markUnread(worktreeId: string) {
-    const wt = this.d.state.worktree(worktreeId);
-    // a discovered worktree has no record to carry the mark
-    if (!wt || wt.unread) return;
-    wt.unread = true;
-    this.d.state.save();
-    this.d.hub.emit("worktreesChanged");
-  }
-
   /** someone sent something here, a chat message or a `!` command: the rail sorts on it */
   markPrompted(worktreeId: string) {
     const wt = this.d.state.worktree(worktreeId);
@@ -1345,10 +1311,4 @@ export class WorktreeService {
       }),
     );
   }
-}
-
-/** a turn finished here since anyone last looked. A worktree with no `lastTurnAt` reads as seen,
- * so worktrees that predate the field do not all light up the first time the daemon restarts. */
-function isUnseen(wt: WorktreeInfo): boolean {
-  return wt.unread === true || (wt.lastTurnAt != null && (wt.seenAt == null || wt.seenAt < wt.lastTurnAt));
 }

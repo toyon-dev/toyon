@@ -11,7 +11,7 @@ import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
 import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
-import { makePlanner } from "./agent/tasks.ts";
+import { makePlanner, makeRecapper } from "./agent/tasks.ts";
 import { locateAssets } from "./core/assets.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
@@ -31,6 +31,7 @@ import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
 import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
+import { TurnService } from "./worktrees/turns.ts";
 
 // Bun exits the process on an unhandled rejection or exception. For a daemon that owns every
 // dev server and agent session, staying up and logging beats taking them all down.
@@ -83,6 +84,13 @@ const runtime = new RuntimeRegistry({
   bridgeScript: () => bridge.get(),
 });
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
+// before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
+const turns = new TurnService({
+  state,
+  hub,
+  transcript: (id) => runtime.agentFor(id)?.transcript() ?? [],
+  summarize: makeRecapper(runtime, agents, state),
+});
 const files = new FileService(state, runtime, (id) => worktrees.readable(id));
 const design = new DesignService((id) => worktrees.readable(id));
 const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
@@ -103,6 +111,7 @@ const { branded, stop: stopServer } = startServer({
     hub,
     repos,
     worktrees,
+    turns,
     files,
     design,
     routes,
@@ -113,7 +122,7 @@ const { branded, stop: stopServer } = startServer({
     agents,
     accounts,
     attachments,
-    planTasks: makePlanner(agents, state),
+    planTasks: makePlanner(agents),
     folderDialog: folderDialog(),
   },
 });

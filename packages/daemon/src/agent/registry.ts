@@ -40,6 +40,12 @@ export interface AgentSpec {
   /** the agent's ids for toyon's plan and build modes (agent/modes.ts); guessed from the
    * advertised list when absent */
   modes?: { plan?: string; build?: string };
+  /** `_meta` on session/new for a side session (a question toyon asks for itself): whatever this
+   * adapter needs to run one bare, without the chat's tools or a saved conversation */
+  sideMeta?: Record<string, unknown>;
+  /** the model a side question runs on while the agent still offers it: a short question answered
+   * well by the agent's smallest model should not cost what the chat's model costs */
+  quickModel?: string;
   /** what the person reads when the agent answers a prompt with "not logged in" and offers no way in */
   loginHint: string;
 }
@@ -56,6 +62,11 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     // "default" is Claude's ask-before-changes mode: every write and command reaches the policy,
     // which is what lets toyon decide. Its own "auto" would decide without us.
     modes: { plan: "plan", build: "default" },
+    // spread into the SDK's query options: without `tools` every side question carries the whole
+    // tool preset's definitions, and without `persistSession` each one is saved under
+    // ~/.claude/projects and listed by `claude --resume` in the worktree
+    sideMeta: { claudeCode: { options: { tools: [], persistSession: false } } },
+    quickModel: "haiku",
     loginHint: "Claude is not logged in",
   },
   {
@@ -70,6 +81,7 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     systemPrompt: "prompt-prefix",
     mode: "agent",
     modes: { plan: "read-only", build: "agent" },
+    quickModel: "gpt-5.6-luna",
     loginHint: "Codex is not logged in",
   },
 ];
@@ -244,7 +256,7 @@ export class AgentRegistry {
 
 const ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
 
-/** ~/.toyon/agents.json: { "<id>": { name, command, args?, env?, confinement?, loginHint?, mode? } } */
+/** ~/.toyon/agents.json: { "<id>": { name, command, args?, env?, confinement?, loginHint?, mode?, planMode?, quickModel? } } */
 export function parseCustomAgents(raw: string): AgentSpec[] {
   const out: AgentSpec[] = [];
   let parsed: unknown;
@@ -288,6 +300,7 @@ export function parseCustomAgents(raw: string): AgentSpec[] {
       systemPrompt: "prompt-prefix",
       ...(str("mode") ? { mode: str("mode") } : {}),
       ...(str("planMode") ? { modes: { plan: str("planMode"), build: str("mode") } } : {}),
+      ...(str("quickModel") ? { quickModel: str("quickModel") } : {}),
       loginHint: str("loginHint") ?? `${str("name") ?? id} is not logged in`,
     });
   }

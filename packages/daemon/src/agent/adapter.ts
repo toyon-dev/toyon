@@ -14,6 +14,15 @@ export type AuthOutcome =
  * the agent is told about rather than being cut off mid-turn. */
 export type AskReply = { kind: "answers"; answers?: AskAnswer[] } | { kind: "choice"; choiceId: string };
 
+/** which model a side question may run on. `require` asks only on the agent's quick model, for a
+ * question that would rather go unasked than spend what the chat's model costs; `prefer` falls back
+ * to the agent's default, for one whose answer is still wanted. */
+export type Quick = "require" | "prefer";
+
+export interface AskOpts {
+  quick?: Quick;
+}
+
 /** everything a message carries besides its text */
 export interface SendOpts {
   context?: string;
@@ -44,9 +53,9 @@ export interface AgentAdapter {
   /** put an event the daemon produced itself (a command the person ran from the composer) on the
    * worktree's transcript and stream, in sequence with what the agent is saying */
   note(event: AgentEvent): void;
-  /** one question on a side session (no tools, its own system prompt): the reply text, or null.
-   * Spawns the agent if it is not running; never touches the worktree's transcript. */
-  ask(system: string, prompt: string): Promise<string | null>;
+  /** one question on a side session (its own system prompt, no chat behind it): the reply text, or
+   * null. Spawns the agent if it is not running; never touches the worktree's transcript. */
+  ask(system: string, prompt: string, opts?: AskOpts): Promise<string | null>;
   /** log in with one of the methods the agent offered (see the agent-auth-required event) */
   authenticate(methodId: string, apiKey?: string): Promise<AuthOutcome>;
   /** send the message that was refused for want of credentials again */

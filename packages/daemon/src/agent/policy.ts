@@ -85,6 +85,20 @@ export function decide(
   return asks ? { kind: "prompt" } : { kind: "allow" };
 }
 
+/** the rules with nobody to ask. A side session (naming, planning, a recap) has no chat to draw a
+ * card in and is only ever asked to read, so it runs as `plan`: a read inside the bounds passes,
+ * and anything that would have been a card is refused quietly rather than shown to anyone. */
+export function decideUnattended(
+  req: RequestPermissionRequest,
+  bounds: Bounds,
+  cwd: string,
+): RequestPermissionResponse {
+  const verdict = decide(req, bounds, cwd, "plan");
+  if (verdict.kind !== "prompt") return pickOption(req.options, verdict);
+  const tool = req.toolCall.name ?? req.toolCall.title ?? "tool";
+  return pickOption(req.options, { kind: "reject", tool, path: "", reason: "nobody is watching this session" });
+}
+
 /** the option that carries the verdict: allow_once (never allow_always, which would persist a
  * rule and widen the agent's own permissions), or a reject that does not cancel the turn when the
  * agent offers one.

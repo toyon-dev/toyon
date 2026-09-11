@@ -6,16 +6,8 @@ import { previewBus, togglePick } from "./previewBus.ts";
 import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
 
-/** the chords a focused Monaco keeps for itself (see the check in useChords) */
-const MONACO_OWNS = new Set<ChordId>([
-  "design",
-  "new",
-  "inspect",
-  "wt-prev",
-  "wt-next",
-  "wt-unseen-prev",
-  "wt-unseen-next",
-]);
+/** the ⌘ chords a focused Monaco keeps for itself; it keeps every ⌥ one too (see useChords) */
+const MONACO_OWNS = new Set<ChordId>(["design", "new", "inspect"]);
 
 /** Global chords (the table lives in shared/chords.ts) and Escape. Reads the store directly inside
  * the handler so the listener is installed once instead of re-subscribing on every state change. */
@@ -31,13 +23,14 @@ export function useChords() {
       // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
       // picker holds shell focus, so those keep the full ladder or there is no way back out.
       if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
-      // ⌘D, ⌘K and ⌘I are Monaco's (add cursor, chord prefix, suggest) while it has the keyboard, and so are
-      // ⌥↑/↓ (move line) and ⌥⇧↑/↓ (copy line); taking them from a focused editor made a design
-      // scan out of a second cursor, and would make a worktree switch out of a line move. ⌘L is
-      // taken from it anyway: expand-line-selection is the loss, and a hand in the editor that
-      // wants to answer the agent is who the chord is for.
+      // ⌘D, ⌘K and ⌘I are Monaco's (add cursor, chord prefix, suggest) while it has the keyboard, and so is
+      // every ⌥ chord: ⌥↑/↓ is move line and ⌥⇧↑/↓ copy line. Taking them from a focused editor
+      // made a design scan out of a second cursor, and would make a worktree switch out of a line
+      // move; the same walk on ⌃Tab binds nothing in Monaco and stays ours. ⌘L is taken from it
+      // anyway: expand-line-selection is the loss, and a hand in the editor that wants to answer
+      // the agent is who the chord is for.
       const monaco = !!document.activeElement?.closest(".monaco-editor");
-      if (monaco && chord && MONACO_OWNS.has(chord.id)) return;
+      if (monaco && chord && (e.altKey || MONACO_OWNS.has(chord.id))) return;
       if (chord) {
         e.preventDefault();
         switch (chord.id) {

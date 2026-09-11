@@ -620,6 +620,18 @@ export function previewIdOf(s: State): string | null {
   return draftSpareOf(s)?.id ?? s.draft.base;
 }
 
+/** the worktree's app is running or on its way up, so its preview can be told where to go */
+export function previewUp(wt: OwnedWorktree): boolean {
+  return wt.procs.some((p) => p.status === "running" || p.status === "starting");
+}
+
+/** where the address bar, ⌘G and ⌘P's `/` send a path: the active worktree's preview, while it is up.
+ * A fresh object each call, so a selector reads one field of it and never the whole. */
+export function routeTarget(s: State): { worktreeId: string; repoId: string } | null {
+  const wt = worktreeById(s, s.activeId);
+  return wt && previewUp(wt) ? { worktreeId: wt.worktree.id, repoId: wt.repoId } : null;
+}
+
 /** the active repo's owned rows in rail order; every repo's when nothing is selected (a daemon with
  * no repos). A row whose remove is in flight is already gone from the person's point of view.
  * Sorted here and never in `rows`: the preview frames are keyed children in `rows` order, and a

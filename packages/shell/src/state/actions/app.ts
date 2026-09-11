@@ -1,6 +1,6 @@
 import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
-import { type State, worktreeById } from "../store.ts";
+import { routeTarget, type State, worktreeById } from "../store.ts";
 import type { Deps } from "./deps.ts";
 
 export type AppState = Pick<
@@ -46,6 +46,14 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       label: "search in files…",
       key: chord("search"),
       onClick: () => dispatch({ a: "open", overlay: { kind: "search" } }),
+    });
+  }
+  if (routeTarget(s as State)) {
+    go.push({
+      id: "routes",
+      label: "go to page…",
+      key: chord("routes"),
+      onClick: () => dispatch({ a: "open", overlay: { kind: "routes" } }),
     });
   }
   go.push({

@@ -236,12 +236,14 @@ let picking = false;
 // what the overlay is drawing, which is also what a click acts on: the box you saw is the thing
 // you get
 let shownEl: Element | null = null;
-// the modifiers swap where a click sends the element: the chat by default, a source file while alt
-// is held, and shift picks which of the two sources that is. Read off the mouse rather than the
-// keyboard, because the chord that armed the picker may have left focus in the shell, where a
-// keydown in here never arrives. Every mousemove carries both.
+// the modifiers swap where a click sends the element: alt trades the verb the picker was armed with
+// (the chat for ⌘E, a source file for ⌘I) for the other, and shift picks which of the two sources
+// it is. Read off the mouse rather than the keyboard, because the chord that armed the picker may
+// have left focus in the shell, where a keydown in here never arrives. Every mousemove carries both.
 let alt = false;
 let shift = false;
+/** armed by ⌘I: the plain click opens the source, and alt is the way to the chat */
+let inspect = false;
 
 /** which file alt-clicking right now would open. The call site is the default because it is the
  * line you edit; shift asks for the JSX itself. Either falls back to the other, so a chain with
@@ -260,16 +262,20 @@ function paintPick(el: Element) {
   const target = pickTarget(src, call);
   // the other source is offered under shift, in both directions: it is the same key back
   const other = target === src ? call : src;
-  // the hint is drawn only when there is a file to open, so it never advertises a dead end: an
-  // element with no fiber source offers the one verb it can honour and says nothing about the other
+  const code = alt !== inspect && !!target;
+  // a hint never advertises a dead end: an element with no fiber source says nothing about opening
+  // one. Under ⌘I its plain click does nothing, so the one thing it can offer is ⌥ for the chat.
   const label =
-    alt && target
-      ? chip(`open ${at(target)}`, other ? `⇧ ${at(other)}` : undefined)
+    code && target
+      ? chip(
+          `open ${at(target)}`,
+          [other && `⇧ ${at(other)}`, inspect && "⌥ chat"].filter(Boolean).join("  ") || undefined,
+        )
       : chip(
           comp ? `<${comp}>${target ? ` · ${at(target)}` : ""}` : el.tagName.toLowerCase(),
-          target ? "⌥ code" : undefined,
+          target && !inspect ? "⌥ code" : inspect && !alt ? "⌥ chat" : undefined,
         );
-  drawBox(el.getBoundingClientRect(), label, alt && !!target);
+  drawBox(el.getBoundingClientRect(), label, code);
 }
 
 function onPickMove(e: MouseEvent) {
@@ -289,9 +295,12 @@ function onPickClick(e: MouseEvent) {
   const { src, comp, call } = pickedAt(fiber);
   shift = e.shiftKey;
   const target = pickTarget(src, call);
+  // ⌘I's plain click only ever opens a file: on an element with none it stays armed and does
+  // nothing, rather than quietly attaching to the chat someone reached past with ⌥
+  if (inspect && !e.altKey && !target) return;
   // opening the source is browsing, so it leaves the picker armed and the next element is one
   // click away; attaching to the chat is a commit, and ends the mode
-  const code = e.altKey && !!target;
+  const code = e.altKey !== inspect && !!target;
   if (!code) stopPicking();
   if (!el) return;
   post({
@@ -330,8 +339,13 @@ function onPickKey(e: KeyboardEvent) {
   }
 }
 
-function startPicking() {
-  if (picking) return;
+function startPicking(code: boolean) {
+  inspect = code;
+  // already armed: ⌘E and ⌘I trade the verb in place, and the box under the pointer says so
+  if (picking) {
+    if (shownEl) paintPick(shownEl);
+    return;
+  }
   picking = true;
   shownEl = null;
   alt = false;
@@ -345,6 +359,7 @@ function startPicking() {
 
 function stopPicking() {
   picking = false;
+  inspect = false;
   shownEl = null;
   alt = false;
   shift = false;
@@ -457,7 +472,7 @@ window.addEventListener("message", (e) => {
       history.forward();
       break;
     case "pick-start":
-      startPicking();
+      startPicking(d.verb === "code");
       break;
     case "pick-mods":
       if (picking && (alt !== d.alt || shift !== d.shift)) {

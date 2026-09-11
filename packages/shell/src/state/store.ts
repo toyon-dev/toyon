@@ -27,6 +27,7 @@ import type {
   PendingRepo,
   PickedElement,
   PickMeta,
+  PickVerb,
   RefHit,
   RepoInfo,
   SearchHit,
@@ -313,8 +314,8 @@ export interface State {
   reloadReq: { id: string; n: number } | null;
   /** a file is being dragged over the chat panel, which is the one place a drop attaches */
   dragFiles: boolean;
-  /** armed element picker + last picked element (pending chat attachment) */
-  picking: boolean;
+  /** the armed element picker's verb (⌘E's chat, ⌘I's code) + last picked element (pending chat attachment) */
+  picking: PickVerb | false;
   pick: (PickedElement & { worktreeId: string }) | null;
   /** a search hit or a picked element: reveal this line once its file-diff arrives. `fiber` marks
    * a line the running page reported, counted against the served module rather than the file, and
@@ -615,7 +616,7 @@ export type Action =
   | { a: "hmr"; id: string }
   | { a: "page"; id: string; url?: string; title?: string; error?: string; fresh?: boolean }
   | { a: "drag-files"; v: boolean }
-  | { a: "set-picking"; v: boolean }
+  | { a: "set-picking"; v: PickVerb | false }
   | { a: "picked"; pick: NonNullable<State["pick"]> }
   | { a: "clear-pick" }
   /** open an overlay (closes any other); palettes forget a pending return, sub-pickers keep it */

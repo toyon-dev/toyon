@@ -18,14 +18,19 @@ declare global {
   }
 }
 
+/** where a picker click sends the element: into the chat, or to the source file it was written in */
+export type PickVerb = "chat" | "code";
+
 export type ShellToBridgeMsg =
   | { type: "reload" }
   | { type: "navigate"; path: string }
   | { type: "back" }
   | { type: "forward" }
-  | { type: "pick-start" }
+  /** `verb` is what a plain click does, ⌘E's chat or ⌘I's source; absent is the chat. Sent while
+   * the picker is already armed, it only changes the verb. */
+  | { type: "pick-start"; verb?: PickVerb }
   | { type: "pick-cancel" }
-  /** the modifiers that steer the picker's click: alt swaps the verb from chat to source, shift
+  /** the modifiers that steer the picker's click: alt swaps the verb for the other one, shift
    * swaps which source. Forwarded because the chord that arms the picker leaves focus in the
    * shell, where a keydown never reaches the frame at all. */
   | { type: "pick-mods"; alt: boolean; shift: boolean }

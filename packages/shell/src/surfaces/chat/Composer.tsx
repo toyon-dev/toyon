@@ -684,9 +684,11 @@ export function Composer({
               icon="pick"
               label="Pick an element on the page to attach"
               hint={chord("pick")}
-              on={picking}
+              // one button for both verbs: lit while either is armed, and a press disarms it; from
+              // rest it arms the chat's, since the box it sits in is where that pick lands
+              on={!!picking}
               disabled={!frameId}
-              onClick={() => frameId && togglePick(frameId, picking, dispatch)}
+              onClick={() => frameId && togglePick(frameId, picking, dispatch, picking || "chat")}
             />
           )}
         </span>

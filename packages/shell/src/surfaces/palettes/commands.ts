@@ -61,9 +61,15 @@ export function buildCommands(
   if (id) {
     add(
       "pick",
-      state.picking ? "cancel element picker" : "pick an element on the page",
-      () => togglePick(id, state.picking, dispatch),
+      state.picking === "chat" ? "cancel element picker" : "pick an element for the chat",
+      () => togglePick(id, state.picking, dispatch, "chat"),
       chord("pick"),
+    );
+    add(
+      "inspect",
+      state.picking === "code" ? "cancel element picker" : "pick an element to open its code",
+      () => togglePick(id, state.picking, dispatch, "code"),
+      chord("inspect"),
     );
     add("reload", "reload preview", () => previewBus.post(id, { type: "reload" }));
   }

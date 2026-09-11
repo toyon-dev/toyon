@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { PASTE_MAX_CHARS, PASTES_PER_MESSAGE } from "./limits.ts";
-import { parseClientMsg } from "./ws.ts";
+import { issueReason, parseClientMsg, toyonConfigSchema } from "./ws.ts";
+
+describe("toyonConfigSchema", () => {
+  // the terminal pane's shell tab is the stream named "shell", so a proc by that name would be unreachable
+  test("refuses a proc named shell, and says why rather than that a key was invalid", () => {
+    expect(toyonConfigSchema.safeParse({ procs: { web: "bun dev" } }).success).toBe(true);
+    const r = toyonConfigSchema.safeParse({ procs: { shell: "bun dev" } });
+    expect(r.success).toBe(false);
+    expect(r.error && issueReason(r.error, "invalid")).toBe('procs.shell: "shell" is reserved for the shell tab');
+  });
+});
 
 describe("parseClientMsg", () => {
   test("accepts every well-formed kind it is given", () => {

@@ -312,4 +312,17 @@ describe("mapCommands", () => {
     const many = Array.from({ length: 400 }, (_, i) => ({ name: `c${i}`, description: "" }));
     expect(mapCommands(many)).toHaveLength(300);
   });
+
+  test("keeps the first of two commands with one name", () => {
+    expect(
+      mapCommands([
+        { name: "review", description: "user" },
+        { name: "ship", description: "" },
+        { name: "review", description: "project" },
+      ]),
+    ).toEqual([
+      { name: "review", description: "user" },
+      { name: "ship", description: "" },
+    ]);
+  });
 });

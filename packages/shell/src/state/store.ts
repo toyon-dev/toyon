@@ -419,6 +419,9 @@ export interface State {
   railOpen: boolean;
   /** bumped to put the keyboard on the rail's current row */
   focusRail: number;
+  /** a worktree marked unread while it was the one on screen: its ring stays until another row is
+   * selected, where the moment of looking would otherwise clear it again (App.tsx) */
+  unreadHold: string | null;
   /** the layout each project was last left in; the active one's is what the flags above hold */
   panels: Record<string, Panels>;
   /** one-shot: auto-close the changes panel if the session starts on a clean main, unless the
@@ -522,6 +525,7 @@ export function initialState(opts: InitialOpts): State {
     focusRight: 0,
     railOpen: opts.storedRailOpen ?? false,
     focusRail: 0,
+    unreadHold: null,
     panels: opts.storedPanels ?? {},
     leftAuto: true,
     zen: false,
@@ -678,6 +682,8 @@ export type Action =
   | { a: "server"; msg: StoreServerMsg }
   | { a: "connected"; v: boolean; failure?: ConnectFailure | null }
   | { a: "activate"; id: string }
+  /** keep the ring on a row just marked unread for as long as it stays the one on screen */
+  | { a: "hold-unread"; id: string }
   /** open the draft tab: a new worktree from `base`, the active project's main when absent. The
    * same base again closes it, so the chord toggles; another base moves it. */
   | { a: "open-draft"; base?: string }
@@ -780,6 +786,8 @@ function guessed(action: Action): boolean {
 
 export function reducer(s: State, action: Action): State {
   let next = reduce(s, action);
+  // a hold is only for the row it was made on: selecting anything else, however it happened, ends it
+  if (next.unreadHold !== null && next.activeId !== next.unreadHold) next = { ...next, unreadHold: null };
   // every open/close routes through here, so the layout is remembered in one place rather than in
   // the dozen actions (a chord, a rail click, a dropped file) that move it
   if (next.activeRepoId !== s.activeRepoId) next = enterRepo(next);
@@ -971,6 +979,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, rightOpen: true, focusRight: s.focusRight + 1 };
     case "show-right":
       return s.rightOpen ? s : { ...s, rightOpen: true };
+    case "hold-unread":
+      return { ...s, unreadHold: action.id };
     case "toggle-rail":
       return { ...s, railOpen: !s.railOpen };
     case "focus-rail":

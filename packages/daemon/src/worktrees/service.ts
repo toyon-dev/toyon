@@ -1209,8 +1209,19 @@ export class WorktreeService {
     const wt = this.d.state.worktree(worktreeId);
     // a discovered worktree has no turns, so nothing to have missed
     if (!wt) return;
-    if (wt.seenAt != null && wt.lastTurnAt != null && wt.seenAt >= wt.lastTurnAt) return;
+    if (!wt.unread && wt.seenAt != null && wt.lastTurnAt != null && wt.seenAt >= wt.lastTurnAt) return;
+    wt.unread = undefined;
     wt.seenAt = Date.now();
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+  }
+
+  /** the person wants to come back to this worktree: ring it until they next look at it */
+  markUnread(worktreeId: string) {
+    const wt = this.d.state.worktree(worktreeId);
+    // a discovered worktree has no record to carry the mark
+    if (!wt || wt.unread) return;
+    wt.unread = true;
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
   }
@@ -1311,5 +1322,5 @@ export class WorktreeService {
 /** a turn finished here since anyone last looked. A worktree with no `lastTurnAt` reads as seen,
  * so worktrees that predate the field do not all light up the first time the daemon restarts. */
 function isUnseen(wt: WorktreeInfo): boolean {
-  return wt.lastTurnAt != null && (wt.seenAt == null || wt.seenAt < wt.lastTurnAt);
+  return wt.unread === true || (wt.lastTurnAt != null && (wt.seenAt == null || wt.seenAt < wt.lastTurnAt));
 }

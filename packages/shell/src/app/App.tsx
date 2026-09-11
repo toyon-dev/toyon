@@ -28,6 +28,8 @@ import { cx } from "../ui/cx.ts";
 const RAIL_PX = 40;
 const RAIL_OPEN_PX = 232;
 const MRU_SUBSCRIPTIONS = 3;
+/** how long a worktree stays on screen, with the window focused, before its unseen ring clears */
+const SEEN_AFTER_MS = 2000;
 
 /** Where the browser's own menu is the useful one and ours would take it away: anything typed
  * into (spelling, paste), the terminal (paste), Monaco, and the preview, which is the person's
@@ -88,20 +90,35 @@ export function App() {
     document.title = activeRow ? `${activeRow.name} · toyon` : "toyon";
   }, [activeRow]);
 
-  // Selecting a worktree clears the rail's unseen ring: whichever way you got here (a rail click,
-  // ⌘1-9, the palette), you are looking at it now. Focus is the one condition kept, and it is what
-  // makes the ring worth having: a turn ending while the tab sits in the background must still be
-  // there when you come back, even on the worktree you happened to leave selected.
+  // Looking at a worktree clears the rail's unseen ring: whichever way you got here (a rail click,
+  // ⌘1-9, the palette), you are looking at it now. Looking takes a moment, not an instant, so a
+  // walk with ⌥↓ that passes through a row leaves its ring for later. Focus is the other condition,
+  // and it is what makes the ring worth having: a turn ending while the tab sits in the background
+  // must still be there when you come back, even on the worktree you happened to leave selected.
+  // A row marked unread while on screen is held (`unreadHold`), or the moment would undo the mark.
   const unseen = !!active?.unseen;
+  const held = useStore((s) => s.unreadHold !== null && s.unreadHold === s.activeId);
   useEffect(() => {
-    if (!sock || !activeId || !unseen) return;
-    const seen = () => {
-      if (document.visibilityState === "visible" && document.hasFocus()) sock.send({ t: "seen", worktreeId: activeId });
+    if (!sock || !activeId || !unseen || held) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const looking = () => document.visibilityState === "visible" && document.hasFocus();
+    const arm = () => {
+      clearTimeout(timer);
+      if (!looking()) return;
+      timer = setTimeout(() => {
+        if (looking()) sock.send({ t: "seen", worktreeId: activeId });
+      }, SEEN_AFTER_MS);
     };
-    seen();
-    window.addEventListener("focus", seen);
-    return () => window.removeEventListener("focus", seen);
-  }, [sock, activeId, unseen]);
+    const disarm = () => clearTimeout(timer);
+    arm();
+    window.addEventListener("focus", arm);
+    window.addEventListener("blur", disarm);
+    return () => {
+      disarm();
+      window.removeEventListener("focus", arm);
+      window.removeEventListener("blur", disarm);
+    };
+  }, [sock, activeId, unseen, held]);
 
   // paint the selected theme (or the picker's live preview); previews get the accent for their overlays
   useEffect(() => {

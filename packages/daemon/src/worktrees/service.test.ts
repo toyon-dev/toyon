@@ -877,6 +877,27 @@ describe("boot", () => {
 describe("unseen", () => {
   const unseenOf = async (id: string) => (await w.worktrees.rows()).find((x) => x.id === id)?.unseen;
 
+  test("marking unread rings a row nothing has run in, and looking at it clears the mark", async () => {
+    await registered();
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    w.worktrees.markUnread(main.id);
+    expect(await unseenOf(main.id)).toBe(true);
+    w.worktrees.markSeen(main.id);
+    expect(await unseenOf(main.id)).toBeUndefined();
+    expect(w.state.worktree(main.id)?.unread).toBeUndefined();
+  });
+
+  test("marking unread brings back a ring that looking had cleared", async () => {
+    await registered();
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    w.hub.emit("agentStatus", main.id, "working");
+    w.hub.emit("agentStatus", main.id, "idle");
+    w.worktrees.markSeen(main.id);
+    expect(await unseenOf(main.id)).toBeUndefined();
+    w.worktrees.markUnread(main.id);
+    expect(await unseenOf(main.id)).toBe(true);
+  });
+
   test("a worktree nothing has run in is not unseen", async () => {
     await registered();
     const main = w.state.worktrees.find((x) => x.kind === "main")!;

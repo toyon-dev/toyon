@@ -24,6 +24,7 @@ export type ChordId =
   | "wt-next"
   | "wt-unseen-prev"
   | "wt-unseen-next"
+  | "mark-unread"
   | "project"
   | "refs";
 
@@ -125,6 +126,9 @@ export const CHORDS: readonly Chord[] = [
   // neither. Down is on the shortcuts card; up is for the hand that already knows it.
   { id: "wt-unseen-prev", key: "ArrowUp", alt: true, shift: true },
   { id: "wt-unseen-next", key: "ArrowDown", alt: true, shift: true },
+  // ⌘⇧U is Mail's mark-as-unread: the ring goes back on the worktree on screen, to come back to.
+  // Monaco binds only ⌘U (cursor undo) and ⌘K ⌘U, so a focused editor lets it through.
+  { id: "mark-unread", key: "u", shift: true },
   // ⌘O is "Open..." in VS Code on macOS and in vscode.dev, which takes it from the browser's own
   // open-file dialog the same way. ⌘⇧O stays free because it is go-to-symbol in VS Code and Monaco.
   // ⌃R is open-recent in VS Code and Zed, and reverse history search in every shell, so a focused

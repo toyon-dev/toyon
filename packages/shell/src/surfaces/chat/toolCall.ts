@@ -52,17 +52,6 @@ const KIND_ICON: Record<ToolKind, IconName> = {
   other: "dot",
 };
 
-/** which kinds open themselves while the agent is on them. Only the one that changes the code: a
- * diff is the thing you would have opened anyway, and it is the thing you want to have seen if it
- * was wrong. Everything else waits for a click, a command it ran included, since a turn that throws
- * a panel open per call reads itself out loud and walks the message you were reading off the top of
- * the log. A set rather than a check so a kind can be added back on its own.
- *
- * `think` never reaches a tool row for Claude (its adapter sends thoughts as `agent_thought_chunk`,
- * which becomes a `thinking` item and a ThoughtRow; acp/map.ts). It is here for an agent that
- * models its reasoning as a call, so that it reads the way a streamed thought does: open. */
-export const AUTO_OPEN: ReadonlySet<ToolKind> = new Set<ToolKind>(["edit", "think"]);
-
 /** a run row's verb says more than "execute" does: `grep -rn x .` is a search and `git commit` is a
  * commit, and the column reads better following the command than the kind. Conservative on purpose:
  * a verb belongs here only when one glyph is right for every use of it, which is why `sed` (a read

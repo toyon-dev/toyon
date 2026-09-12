@@ -1,4 +1,4 @@
-import { type PickMeta, SHELL_TOOL } from "@toyon/shared";
+import type { PickMeta } from "@toyon/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +25,7 @@ import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
-import { AUTO_OPEN, callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
+import { callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
@@ -311,17 +311,31 @@ function Fold({
 /** The agent's reasoning, folded like a call: it is addressed to nobody, and the message after it
  * says whatever in it mattered, so a paragraph of it in the flow read as an answer that had lost
  * its colour. The line is one word, the way a call's is a path: its first sentence was a sentence
- * of prose in a column of file names, and the wrong tier of thing to be ellipsised. Open while it
- * streams, since a thought arriving is the only sign the agent is working, and closed by whatever
- * comes next. It waits for its first words before it opens: an empty panel under a spinner says
- * less than the spinner alone. The body is the message's markdown, not a call's mono: it is prose. */
-export const ThoughtRow = memo(function ThoughtRow({ item, live }: { item: ThinkingItem; live?: boolean }) {
+ * of prose in a column of file names, and the wrong tier of thing to be ellipsised. It is the one
+ * row that opens itself, and it stays open past the calls it set off, which print a line each and
+ * put nothing in its place (openRow in group.ts). The body is the message's markdown, not a call's
+ * mono: it is prose.
+ *
+ * The word and the spinner answer a narrower question than the fold does: the agent is thinking
+ * while this is the newest thing in the log, and a row still reading "Thinking" over a call that
+ * has started says the wrong thing about where the agent is. */
+export const ThoughtRow = memo(function ThoughtRow({
+  item,
+  open,
+  streaming,
+}: {
+  item: ThinkingItem;
+  /** the one row of the turn that opens itself */
+  open?: boolean;
+  /** the agent is thinking right now, rather than off doing what it decided */
+  streaming?: boolean;
+}) {
   const html = useThrottledMarkdown(item.text);
-  const word = live ? "Thinking" : "Thought";
+  const word = streaming ? "Thinking" : "Thought";
   return (
     <Fold
       className="tool-row"
-      auto={!!live && !!item.text.trim()}
+      auto={!!open}
       label={word}
       menu={(fold) =>
         grouped([
@@ -331,7 +345,7 @@ export const ThoughtRow = memo(function ThoughtRow({ item, live }: { item: Think
       }
       summary={
         <>
-          {live ? <span className="spinner">●</span> : <Icon name="bulb" className="tool-icon" />}
+          {streaming ? <span className="spinner">●</span> : <Icon name="bulb" className="tool-icon" />}
           <span className="tool-name">{word}</span>
         </>
       }
@@ -365,21 +379,14 @@ export const ToolRow = memo(
   }) {
     // every call in a run prints the same line, so the first one is the row
     const head = tools[0]!;
-    // While the agent is in the file the row is a feed: each call appends what it just did, and
-    // nothing above it moves. Once it has moved on the run is over and the row is the record of it,
-    // which is the change the run came to rather than one diff per call printing the same
-    // neighbourhood again (mergeDiffs.ts). The swap lands on the same render that closes the row,
-    // so it is only ever seen on a row somebody pinned open.
-    const net = useMemo(
-      () => (live ? null : netOfCalls(tools.map((t) => toolBlocks(t, t.output ?? "")))),
-      [tools, live],
-    );
-    // the live row (openRow in group.ts) opens itself, but only where its output is worth watching
-    // arrive: a read or a search is a file you asked for, and having each one throw a panel open
-    // walks the message you were reading off the top of the log. A command the person ran themselves is
-    // open from the start, since what it printed is the reason they ran it, and the next one
-    // closes it: a series of `!` commands is a prompt, not a stack of listings.
-    const auto = !!live && (head.name === SHELL_TOOL || AUTO_OPEN.has(head.toolKind ?? "other"));
+    // A run of calls on one file is read as the change the run came to, not as one diff per call
+    // printing the same neighbourhood again (mergeDiffs.ts). No edit row opens itself any more, so
+    // this is only ever read on a row somebody opened, and what they came for is what the run did.
+    const net = useMemo(() => netOfCalls(tools.map((t) => toolBlocks(t, t.output ?? ""))), [tools]);
+    // the log decides which row opens itself, and it hands the row two answers: the turn's one
+    // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
+    // open from the start because what it printed is the reason the person ran it
+    const auto = !!live;
     const { label, name, icon, hint } = toolLabel(head, roots);
     const running = !tools.at(-1)?.done;
     const what = [label, hint].filter(Boolean).join(" ");

@@ -18,10 +18,12 @@ const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): Chat
 
 const text = (t: string): ChatItem => ({ kind: "assistant", text: t });
 
+const thought = (t: string): ChatItem => ({ kind: "thinking", text: t }) as ChatItem;
+
 const DIFF = "@@ -1 +1 @@\n-a\n+b";
 
 /** which entry the log opens while the agent works */
-const open = (items: ChatItem[]) => openRow(groupTools(items, ["/wt"]), ["/wt"]);
+const open = (items: ChatItem[]) => openRow(groupTools(items, ["/wt"]));
 
 /** what each entry stands for: the first item's index, and how many calls are on the row */
 const shape = (items: ChatItem[], roots: string[] = []) =>
@@ -147,38 +149,46 @@ describe("groupTools", () => {
     ]);
   });
 
-  test("the open row: a call that has printed nothing yet leaves the diff above it open", () => {
-    const items = [tool("edit", "/wt/a.ts", { output: DIFF }), tool("edit", "/wt/b.ts", { done: false })];
+  test("the open row: a thought opens once it has words, and an empty one opens nothing", () => {
+    expect(open([thought("The caller next.")])).toBe(0);
+    expect(open([thought(" ")])).toBe(-1);
+  });
+
+  test("the open row: no diff ever opens itself, however much it has to show", () => {
+    expect(open([tool("edit", "/wt/a.ts", { output: DIFF })])).toBe(-1);
+    expect(open([tool("edit", "/wt/a.ts", { output: DIFF }), tool("edit", "/wt/b.ts", { output: DIFF })])).toBe(-1);
+    expect(open([tool("read", "/wt/a.ts", { output: "x" })])).toBe(-1);
+  });
+
+  test("the open row: the thought stays open under the calls it set off, pending or returned", () => {
+    const think = thought("The caller next.");
+    expect(open([think, tool("edit", "/wt/a.ts", { done: false })])).toBe(0);
+    expect(open([think, tool("edit", "/wt/a.ts", { output: DIFF })])).toBe(0);
+    expect(open([think, tool("edit", "/wt/a.ts", { output: DIFF }), tool("read", "/wt/b.ts", { output: "x" })])).toBe(
+      0,
+    );
+  });
+
+  test("the open row: the agent's next words close the thought, a message still empty does not", () => {
+    const think = thought("The caller next.");
+    expect(open([think, text("")])).toBe(0);
+    expect(open([think, text("Checking the caller.")])).toBe(-1);
+  });
+
+  test("the open row: the next thought takes it, but only once it has words of its own", () => {
+    const items = [thought("The caller next."), tool("edit", "/wt/a.ts", { output: DIFF }), thought(" ")];
     expect(open(items)).toBe(0);
+    expect(open([...items.slice(0, 2), thought("Now the tests.")])).toBe(2);
   });
 
-  test("the open row: the next change takes it once its diff arrives", () => {
-    const items = [tool("edit", "/wt/a.ts", { output: DIFF }), tool("edit", "/wt/b.ts", { output: DIFF })];
-    expect(open(items)).toBe(1);
-  });
-
-  test("the open row: a read still going leaves the diff open, and closes it once it comes back", () => {
-    const edit = tool("edit", "/wt/a.ts", { output: DIFF });
-    expect(open([edit, tool("read", "/wt/b.ts", { done: false })])).toBe(0);
-    expect(open([edit, tool("read", "/wt/b.ts", { output: "x" })])).toBe(-1);
-  });
-
-  test("the open row: the agent's first words close it, a message or thought still empty does not", () => {
-    const edit = tool("edit", "/wt/a.ts", { output: DIFF });
-    expect(open([edit, text("")])).toBe(0);
-    expect(open([edit, { kind: "thinking", text: " " } as ChatItem])).toBe(0);
-    expect(open([edit, text("Checking the caller.")])).toBe(-1);
-    expect(open([edit, { kind: "thinking", text: "The caller next." } as ChatItem])).toBe(-1);
-  });
-
-  test("the open row: a run on one file stays open while its next call is pending", () => {
-    const items = [tool("edit", "/wt/a.ts", { output: DIFF }), tool("edit", "/wt/a.ts", { done: false })];
-    expect(open(items)).toBe(0);
-  });
-
-  test("the open row: a diff from before the last message is not reopened", () => {
-    const items = [tool("edit", "/wt/a.ts", { output: DIFF }), { kind: "user", text: "and the tests" } as ChatItem];
+  test("the open row: a thought from before the last message is not reopened", () => {
+    const items = [thought("The caller next."), { kind: "user", text: "and the tests" } as ChatItem];
     expect(open(items)).toBe(-1);
+  });
+
+  test("the open row: an agent that models its reasoning as a call opens like a thought", () => {
+    expect(open([tool("think", "/wt/a.ts", { output: "The caller next." })])).toBe(0);
+    expect(open([tool("think", "/wt/a.ts", { done: false })])).toBe(0);
   });
 
   test("two subagents reading one file do not fold into each other's row", () => {

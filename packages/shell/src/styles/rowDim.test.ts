@@ -74,7 +74,7 @@ const NEVER_LIFTS = [
   ".pick-chip button",
   ".overlay-title",
   ".setup-aside",
-  ".status-bar",
+  ".bar",
   ".tool-row .dl.meta",
   ".tool-row .dl.more",
   ".bar-zen-title",

@@ -1,4 +1,4 @@
-/* Pane: a bottom pane of the preview column, its header and its drag handle. */
+/* Pane: a bottom pane of the centre, its header and its drag handle. */
 @layer tokens, base, surfaces;
 @layer base {
   .pane {

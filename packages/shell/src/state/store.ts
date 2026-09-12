@@ -262,7 +262,7 @@ export type Overlay =
 export type ProjectsOverlay = { kind: "projects"; form: "pill" | "center" | "disk" };
 
 /** The new-project page: a project that does not exist yet, named and placed on the page in the
- * preview slot rather than in a form over it. Its second step is the first-run composer of the
+ * centre rather than in a form over it. Its second step is the first-run composer of the
  * project it makes. `creating` runs from Enter until that project's main row is listed, so nothing
  * flashes in between (a clone's import pane takes over as soon as the clone starts); `unmaking` is a
  * made project being taken back here, still listed until the daemon forgets it. */
@@ -504,7 +504,7 @@ export interface State {
   chosenFolder: { seq: number; folder: ChosenFolder | null } | null;
   /** clones in flight, held by the daemon so every tab sees them and a reload does not lose them */
   pending: PendingRepo[];
-  /** the import being watched in the preview area, if any. Separate from `activeRepoId` because a
+  /** the import being watched in the centre, if any. Separate from `activeRepoId` because a
    * pending project has no repo record yet, and mixing the two id spaces would be a bug waiting. */
   activeImportId: string | null;
   /** the daemon's agent registry and the default for new worktrees */
@@ -804,7 +804,7 @@ export type Action =
   | { a: "close-new-project" }
   /** the composer took the send the page asked of it, so it is not asked twice */
   | { a: "auto-sent" }
-  /** show a clone's progress in the preview area (null stops watching) */
+  /** show a clone's progress in the centre (null stops watching) */
   | { a: "watch-import"; id: string | null }
   | { a: "close-editor" }
   /** the editor pane opens this file now; fileSync reads it */

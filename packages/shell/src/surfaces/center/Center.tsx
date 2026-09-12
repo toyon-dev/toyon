@@ -53,12 +53,12 @@ import { ImportPane } from "./ImportPane.tsx";
 import { NewProjectPane } from "./NewProjectPane.tsx";
 import { NoPreviewPane } from "./NoPreviewPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
-import "./preview.css";
+import "./center.css";
 import { wantsLinks } from "../../state/links.ts";
 import { VisitTracker } from "../../state/visits.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 
-/** the preview column: one persistent iframe per visited worktree (switching is a display toggle,
+/** the centre: one persistent iframe per visited worktree (switching is a display toggle,
  * so each preview keeps its app state + HMR socket while hidden), the editor pane, and the overlays */
 export function Center() {
   const dispatch = useDispatch();
@@ -122,7 +122,7 @@ export function Center() {
   const busy = !!active && isBusy(active);
   const forcedSetup = needsSetup && !treeEmpty && !busy ? needsSetup : null;
   const setupRepo = forcedSetup ?? reopened;
-  // a clone being watched takes the preview slot too: same reason as the setup pane, in that the
+  // a clone being watched takes the centre too: same reason as the setup pane, in that the
   // project it belongs to cannot show one yet
   const watching = useStore((s) => s.pending.find((p) => p.id === s.activeImportId) ?? null);
 
@@ -307,7 +307,7 @@ export function Center() {
   // a pane's new height is the pointer's distance from the pane's own bottom edge, which the panes
   // stacked below hold in place whichever of them are open. The room to grow is what the column
   // has left once the other fixed-height panes are laid out, less the 80px the preview (or a
-  // full-height pane) keeps: the same floor as .preview-area's min-height.
+  // full-height pane) keeps: the same floor as .center-area's min-height.
   const measurePane = (min: number) => (ev: PointerEvent, handle: HTMLElement) => {
     const pane = handle.parentElement;
     const center = centerRef.current;
@@ -326,7 +326,7 @@ export function Center() {
   return (
     <div className="center" ref={centerRef}>
       <div
-        className="preview-area"
+        className="center-area"
         style={{ display: (editor && editorFull) || (designOpen && designFull) ? "none" : undefined }}
       >
         <div className="frames-wrap">

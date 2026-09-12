@@ -54,8 +54,8 @@
     text-underline-offset: 3px;
   }
 
-  /* ---- status bar ---- */
-  .status-bar {
+  /* ---- the bar ---- */
+  .bar {
     position: relative;
     display: flex;
     align-items: center;
@@ -77,7 +77,7 @@
    traffic lights float top-left, so the top bar becomes the title bar — draggable, inset past
    the controls (env(titlebar-area-*) comes from the OS), controls themselves stay clickable */
   @media (display-mode: window-controls-overlay) {
-    .status-bar.top-bar {
+    .bar.top-bar {
       -webkit-app-region: drag;
       app-region: drag;
       padding-left: calc(env(titlebar-area-x, 0px) + 10px);
@@ -88,9 +88,9 @@
     }
     /* a float over the bar says this for itself, in float.css: it is drawn in the top layer, so it
      is no part of the bar's layout and this selector could not reach it */
-    .status-bar.top-bar button,
-    .status-bar.top-bar input,
-    .status-bar.top-bar .bar-center {
+    .bar.top-bar button,
+    .bar.top-bar input,
+    .bar.top-bar .bar-center {
       -webkit-app-region: no-drag;
       app-region: no-drag;
     }
@@ -100,14 +100,14 @@
     .app.zen {
       grid-template-rows: auto 1fr;
     }
-    .app.zen .status-bar.top-bar {
+    .app.zen .bar.top-bar {
       display: flex;
       justify-content: center;
     }
-    .app.zen .status-bar.top-bar > :not(.bar-zen-title) {
+    .app.zen .bar.top-bar > :not(.bar-zen-title) {
       display: none;
     }
-    .app.zen .status-bar.top-bar .bar-zen-title {
+    .app.zen .bar.top-bar .bar-zen-title {
       display: block;
     }
   }
@@ -137,7 +137,7 @@
   }
   /* .btn is 11px/1.4 text in 1px padding (~17px) while .btn-icon is a fixed 20px square, so a bar
    mixing them looks ragged; in here they share the icon box's height */
-  .status-bar {
+  .bar {
     & .btn {
       min-height: 20px;
     }
@@ -168,7 +168,7 @@
     text-overflow: ellipsis;
     max-width: 160px;
   }
-  .status-bar {
+  .bar {
     & .bar-grow {
       flex: 1;
     }

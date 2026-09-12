@@ -641,7 +641,7 @@
       background: var(--surface1);
     }
   }
-  /* same 20px box as the status-bar icons, flush with the textarea's right edge
+  /* same 20px box as the bar's icons, flush with the textarea's right edge
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
   /* a crashed proc in this worktree, badged on the terminal button: the only status this row shows,
    and only because the tab that explains it is one click away */

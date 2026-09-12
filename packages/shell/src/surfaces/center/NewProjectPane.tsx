@@ -24,7 +24,7 @@ const NAME_MIN = 14;
 const NO_CHOICES: ModelChoice[] = [];
 
 /**
- * The new project, as one page in the preview slot: a title, where it goes, and the description that
+ * The new project, as one page in the centre: a title, where it goes, and the description that
  * starts it. Written rather than filled in, which is why there is no heading, no labels and no
  * boxes: the placeholder says what the title is for, the line under it says where the folder lands,
  * and create makes the project and sends the description as its first message.

@@ -1,4 +1,4 @@
-/* The centre column: the frames, the setup, import and empty states. */
+/* The centre: the frames, and the views that stand in for them. */
 @layer tokens, base, surfaces;
 @layer surfaces {
   /* ---- center ---- */
@@ -13,7 +13,7 @@
        outside this column counts in that order */
     isolation: isolate;
   }
-  .preview-area {
+  .center-area {
     flex: 1;
     /* the floor a pane drag leaves it too (Center.tsx): the stack shrinks before the preview
        vanishes, so what the panes are about stays in view */

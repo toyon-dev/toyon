@@ -3,8 +3,8 @@ import { useEffect, useRef } from "react";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 
-/** A clone in flight, in the preview area where that project's app will be. Sibling of the setup
- * pane: both take the preview slot for a project that cannot show one yet, and both are the place
+/** A clone in flight, in the centre where that project's app will be. Sibling of the setup
+ * pane: both take the centre for a project that cannot show one yet, and both are the place
  * the person waits rather than a toast that is gone before they look back.
  *
  * Escape closes this pane without stopping the clone (see the ladder in `app/keys.ts`); the button

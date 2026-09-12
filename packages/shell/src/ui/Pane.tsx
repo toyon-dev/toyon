@@ -6,7 +6,7 @@ import { Icon } from "./Icon.tsx";
 import { type MenuEntry, useContextMenu } from "./menu.ts";
 import { Tabs, type TabsProps } from "./Tabs.tsx";
 
-/** a bottom pane of the preview column (editor, terminal): drag handle, header row, close button.
+/** a bottom pane of the centre (editor, terminal): drag handle, header row, close button.
  * Esc closes them in order from app/keys.ts, which owns the ladder. */
 export function Pane({
   className,

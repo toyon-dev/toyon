@@ -32,17 +32,6 @@
       background: #fff;
     }
   }
-  .center {
-    & .empty {
-      height: 100%;
-      display: grid;
-      place-items: center;
-      color: var(--text2);
-      font: var(--type-ui);
-      white-space: pre-wrap;
-      padding: 24px;
-    }
-  }
   .new-project-field {
     flex: 0 1 auto;
     min-width: 0;
@@ -139,20 +128,6 @@
     flex: 1;
     min-width: 0;
   }
-  .import-pane {
-    & .import-log {
-      max-height: 220px;
-      overflow-y: auto;
-      background: var(--sunken);
-      border: 1px solid var(--border0);
-      border-radius: var(--radius);
-      padding: 8px 10px;
-      font: var(--type-mono-sm);
-      color: var(--text1);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-  }
   .import-idle,
   .import-error {
     color: var(--text2);
@@ -160,16 +135,6 @@
 }
 @layer surfaces {
   /* ---- boot pane: what stands in for the preview until a server answers ---- */
-  .boot-pane {
-    width: min(720px, 100%);
-    text-align: left;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  .boot-line {
-    color: var(--text1);
-  }
   .boot-procs {
     list-style: none;
     margin: 0;
@@ -198,17 +163,5 @@
     &.boot-bad .boot-status {
       color: var(--red);
     }
-  }
-  .boot-actions {
-    display: flex;
-    gap: 8px;
-  }
-  .boot-tail {
-    margin: 0;
-    max-height: 40vh;
-    overflow: auto;
-    font: var(--type-mono-sm);
-    color: var(--text1);
-    white-space: pre-wrap;
   }
 }

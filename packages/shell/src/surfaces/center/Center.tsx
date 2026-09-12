@@ -1,4 +1,4 @@
-import { type ConnectFailure, isOwned, parseBridgeMsg } from "@toyon/shared";
+import { isOwned, parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { nextSeq } from "../../state/actions/file.ts";
@@ -31,15 +31,7 @@ import { hasToken } from "../../ws.ts";
 /** read once at load (the token arrives in the URL fragment); calling it during render would write storage */
 const HAS_TOKEN = hasToken();
 
-/** what the empty pane says while the socket is down, by what ws.ts found out about why */
-const CONNECT_TEXT: Record<ConnectFailure | "probing", string> = {
-  probing: "connecting to daemon…",
-  down: "the daemon is not running.\nrun `toyon` in your repo to start it; `toyon doctor` says what it can see",
-  blocked:
-    "the daemon is up, but this page's websocket never connected.\na proxy, VPN or browser extension is the usual cause; `toyon doctor` checks from the terminal",
-  unauthorized: "this page's token is not the running daemon's.\nrun `toyon` again and open the link it prints",
-};
-
+import { Status } from "../../ui/Status.tsx";
 import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
@@ -53,6 +45,7 @@ import { Import } from "./Import.tsx";
 import { NewProject } from "./NewProject.tsx";
 import { NoPreview } from "./NoPreview.tsx";
 import { Setup } from "./Setup.tsx";
+import { waitingText } from "./waiting.ts";
 import "./center.css";
 import { wantsLinks } from "../../state/links.ts";
 import { VisitTracker } from "../../state/visits.ts";
@@ -323,6 +316,20 @@ export function Center() {
   const startDesignDrag = useDragResize(measurePane(160), (h) => setDesignH(Math.round(h)));
   const startTermDrag = useDragResize(measurePane(140), (h) => setTermH(Math.round(h)));
 
+  // the sentence the centre says when nothing of theirs can be shown and no view stands in; null
+  // hands the slot to one that does (see waiting.ts for the order and why it is that order)
+  const say = waitingText({
+    connected,
+    heard,
+    connectFailure,
+    hasToken: HAS_TOKEN,
+    projectChord: chord("project"),
+    title: active?.worktree.title ?? null,
+    needsSetup: !!needsSetup,
+    busy,
+    treeEmpty,
+  });
+
   return (
     <div className="center" ref={centerRef}>
       <div
@@ -389,33 +396,16 @@ export function Center() {
                 !setupRepo &&
                 !watching &&
                 !greenfield &&
-                !incompatible && (
-                  <div className="empty">
-                    {!connected && (!heard || connectFailure) ? (
-                      // heard over the bootstrap fetch means the daemon is up and the socket is a
-                      // moment away; saying "connecting" for that moment is the flash, not the truth
-                      HAS_TOKEN ? (
-                        CONNECT_TEXT[connectFailure ?? "probing"]
-                      ) : (
-                        "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
-                      )
-                    ) : !active ? (
-                      heard ? (
-                        `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
-                      ) : (
-                        ""
-                      )
-                    ) : needsSetup && busy ? (
-                      `building in ${active.worktree.title}; the preview appears once it starts`
-                    ) : needsSetup && treeEmpty ? (
-                      `${active.worktree.title} is empty so far; say what to build`
-                    ) : noProcs ? (
-                      <NoPreview repo={noProcs} />
-                    ) : (
-                      <Boot worktree={active} log={log} />
-                    )}
-                  </div>
-                )}
+                !incompatible &&
+                (say !== null ? (
+                  <Status>
+                    <p className="status-line">{say}</p>
+                  </Status>
+                ) : noProcs ? (
+                  <NoPreview repo={noProcs} />
+                ) : (
+                  active && <Boot worktree={active} log={log} />
+                ))}
             </>
           )}
         </div>

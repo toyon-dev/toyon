@@ -124,6 +124,10 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   const newestShell = entries.findLastIndex((e) => "tools" in e && e.tools[0]?.name === SHELL_TOOL);
   // a `!` command still going: its row spins, and this is where the stop for it lives
   const shellRunning = items.some((i) => i.kind === "tool" && i.name === SHELL_TOOL && !i.done);
+  // The transcript shines one thing at a time, and between two calls there is no row to shine: the
+  // results are in, nothing is in flight, and the agent is deciding what to do next. That gap is
+  // most of a turn and it read as a stall, so the word takes the mark whenever no row holds it.
+  const deciding = working && streaming < 0 && !items.some((i) => i.kind === "tool" && !i.done);
   // The rows under the transcript land a frame after the message that caused them: the agent goes
   // busy after the send is in the log, a queued message after the daemon takes it. They add height
   // without touching `items`, so the send they follow scrolls out from under them.
@@ -161,7 +165,13 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
         )}
         {busy && active && (
           <div className="working-row">
-            {active.agent === "waiting" ? "waiting for your answer…" : "working…"}
+            {/* waiting is not activity: it is blocked on you, and the rail keeps that dot steady
+                for the same reason */}
+            {active.agent === "waiting" ? (
+              "waiting for your answer…"
+            ) : (
+              <span className={deciding ? "live-text" : undefined}>working…</span>
+            )}
             <Button
               variant="outline"
               tone="danger"

@@ -582,14 +582,19 @@
    The band is the text's own two tiers rather than a colour of its own; the yellow is the dot's
    job. It paints through the glyphs rather than over them, and it is `text-fill-color` that is
    cleared rather than `color`, so an element that names its own colour keeps it the moment the
-   animation stops and nothing has to be put back. */
+   animation stops and nothing has to be put back.
+
+   The lit part is a plateau and not a peak: ramping straight from one tier to the other and back
+   puts full brightness on a single column, and since the two tiers are a few steps apart only the
+   top of that ramp reads as lit at all, which is a band about three characters wide on a path.
+   Holding text0 across the middle tenth is what makes it a band you watch travel. */
   .live-text {
-    background: linear-gradient(90deg, var(--text2) 40%, var(--text0) 50%, var(--text2) 60%);
+    background: linear-gradient(90deg, var(--text2) 30%, var(--text0) 45%, var(--text0) 55%, var(--text2) 70%);
     background-size: 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: shine 1.6s linear infinite;
+    animation: shine 2.6s linear infinite;
   }
   @keyframes shine {
     from {

@@ -1,41 +1,5 @@
 import { type EffectCallback, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-/** The overlays only scrim the preview column, so a click on a dock or the rail wouldn't reach a
- * backdrop — dismiss on any mousedown outside the box instead. A button that toggles its own box
- * is exempt: closing here would let its click reopen what it meant to close. */
-export function useDismissOutside(box: RefObject<HTMLElement | null>, onOutside: () => void) {
-  const cb = useRef(onOutside);
-  cb.current = onOutside;
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      const t = e.target as Element | null;
-      // and so is the context menu: it is a portal, so a row's menu inside a picker is outside
-      // the picker's box, and choosing from it must not take the picker down first
-      if (t?.closest?.(".keys-btn, .bar-pill, .menu")) return;
-      // a chip's button is exempt only for the panel hanging in its own wrapper: another chip's
-      // button is an outside click like any other, or two panels end up open at once
-      const wrap = t?.closest?.(".repo-chip-wrap, .chip-picker");
-      if (wrap && box.current && wrap.contains(box.current)) return;
-      if (box.current && !box.current.contains(t as Node)) cb.current();
-    };
-    // a click in the preview iframe never reaches this document, but it does move focus into the
-    // frame; an app switch blurs the window too, and leaves focus where it was
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const onBlur = () => {
-      timer = setTimeout(() => {
-        if (document.activeElement?.tagName === "IFRAME") cb.current();
-      });
-    };
-    document.addEventListener("mousedown", h);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("mousedown", h);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, [box]);
-}
-
 /** Focus on mount — a chord may arrive while the preview iframe or Monaco holds focus, and
  * autoFocus alone loses that race, so take it explicitly on the next frame too. `select` also
  * selects an input's text, and only when focus is actually taken: selecting again on the next

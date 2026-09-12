@@ -195,3 +195,33 @@ export function Float({
     </div>
   );
 }
+
+/**
+ * A box that takes its place in the stack without taking the top layer: a centred palette, which
+ * scrims the preview column on purpose so the docks stay usable, and therefore stays in the page.
+ * It still has to be in the stack, or a menu opened from one of its rows would not know whose child
+ * it is, and the press that chooses from that menu would close the palette under it.
+ */
+export function useFloatEntry(
+  box: MutableRefObject<HTMLElement | null>,
+  {
+    onDismiss,
+    onKey,
+    trigger,
+  }: { onDismiss?: (why: DismissReason) => void; onKey?: (e: KeyboardEvent) => void; trigger?: Element | null } = {},
+) {
+  const live = useRef({ onDismiss, onKey, trigger });
+  live.current = { onDismiss, onKey, trigger };
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const { onDismiss: dismiss, onKey: key, trigger: from } = live.current;
+    const entry = floats.register({
+      box: el,
+      trigger: from,
+      dismiss: dismiss ? (why) => live.current.onDismiss?.(why) : undefined,
+      onKey: key ? (e) => live.current.onKey?.(e) : undefined,
+    });
+    return () => floats.unregister(entry);
+  }, [box]);
+}

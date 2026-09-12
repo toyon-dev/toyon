@@ -120,7 +120,8 @@ export function RoutePicker({
   const close = () => dispatch({ a: "close" });
   return (
     <ListPicker<Row>
-      anchored
+      // the panel is the field's own box: it takes its width and lies exactly on it
+      anchored={{ matchWidth: 0 }}
       items={NO_ROWS}
       filter={filter}
       initialQuery={current}

@@ -30,7 +30,6 @@ const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
  * the map goes with the last of them. */
 const NOT_YET: Record<string, string> = {
   ".inline-picker": "the composer's @ and / menu becomes a Float",
-  ".overlay-box.anchored": "the pickers' panels become Floats",
   ".overlay": "the scrim drops to a rung inside an isolated .center",
   ".pane-resize": "the strip drops to a rung inside an isolated .pane",
   ".rail-panel": "the peek drops to a rung inside the isolated .docks",

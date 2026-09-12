@@ -23,8 +23,8 @@ const ARRIVAL = new Set([".field-lead", ".form-title"]);
 
 /**
  * The rest of the dress, which may say how a part sits but not where the column's edges are.
- * FormRow's parts (`form-row`, `form-label`, `form-control`, `form-actions`, `form-dest`) are not
- * on this list: a row inside a form is its own thing, and its label column is a width it owns.
+ * FormRow's parts (`form-row`, `form-label`, `form-control`) are not on this list: a row inside a
+ * form is its own thing, and its label column is a width it owns.
  */
 const PARTS = new Set([".form-title", ".form-head", ".form-body", ".form-body-lg", ".form-knobs", ".form-go"]);
 const BOX = ["padding", "padding-top", "padding-bottom", "padding-inline", "width", "margin", "margin-top"];
@@ -78,8 +78,8 @@ describe("the form dress", () => {
       }
     }
     if (!head) offenders.push(".form-head must sit the title and its neighbour on one baseline");
-    // the measure is the dress. `.setup-pane` was a second copy of this column for a year, and the
-    // two drifted apart by a top anchor nobody meant to make different.
+    // the measure is the dress: a second rule declaring it is a second column, and two columns
+    // drift apart by whichever of them someone edits.
     if (measures.join() !== ".form") offenders.push(`the measure is declared by ${measures.join(", ") || "nothing"}`);
     expect(offenders.sort()).toEqual([]);
   });

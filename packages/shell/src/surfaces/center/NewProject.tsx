@@ -111,7 +111,7 @@ export function NewProject({ project }: { project: NewProjectState }) {
   const submit = () => {
     if (!ready) return;
     // pendingOpen is what makes this tab, and only this tab, adopt the project the daemon adds; the
-    // description rides on the project and goes from the new project's own box (see settlePage)
+    // description rides on the project and goes from the new project's own box (see settleView)
     dispatch({ a: "open-repo" });
     dispatch({ a: "new-project-set", v: { phase: "creating" } });
     sock?.send({

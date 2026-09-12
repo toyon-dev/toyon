@@ -5,6 +5,7 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { NewProjectState } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
+import { Form } from "../../ui/Form.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
@@ -189,12 +190,12 @@ export function NewProject({ project }: { project: NewProjectState }) {
           : nameError);
 
   return (
-    <div className="new-project-pane">
+    <Form>
       {clone && <p className="new-project-url">{project.url}</p>}
 
-      <div className="new-project-head">
+      <div className="form-head">
         {inPlace ? (
-          <p className="new-project-name">{name}</p>
+          <p className="form-title">{name}</p>
         ) : (
           <Field
             ref={nameRef}
@@ -235,9 +236,9 @@ export function NewProject({ project }: { project: NewProjectState }) {
         </span>
       </div>
 
-      {hint && <p className="hint new-project-hint">{hint}</p>}
+      {hint && <p className="hint">{hint}</p>}
 
-      <div className="new-project-body">
+      <div className="form-body">
         <TextArea
           ref={describeRef}
           bare
@@ -254,7 +255,7 @@ export function NewProject({ project }: { project: NewProjectState }) {
         />
       </div>
 
-      <div className="hint new-project-knobs">
+      <div className="hint form-knobs">
         {agents.length > 1 ? (
           <AgentModelChip agents={agents} agent={defaultAgent} model={model} onChange={pickAgentModel} />
         ) : (
@@ -262,14 +263,14 @@ export function NewProject({ project }: { project: NewProjectState }) {
         )}
         <EffortChip efforts={agentInfo?.efforts ?? NO_CHOICES} value={effort} onChange={setEffort} />
         {existing ? (
-          <Button variant="outline" size="lg" className="new-project-go" autoFocus onClick={() => openFolder(existing)}>
+          <Button variant="outline" size="lg" className="form-go" autoFocus onClick={() => openFolder(existing)}>
             open it
           </Button>
         ) : (
           <Button
             variant="outline"
             size="lg"
-            className="new-project-go"
+            className="form-go"
             busy={project.phase === "creating"}
             disabled={!ready}
             onClick={submit}
@@ -310,7 +311,7 @@ export function NewProject({ project }: { project: NewProjectState }) {
               onChange={(e) => setIdentity({ ...identity, email: e.target.value })}
             />
           </div>
-          <p className="hint new-project-hint">git labels the work you save with these, and asks only once</p>
+          <p className="hint">git labels the work you save with these, and asks only once</p>
         </>
       )}
 
@@ -319,6 +320,6 @@ export function NewProject({ project }: { project: NewProjectState }) {
           or open a folder you already have
         </Button>
       )}
-    </div>
+    </Form>
   );
 }

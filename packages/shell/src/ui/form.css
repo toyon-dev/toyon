@@ -1,0 +1,90 @@
+/* Form: the dress a view wears when a person puts something into it. Its column, its title, the
+   region it is written in, and the row of knobs under that. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* One column on the centre's own ground. No background, no border, no radius and no shadow
+     anywhere on this dress: a box drawn around the first thing anyone writes reads as a form to
+     fill in rather than a page to write on, which is the whole of what separates this from the
+     card it replaced. form.test.ts holds that. */
+  .form {
+    height: 100%;
+    overflow: auto;
+    width: min(var(--form-measure), 100%);
+    margin: 0 auto;
+    padding-inline: var(--view-inset);
+    padding-bottom: var(--view-top);
+    display: flex;
+    flex-direction: column;
+    gap: var(--form-gap);
+    color: var(--text0);
+    font: var(--type-ui);
+    /* the column resets the margin every part of it would otherwise carry, so no part has to */
+    & > p {
+      margin: 0;
+    }
+  }
+  /* the two anchors, and nothing else about the column: see Form.tsx for which is for what */
+  .form-line {
+    padding-top: var(--form-anchor);
+  }
+  .form-top {
+    padding-top: var(--view-top);
+  }
+  /* The one line the form is about, at the size it arrives in. It is the same size the name is
+     typed at (Field's `font="lead"`), because on the first run they are the same words a moment
+     apart and the line must not move or resize between them. */
+  .form-title {
+    font: var(--type-ui-xl);
+    color: var(--text0);
+    overflow-wrap: anywhere;
+  }
+  /* the title line when something sits beside the title: the baseline is what keeps the smaller
+     thing sitting on the title's line rather than on its box */
+  .form-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
+  /* What a person writes here becomes the thing: a first message, a description. So the region is
+     the page it will be read on, with no frame and no ground, and a height to aim at before a word
+     is in it. The height is the region's and the textarea fills it, the way the composer's does.
+     Deliberately no `min-height: 0` here, which is what a composer inside a scrolling panel needs
+     and what a form's body must not have: this box may not collapse. */
+  .form-body {
+    display: flex;
+    min-height: var(--form-body);
+    & textarea {
+      flex: 1;
+      width: 100%;
+      resize: none;
+    }
+  }
+  /* the body when the composer itself is what is written in: it carries its own knobs row, so the
+     region is a tier taller. The height is the region's, and the composer fills it; the dock's
+     tall floor is scoped to the dock for exactly this reason, since a floor set there would sit in
+     the surfaces layer and beat anything this file said. */
+  .form-body-lg {
+    min-height: var(--form-body-lg);
+    /* the dock's composer is a region at the foot of a panel, so it carries a ground, an edge and
+       its own inset. Here it is the page under the title and all three have to go; the inset would
+       leave the first line sitting a few pixels right of the title above it. */
+    & > .composer {
+      flex: 1;
+      background: none;
+      border-top: none;
+      padding: 0;
+    }
+  }
+  /* what will run on it, and the one action, on the row the composer keeps them on */
+  .form-knobs {
+    display: flex;
+    align-items: center;
+    gap: var(--form-gap);
+    min-width: 0;
+  }
+  /* the one primary, at the end of the knobs row */
+  .form-go {
+    margin-left: auto;
+  }
+}

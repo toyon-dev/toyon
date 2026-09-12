@@ -120,6 +120,26 @@
     /* the horizontal padding of a full-bleed row: the text column every list sits on */
     --row-inset: 12px;
 
+    /* The centre's views: the margins a view is laid out in, then each dress's own numbers. The
+     margins are --view-* rather than one dress's, because both dresses read them and a dress
+     reading another dress's token is the wrong direction. A form's bottom room is the top over
+     again, so a form scrolled to its end stops where a top-anchored one starts.
+     A measure has one reader and is still a token: it is the number that defines the dress, and a
+     number that defines a dress belongs beside the dress's other definitions, or the fourth form
+     gets typed with 540. */
+    --view-inset: 24px;
+    --view-top: 48px;
+    /* the two anchors. `line` drops the first line about a quarter down so the name typed on the
+     new-project view lands where that project's title reads a moment later; `top` is --view-top
+     itself, for a form that grows while it is being read. */
+    --form-anchor: max(var(--view-top), 24vh);
+    --form-measure: 560px;
+    --form-gap: 12px;
+    /* the box a person writes in before a word is in it. The -lg tier is the same box carrying its
+     own knobs row, which is the composer on the first-run screen. */
+    --form-body: 96px;
+    --form-body-lg: 120px;
+
     /* Elevation. Two tiers, and the question each answers is what the thing is doing rather than how
    * far off the page it looks:
    *

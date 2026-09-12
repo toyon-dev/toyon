@@ -2,7 +2,7 @@ import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveT
 import { agentItems } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { appearanceLabel, recapsItem } from "../../state/actions/settings.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDarkNow, useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
@@ -27,7 +27,7 @@ export function KeysHelp() {
   const cm = useContextMenu("keys");
   const prefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
-  const systemDark = useStore((s) => s.systemDark);
+  const dark = useDarkNow();
   const agents = useStore((s) => s.agents);
   const globalPrefs = useStore((s) => s.prefs);
   const recaps = recapsItem({ prefs: globalPrefs }, { sock });
@@ -84,7 +84,7 @@ export function KeysHelp() {
           <div className="keys-setting">
             <span className="keys-d">theme</span>
             <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
-              {resolveTheme(prefs, themes, systemDark).name}
+              {resolveTheme(prefs, themes, dark).name}
             </Button>
           </div>
           {/* its own section, not a row under Agents: a row there is an agent */}

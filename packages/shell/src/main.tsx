@@ -10,7 +10,7 @@ import { defaultPanels, initialState, type Panels } from "./state/store.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
-import { applyTheme, cachedTheme, prefersDark } from "./theme.ts";
+import { applyTheme, cachedDaylight, cachedTheme, prefersDark } from "./theme.ts";
 import { DaemonSocket } from "./ws.ts";
 
 // tell an injected preview bridge that this document is a shell, so it leaves the chords to us
@@ -94,6 +94,7 @@ const store = createStore(
   initialState({
     cached,
     systemDark: prefersDark(),
+    daylight: cachedDaylight(),
     storedActive: read(localStorage, STORAGE.active),
     storedRepo: read(localStorage, STORAGE.repo),
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",

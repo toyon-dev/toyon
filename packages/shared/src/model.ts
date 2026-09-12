@@ -516,9 +516,19 @@ export interface Theme {
 
 export type ThemeColorKey = keyof Theme["colors"];
 
+/** What the two following modes follow, each as "is it dark there now": the OS's appearance, and
+ * the sun where the shell is. The shell reads `system` off prefers-color-scheme; `daylight` is what
+ * the daemon last worked out for the browser's own timezone, which is why it is not a media query. */
+export interface DarkNow {
+  system: boolean;
+  daylight: boolean;
+}
+
 export interface ThemePrefs {
-  /** appearance: paint the `dark` or `light` slot, or follow prefers-color-scheme */
-  mode: "dark" | "light" | "system";
+  /** appearance: paint the `dark` or `light` slot, follow prefers-color-scheme, or follow the sun
+   * where the shell is. The last exists because a machine pinned to dark leaves `system` with
+   * nothing to follow, and macOS only runs its own solar schedule while its appearance is Auto. */
+  mode: "dark" | "light" | "system" | "daylight";
   light: string;
   dark: string;
 }

@@ -1,12 +1,13 @@
 import { resolveTheme, type ThemePrefs } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
-import type { State } from "../store.ts";
+import { darkNow, type State } from "../store.ts";
 import type { Deps } from "./deps.ts";
 
 export const appearanceLabel: Record<ThemePrefs["mode"], string> = {
   dark: "dark",
   light: "light",
   system: "follow system",
+  daylight: "follow daylight",
 };
 
 /** browser file dialog to raw theme text (the daemon parses JSONC and converts) */
@@ -21,7 +22,10 @@ export function pickThemeFile(onText: (name: string, source: string) => void) {
   input.click();
 }
 
-export type SettingsState = Pick<State, "themePrefs" | "themes" | "systemDark" | "agents" | "defaultAgent" | "prefs">;
+export type SettingsState = Pick<
+  State,
+  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent" | "prefs"
+>;
 
 /** the one switch on what a recap costs: on, the agent's quick model writes a sentence; off, the
  * facts alone and never a model call. Here, on the settings card, and on the recap line itself.
@@ -47,7 +51,7 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
       {
         id: "theme",
         label: "theme…",
-        detail: resolveTheme(prefs, s.themes, s.systemDark).name,
+        detail: resolveTheme(prefs, s.themes, darkNow(s)).name,
         sub: true,
         onClick: () => dispatch({ a: "open", overlay: { kind: "theme", slot: "theme" } }),
       },

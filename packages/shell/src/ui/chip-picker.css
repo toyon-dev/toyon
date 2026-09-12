@@ -2,18 +2,15 @@
 @layer tokens, base, surfaces;
 @layer base {
   .chip-picker {
-    position: relative;
     display: inline-flex;
     align-items: center;
   }
-  /* Over the chip, the way the switcher opens over the pill: -6px/-9px are the panel's border plus
-   the field strip's padding, so the lead chip lands exactly on the chip and the value does not
-   move. 360px is what a description takes on one line; the anchored box's own 460px is the pill's,
-   sized for the top bar. */
+  /* Over the chip, the way the switcher opens over the pill: Float lands the strip's lead on the
+   chip by measuring it, so the value does not move whatever the strip's padding becomes. 360px is
+   what a description takes on one line; the anchored box's own 460px is the pill's, sized for the
+   top bar. */
   .chip-picker {
     & > .overlay-box.anchored {
-      top: -6px;
-      left: -9px;
       width: min(360px, calc(100vw - 16px));
     }
     /* a chip's list is a handful of rows inside a panel that is already most of the way down the
@@ -30,37 +27,28 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  /* No room below the chip (the composer's chips are at the foot of the window): the panel is
-   flipped, so the field strip is its bottom band and still lands on the chip, with the rows rising
-   above it. Each band swaps the edge it draws its rule and corners on.
-   ChipPicker.tsx measures and sets this. */
-  .chip-picker-up {
-    & > .overlay-box.anchored {
-      top: auto;
-      bottom: -6px;
-      display: flex;
-      flex-direction: column-reverse;
-    }
-    & > .overlay-box.anchored .picker-input {
+  /* No room below the chip (the composer's chips are at the foot of the window): the panel turns
+   over, so the field strip is its bottom band and still lands on the chip, with the rows rising
+   above it. Each band swaps the edge it draws its rule and corners on. A variant only reorders the
+   bands and never resizes the box, because the lead it lands by is measured in the variant already
+   applied. Float marks which way it turned. */
+  .chip-picker > .overlay-box.anchored[data-side="top"] {
+    display: flex;
+    flex-direction: column-reverse;
+    & .picker-input {
       margin: 0 -8px -8px;
       border-bottom: 0;
       border-top: 1px solid var(--border0);
       border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     }
-    & > .overlay-box.anchored .picker-list {
+    & .picker-list {
       margin: 0 var(--picker-bleed, 0) 6px;
     }
   }
   /* no room to the right (the chat dock sits on the window's edge): the panel hangs from the chip's
    right edge, and the strip is mirrored so the lead is its right end and still lands on the chip */
-  .chip-picker-right {
-    & > .overlay-box.anchored {
-      left: auto;
-      right: -9px;
-    }
-    & > .overlay-box.anchored .picker-input {
-      flex-direction: row-reverse;
-    }
+  .chip-picker > .overlay-box.anchored[data-align="end"] .picker-input {
+    flex-direction: row-reverse;
   }
   /* An option is its name over a line saying what it means. The descriptions are sentences, and
    on a one-line row beside the name they were the part that got cut; the row is nowrap for its

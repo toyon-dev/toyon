@@ -1,0 +1,30 @@
+/* Float: the box the browser draws in its top layer. See Float.tsx. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* A popover arrives dressed: centred in the window with a border, padding and the browser's own
+     colours. None of that is ours. Undoing it at zero specificity (`:where`) leaves every float's
+     own class to draw the box, whatever order the stylesheets reach the page in, and still beats
+     the browser's sheet. Position is fixed here because a top-layer box has no parent to sit in;
+     Float.tsx writes the coordinates. */
+  :where(.float) {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    border: 0;
+    padding: 0;
+    background: none;
+    color: inherit;
+    overflow: visible;
+    width: auto;
+    height: auto;
+  }
+  /* The title bar is the window's drag region. A float over it is not in the bar's layout, so the
+     bar's own exemptions cannot reach it and it says so itself: without this, a press on a row that
+     overlaps the bar drags the window instead. */
+  @media (display-mode: window-controls-overlay) {
+    .float {
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+    }
+  }
+}

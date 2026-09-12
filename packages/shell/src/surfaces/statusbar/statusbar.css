@@ -18,17 +18,14 @@
    and it would cover the edges of the nav buttons, which sit 4px either side. The rows share the
    strip's inset, so the list reads down from the address in one column. */
   .bar-route {
-    position: relative;
     display: flex;
     flex: 1;
     min-width: 0;
-    /* The top corners are the field's, since the panel lies exactly on it: a rounder panel leaves the
+    /* The panel lies exactly on the field, which is what it is placed against and whose width it
+     takes (see RoutePicker). The top corners are therefore the field's: a rounder panel leaves the
      field's tighter corner showing outside its arc. The bottom corners are the floating box's. The
      strip sits inside the panel's border, so its curve is the field's less that 1px. */
     & .overlay-box.anchored {
-      top: 0;
-      left: 0;
-      width: 100%;
       border-radius: var(--radius) var(--radius) var(--radius-lg) var(--radius-lg);
       --picker-inset: 10px;
     }
@@ -89,9 +86,10 @@
        that ends exactly there has its bottom border hidden under the traffic lights */
       min-height: calc(max(38px, env(titlebar-area-height, 38px)) + 1px);
     }
+    /* a float over the bar says this for itself, in float.css: it is drawn in the top layer, so it
+     is no part of the bar's layout and this selector could not reach it */
     .status-bar.top-bar button,
     .status-bar.top-bar input,
-    .status-bar.top-bar .overlay-box.anchored,
     .status-bar.top-bar .bar-center {
       -webkit-app-region: no-drag;
       app-region: no-drag;
@@ -149,23 +147,17 @@
    nothing more — .btn already gives the hover background and .on the open one, which is the
    whole visual vocabulary here */
   .bar-project {
-    position: relative;
     display: flex;
     align-items: center;
   }
   .bar-pill {
     flex: none;
   }
-  /* The panel opens over the pill rather than under it, the way an address bar expands in place.
-   -6px/-9px are the panel's border plus the field strip's padding, so the chip lands exactly on
-   the pill's box and the project name does not move at all; the 38px bar leaves 3px of itself
-   above the panel, which is what makes the top edge readable. The pill stays under it, holding
-   the bar's layout. */
+  /* The panel opens over the pill rather than under it, the way an address bar expands in place:
+   Float lands the strip's own chip on the pill, so the project name does not move at all, and the
+   38px bar leaves 3px of itself above the panel, which is what makes the top edge readable. The
+   pill stays under it, holding the bar's layout. */
   .bar-project {
-    & .overlay-box.anchored {
-      top: -6px;
-      left: -9px;
-    }
     /* half the viewport is a centred palette's budget; hanging off the bar, that would bury the app */
     & .overlay-box .picker-list {
       max-height: min(340px, 50vh);

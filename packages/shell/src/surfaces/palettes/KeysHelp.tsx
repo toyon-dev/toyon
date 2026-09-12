@@ -37,7 +37,7 @@ export function KeysHelp() {
     dispatch(a);
   };
   return (
-    <Overlay bare boxClass="keys-stack" onClose={() => dispatch({ a: "close" })}>
+    <Overlay bare boxClass="keys-stack" id="keys-help" onClose={() => dispatch({ a: "close" })}>
       <div className="keys-card">
         <div>
           {/* the current project first, as its own section: how it installs and starts

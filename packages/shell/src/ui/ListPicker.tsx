@@ -5,7 +5,7 @@ import { useFocusOnMount } from "./hooks.ts";
 import { KeyHints } from "./KeyHints.tsx";
 import { type Completion, type Ghost, useListNav } from "./listNav.ts";
 import { type MenuEntry, menuStore, useContextMenu } from "./menu.ts";
-import { Overlay } from "./Overlay.tsx";
+import { type Anchored, Overlay } from "./Overlay.tsx";
 import "./picker.css";
 import { rowState } from "./rowState.ts";
 
@@ -59,6 +59,7 @@ export function ListPicker<T>({
   idleWhen,
   onIdlePick,
   anchored = false,
+  onEscape,
   lead,
   trailing,
   empty = "no matches",
@@ -110,9 +111,12 @@ export function ListPicker<T>({
    * unless `onSide` is wired up, and `complete` unless tab would actually complete something. A
    * function sees the highlighted row, for a picker whose enter means different things per row. */
   keys?: KeyVerbs | ((active: T | null, q: string) => KeyVerbs);
-  /** draw as a dropdown under the trigger (the caller renders it inside the trigger's positioned
-   * wrapper) instead of a centered overlay over the preview */
-  anchored?: boolean;
+  /** draw as a dropdown on the control that opened it (the caller renders it inside that control's
+   * wrapper, which is what it is placed against) instead of a centred overlay over the preview */
+  anchored?: boolean | Anchored;
+  /** Escape while this picker is the topmost float, for one that the store does not own: a chip's
+   * panel is local state, and the ladder in app/keys.ts would shut whatever the chip sits in */
+  onEscape?: () => void;
   /** before the caret: what the query is already scoped to, as a chip */
   lead?: ReactNode;
   /** at the right end of the input row: one escape hatch out of the picker */
@@ -237,7 +241,14 @@ export function ListPicker<T>({
   );
   const keysEl = hints.length > 0 && <KeyHints hints={hints} />;
   return (
-    <Overlay onClose={onBack} boxClass="picker" anchored={anchored}>
+    <Overlay
+      onClose={onBack}
+      onEscape={onEscape}
+      boxClass="picker"
+      anchored={anchored}
+      // the strip's lead is what lands on the control: the chip's value stays where it was
+      coverBy={lead ? ".picker-input > *:first-child" : undefined}
+    >
       {inputEl}
       {listEl}
       {keysEl}

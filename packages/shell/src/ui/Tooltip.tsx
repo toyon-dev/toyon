@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { Float, type FloatHandle } from "./Float.tsx";
 import { Kbd } from "./Kbd.tsx";
+import { type Placement, type Point, pointRect, type Rect } from "./place.ts";
 import "./tooltip.css";
 
 /**
@@ -20,7 +21,6 @@ import "./tooltip.css";
  */
 
 export type TipPlacement = "follow" | "top" | "bottom" | "left" | "right";
-type Side = Exclude<TipPlacement, "follow">;
 
 export type TipOptions = {
   placement?: TipPlacement;
@@ -90,7 +90,6 @@ export type Anchor = {
   also?: TipAlso;
   placement: TipPlacement;
 };
-type Point = { x: number; y: number };
 
 /** The element's own placement; below when it names none. Nothing is guessed from the anchor's
  * size, so where a tip lands is readable off the markup. */
@@ -100,56 +99,34 @@ function placementOf(el: HTMLElement): TipPlacement {
   return "bottom";
 }
 
-/** The preferred side if it has room, else the other side if that one does; when neither fits the
- * preference stands and the clamp below does what it can. */
-function pick(want: Side, other: Side, wantFits: boolean, otherFits: boolean): Side {
-  return wantFits || !otherFits ? want : other;
+/** Where a tip goes: beside its element on the side the markup asked for, or off the pointer for a
+ * following one. A following tip hangs off the pointer's lower right, the way a cursor tip always
+ * has, and swaps to its left when the right runs out; centring it on the pointer put the arrow over
+ * the middle of a box that can be three hundred pixels wide, with the text going both ways from it.
+ * A side tip centres on its anchor and never swaps ends, so only the side it grows on can turn. */
+export function tipPlacement(p: TipPlacement): Placement {
+  if (p === "follow") {
+    return {
+      side: "bottom",
+      align: "start",
+      offset: CURSOR_GAP,
+      alignOffset: -CURSOR_NUDGE,
+      flip: "both",
+      margin: MARGIN,
+    };
+  }
+  return { side: p, align: "center", offset: GAP, flip: "side", margin: MARGIN };
 }
 
-/** Place the box beside its anchor on the placed side, or off the pointer for a following one.
- * Flips to the opposite side when there is no room and clamps to the viewport either way. */
-export function place(box: HTMLDivElement, anchor: Anchor, pointer: Point) {
-  const r = anchor.el.getBoundingClientRect();
-  const w = box.offsetWidth;
-  const h = box.offsetHeight;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const p = anchor.placement;
-
-  let side: Side;
-  let top: number;
-  let left: number;
-  if (p === "left" || p === "right") {
-    const leftOf = r.left - GAP - w;
-    const rightOf = r.right + GAP;
-    const fitsLeft = leftOf >= MARGIN;
-    const fitsRight = rightOf + w <= vw - MARGIN;
-    side = p === "left" ? pick("left", "right", fitsLeft, fitsRight) : pick("right", "left", fitsRight, fitsLeft);
-    left = side === "left" ? leftOf : rightOf;
-    top = r.top + r.height / 2 - h / 2;
-  } else {
-    const follow = p === "follow";
-    const below = follow ? pointer.y + CURSOR_GAP : r.bottom + GAP;
-    const above = follow ? pointer.y - CURSOR_GAP - h : r.top - GAP - h;
-    const fitsBelow = below + h <= vh - MARGIN;
-    const fitsAbove = above >= MARGIN;
-    side = p === "top" ? pick("top", "bottom", fitsAbove, fitsBelow) : pick("bottom", "top", fitsBelow, fitsAbove);
-    top = side === "top" ? above : below;
-    // A following tip hangs off the pointer's lower right, the way a cursor tip always has, and
-    // swaps to its left when the right runs out. Centring it on the pointer put the arrow over the
-    // middle of a box that can be three hundred pixels wide, with the text going both ways from it.
-    left = follow ? pointer.x + CURSOR_NUDGE : r.left + r.width / 2 - w / 2;
-    if (follow && left + w > vw - MARGIN) left = pointer.x - CURSOR_NUDGE - w;
-  }
-
-  box.style.top = `${Math.round(Math.min(Math.max(MARGIN, top), vh - MARGIN - h))}px`;
-  box.style.left = `${Math.round(Math.min(Math.max(MARGIN, left), vw - MARGIN - w))}px`;
-  box.dataset.side = side;
+/** what the tip is placed against: its control, or the pointer it trails */
+export function tipRect(anchor: Anchor, pointer: Point): Rect {
+  return anchor.placement === "follow" ? pointRect(pointer) : anchor.el.getBoundingClientRect();
 }
 
 export function Tooltips() {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
-  const box = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement | null>(null);
+  const handle = useRef<FloatHandle | null>(null);
   const pointer = useRef<Point>({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -252,12 +229,9 @@ export function Tooltips() {
     };
   }, []);
 
-  // position after render so we can measure our own size
+  // the control a tip is about can leave while the tip is up (a row removed under it)
   useLayoutEffect(() => {
-    const b = box.current;
-    if (!b || !anchor) return;
-    if (!anchor.el.isConnected) return setAnchor(null);
-    place(b, anchor, pointer.current);
+    if (anchor && !anchor.el.isConnected) setAnchor(null);
   }, [anchor]);
 
   // a following tip is repositioned straight on the node: going through state would re-render the
@@ -266,7 +240,7 @@ export function Tooltips() {
     if (anchor?.placement !== "follow") return;
     const onMove = (e: MouseEvent) => {
       pointer.current = { x: e.clientX, y: e.clientY };
-      if (box.current) place(box.current, anchor, pointer.current);
+      handle.current?.update();
     };
     document.addEventListener("mousemove", onMove);
     return () => document.removeEventListener("mousemove", onMove);
@@ -285,8 +259,19 @@ export function Tooltips() {
       {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}
     </>
   );
-  return createPortal(
-    <div ref={box} className="tooltip" role="tooltip">
+  return (
+    // shown again whenever it moves to another control, which puts it back above whatever opened
+    // while it stood: a tip about a menu row is over that menu
+    <Float
+      className="tooltip"
+      role="tooltip"
+      boxRef={box}
+      handle={handle}
+      anchor={() => tipRect(anchor, pointer.current)}
+      placement={tipPlacement(anchor.placement)}
+      track={false}
+      raiseKey={anchor}
+    >
       {anchor.also ? (
         <div className="tooltip-pair">
           <span>{words}</span>
@@ -303,7 +288,6 @@ export function Tooltips() {
         head
       )}
       {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
-    </div>,
-    document.body,
+    </Float>
   );
 }

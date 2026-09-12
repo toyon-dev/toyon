@@ -1,4 +1,5 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useMemo, useSyncExternalStore } from "react";
+import { type Placement, type Point, pointRect, type Rect } from "./place.ts";
 
 /**
  * One menu for the whole app. This module is the slot it lives in: opening a menu replaces
@@ -60,7 +61,7 @@ export function tidy(entries: MenuEntry[]): MenuEntry[] {
 /** groups of items with a rule between each, empty groups dropped */
 export const grouped = (groups: MenuEntry[][]): MenuEntry[] => tidy(groups.flatMap((g, i) => (i ? [SEP, ...g] : g)));
 
-export type Point = { x: number; y: number };
+export type { Point };
 
 export type MenuSpec = {
   items: MenuEntry[];
@@ -75,9 +76,13 @@ export type MenuSpec = {
   /** the element it is about: a pointerdown on it does not dismiss, a dropdown's second click
    * toggles it shut, and the menu goes when the element leaves the DOM */
   target: Element;
+  /** which opening this is, so a menu about another row is drawn as another box rather than the
+   * same one moved: the highlight starts again and it takes its place on top of the floats */
+  id?: number;
 };
 
 let current: MenuSpec | null = null;
+let opened = 0;
 const listeners = new Set<() => void>();
 const emit = () => {
   for (const l of listeners) l();
@@ -95,7 +100,7 @@ export const menuStore = {
   open(spec: MenuSpec) {
     const items = tidy(spec.items);
     if (items.length === 0) return menuStore.close();
-    current = { ...spec, items };
+    current = { ...spec, items, id: ++opened };
     emit();
   },
   close() {
@@ -140,18 +145,22 @@ export function placement(
   return { anchor: row.getBoundingClientRect() };
 }
 
-/** the box's top-left for a spec, kept on screen: `w` is the menu's width, `h` its height */
-export function menuBox(
-  spec: Pick<MenuSpec, "at" | "anchor" | "align">,
-  w: number,
-  h: number,
-  vw: number,
-  vh: number,
-): Point {
+/** What a menu is placed against: the row or trigger it hangs under, or the pointer that asked for
+ * it, which is a rect with no size. 4px is both the gap under an anchor and the margin it keeps
+ * from the window's edge, since a menu is a box against the chrome rather than a tip beside a
+ * control. It never flips: a menu that jumped above the row it belongs to would read as another
+ * row's, and the clamp keeps it on screen. */
+export function menuPlacement(spec: Pick<MenuSpec, "at" | "anchor" | "align">): {
+  rect: Rect;
+  placement: Placement;
+} {
   const a = spec.anchor;
-  const x = a ? (spec.align === "right" ? a.right - w : a.left) : (spec.at?.x ?? 0);
-  const y = a ? a.bottom + 4 : (spec.at?.y ?? 0);
-  return { x: Math.max(4, Math.min(x, vw - w - 4)), y: Math.max(4, Math.min(y, vh - h - 4)) };
+  if (!a)
+    return { rect: pointRect(spec.at ?? { x: 0, y: 0 }), placement: { side: "bottom", align: "start", margin: 4 } };
+  return {
+    rect: a,
+    placement: { side: "bottom", align: spec.align === "right" ? "end" : "start", offset: 4, margin: 4 },
+  };
 }
 
 /** how a context menu was asked for; a listbox answers only the keyboard, since a right-click

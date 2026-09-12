@@ -75,6 +75,10 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
           hint={chord("keys")}
           tone="chrome"
           on={keysOpen}
+          // the card this opens, so a press on the lit gear closes it rather than counting as a
+          // press outside: the gesture that opened it may have been the chord, not this button
+          aria-controls="keys-help"
+          aria-expanded={keysOpen}
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
           {...cm.contextMenu(() => settingsItems(store.getState(), { sock, dispatch }))}
         />

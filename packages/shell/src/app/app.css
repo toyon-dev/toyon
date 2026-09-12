@@ -26,6 +26,9 @@
   .docks {
     display: flex;
     min-height: 0;
+    /* the docks layer their own children: a grab strip over the seam it sits on, and the rail's
+       peek over the dock beside it. Neither reaches past this row. */
+    isolation: isolate;
   }
 
   /* zero-width in layout: the dock's own 1px border is the only seam you see.
@@ -64,8 +67,9 @@
     pointer-events: none;
   }
 
+  /* placed against the window rather than any control, so it keeps its own coordinates; being a
+     Float is what puts it over whatever is open when it arrives */
   .toast {
-    position: fixed;
     bottom: 38px;
     left: 50%;
     transform: translateX(-50%);
@@ -76,7 +80,6 @@
     border-radius: var(--radius-md);
     padding: 10px 14px;
     cursor: pointer;
-    z-index: 30;
     box-shadow: var(--elevation-float);
     &.err {
       border-left-color: var(--red);

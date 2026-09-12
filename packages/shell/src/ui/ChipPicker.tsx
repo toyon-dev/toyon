@@ -23,15 +23,6 @@ export type ChipOption<T extends string> = {
   chip?: string;
 };
 
-/** the panel's footprint before it is on screen, for deciding which way it opens: the width is
- * chip-picker.css's, the height is the field strip and a two-line row per option */
-const PANEL_W = 360;
-const panelH = (rows: number) => 68 + 38 * rows;
-
-/** which way the panel opens: over the chip unless that runs off the screen, then above it, or
- * hung from the chip's right edge */
-type Placement = { up: boolean; right: boolean };
-
 /**
  * A chip holding one value out of a few, and the panel it opens into: the one the project pill
  * drops, with the value as the field's lead chip, a row per option with a line under its name
@@ -42,8 +33,9 @@ type Placement = { up: boolean; right: boolean };
  * The panel lands over the chip the way the switcher lands over the pill, whichever way it opens:
  * a chip at the foot of the window (the composer's) gets the field strip at the panel's bottom and
  * the rows rising above it, and one against the window's right edge (the chat dock's) hangs the
- * panel from its right edge. The placement is measured on open: see chip-picker.css. The lead chip
- * is a button, because it covers the chip that opened the panel and a second click there closes it.
+ * panel from its right edge. Float measures the real box against the real chip and marks which way
+ * it turned; chip-picker.css reorders the bands to match. The lead chip is a button, because it
+ * covers the chip that opened the panel and a second click there closes it.
  */
 export function ChipPicker<T extends string>({
   value,
@@ -66,46 +58,32 @@ export function ChipPicker<T extends string>({
   /** the panel went away, picked or not: the host puts the caret back where it was */
   onClose?: () => void;
 }) {
-  const [open, setOpen] = useState<Placement | null>(null);
+  const [open, setOpen] = useState(false);
   const close = () => {
-    setOpen(null);
+    setOpen(false);
     onClose?.();
   };
   const picked = options.find((o) => o.id === value);
   const shown = picked?.chip ?? picked?.label ?? value;
   return (
-    // Escape inside the picker reaches app/keys.ts otherwise, which knows only about the store's
-    // overlay and would shut whatever this chip sits in (the prompt, a bottom pane). The topmost
-    // thing owns Escape, and this one is not in the store.
-    <span
-      className={cx("chip-picker", open?.up && "chip-picker-up", open?.right && "chip-picker-right")}
-      onKeyDownCapture={(e) => {
-        if (!open || e.key !== "Escape") return;
-        e.stopPropagation();
-        close();
-      }}
-    >
+    <span className="chip-picker">
       <Button
         variant="ghost"
         tone="chrome"
         mono
-        on={open !== null}
+        on={open}
         className={cx("chip-picker-btn", className)}
         {...tip(hint)}
-        onClick={(e) => {
-          if (open) return close();
-          const r = e.currentTarget.getBoundingClientRect();
-          setOpen({
-            up: r.top - 6 + panelH(options.length) > window.innerHeight - 8,
-            right: r.left - 9 + PANEL_W > window.innerWidth - 8,
-          });
-        }}
+        onClick={() => (open ? close() : setOpen(true))}
       >
         {shown}
       </Button>
       {open && (
         <ListPicker<ChipOption<T>>
-          anchored
+          // the chip sits wherever its row does, so the panel turns over or swaps ends to stay on
+          // screen; Escape ends it here, since the store does not know this one is open
+          anchored={{ flip: "both", margin: 8 }}
+          onEscape={close}
           items={options}
           filter={(os, q) => {
             // each word against the whole name the row shows and the id the agent gave it, so "codex"

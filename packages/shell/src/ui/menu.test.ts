@@ -5,12 +5,20 @@ import {
   isItem,
   type MenuItem,
   type MenuSpec,
-  menuBox,
+  menuPlacement,
   menuStore,
   SEP,
   stepEnabled,
   tidy,
 } from "./menu.ts";
+import { place } from "./place.ts";
+
+/** where a 180x96 menu lands in a 1000x800 window */
+function box(spec: Pick<MenuSpec, "at" | "anchor" | "align">) {
+  const { rect, placement } = menuPlacement(spec);
+  const { x, y } = place(rect, { w: 180, h: 96 }, { w: 1000, h: 800 }, placement);
+  return { x, y };
+}
 
 const item = (id: string): MenuItem => ({ id, label: id, onClick: () => {} });
 const shape = (entries: ReturnType<typeof tidy>) => entries.map((e) => (isItem(e) ? e.id : "|")).join(" ");
@@ -98,14 +106,14 @@ describe("where a menu opens", () => {
   });
 
   test("the box follows the pointer or hangs off the anchor's chosen edge", () => {
-    expect(menuBox({ at: { x: 100, y: 200 } }, 180, 96, 1000, 800)).toEqual({ x: 100, y: 200 });
+    expect(box({ at: { x: 100, y: 200 } })).toEqual({ x: 100, y: 200 });
     const anchor = { left: 300, right: 400, bottom: 50 } as DOMRect;
-    expect(menuBox({ anchor }, 180, 96, 1000, 800)).toEqual({ x: 300, y: 54 });
-    expect(menuBox({ anchor, align: "right" }, 180, 96, 1000, 800)).toEqual({ x: 220, y: 54 });
+    expect(box({ anchor })).toEqual({ x: 300, y: 54 });
+    expect(box({ anchor, align: "right" })).toEqual({ x: 220, y: 54 });
   });
 
   test("and stays on screen at every edge", () => {
-    expect(menuBox({ at: { x: 990, y: 790 } }, 180, 96, 1000, 800)).toEqual({ x: 816, y: 700 });
-    expect(menuBox({ at: { x: -20, y: -20 } }, 180, 96, 1000, 800)).toEqual({ x: 4, y: 4 });
+    expect(box({ at: { x: 990, y: 790 } })).toEqual({ x: 816, y: 700 });
+    expect(box({ at: { x: -20, y: -20 } })).toEqual({ x: 4, y: 4 });
   });
 });

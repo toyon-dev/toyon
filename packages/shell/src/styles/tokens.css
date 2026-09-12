@@ -134,13 +134,10 @@
    * seam rather than a lift, and the jump-down pill, which is a control and not a surface. */
     --elevation-float: 0 6px 20px var(--shadow);
     --elevation-overlay: 0 10px 36px var(--shadow);
-    /* z-index is a ladder, written here rather than tokenised because every rung is one rule and
-     nothing reads it from two places: the dock's resize handle 1, a pane header's floating actions
-     2, a pane's resize handle and the composer's inline picker 5, the palette scrim 10, the rail's
-     peek 25, the toast 30, an anchored picker 40, the context menu 50 (it can open from a row
-     inside that picker), the tooltip 100. A new layer names its rung in this sentence before it
-     takes one. A rung only counts inside the stacking context it sits in, so nothing that holds an
-     anchored picker takes a transform, a filter or a z-index of its own. */
+    /* Nothing floats by z-index here: a box that covers what it does not own is a Float, drawn in
+     the browser's top layer (ui/Float.tsx), where the one shown last is on top and no ancestor can
+     trap or clip it. What is left is a component layering its own children, which isolates its own
+     root and uses 1 or 2. styles/layers.test.ts holds that line. */
     /* Four prefixes, one per kind, and the prefix is what tells you which kind you have:
    *
    *   --face-*    a font stack. Raw material: it belongs inside a --type-* value, and no rule sets

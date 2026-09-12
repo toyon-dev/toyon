@@ -9,6 +9,9 @@
     background: var(--surface0);
     display: flex;
     flex-direction: column;
+    /* the column layers its own children: the palette's scrim over the panes under it, and nothing
+       outside this column counts in that order */
+    isolation: isolate;
   }
   .preview-area {
     flex: 1;

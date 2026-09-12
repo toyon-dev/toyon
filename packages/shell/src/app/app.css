@@ -26,6 +26,9 @@
   .docks {
     display: flex;
     min-height: 0;
+    /* the docks layer their own children: a grab strip over the seam it sits on, and the rail's
+       peek over the dock beside it. Neither reaches past this row. */
+    isolation: isolate;
   }
 
   /* zero-width in layout: the dock's own 1px border is the only seam you see.

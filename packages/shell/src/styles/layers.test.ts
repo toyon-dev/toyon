@@ -26,20 +26,6 @@ const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
   ".image-chip.in-chat:hover .image-thumb": { root: ".chat-log", why: "the transcript's own image, larger" },
 };
 
-/** Still on the old ladder, each with the float that takes it. A phase empties its own entries, and
- * the map goes with the last of them. */
-const NOT_YET: Record<string, string> = {
-  ".overlay": "the scrim drops to a rung inside an isolated .center",
-  ".pane-resize": "the strip drops to a rung inside an isolated .pane",
-  ".rail-panel": "the peek drops to a rung inside the isolated .docks",
-};
-
-/** the roots that do not isolate yet, for the same reason */
-const ISOLATION_PENDING = new Set([".docks", ".center", ".pane", ".chat-log"]);
-
-/** a float still placing itself, until its phase moves it into the top layer */
-const FIXED_PENDING = new Set<string>();
-
 const cssFiles = () => [...new Glob("**/*.css").scanSync({ cwd: SRC })].sort();
 const codeFiles = () => [...new Glob("**/*.{ts,tsx}").scanSync({ cwd: SRC })].filter((f) => !f.endsWith(".test.ts"));
 
@@ -54,20 +40,17 @@ describe("layers", () => {
       if (z === undefined) continue;
       for (const selector of rule.selectors) {
         seen.add(selector);
-        if (NOT_YET[selector]) continue;
         const layer = LOCAL_LAYERS[selector];
         if (!layer) {
           offenders.push(`${selector}: z-index ${z} belongs to a float, which takes none`);
           continue;
         }
         if (z !== "1" && z !== "2") offenders.push(`${selector}: z-index ${z} is not 1 or 2`);
-        if (!isolates.has(layer.root) && !ISOLATION_PENDING.has(layer.root)) {
-          offenders.push(`${selector}: its root ${layer.root} does not isolate`);
-        }
+        if (!isolates.has(layer.root)) offenders.push(`${selector}: its root ${layer.root} does not isolate`);
       }
     }
-    // a name left in a map here outlives the rule it was written for
-    for (const selector of [...Object.keys(LOCAL_LAYERS), ...Object.keys(NOT_YET)]) {
+    // a name left in the map here outlives the rule it was written for
+    for (const selector of Object.keys(LOCAL_LAYERS)) {
       if (!seen.has(selector)) offenders.push(`${selector}: named here but declares no z-index`);
     }
     expect(offenders).toEqual([]);
@@ -79,9 +62,7 @@ describe("layers", () => {
       if (file === "ui/float.css") continue;
       for (const rule of cssRules(await Bun.file(`${SRC}${file}`).text())) {
         if (rule.decls.get("position") !== "fixed") continue;
-        for (const selector of rule.selectors) {
-          if (!FIXED_PENDING.has(selector)) offenders.push(`${file} ${selector}: a float is placed by Float.tsx`);
-        }
+        for (const selector of rule.selectors) offenders.push(`${file} ${selector}: a float is placed by Float.tsx`);
       }
     }
     expect(offenders).toEqual([]);

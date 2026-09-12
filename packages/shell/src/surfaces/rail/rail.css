@@ -198,7 +198,9 @@
     background: var(--surface1);
     border-left: 1px solid var(--border0);
     overflow: hidden;
-    z-index: 25;
+    /* the peek grows left over the chat dock and its grab strip, which are its neighbours inside
+       .docks and the only things it covers */
+    z-index: 2;
     /* the shadow only ever escapes to the left, never over the top bar. The clip has to hold while the
      panel collapses too, or the blur pops out on all four sides on the way back in. */
     clip-path: inset(0 0 0 -32px);

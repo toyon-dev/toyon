@@ -23,6 +23,9 @@
   .chat-log {
     flex: 1;
     overflow-y: auto;
+    /* the transcript layers its own children: a hovered image grows over the chips beside it, and
+       stops at the log's edge rather than climbing over the composer */
+    isolation: isolate;
     padding: 12px;
     display: flex;
     flex-direction: column;

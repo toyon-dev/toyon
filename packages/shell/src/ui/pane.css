@@ -3,6 +3,9 @@
 @layer base {
   .pane {
     position: relative;
+    /* a pane layers its own children, and bounds what an editor or a terminal inside it can climb
+       over: their own stacking runs deep, and it stops at this edge */
+    isolation: isolate;
     border-top: 1px solid var(--border0);
     background: var(--surface0);
     /* the open tab of a strip in the head is painted in this ground, so it joins the body under it;
@@ -45,7 +48,8 @@
     right: 0;
     height: 6px;
     cursor: row-resize;
-    z-index: 5;
+    /* over this pane's own head and the pane above it; inside .pane, so it reaches no further */
+    z-index: 1;
     &:hover {
       background: var(--element0);
     }

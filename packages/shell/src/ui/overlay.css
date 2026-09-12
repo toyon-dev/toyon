@@ -11,7 +11,8 @@
     justify-items: center;
     align-content: start;
     padding-top: clamp(72px, 18vh, 220px);
-    z-index: 10;
+    /* over the panes of the column it dims, and no further: .center isolates */
+    z-index: 1;
   }
   .overlay-box {
     width: min(560px, 90%);

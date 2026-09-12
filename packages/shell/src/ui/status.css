@@ -2,11 +2,15 @@
    actions, and the tail of output under them. */
 @layer tokens, base, surfaces;
 @layer base {
-  /* The block starts at the region's top left. No `margin: 0 auto` on purpose: a form is centred
-     and a status is not, which is how you tell at a glance who is talking, and a block that grows
-     while centred shifts the lines already being read. No ground either; see status.test.ts. */
+  /* Top anchored, and that is the part that matters: a status grows while it is read (procs arrive,
+     git prints another line), and anything that centres it vertically pushes the lines already
+     under someone's eye. Its column sits where every other view's column sits, which costs nothing
+     because the width is fixed and so the horizontal position never moves as content arrives; left
+     in the corner of an empty screen, a one-line status read as a stray log line rather than as the
+     app saying where things stand. The text inside is left aligned. No ground; see status.test.ts. */
   .status {
     width: min(var(--status-measure), 100%);
+    margin-inline: auto;
     padding: var(--view-top) var(--view-inset);
     display: flex;
     flex-direction: column;

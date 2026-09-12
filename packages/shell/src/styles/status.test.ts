@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { cssRules, shellCss } from "./cssRules.ts";
 
 /**
- * The status dress: the machine speaks from the left, in the reading face, with no card.
+ * The status dress: top anchored, in the reading face, with no card.
  *
- * A form is centred and a status is not, and that is the fastest way to see which one is talking.
- * It also matters mechanically: a status block grows while it is being read (procs arrive, git
- * prints another line), and a centred block that grows moves the lines already under someone's
- * eye. Centring crept back in twice before this was a rule, both times because the sentence being
- * shown that day happened to be one line long.
+ * Top anchored, which is the half that matters: a status grows while it is being read, so anything
+ * that centres it vertically pushes the lines already under someone's eye. Its column is centred
+ * like every other view's, which is safe because the width is fixed and the horizontal position
+ * therefore never moves as content arrives. That distinction was got wrong once in the other
+ * direction: pinned to the corner, a one-line status read as a stray log line.
  *
  * The face rule is the other half. Prose here is the shell's own voice explaining a state, so it
  * reads in the UI face; mono is for the machine's literal output, which is one part.
@@ -21,26 +21,29 @@ const EVIDENCE = new Set([".status-tail"]);
 const GROUND = ["background", "background-color", "border", "border-radius", "box-shadow"];
 const REMOVED = new Set(["none", "transparent", "0", "unset", "initial", "0px"]);
 
-/** every way a block gets centred, which is the thing a status must never be */
-const CENTRING: Record<string, string[]> = {
+/**
+ * Every way a block gets pushed down the region it sits in. `margin-inline: auto` is deliberately
+ * not here: centring the column horizontally never moves anything, because the width is fixed.
+ */
+const SINKING: Record<string, string[]> = {
   "text-align": ["center"],
-  "margin-inline": ["auto"],
-  margin: ["0 auto", "auto"],
   "place-items": ["center"],
+  "align-items": ["center"],
   "justify-content": ["center"],
+  "align-self": ["center"],
 };
 
 const isStatus = (sel: string) => /(^|\s|>)\.status(-[\w-]+)?\b/.test(sel);
 
 describe("the status dress", () => {
-  test("the machine speaks from the left", async () => {
+  test("a status is top anchored, so growing it never moves what is being read", async () => {
     const offenders: string[] = [];
     for (const rule of cssRules(await shellCss())) {
       for (const sel of rule.selectors) {
         if (!isStatus(sel)) continue;
-        for (const [prop, bad] of Object.entries(CENTRING)) {
+        for (const [prop, bad] of Object.entries(SINKING)) {
           const v = rule.decls.get(prop);
-          if (v && bad.includes(v)) offenders.push(`${sel} centres itself with ${prop}: ${v}`);
+          if (v && bad.includes(v)) offenders.push(`${sel} sinks itself with ${prop}: ${v}`);
         }
       }
     }

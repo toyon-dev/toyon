@@ -8,9 +8,11 @@ import "./status.css";
  * ends of a range that used to be three different idioms: a log still scrolling while dev servers
  * come up, and a standing fact like a project having nothing to run at all.
  *
- * It starts at the region's top left, because output reads from there and because a block that
- * grows while it is centred moves the lines a person is already reading. A form is centred and a
- * status is not, and that difference is the fastest way to see which one is talking.
+ * It is anchored to the top of the region, because it grows while it is being read and anything
+ * that centres it vertically pushes the lines already under someone's eye. Its column sits where
+ * every other view's does; that costs nothing, since the width is fixed and the horizontal position
+ * never moves as content arrives, and pinned to the corner instead a one-line status read as a
+ * stray log line rather than as the app saying where things stand.
  *
  * Prose in the UI face, mono only for evidence (`status-tail`). No card: a ground drawn around a
  * clone's progress is a box around the machine's own voice, which `Import` wore for a year.

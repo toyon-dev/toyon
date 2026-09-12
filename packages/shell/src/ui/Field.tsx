@@ -9,7 +9,7 @@ import "./field.css";
  * branch, a command, which are literals the person also types elsewhere, so it is mono; a prose
  * box (lg) holds what they write, so it is ui. A picker's filter says `font="mono"` because a filter
  * is an identifier, and the ask note says `font="ui"` on its small box. `lead` is the one question a
- * page asks, typed at the size its answer is read at afterwards: the new-project page's name.
+ * page asks, typed at the size its answer is read at afterwards: the new-project view's name.
  */
 export type FieldSize = "sm" | "md" | "lg";
 export type FieldFont = "mono" | "ui" | "lead";
@@ -29,7 +29,7 @@ type Shared = {
   /** no box of its own, because the region it sits in is the box: the composer, a picker's strip */
   bare?: boolean;
   /** a line under it instead of a box, for a form that has to read as a page rather than a form:
-   * the new-project page's name and email. `bare` is the same idea with nothing left at all. */
+   * the new-project view's name and email. `bare` is the same idea with nothing left at all. */
   rule?: boolean;
   /** how the field sits in its parent (flex, width, margin). Never its box or its face. */
   className?: string;

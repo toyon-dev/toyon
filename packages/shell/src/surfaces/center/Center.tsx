@@ -1,4 +1,4 @@
-import { type ConnectFailure, isOwned, parseBridgeMsg } from "@toyon/shared";
+import { isOwned, parseBridgeMsg } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { nextSeq } from "../../state/actions/file.ts";
@@ -31,34 +31,27 @@ import { hasToken } from "../../ws.ts";
 /** read once at load (the token arrives in the URL fragment); calling it during render would write storage */
 const HAS_TOKEN = hasToken();
 
-/** what the empty pane says while the socket is down, by what ws.ts found out about why */
-const CONNECT_TEXT: Record<ConnectFailure | "probing", string> = {
-  probing: "connecting to daemon…",
-  down: "the daemon is not running.\nrun `toyon` in your repo to start it; `toyon doctor` says what it can see",
-  blocked:
-    "the daemon is up, but this page's websocket never connected.\na proxy, VPN or browser extension is the usual cause; `toyon doctor` checks from the terminal",
-  unauthorized: "this page's token is not the running daemon's.\nrun `toyon` again and open the link it prints",
-};
-
+import { Status } from "../../ui/Status.tsx";
 import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, isBusy, previewUrl, relFile, wtDir } from "../util.ts";
-import { BootPane } from "./BootPane.tsx";
-import { DiscoveredPane } from "./DiscoveredPane.tsx";
-import { GreenfieldPane } from "./GreenfieldPane.tsx";
-import { ImportPane } from "./ImportPane.tsx";
-import { NewProjectPane } from "./NewProjectPane.tsx";
-import { NoPreviewPane } from "./NoPreviewPane.tsx";
-import { SetupPane } from "./SetupPane.tsx";
-import "./preview.css";
+import { Boot } from "./Boot.tsx";
+import { Discovered } from "./Discovered.tsx";
+import { Greenfield } from "./Greenfield.tsx";
+import { Import } from "./Import.tsx";
+import { NewProject } from "./NewProject.tsx";
+import { NoPreview } from "./NoPreview.tsx";
+import { Setup } from "./Setup.tsx";
+import { waitingText } from "./waiting.ts";
+import "./center.css";
 import { wantsLinks } from "../../state/links.ts";
 import { VisitTracker } from "../../state/visits.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 
-/** the preview column: one persistent iframe per visited worktree (switching is a display toggle,
+/** the centre: one persistent iframe per visited worktree (switching is a display toggle,
  * so each preview keeps its app state + HMR socket while hidden), the editor pane, and the overlays */
 export function Center() {
   const dispatch = useDispatch();
@@ -89,7 +82,7 @@ export function Center() {
   const editor = useStore((s) => s.editor);
   // an empty project asks what to build before it asks how to start; the panes a previous project
   // left open (a project never laid out adopts what is on screen) hide, not close, until then, and
-  // on the new-project page before it
+  // on the new-project view before it
   const greenfield = useGreenfield();
   const newProject = useNewProject();
   const firstRun = useFirstRun();
@@ -122,7 +115,7 @@ export function Center() {
   const busy = !!active && isBusy(active);
   const forcedSetup = needsSetup && !treeEmpty && !busy ? needsSetup : null;
   const setupRepo = forcedSetup ?? reopened;
-  // a clone being watched takes the preview slot too: same reason as the setup pane, in that the
+  // a clone being watched takes the centre too: same reason as the setup pane, in that the
   // project it belongs to cannot show one yet
   const watching = useStore((s) => s.pending.find((p) => p.id === s.activeImportId) ?? null);
 
@@ -307,7 +300,7 @@ export function Center() {
   // a pane's new height is the pointer's distance from the pane's own bottom edge, which the panes
   // stacked below hold in place whichever of them are open. The room to grow is what the column
   // has left once the other fixed-height panes are laid out, less the 80px the preview (or a
-  // full-height pane) keeps: the same floor as .preview-area's min-height.
+  // full-height pane) keeps: the same floor as .center-area's min-height.
   const measurePane = (min: number) => (ev: PointerEvent, handle: HTMLElement) => {
     const pane = handle.parentElement;
     const center = centerRef.current;
@@ -323,10 +316,24 @@ export function Center() {
   const startDesignDrag = useDragResize(measurePane(160), (h) => setDesignH(Math.round(h)));
   const startTermDrag = useDragResize(measurePane(140), (h) => setTermH(Math.round(h)));
 
+  // the sentence the centre says when nothing of theirs can be shown and no view stands in; null
+  // hands the slot to one that does (see waiting.ts for the order and why it is that order)
+  const say = waitingText({
+    connected,
+    heard,
+    connectFailure,
+    hasToken: HAS_TOKEN,
+    projectChord: chord("project"),
+    title: active?.worktree.title ?? null,
+    needsSetup: !!needsSetup,
+    busy,
+    treeEmpty,
+  });
+
   return (
     <div className="center" ref={centerRef}>
       <div
-        className="preview-area"
+        className="center-area"
         style={{ display: (editor && editorFull) || (designOpen && designFull) ? "none" : undefined }}
       >
         <div className="frames-wrap">
@@ -351,20 +358,20 @@ export function Center() {
           ))}
           {/* the page stands in for every pane below: it is about a project that is not one of them */}
           {newProject ? (
-            <NewProjectPane page={newProject} />
+            <NewProject project={newProject} />
           ) : (
             <>
-              {watching && <ImportPane key={watching.id} pending={watching} />}
-              {greenfield && active && !watching && <GreenfieldPane key={active.worktree.id} active={active} />}
+              {watching && <Import key={watching.id} pending={watching} />}
+              {greenfield && active && !watching && <Greenfield key={active.worktree.id} active={active} />}
               {setupRepo && !watching && !greenfield && (
-                <SetupPane
+                <Setup
                   // the form reads the guess once, so a fresh guess (the agent scaffolded) remounts it
                   key={`${setupRepo.id}:${JSON.stringify(setupRepo.config)}`}
                   repo={setupRepo}
                   onClose={forcedSetup ? undefined : () => dispatch({ a: "close" })}
                 />
               )}
-              {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
+              {activeDiscovered && !setupRepo && !watching && <Discovered row={activeDiscovered} />}
               {/* a stale build is the same card wherever it is noticed: here, or a chunk that failed to load */}
               {!activeReady &&
                 !draftSpare &&
@@ -389,33 +396,16 @@ export function Center() {
                 !setupRepo &&
                 !watching &&
                 !greenfield &&
-                !incompatible && (
-                  <div className="empty">
-                    {!connected && (!heard || connectFailure) ? (
-                      // heard over the bootstrap fetch means the daemon is up and the socket is a
-                      // moment away; saying "connecting" for that moment is the flash, not the truth
-                      HAS_TOKEN ? (
-                        CONNECT_TEXT[connectFailure ?? "probing"]
-                      ) : (
-                        "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
-                      )
-                    ) : !active ? (
-                      heard ? (
-                        `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
-                      ) : (
-                        ""
-                      )
-                    ) : needsSetup && busy ? (
-                      `building in ${active.worktree.title}; the preview appears once it starts`
-                    ) : needsSetup && treeEmpty ? (
-                      `${active.worktree.title} is empty so far; say what to build`
-                    ) : noProcs ? (
-                      <NoPreviewPane repo={noProcs} />
-                    ) : (
-                      <BootPane worktree={active} log={log} />
-                    )}
-                  </div>
-                )}
+                !incompatible &&
+                (say !== null ? (
+                  <Status>
+                    <p className="status-line">{say}</p>
+                  </Status>
+                ) : noProcs ? (
+                  <NoPreview repo={noProcs} />
+                ) : (
+                  active && <Boot worktree={active} log={log} />
+                ))}
             </>
           )}
         </div>

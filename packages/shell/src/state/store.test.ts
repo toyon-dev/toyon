@@ -12,8 +12,8 @@ import {
   isGreenfield,
   isSubPicker,
   localOf,
-  type NewProject,
-  newProjectPage,
+  type NewProjectState,
+  newProjectState,
   type OpenFile,
   previewIdOf,
   reducer,
@@ -575,8 +575,8 @@ describe("overlays", () => {
     expect(s.overlay).toEqual({ kind: "commands" });
     expect(s.paletteReturn?.q).toBe("the");
   });
-  test("the folder chooser opens over the new-project page and backs out onto it, unchanged", () => {
-    const page = newProjectPage({ mode: "create", name: "my-app", parent: "~/Projects" });
+  test("the folder chooser opens over the new-project view and backs out onto it, unchanged", () => {
+    const page = newProjectState({ mode: "create", name: "my-app", parent: "~/Projects" });
     const choosing = run([
       { a: "new-project", v: page },
       { a: "open", overlay: { kind: "choose-folder" } },
@@ -1048,14 +1048,14 @@ describe("projects", () => {
   });
 });
 
-describe("new-project page", () => {
+describe("new-project view", () => {
   const one = () => helloIn([repo("r1")], wt("m1", "main", undefined, "r1"));
-  const page = (over: Partial<NewProject> = {}): NewProject => ({
-    ...newProjectPage({ mode: "create", name: "my-app", parent: "~/Projects" }),
+  const page = (over: Partial<NewProjectState> = {}): NewProjectState => ({
+    ...newProjectState({ mode: "create", name: "my-app", parent: "~/Projects" }),
     ...over,
   });
   const made = (): RepoInfo => ({ ...repo("r2"), path: "/p/my-app", name: "my-app", needsSetup: true, made: "folder" });
-  const creating = (over: Partial<NewProject> = {}): Action[] => [
+  const creating = (over: Partial<NewProjectState> = {}): Action[] => [
     one(),
     { a: "new-project", v: page(over) },
     { a: "open-repo" },
@@ -1064,7 +1064,7 @@ describe("new-project page", () => {
 
   test("with no project anywhere the page is what there is, offering ~/Projects", () => {
     const s = run([hello()]);
-    expect(s.newProject).toEqual(newProjectPage({ mode: "create", name: "", parent: "~/Projects" }));
+    expect(s.newProject).toEqual(newProjectState({ mode: "create", name: "", parent: "~/Projects" }));
     expect(isFirstRun(s)).toBe(true);
     // with no project behind it, leaving it has nowhere to go
     expect(reducer(s, { a: "close-new-project" }).newProject).not.toBeNull();

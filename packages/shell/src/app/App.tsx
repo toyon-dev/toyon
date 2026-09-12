@@ -5,10 +5,10 @@ import { removeWorktrees } from "../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
 import { useActive, useActiveId, useActiveRow, useFirstRun, useRows, useTheme } from "../state/selectors.ts";
+import { Center } from "../surfaces/center/Center.tsx";
 import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
 import { RightDock } from "../surfaces/chat/RightDock.tsx";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
-import { Center } from "../surfaces/preview/Center.tsx";
 import { WtRail } from "../surfaces/rail/WtRail.tsx";
 import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
 import { clampW } from "../surfaces/util.ts";
@@ -54,7 +54,7 @@ export function App() {
   const daylightUntil = useStore((s) => s.daylight?.until ?? 0);
   const zen = useStore((s) => s.zen);
   const firstRun = useFirstRun();
-  // both docks are hidden, not closed, on the new-project page and while the composer sits in the
+  // both docks are hidden, not closed, on the new-project view and while the composer sits in the
   // centre of an empty project. So is the rail: on the page it lists a project that is not the one
   // being made, and on an empty project its only row is main, already open, with no new worktree to
   // offer, since one off the root commit would take the scaffold to a branch while main stayed blank.

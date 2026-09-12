@@ -2,6 +2,7 @@ import type { LogLine, OwnedWorktree, ProcState } from "@toyon/shared";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
+import { Status } from "../../ui/Status.tsx";
 import { procFixPrompt } from "./fixPrompt.ts";
 
 /** how much of the tail the pane shows: enough to read a stack trace, not a scrollback */
@@ -11,7 +12,7 @@ const TAIL = 30;
  * the supervisor has worked out what is wrong, the reason and a restart, over the output tail. The
  * proxy's own placeholder could not tell compiling from crashed from listening somewhere else, and
  * that was the difference between "it is coming" and "nothing will ever come". */
-export function BootPane({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[] }) {
+export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[] }) {
   const sock = useSock();
   const dispatch = useDispatch();
   const procs = worktree.procs;
@@ -21,9 +22,9 @@ export function BootPane({ worktree, log }: { worktree: OwnedWorktree; log: LogL
   // the rule, and the daemon restarts the proc when its turn ends
   const askAgent = () => sock?.send({ t: "chat", worktreeId: worktree.id, text: procFixPrompt(worktree, log) });
   return (
-    <div className="boot-pane">
+    <Status>
       {procs.length === 0 ? (
-        <div className="boot-line">starting dev servers…</div>
+        <div className="status-line">starting dev servers…</div>
       ) : (
         <ul className="boot-procs">
           {procs.map((p) => (
@@ -44,7 +45,7 @@ export function BootPane({ worktree, log }: { worktree: OwnedWorktree; log: LogL
         </ul>
       )}
       {bad && (
-        <div className="boot-actions">
+        <div className="status-actions">
           {worktree.agent === "idle" && (
             <Button variant="outline" size="lg" onClick={askAgent}>
               ask the agent to fix it
@@ -58,14 +59,14 @@ export function BootPane({ worktree, log }: { worktree: OwnedWorktree; log: LogL
         </div>
       )}
       {log.length > 0 && (
-        <pre className="boot-tail">
+        <pre className="status-tail">
           {log
             .slice(-TAIL)
             .map((l) => `[${l.proc}] ${l.line}`)
             .join("\n")}
         </pre>
       )}
-    </div>
+    </Status>
   );
 }
 

@@ -1,0 +1,131 @@
+/* The centre: the frames, and the views that stand in for them. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  /* ---- center ---- */
+  .center {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    background: var(--surface0);
+    display: flex;
+    flex-direction: column;
+    /* the column layers its own children: the palette's scrim over the panes under it, and nothing
+       outside this column counts in that order */
+    isolation: isolate;
+  }
+  .center-area {
+    flex: 1;
+    /* the floor a pane drag leaves it too (Center.tsx): the stack shrinks before the preview
+       vanishes, so what the panes are about stays in view */
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+  }
+  .frames-wrap {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    & iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #fff;
+    }
+  }
+  .new-project-field {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* the clone's source, read back above the name it gave */
+  .new-project-url {
+    margin: 0;
+    font: var(--type-mono);
+    color: var(--text1);
+    overflow-wrap: anywhere;
+  }
+  /* where it goes, read as the folder's own name with the path on hover, the way to change it, and
+     the button that makes it once there is something to make */
+  .new-project-where {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--row-height);
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .new-project-parent {
+    color: var(--text0);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .new-project-folder {
+    flex-shrink: 0;
+  }
+  .new-project-identity {
+    display: flex;
+    gap: 8px;
+    & > .field {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+  /* a quiet line rather than a second action: the ghost button's padding hangs into the gutter, so
+     its words start where the text above them does */
+  .new-project-open {
+    align-self: flex-start;
+    margin-left: calc(-1 * var(--btn-pad-x));
+  }
+
+  .setup-proc {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .setup-name {
+    width: 90px;
+    flex-shrink: 0;
+  }
+  .setup-cmd {
+    flex: 1;
+    min-width: 0;
+  }
+  .import-idle,
+  .import-error {
+    color: var(--text2);
+  }
+}
+@layer surfaces {
+  /* ---- boot pane: what stands in for the preview until a server answers ---- */
+  .boot-procs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .boot-proc {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    column-gap: 12px;
+    & .boot-name {
+      font: var(--type-mono);
+      color: var(--text0);
+    }
+    & .boot-status {
+      color: var(--text1);
+    }
+    /* the reason spans the row; it is the line the person came here to read */
+    & .boot-detail {
+      grid-column: 1 / -1;
+      color: var(--text0);
+    }
+    &.boot-bad .boot-status {
+      color: var(--red);
+    }
+  }
+}

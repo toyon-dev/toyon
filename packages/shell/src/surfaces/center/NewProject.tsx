@@ -2,29 +2,30 @@ import type { ModelChoice } from "@toyon/shared";
 import { projectNameError } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import type { NewProject } from "../../state/store.ts";
+import type { NewProjectState } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
+import { Form } from "../../ui/Form.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { destination, expandHome, folderName, splitTypedPath } from "../palettes/projectPicker.ts";
 
-/** how long the name sits still before the page asks whether a folder by that name is already there */
+/** how long the name sits still before the project asks whether a folder by that name is already there */
 const ASK_AFTER_MS = 150;
 
 /** enough of an email for git to label work with; git itself checks nothing */
 const EMAIL = /^[^\s@]+@[^\s@]+$/;
 
 /** the name is sized to what is in it, with room to start typing in: a title with its folder beside
- * it, rather than a field stretched across the page with the folder pushed to the far edge */
+ * it, rather than a field stretched across the project with the folder pushed to the far edge */
 const NAME_MIN = 14;
 
 const NO_CHOICES: ModelChoice[] = [];
 
 /**
- * The new project, as one page in the preview slot: a title, where it goes, and the description that
+ * The new project, as one project in the centre: a title, where it goes, and the description that
  * starts it. Written rather than filled in, which is why there is no heading, no labels and no
  * boxes: the placeholder says what the title is for, the line under it says where the folder lands,
  * and create makes the project and sends the description as its first message.
@@ -37,10 +38,10 @@ const NO_CHOICES: ModelChoice[] = [];
  * it, so nobody has to know how to write a path. Where the daemon can open Finder in front of the
  * person, what comes back decides the rest: an ordinary folder is the location, an empty one becomes
  * the project itself, and one that is already a project is offered for opening. Git's name and email
- * sit above the title when git has none, since they are asked once ever and are not what this page
+ * sit above the title when git has none, since they are asked once ever and are not what this project
  * is about. The quiet line at the bottom is for someone who came here with a project already.
  */
-export function NewProjectPane({ page }: { page: NewProject }) {
+export function NewProject({ project }: { project: NewProjectState }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const repos = useStore((s) => s.repos);
@@ -60,13 +61,13 @@ export function NewProjectPane({ page }: { page: NewProject }) {
   const nameRef = useRef<HTMLInputElement>(null);
   const describeRef = useRef<HTMLTextAreaElement>(null);
 
-  const { mode, name, parent, prompt } = page;
+  const { mode, name, parent, prompt } = project;
   const clone = mode === "clone";
   const inPlace = mode === "init";
-  const editing = page.phase === "editing";
+  const editing = project.phase === "editing";
   const typed = name.trim();
   // a folder made the project where it stands keeps the name it already has, spaces and all; an empty
-  // field is where the page starts, not a mistake to flag
+  // field is where the project starts, not a mistake to flag
   const nameError = inPlace || !typed ? null : projectNameError(name);
   const dest = !inPlace && typed && !nameError ? destination(parent, typed) : null;
   const where = folderName(parent, home);
@@ -100,17 +101,17 @@ export function NewProjectPane({ page }: { page: NewProject }) {
   }, [dest, sock]);
 
   // back from a refused create, or from the first-run screen: the keyboard goes back to the name
-  useOnChange([page.phase], () => {
-    if (page.phase === "editing") nameRef.current?.focus();
+  useOnChange([project.phase], () => {
+    if (project.phase === "editing") nameRef.current?.focus();
   });
 
-  // a refusal is about the folder that was picked, so anything that changes what the page holds ends it
+  // a refusal is about the folder that was picked, so anything that changes what the project holds ends it
   useOnChange([mode, name, parent], () => setRefusal(null));
 
   const submit = () => {
     if (!ready) return;
     // pendingOpen is what makes this tab, and only this tab, adopt the project the daemon adds; the
-    // description rides on the page and goes from the new project's own box (see settlePage)
+    // description rides on the project and goes from the new project's own box (see settlePage)
     dispatch({ a: "open-repo" });
     dispatch({ a: "new-project-set", v: { phase: "creating" } });
     sock?.send({
@@ -118,7 +119,7 @@ export function NewProjectPane({ page }: { page: NewProject }) {
       mode,
       parent: parent.trim(),
       name: typed,
-      ...(clone && page.url ? { url: page.url } : {}),
+      ...(clone && project.url ? { url: project.url } : {}),
       ...(askIdentity ? { identity: { name: identity.name.trim(), email: identity.email.trim() } } : {}),
     });
   };
@@ -189,12 +190,12 @@ export function NewProjectPane({ page }: { page: NewProject }) {
           : nameError);
 
   return (
-    <div className="new-project-pane">
-      {clone && <p className="new-project-url">{page.url}</p>}
+    <Form>
+      {clone && <p className="new-project-url">{project.url}</p>}
 
-      <div className="new-project-head">
+      <div className="form-head">
         {inPlace ? (
-          <p className="new-project-name">{name}</p>
+          <p className="form-title">{name}</p>
         ) : (
           <Field
             ref={nameRef}
@@ -208,7 +209,7 @@ export function NewProjectPane({ page }: { page: NewProject }) {
             placeholder="Project name"
             disabled={!editing}
             // the box follows what is in it, so the folder beside it stays beside it rather than
-            // being pushed to the far edge of a field stretched across the page
+            // being pushed to the far edge of a field stretched across the project
             style={{ width: `${Math.max(name.length + 1, NAME_MIN)}ch` }}
             onChange={(e) => dispatch({ a: "new-project-set", v: { name: e.target.value } })}
             // enter in a title goes to the body, the way it does in anything else with a title
@@ -235,9 +236,9 @@ export function NewProjectPane({ page }: { page: NewProject }) {
         </span>
       </div>
 
-      {hint && <p className="hint new-project-hint">{hint}</p>}
+      {hint && <p className="hint">{hint}</p>}
 
-      <div className="new-project-body">
+      <div className="form-body">
         <TextArea
           ref={describeRef}
           bare
@@ -254,7 +255,7 @@ export function NewProjectPane({ page }: { page: NewProject }) {
         />
       </div>
 
-      <div className="hint new-project-knobs">
+      <div className="hint form-knobs">
         {agents.length > 1 ? (
           <AgentModelChip agents={agents} agent={defaultAgent} model={model} onChange={pickAgentModel} />
         ) : (
@@ -262,15 +263,15 @@ export function NewProjectPane({ page }: { page: NewProject }) {
         )}
         <EffortChip efforts={agentInfo?.efforts ?? NO_CHOICES} value={effort} onChange={setEffort} />
         {existing ? (
-          <Button variant="outline" size="lg" className="new-project-go" autoFocus onClick={() => openFolder(existing)}>
+          <Button variant="outline" size="lg" className="form-go" autoFocus onClick={() => openFolder(existing)}>
             open it
           </Button>
         ) : (
           <Button
             variant="outline"
             size="lg"
-            className="new-project-go"
-            busy={page.phase === "creating"}
+            className="form-go"
+            busy={project.phase === "creating"}
             disabled={!ready}
             onClick={submit}
             {...tip(
@@ -310,7 +311,7 @@ export function NewProjectPane({ page }: { page: NewProject }) {
               onChange={(e) => setIdentity({ ...identity, email: e.target.value })}
             />
           </div>
-          <p className="hint new-project-hint">git labels the work you save with these, and asks only once</p>
+          <p className="hint">git labels the work you save with these, and asks only once</p>
         </>
       )}
 
@@ -319,6 +320,6 @@ export function NewProjectPane({ page }: { page: NewProject }) {
           or open a folder you already have
         </Button>
       )}
-    </div>
+    </Form>
   );
 }

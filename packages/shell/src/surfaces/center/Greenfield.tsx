@@ -1,20 +1,21 @@
 import type { OwnedWorktree } from "@toyon/shared";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
-import { localOf, newProjectPage } from "../../state/store.ts";
+import { localOf, newProjectState } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
+import { Form } from "../../ui/Form.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { parentFolder } from "../palettes/projectPicker.ts";
 
-/** What fills the preview column for a project with nothing in it yet. The same slot the setup
+/** What fills the centre for a project with nothing in it yet. The same slot the setup
  * and discovered panes use, and the one time the composer sits here instead of in its dock: there
  * is nothing else to look at, and a page with one box on it says where to start.
  *
  * A project made a moment ago can still be renamed or moved, so its name in the question is the way
  * back to the page it was made on: the name goes back into the field, and the daemon takes back what
  * it made. The daemon also checks the project is still untouched, and says so if it is not. */
-export function GreenfieldPane({ active }: { active: OwnedWorktree }) {
+export function Greenfield({ active }: { active: OwnedWorktree }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
@@ -27,7 +28,7 @@ export function GreenfieldPane({ active }: { active: OwnedWorktree }) {
     dispatch({
       a: "new-project",
       v: {
-        ...newProjectPage({
+        ...newProjectState({
           mode: repo.made === "git" ? "init" : "create",
           name: repo.name,
           parent: parentFolder(repo.path, home) ?? repo.path,
@@ -42,8 +43,8 @@ export function GreenfieldPane({ active }: { active: OwnedWorktree }) {
   };
 
   return (
-    <div className="greenfield-pane">
-      <p className="greenfield-title">
+    <Form>
+      <p className="form-title">
         {repo?.made ? (
           <Button variant="inline" onClick={back} {...tip("Rename or move this project")}>
             {title}
@@ -52,7 +53,9 @@ export function GreenfieldPane({ active }: { active: OwnedWorktree }) {
           title
         )}
       </p>
-      <Composer active={active} greenfield />
-    </div>
+      <div className="form-body form-body-lg">
+        <Composer active={active} greenfield />
+      </div>
+    </Form>
   );
 }

@@ -18,6 +18,7 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
+import { greenfieldContext } from "../center/greenfield.ts";
 import { baseNote, behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
@@ -28,7 +29,6 @@ import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
-import { greenfieldContext } from "../preview/greenfield.ts";
 import { recapLine, recapShown } from "../recap.ts";
 import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
@@ -455,7 +455,7 @@ export function Composer({
     if (drafting) dispatch({ a: "close-draft" });
   };
 
-  // The description typed on the new-project page, in the box of the project it just made. It is
+  // The description typed on the new-project view, in the box of the project it just made. It is
   // sent from here rather than from the page so that the first message of a project made there is
   // the same message as any other: the same context blocks, the same stamping on a main that has
   // never run, and the same dock coming back with the reply.

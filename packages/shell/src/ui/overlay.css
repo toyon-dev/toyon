@@ -1,7 +1,7 @@
 /* Overlay: the scrim and the box a palette or prompt sits in. */
 @layer tokens, base, surfaces;
 @layer base {
-  /* ---- overlay: scrim over the preview column + a box anchored near the top (a palette's height
+  /* ---- overlay: scrim over the centre + a box anchored near the top (a palette's height
    changes as you type, and a centered box would bob with it — editor/launcher convention) ---- */
   .overlay {
     position: absolute;

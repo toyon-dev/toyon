@@ -116,8 +116,8 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   // the one row that opens itself while the agent runs; everything else in the turn is a line
   const working = active?.agent === "working";
   const liveRow = useMemo(() => (working ? openRow(entries) : -1), [working, entries]);
-  // the spinner and the word are about now, not about what is open: the agent is thinking only while
-  // the thought is the newest thing in the log, and the thought stays open well past that
+  // the live marks and the word are about now, not about what is open: the agent is thinking only
+  // while the thought is the newest thing in the log, and the thought stays open well past that
   const last = entries.at(-1);
   const streaming = working && last && "item" in last && last.item.kind === "thinking" ? entries.length - 1 : -1;
   // the newest `!` command is the one whose output is open; each one closes the one before it

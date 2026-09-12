@@ -547,10 +547,66 @@
       color: var(--text0);
       background: var(--surface2);
     }
-    /* the icon's own box, so the name does not step sideways when the call ends; the working
-     colour, since a turning ring in the text colour reads as a stalled icon */
-    & .tool-spinner {
-      color: var(--yellow);
+  }
+
+  /* ---- the two live marks ----
+   A row that is still running keeps its glyph: the kind is the one thing the row does not say in
+   words (toolCall.ts prints no name where the hint is a path), and a mark standing in for the glyph
+   took it away exactly while it mattered. So the state rides on top of the row instead.
+
+   The dot is the fact and the shine is the motion, the same division the rail draws between a
+   dot's colour and its pulse: turn the motion off and the row still says it is live. */
+
+  /* the dot trails the row's last thing, count included, rather than sitting in a column at the
+   margin: adjacent to the text it is punctuation and reads in the same movement as the line, and a
+   hint long enough to fill the row pushes it out to the margin on its own. Steady, because the
+   shine beside it is already moving and two rhythms on one row beat against each other. */
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--yellow);
+    flex: 0 0 auto;
+  }
+  /* the hint stops at its text so the dot can follow it; every other row leaves it flexible so the
+   count keeps the margin */
+  .tool-row.live-row .tool-hint {
+    flex: 0 1 auto;
+  }
+  /* a highlight travelling the row's text, which is the row's only sign of life: a call's hint is
+   written when it starts and says nothing more until it ends, so a running call and a wedged one
+   look the same without it. The answer is not marked this way and does not need to be, since its
+   words appearing is the signal, and a band sweeping the whole block would travel back over the
+   sentences already read to say what the arriving ones say better.
+
+   The band is the text's own two tiers rather than a colour of its own; the yellow is the dot's
+   job. It paints through the glyphs rather than over them, and it is `text-fill-color` that is
+   cleared rather than `color`, so an element that names its own colour keeps it the moment the
+   animation stops and nothing has to be put back. */
+  .live-text {
+    background: linear-gradient(90deg, var(--text2) 40%, var(--text0) 50%, var(--text2) 60%);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 1.6s linear infinite;
+  }
+  @keyframes shine {
+    from {
+      background-position: 150% 0;
+    }
+    to {
+      background-position: -150% 0;
+    }
+  }
+  /* a sweep across words modulates the contrast of the thing being read, which is what this setting
+   is for; there is no gentler form of it to fall back to, so it goes and the dot carries the state
+   alone */
+  @media (prefers-reduced-motion: reduce) {
+    .live-text {
+      background: none;
+      -webkit-text-fill-color: currentColor;
+      animation: none;
     }
   }
   /* the graft divider is the blocked row's box with the accent's edge: both are the daemon writing

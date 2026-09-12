@@ -40,7 +40,7 @@ export function Overlays() {
       {overlay?.kind === "projects" && overlay.form !== "pill" && (
         <ProjectPicker key={overlay.form} form={overlay.form} />
       )}
-      {overlay?.kind === "choose-folder" && newProject && <FolderPicker page={newProject} />}
+      {overlay?.kind === "choose-folder" && newProject && <FolderPicker project={newProject} />}
     </>
   );
 }

@@ -1,7 +1,7 @@
 import type { OwnedWorktree } from "@toyon/shared";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
-import { localOf, newProjectPage } from "../../state/store.ts";
+import { localOf, newProjectState } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { Composer } from "../chat/Composer.tsx";
@@ -14,7 +14,7 @@ import { parentFolder } from "../palettes/projectPicker.ts";
  * A project made a moment ago can still be renamed or moved, so its name in the question is the way
  * back to the page it was made on: the name goes back into the field, and the daemon takes back what
  * it made. The daemon also checks the project is still untouched, and says so if it is not. */
-export function GreenfieldPane({ active }: { active: OwnedWorktree }) {
+export function Greenfield({ active }: { active: OwnedWorktree }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
@@ -27,7 +27,7 @@ export function GreenfieldPane({ active }: { active: OwnedWorktree }) {
     dispatch({
       a: "new-project",
       v: {
-        ...newProjectPage({
+        ...newProjectState({
           mode: repo.made === "git" ? "init" : "create",
           name: repo.name,
           parent: parentFolder(repo.path, home) ?? repo.path,

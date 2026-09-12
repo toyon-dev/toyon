@@ -43,7 +43,7 @@
       padding: 24px;
     }
   }
-  /* ---- first run: the new-project page, and the empty project it gives way to ----
+  /* ---- first run: the new-project view, and the empty project it gives way to ----
      One column, written rather than filled in: the name is a title with no box, what it needs is on
      rules under it, and the box it becomes is a page to write on. Both screens hold their first line
      at the same height and the same size, so the name typed on the page is exactly where the

@@ -5,7 +5,7 @@ import { Button } from "../../ui/Button.tsx";
 /** What fills the centre for a worktree git knows about but toyon does not run. There is
  * no preview to show: nothing is serving. The same slot the setup pane uses, for the same reason
  * — the centre is where a repo explains itself when it has no app to display yet. */
-export function DiscoveredPane({ row }: { row: WorktreeStatus }) {
+export function Discovered({ row }: { row: WorktreeStatus }) {
   const sock = useSock();
   const clientId = useStore((s) => s.clientId);
   const home = useStore((s) => s.home);

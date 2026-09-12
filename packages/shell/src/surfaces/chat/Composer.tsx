@@ -455,7 +455,7 @@ export function Composer({
     if (drafting) dispatch({ a: "close-draft" });
   };
 
-  // The description typed on the new-project page, in the box of the project it just made. It is
+  // The description typed on the new-project view, in the box of the project it just made. It is
   // sent from here rather than from the page so that the first message of a project made there is
   // the same message as any other: the same context blocks, the same stamping on a main that has
   // never run, and the same dock coming back with the reply.

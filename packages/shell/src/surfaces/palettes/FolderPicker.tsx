@@ -1,17 +1,17 @@
 import { projectNameError } from "@toyon/shared";
 import { useCallback } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import type { NewProject } from "../../state/store.ts";
+import type { NewProjectState } from "../../state/store.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { PaletteRow } from "./PaletteRow.tsx";
 import { destination, type FolderRow, folderName, folderRows, looksLikePath } from "./projectPicker.ts";
 
 /** Where a new project goes, found by walking to the folder rather than typing its path, over the
- * new-project page it fills in. It opens at the folder the page already had. A click opens a folder,
- * the first row puts the project in the folder being shown, and backing out leaves the page as it
+ * new-project project it fills in. It opens at the folder the project already had. A click opens a folder,
+ * the first row puts the project in the folder being shown, and backing out leaves the project as it
  * was. The field is the same path completion the project picker has, for someone who would rather
  * type. */
-export function FolderPicker({ page }: { page: NewProject }) {
+export function FolderPicker({ project }: { project: NewProjectState }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const paths = useStore((s) => s.paths);
@@ -30,12 +30,12 @@ export function FolderPicker({ page }: { page: NewProject }) {
     [paths, home],
   );
 
-  const name = projectNameError(page.name) ? null : page.name.trim();
+  const name = projectNameError(project.name) ? null : project.name.trim();
   const listing = (path: string) => `${path.replace(/\/+$/, "")}/`;
 
   return (
     <ListPicker<FolderRow>
-      initialQuery={listing(page.parent)}
+      initialQuery={listing(project.parent)}
       // what the folder is being found for, the way the project picker's chip names the open project
       lead={<span className="picker-chip">{name ?? "new project"}</span>}
       items={[]}
@@ -48,7 +48,10 @@ export function FolderPicker({ page }: { page: NewProject }) {
       onPick={(r) => {
         if (r.kind !== "here") return;
         // choosing a location is choosing to make a folder there, even after an empty one was picked
-        dispatch({ a: "new-project-set", v: { mode: page.mode === "init" ? "create" : page.mode, parent: r.path } });
+        dispatch({
+          a: "new-project-set",
+          v: { mode: project.mode === "init" ? "create" : project.mode, parent: r.path },
+        });
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close" })}

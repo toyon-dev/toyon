@@ -52,7 +52,7 @@ export function App() {
   const connected = useStore((s) => s.connected);
   const zen = useStore((s) => s.zen);
   const firstRun = useFirstRun();
-  // both docks are hidden, not closed, on the new-project page and while the composer sits in the
+  // both docks are hidden, not closed, on the new-project view and while the composer sits in the
   // centre of an empty project. So is the rail: on the page it lists a project that is not the one
   // being made, and on an empty project its only row is main, already open, with no new worktree to
   // offer, since one off the root commit would take the scaffold to a branch while main stayed blank.

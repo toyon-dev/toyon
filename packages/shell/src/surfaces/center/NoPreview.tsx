@@ -5,7 +5,7 @@ import { Button } from "../../ui/Button.tsx";
 /** The centre of a project that was set up with nothing to run: a library, a CLI, a backend with
  * no HTTP server. Says so, and says what still works, rather than waiting on a server that will
  * never come. The way to a preview later is the setup pane. */
-export function NoPreviewPane({ repo }: { repo: RepoInfo }) {
+export function NoPreview({ repo }: { repo: RepoInfo }) {
   const dispatch = useDispatch();
   return (
     <div className="boot-pane">

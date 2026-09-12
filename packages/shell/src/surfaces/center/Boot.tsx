@@ -11,7 +11,7 @@ const TAIL = 30;
  * the supervisor has worked out what is wrong, the reason and a restart, over the output tail. The
  * proxy's own placeholder could not tell compiling from crashed from listening somewhere else, and
  * that was the difference between "it is coming" and "nothing will ever come". */
-export function BootPane({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[] }) {
+export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[] }) {
   const sock = useSock();
   const dispatch = useDispatch();
   const procs = worktree.procs;

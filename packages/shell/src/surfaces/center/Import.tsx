@@ -9,7 +9,7 @@ import { Button } from "../../ui/Button.tsx";
  *
  * Escape closes this pane without stopping the clone (see the ladder in `app/keys.ts`); the button
  * is what stops it. Escape is reflexive, and a five-minute download is not worth losing to one. */
-export function ImportPane({ pending }: { pending: PendingRepo }) {
+export function Import({ pending }: { pending: PendingRepo }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const failed = !!pending.error;

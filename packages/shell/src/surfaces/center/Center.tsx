@@ -46,13 +46,13 @@ import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../palettes/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, isBusy, previewUrl, relFile, wtDir } from "../util.ts";
-import { BootPane } from "./BootPane.tsx";
-import { DiscoveredPane } from "./DiscoveredPane.tsx";
-import { GreenfieldPane } from "./GreenfieldPane.tsx";
-import { ImportPane } from "./ImportPane.tsx";
-import { NewProjectPane } from "./NewProjectPane.tsx";
-import { NoPreviewPane } from "./NoPreviewPane.tsx";
-import { SetupPane } from "./SetupPane.tsx";
+import { Boot } from "./Boot.tsx";
+import { Discovered } from "./Discovered.tsx";
+import { Greenfield } from "./Greenfield.tsx";
+import { Import } from "./Import.tsx";
+import { NewProject } from "./NewProject.tsx";
+import { NoPreview } from "./NoPreview.tsx";
+import { Setup } from "./Setup.tsx";
 import "./center.css";
 import { wantsLinks } from "../../state/links.ts";
 import { VisitTracker } from "../../state/visits.ts";
@@ -89,7 +89,7 @@ export function Center() {
   const editor = useStore((s) => s.editor);
   // an empty project asks what to build before it asks how to start; the panes a previous project
   // left open (a project never laid out adopts what is on screen) hide, not close, until then, and
-  // on the new-project page before it
+  // on the new-project view before it
   const greenfield = useGreenfield();
   const newProject = useNewProject();
   const firstRun = useFirstRun();
@@ -351,20 +351,20 @@ export function Center() {
           ))}
           {/* the page stands in for every pane below: it is about a project that is not one of them */}
           {newProject ? (
-            <NewProjectPane page={newProject} />
+            <NewProject project={newProject} />
           ) : (
             <>
-              {watching && <ImportPane key={watching.id} pending={watching} />}
-              {greenfield && active && !watching && <GreenfieldPane key={active.worktree.id} active={active} />}
+              {watching && <Import key={watching.id} pending={watching} />}
+              {greenfield && active && !watching && <Greenfield key={active.worktree.id} active={active} />}
               {setupRepo && !watching && !greenfield && (
-                <SetupPane
+                <Setup
                   // the form reads the guess once, so a fresh guess (the agent scaffolded) remounts it
                   key={`${setupRepo.id}:${JSON.stringify(setupRepo.config)}`}
                   repo={setupRepo}
                   onClose={forcedSetup ? undefined : () => dispatch({ a: "close" })}
                 />
               )}
-              {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
+              {activeDiscovered && !setupRepo && !watching && <Discovered row={activeDiscovered} />}
               {/* a stale build is the same card wherever it is noticed: here, or a chunk that failed to load */}
               {!activeReady &&
                 !draftSpare &&
@@ -410,9 +410,9 @@ export function Center() {
                     ) : needsSetup && treeEmpty ? (
                       `${active.worktree.title} is empty so far; say what to build`
                     ) : noProcs ? (
-                      <NoPreviewPane repo={noProcs} />
+                      <NoPreview repo={noProcs} />
                     ) : (
-                      <BootPane worktree={active} log={log} />
+                      <Boot worktree={active} log={log} />
                     )}
                   </div>
                 )}

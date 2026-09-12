@@ -22,7 +22,7 @@ const proc = (name: string, cmd: string): Proc => ({ id: nextProcId++, name, cmd
  * both take. The detector has usually filled the form already, so the pane's job is to show the
  * guess and make the next move the only thing drawn as a button: `start` when there is something
  * to start, and the agent when the detector found nothing and nothing has been typed yet. */
-export function SetupPane({ repo, onClose }: { repo: RepoInfo; onClose?: () => void }) {
+export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void }) {
   const sock = useSock();
   const store = useStoreInstance();
   // the repo's main worktree is where the agent writes toyon.json: the daemon watches that copy

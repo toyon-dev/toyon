@@ -12,6 +12,7 @@ describe("the settings menu", () => {
         themePrefs: { mode: "system", dark: "t-dark", light: "t-light" },
         themes: [theme("t-dark", "Night", "dark"), theme("t-light", "Day", "light")],
         systemDark: true,
+        daylight: null,
         agents: [{ id: "claude", name: "Claude" } as AgentInfo],
         defaultAgent: "claude",
         prefs: { recaps: "summarize" },

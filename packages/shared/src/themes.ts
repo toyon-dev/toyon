@@ -1,7 +1,7 @@
 // Built-in themes + color helpers shared by the daemon (importing/serving) and
 // the shell (applying). Every color is #rrggbb or #rrggbbaa.
 
-import type { Theme, ThemeColorKey, ThemePrefs, ThemeSyntaxToken } from "./model.ts";
+import type { DarkNow, Theme, ThemeColorKey, ThemePrefs, ThemeSyntaxToken } from "./model.ts";
 
 // Toyon's own theme, and the one it boots into. Heteromeles arbutifolia: a brown hillside, sage
 // leaves, a scarlet berry. Three decisions in here were expensive and are worth not relitigating.
@@ -1024,14 +1024,23 @@ export function faultKey(theme: Theme): ThemeColorKey {
   return accentKey(theme) === "orange" ? "red" : "orange";
 }
 
+/** A mode that follows something rather than naming a slot, and so survives picking a theme that
+ * only paints one kind: choosing Gruvbox Light while following the sun sets the light slot and
+ * leaves the following alone. */
+export function follows(mode: ThemePrefs["mode"]): mode is "system" | "daylight" {
+  return mode === "system" || mode === "daylight";
+}
+
 /** which slot the prefs paint right now */
-export function effectiveKind(prefs: ThemePrefs, prefersDark: boolean): "dark" | "light" {
-  return prefs.mode === "system" ? (prefersDark ? "dark" : "light") : prefs.mode;
+export function effectiveKind(prefs: ThemePrefs, dark: DarkNow): "dark" | "light" {
+  if (prefs.mode === "system") return dark.system ? "dark" : "light";
+  if (prefs.mode === "daylight") return dark.daylight ? "dark" : "light";
+  return prefs.mode;
 }
 
 /** the effective theme; an unknown id falls back to the built-in of that kind */
-export function resolveTheme(prefs: ThemePrefs, themes: Theme[], prefersDark: boolean): Theme {
-  const kind = effectiveKind(prefs, prefersDark);
+export function resolveTheme(prefs: ThemePrefs, themes: Theme[], dark: DarkNow): Theme {
+  const kind = effectiveKind(prefs, dark);
   return themes.find((t) => t.id === prefs[kind]) ?? builtinThemes.find((t) => t.kind === kind) ?? toyonDark;
 }
 
@@ -1096,7 +1105,7 @@ export function pickFamily(prefs: ThemePrefs, fam: ThemeFamily): ThemePrefs {
   const next: ThemePrefs = { ...prefs };
   if (fam.dark) next.dark = fam.dark.id;
   if (fam.light) next.light = fam.light.id;
-  if (next.mode !== "system" && !fam[next.mode]) next.mode = fam.dark ? "dark" : "light";
+  if (!follows(next.mode) && !fam[next.mode]) next.mode = fam.dark ? "dark" : "light";
   return next;
 }
 
@@ -1105,7 +1114,7 @@ export function pickTheme(prefs: ThemePrefs, theme: Theme, themes: Theme[]): The
   const next: ThemePrefs = { ...prefs, [theme.kind]: theme.id };
   const sib = pairOf(theme, themes);
   if (sib) next[sib.kind] = sib.id;
-  if (next.mode !== "system") next.mode = theme.kind;
+  if (!follows(next.mode)) next.mode = theme.kind;
   return next;
 }
 

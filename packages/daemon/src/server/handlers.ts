@@ -20,6 +20,7 @@ import { browsePath, describeFolder } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { RouteService } from "../routes/service.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
+import { daylightNow } from "../themes/daylight.ts";
 import type { ThemeStore } from "../themes/store.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
@@ -486,6 +487,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   "set-theme"(msg, _ctx, s) {
     s.themes.setPrefs(msg.prefs);
     s.hub.emit("themesChanged");
+  },
+
+  // Stateless on purpose: the shell owns the clock, because it is the one that sleeps with the
+  // laptop and has to recheck on waking. This just answers where the sun is for a zone.
+  zone(msg, ctx, _s) {
+    ctx.reply({ t: "daylight", ...daylightNow(msg.tz) });
   },
 
   "import-theme"(msg, _ctx, s) {

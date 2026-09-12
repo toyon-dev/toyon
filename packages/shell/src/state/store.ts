@@ -17,6 +17,7 @@ import type {
   ChosenFolder,
   CommitEntry,
   ConnectFailure,
+  DarkNow,
   DesignIndex,
   FileServerMsg,
   GitFileStatus,
@@ -481,6 +482,9 @@ export interface State {
   previewTheme: Theme | null;
   /** OS appearance (prefers-color-scheme), for themePrefs.mode === "system" */
   systemDark: boolean;
+  /** the daemon's last word on the sun here, for themePrefs.mode === "daylight"; `until` 0 means a
+   * carried-forward answer whose next boundary is not known yet */
+  daylight: { dark: boolean; until: number } | null;
   /** the project picker's path completion: what the daemon found for `query`, and what `query`
    * itself is. `target` is what separates "no such folder" from "nothing matches yet": both arrive
    * as an empty `entries`, and only one of them is somewhere a project can be made. */
@@ -529,6 +533,8 @@ export interface InitialOpts {
   /** the theme painted last time, so there is no flash back to the default before hello */
   cached?: Theme;
   systemDark?: boolean;
+  /** the sun as the last page load left it, so following daylight paints right away */
+  daylight?: { dark: boolean; until: number } | null;
   storedActive?: string | null;
   /** project selected before the last reload, restored on hello */
   storedRepo?: string | null;
@@ -594,6 +600,7 @@ export function initialState(opts: InitialOpts): State {
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
     systemDark: opts.systemDark ?? true,
+    daylight: opts.daylight ?? null,
     paths: { query: "", entries: [], target: null },
     home: "",
     folderDialog: false,
@@ -619,9 +626,15 @@ export function initialState(opts: InitialOpts): State {
   return stored ? applyPanels(state, stored) : state;
 }
 
+/** what the following modes follow. Daylight stands in with the OS until the daemon has answered,
+ * which is a better guess than a coin toss and only lasts a round trip. */
+export function darkNow(s: Pick<State, "systemDark" | "daylight">): DarkNow {
+  return { system: s.systemDark, daylight: s.daylight?.dark ?? s.systemDark };
+}
+
 /** the theme to paint right now: picker preview beats prefs */
 export function currentTheme(s: State): Theme {
-  return s.previewTheme ?? resolveTheme(s.themePrefs, s.themes, s.systemDark);
+  return s.previewTheme ?? resolveTheme(s.themePrefs, s.themes, darkNow(s));
 }
 
 export function localOf(s: State, id: string | null | undefined): WorktreeLocal {
@@ -1256,6 +1269,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages } };
     case "themes":
       return { ...s, themes: msg.themes, themePrefs: msg.prefs };
+    case "daylight":
+      return { ...s, daylight: { dark: msg.dark, until: msg.until } };
     case "agents":
       return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent };
     case "prefs":

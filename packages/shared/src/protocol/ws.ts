@@ -69,6 +69,9 @@ export type ServerMsg =
       visits: Record<string, PageEntry[]>;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
+  /** the answer to a `zone`: whether the sun is down where that browser is, and when that changes.
+   * Only the appearance mode that follows daylight reads it, and the shell asks again at `until`. */
+  | { t: "daylight"; dark: boolean; until: number }
   | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
   /** a preference changed, from any tab */
   | { t: "prefs"; prefs: Prefs }
@@ -305,7 +308,7 @@ export const toyonConfigSchema = z
   });
 
 export const themePrefsSchema = z.object({
-  mode: z.enum(["dark", "light", "system"]),
+  mode: z.enum(["dark", "light", "system", "daylight"]),
   light: z.string(),
   dark: z.string(),
 });
@@ -491,6 +494,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** drop a repo from the daemon; refused while it still has task worktrees */
   z.object({ t: z.literal("forget-repo"), repoId: id }),
   z.object({ t: z.literal("set-theme"), prefs: themePrefsSchema }),
+  /** the browser's own IANA timezone, which is the only place the person's longitude is known: a
+   * cloud daemon sits in whatever zone its VM does. Answered with `daylight`. */
+  z.object({ t: z.literal("zone"), tz: z.string().max(100) }),
   z.object({ t: z.literal("set-default-agent"), agent: id }),
   /** change the preferences it names; the rest keep their values */
   z.object({ t: z.literal("set-prefs"), prefs: prefsSchema.partial() }),

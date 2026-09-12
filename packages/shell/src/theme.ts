@@ -40,6 +40,37 @@ export function prefersDark(): boolean {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
 }
 
+/** how long after a boundary the cached answer can still be flipped and believed; past this, two
+ * boundaries may have gone by and only the daemon knows which side we are on */
+const STALE_MS = 12 * 3_600_000;
+
+/**
+ * The last thing the daemon said about the sun, carried forward. Opening the app in the morning
+ * after closing it at night is the ordinary case, and the cached answer has expired by then: what
+ * saves the flash is that we know it flipped at `until`, so one flip is still sound for a while.
+ */
+export function cachedDaylight(): { dark: boolean; until: number } | null {
+  try {
+    const raw = localStorage.getItem(STORAGE.daylight);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as { dark: boolean; until: number };
+    if (typeof d?.dark !== "boolean" || typeof d.until !== "number") return null;
+    const over = Date.now() - d.until;
+    if (over < 0) return d;
+    // flipped, but the boundary after it is the daemon's to know: `until` 0 says "ask, and until
+    // the answer lands paint this rather than nothing"
+    return over < STALE_MS ? { dark: !d.dark, until: 0 } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberDaylight(d: { dark: boolean; until: number }) {
+  try {
+    localStorage.setItem(STORAGE.daylight, JSON.stringify(d));
+  } catch {}
+}
+
 /** subscribe to OS appearance changes; returns the unsubscribe */
 export function onPrefersDarkChange(cb: (dark: boolean) => void): () => void {
   const mq = window.matchMedia?.("(prefers-color-scheme: dark)");

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { appItems } from "../state/actions/app.ts";
 import { restoreArchived } from "../state/actions/archive.ts";
 import { removeWorktrees } from "../state/actions/worktree.ts";
@@ -12,7 +12,7 @@ import { useFileDrop } from "../surfaces/chat/useIntake.ts";
 import { WtRail } from "../surfaces/rail/WtRail.tsx";
 import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
 import { clampW } from "../surfaces/util.ts";
-import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "../theme.ts";
+import { applyTheme, bridgeThemeMsg, onPrefersDarkChange, rememberDaylight } from "../theme.ts";
 import { Button, IconButton } from "../ui/Button.tsx";
 import { Float } from "../ui/Float.tsx";
 import { floats } from "../ui/floats.ts";
@@ -50,6 +50,8 @@ export function App() {
   const active = useActive();
   const activeRow = useActiveRow();
   const connected = useStore((s) => s.connected);
+  const daylight = useStore((s) => s.daylight);
+  const daylightUntil = useStore((s) => s.daylight?.until ?? 0);
   const zen = useStore((s) => s.zen);
   const firstRun = useFirstRun();
   // both docks are hidden, not closed, on the new-project view and while the composer sits in the
@@ -157,6 +159,34 @@ export function App() {
     previewBus.broadcast(bridgeThemeMsg(theme));
   }, [theme, previewing]);
   useEffect(() => onPrefersDarkChange((v) => dispatch({ a: "system-dark", v })), [dispatch]);
+
+  // Where the sun is has no media query behind it: the zone table lives in the daemon, so the shell
+  // asks. It asks for every mode, not only the one that follows daylight, because the picker's row
+  // says which way it is leaning before you choose it.
+  const askZone = useCallback(() => {
+    sock?.send({ t: "zone", tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
+  }, [sock]);
+  useEffect(() => {
+    if (!connected) return;
+    askZone();
+    // a laptop shut at midnight fires its timeout whenever it wakes, which is the wrong minute and
+    // possibly the wrong day; coming back to the tab is the signal that can be trusted
+    const wake = () => {
+      if (document.visibilityState === "visible") askZone();
+    };
+    document.addEventListener("visibilitychange", wake);
+    return () => document.removeEventListener("visibilitychange", wake);
+  }, [connected, askZone]);
+  useEffect(() => {
+    if (!connected || daylightUntil <= Date.now()) return;
+    // a second past it, so the daemon is answering about the side we have crossed onto
+    const timer = setTimeout(askZone, daylightUntil - Date.now() + 1000);
+    return () => clearTimeout(timer);
+  }, [connected, daylightUntil, askZone]);
+  // carried forward so tomorrow's first paint knows which side of the boundary it is on
+  useEffect(() => {
+    if (daylight && daylight.until > 0) rememberDaylight(daylight);
+  }, [daylight]);
 
   useEffect(() => {
     if (!activeId) return;

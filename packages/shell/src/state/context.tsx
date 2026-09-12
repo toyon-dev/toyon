@@ -3,6 +3,7 @@
 // lets a streamed log line touch the log view and nothing else. Selectors must return stable
 // values for unchanged state: pick fields or use the EMPTY_* constants, never build a fresh object.
 
+import type { DarkNow } from "@toyon/shared";
 import { createContext, type ReactNode, useContext, useSyncExternalStore } from "react";
 import type { DaemonSocket } from "../ws.ts";
 import type { FileSync } from "./fileSync.ts";
@@ -65,6 +66,14 @@ export function useStoreInstance(): Store {
 export function useStore<T>(selector: (s: State) => T): T {
   const store = useStoreInstance();
   return useSyncExternalStore(store.subscribe, () => selector(store.getState()));
+}
+
+/** what the following appearance modes follow. Two selections rather than one, because a selector
+ * returning `{system, daylight}` would be a new object on every read and never settle. */
+export function useDarkNow(): DarkNow {
+  const system = useStore((s) => s.systemDark);
+  const daylight = useStore((s) => s.daylight?.dark);
+  return { system, daylight: daylight ?? system };
 }
 
 export function useDispatch(): Store["dispatch"] {

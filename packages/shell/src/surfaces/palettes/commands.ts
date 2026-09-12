@@ -117,6 +117,7 @@ export type CommandState = Pick<
   | "themePrefs"
   | "themes"
   | "systemDark"
+  | "daylight"
   | "rows"
   | "visible"
   | "activeId"
@@ -140,6 +141,7 @@ export function useCommands(): Command[] {
   const themePrefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
+  const daylight = useStore((s) => s.daylight);
   const rows = useStore((s) => s.rows);
   const visible = useStore((s) => s.visible);
   const activeId = useStore((s) => s.activeId);
@@ -160,6 +162,7 @@ export function useCommands(): Command[] {
       themePrefs,
       themes,
       systemDark,
+      daylight,
       rows,
       visible,
       activeId,
@@ -181,6 +184,7 @@ export function useCommands(): Command[] {
     themePrefs,
     themes,
     systemDark,
+    daylight,
     rows,
     visible,
     activeId,

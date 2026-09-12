@@ -14,6 +14,9 @@ export const STORAGE = {
   token: "toyon-token",
   /** last painted theme, applied before the daemon's hello to avoid a flash */
   theme: "toyon-theme",
+  /** the daemon's last answer about the sun, so a page that opens while following daylight paints
+   * from it rather than waiting a round trip: {"dark":true,"until":<epoch ms>} */
+  daylight: "toyon-sun",
   leftWidth: "toyon-lw",
   rightWidth: "toyon-rw",
   editorHeight: "toyon-dh",

@@ -42,6 +42,13 @@ export function extensionDirs(): string[] {
   return defaultExtensionDirs;
 }
 
+const MODES: ReadonlyArray<ThemePrefs["mode"]> = ["dark", "light", "system", "daylight"];
+
+/** a saved or client-sent mode, or dark: an unknown one is a pref written by a newer build */
+function asMode(mode: unknown): ThemePrefs["mode"] {
+  return MODES.find((m) => m === mode) ?? "dark";
+}
+
 interface ContributedTheme {
   label?: string;
   uiTheme?: string;
@@ -60,7 +67,7 @@ export class ThemeStore {
   get prefs(): ThemePrefs {
     const raw = { ...defaultThemePrefs, ...this.prefsRef.get() } as ThemePrefs & { theme?: string };
     const known = (id: string | undefined) => !!id && this.themes.some((t) => t.id === id);
-    let mode: ThemePrefs["mode"] = raw.mode === "system" || raw.mode === "light" ? raw.mode : "dark";
+    let mode = asMode(raw.mode);
     let light = raw.light,
       dark = raw.dark;
     if ((raw.mode as string) === "fixed" && known(raw.theme)) {
@@ -77,7 +84,7 @@ export class ThemeStore {
   }
 
   setPrefs(p: ThemePrefs) {
-    const mode = p.mode === "system" || p.mode === "light" ? p.mode : "dark";
+    const mode = asMode(p.mode);
     this.prefsRef.set({ mode, light: p.light, dark: p.dark });
   }
 

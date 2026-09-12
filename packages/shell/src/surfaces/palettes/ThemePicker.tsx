@@ -1,7 +1,7 @@
 import type { Theme } from "@toyon/shared";
 import { effectiveKind, pickFamily, type ThemeFamily, themeFamilies } from "@toyon/shared";
 import { useMemo, useState } from "react";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { useDarkNow, useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { rowState } from "../../ui/rowState.ts";
@@ -17,8 +17,8 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
   const sock = useSock();
   const prefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
-  const systemDark = useStore((s) => s.systemDark);
-  const nowKind = effectiveKind(prefs, systemDark);
+  const dark = useDarkNow();
+  const nowKind = effectiveKind(prefs, dark);
   const selectedId = prefs[slot === "theme" ? nowKind : slot];
   const close = () => dispatch({ a: "close" });
   const back = () => dispatch({ a: "close", back: true });

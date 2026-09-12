@@ -29,18 +29,16 @@ const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
 /** Still on the old ladder, each with the float that takes it. A phase empties its own entries, and
  * the map goes with the last of them. */
 const NOT_YET: Record<string, string> = {
-  ".inline-picker": "the composer's @ and / menu becomes a Float",
   ".overlay": "the scrim drops to a rung inside an isolated .center",
   ".pane-resize": "the strip drops to a rung inside an isolated .pane",
   ".rail-panel": "the peek drops to a rung inside the isolated .docks",
-  ".toast": "the toast becomes a Float",
 };
 
 /** the roots that do not isolate yet, for the same reason */
 const ISOLATION_PENDING = new Set([".docks", ".center", ".pane", ".chat-log"]);
 
 /** a float still placing itself, until its phase moves it into the top layer */
-const FIXED_PENDING = new Set([".toast"]);
+const FIXED_PENDING = new Set<string>();
 
 const cssFiles = () => [...new Glob("**/*.css").scanSync({ cwd: SRC })].sort();
 const codeFiles = () => [...new Glob("**/*.{ts,tsx}").scanSync({ cwd: SRC })].filter((f) => !f.endsWith(".test.ts"));

@@ -14,6 +14,7 @@ import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
 import { clampW } from "../surfaces/util.ts";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "../theme.ts";
 import { Button, IconButton } from "../ui/Button.tsx";
+import { Float } from "../ui/Float.tsx";
 import { floats } from "../ui/floats.ts";
 import { useDragResize, useOnChange, usePersisted } from "../ui/hooks.ts";
 import { Menus } from "../ui/Menu.tsx";
@@ -279,7 +280,8 @@ export function App() {
         {!firstRun && <WtRail />}
       </div>
       {toast && (
-        <div className={cx("toast", !toast.ok && "err")} role="status">
+        // shown again for each new message, which puts it over whatever has opened since
+        <Float className={cx("toast", !toast.ok && "err")} role="status" raiseKey={toast}>
           {toast.message}
           <IconButton
             icon="close"
@@ -318,7 +320,7 @@ export function App() {
               restore
             </Button>
           )}
-        </div>
+        </Float>
       )}
     </div>
   );

@@ -4,7 +4,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
 import { fileItems, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { useActive, useActiveId, useActiveRow, useGreenfield, useLocalField } from "../../state/selectors.ts";
+import { useActive, useActiveId, useActiveRow, useFirstRun, useLocalField } from "../../state/selectors.ts";
 import { repoById } from "../../state/store.ts";
 import { step } from "../../ui/listNav.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
@@ -34,9 +34,9 @@ export function LeftDock({ width }: { width: number }) {
   const activeId = useActiveId();
   const active = useActive();
   const leftOpen = useStore((s) => s.leftOpen);
-  // hidden, not closed, on an empty project: the layout remembers nothing of it and the panel is
+  // hidden, not closed, on a first-run screen: the layout remembers nothing of it and the panel is
   // back, as it was, with the first message
-  const greenfield = useGreenfield();
+  const firstRun = useFirstRun();
   const focusReq = useStore((s) => s.focusLeft);
   const gitInfo = useLocalField(activeId, "git");
   // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
@@ -299,7 +299,7 @@ export function LeftDock({ width }: { width: number }) {
   const noHover = useCallback(() => {}, []);
 
   return (
-    <div className={cx("left-dock", (!leftOpen || greenfield) && "collapsed")} style={{ width }}>
+    <div className={cx("left-dock", (!leftOpen || firstRun) && "collapsed")} style={{ width }}>
       {/* the count is the working tree's: the committed section under it keeps its own title */}
       <Tabs<Tab>
         fill

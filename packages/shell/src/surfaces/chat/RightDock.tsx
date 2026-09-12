@@ -1,5 +1,5 @@
 import { useStore } from "../../state/context.tsx";
-import { useActive, useDraft, useGreenfield } from "../../state/selectors.ts";
+import { useActive, useDraft, useFirstRun } from "../../state/selectors.ts";
 import { ChatLog } from "./ChatLog.tsx";
 import { Composer } from "./Composer.tsx";
 import { DraftIntro } from "./DraftIntro.tsx";
@@ -11,8 +11,8 @@ import { cx } from "../../ui/cx.ts";
  * transcript's place holds the draft's intro, and the composer writes the draft. */
 export function RightDock({ width }: { width: number }) {
   const rightOpen = useStore((s) => s.rightOpen);
-  // hidden, not closed, while the composer is in the centre: the layout remembers nothing of it
-  const greenfield = useGreenfield();
+  // hidden, not closed, on a first-run screen: the layout remembers nothing of it
+  const firstRun = useFirstRun();
   const active = useActive();
   const draft = useDraft();
   // dropped files attach here, but the drop is taken on the window (see useFileDrop): this only
@@ -20,7 +20,7 @@ export function RightDock({ width }: { width: number }) {
   const over = useStore((s) => s.dragFiles);
   return (
     <div
-      className={cx("right-dock", (!rightOpen || greenfield) && "collapsed", over && "drop-over")}
+      className={cx("right-dock", (!rightOpen || firstRun) && "collapsed", over && "drop-over")}
       style={{ width }}
       ref={(el) => {
         chatPanel.el = el;

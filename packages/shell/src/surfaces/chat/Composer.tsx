@@ -327,7 +327,7 @@ export function Composer({
     : recap
       ? recapLine(recap)
       : greenfield
-        ? "describe the app; the agent scaffolds it here"
+        ? `describe ${title}…`
         : drafting || spawning
           ? "describe a change"
           : onMain
@@ -454,6 +454,19 @@ export function Composer({
     // the worktree the draft was for is on its way and takes the selection when it lands
     if (drafting) dispatch({ a: "close-draft" });
   };
+
+  // The description typed on the new-project page, in the box of the project it just made. It is
+  // sent from here rather than from the page so that the first message of a project made there is
+  // the same message as any other: the same context blocks, the same stamping on a main that has
+  // never run, and the same dock coming back with the reply.
+  // Only the centred one answers: the dock renders a composer for the same worktree at the same
+  // time, and both reading one flag sent the first message twice.
+  const autoSend = useStore((s) => s.autoSend);
+  useOnChange([autoSend, id], () => {
+    if (!autoSend || autoSend !== id || !text.trim() || centred !== !!greenfield) return;
+    dispatch({ a: "auto-sent" });
+    send();
+  });
 
   // backspace in an empty box removes the attachment added last
   const removeLast = (): boolean => {

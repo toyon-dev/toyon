@@ -286,6 +286,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       prefs: s.state.prefs,
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
+      gitIdentity: await s.repos.gitIdentity(),
       pending: s.repos.pending,
       visits: s.routes.historyAll(),
     }) satisfies ServerMsg;

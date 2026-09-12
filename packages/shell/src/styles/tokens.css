@@ -166,6 +166,8 @@
    *   ui / mono        the app: rows, prose, menus, file paths, the tool log, the diff
    *   ui-sm / mono-sm  the frame: key chips, and the bars that describe state rather than hold it
    *   ui-lg            arrival, and nothing else. A heading that is not an arrival is ui + strong
+   *   ui-xl            a page that is one thing: the name of the project being made, and the same
+   *                    name as the title of its first-run screen, where it must not move or resize
    *
    * mono sits a point under ui at the body tier because mono reads optically larger; at the small
    * tier the correction is under a pixel and both are 11. There is no mono-lg: if one is ever
@@ -181,6 +183,7 @@
     --type-ui-sm: 400 11px / 1.4 var(--face-ui);
     --type-ui: 400 13px / 1.5 var(--face-ui);
     --type-ui-lg: 400 20px / 28px var(--face-ui);
+    --type-ui-xl: 400 24px / 32px var(--face-ui);
     --type-mono-sm: 400 var(--size-mono-sm) var(--face-mono);
     --type-mono: 400 var(--size-mono) var(--face-mono);
 

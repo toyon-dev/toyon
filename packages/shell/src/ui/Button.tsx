@@ -15,7 +15,7 @@ import "./button.css";
  * styles/button.test.ts holds that line.
  */
 export type ButtonSize = "sm" | "md" | "lg";
-export type ButtonVariant = "ghost" | "outline" | "field";
+export type ButtonVariant = "ghost" | "outline" | "field" | "inline";
 export type ButtonTone = "primary" | "quiet" | "danger" | "chrome";
 
 const SIZE: Record<ButtonSize, string> = {
@@ -34,6 +34,8 @@ const VARIANT: Record<ButtonVariant, string> = {
   outline: "btn-outline",
   /** drawn as a form field, because it holds a current value you click to change */
   field: "btn-outline btn-field",
+  /** a word in a sentence that can be pressed: the sentence's own face and colour, and no box */
+  inline: "btn-inline",
 };
 
 const TONE: Record<ButtonTone, string> = {

@@ -100,6 +100,26 @@
     }
   }
 
+  /* variant: inline is a word inside a sentence that can be pressed, the first-run screen's project
+   name. It keeps the sentence's face, colour and line and draws no box, so the sentence reads
+   unbroken; a dotted underline says it can be pressed, and goes solid under the pointer. */
+  .btn-inline {
+    display: inline;
+    padding: 0;
+    border-radius: 0;
+    font: inherit;
+    line-height: inherit;
+    color: inherit;
+    white-space: normal;
+    text-decoration: underline dotted var(--border1);
+    text-underline-offset: 0.2em;
+    &:hover {
+      color: var(--text0);
+      background: none;
+      text-decoration: underline solid currentColor;
+    }
+  }
+
   /* tone: colour only, never the box. Each is the resting colour; `on` is handled below. */
   .tone-primary {
     color: var(--accent);

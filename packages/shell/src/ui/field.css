@@ -29,6 +29,22 @@
   .field-ui {
     font: var(--type-ui);
   }
+  /* the lead face: the one thing a page is about, typed at the size it is read at afterwards */
+  .field-lead {
+    font: var(--type-ui-xl);
+  }
+  /* a line instead of a box: a form on a page that should read as a page. The line is the border
+     the box gave up, so focus still moves it the way a box's does. */
+  .field-rule {
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border0);
+    border-radius: 0;
+    padding-left: 0;
+    &:focus {
+      border-bottom-color: var(--border1);
+    }
+  }
   /* no box: the region around it is the field. The composer carries the sunken ground for the
      whole panel, and a picker's strip carries it across the top of its panel. */
   .field-bare {

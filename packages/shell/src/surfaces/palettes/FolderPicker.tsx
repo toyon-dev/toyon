@@ -1,16 +1,17 @@
 import { projectNameError } from "@toyon/shared";
 import { useCallback } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import type { NewProjectForm } from "../../state/store.ts";
+import type { NewProject } from "../../state/store.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { PaletteRow } from "./PaletteRow.tsx";
 import { destination, type FolderRow, folderName, folderRows, looksLikePath } from "./projectPicker.ts";
 
-/** Where a new project goes, found by walking to the folder rather than typing its path. The form's
- * `change` opens it at the folder the form already had. A click opens a folder, the first row puts
- * the project in the folder being shown, and backing out returns to the form as it was. The field
- * is the same path completion the project picker has, for someone who would rather type. */
-export function FolderPicker({ form }: { form: NewProjectForm }) {
+/** Where a new project goes, found by walking to the folder rather than typing its path, over the
+ * new-project page it fills in. It opens at the folder the page already had. A click opens a folder,
+ * the first row puts the project in the folder being shown, and backing out leaves the page as it
+ * was. The field is the same path completion the project picker has, for someone who would rather
+ * type. */
+export function FolderPicker({ page }: { page: NewProject }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const paths = useStore((s) => s.paths);
@@ -29,12 +30,12 @@ export function FolderPicker({ form }: { form: NewProjectForm }) {
     [paths, home],
   );
 
-  const name = projectNameError(form.name) ? null : form.name.trim();
+  const name = projectNameError(page.name) ? null : page.name.trim();
   const listing = (path: string) => `${path.replace(/\/+$/, "")}/`;
 
   return (
     <ListPicker<FolderRow>
-      initialQuery={listing(form.parent)}
+      initialQuery={listing(page.parent)}
       // what the folder is being found for, the way the project picker's chip names the open project
       lead={<span className="picker-chip">{name ?? "new project"}</span>}
       items={[]}
@@ -45,16 +46,12 @@ export function FolderPicker({ form }: { form: NewProjectForm }) {
       completionOf={(r) => (r.kind === "dir" ? listing(r.entry.path) : null)}
       narrowTo={(r) => (r.kind === "dir" ? listing(r.entry.path) : r.kind === "up" ? listing(r.path) : null)}
       onPick={(r) => {
+        if (r.kind !== "here") return;
         // choosing a location is choosing to make a folder there, even after an empty one was picked
-        if (r.kind === "here") {
-          dispatch({
-            a: "open",
-            overlay: { ...form, mode: form.mode === "init" ? "create" : form.mode, parent: r.path },
-          });
-        }
+        dispatch({ a: "new-project-set", v: { mode: page.mode === "init" ? "create" : page.mode, parent: r.path } });
+        dispatch({ a: "close" });
       }}
-      // esc reaches the reducer as a close with back, which does the same
-      onBack={() => dispatch({ a: "open", overlay: form })}
+      onBack={() => dispatch({ a: "close" })}
       placeholder="type a folder path"
       keys={(active) => ({
         complete: "completes the path",

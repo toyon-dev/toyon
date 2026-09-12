@@ -447,6 +447,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply(toast("", true, `created ${repo.name}`));
   },
 
+  async "unmake-repo"(msg, _ctx, s) {
+    // no toast: the page it was asked from is the answer, with the project's name back in its field
+    await s.repos.unmake(msg.repoId);
+  },
+
   "cancel-import"(msg, _ctx, s) {
     s.repos.cancelImport(msg.id);
   },
@@ -458,7 +463,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async "choose-folder"(msg, ctx, s) {
     let path: string | null;
     try {
-      path = await s.folderDialog.choose(msg.start);
+      path = await s.folderDialog.choose(msg.start, msg.purpose);
     } catch (e) {
       // the form is waiting on an answer to stop looking busy; the throw still reaches it as a toast
       ctx.reply({ t: "folder-chosen", folder: null });

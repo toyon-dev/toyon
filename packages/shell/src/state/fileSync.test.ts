@@ -83,6 +83,7 @@ function harness() {
     prefs: initial.prefs,
     home: "/h",
     folderDialog: false,
+    gitIdentity: true,
     pending: [],
     visits: {},
   });

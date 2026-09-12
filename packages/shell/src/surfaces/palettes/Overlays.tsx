@@ -8,7 +8,6 @@ import { CommandPalette } from "./CommandPalette.tsx";
 import { ElementSources } from "./ElementSources.tsx";
 import { FolderPicker } from "./FolderPicker.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
-import { NewProjectOverlay } from "./NewProjectOverlay.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import { RefPicker } from "./RefPicker.tsx";
@@ -22,6 +21,7 @@ export function Overlays() {
   const overlay = useOverlay();
   const activeId = useActiveId();
   const activeRepoId = useStore((s) => s.activeRepoId);
+  const newProject = useStore((s) => s.newProject);
   return (
     <>
       {overlay?.kind === "quick-open" && activeId && <QuickOpen worktreeId={activeId} />}
@@ -40,8 +40,7 @@ export function Overlays() {
       {overlay?.kind === "projects" && overlay.form !== "pill" && (
         <ProjectPicker key={overlay.form} form={overlay.form} />
       )}
-      {overlay?.kind === "new-project" && <NewProjectOverlay overlay={overlay} />}
-      {overlay?.kind === "choose-folder" && <FolderPicker form={overlay.form} />}
+      {overlay?.kind === "choose-folder" && newProject && <FolderPicker page={newProject} />}
     </>
   );
 }

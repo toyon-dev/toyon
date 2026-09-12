@@ -7,6 +7,7 @@ import { useStore } from "./context.tsx";
 import {
   currentTheme,
   draftSpareOf,
+  isFirstRun,
   isGreenfield,
   localOf,
   previewIdOf,
@@ -72,6 +73,15 @@ export const useTheme = () => useStore(currentTheme);
 
 /** an empty project nobody has spoken to yet: the composer sits in the centre, the chat dock is hidden */
 export const useGreenfield = (): boolean => useStore(isGreenfield);
+
+/** the new-project page or a greenfield project: the docks, the rail and the panes are hidden */
+export const useFirstRun = (): boolean => useStore(isFirstRun);
+
+/** the new-project page, while it is up */
+export const useNewProject = () => useStore((s) => s.newProject);
+
+/** the worktree whose composer should send what is in its box: the new-project page's description */
+export const useAutoSend = () => useStore((s) => s.autoSend);
 
 /** the new worktree being drafted, while the draft tab is open */
 export const useDraft = () => useStore((s) => s.draft);

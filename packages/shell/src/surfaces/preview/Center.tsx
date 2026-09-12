@@ -13,8 +13,10 @@ import {
   useActiveRepoNeedingSetup,
   useActiveRow,
   useDraftSpare,
+  useFirstRun,
   useGreenfield,
   useLocalField,
+  useNewProject,
   usePreviewId,
   useRows,
   useTheme,
@@ -48,6 +50,7 @@ import { BootPane } from "./BootPane.tsx";
 import { DiscoveredPane } from "./DiscoveredPane.tsx";
 import { GreenfieldPane } from "./GreenfieldPane.tsx";
 import { ImportPane } from "./ImportPane.tsx";
+import { NewProjectPane } from "./NewProjectPane.tsx";
 import { NoPreviewPane } from "./NoPreviewPane.tsx";
 import { SetupPane } from "./SetupPane.tsx";
 import "./preview.css";
@@ -85,10 +88,13 @@ export function Center() {
   const connectFailure = useStore((s) => s.connectFailure);
   const editor = useStore((s) => s.editor);
   // an empty project asks what to build before it asks how to start; the panes a previous project
-  // left open (a project never laid out adopts what is on screen) hide, not close, until then
+  // left open (a project never laid out adopts what is on screen) hide, not close, until then, and
+  // on the new-project page before it
   const greenfield = useGreenfield();
-  const termOpen = useStore((s) => s.termOpen) && !greenfield;
-  const designOpen = useStore((s) => s.designOpen) && !greenfield;
+  const newProject = useNewProject();
+  const firstRun = useFirstRun();
+  const termOpen = useStore((s) => s.termOpen) && !firstRun;
+  const designOpen = useStore((s) => s.designOpen) && !firstRun;
   const reloadReq = useStore((s) => s.reloadReq);
   const theme = useTheme();
   const themeRef = useRef(theme);
@@ -339,72 +345,79 @@ export function Center() {
               src={previewUrl(f.id, f.port)}
               title={f.title}
               style={{
-                display: f.id === previewId && !setupRepo && !watching && !greenfield ? "block" : "none",
+                display: f.id === previewId && !setupRepo && !watching && !firstRun ? "block" : "none",
               }}
             />
           ))}
-          {watching && <ImportPane key={watching.id} pending={watching} />}
-          {greenfield && active && !watching && <GreenfieldPane key={active.worktree.id} active={active} />}
-          {setupRepo && !watching && !greenfield && (
-            <SetupPane
-              // the form reads the guess once, so a fresh guess (the agent scaffolded) remounts it
-              key={`${setupRepo.id}:${JSON.stringify(setupRepo.config)}`}
-              repo={setupRepo}
-              onClose={forcedSetup ? undefined : () => dispatch({ a: "close" })}
-            />
-          )}
-          {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
-          {/* a stale build is the same card wherever it is noticed: here, or a chunk that failed to load */}
-          {!activeReady &&
-            !draftSpare &&
-            !activeDiscovered &&
-            !setupRepo &&
-            !watching &&
-            !greenfield &&
-            incompatible && (
-              <CrashCard
-                title={STALE_BUILD.title}
-                body={STALE_BUILD.body}
-                action={
-                  <Button variant="outline" onClick={() => window.location.reload()}>
-                    reload
-                  </Button>
-                }
-              />
-            )}
-          {!activeReady &&
-            !draftSpare &&
-            !activeDiscovered &&
-            !setupRepo &&
-            !watching &&
-            !greenfield &&
-            !incompatible && (
-              <div className="empty">
-                {!connected && (!heard || connectFailure) ? (
-                  // heard over the bootstrap fetch means the daemon is up and the socket is a
-                  // moment away; saying "connecting" for that moment is the flash, not the truth
-                  HAS_TOKEN ? (
-                    CONNECT_TEXT[connectFailure ?? "probing"]
-                  ) : (
-                    "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
-                  )
-                ) : !active ? (
-                  heard ? (
-                    `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
-                  ) : (
-                    ""
-                  )
-                ) : needsSetup && busy ? (
-                  `building in ${active.worktree.title}; the preview appears once it starts`
-                ) : needsSetup && treeEmpty ? (
-                  `${active.worktree.title} is empty so far; say what to build`
-                ) : noProcs ? (
-                  <NoPreviewPane repo={noProcs} />
-                ) : (
-                  <BootPane worktree={active} log={log} />
+          {/* the page stands in for every pane below: it is about a project that is not one of them */}
+          {newProject ? (
+            <NewProjectPane page={newProject} />
+          ) : (
+            <>
+              {watching && <ImportPane key={watching.id} pending={watching} />}
+              {greenfield && active && !watching && <GreenfieldPane key={active.worktree.id} active={active} />}
+              {setupRepo && !watching && !greenfield && (
+                <SetupPane
+                  // the form reads the guess once, so a fresh guess (the agent scaffolded) remounts it
+                  key={`${setupRepo.id}:${JSON.stringify(setupRepo.config)}`}
+                  repo={setupRepo}
+                  onClose={forcedSetup ? undefined : () => dispatch({ a: "close" })}
+                />
+              )}
+              {activeDiscovered && !setupRepo && !watching && <DiscoveredPane row={activeDiscovered} />}
+              {/* a stale build is the same card wherever it is noticed: here, or a chunk that failed to load */}
+              {!activeReady &&
+                !draftSpare &&
+                !activeDiscovered &&
+                !setupRepo &&
+                !watching &&
+                !greenfield &&
+                incompatible && (
+                  <CrashCard
+                    title={STALE_BUILD.title}
+                    body={STALE_BUILD.body}
+                    action={
+                      <Button variant="outline" onClick={() => window.location.reload()}>
+                        reload
+                      </Button>
+                    }
+                  />
                 )}
-              </div>
-            )}
+              {!activeReady &&
+                !draftSpare &&
+                !activeDiscovered &&
+                !setupRepo &&
+                !watching &&
+                !greenfield &&
+                !incompatible && (
+                  <div className="empty">
+                    {!connected && (!heard || connectFailure) ? (
+                      // heard over the bootstrap fetch means the daemon is up and the socket is a
+                      // moment away; saying "connecting" for that moment is the flash, not the truth
+                      HAS_TOKEN ? (
+                        CONNECT_TEXT[connectFailure ?? "probing"]
+                      ) : (
+                        "no access token for this address.\nrun `toyon` in your repo, or open the full URL\n(with #token=…) printed in ~/.toyon/daemon.log"
+                      )
+                    ) : !active ? (
+                      heard ? (
+                        `nothing open yet.\npress ${chord("project")} to open a project, or type a name there to start a new one`
+                      ) : (
+                        ""
+                      )
+                    ) : needsSetup && busy ? (
+                      `building in ${active.worktree.title}; the preview appears once it starts`
+                    ) : needsSetup && treeEmpty ? (
+                      `${active.worktree.title} is empty so far; say what to build`
+                    ) : noProcs ? (
+                      <NoPreviewPane repo={noProcs} />
+                    ) : (
+                      <BootPane worktree={active} log={log} />
+                    )}
+                  </div>
+                )}
+            </>
+          )}
         </div>
       </div>
       {editor && (

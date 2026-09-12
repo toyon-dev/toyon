@@ -6,6 +6,7 @@ import {
   type PathEntry,
   type PathTarget,
   type PendingRepo,
+  PROJECTS_FOLDER,
   projectNameError,
   type RepoInfo,
 } from "@toyon/shared";
@@ -38,7 +39,8 @@ export function splitTypedPath(q: string): { parent: string; name: string } {
 
 /** the folder most of this person's projects already live in, so a new one is offered beside them.
  * Derived rather than configured: there is no "projects directory" setting to get wrong, and no
- * assumption that anyone keeps them in ~/Projects. */
+ * assumption that anyone keeps them in ~/Projects. With no project yet there is nothing to follow,
+ * and ~/Projects is offered because the daemon makes that one folder when it is not there. */
 export function defaultParent(repos: RepoInfo[], activeRepoId: string | null, home: string): string {
   const dirs = repos.map((r) => r.path.slice(0, r.path.lastIndexOf("/"))).filter(Boolean);
   const active = repos.find((r) => r.id === activeRepoId);
@@ -56,7 +58,7 @@ export function defaultParent(repos: RepoInfo[], activeRepoId: string | null, ho
       bestCount = n;
     }
   }
-  return collapseHome(best || activeDir || home, home);
+  return best ? collapseHome(best, home) : `~/${PROJECTS_FOLDER}`;
 }
 
 /** `/Users/k/Projects` as `~/Projects`, the way it would be typed back in. Only on a segment

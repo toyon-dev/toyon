@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { clientMsgSchema, FILE_MAX_CHARS, type ServerMsg, SHELL_STREAM, streamKey } from "@toyon/shared";
+import { clientMsgSchema, FILE_MAX_CHARS, type RepoInfo, type ServerMsg, SHELL_STREAM, streamKey } from "@toyon/shared";
 import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
@@ -38,6 +39,25 @@ function lastToast(replies: ServerMsg[]): string | undefined {
   return m?.t === "shipped" ? m.message : undefined;
 }
 afterEach(() => cleanup());
+
+const IDENTITY = "[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n";
+
+/** git reads a config of the test's own for the length of `fn`, so identity is what the test says and
+ * the developer's own config is neither depended on nor written to */
+async function withGitConfig(content: string, fn: (file: string) => Promise<void>): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), "toyon-cfg-"));
+  const file = join(dir, "gitconfig");
+  writeFileSync(file, content);
+  const saved = process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_GLOBAL = file;
+  try {
+    await fn(file);
+  } finally {
+    if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+    else process.env.GIT_CONFIG_GLOBAL = saved;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 function make() {
   const t = tmpRepo();
@@ -757,7 +777,7 @@ describe("handlers", () => {
     chosen.push(fresh, repo, root, null);
     const kinds: Array<string | null> = [];
     for (let i = 0; i < 4; i++) {
-      await dispatch({ t: "choose-folder", start: "~" }, ctx, services);
+      await dispatch({ t: "choose-folder", start: "~", purpose: "location" }, ctx, services);
       kinds.push(lastOf(replies, "folder-chosen")?.folder?.kind ?? null);
     }
     expect(kinds).toEqual(["empty", "project", "folder", null]);
@@ -771,7 +791,9 @@ describe("handlers", () => {
       },
       cancel: () => {},
     };
-    await expect(dispatch({ t: "choose-folder", start: "~" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+    await expect(
+      dispatch({ t: "choose-folder", start: "~", purpose: "location" }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
     expect(lastOf(replies, "folder-chosen")).toEqual({ t: "folder-chosen", folder: null });
   });
 
@@ -800,6 +822,85 @@ describe("handlers", () => {
     await expect(
       dispatch({ t: "create-repo", mode: "init", parent: repo, name: "inner" }, ctx, services),
     ).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("unmake-repo takes back exactly what create-repo made, while it is untouched", async () => {
+    const { services, ctx, repo } = make();
+    const parent = dirname(repo);
+    await withGitConfig(IDENTITY, async () => {
+      await dispatch({ t: "create-repo", mode: "create", parent, name: "fresh" }, ctx, services);
+      const made = services.state.repos.find((r) => r.name === "fresh")!;
+      expect(made.made).toBe("folder");
+      await dispatch({ t: "unmake-repo", repoId: made.id }, ctx, services);
+      expect(services.state.repos.some((r) => r.id === made.id)).toBe(false);
+      expect(services.state.worktrees.some((w) => w.repoId === made.id)).toBe(false);
+      expect(existsSync(join(parent, "fresh"))).toBe(false);
+
+      // an empty folder that was already the person's stays theirs: only the .git goes
+      mkdirSync(join(parent, "Mine"));
+      writeFileSync(join(parent, "Mine", ".DS_Store"), "");
+      await dispatch({ t: "create-repo", mode: "init", parent, name: "Mine" }, ctx, services);
+      const init = services.state.repos.find((r) => r.name === "Mine")!;
+      expect(init.made).toBe("git");
+      await dispatch({ t: "unmake-repo", repoId: init.id }, ctx, services);
+      expect(services.state.repos.some((r) => r.id === init.id)).toBe(false);
+      expect(existsSync(join(parent, "Mine", ".DS_Store"))).toBe(true);
+      expect(existsSync(join(parent, "Mine", ".git"))).toBe(false);
+    });
+  });
+
+  test("unmake-repo refuses a project that has been used, and one it did not make", async () => {
+    const { services, ctx, repo } = make();
+    const parent = dirname(repo);
+    await withGitConfig(IDENTITY, async () => {
+      const made = async (name: string) => {
+        await dispatch({ t: "create-repo", mode: "create", parent, name }, ctx, services);
+        return services.state.repos.find((r) => r.name === name)!;
+      };
+      const refused = async (r: RepoInfo, sign: RegExp) => {
+        await expect(dispatch({ t: "unmake-repo", repoId: r.id }, ctx, services)).rejects.toThrow(sign);
+        expect(services.state.repos.some((x) => x.id === r.id)).toBe(true);
+        expect(existsSync(r.path)).toBe(true);
+      };
+      const files = await made("files");
+      writeFileSync(join(files.path, "index.html"), "<h1>hi</h1>\n");
+      await refused(files, /has files in it/);
+      const commits = await made("commits");
+      sh(commits.path, GIT, "commit", "--allow-empty", "-qm", "second");
+      await refused(commits, /has commits/);
+      // the agent's settings are excluded from git, so this is the one sign status cannot see
+      const agent = await made("agent");
+      mkdirSync(join(agent.path, ".claude"));
+      await refused(agent, /agent has already run/);
+      await dispatch({ t: "register-repo", path: repo }, ctx, services);
+      await refused(services.state.repos.find((r) => !r.made)!, /was opened/);
+    });
+  });
+
+  test("create-repo writes the name and email it is given before it commits", async () => {
+    const { services, ctx, repo } = make();
+    const parent = dirname(repo);
+    await withGitConfig("[commit]\n\tgpgsign = false\n", async (file) => {
+      expect(await services.repos.gitIdentity()).toBe(false);
+      await expect(
+        dispatch({ t: "create-repo", mode: "create", parent, name: "nobody" }, ctx, services),
+      ).rejects.toBeInstanceOf(UserError);
+      await dispatch(
+        {
+          t: "create-repo",
+          mode: "create",
+          parent,
+          name: "someone",
+          identity: { name: "Ada", email: "ada@example.com" },
+        },
+        ctx,
+        services,
+      );
+      expect(services.state.repos.some((r) => r.name === "someone")).toBe(true);
+      expect(readFileSync(file, "utf8")).toContain("ada@example.com");
+      // read again after a create, so the next hello stops the page asking
+      expect(await services.repos.gitIdentity()).toBe(true);
+    });
   });
 
   test("a clone becomes a pending project the daemon holds, then a real one", async () => {

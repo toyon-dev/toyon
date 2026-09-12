@@ -59,8 +59,37 @@
     color: var(--text0);
     font: var(--type-ui);
   }
+  /* the title line: the name, sized to itself, with where it lands beside it */
+  .new-project-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
   .new-project-field {
-    width: 100%;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* What a person writes here is the first message of the project, so the region is the page it will
+     be read on: no frame, no ground, and a height to aim at before a word is in it. The height is
+     the region's and the textarea fills it, the same way the composer's does (Field's `bare`), and
+     the drag handle goes: a corner to pull is furniture on a page someone is writing on. */
+  .new-project-body {
+    display: flex;
+    min-height: 96px;
+    & textarea {
+      flex: 1;
+      width: 100%;
+      resize: none;
+    }
+  }
+  /* what will run on it, and the one action, on the row the composer keeps them on */
+  .new-project-knobs {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
   }
   /* an empty folder made the project keeps its own name, so it is read at the field's size, not edited */
   .new-project-name {
@@ -84,6 +113,7 @@
     gap: 6px;
     min-height: var(--row-height);
     min-width: 0;
+    flex: 0 1 auto;
   }
   .new-project-parent {
     color: var(--text0);

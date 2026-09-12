@@ -496,6 +496,9 @@ export interface State {
   choosingFolder: false | "location" | "open";
   /** the new-project page, while it is up */
   newProject: NewProject | null;
+  /** this worktree's composer should send what is already in its box, once: the description typed on
+   * the new-project page, going as the first message from the box that now holds it */
+  autoSend: string | null;
   /** the last answer to `choose-folder`, numbered so the form that asked can tell a new answer from
    * the one it already applied */
   chosenFolder: { seq: number; folder: ChosenFolder | null } | null;
@@ -598,6 +601,7 @@ export function initialState(opts: InitialOpts): State {
     gitIdentity: true,
     choosingFolder: false,
     newProject: null,
+    autoSend: null,
     chosenFolder: null,
     pending: [],
     activeImportId: null,
@@ -798,6 +802,8 @@ export type Action =
   | { a: "new-project-set"; v: Partial<NewProject> }
   /** leave the page for the project behind it; with no project there is nowhere to go */
   | { a: "close-new-project" }
+  /** the composer took the send the page asked of it, so it is not asked twice */
+  | { a: "auto-sent" }
   /** show a clone's progress in the preview area (null stops watching) */
   | { a: "watch-import"; id: string | null }
   | { a: "close-editor" }
@@ -982,6 +988,8 @@ function reduce(s: State, action: Action): State {
     case "close-new-project":
       // with no project behind it, the page is the only thing there is to show
       return s.newProject && s.repos.length > 0 ? { ...s, newProject: null, choosingFolder: false } : s;
+    case "auto-sent":
+      return s.autoSend ? { ...s, autoSend: null } : s;
     case "watch-import":
       return { ...s, activeImportId: action.id };
     case "close-editor":
@@ -1179,15 +1187,22 @@ function pruneByRepo<T>(flags: Record<string, T>, repos: RepoInfo[]): Record<str
   return Object.fromEntries(Object.entries(flags).filter(([id]) => keep.has(id)));
 }
 
-/** the new-project page, once the project it made has its main row: it gives way to that row's
- * first-run screen, carrying what was typed there before the way back */
+/** The new-project page, once the project it made has its main row: it gives way to that row's
+ * first-run screen, and the description typed on the page lands in that row's box.
+ *
+ * It goes from there rather than from the page, so the first message of a project made here is the
+ * same message as any other first message: the composer's, with its context blocks, the model and
+ * effort it stamps on a main that has never run, and the chat dock coming back with the reply. With
+ * nothing described, the box is left empty and waiting, which is where a project opened from the
+ * terminal starts. */
 function settlePage(s: State): State {
   const page = s.newProject;
   if (page?.phase !== "creating" || !page.repoId) return s;
   const main = mainOf(s, page.repoId);
   if (!main) return s;
-  const seeded = page.prompt ? withLocal(s, main.id, (l) => ({ ...l, draft: page.prompt })) : s;
-  return { ...seeded, newProject: null };
+  if (!page.prompt.trim()) return { ...s, newProject: null };
+  const seeded = withLocal(s, main.id, (l) => ({ ...l, draft: page.prompt }));
+  return { ...seeded, newProject: null, autoSend: main.id };
 }
 
 function onServer(s: State, msg: StoreServerMsg): State {

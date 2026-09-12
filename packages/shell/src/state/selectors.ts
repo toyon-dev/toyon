@@ -80,6 +80,9 @@ export const useFirstRun = (): boolean => useStore(isFirstRun);
 /** the new-project page, while it is up */
 export const useNewProject = () => useStore((s) => s.newProject);
 
+/** the worktree whose composer should send what is in its box: the new-project page's description */
+export const useAutoSend = () => useStore((s) => s.autoSend);
+
 /** the new worktree being drafted, while the draft tab is open */
 export const useDraft = () => useStore((s) => s.draft);
 

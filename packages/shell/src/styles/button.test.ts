@@ -46,13 +46,12 @@ const PRIMITIVES = new Set([
 
 /**
  * Controls that are deliberately not one of the sizes, each for a reason:
- * - .setup-add is a bare text link in a form, no horizontal box at all
  * - .jump-down is a floating pill over the transcript, sized to clear the composer
  * - .rail-new and .rail-disc-head are full-width rail rows that happen to be buttons
  * - .bar-path is the address strip: chrome, so quieter at rest than a form field, with the bar's
  *   own inset
  */
-const ONE_OFFS = new Set([".setup-add", ".jump-down", ".rail-new", ".rail-disc-head", ".bar-path"]);
+const ONE_OFFS = new Set([".jump-down", ".rail-new", ".rail-disc-head", ".bar-path"]);
 
 /**
  * A raw <button> is a row, or one of three inline controls that are text rather than a chip:

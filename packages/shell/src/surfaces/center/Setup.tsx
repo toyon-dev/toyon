@@ -4,6 +4,7 @@ import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
+import { Form } from "../../ui/Form.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -85,6 +86,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       {multi && (
         <Field
           size="md"
+          rule
           className="setup-name"
           value={p.name}
           placeholder="name"
@@ -94,6 +96,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       )}
       <Field
         size="md"
+        rule
         className="setup-cmd"
         value={p.cmd}
         placeholder="npm run dev"
@@ -104,104 +107,101 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   );
 
   return (
-    <div className="setup-pane">
-      <p className="setup-lead">how does {repo.name} start?</p>
-      <div className="setup-card">
-        <FormRow label="install" hint="once per new worktree; one command per line">
-          <TextArea
-            size="md"
-            rows={Math.max(1, install.split("\n").length)}
-            value={install}
-            placeholder="bun install"
-            onChange={(e) => setInstall(e.target.value)}
-          />
-        </FormRow>
+    <Form anchor="top">
+      <p className="form-title">how does {repo.name} start?</p>
+      <FormRow label="install" hint="once per new worktree; one command per line">
+        <TextArea
+          size="md"
+          rule
+          rows={Math.max(1, install.split("\n").length)}
+          value={install}
+          placeholder="bun install"
+          onChange={(e) => setInstall(e.target.value)}
+        />
+      </FormRow>
 
-        <FormRow
-          label="start"
-          hint={
-            <>
-              must listen on <code {...tip("toyon sets a different port for each worktree")}>$PORT</code>
-              {/* where the guess came from, and the way to it: the file opens in the editor pane
+      <FormRow
+        label="start"
+        hint={
+          <>
+            must listen on <code {...tip("toyon sets a different port for each worktree")}>$PORT</code>
+            {/* where the guess came from, and the way to it: the file opens in the editor pane
                   under this card, so the script the person meant is a copy and a paste away */}
-              {repo.guess && main && (
-                <>
-                  {" · from "}
-                  <Button
-                    mono
-                    tone="quiet"
-                    {...tip(`open ${repo.guess} in the editor pane`)}
-                    onClick={() => openSource(store, sock, main.id, repo.guess ?? "", 1)}
-                  >
-                    {repo.guess}
-                  </Button>
-                </>
-              )}
-            </>
-          }
-        >
-          {/* never empty: a row is only removable while there are two, so the guard is for the type */}
-          {procs[0] && procRow(procs[0], 0)}
-        </FormRow>
-        {procs.slice(1).map((p, i) => (
-          <div className="form-row" key={p.id}>
-            <span className="form-label" />
-            <div className="form-control">{procRow(p, i + 1)}</div>
-          </div>
-        ))}
-        <div className="form-row">
+            {repo.guess && main && (
+              <>
+                {" · from "}
+                <Button
+                  mono
+                  tone="quiet"
+                  {...tip(`open ${repo.guess} in the editor pane`)}
+                  onClick={() => openSource(store, sock, main.id, repo.guess ?? "", 1)}
+                >
+                  {repo.guess}
+                </Button>
+              </>
+            )}
+          </>
+        }
+      >
+        {/* never empty: a row is only removable while there are two, so the guard is for the type */}
+        {procs[0] && procRow(procs[0], 0)}
+      </FormRow>
+      {procs.slice(1).map((p, i) => (
+        <div className="form-row" key={p.id}>
           <span className="form-label" />
-          <Button tone="quiet" onClick={() => setProcs([...procs, proc("", "")])}>
-            <Icon name="plus" className="icon-inline" /> another process
-          </Button>
+          <div className="form-control">{procRow(p, i + 1)}</div>
         </div>
+      ))}
+      <div className="form-row">
+        <span className="form-label" />
+        <Button tone="quiet" onClick={() => setProcs([...procs, proc("", "")])}>
+          <Icon name="plus" className="icon-inline" /> another process
+        </Button>
+      </div>
 
-        <div className="form-actions">
-          {/* the file the button writes, the way the new-project form shows the folder it makes;
+      <div className="form-knobs">
+        {/* the file the button writes, the way the new-project form shows the folder it makes;
               the repo is named in the lead, so the path is only the file */}
-          <span className="form-dest">toyon.json</span>
-          {onClose && <Button onClick={onClose}>cancel</Button>}
-          {/* the third answer, only where it is one: beside a guessed start command it read as a
+        <span className="form-sign">toyon.json</span>
+        {onClose && <Button onClick={onClose}>cancel</Button>}
+        {/* the third answer, only where it is one: beside a guessed start command it read as a
               verdict on the repo. A repo the detector could not read gets it, and so does the
               reopened pane, which is where a preview is turned off. */}
-          {(!guessed || onClose) && (
-            <Button
-              {...tip("This project has no dev server: chat, changes and the terminal work, the preview stays empty")}
-              onClick={nothingToRun}
-            >
-              no dev server
-            </Button>
-          )}
-          {/* one primary, and it is the one that fits the form: the agent while the form is blank,
+        {(!guessed || onClose) && (
+          <Button
+            {...tip("This project has no dev server: chat, changes and the terminal work, the preview stays empty")}
+            onClick={nothingToRun}
+          >
+            no dev server
+          </Button>
+        )}
+        {/* one primary, and it is the one that fits the form: the agent while the form is blank,
               start once there is a command in it. A swap rather than a third ghost, since a
               disabled start beside the agent was a button with nothing to say. */}
-          {agentLeads && main ? (
-            <Button
-              variant="outline"
-              size="lg"
-              disabled={main.agent !== "idle"}
-              {...tip(
-                "The agent reads the repo and writes toyon.json; the daemon picks the file up as soon as it lands",
-              )}
-              onClick={askAgent}
-            >
-              let the agent work it out
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="lg"
-              disabled={!canStart}
-              {...(onClose
-                ? tip("Restarts every worktree of this repo. Profiles and other keys in the file are kept.")
-                : {})}
-              onClick={start}
-            >
-              {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
-            </Button>
-          )}
-        </div>
+        {agentLeads && main ? (
+          <Button
+            variant="outline"
+            size="lg"
+            disabled={main.agent !== "idle"}
+            {...tip("The agent reads the repo and writes toyon.json; the daemon picks the file up as soon as it lands")}
+            onClick={askAgent}
+          >
+            let the agent work it out
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="lg"
+            disabled={!canStart}
+            {...(onClose
+              ? tip("Restarts every worktree of this repo. Profiles and other keys in the file are kept.")
+              : {})}
+            onClick={start}
+          >
+            {onClose ? "save + restart" : "start"} <Icon name="forward" className="icon-inline" />
+          </Button>
+        )}
       </div>
-    </div>
+    </Form>
   );
 }

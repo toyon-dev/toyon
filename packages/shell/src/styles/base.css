@@ -235,6 +235,13 @@
       opacity: 0.3;
     }
   }
+  /* the working dot stops breathing and keeps its colour: the pulse says "busy" a second time, and
+   yellow against green, accent and red already carries the state on its own */
+  @media (prefers-reduced-motion: reduce) {
+    .dot.working {
+      animation: none;
+    }
+  }
   /* command palette rows: label left, chord hint right */
   .row-current {
     --row-edge-color: var(--accent);

@@ -15,7 +15,6 @@ import { useReveal } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
-import { Spinner } from "../../ui/Spinner.tsx";
 import { attachmentUrl } from "../../ws.ts";
 import { wtDir } from "../util.ts";
 import { AskCard } from "./AskCard.tsx";
@@ -345,8 +344,9 @@ export const ThoughtRow = memo(function ThoughtRow({
       }
       summary={
         <>
-          {streaming ? <span className="spinner">●</span> : <Icon name="bulb" className="tool-icon" />}
-          <span className="tool-name">{word}</span>
+          <Icon name="bulb" className="tool-icon" />
+          <span className={cx("tool-name", streaming && "live-text")}>{word}</span>
+          {streaming && <span className="live-dot" />}
         </>
       }
     >
@@ -396,6 +396,7 @@ export const ToolRow = memo(
       <Fold
         className={cx(
           "tool-row",
+          running && "live-row",
           tools.some((t) => t.isError) && "error",
           head.parentToolId && "nested",
           head.subagent && "spawn",
@@ -411,10 +412,11 @@ export const ToolRow = memo(
         }}
         summary={
           <>
-            {running ? <Spinner className="tool-spinner" /> : <Icon name={icon} className="tool-icon" />}
-            {name && <span className="tool-name">{name}</span>}
-            {hint && <span className="tool-hint">{hint}</span>}
+            <Icon name={icon} className="tool-icon" />
+            {name && <span className={cx("tool-name", running && "live-text")}>{name}</span>}
+            {hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>}
             {tools.length > 1 && <span className="tool-count">×{tools.length}</span>}
+            {running && <span className="live-dot" />}
           </>
         }
       >

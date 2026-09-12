@@ -190,35 +190,6 @@ export function NewProjectPane({ page }: { page: NewProject }) {
 
   return (
     <div className="new-project-pane">
-      {askIdentity && (
-        <>
-          <div className="new-project-identity">
-            <Field
-              size="md"
-              font="ui"
-              rule
-              value={identity.name}
-              placeholder="Your name"
-              autoComplete="name"
-              disabled={!editing}
-              onChange={(e) => setIdentity({ ...identity, name: e.target.value })}
-            />
-            <Field
-              size="md"
-              font="ui"
-              rule
-              type="email"
-              value={identity.email}
-              placeholder="Email"
-              autoComplete="email"
-              disabled={!editing}
-              onChange={(e) => setIdentity({ ...identity, email: e.target.value })}
-            />
-          </div>
-          <p className="hint new-project-hint">git labels the work you save with these, and asks only once</p>
-        </>
-      )}
-
       {clone && <p className="new-project-url">{page.url}</p>}
 
       <div className="new-project-head">
@@ -311,6 +282,37 @@ export function NewProjectPane({ page }: { page: NewProject }) {
           </Button>
         )}
       </div>
+
+      {/* under the action rather than over the title: this is asked once ever, and it is about git
+          rather than about the project being written here */}
+      {askIdentity && (
+        <>
+          <div className="new-project-identity">
+            <Field
+              size="md"
+              font="ui"
+              rule
+              value={identity.name}
+              placeholder="Your name"
+              autoComplete="name"
+              disabled={!editing}
+              onChange={(e) => setIdentity({ ...identity, name: e.target.value })}
+            />
+            <Field
+              size="md"
+              font="ui"
+              rule
+              type="email"
+              value={identity.email}
+              placeholder="Email"
+              autoComplete="email"
+              disabled={!editing}
+              onChange={(e) => setIdentity({ ...identity, email: e.target.value })}
+            />
+          </div>
+          <p className="hint new-project-hint">git labels the work you save with these, and asks only once</p>
+        </>
+      )}
 
       {!clone && editing && (
         <Button tone="quiet" className="new-project-open" onClick={() => choose("open")}>

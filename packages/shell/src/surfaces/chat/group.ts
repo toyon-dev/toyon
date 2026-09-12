@@ -1,5 +1,5 @@
 import type { ChatItem } from "../../state/store.ts";
-import { AUTO_OPEN, toolBlocks, toolLabel } from "./toolCall.ts";
+import { toolLabel } from "./toolCall.ts";
 
 /** An agent working through one file writes it in several calls, one hunk each, and the transcript
  * printed a line per call: four rows reading "edit menu.ts" with nothing to tell them apart. A run
@@ -82,41 +82,36 @@ export function sameTools(a: ToolItem[], b: ToolItem[]): boolean {
   return a.length === b.length && a.every((item, i) => item === b[i]);
 }
 
-/** Which row of the turn has its output open while the agent works, or -1. A diff stays open until
- * something after it has something to show: the agent's words, a call that has come back, or the
- * next change's own diff. Handing the open row to the newest call instead closed the diff the moment
- * a call started, a beat before that call had anything in it, onto a spinner with nothing under it.
- * Any message ends the search, the one that started the turn included, so a diff from the turn
+/** Which row of the turn opens itself while the agent works, or -1. Reasoning is the only thing that
+ * does. A thought is prose addressed to the reader and it is the last the agent said about what it
+ * is doing, so it stays up while the calls under it tick by. A diff does not open itself: the row
+ * names the file and the pane is a click away, and a panel thrown open per call walks the message
+ * you were reading off the top of the log, on the surface most of whose people never read the code.
+ *
+ * It stays open until the agent writes something else worth reading: its next words, or its next
+ * thought. A call landing does not close it, since a call no longer puts anything in its place.
+ * Any message ends the search, the one that started the turn included, so a thought from the turn
  * before is never reopened. */
-export function openRow(entries: ChatEntry[], roots: string[]): number {
+export function openRow(entries: ChatEntry[]): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i]!;
-    if (!("tools" in entry)) {
-      if (says(entry.item)) return -1;
+    // an agent that models its reasoning as a call rather than streaming it (never Claude;
+    // acp/map.ts) reads the way a thought does
+    if ("tools" in entry) {
+      if (entry.tools[0]?.toolKind === "think") return i;
       continue;
     }
-    if (AUTO_OPEN.has(entry.tools[0]?.toolKind ?? "other") && entry.tools.some((t) => shows(t, roots))) return i;
-    if (entry.tools.some((t) => t.done)) return -1;
+    if (entry.item.kind === "thinking") {
+      if (entry.item.text.trim()) return i;
+      continue;
+    }
+    if (says(entry.item)) return -1;
   }
   return -1;
 }
 
-/** a message or a thought still waiting for its first words has nothing to read yet; every other
- * item is there to be read the moment it lands */
-function says(item: Exclude<ChatItem, { kind: "tool" }>): boolean {
-  return item.kind === "assistant" || item.kind === "thinking" ? !!item.text.trim() : true;
-}
-
-/** the log asks this of the open row on every streamed token, and a call's item is replaced
- * whenever it changes, so the answer is kept per item rather than parsing a whole diff each time */
-const showing = new WeakMap<ToolItem, boolean>();
-
-/** whether the panel under a call would draw anything: the same test ToolPart makes */
-function shows(item: ToolItem, roots: string[]): boolean {
-  let yes = showing.get(item);
-  if (yes === undefined) {
-    yes = !!toolLabel(item, roots).command || toolBlocks(item, item.output ?? "").length > 0;
-    showing.set(item, yes);
-  }
-  return yes;
+/** a message still waiting for its first words has nothing to read yet, so it closes nothing; every
+ * other item is there to be read the moment it lands */
+function says(item: Exclude<ChatItem, { kind: "tool" | "thinking" }>): boolean {
+  return item.kind === "assistant" ? !!item.text.trim() : true;
 }

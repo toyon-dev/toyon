@@ -6,7 +6,8 @@ import "./menu.css";
 import { cx } from "./cx.ts";
 import { Icon } from "./Icon.tsx";
 import { Kbd } from "./Kbd.tsx";
-import { isItem, type MenuItem, type MenuSpec, menuBox, menuStore, stepEnabled, useMenu } from "./menu.ts";
+import { isItem, type MenuItem, type MenuSpec, menuPlacement, menuStore, stepEnabled, useMenu } from "./menu.ts";
+import { place } from "./place.ts";
 import { rowState } from "./rowState.ts";
 
 /** wide enough for the longest verb and its chord on one line ("show worktree panel  ⌘⇧K") */
@@ -146,7 +147,13 @@ function Menu({ spec }: { spec: MenuSpec }) {
   useLayoutEffect(() => {
     const b = box.current;
     if (!b) return;
-    const { x, y } = menuBox(spec, WIDTH, b.offsetHeight, window.innerWidth, window.innerHeight);
+    const { rect, placement } = menuPlacement(spec);
+    const { x, y } = place(
+      rect,
+      { w: WIDTH, h: b.offsetHeight },
+      { w: window.innerWidth, h: window.innerHeight },
+      placement,
+    );
     b.style.left = `${x}px`;
     b.style.top = `${y}px`;
   }, [spec]);

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Kbd } from "./Kbd.tsx";
+import { type Placement, type Point, place as placeBox, pointRect, type Rect } from "./place.ts";
 import "./tooltip.css";
 
 /**
@@ -20,7 +21,6 @@ import "./tooltip.css";
  */
 
 export type TipPlacement = "follow" | "top" | "bottom" | "left" | "right";
-type Side = Exclude<TipPlacement, "follow">;
 
 export type TipOptions = {
   placement?: TipPlacement;
@@ -90,7 +90,6 @@ export type Anchor = {
   also?: TipAlso;
   placement: TipPlacement;
 };
-type Point = { x: number; y: number };
 
 /** The element's own placement; below when it names none. Nothing is guessed from the anchor's
  * size, so where a tip lands is readable off the markup. */
@@ -100,50 +99,40 @@ function placementOf(el: HTMLElement): TipPlacement {
   return "bottom";
 }
 
-/** The preferred side if it has room, else the other side if that one does; when neither fits the
- * preference stands and the clamp below does what it can. */
-function pick(want: Side, other: Side, wantFits: boolean, otherFits: boolean): Side {
-  return wantFits || !otherFits ? want : other;
+/** Where a tip goes: beside its element on the side the markup asked for, or off the pointer for a
+ * following one. A following tip hangs off the pointer's lower right, the way a cursor tip always
+ * has, and swaps to its left when the right runs out; centring it on the pointer put the arrow over
+ * the middle of a box that can be three hundred pixels wide, with the text going both ways from it.
+ * A side tip centres on its anchor and never swaps ends, so only the side it grows on can turn. */
+export function tipPlacement(p: TipPlacement, rect: Rect, pointer: Point): { rect: Rect; placement: Placement } {
+  if (p === "follow") {
+    return {
+      rect: pointRect(pointer),
+      placement: {
+        side: "bottom",
+        align: "start",
+        offset: CURSOR_GAP,
+        alignOffset: -CURSOR_NUDGE,
+        flip: "both",
+        margin: MARGIN,
+      },
+    };
+  }
+  return { rect, placement: { side: p, align: "center", offset: GAP, flip: "side", margin: MARGIN } };
 }
 
-/** Place the box beside its anchor on the placed side, or off the pointer for a following one.
- * Flips to the opposite side when there is no room and clamps to the viewport either way. */
+/** Place the box and mark the side it took, which is the axis its entry animation runs along.
+ * Rounded on the way out: half a pixel of text is blurrier than a pixel of drift. */
 export function place(box: HTMLDivElement, anchor: Anchor, pointer: Point) {
-  const r = anchor.el.getBoundingClientRect();
-  const w = box.offsetWidth;
-  const h = box.offsetHeight;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const p = anchor.placement;
-
-  let side: Side;
-  let top: number;
-  let left: number;
-  if (p === "left" || p === "right") {
-    const leftOf = r.left - GAP - w;
-    const rightOf = r.right + GAP;
-    const fitsLeft = leftOf >= MARGIN;
-    const fitsRight = rightOf + w <= vw - MARGIN;
-    side = p === "left" ? pick("left", "right", fitsLeft, fitsRight) : pick("right", "left", fitsRight, fitsLeft);
-    left = side === "left" ? leftOf : rightOf;
-    top = r.top + r.height / 2 - h / 2;
-  } else {
-    const follow = p === "follow";
-    const below = follow ? pointer.y + CURSOR_GAP : r.bottom + GAP;
-    const above = follow ? pointer.y - CURSOR_GAP - h : r.top - GAP - h;
-    const fitsBelow = below + h <= vh - MARGIN;
-    const fitsAbove = above >= MARGIN;
-    side = p === "top" ? pick("top", "bottom", fitsAbove, fitsBelow) : pick("bottom", "top", fitsBelow, fitsAbove);
-    top = side === "top" ? above : below;
-    // A following tip hangs off the pointer's lower right, the way a cursor tip always has, and
-    // swaps to its left when the right runs out. Centring it on the pointer put the arrow over the
-    // middle of a box that can be three hundred pixels wide, with the text going both ways from it.
-    left = follow ? pointer.x + CURSOR_NUDGE : r.left + r.width / 2 - w / 2;
-    if (follow && left + w > vw - MARGIN) left = pointer.x - CURSOR_NUDGE - w;
-  }
-
-  box.style.top = `${Math.round(Math.min(Math.max(MARGIN, top), vh - MARGIN - h))}px`;
-  box.style.left = `${Math.round(Math.min(Math.max(MARGIN, left), vw - MARGIN - w))}px`;
+  const { rect, placement } = tipPlacement(anchor.placement, anchor.el.getBoundingClientRect(), pointer);
+  const { x, y, side } = placeBox(
+    rect,
+    { w: box.offsetWidth, h: box.offsetHeight },
+    { w: window.innerWidth, h: window.innerHeight },
+    placement,
+  );
+  box.style.top = `${Math.round(y)}px`;
+  box.style.left = `${Math.round(x)}px`;
   box.dataset.side = side;
 }
 

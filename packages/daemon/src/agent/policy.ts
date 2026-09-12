@@ -1,5 +1,6 @@
 // Answers an agent's session/request_permission. The bounds come first in every mode: a write
-// outside the worktree is rejected and the agent is told why. Inside them the worktree's mode
+// outside the worktree is rejected, and the reason is written into the transcript for the person,
+// since ACP's response carries an outcome and no reason for the agent. Inside them the worktree's mode
 // decides: `auto` allows writes and sandboxed commands, `ask` (and `plan`, should a write arrive
 // in it) turns each into a card for a person. A plan approval, `switch_mode` (Claude's
 // ExitPlanMode, Codex's plan review), is a card in every mode: approving a plan nobody read is not
@@ -56,7 +57,7 @@ export function decide(
         kind: "reject",
         tool,
         path: "",
-        reason: `${tool} named no file path, so Toyon cannot verify it stays inside the worktree.`,
+        reason: "The call named no file path, so Toyon cannot tell whether it stays inside the worktree.",
       };
     }
     return { kind: "allow" };
@@ -68,7 +69,7 @@ export function decide(
         kind: "reject",
         tool,
         path: raw,
-        reason: `Writing to ${raw} is not allowed: agent settings under .claude/ are managed by Toyon.`,
+        reason: "Agent settings under .claude/ are managed by Toyon, not written by the agent.",
       };
     }
     if (!bounds.allowWrite.some((a) => within(target, a))) {
@@ -76,7 +77,7 @@ export function decide(
         kind: "reject",
         tool,
         path: raw,
-        reason: `Writing to ${raw} is outside this worktree (${cwd}). Toyon confines edits to the worktree; work within it.`,
+        reason: "The path is outside this worktree; Toyon confines every edit to it.",
       };
     }
   }

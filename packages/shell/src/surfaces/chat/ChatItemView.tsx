@@ -598,16 +598,17 @@ export const ChatItemView = memo(function ChatItemView({
     case "ask":
       return <AskCard item={item} />;
     case "blocked":
+      // the reason is on the row rather than in a tooltip: the agent is told only that its request
+      // was refused, so it reports a refusal as the person declining, and the row is the only place
+      // the person can read whose rule this was
       return (
-        <div
-          className="blocked-row"
-          data-tip={item.reason}
-          data-tip-placement="follow"
-          {...cm.contextMenu(() => blockedItems(item.path, dirOf()))}
-        >
-          <span className="blocked-tag">blocked</span>
-          <span className="tool-name">{item.tool}</span>
-          <span className="tool-hint">{item.path}</span>
+        <div className="blocked-row" {...cm.contextMenu(() => blockedItems(item.path, dirOf()))}>
+          <div className="blocked-head">
+            <span className="blocked-tag">blocked</span>
+            <span className="tool-name">{item.tool}</span>
+            {item.path && <span className="tool-hint">{item.path}</span>}
+          </div>
+          <div className="blocked-why row-dim">{item.reason}</div>
         </div>
       );
     case "grafted":

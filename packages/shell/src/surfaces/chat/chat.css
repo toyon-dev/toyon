@@ -550,13 +550,10 @@
       color: var(--yellow);
     }
   }
-  /* the graft divider is the blocked row's box with the accent's edge: both are one line the
-   daemon wrote into the transcript, and only the second is good news */
+  /* the graft divider is the blocked row's box with the accent's edge: both are the daemon writing
+   into the transcript itself, and only the second is good news */
   .blocked-row,
   .graft-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     padding: 4px 8px;
     font: var(--type-mono);
     color: var(--text1);
@@ -570,6 +567,19 @@
     & .tool-name {
       color: var(--text1);
     }
+  }
+  .graft-row,
+  .blocked-row .blocked-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  /* Toyon's rule, under the call it refused. The agent is told only that its request was refused,
+   so it reports one as the person declining; this line is where the person reads otherwise, and it
+   wraps rather than truncating, since it is the whole reason the block is here */
+  .blocked-row .blocked-why {
+    margin-top: 2px;
+    font: var(--type-ui-sm);
   }
   .graft-row {
     border-left-color: var(--accent);
@@ -653,13 +663,12 @@
     }
   }
   /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
-  /* main's target line above the box: a sentence, so it flows as text (TargetChip.tsx says why) */
+  /* main's target line, outside the box on the panel's ground, where the draft tab's birth-time row
+   sits: inside it, it took the top of the typing surface and the placeholder read as the second
+   line. Indented to the textarea's own left edge, not the panel's, so the sentence and the
+   placeholder start on one column. A sentence, so it flows as text (TargetChip.tsx says why) */
   .composer-target {
-    margin-bottom: 8px;
-  }
-  /* the recap above the box: plain text that wraps, spaced from what sits under it like the target line */
-  .composer-recap {
-    margin-bottom: 8px;
+    padding: 0 10px 8px;
   }
   .spawn-left {
     display: flex;

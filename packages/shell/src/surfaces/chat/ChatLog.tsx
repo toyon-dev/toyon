@@ -113,12 +113,13 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   const entries = useMemo(() => groupTools(items, roots), [items, roots]);
   // a colour per subagent, so two of them running at once are two runs and not one indented block
   const rails = useMemo(() => railSlots(items), [items]);
-  // the row whose output is open while the agent runs; everything else in the turn is a line
+  // the one row that opens itself while the agent runs; everything else in the turn is a line
   const working = active?.agent === "working";
-  const liveRow = useMemo(() => (working ? openRow(entries, roots) : -1), [working, entries, roots]);
-  // a thought is live only while it is the newest thing in the log: the next call or word closes it
+  const liveRow = useMemo(() => (working ? openRow(entries) : -1), [working, entries]);
+  // the spinner and the word are about now, not about what is open: the agent is thinking only while
+  // the thought is the newest thing in the log, and the thought stays open well past that
   const last = entries.at(-1);
-  const liveThought = working && last && "item" in last && last.item.kind === "thinking" ? entries.length - 1 : -1;
+  const streaming = working && last && "item" in last && last.item.kind === "thinking" ? entries.length - 1 : -1;
   // the newest `!` command is the one whose output is open; each one closes the one before it
   const newestShell = entries.findLastIndex((e) => "tools" in e && e.tools[0]?.name === SHELL_TOOL);
   // a `!` command still going: its row spins, and this is where the stop for it lives
@@ -147,7 +148,7 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
               marked={entry.at === walkAt}
             />
           ) : entry.item.kind === "thinking" ? (
-            <ThoughtRow key={entry.at} item={entry.item} live={i === liveThought} />
+            <ThoughtRow key={entry.at} item={entry.item} open={i === liveRow} streaming={i === streaming} />
           ) : (
             <ChatItemView
               key={entry.at}

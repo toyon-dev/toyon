@@ -76,9 +76,13 @@ export type MenuSpec = {
   /** the element it is about: a pointerdown on it does not dismiss, a dropdown's second click
    * toggles it shut, and the menu goes when the element leaves the DOM */
   target: Element;
+  /** which opening this is, so a menu about another row is drawn as another box rather than the
+   * same one moved: the highlight starts again and it takes its place on top of the floats */
+  id?: number;
 };
 
 let current: MenuSpec | null = null;
+let opened = 0;
 const listeners = new Set<() => void>();
 const emit = () => {
   for (const l of listeners) l();
@@ -96,7 +100,7 @@ export const menuStore = {
   open(spec: MenuSpec) {
     const items = tidy(spec.items);
     if (items.length === 0) return menuStore.close();
-    current = { ...spec, items };
+    current = { ...spec, items, id: ++opened };
     emit();
   },
   close() {

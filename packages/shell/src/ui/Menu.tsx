@@ -1,17 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import { useStoreInstance } from "../state/context.tsx";
+import { Float } from "./Float.tsx";
 import { jumpTo } from "./listNav.ts";
 import "./menu.css";
 import { cx } from "./cx.ts";
 import { Icon } from "./Icon.tsx";
 import { Kbd } from "./Kbd.tsx";
 import { isItem, type MenuItem, type MenuSpec, menuPlacement, menuStore, stepEnabled, useMenu } from "./menu.ts";
-import { place } from "./place.ts";
 import { rowState } from "./rowState.ts";
-
-/** wide enough for the longest verb and its chord on one line ("show worktree panel  ⌘⇧K") */
-const WIDTH = 220;
 
 /** a modifier on its own: shift for a screenshot chord, cmd held while deciding. Not a key meant
  * for the menu or for anything behind it, so it neither moves the highlight nor closes anything. */
@@ -48,7 +44,9 @@ export function Menus() {
     };
   }, [spec, store]);
   if (!spec) return null;
-  return createPortal(<Menu spec={spec} />, document.body);
+  // a menu about another row is another box, not this one moved: its highlight starts again and it
+  // takes its own place among the floats
+  return <Menu key={spec.id} spec={spec} />;
 }
 
 /**
@@ -67,26 +65,12 @@ function Menu({ spec }: { spec: MenuSpec }) {
   const live = useRef({ idx, items });
   live.current = { idx, items };
   // typeahead reads the labels off the DOM, which is also what you see
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const close = () => menuStore.close();
-    const inside = (t: EventTarget | null) => t instanceof Node && box.current?.contains(t);
-    // the click that opened the menu may still be bubbling when this mounts: ignore events older than us
-    const openedAt = performance.now();
-    const onClick = (e: MouseEvent) => {
-      if (e.timeStamp > openedAt && !inside(e.target)) close();
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      if (inside(e.target)) return;
-      // on the trigger itself: a dropdown's second click toggles, and a row re-opening its own
-      // menu at a new point is a replace, not a dismiss followed by nothing
-      if (e.target instanceof Node && spec.target.contains(e.target)) return;
-      close();
-    };
-    // Capture, because the menu is the topmost thing and the only one: app/keys.ts holds the
-    // Escape ladder on a bubbling window keydown, and a focused listbox has its own arrows.
-    // Taking the key first and ending it here is what "the topmost thing owns the key" means.
-    const onKeyDown = (e: KeyboardEvent) => {
+  const box = useRef<HTMLDivElement | null>(null);
+  // The keyboard, for as long as this is the topmost float. Arrows, Enter, Escape and typeahead end
+  // here; anything else closes the menu and is let through, so the chord reaches the app behind it.
+  const onKey = (e: KeyboardEvent) => {
+    {
+      const close = () => menuStore.close();
       const { idx: i, items: its } = live.current;
       if (MODIFIERS.has(e.key)) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -124,49 +108,34 @@ function Menu({ spec }: { spec: MenuSpec }) {
       // anything else (a chord, tab, a function key) closes the menu and is still let through, so
       // the chord reaches the app: hitting one is a way of saying you are done here
       close();
-    };
-    // a scroll under a fixed box leaves it over the wrong row; the box itself never scrolls
-    document.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("click", onClick);
-    window.addEventListener("keydown", onKeyDown, true);
+    }
+  };
+  useEffect(() => {
+    const close = () => menuStore.close();
+    // a scroll or a resize under a placed box leaves it over the wrong row; the box never scrolls
     window.addEventListener("blur", close);
     window.addEventListener("resize", close);
     document.addEventListener("scroll", close, true);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("click", onClick);
-      window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("blur", close);
       window.removeEventListener("resize", close);
       document.removeEventListener("scroll", close, true);
     };
-  }, [spec]);
-  // keep the whole menu on screen when opened near an edge: placed once it has a height, before
-  // paint, since a row with a detail line is taller than one without and a guess from the row
-  // token left a two-line menu hanging off the bottom
-  useLayoutEffect(() => {
-    const b = box.current;
-    if (!b) return;
-    const { rect, placement } = menuPlacement(spec);
-    const { x, y } = place(
-      rect,
-      { w: WIDTH, h: b.offsetHeight },
-      { w: window.innerWidth, h: window.innerHeight },
-      placement,
-    );
-    b.style.left = `${x}px`;
-    b.style.top = `${y}px`;
-  }, [spec]);
+  }, []);
+  const { rect, placement } = menuPlacement(spec);
   // a list with a checked row in it reserves the gutter on every row, so the labels stay in a column
   const gutter = items.some((it) => it.checked);
   return (
-    // the width is set here rather than in the stylesheet because the clamp above depends on it,
-    // and a menu that is one width in CSS and another in the maths lands off screen at the edges
-    <div
+    <Float
       className="menu"
       role="menu"
-      ref={box}
-      style={{ position: "fixed", left: 0, top: 0, width: WIDTH }}
+      boxRef={box}
+      anchor={() => rect}
+      placement={placement}
+      track={false}
+      trigger={spec.target}
+      onDismiss={() => menuStore.close()}
+      onKey={onKey}
       // a right-click on the menu itself is not a request for another one
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -177,7 +146,7 @@ function Menu({ spec }: { spec: MenuSpec }) {
         const i = items.indexOf(e);
         return <MenuRow key={e.id} item={e} gutter={gutter} cursor={i === idx} onEnter={() => setIdx(i)} />;
       })}
-    </div>
+    </Float>
   );
 }
 

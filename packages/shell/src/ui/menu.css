@@ -2,9 +2,8 @@
 @layer tokens, base, surfaces;
 @layer base {
   .menu {
-    position: fixed;
-    /* above the anchored picker it can open from (a project row in the bar's dropdown) */
-    z-index: 50;
+    /* wide enough for the longest verb and its chord on one line ("show worktree panel  ⌘⇧K") */
+    width: 220px;
     background: var(--surface1);
     border: 1px solid var(--border1);
     border-radius: var(--radius-md);
@@ -17,7 +16,6 @@
     box-shadow: var(--elevation-float);
     display: flex;
     flex-direction: column;
-    /* width is set by Menu.tsx, which needs the number for its off-screen clamp */
     /* the geometry is .row's. A menu row rests a tier above a list row because every one of them is an
    action you are about to take, not a thing you are scanning past. */
     & button {

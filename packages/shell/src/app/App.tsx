@@ -14,6 +14,7 @@ import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
 import { clampW } from "../surfaces/util.ts";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange } from "../theme.ts";
 import { Button, IconButton } from "../ui/Button.tsx";
+import { floats } from "../ui/floats.ts";
 import { useDragResize, useOnChange, usePersisted } from "../ui/hooks.ts";
 import { Menus } from "../ui/Menu.tsx";
 import { useContextMenu } from "../ui/menu.ts";
@@ -66,6 +67,10 @@ export function App() {
   const toast = useStore((s) => s.toast);
   const clientId = useStore((s) => s.clientId);
   const rows = useRows();
+
+  // the stack every float registers in: it decides which float a press or a key belongs to, and
+  // closes the ones it does not
+  useEffect(() => floats.install(window), []);
 
   // the daemon streams only subscribed worktrees. Keep the last few visited subscribed so their
   // previews still reload after an agent turn while hidden and switching back is instant; drop

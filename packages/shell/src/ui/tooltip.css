@@ -3,10 +3,6 @@
 @layer base {
   /* ---- tooltip (one instance, delegated via data-tip; see Tooltip.tsx) ---- */
   .tooltip {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 100;
     pointer-events: none;
     max-width: 320px;
     /* sized by its text, not by where it last stood: a fixed box with `left` set shrinks to the

@@ -1,16 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { place, type Rect } from "./place.ts";
+import { place, pointRect, type Rect } from "./place.ts";
 import { type TipPlacement, tipPlacement } from "./Tooltip.tsx";
 
-// tipPlacement says what a tip is placed against and how; place() does the geometry. Both are
-// numbers, so the flip and clamp rules hold without a browser.
+// tipPlacement says how a tip sits against what it is about; place() does the geometry. Both are
+// numbers, so the flip and clamp rules hold without a browser. The anchor a following tip takes is
+// the pointer, which is tipRect's one DOM read.
 const VP = { w: 1000, h: 600 };
 const BOX = { w: 200, h: 30 };
 
 function at(r: { left: number; top: number; width: number; height: number }, placement: TipPlacement) {
-  const anchor: Rect = { left: r.left, top: r.top, right: r.left + r.width, bottom: r.top + r.height };
-  const tip = tipPlacement(placement, anchor, { x: 0, y: 0 });
-  const { x, y, side } = place(tip.rect, BOX, VP, tip.placement);
+  const el: Rect = { left: r.left, top: r.top, right: r.left + r.width, bottom: r.top + r.height };
+  const anchor = placement === "follow" ? pointRect({ x: 0, y: 0 }) : el;
+  const { x, y, side } = place(anchor, BOX, VP, tipPlacement(placement));
   return { side, top: Math.round(y), left: Math.round(x) };
 }
 

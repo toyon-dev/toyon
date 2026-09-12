@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { Float, type FloatHandle } from "./Float.tsx";
 import { Kbd } from "./Kbd.tsx";
-import { type Placement, type Point, place as placeBox, pointRect, type Rect } from "./place.ts";
+import { type Placement, type Point, pointRect, type Rect } from "./place.ts";
 import "./tooltip.css";
 
 /**
@@ -104,41 +104,29 @@ function placementOf(el: HTMLElement): TipPlacement {
  * has, and swaps to its left when the right runs out; centring it on the pointer put the arrow over
  * the middle of a box that can be three hundred pixels wide, with the text going both ways from it.
  * A side tip centres on its anchor and never swaps ends, so only the side it grows on can turn. */
-export function tipPlacement(p: TipPlacement, rect: Rect, pointer: Point): { rect: Rect; placement: Placement } {
+export function tipPlacement(p: TipPlacement): Placement {
   if (p === "follow") {
     return {
-      rect: pointRect(pointer),
-      placement: {
-        side: "bottom",
-        align: "start",
-        offset: CURSOR_GAP,
-        alignOffset: -CURSOR_NUDGE,
-        flip: "both",
-        margin: MARGIN,
-      },
+      side: "bottom",
+      align: "start",
+      offset: CURSOR_GAP,
+      alignOffset: -CURSOR_NUDGE,
+      flip: "both",
+      margin: MARGIN,
     };
   }
-  return { rect, placement: { side: p, align: "center", offset: GAP, flip: "side", margin: MARGIN } };
+  return { side: p, align: "center", offset: GAP, flip: "side", margin: MARGIN };
 }
 
-/** Place the box and mark the side it took, which is the axis its entry animation runs along.
- * Rounded on the way out: half a pixel of text is blurrier than a pixel of drift. */
-export function place(box: HTMLDivElement, anchor: Anchor, pointer: Point) {
-  const { rect, placement } = tipPlacement(anchor.placement, anchor.el.getBoundingClientRect(), pointer);
-  const { x, y, side } = placeBox(
-    rect,
-    { w: box.offsetWidth, h: box.offsetHeight },
-    { w: window.innerWidth, h: window.innerHeight },
-    placement,
-  );
-  box.style.top = `${Math.round(y)}px`;
-  box.style.left = `${Math.round(x)}px`;
-  box.dataset.side = side;
+/** what the tip is placed against: its control, or the pointer it trails */
+export function tipRect(anchor: Anchor, pointer: Point): Rect {
+  return anchor.placement === "follow" ? pointRect(pointer) : anchor.el.getBoundingClientRect();
 }
 
 export function Tooltips() {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
-  const box = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement | null>(null);
+  const handle = useRef<FloatHandle | null>(null);
   const pointer = useRef<Point>({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -241,12 +229,9 @@ export function Tooltips() {
     };
   }, []);
 
-  // position after render so we can measure our own size
+  // the control a tip is about can leave while the tip is up (a row removed under it)
   useLayoutEffect(() => {
-    const b = box.current;
-    if (!b || !anchor) return;
-    if (!anchor.el.isConnected) return setAnchor(null);
-    place(b, anchor, pointer.current);
+    if (anchor && !anchor.el.isConnected) setAnchor(null);
   }, [anchor]);
 
   // a following tip is repositioned straight on the node: going through state would re-render the
@@ -255,7 +240,7 @@ export function Tooltips() {
     if (anchor?.placement !== "follow") return;
     const onMove = (e: MouseEvent) => {
       pointer.current = { x: e.clientX, y: e.clientY };
-      if (box.current) place(box.current, anchor, pointer.current);
+      handle.current?.update();
     };
     document.addEventListener("mousemove", onMove);
     return () => document.removeEventListener("mousemove", onMove);
@@ -274,8 +259,19 @@ export function Tooltips() {
       {anchor.key && <Kbd k={anchor.key} className="tooltip-key" />}
     </>
   );
-  return createPortal(
-    <div ref={box} className="tooltip" role="tooltip">
+  return (
+    // shown again whenever it moves to another control, which puts it back above whatever opened
+    // while it stood: a tip about a menu row is over that menu
+    <Float
+      className="tooltip"
+      role="tooltip"
+      boxRef={box}
+      handle={handle}
+      anchor={() => tipRect(anchor, pointer.current)}
+      placement={tipPlacement(anchor.placement)}
+      track={false}
+      raiseKey={anchor}
+    >
       {anchor.also ? (
         <div className="tooltip-pair">
           <span>{words}</span>
@@ -292,7 +288,6 @@ export function Tooltips() {
         head
       )}
       {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
-    </div>,
-    document.body,
+    </Float>
   );
 }

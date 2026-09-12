@@ -30,7 +30,7 @@ type Props = {
 };
 
 /**
- * The palette frame: a scrim over the preview column and a box, or a dropdown on the control that
+ * The palette frame: a scrim over the centre and a box, or a dropdown on the control that
  * opened it. Every overlay dismisses the same way, through the one stack in floats.ts: a press
  * outside it and everything it opened, or a press in the preview, which never reaches this page.
  */

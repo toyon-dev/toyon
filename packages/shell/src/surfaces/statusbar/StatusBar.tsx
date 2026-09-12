@@ -20,9 +20,9 @@ import { pathOf } from "./routePicker.ts";
 
 /** the top bar: dock toggles, the route bar centered over the preview, tools (proc health badges the
  * composer's terminal button; a dead socket colours the worktree rail) */
-/** `leftPx`/`rightPx`: the dock columns' widths, so the nav cluster can sit over the preview column */
+/** `leftPx`/`rightPx`: the dock columns' widths, so the nav cluster can sit over the centre */
 export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number }) {
-  // nav cluster stays centered over the preview column; only this surface re-renders on resize
+  // the nav cluster stays centred over the centre; only this surface re-renders on resize
   const winW = useWindowWidth();
   const navCenter = leftPx + (winW - leftPx - rightPx) / 2;
   const dispatch = useDispatch();
@@ -43,7 +43,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const id = active?.worktree.id ?? null;
   const ready = !!active && previewUp(active);
   return (
-    <div className="status-bar top-bar">
+    <div className="bar top-bar">
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "toyon"}</span>}
       {/* the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
           disabled button still lights and explains itself on hover as if it might do something */}
@@ -167,7 +167,7 @@ function ProjectPill() {
   );
 }
 
-/** Safari-style: back/forward/reload + the preview's route, anchored to the preview column's center.
+/** Safari-style: back/forward/reload + the preview's route, anchored to the middle of the centre.
  * The address is the route list's trigger rather than an editor: pressing it opens the list over
  * it, holding the address, and a path is typed there. */
 function RouteBar({

@@ -590,9 +590,11 @@
       color: var(--accent);
     }
   }
-  /* the frame is base's (.composer): the chat's is the tall one */
-  .chat-input {
-    min-height: 160px;
+  /* the frame is base's (.composer); the tall floor is the dock's own. Scoped to the dock rather
+     than written on every composer, because the only other one stands on a form in the centre,
+     where the region it sits in owns the height and a floor from here would fight it. */
+  .right-dock .chat-input {
+    --composer-min: 160px;
   }
   /* the argument hint sits left of the key hints, where the eye lands after picking */
   /* the paste chip borrows the image chip's link row; its own line is the counts */
@@ -641,7 +643,7 @@
       background: var(--surface1);
     }
   }
-  /* same 20px box as the status-bar icons, flush with the textarea's right edge
+  /* same 20px box as the bar's icons, flush with the textarea's right edge
    (the chat toggle in the bar is 4px further right — the nearby edge wins) */
   /* a crashed proc in this worktree, badged on the terminal button: the only status this row shows,
    and only because the tab that explains it is one click away */

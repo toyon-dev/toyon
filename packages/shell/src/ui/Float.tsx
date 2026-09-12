@@ -198,7 +198,7 @@ export function Float({
 
 /**
  * A box that takes its place in the stack without taking the top layer: a centred palette, which
- * scrims the preview column on purpose so the docks stay usable, and therefore stays in the page.
+ * scrims the centre on purpose so the docks stay usable, and therefore stays in the page.
  * It still has to be in the stack, or a menu opened from one of its rows would not know whose child
  * it is, and the press that chooses from that menu would close the palette under it.
  */

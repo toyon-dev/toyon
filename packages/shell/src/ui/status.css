@@ -1,0 +1,46 @@
+/* Status: the dress a view wears when the machine is speaking. Its block, its prose line, its
+   actions, and the tail of output under them. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* Top anchored, and that is the part that matters: a status grows while it is read (procs arrive,
+     git prints another line), and anything that centres it vertically pushes the lines already
+     under someone's eye. Its column sits where every other view's column sits, which costs nothing
+     because the width is fixed and so the horizontal position never moves as content arrives; left
+     in the corner of an empty screen, a one-line status read as a stray log line rather than as the
+     app saying where things stand. The text inside is left aligned. No ground; see status.test.ts. */
+  .status {
+    width: min(var(--status-measure), 100%);
+    margin-inline: auto;
+    padding: var(--view-top) var(--view-inset);
+    display: flex;
+    flex-direction: column;
+    gap: var(--status-gap);
+    text-align: left;
+    color: var(--text0);
+    font: var(--type-ui);
+    & > p {
+      margin: 0;
+    }
+  }
+  /* the sentence the person came here to read. pre-wrap because some of these arrive as a written
+     paragraph with its own line breaks rather than as markup */
+  .status-line {
+    color: var(--text1);
+    white-space: pre-wrap;
+  }
+  /* never a primary: a status is not asking for anything, it is saying where things stand, and the
+     way on is an offer rather than the point */
+  .status-actions {
+    display: flex;
+    gap: 8px;
+  }
+  /* the machine's own words, which is the one place mono belongs on this dress */
+  .status-tail {
+    max-height: 40vh;
+    overflow: auto;
+    font: var(--type-mono-sm);
+    color: var(--text1);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}

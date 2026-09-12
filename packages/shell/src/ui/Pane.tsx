@@ -6,8 +6,17 @@ import { Icon } from "./Icon.tsx";
 import { type MenuEntry, useContextMenu } from "./menu.ts";
 import { Tabs, type TabsProps } from "./Tabs.tsx";
 
-/** a bottom pane of the preview column (editor, terminal): drag handle, header row, close button.
- * Esc closes them in order from app/keys.ts, which owns the ladder. */
+/**
+ * A pane: stacked inside the centre, resizable, closable, with a header row and a drag handle,
+ * and on the Esc ladder that app/keys.ts owns. Exactly three things are one, the editor, the
+ * design pane and the terminal, and Center.tsx counts them as `:scope > .pane` when it works out
+ * how much room a drag has left.
+ *
+ * Nothing else is a pane. The views that stand in for the preview fill the centre whole and have
+ * no header, no handle and no height of their own; the bar at the top of the window is a bar. For
+ * years seven of those views were named `*Pane` and rendered none of this, which is the drift this
+ * paragraph exists to stop.
+ */
 export function Pane({
   className,
   height,

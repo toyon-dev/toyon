@@ -2,7 +2,7 @@ import { isOwned, type RepoInfo } from "@toyon/shared";
 import { useCallback } from "react";
 import { importItems, projectItems } from "../../state/actions/project.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { newProjectPage, type ProjectsOverlay } from "../../state/store.ts";
+import { newProjectState, type ProjectsOverlay } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -28,7 +28,7 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const repos = useStore((s) => s.repos);
-  // over the new-project page no project is the open one, so none is marked
+  // over the new-project view no project is the open one, so none is marked
   const current = useStore((s) => (s.newProject ? null : s.activeRepoId));
   const rows = useStore((s) => s.rows);
   const paths = useStore((s) => s.paths);
@@ -89,11 +89,11 @@ export function ProjectPicker({ form }: { form: ProjectsOverlay["form"] }) {
     sock?.send({ t: "create-repo", mode: "create", parent, name });
   };
 
-  /** the new-project page, for the rows where something would otherwise be guessed */
+  /** the new-project view, for the rows where something would otherwise be guessed */
   const ask = (mode: "create" | "clone", name: string, url?: string) =>
     dispatch({
       a: "new-project",
-      v: newProjectPage({
+      v: newProjectState({
         mode,
         name,
         // a bare name says nothing about location: offer wherever the other projects already live

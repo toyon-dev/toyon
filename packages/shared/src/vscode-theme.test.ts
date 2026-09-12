@@ -141,9 +141,17 @@ describe("pairing", () => {
   });
   test("resolveTheme by appearance", () => {
     const p = { mode: "system" as const, light: "vscode-2026-light", dark: "missing" };
-    expect(resolveTheme(p, all, false).id).toBe("vscode-2026-light");
-    expect(resolveTheme(p, all, true).id).toBe("toyon-dark"); // unknown falls back to the built-in of that kind
-    expect(resolveTheme({ ...p, mode: "light" }, all, true).id).toBe("vscode-2026-light");
+    expect(resolveTheme(p, all, { system: false, daylight: true }).id).toBe("vscode-2026-light");
+    // unknown falls back to the built-in of that kind
+    expect(resolveTheme(p, all, { system: true, daylight: false }).id).toBe("toyon-dark");
+    expect(resolveTheme({ ...p, mode: "light" }, all, { system: true, daylight: true }).id).toBe("vscode-2026-light");
+  });
+
+  test("resolveTheme follows the sun, not the OS, once the mode says so", () => {
+    const p = { mode: "daylight" as const, light: "vscode-2026-light", dark: "toyon-dark" };
+    // the case the mode exists for: a machine pinned to dark, still taking a light afternoon
+    expect(resolveTheme(p, all, { system: true, daylight: false }).id).toBe("vscode-2026-light");
+    expect(resolveTheme(p, all, { system: true, daylight: true }).id).toBe("toyon-dark");
   });
 });
 

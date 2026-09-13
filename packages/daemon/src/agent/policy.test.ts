@@ -16,7 +16,9 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 const secret = join(root, "home", "token");
 const bounds: Bounds = {
   root: wt,
-  allowWrite: [wt, "/tmp", "/private/tmp"],
+  // a scratch dir stands in for /tmp: on Linux tmpdir() is /tmp itself, so allowing /tmp would allow
+  // the "outside" these tests need refused
+  allowWrite: [wt, join(root, "scratch")],
   denyWrite: [join(wt, ".claude"), secret],
   denyRead: [secret],
   gitDir: null,

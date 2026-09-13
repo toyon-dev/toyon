@@ -732,7 +732,8 @@ describe("landing", () => {
   test("the push route pushes main to origin, and refuses when origin moved under it", async () => {
     const repoId = await registered();
     const origin = join(w.repo, "..", "origin.git");
-    sh(w.repo, "git", "init", "-q", "--bare", origin);
+    // -b main: a clone of origin checks out its HEAD, which is init.defaultBranch unless named
+    sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
     sh(w.repo, "git", "remote", "add", "origin", origin);
     sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
     w.state.requireRepo(repoId).config.land = { route: "push" };

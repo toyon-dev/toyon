@@ -6,7 +6,7 @@ import { Button } from "../../ui/Button.tsx";
 import { Form } from "../../ui/Form.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { Composer } from "../chat/Composer.tsx";
-import { parentFolder } from "../palettes/projectPicker.ts";
+import { parentFolder } from "../overlays/projectPicker.ts";
 
 /** What fills the centre for a project with nothing in it yet. The same slot the setup
  * and discovered panes use, and the one time the composer sits here instead of in its dock: there

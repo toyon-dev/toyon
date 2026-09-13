@@ -10,7 +10,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
-import { destination, expandHome, folderName, splitTypedPath } from "../palettes/projectPicker.ts";
+import { destination, expandHome, folderName, splitTypedPath } from "../overlays/projectPicker.ts";
 
 /** how long the name sits still before the project asks whether a folder by that name is already there */
 const ASK_AFTER_MS = 150;

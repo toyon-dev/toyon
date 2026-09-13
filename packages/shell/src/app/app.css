@@ -9,16 +9,24 @@
     height: 100%;
 
     /* zen: full-bleed preview, all chrome hidden (⌘. exits; esc belongs to the page) */
-    /* hiding the bar removes a grid child — collapse to one full-height row so
-   .docks doesn't re-slot into the auto track (grid re-slotting, round two) */
-    &.zen {
-      grid-template-rows: 1fr;
-    }
-    &.zen .bar,
     &.zen .left-dock,
     &.zen .right-dock,
     &.zen .rail,
     &.zen .dock-resize {
+      display: none;
+    }
+  }
+  /* The top bar goes in zen too, except in the installed app with a window-controls overlay, where
+     the top bar is the window's own title bar and topbar.css keeps a bare title strip in its place.
+     Said as a media condition rather than settled by specificity: this rule and topbar.css's are
+     equally specific and in the same layer, so which one held used to be whichever file loaded last.
+     Hiding the bar removes a grid child, so the row collapses with it or .docks re-slots into the
+     auto track (grid re-slotting, round two). */
+  @media not (display-mode: window-controls-overlay) {
+    .app.zen {
+      grid-template-rows: 1fr;
+    }
+    .app.zen .top-bar {
       display: none;
     }
   }

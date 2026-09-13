@@ -46,7 +46,7 @@ const count = (n: number) => (n > 999 ? "1k+" : String(n));
 
 /** far-right worktree rail: 40px dot strip, hover peeks the full panel; shift-click / "graft with…"
  * enters a multi-select for grafting, bulk sync and bulk remove */
-export function WtRail() {
+export function Rail() {
   const dispatch = useDispatch();
   const sock = useSock();
   const worktrees = useVisibleWorktrees();

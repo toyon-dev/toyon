@@ -11,17 +11,17 @@ import { useOnChange, useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
-import { ProjectPicker } from "../palettes/ProjectPicker.tsx";
+import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
 import { chord, isInstalledApp } from "../util.ts";
-import "./statusbar.css";
+import "./topbar.css";
 import { Field } from "../../ui/Field.tsx";
 import { RoutePicker } from "./RoutePicker.tsx";
 import { pathOf } from "./routePicker.ts";
 
-/** the top bar: dock toggles, the route bar centered over the preview, tools (proc health badges the
+/** the top bar: dock toggles, the route centered over the preview, tools (proc health badges the
  * composer's terminal button; a dead socket colours the worktree rail) */
 /** `leftPx`/`rightPx`: the dock columns' widths, so the nav cluster can sit over the centre */
-export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number }) {
+export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number }) {
   // the nav cluster stays centred over the centre; only this surface re-renders on resize
   const winW = useWindowWidth();
   const navCenter = leftPx + (winW - leftPx - rightPx) / 2;
@@ -43,7 +43,7 @@ export function StatusBar({ leftPx, rightPx }: { leftPx: number; rightPx: number
   const id = active?.worktree.id ?? null;
   const ready = !!active && previewUp(active);
   return (
-    <div className="bar top-bar">
+    <div className="top-bar">
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "toyon"}</span>}
       {/* the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
           disabled button still lights and explains itself on hover as if it might do something */}

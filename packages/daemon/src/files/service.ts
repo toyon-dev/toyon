@@ -136,7 +136,7 @@ export class FileService {
    * be editing behind you: open a shell there, or take it over first. */
   private requireOwned(worktreeId: string) {
     if (!this.state.worktree(worktreeId) && this.readable(worktreeId)) {
-      throw new UserError("toyon does not run this worktree: take it over to edit files here");
+      throw new UserError("Toyon does not run this worktree: take it over to edit files here");
     }
     return this.state.requireWorktree(worktreeId);
   }

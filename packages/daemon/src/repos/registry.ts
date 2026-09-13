@@ -149,7 +149,7 @@ export class RepoRegistry {
   async unmake(repoId: string): Promise<void> {
     const repo = this.d.state.requireRepo(repoId);
     const { made } = repo;
-    if (!made) throw new UserError(`${repo.name} was opened, not made here, so toyon will not remove it`);
+    if (!made) throw new UserError(`${repo.name} was opened, not made here, so Toyon will not remove it`);
     const used = await this.usedSign(repo);
     if (used) throw new UserError(`${used}, so it can't be renamed or moved from here`);
     await this.forget(repoId);
@@ -178,7 +178,7 @@ export class RepoRegistry {
    * is fine. */
   private refuseIfManaged(dir: string): void {
     const managed = [...this.d.state.repos, ...this.d.state.worktrees].some((r) => isInside(dir, r.path));
-    if (managed) throw new UserError(`${dir} is inside a project toyon already manages`);
+    if (managed) throw new UserError(`${dir} is inside a project Toyon already manages`);
   }
 
   /** clones in flight, oldest first */
@@ -475,7 +475,7 @@ export class RepoRegistry {
     }
     // before the sameness check: a misspelt key changes nothing, which is exactly when it needs saying
     if (file.ignored) {
-      const line = `ignoring ${file.ignored.join(", ")}, which toyon does not know`;
+      const line = `ignoring ${file.ignored.join(", ")}, which Toyon does not know`;
       log.warn(repo.id, line);
       if (announce) this.tellMain(repo, line);
     }

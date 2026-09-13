@@ -8,7 +8,7 @@
 # state dir per worktree, named after it, so parallel worktrees stay independent and a restart
 # finds the same token (the shell holds that per origin, in localStorage).
 set -eu
-: "${PORT:?no PORT in the environment: run this through toyon, not by hand}"
+: "${PORT:?no PORT in the environment: run this through Toyon, not by hand}"
 exec env \
   TOYON_PORT="$PORT" \
   TOYON_HOME="${TOYON_DEV_HOME:-$HOME/.toyon-dev/$(basename "$(pwd)")}" \

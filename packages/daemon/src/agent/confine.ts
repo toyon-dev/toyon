@@ -78,8 +78,8 @@ export function confine(
   }
   if (platform === "linux") {
     const bwrap = which("bwrap");
-    if (!bwrap) throw new UserError("This agent runs in toyon's sandbox, which needs bubblewrap (bwrap) on Linux.");
+    if (!bwrap) throw new UserError("This agent runs in Toyon's sandbox, which needs bubblewrap (bwrap) on Linux.");
     return { ...launch, command: bwrap, args: [...bwrapArgs(b, extraWrite), "--", launch.command, ...launch.args] };
   }
-  throw new UserError(`This agent runs in toyon's sandbox, which is not available on ${platform}.`);
+  throw new UserError(`This agent runs in Toyon's sandbox, which is not available on ${platform}.`);
 }

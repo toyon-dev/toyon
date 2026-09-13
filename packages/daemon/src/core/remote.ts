@@ -95,7 +95,7 @@ export function door(req: Request, peer: string, remote: Remote | null, listener
   // A plain-http front would put the token on the network in the clear, and the page would not be
   // a secure context either, so that is refused by name.
   if (req.headers.get("x-forwarded-proto") !== "https") {
-    return forbidden(`${host} reaches toyon over https only; the front must terminate TLS`);
+    return forbidden(`${host} reaches Toyon over https only; the front must terminate TLS`);
   }
   if (listener === "preview") return { kind: "preview", worktreeId: null };
   return worktreeId === null ? { kind: "shell" } : { kind: "preview", worktreeId };
@@ -149,7 +149,7 @@ export function passPreview(
       ok: false,
       response: new Response(
         `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"></head>` +
-          `<body>This preview opens from toyon; open your toyon link first.</body></html>`,
+          `<body>This preview opens from Toyon; open your Toyon link first.</body></html>`,
         { status: 403, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
       ),
     };

@@ -62,9 +62,9 @@ export async function uninstall(opts: { yes: boolean }): Promise<number> {
   if (existsSync(app)) console.log(`  ${app}`);
   console.log("and stops the daemon if it is running.");
   console.log(
-    "it keeps: your repos, every branch toyon made" +
+    "it keeps: your repos, every branch Toyon made" +
       (branches.length ? ` (${branches.length} under toyon/)` : "") +
-      ", and toyon's settings in each repo (.toyon/ or toyon.json).",
+      ", and Toyon's settings in each repo (.toyon/ or toyon.json).",
   );
   if (!opts.yes && !(await confirm("continue?"))) {
     console.log("nothing removed");

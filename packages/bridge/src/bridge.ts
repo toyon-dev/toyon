@@ -20,7 +20,7 @@ declare global {
 }
 // injected once per document: an htmx/Turbo fragment swap re-delivers the tag and would wrap
 // history and double every listener
-if (window.__toyonBridge) throw new Error("toyon bridge already installed");
+if (window.__toyonBridge) throw new Error("Toyon bridge already installed");
 window.__toyonBridge = true;
 
 const SHELL_ORIGINS: string[] = window.__toyonShellOrigins ?? [];

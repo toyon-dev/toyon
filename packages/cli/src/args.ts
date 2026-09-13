@@ -85,7 +85,7 @@ export function parseArgs(argv: string[]): Command {
     if (a === "--app" || a === "--pwa") app = true;
     else if (a === "--install-app") installApp = true;
     else if (a.startsWith("-")) return { kind: "error", message: `unknown option ${a}` };
-    else if (path !== null) return { kind: "error", message: "toyon opens one path at a time" };
+    else if (path !== null) return { kind: "error", message: "Toyon opens one path at a time" };
     else path = a;
   }
   return { kind: "open", path, app, installApp };
@@ -149,21 +149,21 @@ usage
   toyon [path]            start the daemon if it is not running, register the repo at path
                           (default: the current directory) and open the shell
   toyon stop              stop the daemon and every dev server and agent it runs
-  toyon doctor            check the daemon, the token, the shell build and the tools toyon needs
+  toyon doctor            check the daemon, the token, the shell build and the tools Toyon needs
   toyon logs [-f] [-n N]  print the daemon log; -f keeps following it, -n sets how many lines
   toyon version           print the CLI version, and the daemon's if one is running
-  toyon uninstall [--yes] stop the daemon and remove everything toyon put on this machine;
-                          your repos and the branches toyon made stay
+  toyon uninstall [--yes] stop the daemon and remove everything Toyon put on this machine;
+                          your repos and the branches Toyon made stay
   toyon remote [name|off] open the shell from another device at https://name, through a TLS
                           front on this machine; with no name, print the setting; off also
-                          removes the tailscale serve entries toyon set
+                          removes the tailscale serve entries Toyon set
     --ports               put each preview on its own port of the name, for a front that cannot
                           hold a wildcard certificate
   toyon remote --tailscale
                           open the shell from your tailnet at this machine's Tailscale name:
-                          sets up tailscale serve for toyon and ports 10001-10008
+                          sets up tailscale serve for Toyon and ports 10001-10008
   toyon deploy fly up <name> [--region code] [--repo url]
-                          run toyon on your own Fly account at https://name.fly.dev with your own
+                          run Toyon on your own Fly account at https://name.fly.dev with your own
                           keys; --repo clones that repository onto it the first time
   toyon deploy fly url <name>
                           print the link to that machine again

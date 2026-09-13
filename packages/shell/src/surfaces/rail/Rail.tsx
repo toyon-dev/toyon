@@ -551,7 +551,7 @@ export function Rail() {
                 className="rail-disc-head"
                 aria-expanded={discOpen}
                 {...tip(
-                  `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that toyon did not make`,
+                  `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that Toyon did not make`,
                   undefined,
                   { placement: "left" },
                 )}

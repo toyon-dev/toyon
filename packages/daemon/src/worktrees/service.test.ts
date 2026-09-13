@@ -489,7 +489,7 @@ describe("config reload", () => {
     writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "true" }, chek: "bun test" }));
     w.repos.reloadConfig(repoId);
     expect(w.state.requireRepo(repoId).config).toEqual({ run: { web: "true" } });
-    expect(lines).toEqual(["ignoring toyon.json: chek, which toyon does not know"]);
+    expect(lines).toEqual(["ignoring toyon.json: chek, which Toyon does not know"]);
   });
 
   test("a file in .toyon/ is read like one at the root, and moving it there changes where a save goes", async () => {

@@ -49,7 +49,7 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   }
 
   if (!(await health())) {
-    console.log("starting toyon daemon…");
+    console.log("starting Toyon daemon…");
     if (!(await startDaemon())) {
       console.error(`daemon failed to start; \`toyon logs\` shows why (${logFile})`);
       return 1;

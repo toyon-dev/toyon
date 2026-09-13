@@ -46,7 +46,7 @@ const KEYS: Array<[string, string]> = [
 const CLOSED: Record<string, string> = {
   skipped: "you skipped this",
   cancelled: "the turn was stopped before you answered",
-  expired: "toyon restarted before you answered",
+  expired: "Toyon restarted before you answered",
 };
 
 export function AskCard({ item }: { item: Ask }) {

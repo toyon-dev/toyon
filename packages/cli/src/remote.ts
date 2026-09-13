@@ -68,7 +68,7 @@ export async function remote(cmd: Extract<Command, { kind: "remote" }>): Promise
     // line when the setting pointed at a tailnet name
     try {
       const removed = await unserveTailnet(tailscaleCli(), port);
-      if (removed > 0) console.log(`removed toyon's ${removed} tailscale serve entries`);
+      if (removed > 0) console.log(`removed Toyon's ${removed} tailscale serve entries`);
     } catch (e) {
       if (!(e instanceof TailscaleError)) throw e;
       if (was?.host.endsWith(".ts.net")) console.error(`toyon: could not remove tailscale serve entries: ${e.message}`);
@@ -84,7 +84,7 @@ export async function remote(cmd: Extract<Command, { kind: "remote" }>): Promise
       console.log(`  ${r.host}, *.${r.host} {\n    reverse_proxy 127.0.0.1:${port}\n  }\n`);
       console.log("the wildcard certificate needs Caddy's DNS challenge, through your DNS provider's module");
     }
-    console.log("toyon refuses the name over plain http: the token in the link grants a shell on this machine");
+    console.log("Toyon refuses the name over plain http: the token in the link grants a shell on this machine");
   }
   if (h && !same(h.remote, r)) console.log("the daemon reads this at start; `toyon stop` then `toyon` applies it");
   return 0;

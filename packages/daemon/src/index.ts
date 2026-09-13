@@ -216,13 +216,13 @@ const previewsAt = (r: NonNullable<typeof remote>) =>
     : `previews at ${r.previews}`;
 
 if (remote?.front === "edge") {
-  console.log(`toyon daemon on https://${remote.host}/ behind the edge, ${previewsAt(remote)}`);
+  console.log(`Toyon daemon on https://${remote.host}/ behind the edge, ${previewsAt(remote)}`);
   console.log(`         token read from ${paths.tokenFile}; not printed`);
 } else {
   const shellUrl = branded
     ? `http://toyon.localhost/#token=${token}`
     : `http://toyon.localhost:${port}/#token=${token}`;
-  console.log(`toyon daemon on ${shellUrl}`);
+  console.log(`Toyon daemon on ${shellUrl}`);
   console.log(`         (fallback: http://127.0.0.1:${port}/#token=${token})`);
   if (remote) {
     console.log(`         remote: https://${remote.host}/#token=${token}, through a TLS front on this port`);

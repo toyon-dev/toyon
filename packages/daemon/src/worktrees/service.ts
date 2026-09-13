@@ -367,7 +367,7 @@ export class WorktreeService {
   private async requireDiscovered(repoId: string, repoPath: string, target: string): Promise<FoundWorktree> {
     const rows = await discoverIn(repoId, repoPath, this.d.state.worktrees);
     const found = rows.find((r) => canonical(r.path) === target);
-    if (!found) throw new UserError("that worktree is gone, or toyon already has it");
+    if (!found) throw new UserError("that worktree is gone, or Toyon already has it");
     return found;
   }
 
@@ -380,7 +380,7 @@ export class WorktreeService {
   async adopt(worktreeId: string, createdBy?: string): Promise<WorktreeInfo> {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
-    if (r.wt) throw new UserError(`toyon already runs ${r.name}`);
+    if (r.wt) throw new UserError(`Toyon already runs ${r.name}`);
     const repoId = r.repoId;
     const repo = this.d.state.requireRepo(repoId);
     const target = canonical(r.path);
@@ -398,7 +398,7 @@ export class WorktreeService {
       const enclosing = [...this.d.state.repos, ...this.d.state.worktrees].find((r) =>
         isInside(target, canonical(r.path)),
       );
-      if (enclosing) throw new UserError(`${found.name} sits inside ${enclosing.path}, which toyon already manages`);
+      if (enclosing) throw new UserError(`${found.name} sits inside ${enclosing.path}, which Toyon already manages`);
       const rec: WorktreeInfo = {
         id: shortId(),
         repoId,

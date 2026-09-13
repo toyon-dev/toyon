@@ -36,7 +36,7 @@ export function CrashCard({
 
 /** what a stale build says, wherever it is noticed: here, and the preview's protocol check */
 export const STALE_BUILD = {
-  title: "toyon was updated",
+  title: "Toyon was updated",
   body: "This page is still running the old build. Reload to pick up the new one.",
 } as const;
 
@@ -60,7 +60,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode; pane?: boole
     return (
       <CrashCard
         pane={this.props.pane}
-        title={staleBuild ? STALE_BUILD.title : "toyon hit an error"}
+        title={staleBuild ? STALE_BUILD.title : "Toyon hit an error"}
         body={staleBuild ? STALE_BUILD.body : error.message || String(error)}
         action={
           <Button variant="outline" onClick={() => window.location.reload()}>

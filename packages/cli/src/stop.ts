@@ -16,7 +16,7 @@ export async function stop(): Promise<number> {
     pid = null;
   }
   if (pid === null) {
-    console.log("toyon is not running");
+    console.log("Toyon is not running");
     return 0;
   }
   try {
@@ -35,6 +35,6 @@ export async function stop(): Promise<number> {
     rmSync(pidFile, { force: true });
     return 1;
   }
-  console.log(`stopped toyon (pid ${pid})`);
+  console.log(`stopped Toyon (pid ${pid})`);
   return 0;
 }

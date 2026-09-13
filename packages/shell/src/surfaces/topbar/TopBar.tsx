@@ -54,7 +54,7 @@ export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number })
   const ready = !!active && previewUp(active);
   return (
     <div className="top-bar">
-      {zen && <span className="bar-zen-title">{active?.worktree.title ?? "toyon"}</span>}
+      {zen && <span className="bar-zen-title">{active?.worktree.title ?? "Toyon"}</span>}
       {/* the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
           disabled button still lights and explains itself on hover as if it might do something */}
       {!firstRun && (

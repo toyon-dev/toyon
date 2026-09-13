@@ -112,7 +112,7 @@ export function App() {
   }, [rows]);
 
   useEffect(() => {
-    document.title = activeRow ? `${activeRow.name} · toyon` : "toyon";
+    document.title = activeRow ? `${activeRow.name} · Toyon` : "Toyon";
   }, [activeRow]);
 
   // Looking at a worktree clears the rail's unseen ring: whichever way you got here (a rail click,

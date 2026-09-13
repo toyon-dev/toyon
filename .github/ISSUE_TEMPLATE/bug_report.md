@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something toyon did wrong
+about: Something Toyon did wrong
 labels: bug
 ---
 

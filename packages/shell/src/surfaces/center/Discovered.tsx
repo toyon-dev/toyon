@@ -16,12 +16,12 @@ export function Discovered({ row }: { row: WorktreeStatus }) {
     <View wide>
       <p className="status-line">{row.name}</p>
       <p>
-        This worktree exists in git, but toyon did not make it and is not running it: no dev servers, no preview, no
+        This worktree exists in git, but Toyon did not make it and is not running it: no dev servers, no preview, no
         agent. A shell at <code>{dir}</code> opens below.
       </p>
       {row.locked ? (
         <p>
-          Another tool is holding it{row.lockReason ? `: ${row.lockReason}` : ""}. Taking it over would put toyon's dev
+          Another tool is holding it{row.lockReason ? `: ${row.lockReason}` : ""}. Taking it over would put Toyon's dev
           servers in a directory something else is working in, so that stays off until the lock goes.
         </p>
       ) : (

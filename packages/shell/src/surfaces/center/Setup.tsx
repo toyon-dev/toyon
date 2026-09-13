@@ -201,7 +201,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
         label="start"
         hint={
           <>
-            must listen on <code {...tip("toyon sets a different port for each worktree")}>$PORT</code>
+            must listen on <code {...tip("Toyon sets a different port for each worktree")}>$PORT</code>
             {/* where the guess came from, and the way to it: the file opens in the editor pane
                   under this card, so the script the person meant is a copy and a paste away */}
             {repo.guess && main && (

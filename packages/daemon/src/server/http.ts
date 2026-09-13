@@ -175,6 +175,6 @@ export function createFetch(opts: HttpOpts) {
     if (hashed) return new Response("not found", { status: 404 });
     const index = join(opts.shellDist, "index.html");
     if (existsSync(index)) return new Response(Bun.file(index), { headers: { "cache-control": NO_STORE } });
-    return new Response("toyon daemon running; shell not built (run: bun run build)", { status: 200 });
+    return new Response("Toyon daemon running; shell not built (run: bun run build)", { status: 200 });
   };
 }

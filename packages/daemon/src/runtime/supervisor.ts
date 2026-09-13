@@ -189,7 +189,7 @@ export class WorktreeProcs {
       mp.state.host = (await reachableHost(found.port)) ?? found.host;
       mp.state.status = "running";
       mp.state.detail =
-        `ignoring $PORT: listening on :${found.port}, not the :${port} toyon assigned. The preview follows ` +
+        `ignoring $PORT: listening on :${found.port}, not the :${port} Toyon assigned. The preview follows ` +
         `:${found.port} for now; add the tool's port flag (vite: --port $PORT --strictPort) to the command ` +
         "so two worktrees do not fight over one port.";
     } else {

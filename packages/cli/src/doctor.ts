@@ -58,7 +58,7 @@ export async function doctor(): Promise<number> {
   lines.push(line(true, "home", home));
 
   const git = await toolVersion("git", ["--version"]);
-  lines.push(git ? line(true, "git", git) : line(false, "git", "not found on PATH; toyon needs git 2.x"));
+  lines.push(git ? line(true, "git", git) : line(false, "git", "not found on PATH; Toyon needs git 2.x"));
 
   if (process.platform === "linux") {
     const missing = missingSandboxTools();
@@ -145,11 +145,11 @@ export async function doctor(): Promise<number> {
     try {
       const r = await fetch(`${base}/`, { signal: AbortSignal.timeout(1000) });
       const body = await r.text();
-      const built = r.ok && !body.startsWith("toyon daemon running; shell not built");
+      const built = r.ok && !body.startsWith("Toyon daemon running; shell not built");
       lines.push(
         built
           ? line(true, "shell", "served")
-          : line(false, "shell", "not built: run `bun run build` in the toyon checkout"),
+          : line(false, "shell", "not built: run `bun run build` in the Toyon checkout"),
       );
     } catch (e) {
       lines.push(line(false, "shell", `could not fetch: ${(e as Error).message}`));

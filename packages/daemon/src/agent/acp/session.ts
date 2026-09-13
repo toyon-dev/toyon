@@ -908,7 +908,7 @@ export class AcpSession implements AgentAdapter {
       // an MCP server's own form: free text, a number, a date. Declining is the protocol's "the
       // person passed", which both bridges carry on from; an agent-error row would read as a
       // toyon bug in the middle of a turn that is going fine.
-      log.warn(this.d.worktreeId, `elicitation toyon cannot draw as choices; declined: ${params.message}`);
+      log.warn(this.d.worktreeId, `elicitation Toyon cannot draw as choices; declined: ${params.message}`);
       return { action: "decline" };
     }
     // the union's custom-mode arm is an open record, so this is `unknown` until it is checked

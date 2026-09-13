@@ -109,7 +109,7 @@ const notify = async (s: Services, ctx: HandlerCtx, worktreeId: string, msg: Ser
  * like the others, so the refusal names the way out rather than calling the worktree unknown. */
 const requireRun = (s: Services, id: string): WorktreeInfo => {
   if (!s.state.worktree(id) && s.worktrees.readable(id)) {
-    throw new UserError("toyon does not run this worktree: take it over first");
+    throw new UserError("Toyon does not run this worktree: take it over first");
   }
   return s.state.requireWorktree(id);
 };

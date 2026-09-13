@@ -70,7 +70,7 @@ export function tailnetName(json: string): string {
   try {
     st = JSON.parse(json) as Status;
   } catch {
-    throw new TailscaleError(notRunning(json) ? NOT_RUNNING : "tailscale status --json printed nothing toyon can read");
+    throw new TailscaleError(notRunning(json) ? NOT_RUNNING : "tailscale status --json printed nothing Toyon can read");
   }
   switch (st.BackendState) {
     case "Running":
@@ -108,7 +108,7 @@ export function parseServeConfig(json: string): ServeConfig {
     return (JSON.parse(text) as ServeConfig | null) ?? {};
   } catch {
     throw new TailscaleError(
-      notRunning(text) ? NOT_RUNNING : "tailscale serve status --json printed nothing toyon can read",
+      notRunning(text) ? NOT_RUNNING : "tailscale serve status --json printed nothing Toyon can read",
     );
   }
 }
@@ -154,7 +154,7 @@ export async function serveTailnet(ts: Tailscale, daemonPort: number): Promise<s
   const taken = want.flatMap(({ e, h }) => (h.kind === "other" ? [`https ${e.port} (${h.what})`] : []));
   if (taken.length > 0) {
     throw new TailscaleError(
-      `tailscale serve already uses ${taken.join(", ")}; toyon changed nothing. Free those with \`tailscale serve --https=<port> off\`, or use \`toyon remote ${name} --ports\` with a front of your own`,
+      `tailscale serve already uses ${taken.join(", ")}; Toyon changed nothing. Free those with \`tailscale serve --https=<port> off\`, or use \`toyon remote ${name} --ports\` with a front of your own`,
     );
   }
   for (const { e, h } of want) {

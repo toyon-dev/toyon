@@ -213,7 +213,7 @@ function EditorNote({ editor, disk, files }: { editor: EditorFile; disk: EditorD
   if (ref === undefined && !disk.writable && !disk.binary && !disk.tooLarge) {
     return (
       <div className="editor-note">
-        <span className="hint">read-only: toyon does not run this worktree</span>
+        <span className="hint">read-only: Toyon does not run this worktree</span>
       </div>
     );
   }

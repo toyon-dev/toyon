@@ -17,7 +17,7 @@ export const SYSTEM_APPEND = [
   "`@some/path` in a message means read that file or directory first; `@changes` means this worktree's uncommitted files, which `git status` lists.",
   'Toyon previews the project in a browser panel by running the commands in its settings file, .toyon/settings.json (or toyon.json at the repo root, in a repo that keeps it there), shaped like {"setup": ["bun install"], "run": {"web": "bun run dev --port $PORT"}, "check": "bun run check", "land": {"route": "merge"}}: setup runs once in every new worktree, every command in run keeps running and must listen on $PORT, which toyon sets differently for each worktree, check (optional) runs after each of your turns and must pass before the work can be merged, and land.route (optional: "merge", "push" or "pr") says how the user lands work on main. A settings.local.json beside it (toyon.local.json at the root) holds one person\'s overrides and is never committed.',
   "When you scaffold a project, write its .gitignore (dependencies, build output, local env files) before installing anything, so an install never leaves thousands of untracked files for the user to wade through or commit.",
-  "When you scaffold a project or change how it installs or starts, finish by updating the settings file toyon already reads, or writing .toyon/settings.json when there is none, so the preview can run it.",
+  "When you scaffold a project or change how it installs or starts, finish by updating the settings file Toyon already reads, or writing .toyon/settings.json when there is none, so the preview can run it.",
 ].join(" ");
 
 /** what the model reads as an image's label: its session number (how the user will refer to it

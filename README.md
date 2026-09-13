@@ -10,7 +10,7 @@ Each copy runs on your own machine, and the next one is pre-warmed. Works with C
 
 A diff says what changed, not whether the page still looks right. A preview link at the end of a run shows you the result after the agent has stopped, too late to steer it. And with more than one agent going it gets worse: terminal splits, copies of the repo made by hand, dev servers fighting over a port.
 
-In toyon you type what you want, and the chat opens with your app already running in the middle of the window. Point at a button in the page and ask for it to be bigger; watch it change while the agent works; keep the change when it looks right.
+In Toyon you type what you want, and the chat opens with your app already running in the middle of the window. Point at a button in the page and ask for it to be bigger; watch it change while the agent works; keep the change when it looks right.
 
 ## How it works
 
@@ -31,11 +31,11 @@ npx toyon
 
 Needs git and Node 18 or newer. bun comes with the package. On Linux the agents' sandbox also needs bubblewrap and socat (`sudo apt install bubblewrap socat`), and Ubuntu 24.04 and later stop bubblewrap starting until an AppArmor profile allows it; `toyon doctor` checks both and prints the profile. `npm i -g toyon` puts `toyon` on your PATH for good, after which `toyon`, `toyon .` and `toyon ~/projects/app` all open a project. Run it anywhere else and toyon opens without a project, ready to start a new one, so no code is needed to begin. `toyon --help` lists the rest: `stop`, `doctor`, `logs`, `version`, `uninstall`, `remote`, `deploy`.
 
-Agents: Claude Code, Codex and OpenCode, each through its own login. Toyon installs the Claude Code and Codex adapters on first start and asks you to sign in from the chat when one is needed. OpenCode is a larger download, so toyon fetches it the first time you pick it; it signs in with `opencode auth login` in the chat's terminal and uses whichever providers you have signed it into. Your existing setup comes along: Claude Code loads your user, project and local settings, so permission rules, hooks, slash commands, plugins and MCP servers (from `.mcp.json` and your user settings) work as they do in the terminal, and Codex and OpenCode read their own config files. MCP servers run as each agent runs them, outside toyon's sandbox.
+Agents: Claude Code, Codex and OpenCode, each through its own login. Toyon installs the Claude Code and Codex adapters on first start and asks you to sign in from the chat when one is needed. OpenCode is a larger download, so Toyon fetches it the first time you pick it; it signs in with `opencode auth login` in the chat's terminal and uses whichever providers you have signed it into. Your existing setup comes along: Claude Code loads your user, project and local settings, so permission rules, hooks, slash commands, plugins and MCP servers (from `.mcp.json` and your user settings) work as they do in the terminal, and Codex and OpenCode read their own config files. MCP servers run as each agent runs them, outside Toyon's sandbox.
 
 ## What you get
 
-- **A copy of your project per chat.** Type what you want; toyon makes a branch and a git worktree, clones the dependencies, starts your dev servers and opens the agent in it. One spare per project is kept warm, so the next chat's app is usually already running. A second chat right after, or several at once, waits for its own setup.
+- **A copy of your project per chat.** Type what you want; Toyon makes a branch and a git worktree, clones the dependencies, starts your dev servers and opens the agent in it. One spare per project is kept warm, so the next chat's app is usually already running. A second chat right after, or several at once, waits for its own setup.
 - **Your app at the centre.** Each copy runs its own servers behind its own preview address. Switch between chats like tabs; each keeps its page state while hidden.
 - **Connected to its code.** Point at anything on the page to talk about it or open the line that draws it. Hover a change and it is outlined in the page. A design pane maps the page back to your tokens and components.
 - **More than one version.** Send one prompt to several copies and compare the results in the app.
@@ -59,7 +59,7 @@ browser (shell UI) ──HTTP/WS──> daemon (one per machine)
                                   └─ git ops (status/diff, ref watcher, land)
 ```
 
-The contract for anything toyon runs: *stay in the foreground, listen on `$PORT`, reload yourself however you like.* A `.toyon/settings.json` in the project names the setup commands, the commands to `run`, an optional `check` and how work lands (`toyon.json` at the root is read too). The first open guesses one from `package.json` and asks you to confirm it; other stacks start from an empty guess, and the agent can fill it in. Tools that take their port from a flag rather than the environment, Vite among them, get the flag added by the guess. If a server still comes up on some other port, toyon follows it there and tells you which flag to add, and if it never listens at all the preview says so instead of waiting.
+The contract for anything Toyon runs: *stay in the foreground, listen on `$PORT`, reload yourself however you like.* A `.toyon/settings.json` in the project names the setup commands, the commands to `run`, an optional `check` and how work lands (`toyon.json` at the root is read too). The first open guesses one from `package.json` and asks you to confirm it; other stacks start from an empty guess, and the agent can fill it in. Tools that take their port from a flag rather than the environment, Vite among them, get the flag added by the guess. If a server still comes up on some other port, Toyon follows it there and tells you which flag to add, and if it never listens at all the preview says so instead of waiting.
 
 Copies start when you open them, not when the daemon boots. `toyon stop` stops the daemon and everything it runs. `toyon doctor` says what is running and why a page cannot connect.
 
@@ -77,7 +77,7 @@ Each copy is a real `git worktree` under `~/.toyon/worktrees.noindex` with its o
 
 ## Somewhere other than your laptop
 
-Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. None of it passes through a toyon server; there is none. These routes are new. On Fly, a browser has opened the shell and two copies' previews, an agent's edit has shown up in a preview without a reload, and every refusal has been checked from outside. On a tailnet, a phone has opened the shell and a preview and seen an agent's edit arrive without a reload. The Caddy route has been checked with requests shaped like its own, and has not been opened from a phone yet. The shell has no phone layout yet: on a phone, open a preview in its own tab.
+Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. None of it passes through a Toyon server; there is none. These routes are new. On Fly, a browser has opened the shell and two copies' previews, an agent's edit has shown up in a preview without a reload, and every refusal has been checked from outside. On a tailnet, a phone has opened the shell and a preview and seen an agent's edit arrive without a reload. The Caddy route has been checked with requests shaped like its own, and has not been opened from a phone yet. The shell has no phone layout yet: on a phone, open a preview in its own tab.
 
 A host needs a process that stays up, a disk that survives restarts, WebSockets, and either a wildcard name or a range of ports it forwards. That rules out serverless hosts and hosts that scale to zero with no disk.
 
@@ -115,7 +115,7 @@ npx toyon deploy fly up my-toyon
 It needs flyctl signed in (`fly auth login`) and an Anthropic API key in `ANTHROPIC_API_KEY` or `~/.toyon/cloud/anthropic.key`. Toyon builds the machine in your Fly builder from the package you ran, gives it a 5 GB volume in the region closest to you, and prints the link. `--repo https://github.com/you/app.git` clones your repository onto it the first time; a private one needs a GitHub token with access to it in `GITHUB_TOKEN` or `~/.toyon/cloud/github.token`. `toyon deploy fly url my-toyon` prints the link again, and `toyon deploy fly destroy my-toyon` deletes the app and its volume.
 
 - The machine measured about $4-6 a month in ordinary use and $10-11 left running all month, volume included, plus whatever your agents spend.
-- It stops when idle, but an open toyon tab keeps it awake.
+- It stops when idle, but an open Toyon tab keeps it awake.
 - The volume holds the only copy of anything you have not pushed.
 - Code you run on it can read the Anthropic key, as it can on your laptop.
 - The first prompt waits while the agents install.
@@ -132,7 +132,7 @@ It needs flyctl signed in (`fly auth login`) and an Anthropic API key in `ANTHRO
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | For the agents. |
 | `GITHUB_TOKEN`, `TOYON_REPO_URL` | Optional: a repository to clone on first start, and access to it. |
 | `/data` | A disk that survives restarts. |
-| Ports | 4141 for toyon, over https with the host's TLS in front, and 10001-10008 when previews use ports. |
+| Ports | 4141 for Toyon, over https with the host's TLS in front, and 10001-10008 when previews use ports. |
 
 A host with a single public port needs your own wildcard domain and the `w{id}` form.
 
@@ -144,7 +144,7 @@ The daemon listens on loopback only, refuses any other peer and any non-loopback
 
 Agents run confined. Everything a shell command spawns runs inside an OS sandbox (Seatbelt on macOS, bubblewrap on Linux) that allows writes to the worktree, its git metadata, the temp directories and package-manager caches, and nothing else. Claude Code builds that sandbox from the settings toyon writes and Codex uses its own; OpenCode brings none, so toyon runs the whole of it inside toyon's own. File tools bypass the shell, so a permission policy applies the same boundary to every write they ask for, and refusals show up in the transcript. An agent cannot widen its own sandbox or another's: every agent's settings in the worktree (`.claude/`, `.codex/`, `.opencode/`, `opencode.json`) are deny-listed. No agent can read or write toyon's own token or `agents.json`; Codex's sandbox takes no such list, so its shell commands can still read the token.
 
-OpenCode loads plugins a repository ships in `.opencode/plugin` when it starts, inside the sandbox. Opening a repository in toyon already runs its setup and its dev server, so open the ones you trust.
+OpenCode loads plugins a repository ships in `.opencode/plugin` when it starts, inside the sandbox. Opening a repository in Toyon already runs its setup and its dev server, so open the ones you trust.
 
 Each chat has a permission mode, shown next to the prompt. **auto**, the default, lets edits and sandboxed commands run and asks only when the agent proposes a plan. **ask** turns every edit and every command into a card in the chat before it runs. **plan** puts the agent in its read-only mode; the plan comes back as a card, and approving it chooses whether the work runs in auto or ask. Three versions can run in auto while the one touching your database runs in ask.
 
@@ -157,7 +157,7 @@ toyon uninstall
 npm uninstall -g toyon
 ```
 
-The first command lists what it will remove and asks before doing it: the daemon, everything under `~/.toyon` (state, transcripts, the agent adapters, and the worktree directories, removed through git so each repository's worktree list stays clean), and `~/Applications/Toyon.app` if you installed it. It keeps your projects, every branch toyon made under `toyon/`, and toyon's settings in each project. `--yes` skips the question. It does not delete a machine you deployed to Fly; `toyon deploy fly destroy <name>` does, and should run first.
+The first command lists what it will remove and asks before doing it: the daemon, everything under `~/.toyon` (state, transcripts, the agent adapters, and the worktree directories, removed through git so each repository's worktree list stays clean), and `~/Applications/Toyon.app` if you installed it. It keeps your projects, every branch Toyon made under `toyon/`, and Toyon's settings in each project. `--yes` skips the question. It does not delete a machine you deployed to Fly; `toyon deploy fly destroy <name>` does, and should run first.
 
 ## Telemetry
 
@@ -178,9 +178,9 @@ bun run check           # typecheck, lint, tests, bridge size gate
 
 `check` is the bar for every commit, and CI runs it on every pull request. `bun run pack` assembles the npm package under `packages/cli/dist`, which is what `npm publish` ships.
 
-### Toyon in toyon
+### Toyon in Toyon
 
-This repo carries a `.toyon/settings.json`, so you can open it as a project in toyon and get a working toyon in the preview. The `dev` profile runs the nested daemon on the port the supervisor hands it, with its own state under `~/.toyon-dev/<worktree>`, and previews the Vite shell against it. The `built` profile builds the shell and previews the daemon serving it, which is what a user gets. Pick one per chat in the profile menu.
+This repo carries a `.toyon/settings.json`, so you can open it as a project in Toyon and get a working Toyon in the preview. The `dev` profile runs the nested daemon on the port the supervisor hands it, with its own state under `~/.toyon-dev/<worktree>`, and previews the Vite shell against it. The `built` profile builds the shell and previews the daemon serving it, which is what a user gets. Pick one per chat in the profile menu.
 
 The nested shell needs the nested daemon's token once per worktree. It is printed in the `daemon` command's tab at startup; open the preview URL in its own tab with that `#token=` fragment on the end, and the browser keeps it for that origin from then on.
 

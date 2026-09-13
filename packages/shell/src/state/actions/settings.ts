@@ -44,6 +44,7 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
       },
       {
         id: "appearance",
+        topic: "theme",
         label: "light or dark…",
         detail: appearanceLabel[prefs.mode],
         sub: true,
@@ -62,15 +63,22 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
     [
       {
         id: "theme-import",
+        topic: "theme",
         label: "import a VS Code theme…",
         onClick: () => pickThemeFile((name, source) => sock?.send({ t: "import-theme", name, source })),
       },
-      { id: "theme-rescan", label: "rescan editor themes", onClick: () => sock?.send({ t: "rescan-themes" }) },
+      {
+        id: "theme-rescan",
+        topic: "theme",
+        label: "rescan editor themes",
+        onClick: () => sock?.send({ t: "rescan-themes" }),
+      },
     ],
     // per-slot overrides for mismatched pairs; the picker fills both slots by family so these sit last
     [
       {
         id: "theme-dark",
+        topic: "theme",
         label: "dark slot override…",
         detail: themeName(prefs.dark),
         sub: true,
@@ -78,6 +86,7 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
       },
       {
         id: "theme-light",
+        topic: "theme",
         label: "light slot override…",
         detail: themeName(prefs.light),
         sub: true,

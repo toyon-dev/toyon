@@ -348,14 +348,13 @@
   .rail .rail-disc-item .rail-lock {
     margin-left: 9.5px;
   }
-  /* the socket is down: every row is stale and nothing you click will answer. Fading them read as
-   "still loading", so they take the fault colour instead and hovering the rail says what happened.
-   The dots go with them: what they were reporting is exactly what we have stopped hearing. */
+  /* the socket is down: every row is stale and nothing you click will answer. The dots say so, in
+   the fault colour: what they were reporting is exactly what we have stopped hearing, and the dot
+   column is where every other state of a worktree is read. The names keep their own colour. Fading
+   them read as "still loading", and painting them in the fault colour put a status on the text,
+   which read as something wrong with each worktree rather than with the wire. The tip on every
+   row says what happened. */
   .rail {
-    &.offline .rail-item,
-    &.offline .rail-disc-item {
-      color: var(--fault);
-    }
     &.offline .rail-item .dot {
       background: var(--fault);
       animation: none;

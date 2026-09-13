@@ -18,17 +18,20 @@ describe("the settings menu", () => {
       },
       { sock: null, dispatch: () => {} },
     );
-    expect(items.map((i) => (isItem(i) ? `${i.label}${i.detail ? ` [${i.detail}]` : ""}` : "|"))).toEqual([
+    // the topic is the palette's word for the theme cluster, the menu's rule does that job there
+    const line = (i: (typeof items)[number]) =>
+      isItem(i) ? `${i.topic ? `${i.topic}: ` : ""}${i.label}${i.detail ? ` [${i.detail}]` : ""}` : "|";
+    expect(items.map(line)).toEqual([
       "theme… [Night]",
-      "light or dark… [follow system]",
+      "theme: light or dark… [follow system]",
       "|",
       "default agent… [Claude]",
       "|",
-      "import a VS Code theme…",
-      "rescan editor themes",
+      "theme: import a VS Code theme…",
+      "theme: rescan editor themes",
       "|",
-      "dark slot override… [Night]",
-      "light slot override… [Day]",
+      "theme: dark slot override… [Night]",
+      "theme: light slot override… [Day]",
     ]);
     expect(
       items

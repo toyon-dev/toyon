@@ -9,12 +9,6 @@
     height: 100%;
 
     /* zen: full-bleed preview, all chrome hidden (⌘. exits; esc belongs to the page) */
-    /* hiding the bar removes a grid child — collapse to one full-height row so
-   .docks doesn't re-slot into the auto track (grid re-slotting, round two) */
-    &.zen {
-      grid-template-rows: 1fr;
-    }
-    &.zen .bar,
     &.zen .left-dock,
     &.zen .right-dock,
     &.zen .rail,
@@ -22,6 +16,8 @@
       display: none;
     }
   }
+  /* The top bar in zen is topbar.css's: hidden there, except in the installed app, where it is the
+     window's own title bar and keeps a bare title strip. */
 
   .docks {
     display: flex;

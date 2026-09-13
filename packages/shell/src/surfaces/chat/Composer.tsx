@@ -34,10 +34,10 @@ import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
 import { TargetLine } from "../chips/TargetChip.tsx";
-import { CommandRow } from "../palettes/CommandRow.tsx";
-import { PaletteRow } from "../palettes/PaletteRow.tsx";
-import { fileRow } from "../palettes/QuickOpen.tsx";
-import { rankFiles } from "../palettes/quickOpen.ts";
+import { CommandRow } from "../overlays/CommandRow.tsx";
+import { PaletteRow } from "../overlays/PaletteRow.tsx";
+import { fileRow } from "../overlays/QuickOpen.tsx";
+import { rankFiles } from "../overlays/quickOpen.ts";
 import { landingLine, prCanMerge, prLine, recapLine, recapShown } from "../recap.ts";
 import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
@@ -126,7 +126,7 @@ export function Composer({
   // the picker picks from and the page context describes
   const frameId = usePreviewId();
   const page = useLocalField(frameId, "page");
-  const onPaste = useComposerPaste(boxId, id);
+  const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id);
   const setText = (t: string) => boxId && dispatch({ a: "set-draft", id: boxId, text: t });
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
@@ -635,13 +635,17 @@ export function Composer({
             }}
             // arrow keys and clicks move the caret without changing the text, and the menu follows it;
             // a click in a recalled message is starting to edit it
-            onKeyUp={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+            onKeyUp={(e) => {
+              onPasteKeyUp();
+              setCaret(e.currentTarget.selectionStart ?? 0);
+            }}
             onClick={(e) => {
               setCaret(e.currentTarget.selectionStart ?? 0);
               keepRecalled();
             }}
             onPaste={onPaste}
             onKeyDown={(e) => {
+              onPasteKey(e);
               // an IME builds a word out of several keystrokes; a menu opening mid-composition would
               // fight the candidate list
               if (e.nativeEvent.isComposing) return;

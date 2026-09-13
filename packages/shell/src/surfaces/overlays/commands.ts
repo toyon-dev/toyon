@@ -38,18 +38,20 @@ export function buildCommands(
   const cmds: Command[] = [];
   const add = (id: string, label: string, run: () => void, hint?: string, sub?: boolean) =>
     cmds.push({ id, label, hint, run, sub });
-  /** a menu's items as commands, the rules between groups dropped: an owner's name is appended so
-   * the line says which project or worktree it is about, and the chord or a string detail becomes
-   * the hint. Menu ids are only unique within their menu, and the palette keys its rows by id: the
-   * app's "terminal" and a worktree's "terminal" under one key left a stale row in the DOM when the
-   * list changed under them, so an owner's items are scoped by it. */
+  /** a menu's items as commands, the rules between groups dropped: an item's topic goes in front
+   * and an owner's name is appended, so the line says what kind of thing it is and which project
+   * or worktree it is about, and the chord or a string detail becomes the hint. Menu ids are only
+   * unique within their menu, and the palette keys its rows by id: the app's "terminal" and a
+   * worktree's "terminal" under one key left a stale row in the DOM when the list changed under
+   * them, so an owner's items are scoped by it. */
   const addItems = (items: MenuEntry[], owner?: { scope: string; name: string }) => {
     for (const it of items) {
       // a rule is not a command; nor is a verb that cannot run now, or the choice already in effect
       if (!isItem(it) || it.disabled !== undefined || it.checked) continue;
       const hint = it.key ?? (typeof it.detail === "string" ? it.detail : undefined);
       const id = owner ? `${owner.scope}:${it.id}` : it.id;
-      add(id, owner ? `${it.label} · ${owner.name}` : it.label, it.onClick, hint, it.sub);
+      const label = it.topic ? `${it.topic}: ${it.label}` : it.label;
+      add(id, owner ? `${label} · ${owner.name}` : label, it.onClick, hint, it.sub);
     }
   };
   const deps = { sock, dispatch };

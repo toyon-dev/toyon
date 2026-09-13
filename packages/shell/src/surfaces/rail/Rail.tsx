@@ -44,9 +44,12 @@ import { rowState } from "../../ui/rowState.ts";
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
 const count = (n: number) => (n > 999 ? "1k+" : String(n));
 
+/** what every row and the panel's ground say while the socket is down */
+const OFFLINE_TIP = "Lost the daemon; retrying";
+
 /** far-right worktree rail: 40px dot strip, hover peeks the full panel; shift-click / "graft with…"
  * enters a multi-select for grafting, bulk sync and bulk remove */
-export function WtRail() {
+export function Rail() {
   const dispatch = useDispatch();
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
@@ -74,7 +77,7 @@ export function WtRail() {
     if (sock && connected && activeRepoId) sock.send({ t: "list-archived", repoId: activeRepoId });
   }, [sock, connected, activeRepoId]);
   const activeId = useActiveId();
-  // the list only dims: what the socket is doing is the bar's to say, not the rail's
+  // offline the dots take the fault colour and every tip names it; the bar says what the socket is doing
   const offline = useOffline();
   const leftOpen = useStore((s) => s.leftOpen);
   const railOpen = useStore((s) => s.railOpen);
@@ -261,20 +264,28 @@ export function WtRail() {
         // asking about. A found row has no state to name, so the path is its text, unless
         // something holds it. Main's lead names the project, at the far start of the state's line,
         // since its row goes by its branch and its path alone reads as one more worktree.
+        // Offline, the state is whatever the daemon last said, and a tip restating it as live sat
+        // over a row painted in the fault colour, a green "Running" over an orange dot: the tip
+        // names the fault instead, with no dot, since there is no live state for one to restate.
         {...(owned
-          ? tip(stateLabel(w, repoOf(owned)?.needsSetup), undefined, {
+          ? tip(offline ? OFFLINE_TIP : stateLabel(w, repoOf(owned)?.needsSetup), undefined, {
               placement: "left",
               // an unseen stop says what happened above the path, so a hover is enough to triage it
               detail:
                 w.unseen && owned.worktree.lastTurn
                   ? `${recapLine(owned.worktree.lastTurn)}\n${wtDirLabel(w)}`
                   : wtDirLabel(w),
-              dot: dotClass(w),
+              dot: offline ? undefined : dotClass(w),
               lead: leadOf(w, isMain(owned.worktree) ? (repoOf(owned)?.name ?? null) : null),
             })
-          : w.locked
-            ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, { placement: "left", detail: wtDirLabel(w) })
-            : tip(wtDirLabel(w), undefined, { placement: "left" }))}
+          : offline
+            ? tip(OFFLINE_TIP, undefined, { placement: "left", detail: wtDirLabel(w) })
+            : w.locked
+              ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, {
+                  placement: "left",
+                  detail: wtDirLabel(w),
+                })
+              : tip(wtDirLabel(w), undefined, { placement: "left" }))}
         data-wt={id}
         // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
         // is picked and takes the focus, so the next press keeps walking. The new-worktree row sits
@@ -445,13 +456,9 @@ export function WtRail() {
         offline && "offline",
       )}
     >
-      {/* the rows carry the socket's state, so the explanation hangs off the panel: a row has no
-          tip of its own, and the tooltip walks up to the nearest one */}
-      <div
-        className="rail-panel"
-        data-tip={offline ? "Lost the daemon; retrying" : undefined}
-        data-tip-placement="follow"
-      >
+      {/* the dots carry the socket's state, and every row's tip names it; the panel's own tip covers
+          the ground between and under the rows, where the tooltip walks up to the nearest one */}
+      <div className="rail-panel" data-tip={offline ? OFFLINE_TIP : undefined} data-tip-placement="follow">
         <div className="rail-list" ref={listRef}>
           {lead && railRow(lead)}
           {!graftMode && newRow}

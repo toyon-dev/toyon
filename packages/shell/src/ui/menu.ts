@@ -21,6 +21,11 @@ export type MenuItem = {
   key?: string;
   /** opens a picker of its own: the palette comes back to itself when that picker is escaped */
   sub?: boolean;
+  /** the word the palette puts in front, "theme: dark slot override…". A menu shows a group as
+   * a rule between its neighbours; the palette is one flat scored list, so a group there is a
+   * word its members share, and this is that word for a cluster whose labels do not share one on
+   * their own. The menu never draws it. */
+  topic?: string;
   /** cannot run right now, and why: drawn dim with the reason under it, skipped by the keys. A
    * verb that stays on the list while it cannot run is how the menu keeps its shape and teaches
    * what exists; one that vanishes teaches nothing. */

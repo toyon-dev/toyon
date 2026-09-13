@@ -9,8 +9,8 @@ import { Center } from "../surfaces/center/Center.tsx";
 import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
 import { RightDock } from "../surfaces/chat/RightDock.tsx";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
-import { WtRail } from "../surfaces/rail/WtRail.tsx";
-import { StatusBar } from "../surfaces/statusbar/StatusBar.tsx";
+import { Rail } from "../surfaces/rail/Rail.tsx";
+import { TopBar } from "../surfaces/topbar/TopBar.tsx";
 import { clampW } from "../surfaces/util.ts";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange, rememberDaylight } from "../theme.ts";
 import { Button, IconButton } from "../ui/Button.tsx";
@@ -300,14 +300,14 @@ export function App() {
     >
       <Tooltips />
       <Menus />
-      <StatusBar leftPx={leftOpen ? leftW : 0} rightPx={(rightOpen ? rightW : 0) + railPx} />
+      <TopBar leftPx={leftOpen ? leftW : 0} rightPx={(rightOpen ? rightW : 0) + railPx} />
       <div className="docks">
         <LeftDock width={leftW} />
         {leftOpen && <div className="dock-resize left" onPointerDown={dragLeft} />}
         <Center />
         {rightOpen && <div className="dock-resize right" onPointerDown={dragRight} />}
         <RightDock width={rightW} />
-        {!firstRun && <WtRail />}
+        {!firstRun && <Rail />}
       </div>
       {toast && (
         // shown again for each new message, which puts it over whatever has opened since

@@ -3,7 +3,7 @@
 // rather than in the composer.
 
 import type { AgentCommand } from "@toyon/shared";
-import { commandScore } from "../palettes/commands.ts";
+import { commandScore } from "../overlays/commands.ts";
 
 export interface Trigger {
   kind: "file" | "command";

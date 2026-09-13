@@ -67,7 +67,7 @@
      the theme's to name (Theme.accent, orange unless it says otherwise) and applyTheme
      overwrites this, so every other theme keeps selecting in orange. */
     --accent: var(--red);
-    /* what a lost connection is painted in: the rail's rows and dots while the daemon is down. Warm,
+    /* what a lost connection is painted in: the rail's dots while the daemon is down. Warm,
      because it is a fault, and never the accent, because it colours whole rows and a row in the
      accent reads as selected. applyTheme overwrites this too (faultKey): orange unless the theme
      selects in orange, then red. */
@@ -120,29 +120,27 @@
     /* the horizontal padding of a full-bleed row: the text column every list sits on */
     --row-inset: 12px;
 
-    /* The centre's views: the margins a view is laid out in, then each dress's own numbers. The
-     margins are --view-* rather than one dress's, because both dresses read them and a dress
-     reading another dress's token is the wrong direction. A form's bottom room is the top over
-     again, so a form scrolled to its end stops where a top-anchored one starts.
-     A measure has one reader and is still a token: it is the number that defines the dress, and a
-     number that defines a dress belongs beside the dress's other definitions, or the fourth form
-     gets typed with 540. */
+    /* The centre's views. Every view of toyon's own sits in one column: the margins it is laid out
+     in, its measure, its gap, and where its first line sits. What a person types into and what the
+     machine reports differ in their parts, not in the column, so there is one of these. The wide
+     measure is the one number that follows the content: output is read rather than written, and
+     its lines run longer than prose.
+     A measure has one reader and is still a token: it is the number that defines the column, and a
+     number that defines something belongs beside its other definitions, or the next view gets
+     typed with 540. */
     --view-inset: 24px;
     --view-top: 48px;
-    /* the two anchors. `line` drops the first line about a quarter down so the name typed on the
-     new-project view lands where that project's title reads a moment later; `top` is --view-top
-     itself, for a form that grows while it is being read. */
-    --form-anchor: max(var(--view-top), 24vh);
-    --form-measure: 560px;
-    --form-gap: 12px;
+    /* the first run's drop: the name typed on the new-project view lands where that project's title
+     reads a moment later, about a quarter down. Every other view holds its top at --view-top. */
+    --view-anchor: max(var(--view-top), 24vh);
+    --view-measure: 560px;
+    --view-gap: 12px;
+    --view-measure-wide: 720px;
+    --view-gap-wide: 16px;
     /* the box a person writes in before a word is in it. The -lg tier is the same box carrying its
      own knobs row, which is the composer on the first-run screen. */
     --form-body: 96px;
     --form-body-lg: 120px;
-    /* the machine's block is wider than a form's, because its lines are output rather than prose
-     someone is writing, and it is read rather than filled in. */
-    --status-measure: 720px;
-    --status-gap: 16px;
 
     /* Elevation. Two tiers, and the question each answers is what the thing is doing rather than how
    * far off the page it looks:

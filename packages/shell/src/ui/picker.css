@@ -74,7 +74,7 @@
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     }
     /* Anchored, the strip is a row of the bar it drops out of, so it keeps a bar's height.
-   chip-picker.css and statusbar.css place the panel from this padding, so the lead lands exactly
+   chip-picker.css and topbar.css place the panel from this padding, so the lead lands exactly
    on the control that opened it. */
     &.anchored {
       --picker-inset: 8px;

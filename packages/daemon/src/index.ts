@@ -9,6 +9,7 @@ import pkg from "../package.json" with { type: "json" };
 import { AgentAccounts } from "./agent/accounts.ts";
 import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
+import { LinuxSandbox } from "./agent/linuxSandbox.ts";
 import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
@@ -58,7 +59,10 @@ if (remote && addressedByPort(remote.previews)) pinProxyPorts(PREVIEW_PORTS);
 const state = new StateStore(paths);
 const hub = new Hub();
 const bridge = new BridgeScript(BRIDGE_JS);
-const agents = loadAgentRegistry(paths.agentsFile, paths.agentsDir);
+// on Linux, whether bubblewrap can start, answered before the first agent listing
+const linuxSandbox = new LinuxSandbox();
+await linuxSandbox.refresh();
+const agents = loadAgentRegistry(paths.agentsFile, paths.agentsDir, linuxSandbox);
 // A new worktree's picker lists every agent's models, and an agent nobody has run yet has listed
 // none: once it is installed, a throwaway session reads them. It runs in the daemon's scratch
 // directory, prepared like any other launch, so an agent in toyon's sandbox is confined there too.

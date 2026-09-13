@@ -4,6 +4,7 @@
 // it the shell shows an agent that never answers. Named here, from the terminal, before that happens.
 
 import { readFileSync } from "node:fs";
+import { BWRAP_PROBE_ARGS } from "@toyon/shared";
 
 /** the executables Claude Code looks for, with the apt package that provides each */
 export const LINUX_SANDBOX_TOOLS: ReadonlyArray<{ exe: string; apt: string }> = [
@@ -29,7 +30,7 @@ export function sandboxAdvice(missing: string[]): string {
 export function bwrapStartError(bwrap: string | null = Bun.which("bwrap")): string | null {
   if (!bwrap) return null;
   try {
-    const r = Bun.spawnSync([bwrap, "--ro-bind", "/", "/", "true"], { stdout: "ignore", stderr: "pipe" });
+    const r = Bun.spawnSync([bwrap, ...BWRAP_PROBE_ARGS], { stdout: "ignore", stderr: "pipe" });
     return r.exitCode === 0 ? null : r.stderr.toString().trim() || `bwrap exited ${r.exitCode}`;
   } catch (e) {
     return (e as Error).message;
@@ -47,26 +48,4 @@ export function userNamespacesRestricted(
   }
 }
 
-/** allows user namespaces for bwrap alone, leaving the restriction on for everything else */
-export const BWRAP_APPARMOR_PROFILE = `abi <abi/4.0>,
-include <tunables/global>
-profile bwrap /usr/bin/bwrap flags=(unconfined) {
-  userns,
-  include if exists <local/bwrap>
-}
-`;
-
-/** what to do when bubblewrap is installed and cannot start */
-export function bwrapBlockedAdvice(error: string, restricted: boolean): string {
-  if (!restricted) return `bubblewrap is installed but cannot start a sandbox: ${error}`;
-  return [
-    `bubblewrap cannot start a sandbox: ${error}`,
-    "This system restricts unprivileged user namespaces. Allow them for bubblewrap alone:",
-    "  sudo tee /etc/apparmor.d/bwrap >/dev/null <<'EOF'",
-    ...BWRAP_APPARMOR_PROFILE.trimEnd()
-      .split("\n")
-      .map((l) => `  ${l}`),
-    "  EOF",
-    "  sudo apparmor_parser -r /etc/apparmor.d/bwrap",
-  ].join("\n");
-}
+export { BWRAP_APPARMOR_PROFILE, bwrapBlockedAdvice } from "@toyon/shared";

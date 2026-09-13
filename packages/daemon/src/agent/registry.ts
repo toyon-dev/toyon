@@ -14,6 +14,7 @@ import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import { run } from "../git/exec.ts";
 import { confine } from "./confine.ts";
+import type { SandboxCheck } from "./linuxSandbox.ts";
 import { type HostTraits, hostTraits, nativePackage } from "./native.ts";
 import { opencodeEnv, opencodeQuickModel } from "./opencode.ts";
 import { type Bounds, type Prepared, writeClaudeLocalSettings } from "./sandbox.ts";
@@ -165,6 +166,8 @@ export class AgentRegistry {
     private installer: Installer = bunInstall,
     /** which native build this machine takes; read once, since the files that say do not change */
     private host: HostTraits = hostTraits(),
+    /** why agent sandboxes cannot start here; the daemon passes the live Linux check */
+    private sandbox: SandboxCheck = { problem: () => null },
   ) {
     for (const s of specs) this.specs.set(s.id, s);
   }
@@ -218,8 +221,13 @@ export class AgentRegistry {
     }
   }
 
-  /** null when launchable, else the reason it is not */
+  /** null when launchable, else the reason it is not: not installed, or a sandbox it needs cannot
+   * start on this machine */
   unavailable(spec: AgentSpec): string | null {
+    return this.notInstalled(spec) ?? (spec.confinement === "none" ? null : this.sandbox.problem());
+  }
+
+  private notInstalled(spec: AgentSpec): string | null {
     if (spec.run.kind !== "command") {
       if (!this.packageName(spec)) return `no build for ${this.host.platform} ${this.host.arch}`;
       if (this.installed(spec)) return null;
@@ -385,7 +393,7 @@ export function parseCustomAgents(raw: string): AgentSpec[] {
 }
 
 /** builtins plus the user's file; a custom entry may shadow a builtin id on purpose */
-export function loadAgentRegistry(agentsFile: string, agentsDir: string): AgentRegistry {
+export function loadAgentRegistry(agentsFile: string, agentsDir: string, sandbox?: SandboxCheck): AgentRegistry {
   const custom = existsSync(agentsFile) ? parseCustomAgents(readFileSync(agentsFile, "utf8")) : [];
-  return new AgentRegistry([...BUILTIN_AGENTS, ...custom], agentsDir);
+  return new AgentRegistry([...BUILTIN_AGENTS, ...custom], agentsDir, undefined, undefined, sandbox);
 }

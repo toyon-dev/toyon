@@ -114,7 +114,7 @@ export interface ToolRowText {
 
 export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   const command = field(call, "command");
-  const v = field(call, "file_path") || command || field(call, "path") || field(call, "pattern");
+  const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern");
   const raw = v || (call.title && call.title !== call.name ? call.title : "");
   // Claude's Bash tool sends a sentence of its own ("Build the project"); it beats the command as
   // the row's label, and the command still shows inside
@@ -153,7 +153,12 @@ export function toolBlocks(call: ToolCall, output: string): OutputBlock[] {
 /** the file the call names, where it names one. Unlike the row's hint this stays absolute and keeps
  * its extension, which is what says the language a diff under it is written in. */
 export function callPath(call: ToolCall): string {
-  return field(call, "file_path") || field(call, "path");
+  return filePathOf(call) || field(call, "path");
+}
+
+/** the file an edit or a read names: Claude says file_path, OpenCode filepath */
+function filePathOf(call: ToolCall): string {
+  return field(call, "file_path") || field(call, "filepath") || field(call, "filePath");
 }
 
 /** the worktree path is the same forty characters on every row and the part that identifies the

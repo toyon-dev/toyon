@@ -29,7 +29,10 @@ export function requestedPaths(req: RequestPermissionRequest): string[] {
   const input = req.toolCall.rawInput;
   if (input && typeof input === "object") {
     const rec = input as Record<string, unknown>;
-    for (const k of ["file_path", "notebook_path", "path"]) if (typeof rec[k] === "string") raw.push(rec[k] as string);
+    // Claude says file_path, OpenCode filepath
+    for (const k of ["file_path", "filepath", "filePath", "notebook_path", "path"]) {
+      if (typeof rec[k] === "string") raw.push(rec[k] as string);
+    }
     if (Array.isArray(rec.paths)) for (const p of rec.paths) if (typeof p === "string") raw.push(p);
   }
   return [...new Set(raw)];

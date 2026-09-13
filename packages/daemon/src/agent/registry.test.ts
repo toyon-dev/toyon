@@ -18,6 +18,13 @@ function fakeInstaller(fail = new Set<string>()): { installer: Installer; calls:
     calls.push(`${pkg}@${version}`);
     if (fail.has(pkg)) return { ok: false, err: "registry unreachable" };
     const pkgDir = join(dir, "node_modules", pkg);
+    // a native build: the binary at its bin path, no JS entry
+    if (pkg.startsWith("opencode-")) {
+      mkdirSync(join(pkgDir, "bin"), { recursive: true });
+      writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ version }));
+      writeFileSync(join(pkgDir, "bin", "opencode"), "");
+      return { ok: true, err: "" };
+    }
     mkdirSync(join(pkgDir, "dist"), { recursive: true });
     writeFileSync(
       join(pkgDir, "package.json"),
@@ -50,12 +57,13 @@ describe("agent registry", () => {
     expect(reg.infos().map((i) => [i.id, i.available, i.reason])).toEqual([
       ["claude", false, "not installed yet"],
       ["codex", false, "not installed yet"],
+      ["opencode", false, "not installed"],
     ]);
     expect(() => reg.require("claude")).toThrow(/not ready/);
     await reg.installMissing();
     expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.75.1", "@agentclientprotocol/codex-acp@1.10.0"]);
-    expect(changes[0]).toEqual(["claude:installing", "codex:not installed yet"]);
-    expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok"]);
+    expect(changes[0]).toEqual(["claude:installing", "codex:not installed yet", "opencode:not installed"]);
+    expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok", "opencode:not installed"]);
     const l = reg.launch(reg.require("claude"), prepared);
     expect(l.command).toBe(process.execPath);
     expect(l.env).toEqual({ FROM_SETUP: "1" });
@@ -64,6 +72,40 @@ describe("agent registry", () => {
     // already at the pinned version: nothing to do
     await reg.installMissing();
     expect(calls).toHaveLength(2);
+  });
+
+  test("OpenCode waits to be asked for, then installs as this machine's native build and runs as that binary", async () => {
+    const { installer, calls } = fakeInstaller();
+    const host = { platform: "linux" as const, arch: "x64", musl: true, avx2: false };
+    const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), installer, host);
+    await reg.installMissing();
+    expect(calls.some((c) => c.startsWith("opencode"))).toBe(false);
+    expect(reg.infos().find((i) => i.id === "opencode")).toMatchObject({
+      available: false,
+      reason: "not installed",
+      onDemand: true,
+      sandboxed: true,
+    });
+    await reg.install("opencode");
+    expect(calls.at(-1)).toBe("opencode-linux-x64-baseline-musl@1.18.30");
+    const spec = reg.require("opencode");
+    expect(reg.command(spec)).toEqual({
+      command: expect.stringMatching(/opencode-linux-x64-baseline-musl\/bin\/opencode$/),
+      args: ["acp"],
+    });
+    // already at the pinned version: asking again installs nothing
+    await reg.install("opencode");
+    expect(calls.filter((c) => c.startsWith("opencode"))).toHaveLength(1);
+  });
+
+  test("a native agent with no build for this machine says so instead of offering an install", () => {
+    const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), fakeInstaller().installer, {
+      platform: "freebsd",
+      arch: "x64",
+      musl: false,
+      avx2: true,
+    });
+    expect(reg.infos().find((i) => i.id === "opencode")?.reason).toBe("no build for freebsd x64");
   });
 
   test("a failed install is remembered as the reason and can be retried; concurrent installs share one run", async () => {

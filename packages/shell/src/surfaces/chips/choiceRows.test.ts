@@ -145,7 +145,8 @@ describe("agentModelRows", () => {
     ];
     const { rows } = agentModelRows(agents, "claude", "");
     expect(rows.slice(2)).toEqual([
-      { id: "codex ", label: "Codex", description: "not installed: installing", disabled: true },
+      // the reason reads as it is: "installing", "not installed", or why an install failed
+      { id: "codex ", label: "Codex", description: "installing", disabled: true },
       {
         id: "mine ",
         label: "Mine",

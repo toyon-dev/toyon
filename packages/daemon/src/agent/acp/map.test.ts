@@ -109,6 +109,31 @@ describe("mapUpdate", () => {
     ]);
   });
 
+  test("a command reported completed that exited non-zero is an error (OpenCode marks every call completed)", () => {
+    expect(
+      run([
+        {
+          sessionUpdate: "tool_call",
+          toolCallId: "c5",
+          title: "touch /x",
+          kind: "execute",
+          status: "completed",
+          rawOutput: { output: "touch: /x: Operation not permitted", metadata: { exit: 1 } },
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "tool-start",
+        toolId: "c5",
+        name: "touch /x",
+        input: { locations: [] },
+        kind: "execute",
+        title: "touch /x",
+      },
+      { type: "tool-end", toolId: "c5", output: "touch: /x: Operation not permitted", isError: true },
+    ]);
+  });
+
   test("model config updates surface as session-info; everything else is ignored", () => {
     expect(
       run([

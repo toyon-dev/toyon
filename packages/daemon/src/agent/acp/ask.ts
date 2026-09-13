@@ -6,8 +6,9 @@ import * as acp from "@agentclientprotocol/sdk";
 import { fireAndForget, log } from "../../core/log.ts";
 import type { Quick } from "../adapter.ts";
 import { agentModeFor } from "../modes.ts";
+import { quickModelFor } from "../quick.ts";
 import type { AgentSpec } from "../registry.ts";
-import { readOptions } from "./options.ts";
+import { readModeOption, readOptions } from "./options.ts";
 
 export interface Ask {
   cwd: string;
@@ -40,8 +41,8 @@ export async function askOnce(ctx: acp.ClientContext, a: Ask): Promise<string | 
   try {
     if (a.quick) {
       const model = readOptions(s.configOptions).get("model");
-      const quick = a.spec.quickModel;
-      if (quick && model?.ids.includes(quick)) {
+      const quick = model && quickModelFor(a.spec, model.ids, model.current);
+      if (model && quick) {
         // before the mode: Claude reconciles its permission mode against the model it is moved to
         if (model.current !== quick) {
           await ctx.request(acp.methods.agent.session.setConfigOption, {
@@ -63,6 +64,17 @@ export async function askOnce(ctx: acp.ClientContext, a: Ask): Promise<string | 
       );
       if (readOnly && s.modes.currentModeId !== readOnly) {
         await ctx.request(acp.methods.agent.session.setMode, { sessionId: s.sessionId, modeId: readOnly });
+      }
+    } else {
+      // an agent that offers its modes as a config option is put in its read-only one the same way
+      const modes = readModeOption(s.configOptions);
+      const readOnly = modes && agentModeFor(a.spec, "plan", modes.ids);
+      if (modes && readOnly && modes.current !== readOnly) {
+        await ctx.request(acp.methods.agent.session.setConfigOption, {
+          sessionId: s.sessionId,
+          configId: modes.id,
+          value: readOnly,
+        });
       }
     }
     const body = meta ? a.prompt : `${a.system}\n\n${a.prompt}`;

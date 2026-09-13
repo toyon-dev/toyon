@@ -36,7 +36,7 @@ import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
 import { parseForm, toContent } from "./elicit.ts";
 import { endOfAsk, mapCommands, mapStopReason, mapUpdate, type ToolMemos } from "./map.ts";
-import { currentValues, type LiveOptions, type OptionCategory, readOptions } from "./options.ts";
+import { currentValues, type LiveOptions, type OptionCategory, readModeOption, readOptions } from "./options.ts";
 import { STEER_METHOD, type SteerOutcome, steerOutcome, supportsSteering } from "./steering.ts";
 import type { AcpLink } from "./transport.ts";
 
@@ -118,6 +118,9 @@ interface Live {
   modeIds: string[] | null;
   /** the agent's current mode as last told to us (set_mode, or its own current_mode_update) */
   modeId: string | null;
+  /** the config option the modes live in, for an agent that offers them as one (OpenCode's `mode`)
+   * rather than as ACP's `modes`; null when they are ACP modes or absent */
+  modeConfigId: string | null;
   /** the select options toyon drives (model, effort), those the agent has, each with its
    * choices and the current value as last told to us */
   options: LiveOptions;
@@ -471,9 +474,16 @@ export class AcpSession implements AgentAdapter {
     const conn = await this.ensureConn();
     const method = conn.authMethods.find((m) => m.id === methodId);
     if (!method) throw new UserError(`${conn.spec.name} offers no login method "${methodId}"`);
-    if ("type" in method && method.type === "terminal") {
+    const login = terminalLogin(method);
+    if (login) {
       const l = this.d.launch(conn.spec);
-      return { kind: "terminal", line: [l.command, ...l.args, ...(method.args ?? [])].map(shellQuote).join(" ") };
+      // ACP's terminal method adds arguments to the adapter's own command line. A terminal-auth
+      // `_meta` names a command of its own (OpenCode's `opencode auth login`), which is the agent
+      // binary this toyon installed, without the arguments that start it as an adapter.
+      const base = login.own
+        ? [l.command, ...l.args.slice(0, l.args.length - (conn.spec.run.args?.length ?? 0))]
+        : [l.command, ...l.args];
+      return { kind: "terminal", line: [...base, ...login.args].map(shellQuote).join(" ") };
     }
     try {
       await conn.ctx.request(acp.methods.agent.authenticate, {
@@ -610,6 +620,9 @@ export class AcpSession implements AgentAdapter {
           // drops AskUserQuestion from the model's tool list entirely without it. `url` stays
           // unadvertised: it is for sending someone to a browser mid-turn, which toyon cannot do.
           elicitation: { form: {} },
+          // an agent offers its terminal login only to a client that says it can run one; toyon's
+          // terminal pane can (OpenCode's `opencode auth login`)
+          _meta: { "terminal-auth": true },
         },
         clientInfo: { name: "toyon", version: "0" },
       });
@@ -678,13 +691,15 @@ export class AcpSession implements AgentAdapter {
     const options = readOptions(configOptions);
     this.emit({ type: "session-info", sessionId: sessionId!, ...currentValues(options) });
     this.learn(options);
+    const modeOption = modes ? null : readModeOption(configOptions);
     this.live = {
       conn,
       sessionId: sessionId!,
       prefixPending: !resumed && conn.spec.systemPrompt === "prompt-prefix",
       tools: new Map(),
-      modeIds: modes ? modes.availableModes.map((m) => m.id) : null,
-      modeId: modes?.currentModeId ?? null,
+      modeIds: modes ? modes.availableModes.map((m) => m.id) : (modeOption?.ids ?? null),
+      modeId: modes?.currentModeId ?? modeOption?.current ?? null,
+      modeConfigId: modeOption?.id ?? null,
       options,
     };
     // the worktree's mode, model and effort, applied now so a resumed session does not answer its
@@ -712,7 +727,16 @@ export class AcpSession implements AgentAdapter {
     if (!live.modeIds) return;
     const wanted = agentModeFor(live.conn.spec, this.mode(), live.modeIds);
     if (!wanted || wanted === live.modeId) return;
-    await live.conn.ctx.request(acp.methods.agent.session.setMode, { sessionId: live.sessionId, modeId: wanted });
+    if (live.modeConfigId) {
+      const r = await live.conn.ctx.request(acp.methods.agent.session.setConfigOption, {
+        sessionId: live.sessionId,
+        configId: live.modeConfigId,
+        value: wanted,
+      });
+      this.absorb(live, r.configOptions);
+    } else {
+      await live.conn.ctx.request(acp.methods.agent.session.setMode, { sessionId: live.sessionId, modeId: wanted });
+    }
     live.modeId = wanted;
   }
 
@@ -743,6 +767,12 @@ export class AcpSession implements AgentAdapter {
   private absorb(live: Live, configOptions: acp.SessionConfigOption[] | null | undefined) {
     live.options = readOptions(configOptions);
     this.learn(live.options);
+    // the agent's mode rides in the same list when it offers modes as an option
+    const modes = live.modeConfigId ? readModeOption(configOptions) : null;
+    if (modes) {
+      live.modeIds = modes.ids;
+      live.modeId = modes.current;
+    }
   }
 
   private learn(options: LiveOptions) {
@@ -1017,8 +1047,18 @@ export function permissionDetail(params: acp.RequestPermissionRequest): string {
 const REJECTED_CREDENTIAL_RE =
   /\b401\b|unauthorized|invalid[\s_-]?api[\s_-]?key|authentication[\s_-]?(error|failed)|api key (is )?(invalid|expired|incorrect)|incorrect api key|(token|credential)s? (have |has )?expired|expired (token|credential)|not (logged in|authenticated)/i;
 
+/** a login method that runs in a terminal: ACP's terminal type, whose args follow the adapter's own
+ * command, or a terminal-auth `_meta`, whose args follow the agent binary alone */
+function terminalLogin(m: acp.AuthMethod): { own: boolean; args: string[] } | null {
+  if ("type" in m && m.type === "terminal") return { own: false, args: m.args ?? [] };
+  const meta = (m._meta as Record<string, unknown> | null | undefined)?.["terminal-auth"];
+  if (!meta || typeof meta !== "object") return null;
+  const args = (meta as { args?: unknown }).args;
+  return { own: true, args: Array.isArray(args) ? args.filter((a): a is string => typeof a === "string") : [] };
+}
+
 function authMethodInfo(m: acp.AuthMethod): AuthMethodInfo {
-  const terminal = "type" in m && m.type === "terminal";
+  const terminal = terminalLogin(m) !== null;
   return {
     id: m.id,
     name: m.name,

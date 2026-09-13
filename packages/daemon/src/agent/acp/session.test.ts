@@ -93,6 +93,10 @@ function fakeAgent(
     effort?: { id?: string; for: string[] };
     /** advertise session/close and session/delete */
     caps?: { close?: boolean; delete?: boolean };
+    /** offer build and plan as a `mode` config option, starting on this one: OpenCode's shape */
+    modeOption?: string;
+    /** offer a login through a terminal-auth `_meta`, as OpenCode does */
+    authMeta?: boolean;
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
@@ -116,7 +120,23 @@ function fakeAgent(
     app: null!,
   };
   let n = 0;
+  let agentMode = opts.modeOption;
   const configOptions = (): acp.SessionConfigOption[] => [
+    ...(agentMode
+      ? [
+          {
+            id: "mode",
+            name: "Mode",
+            category: "mode",
+            type: "select" as const,
+            currentValue: agentMode,
+            options: [
+              { value: "build", name: "build" },
+              { value: "plan", name: "plan" },
+            ],
+          },
+        ]
+      : []),
     {
       id: "model",
       name: "m",
@@ -174,6 +194,15 @@ function fakeAgent(
           { id: "api-key", name: "API Key" },
           { id: "chat-gpt", name: "ChatGPT", description: "browser" },
           { id: "claude-login", name: "Claude login", type: "terminal", args: ["--cli", "auth", "login"] },
+          ...(opts.authMeta
+            ? [
+                {
+                  id: "opencode-login",
+                  name: "Login with opencode",
+                  _meta: { "terminal-auth": { command: "opencode", args: ["auth", "login"], label: "OpenCode Login" } },
+                },
+              ]
+            : []),
         ],
         ...(opts.steering ? { _meta: { steering: { supported: true } } } : {}),
       };
@@ -218,6 +247,7 @@ function fakeAgent(
       f.configs.push(`${c.params.configId}=${String(c.params.value)}`);
       f.calls.push(`config ${c.params.configId}=${String(c.params.value)}`);
       if (c.params.configId === "model") f.model = String(c.params.value);
+      else if (c.params.configId === "mode") agentMode = String(c.params.value);
       else f.effort = String(c.params.value);
       // the reply is the whole list, rebuilt: a model without effort takes that option away
       return { configOptions: configOptions() };
@@ -829,6 +859,25 @@ describe("AcpSession", () => {
     expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
     expect(w.links).toHaveLength(1);
     await expect(w.session.authenticate("nope")).rejects.toThrow(/no login method/);
+    await w.session.close();
+  });
+
+  test("a terminal-auth _meta login runs the agent's binary with its own args, not the adapter's command line", async () => {
+    const fake = fakeAgent(
+      async () => {
+        throw acp.RequestError.authRequired();
+      },
+      { authMeta: true },
+    );
+    // the adapter starts as `/bin/agent run.js`, the world's stubbed launch; run.js is what makes it an adapter
+    const w = world(fake, { ...codexSpec, run: { kind: "command", command: "/bin/agent", args: ["run.js"] } });
+    w.session.send("a");
+    await w.idle();
+    // the login is only offered to a client that says it can run one
+    expect(fake.inits[0]?.clientCapabilities?._meta).toEqual({ "terminal-auth": true });
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
+    expect(card.methods).toContainEqual({ id: "opencode-login", name: "Login with opencode", kind: "terminal" });
+    expect(await w.session.authenticate("opencode-login")).toEqual({ kind: "terminal", line: "/bin/agent auth login" });
     await w.session.close();
   });
 
@@ -1574,6 +1623,26 @@ describe("AcpSession permission modes", () => {
     w.session.send("two");
     await w.idle();
     expect(fake.modes).toEqual(["agent"]);
+    await w.session.close();
+  });
+
+  test("an agent that offers its modes as a config option is switched through set_config_option", async () => {
+    let mode: "auto" | "ask" | "plan" = "plan";
+    const fake = fakeAgent(say("ok"), { modeOption: "build" });
+    const spec: AgentSpec = { ...codexSpec, id: "opencode", modes: { plan: "plan", build: "build" } };
+    const w = world(fake, spec, 60_000, undefined, { mode: () => mode });
+    w.session.send("plan it");
+    await w.idle();
+    expect(fake.configs).toEqual(["mode=plan"]);
+    expect(fake.modes).toEqual([]);
+    // already there: a second turn in plan sets nothing
+    w.session.send("still planning");
+    await w.idle();
+    expect(fake.configs).toEqual(["mode=plan"]);
+    mode = "auto";
+    w.session.send("build it");
+    await w.idle();
+    expect(fake.configs).toEqual(["mode=plan", "mode=build"]);
     await w.session.close();
   });
 });

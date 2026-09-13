@@ -58,6 +58,14 @@ describe("policy.decide", () => {
     );
   });
 
+  test("OpenCode's rawInput.filepath is a path like any other: inside allowed, outside refused", () => {
+    expect(decide(req({ kind: "edit", title: "a.txt", rawInput: { filepath: "a.txt" } }), bounds, wt).kind).toBe(
+      "allow",
+    );
+    const outside = req({ kind: "edit", title: "z", rawInput: { filepath: join(root, "outside/z") } });
+    expect(decide(outside, bounds, wt).kind).toBe("reject");
+  });
+
   test("outside the worktree is rejected with a reason naming Toyon, not the person", () => {
     const v = decide(
       req({ kind: "edit", name: "Write", rawInput: { file_path: join(root, "outside/z") } }),

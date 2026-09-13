@@ -3,55 +3,70 @@ import type { OwnedWorktree, RepoInfo, Theme } from "@toyon/shared";
 import { buildCommands, type Command, type CommandState, commandHits, filterCommands } from "./commands.ts";
 
 describe("buildCommands", () => {
-  // the rows are keyed by id, so an id twice leaves a stale row behind when the list changes
-  test("gives every command its own id, though the app and a worktree both have a terminal", () => {
-    const repo = { id: "r", path: "/r", name: "r", defaultBranch: "main", config: {}, needsSetup: false } as RepoInfo;
-    const wt = {
+  const repo = { id: "r", path: "/r", name: "r", defaultBranch: "main", config: {}, needsSetup: false } as RepoInfo;
+  const wt = {
+    id: "w1",
+    repoId: "r",
+    name: "feature",
+    branch: "feature",
+    path: "/r/wt/feature",
+    worktree: {
       id: "w1",
       repoId: "r",
-      name: "feature",
-      branch: "feature",
+      title: "feature",
+      branch: "toyon/feature",
       path: "/r/wt/feature",
-      worktree: {
-        id: "w1",
-        repoId: "r",
-        title: "feature",
-        branch: "toyon/feature",
-        path: "/r/wt/feature",
-        kind: "worktree",
-        proxyPort: 1,
-        createdAt: 0,
-      },
-      procs: [],
-      agent: "idle",
-      dirty: 0,
-      ahead: 0,
-      behind: 0,
-    } as unknown as OwnedWorktree;
-    const state = {
-      picking: null,
-      leftOpen: true,
-      rightOpen: true,
-      railOpen: true,
-      termOpen: false,
-      designOpen: false,
-      themePrefs: { mode: "system", dark: "t", light: "t" },
-      themes: [{ id: "t", name: "Night", kind: "dark" } as Theme],
-      systemDark: true,
-      rows: [wt],
-      visible: [wt],
-      activeId: "w1",
-      activeRepoId: "r",
-      repos: [repo],
-      agents: [],
-      defaultAgent: "claude",
-      prefs: { recaps: "summarize" },
-      shipping: {},
-    } as unknown as CommandState;
+      kind: "worktree",
+      proxyPort: 1,
+      createdAt: 0,
+    },
+    procs: [],
+    agent: "idle",
+    dirty: 0,
+    ahead: 0,
+    behind: 0,
+  } as unknown as OwnedWorktree;
+  const state = {
+    picking: null,
+    leftOpen: true,
+    rightOpen: true,
+    railOpen: true,
+    termOpen: false,
+    designOpen: false,
+    themePrefs: { mode: "system", dark: "t", light: "t" },
+    themes: [{ id: "t", name: "Night", kind: "dark" } as Theme],
+    systemDark: true,
+    rows: [wt],
+    visible: [wt],
+    activeId: "w1",
+    activeRepoId: "r",
+    repos: [repo],
+    agents: [],
+    defaultAgent: "claude",
+    prefs: { recaps: "summarize" },
+    shipping: {},
+  } as unknown as CommandState;
+
+  // the rows are keyed by id, so an id twice leaves a stale row behind when the list changes
+  test("gives every command its own id, though the app and a worktree both have a terminal", () => {
     const ids = buildCommands(state, () => {}, null, wt, repo).map((c) => c.id);
     expect(ids).toContain("terminal");
     expect(ids).toContain("wt:terminal");
     expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+  });
+  // the settings menu shows the theme rows as a group under a rule; the palette has no rules, so
+  // the group is a word in front of each, and typing that word lists them all
+  test("lists the whole theme cluster under its word", () => {
+    const cmds = buildCommands(state, () => {}, null, wt, repo);
+    const hits = filterCommands(cmds, "theme").map((c) => c.label);
+    expect(hits.sort()).toEqual([
+      "theme: dark slot override…",
+      "theme: import a VS Code theme…",
+      "theme: light or dark…",
+      "theme: light slot override…",
+      "theme: rescan editor themes",
+      "theme…",
+    ]);
   });
 });
 

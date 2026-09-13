@@ -13,8 +13,8 @@ import type { AgentSpec } from "./registry.ts";
 export interface OptionProbeDeps {
   infos: () => AgentInfo[];
   require: (id: string) => AgentSpec;
-  /** spawn the adapter for a short-lived connection */
-  connect: (app: acp.ClientApp, spec: AgentSpec) => AcpLink;
+  /** spawn the adapter for a short-lived connection, prepared like any launch */
+  connect: (app: acp.ClientApp, spec: AgentSpec) => Promise<AcpLink>;
   /** where the throwaway session says it works; nothing is prompted, so nothing is written there */
   cwd: string;
   /** a session has listed this agent's models before */
@@ -46,7 +46,7 @@ export class OptionProbe {
     const app = acp.client({ name: "toyon" }).onNotification(acp.methods.client.session.update, () => {});
     let link: AcpLink;
     try {
-      link = this.d.connect(app, this.d.require(agentId));
+      link = await this.d.connect(app, this.d.require(agentId));
     } catch (e) {
       log.warn(tag, "could not start the agent to read its models", e);
       return;

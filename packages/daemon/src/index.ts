@@ -11,6 +11,7 @@ import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
 import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
+import { prepareLaunch } from "./agent/sandbox.ts";
 import { makeLander, makePlanner, makeRecapper } from "./agent/tasks.ts";
 import { locateAssets } from "./core/assets.ts";
 import { folderDialog } from "./core/dialog.ts";
@@ -57,14 +58,21 @@ if (remote && addressedByPort(remote.previews)) pinProxyPorts(PREVIEW_PORTS);
 const state = new StateStore(paths);
 const hub = new Hub();
 const bridge = new BridgeScript(BRIDGE_JS);
-const agents = loadAgentRegistry(paths.home, paths.agentsDir);
+const agents = loadAgentRegistry(paths.agentsFile, paths.agentsDir);
 // A new worktree's picker lists every agent's models, and an agent nobody has run yet has listed
-// none: once it is installed, a throwaway session reads them. The daemon's home is only where it runs.
+// none: once it is installed, a throwaway session reads them. It runs in the daemon's scratch
+// directory, prepared like any other launch, so an agent in toyon's sandbox is confined there too.
 const probe = new OptionProbe({
   infos: () => agents.infos(),
   require: (id) => agents.require(id),
-  connect: (app, spec) => spawnAcp(app, agents.launch(spec), paths.home, `probe:${spec.id}`),
-  cwd: paths.home,
+  connect: async (app, spec) =>
+    spawnAcp(
+      app,
+      agents.launch(spec, await prepareLaunch(paths.scratchDir, spec)),
+      paths.scratchDir,
+      `probe:${spec.id}`,
+    ),
+  cwd: paths.scratchDir,
   known: (id) => state.cachedOptions(id, "model").length > 0,
   learned: (id, category, choices) => {
     if (state.setCachedOptions(id, category, choices)) hub.emit("agentsChanged");
@@ -74,11 +82,17 @@ agents.onChange = () => {
   hub.emit("agentsChanged");
   fireAndForget("agents", probe.missing(), "read agent models");
 };
-// a sign-out spawns the adapter on its own, with no session and no worktree: the daemon's home is
-// only where the process runs, never written to
+// a sign-out spawns the adapter on its own, with no session and no worktree: in the scratch
+// directory, the same as a probe
 const accounts = new AgentAccounts({
   require: (id) => agents.require(id),
-  connect: (app, spec) => spawnAcp(app, agents.launch(spec), paths.home, `auth:${spec.id}`),
+  connect: async (app, spec) =>
+    spawnAcp(
+      app,
+      agents.launch(spec, await prepareLaunch(paths.scratchDir, spec)),
+      paths.scratchDir,
+      `auth:${spec.id}`,
+    ),
 });
 accounts.onChange = () => hub.emit("agentsChanged");
 const attachments = new AttachmentStore(paths.attachmentsDir);

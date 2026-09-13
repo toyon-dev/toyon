@@ -30,7 +30,7 @@ import { agentModeFor, modeAfterPlan } from "../modes.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
 import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
-import { type Bounds, worktreeBounds, writeClaudeLocalSettings } from "../sandbox.ts";
+import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
 import { askOnce } from "./ask.ts";
 import { AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, supportsLogout } from "./authstatus.ts";
@@ -48,9 +48,9 @@ export interface AcpSessionDeps {
   cwd: string;
   /** resolved at spawn time, so a worktree stamped with an agent after creation still gets it */
   spec: () => AgentSpec;
-  /** spawn (or, in tests, connect in-process) the agent for this client app */
-  connect: (app: acp.ClientApp, spec: AgentSpec) => AcpLink;
-  /** the command line that starts the adapter (terminal-type login methods run it with extra args) */
+  /** spawn (or, in tests, connect in-process) the agent for this client app, from its prepared launch */
+  connect: (app: acp.ClientApp, spec: AgentSpec, prepared: Prepared) => AcpLink;
+  /** the adapter's own command line, unconfined (terminal-type login methods run it with extra args) */
   launch: (spec: AgentSpec) => { command: string; args: string[] };
   transcriptsDir: string;
   /** where attached images are written before the prompt carries them */
@@ -67,8 +67,8 @@ export interface AcpSessionDeps {
   onCommandsLearned?: (commands: AgentCommand[]) => void;
   /** how long an idle adapter process lives after its last turn */
   idleMs?: number;
-  /** the worktree's write bounds, and the settings file that makes Claude Code enforce them */
-  prepare?: (cwd: string, spec: AgentSpec) => Promise<Bounds>;
+  /** the worktree's bounds, after the agent's own setup has run (agent/sandbox.ts `prepareLaunch`) */
+  prepare?: (cwd: string, spec: AgentSpec) => Promise<Prepared>;
   /** what the agent may do here without asking; read before every turn and every permission */
   mode?: () => PermissionMode;
   /** a plan approval decided the mode for the work that follows */
@@ -83,13 +83,6 @@ export interface AcpSessionDeps {
 }
 
 const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
-
-async function defaultPrepare(cwd: string, spec: AgentSpec): Promise<Bounds> {
-  const bounds = await worktreeBounds(cwd);
-  if (spec.confinement === "claude-settings") await writeClaudeLocalSettings(cwd, bounds);
-  else if (spec.confinement === "none") log.warn(cwd, `agent ${spec.id} runs without an OS sandbox`);
-  return bounds;
-}
 
 /** the adapter process, initialized: enough to log in and to ask side questions */
 interface Conn {
@@ -582,19 +575,21 @@ export class AcpSession implements AgentAdapter {
 
   private async openConn(): Promise<Conn> {
     const spec = this.d.spec();
-    const bounds = await (this.d.prepare ?? defaultPrepare)(this.d.cwd, spec);
+    const prepared = await (this.d.prepare ?? prepareLaunch)(this.d.cwd, spec);
+    const { bounds } = prepared;
+    const sandboxed = spec.confinement !== "none";
     const side = new Map<string, (text: string) => void>();
     const commands = new Map<string, AgentCommand[]>();
     const app = acp
       .client({ name: "toyon" })
-      .onRequest(acp.methods.client.session.requestPermission, (c) => this.onPermission(c.params, bounds))
+      .onRequest(acp.methods.client.session.requestPermission, (c) => this.onPermission(c.params, bounds, sandboxed))
       .onRequest(acp.methods.client.elicitation.create, (c) => this.onElicit(c.params, c.signal))
       .onNotification(acp.methods.client.session.update, (c) => this.onUpdate(c.params, side, commands))
       // the agent pushes its identity unasked, here and whenever it changes; settings shows the last one
       .onNotification(AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, (c) => {
         if (c.params) this.d.onAuth?.(spec.id, { status: c.params });
       });
-    const link = this.d.connect(app, spec);
+    const link = this.d.connect(app, spec, prepared);
     const ctx = link.conn.agent;
     // the process dying while idle must not leave a dead handle for the next prompt to use
     link.exited.then(() => {
@@ -797,10 +792,14 @@ export class AcpSession implements AgentAdapter {
     }
   }
 
-  private onPermission(params: acp.RequestPermissionRequest, bounds: Bounds): Promise<acp.RequestPermissionResponse> {
+  private onPermission(
+    params: acp.RequestPermissionRequest,
+    bounds: Bounds,
+    sandboxed: boolean,
+  ): Promise<acp.RequestPermissionResponse> {
     // taken now: a card the process took down with it settles after `live` is already gone
     const tools = this.live?.tools;
-    return Promise.resolve(this.answerPermission(params, bounds)).then((res) => {
+    return Promise.resolve(this.answerPermission(params, bounds, sandboxed)).then((res) => {
       const end = tools && endOfAsk(params, res, tools);
       if (end) this.emit(end);
       return res;
@@ -810,12 +809,13 @@ export class AcpSession implements AgentAdapter {
   private answerPermission(
     params: acp.RequestPermissionRequest,
     bounds: Bounds,
+    sandboxed: boolean,
   ): acp.RequestPermissionResponse | Promise<acp.RequestPermissionResponse> {
     // a side session shares this connection but has no chat: its requests are never a card or a
     // blocked row in the worktree's transcript, the same way its elicitations are declined
     const live = this.live;
     if (!live || params.sessionId !== live.sessionId) return decideUnattended(params, bounds, this.d.cwd);
-    const verdict = decide(params, bounds, this.d.cwd, this.mode());
+    const verdict = decide(params, bounds, this.d.cwd, this.mode(), sandboxed);
     if (verdict.kind === "prompt") return this.askPermission(params);
     if (verdict.kind === "reject") {
       this.emit({

@@ -1,9 +1,15 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { UserError } from "../core/errors.ts";
-import { AgentRegistry, BUILTIN_AGENTS, type Installer, parseCustomAgents } from "./registry.ts";
+import { AgentRegistry, type AgentSpec, BUILTIN_AGENTS, type Installer, parseCustomAgents } from "./registry.ts";
+import type { Prepared } from "./sandbox.ts";
+
+const prepared: Prepared = {
+  bounds: { root: "/w", allowWrite: ["/w"], denyWrite: [], denyRead: [], gitDir: null },
+  env: { FROM_SETUP: "1" },
+};
 
 /** an installer that "downloads" by writing the package's bin into place; a rejected pkg fails */
 function fakeInstaller(fail = new Set<string>()): { installer: Installer; calls: string[] } {
@@ -50,8 +56,9 @@ describe("agent registry", () => {
     expect(calls).toEqual(["@agentclientprotocol/claude-agent-acp@0.75.1", "@agentclientprotocol/codex-acp@1.10.0"]);
     expect(changes[0]).toEqual(["claude:installing", "codex:not installed yet"]);
     expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok"]);
-    const l = reg.launch(reg.require("claude"));
+    const l = reg.launch(reg.require("claude"), prepared);
     expect(l.command).toBe(process.execPath);
+    expect(l.env).toEqual({ FROM_SETUP: "1" });
     expect(l.args[0]).toMatch(/claude-agent-acp\/dist\/index\.js$/);
     expect(JSON.parse(readFileSync(join(l.args[0]!, "../../package.json"), "utf8")).version).toBe("0.75.1");
     // already at the pinned version: nothing to do
@@ -111,10 +118,14 @@ describe("agent registry", () => {
         nocmd: { name: "no command" },
         badargs: { command: "x", args: "nope" },
         badconf: { command: "x", confinement: "claude-settings" },
+        unknownconf: { command: "x", confinement: "jail" },
+        boxed: { command: "x", confinement: "toyon-sandbox" },
         claude: { command: "my-claude-acp", confinement: "adapter-sandbox", mode: "agent" },
       }),
     );
-    expect(specs.map((s) => s.id)).toEqual(["gemini", "claude"]);
+    expect(specs.map((s) => s.id)).toEqual(["gemini", "boxed", "claude"]);
+    expect(specs[1]).toMatchObject({ confinement: "toyon-sandbox" });
+    specs.splice(1, 1);
     expect(specs[0]).toMatchObject({
       name: "Gemini CLI",
       run: { kind: "command", command: "gemini", args: ["--experimental-acp"] },
@@ -128,5 +139,30 @@ describe("agent registry", () => {
     expect(reg.get("claude")?.builtin).toBe(false);
     expect(parseCustomAgents("not json")).toEqual([]);
     expect(parseCustomAgents("[]")).toEqual([]);
+  });
+
+  test("an agent in toyon's sandbox launches inside it; its own command line stays unwrapped for a login", () => {
+    const boxed: AgentSpec = {
+      id: "boxed",
+      name: "Boxed",
+      builtin: false,
+      run: { kind: "command", command: "sh", args: ["-c", "true"] },
+      confinement: "toyon-sandbox",
+      stateDirs: [".local/share/boxed"],
+      systemPrompt: "prompt-prefix",
+      loginHint: "",
+    };
+    const reg = new AgentRegistry([boxed], tmp());
+    expect(reg.command(boxed)).toEqual({ command: "sh", args: ["-c", "true"] });
+    const launch = () => reg.launch(boxed, prepared);
+    if (process.platform === "linux" && !Bun.which("bwrap")) {
+      expect(launch).toThrow(UserError);
+      return;
+    }
+    const l = launch();
+    expect(l.command).not.toBe("sh");
+    expect(l.args.slice(-3)).toEqual(["sh", "-c", "true"]);
+    expect(l.env).toEqual({ FROM_SETUP: "1" });
+    if (process.platform === "darwin") expect(l.args[1]).toContain(join(homedir(), ".local/share/boxed"));
   });
 });

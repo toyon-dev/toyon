@@ -13,10 +13,12 @@ mkdirSync(join(root, "outside"));
 symlinkSync(join(root, "outside"), join(wt, "escape"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
+const secret = join(root, "home", "token");
 const bounds: Bounds = {
   root: wt,
   allowWrite: [wt, "/tmp", "/private/tmp"],
-  denyWrite: [join(wt, ".claude")],
+  denyWrite: [join(wt, ".claude"), secret],
+  denyRead: [secret],
   gitDir: null,
 };
 
@@ -107,6 +109,22 @@ describe("policy.decide", () => {
     const outside = req({ kind: "edit", title: "Edit", locations: [{ path: "/etc/hosts" }] });
     expect(decide(outside, bounds, wt, "ask").kind).toBe("reject");
     expect(decide(req({ kind: "switch_mode", title: "Approve Plan" }), bounds, wt, "auto").kind).toBe("prompt");
+  });
+
+  test("toyon's secrets are refused to every tool, a read included, with a reason that says why", () => {
+    for (const kind of ["read", "edit"] as const) {
+      const v = decide(req({ kind, name: "Read", locations: [{ path: secret }] }), bounds, wt);
+      expect(v.kind).toBe("reject");
+      if (v.kind === "reject") expect(v.reason).toContain("credentials");
+    }
+  });
+
+  test("an agent with no OS sandbox has each command put to a person, even in auto; its edits are unchanged", () => {
+    const run = req({ kind: "execute", title: "bun test", rawInput: { command: "bun test" } });
+    expect(decide(run, bounds, wt, "auto", false).kind).toBe("prompt");
+    expect(decide(run, bounds, wt, "auto", true).kind).toBe("allow");
+    const edit = req({ kind: "edit", title: "Edit", locations: [{ path: join(wt, "src", "a.ts") }] });
+    expect(decide(edit, bounds, wt, "auto", false).kind).toBe("allow");
   });
 
   test("requestedPaths merges locations and raw input keys without duplicates", () => {

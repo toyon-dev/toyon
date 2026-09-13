@@ -26,7 +26,7 @@ function fakeAdapter(opts: { logout?: boolean; pushOnInit?: AuthStatus; pushOnLo
       if (opts.pushOnLogout) await c.client.notify(AUTH_STATUS_UPDATE_METHOD, { authStatus: opts.pushOnLogout });
       return {};
     });
-  const connect: AgentAccountsDeps["connect"] = (clientApp) => {
+  const connect: AgentAccountsDeps["connect"] = async (clientApp) => {
     seen.connects++;
     const conn = clientApp.connect(app);
     return {

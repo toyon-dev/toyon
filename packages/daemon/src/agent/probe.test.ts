@@ -43,7 +43,7 @@ function fakeAdapter(opts: { failNew?: boolean } = {}) {
       seen.prompts++;
       return { stopReason: "end_turn" as const };
     });
-  const connect: OptionProbeDeps["connect"] = (clientApp) => {
+  const connect: OptionProbeDeps["connect"] = async (clientApp) => {
     const conn = clientApp.connect(app);
     return {
       conn,

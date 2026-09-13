@@ -224,6 +224,12 @@
     color: var(--text2);
     font-style: italic;
   }
+  /* the seconds of silence after the word: a number that ticks holds its width, so the stop button
+   beside it does not step when 9 becomes 10 */
+  .working-quiet {
+    margin-left: 6px;
+    font-variant-numeric: tabular-nums;
+  }
 
   /* a collapsed row is a line of the transcript, not a card: no fill and no border, so twenty calls in
    a turn read as text to skip over. It spans the log's full width and its box meets its neighbours'

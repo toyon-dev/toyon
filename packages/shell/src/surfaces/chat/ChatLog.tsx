@@ -12,6 +12,29 @@ import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { groupTools, openRow, railSlots } from "./group.ts";
 import { isBlank } from "./recall.ts";
 
+/** seconds of silence before the working line starts counting */
+const QUIET_AFTER = 3;
+
+/** Whole seconds since `items` last changed, ticking once a second while `busy`; 0 otherwise.
+ * The stamp is taken in an effect keyed on `items`, so the render that lands a result still shows
+ * the old count for up to a second; it forces a re-render only when a count was showing, so a
+ * healthy turn streaming tokens pays nothing for this. */
+function useQuietSeconds(items: unknown, busy: boolean): number {
+  const since = useRef(Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useOnChange([items], () => {
+    const wasShowing = (now - since.current) / 1000 >= QUIET_AFTER;
+    since.current = Date.now();
+    if (wasShowing) setNow(since.current);
+  });
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
+  return busy ? Math.floor((now - since.current) / 1000) : 0;
+}
+
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill */
 export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   const dispatch = useDispatch();
@@ -124,10 +147,12 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   const newestShell = entries.findLastIndex((e) => "tools" in e && e.tools[0]?.name === SHELL_TOOL);
   // a `!` command still going: its row spins, and this is where the stop for it lives
   const shellRunning = items.some((i) => i.kind === "tool" && i.name === SHELL_TOOL && !i.done);
-  // The transcript shines one thing at a time, and between two calls there is no row to shine: the
-  // results are in, nothing is in flight, and the agent is deciding what to do next. That gap is
-  // most of a turn and it read as a stall, so the word takes the mark whenever no row holds it.
-  const deciding = working && streaming < 0 && !items.some((i) => i.kind === "tool" && !i.done);
+  // How long the log has been silent, in whole seconds. Between two calls nothing is in flight and
+  // no row is live, and that gap is most of a turn; a mark that moves would say "busy" the same way
+  // whether the agent is thinking or wedged, and this is the one signal that changes with the
+  // difference: nothing while results keep landing, a number climbing when they stop. It measures
+  // silence rather than the turn, so a running call counts too: a hung command is silence.
+  const quiet = useQuietSeconds(items, busy);
   // The rows under the transcript land a frame after the message that caused them: the agent goes
   // busy after the send is in the log, a queued message after the daemon takes it. They add height
   // without touching `items`, so the send they follow scrolls out from under them.
@@ -170,7 +195,12 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
             {active.agent === "waiting" ? (
               "waiting for your answer…"
             ) : (
-              <span className={deciding ? "live-text" : undefined}>working…</span>
+              <span>
+                working…
+                {/* under the threshold a healthy turn would flick the number on and off with
+                    every result; past it, the silence is the news */}
+                {quiet >= QUIET_AFTER && <span className="working-quiet">{quiet}s</span>}
+              </span>
             )}
             <Button
               variant="outline"

@@ -5,7 +5,13 @@ import { existsSync, statSync } from "node:fs";
 import { WS_CLOSE_UNAUTHORIZED } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { alive, base, health, home, logFile, port, readPid, readToken, tokenFile } from "./daemon.ts";
-import { missingSandboxTools, sandboxAdvice } from "./sandboxDeps.ts";
+import {
+  bwrapBlockedAdvice,
+  bwrapStartError,
+  missingSandboxTools,
+  sandboxAdvice,
+  userNamespacesRestricted,
+} from "./sandboxDeps.ts";
 
 type Line = { ok: boolean; label: string; detail: string };
 
@@ -56,10 +62,13 @@ export async function doctor(): Promise<number> {
 
   if (process.platform === "linux") {
     const missing = missingSandboxTools();
+    const blocked = missing.length === 0 ? bwrapStartError() : null;
     lines.push(
-      missing.length === 0
-        ? line(true, "sandbox", "bubblewrap and socat found; Claude Code's sandbox can run")
-        : line(false, "sandbox", sandboxAdvice(missing)),
+      missing.length > 0
+        ? line(false, "sandbox", sandboxAdvice(missing))
+        : blocked
+          ? line(false, "sandbox", bwrapBlockedAdvice(blocked, userNamespacesRestricted()))
+          : line(true, "sandbox", "bubblewrap and socat found, and bubblewrap starts a sandbox"),
     );
   }
 

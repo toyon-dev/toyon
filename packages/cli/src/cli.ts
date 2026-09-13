@@ -14,7 +14,13 @@ import { deploy } from "./deploy/fly.ts";
 import { doctor } from "./doctor.ts";
 import { logs } from "./logs.ts";
 import { remote } from "./remote.ts";
-import { missingSandboxTools, sandboxAdvice } from "./sandboxDeps.ts";
+import {
+  bwrapBlockedAdvice,
+  bwrapStartError,
+  missingSandboxTools,
+  sandboxAdvice,
+  userNamespacesRestricted,
+} from "./sandboxDeps.ts";
 import { stop } from "./stop.ts";
 import { uninstall } from "./uninstall.ts";
 
@@ -33,10 +39,13 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   const target = resolve(cmd.path ?? process.cwd());
   const register = explicit || existsSync(join(target, ".git"));
 
-  // Claude Code's sandbox needs bubblewrap and socat on Linux, which a plain install often lacks
+  // agent sandboxes on Linux need bubblewrap and socat, which a plain install often lacks, and
+  // Ubuntu 24.04 and later stop an installed bubblewrap starting until AppArmor allows it
   if (process.platform === "linux") {
     const missing = missingSandboxTools();
+    const blocked = missing.length === 0 ? bwrapStartError() : null;
     if (missing.length > 0) console.log(sandboxAdvice(missing));
+    else if (blocked) console.log(bwrapBlockedAdvice(blocked, userNamespacesRestricted()));
   }
 
   if (!(await health())) {

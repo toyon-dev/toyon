@@ -1,7 +1,9 @@
-// Claude Code's Bash sandbox on Linux is bubblewrap plus socat, and the adapter refuses to run a
-// turn without them (turning the sandbox off in settings did not bypass the check when tried on
-// 2026-09-10), so the shell shows an agent that never answers. Named here, from the terminal,
-// before that happens. Codex brings its own sandbox and needs neither.
+// Agent sandboxes on Linux are bubblewrap: Claude Code's (which also wants socat, and refuses to run
+// a turn without both; turning the sandbox off in settings did not bypass the check when tried on
+// 2026-09-10), Codex's workspace-write mode, and toyon's own for an agent that brings none. Without
+// it the shell shows an agent that never answers. Named here, from the terminal, before that happens.
+
+import { readFileSync } from "node:fs";
 
 /** the executables Claude Code looks for, with the apt package that provides each */
 export const LINUX_SANDBOX_TOOLS: ReadonlyArray<{ exe: string; apt: string }> = [
@@ -19,4 +21,52 @@ export function missingSandboxTools(path = process.env.PATH ?? "", platform = pr
 export function sandboxAdvice(missing: string[]): string {
   const apt = LINUX_SANDBOX_TOOLS.map((t) => t.apt).join(" ");
   return `Claude Code's sandbox on Linux needs ${missing.join(" and ")}; install with: sudo apt install ${apt}`;
+}
+
+/** Why an installed bubblewrap cannot start a sandbox here, in its own words, or null when it can
+ * (or is not installed, which `missingSandboxTools` names). Being on PATH proves nothing: Ubuntu
+ * 24.04 and later ship it and then refuse the user namespace it needs. */
+export function bwrapStartError(bwrap: string | null = Bun.which("bwrap")): string | null {
+  if (!bwrap) return null;
+  try {
+    const r = Bun.spawnSync([bwrap, "--ro-bind", "/", "/", "true"], { stdout: "ignore", stderr: "pipe" });
+    return r.exitCode === 0 ? null : r.stderr.toString().trim() || `bwrap exited ${r.exitCode}`;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
+/** whether AppArmor restricts unprivileged user namespaces, as Ubuntu 24.04 and later do by default */
+export function userNamespacesRestricted(
+  read: () => string = () => readFileSync("/proc/sys/kernel/apparmor_restrict_unprivileged_userns", "utf8"),
+): boolean {
+  try {
+    return read().trim() === "1";
+  } catch {
+    return false; // no such setting: this kernel does not restrict them
+  }
+}
+
+/** allows user namespaces for bwrap alone, leaving the restriction on for everything else */
+export const BWRAP_APPARMOR_PROFILE = `abi <abi/4.0>,
+include <tunables/global>
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/bwrap>
+}
+`;
+
+/** what to do when bubblewrap is installed and cannot start */
+export function bwrapBlockedAdvice(error: string, restricted: boolean): string {
+  if (!restricted) return `bubblewrap is installed but cannot start a sandbox: ${error}`;
+  return [
+    `bubblewrap cannot start a sandbox: ${error}`,
+    "This system restricts unprivileged user namespaces. Allow them for bubblewrap alone:",
+    "  sudo tee /etc/apparmor.d/bwrap >/dev/null <<'EOF'",
+    ...BWRAP_APPARMOR_PROFILE.trimEnd()
+      .split("\n")
+      .map((l) => `  ${l}`),
+    "  EOF",
+    "  sudo apparmor_parser -r /etc/apparmor.d/bwrap",
+  ].join("\n");
 }

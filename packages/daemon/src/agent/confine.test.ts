@@ -82,19 +82,27 @@ describe("confine", () => {
   });
 });
 
-/** whether this machine can run the sandbox at all. It cannot where bwrap is missing, where user
- * namespaces are blocked (some CI runners), or inside a sandbox that forbids nesting another; the
- * real run is then reported skipped rather than passed. */
-function canSandbox(): boolean {
+/** Why this machine cannot run the sandbox, or null when it can. It cannot where bwrap is missing,
+ * where unprivileged user namespaces are blocked (Ubuntu 24.04 restricts them through AppArmor), or
+ * inside a sandbox that forbids nesting another; the real run is then reported skipped. */
+function sandboxBlocked(): string | null {
   try {
     const l = confine({ command: "/bin/sh", args: ["-c", "true"], env: {} }, bounds);
-    return Bun.spawnSync([l.command, ...l.args]).exitCode === 0;
-  } catch {
-    return false; // no sandbox on this platform: the same answer as one that cannot start
+    const r = Bun.spawnSync([l.command, ...l.args]);
+    return r.exitCode === 0 ? null : `${l.command} exited ${r.exitCode}: ${r.stderr.toString().trim()}`;
+  } catch (e) {
+    return (e as Error).message; // no sandbox on this platform
   }
 }
+const blocked = sandboxBlocked();
 
-describe.skipIf(!canSandbox())("confine, for real", () => {
+// CI sets this, so a runner that cannot sandbox fails with the reason instead of passing with the
+// real run skipped. A laptop leaves it unset: a test run inside an agent's sandbox cannot nest one.
+test.if(process.env.TOYON_SANDBOX_REQUIRED === "1")("this machine can run the sandbox", () => {
+  expect(blocked).toBeNull();
+});
+
+describe.skipIf(blocked !== null)("confine, for real", () => {
   test("a write inside lands; a write outside and a read of a secret are refused", () => {
     const script = [
       `echo x > "${join(inside, "a")}"`,

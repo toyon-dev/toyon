@@ -39,12 +39,13 @@ describe("parseArgs", () => {
     expect(parseArgs(["logs", "--lines"]).kind).toBe("error");
   });
   test("remote takes one host name or off, and prints the setting with neither", () => {
-    expect(parseArgs(["remote"])).toEqual({ kind: "remote", to: null, ports: false });
-    expect(parseArgs(["remote", "off"])).toEqual({ kind: "remote", to: "off", ports: false });
+    expect(parseArgs(["remote"])).toEqual({ kind: "remote", to: null, ports: false, tailscale: false });
+    expect(parseArgs(["remote", "off"])).toEqual({ kind: "remote", to: "off", ports: false, tailscale: false });
     expect(parseArgs(["remote", "toyon.example.com"])).toEqual({
       kind: "remote",
       to: "toyon.example.com",
       ports: false,
+      tailscale: false,
     });
     for (const bad of ["https://toyon.example.com", "toyon.example.com:443", "box", "10.0.0.5", "toyon.localhost"]) {
       expect(parseArgs(["remote", bad]).kind).toBe("error");
@@ -52,12 +53,22 @@ describe("parseArgs", () => {
     expect(parseArgs(["remote", "a.example", "b.example"]).kind).toBe("error");
   });
   test("remote --ports goes with a name, on either side of it", () => {
-    const want = { kind: "remote", to: "box.tail1234.ts.net", ports: true } as const;
+    const want = { kind: "remote", to: "box.tail1234.ts.net", ports: true, tailscale: false } as const;
     expect(parseArgs(["remote", "box.tail1234.ts.net", "--ports"])).toEqual(want);
     expect(parseArgs(["remote", "--ports", "box.tail1234.ts.net"])).toEqual(want);
     expect(parseArgs(["remote", "--ports"]).kind).toBe("error");
     expect(parseArgs(["remote", "off", "--ports"]).kind).toBe("error");
     expect(parseArgs(["remote", "toyon.example.com", "--wild"]).kind).toBe("error");
+  });
+  test("remote --tailscale takes no name, since Tailscale supplies it", () => {
+    expect(parseArgs(["remote", "--tailscale"])).toEqual({ kind: "remote", to: null, ports: false, tailscale: true });
+    for (const bad of [
+      ["remote", "--tailscale", "box.tail1234.ts.net"],
+      ["remote", "--tailscale", "off"],
+      ["remote", "--tailscale", "--ports"],
+    ]) {
+      expect(parseArgs(bad).kind).toBe("error");
+    }
   });
   test("deploy fly takes an action and an app name, and each action only its own options", () => {
     expect(parseArgs(["deploy", "fly", "up", "my-toyon"])).toEqual({

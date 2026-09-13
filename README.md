@@ -77,7 +77,7 @@ Each copy is a real `git worktree` under `~/.toyon/worktrees.noindex` with its o
 
 ## Somewhere other than your laptop
 
-Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. None of it passes through a toyon server; there is none. These routes are new. On Fly, a browser has opened the shell and two copies' previews, an agent's edit has shown up in a preview without a reload, and every refusal has been checked from outside. The Caddy and Tailscale routes have been checked with requests shaped like theirs, and neither has been opened from a phone yet.
+Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. None of it passes through a toyon server; there is none. These routes are new. On Fly, a browser has opened the shell and two copies' previews, an agent's edit has shown up in a preview without a reload, and every refusal has been checked from outside. On a tailnet, a phone has opened the shell and a preview and seen an agent's edit arrive without a reload. The Caddy route has been checked with requests shaped like its own, and has not been opened from a phone yet. The shell has no phone layout yet: on a phone, open a preview in its own tab.
 
 A host needs a process that stays up, a disk that survives restarts, WebSockets, and either a wildcard name or a range of ports it forwards. That rules out serverless hosts and hosts that scale to zero with no disk.
 
@@ -98,15 +98,13 @@ toyon.example.com, *.toyon.example.com {
 
 The wildcard certificate needs Caddy's DNS challenge, built with your DNS provider's module; the example uses Cloudflare's. Each copy's preview gets its own name under yours, so each keeps its own cookies. `toyon stop` then `toyon` applies the setting.
 
-**Your own box on your tailnet, with no domain.** Tailscale cannot issue a wildcard certificate, so each preview gets its own port instead:
+**Your own box on your tailnet, with no domain.** Turn on MagicDNS and HTTPS certificates in the Tailscale admin console, sign the box in with `tailscale up`, then:
 
 ```sh
-toyon remote box.your-tailnet.ts.net --ports
-tailscale serve --bg --https=443 http://127.0.0.1:4141
-tailscale serve --bg --https=10001 http://127.0.0.1:10001
+toyon remote --tailscale
 ```
 
-Repeat the last line for each port through 10008. On this route every copy shares one set of cookies, so two copies of an app with a login sign each other out.
+Toyon reads the box's name from Tailscale and sets up `tailscale serve` for itself on 443 and for previews on ports 10001-10008; Tailscale cannot issue a wildcard certificate, so each preview gets its own port. It changes nothing if one of those ports already serves something else. `toyon remote off` removes the entries it set and leaves your own. On this route every copy shares one set of cookies, so two copies of an app with a login sign each other out.
 
 **Your own Fly account.**
 

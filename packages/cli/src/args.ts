@@ -10,8 +10,9 @@ export type Command =
   | { kind: "logs"; follow: boolean; lines: number }
   | { kind: "version" }
   | { kind: "uninstall"; yes: boolean }
-  /** `to`: a host name, "off", or null to print the setting; `ports`: previews on ports of the name */
-  | { kind: "remote"; to: string | null; ports: boolean }
+  /** `to`: a host name, "off", or null to print the setting; `ports`: previews on ports of the name;
+   * `tailscale`: take the name from Tailscale and set up tailscale serve for it */
+  | { kind: "remote"; to: string | null; ports: boolean; tailscale: boolean }
   | {
       kind: "deploy";
       provider: "fly";
@@ -49,11 +50,18 @@ export function parseArgs(argv: string[]): Command {
       }
       case "remote": {
         const ports = rest.includes("--ports");
-        const names = rest.filter((a) => a !== "--ports");
+        const tailscale = rest.includes("--tailscale");
+        const names = rest.filter((a) => a !== "--ports" && a !== "--tailscale");
         const option = names.find((a) => a.startsWith("-"));
         if (option) return { kind: "error", message: `unknown option ${option}` };
         if (names.length > 1) return { kind: "error", message: "toyon remote takes one name, or off" };
         const to = names[0] ?? null;
+        if (tailscale) {
+          if (to !== null || ports) {
+            return { kind: "error", message: "--tailscale goes alone: the name comes from Tailscale" };
+          }
+          return { kind: "remote", to, ports, tailscale };
+        }
         if (ports && (to === null || to === "off")) {
           return { kind: "error", message: "--ports goes with a name: toyon remote <name> --ports" };
         }
@@ -63,7 +71,7 @@ export function parseArgs(argv: string[]): Command {
             message: `${to} is not a host name; give the name your TLS front answers for, like toyon.example.com`,
           };
         }
-        return { kind: "remote", to, ports };
+        return { kind: "remote", to, ports, tailscale };
       }
       case "deploy":
         return parseDeploy(rest);
@@ -147,9 +155,13 @@ usage
   toyon uninstall [--yes] stop the daemon and remove everything toyon put on this machine;
                           your repos and the branches toyon made stay
   toyon remote [name|off] open the shell from another device at https://name, through a TLS
-                          front on this machine; with no name, print the setting
+                          front on this machine; with no name, print the setting; off also
+                          removes the tailscale serve entries toyon set
     --ports               put each preview on its own port of the name, for a front that cannot
-                          hold a wildcard certificate (tailscale serve)
+                          hold a wildcard certificate
+  toyon remote --tailscale
+                          open the shell from your tailnet at this machine's Tailscale name:
+                          sets up tailscale serve for toyon and ports 10001-10008
   toyon deploy fly up <name> [--region code] [--repo url]
                           run toyon on your own Fly account at https://name.fly.dev with your own
                           keys; --repo clones that repository onto it the first time

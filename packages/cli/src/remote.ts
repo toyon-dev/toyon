@@ -12,6 +12,7 @@ import {
 } from "@toyon/shared";
 import type { Command } from "./args.ts";
 import { health, home, port, remoteFile } from "./daemon.ts";
+import { serveTailnet, TailscaleError, tailscaleCli, unserveTailnet } from "./tailscale.ts";
 
 function saved(): RemoteView | null {
   if (!existsSync(remoteFile)) return null;
@@ -28,10 +29,16 @@ function describe(r: RemoteView): string {
   return `remote access: https://${r.host}/, previews at ${at}`;
 }
 
+function save(r: RemoteView) {
+  mkdirSync(home, { recursive: true });
+  writeFileSync(remoteFile, `${JSON.stringify(r, null, 2)}\n`);
+  console.log(describe(r));
+}
+
 export async function remote(cmd: Extract<Command, { kind: "remote" }>): Promise<number> {
   const h = await health();
 
-  if (cmd.to === null) {
+  if (cmd.to === null && !cmd.tailscale) {
     const r = saved();
     console.log(r ? describe(r) : "remote access is off; `toyon remote <name>` turns it on");
     if (h && !same(h.remote, r))
@@ -40,14 +47,35 @@ export async function remote(cmd: Extract<Command, { kind: "remote" }>): Promise
   }
 
   let r: RemoteView | null = null;
-  if (cmd.to === "off") {
+  if (cmd.tailscale) {
+    let name: string;
+    try {
+      name = await serveTailnet(tailscaleCli(), port);
+    } catch (e) {
+      if (!(e instanceof TailscaleError)) throw e;
+      console.error(`toyon: ${e.message}`);
+      return 1;
+    }
+    r = { host: name, previews: portPreviews(name) };
+    save(r);
+    console.log(`tailscale serve sends https://${name}/ to 127.0.0.1:${port}, and each of ports ${ports} to the`);
+    console.log("same port on 127.0.0.1; only devices on your tailnet reach them");
+  } else if (cmd.to === "off") {
+    const was = saved();
     rmSync(remoteFile, { force: true });
     console.log("remote access is off");
-  } else {
+    // entries toyon set are removed whatever the file said; a missing Tailscale is only worth a
+    // line when the setting pointed at a tailnet name
+    try {
+      const removed = await unserveTailnet(tailscaleCli(), port);
+      if (removed > 0) console.log(`removed toyon's ${removed} tailscale serve entries`);
+    } catch (e) {
+      if (!(e instanceof TailscaleError)) throw e;
+      if (was?.host.endsWith(".ts.net")) console.error(`toyon: could not remove tailscale serve entries: ${e.message}`);
+    }
+  } else if (cmd.to !== null) {
     r = { host: cmd.to, previews: cmd.ports ? portPreviews(cmd.to) : hostPreviews(cmd.to) };
-    mkdirSync(home, { recursive: true });
-    writeFileSync(remoteFile, `${JSON.stringify(r, null, 2)}\n`);
-    console.log(describe(r));
+    save(r);
     if (addressedByPort(r.previews)) {
       console.log(`point a TLS front for ${r.host} at 127.0.0.1:${port} on 443, and each of ports ${ports} at`);
       console.log("the same port on 127.0.0.1");

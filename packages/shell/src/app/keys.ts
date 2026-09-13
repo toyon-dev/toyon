@@ -145,8 +145,11 @@ export function useChords() {
           case "term-tab": {
             const wt = s.rows.find((w) => w.id === s.activeId);
             if (!wt) break;
+            const current = localOf(s, s.activeId).termStream;
+            // a login on screen is the pane's only tab, so there is nothing to walk to
+            if (wt.login && current === LOGIN_STREAM) break;
             const streams = [SHELL_STREAM, ...(wt.login ? [LOGIN_STREAM] : []), ...wt.procs.map((p) => p.name)];
-            const at = streams.indexOf(localOf(s, s.activeId).termStream);
+            const at = streams.indexOf(current);
             dispatch({
               a: "term-stream",
               id: wt.id,

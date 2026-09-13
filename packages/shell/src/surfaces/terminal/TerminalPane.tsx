@@ -70,7 +70,7 @@ export function TerminalPane({
     }
     setExit({ code });
   };
-  const tabs = useTermTabs({ worktreeId, procs, login, onRestart: restart });
+  const tabs = useTermTabs({ worktreeId, procs, login, current: stream, onRestart: restart });
   return (
     <Pane
       className="term-pane"

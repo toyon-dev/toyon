@@ -9,6 +9,7 @@ export * from "./config.ts";
 export * from "./daemon.ts";
 export * from "./diff.ts";
 export * from "./land.ts";
+export * from "./launcher.ts";
 export * from "./model.ts";
 export * from "./paste.ts";
 export * from "./ports.ts";

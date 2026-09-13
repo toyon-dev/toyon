@@ -8,10 +8,10 @@ import { Resolver } from "node:dns/promises";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PREVIEW_PORTS, portPreviews } from "@toyon/shared";
+import { launcherAddLink, PREVIEW_PORTS, portPreviews } from "@toyon/shared";
 import type { Command } from "../args.ts";
 import { home } from "../daemon.ts";
-import { launcherAddLink } from "../launcher.ts";
+import { openUrl } from "../openUrl.ts";
 import { bunVersion, machineSources, writeMachineContext } from "./context.ts";
 
 type DeployCommand = Extract<Command, { kind: "deploy" }>;
@@ -263,6 +263,8 @@ async function up(cmd: DeployCommand, bin: string): Promise<void> {
   if (!up) console.log(`it has not answered yet; \`fly logs -a ${cmd.name}\` shows what it is doing`);
   printLinks(cmd.name, token);
   console.log("the volume holds the only copy of anything not pushed to a remote");
+  // the list at toyon.cloud is where this machine is found again; the sign-in link stays printed only
+  openUrl(launcherAddLink(`https://${cmd.name}.fly.dev`));
 }
 
 function printLinks(app: string, token: string): void {

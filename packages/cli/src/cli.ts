@@ -3,7 +3,6 @@
 // (stop, doctor, logs, version) are the operator surface a stranger needs to make it go away
 // again. Runs under bun from the source tree; the npm shim replaces this shebang.
 
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import pkg from "../package.json" with { type: "json" };
@@ -13,6 +12,7 @@ import { base, health, logFile, port, readToken, shellUrl, startDaemon } from ".
 import { deploy } from "./deploy/fly.ts";
 import { doctor } from "./doctor.ts";
 import { logs } from "./logs.ts";
+import { openUrl } from "./openUrl.ts";
 import { remote } from "./remote.ts";
 import {
   bwrapBlockedAdvice,
@@ -23,13 +23,6 @@ import {
 } from "./sandboxDeps.ts";
 import { stop } from "./stop.ts";
 import { uninstall } from "./uninstall.ts";
-
-/** the platform's URL opener; the URL is printed first, so a machine with no opener loses nothing */
-function openUrl(url: string): void {
-  const child = spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore" });
-  child.on("error", () => {}); // the URL is on the terminal; a headless box has nothing to open it with
-  child.unref();
-}
 
 async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   // an explicit path is registered whatever it is (the daemon says if it is not a repo); a bare

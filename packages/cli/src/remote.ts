@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import {
   addressedByPort,
   hostPreviews,
+  launcherAddLink,
   PREVIEW_PORTS,
   parseRemote,
   portPreviews,
@@ -12,7 +13,7 @@ import {
 } from "@toyon/shared";
 import type { Command } from "./args.ts";
 import { health, home, port, remoteFile } from "./daemon.ts";
-import { launcherAddLink } from "./launcher.ts";
+import { openUrl } from "./openUrl.ts";
 import { serveTailnet, TailscaleError, tailscaleCli, unserveTailnet } from "./tailscale.ts";
 
 function saved(): RemoteView | null {
@@ -88,7 +89,11 @@ export async function remote(cmd: Extract<Command, { kind: "remote" }>): Promise
     console.log("Toyon refuses the name over plain http: the token in the link grants a shell on this machine");
   }
   // a tailnet name is a machine as much as a domain is
-  if (r) console.log(`add it to your list at toyon.cloud: ${launcherAddLink(`https://${r.host}`)}`);
+  if (r) {
+    const add = launcherAddLink(`https://${r.host}`);
+    console.log(`add it to your list at toyon.cloud: ${add}`);
+    openUrl(add);
+  }
   if (h && !same(h.remote, r)) console.log("the daemon reads this at start; `toyon stop` then `toyon` applies it");
   return 0;
 }

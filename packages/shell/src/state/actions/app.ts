@@ -1,3 +1,4 @@
+import { launcherAddLink } from "@toyon/shared";
 import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
@@ -5,7 +6,16 @@ import type { Deps } from "./deps.ts";
 
 export type AppState = Pick<
   State,
-  "leftOpen" | "rightOpen" | "railOpen" | "termOpen" | "designOpen" | "activeId" | "activeRepoId" | "repos" | "rows"
+  | "leftOpen"
+  | "rightOpen"
+  | "railOpen"
+  | "termOpen"
+  | "designOpen"
+  | "activeId"
+  | "activeRepoId"
+  | "repos"
+  | "rows"
+  | "remote"
 >;
 
 /** The app's own actions, in three groups: somewhere to go, the panels, and the app itself. What
@@ -109,6 +119,12 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       onClick: () => dispatch({ a: "open", overlay: { kind: "keys" } }),
     },
   ];
+  // A machine with a public name is listed at toyon.cloud per browser, so a phone or a second
+  // laptop that opened it here adds it from here. The link carries the name, never the token.
+  if (s.remote) {
+    const link = launcherAddLink(`https://${s.remote.host}`);
+    app.push({ id: "toyon-cloud", label: "add to toyon.cloud", onClick: () => window.open(link, "_blank") });
+  }
   // a project with nothing to run has the chat as its centre, so there is no chat panel to toggle,
   // and no page for zen or the design pane's outlines to work on
   const pageless = isChatCentred(s) ? new Set(["right", "design", "zen"]) : null;

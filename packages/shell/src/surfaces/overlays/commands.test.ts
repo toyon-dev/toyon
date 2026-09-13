@@ -52,6 +52,7 @@ describe("buildCommands", () => {
     agents: [],
     defaultAgent: "claude",
     shipping: {},
+    remote: null,
   } as unknown as CommandState;
 
   // the rows are keyed by id, so an id twice leaves a stale row behind when the list changes
@@ -69,6 +70,22 @@ describe("buildCommands", () => {
     const ids = buildCommands({ ...state, repos: [bare] }, () => {}, null, wt, bare).map((c) => c.id);
     for (const id of pageVerbs) expect(ids).not.toContain(id);
     expect(ids).toContain("terminal");
+  });
+  test("a machine with a public name offers to add it to toyon.cloud, by name and without the token", () => {
+    expect(buildCommands(state, () => {}, null, wt, repo).map((c) => c.id)).not.toContain("toyon-cloud");
+    const remote = { host: "my-toyon.fly.dev", previews: "https://my-toyon.fly.dev:{port}" };
+    const opened: string[] = [];
+    const g = globalThis as any;
+    const saved = g.window;
+    g.window = { open: (url: string) => opened.push(url) };
+    try {
+      const add = buildCommands({ ...state, remote }, () => {}, null, wt, repo).find((c) => c.id === "toyon-cloud");
+      expect(add?.label).toBe("add to toyon.cloud");
+      add?.run();
+      expect(opened).toEqual(["https://toyon.cloud/#add=https%3A%2F%2Fmy-toyon.fly.dev"]);
+    } finally {
+      g.window = saved;
+    }
   });
   // the settings menu shows the theme rows as a group under a rule; the palette has no rules, so
   // the group is a word in front of each, and typing that word lists them all

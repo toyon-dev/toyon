@@ -79,7 +79,7 @@ Each copy is a real `git worktree` under `~/.toyon/worktrees.noindex` with its o
 
 Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. None of it passes through a Toyon server; there is none. These routes are new. On Fly, a browser has opened the shell and two copies' previews, an agent's edit has shown up in a preview without a reload, and every refusal has been checked from outside. On a tailnet, a phone has opened the shell and a preview and seen an agent's edit arrive without a reload. The Caddy route has been checked with requests shaped like its own, and has not been opened from a phone yet. The shell has no phone layout yet: on a phone, open a preview in its own tab.
 
-[toyon.cloud](https://toyon.cloud) keeps a list of your machines in your browser, and nothing else. `toyon deploy fly up` and `toyon remote` print the link that adds one; it carries the address, never the token.
+[toyon.cloud](https://toyon.cloud) keeps a list of your machines in your browser, and nothing else. `toyon deploy fly up` and `toyon remote` open it with the new machine added, and a machine's own menu has "add to toyon.cloud" for another browser. The link carries the address, never the token.
 
 A host needs a process that stays up, a disk that survives restarts, WebSockets, and either a wildcard name or a range of ports it forwards. That rules out serverless hosts and hosts that scale to zero with no disk.
 

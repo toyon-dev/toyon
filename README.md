@@ -42,6 +42,8 @@ Agents: Claude Code and Codex, each through its own login. Toyon installs the ad
 - **Keep it your way.** When a turn is done and your check passes, the composer offers to land it: merged into main on your machine, pushed, or opened as a pull request, whichever your project's settings name. Nothing is committed or pushed until you press it.
 - **The rest of the loop.** A terminal per chat, quick-open and search, a diff you can edit, themes including your VS Code ones, and an installable app window.
 
+Built for web apps. A project without a page still works; the chat takes the middle instead of the preview.
+
 ## How is this different from Conductor or Superset?
 
 They are good tools for running many agents at once, built for teams on GitHub. Toyon is built around the app instead of the agents: every chat opens with your app running at the centre, connected to its code, so you see each change before you keep it. It is MIT licensed, needs no account, sends no telemetry, runs in your browser on macOS or Linux, and can land work on your own machine without GitHub.

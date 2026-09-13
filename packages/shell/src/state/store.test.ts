@@ -1463,7 +1463,7 @@ describe("a landing op in flight", () => {
   });
 
   test("a merge whose worktree is then removed, and a reconnect, both retire it", () => {
-    let s = run([three(), { a: "shipping", id: "a", op: "merge-main" }, worktrees(wt("main", "main"), wt("b"))]);
+    let s = run([three(), { a: "shipping", id: "a", op: "land" }, worktrees(wt("main", "main"), wt("b"))]);
     expect(s.shipping).toEqual({});
     s = run([three(), sync("a"), three()]);
     expect(s.shipping).toEqual({});

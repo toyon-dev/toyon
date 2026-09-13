@@ -92,6 +92,13 @@
     flex: 1;
     min-width: 0;
   }
+  /* the route chip and, on the PR route, the auto-merge switch beside it */
+  .setup-land {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
   .import-idle,
   .import-error {
     color: var(--text2);

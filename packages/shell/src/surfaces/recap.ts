@@ -1,11 +1,43 @@
 // The recap line: what happened while you were away, as the agent's own sentence about it. The
 // composer opens on it as its placeholder, and the rail row's tip carries it.
 
-import type { Landing, LastTurn, TurnFacts } from "@toyon/shared";
+import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
 import { ago } from "./util.ts";
 
 /** a clause that ends the line gets its full stop, unless it brought its own */
 const ended = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+
+/** The worktree's PR as the placeholder's first line: what GitHub is waiting on, or that it is
+ * done. Read while the PR stands between the work and main. */
+export function prLine(pr: PrState): string {
+  const n = `PR #${pr.number}`;
+  if (pr.state === "merged") return `${n} merged; main here is behind origin.`;
+  if (pr.state === "closed") return `${n} was closed without merging.`;
+  if (pr.automerge) {
+    const on = pr.review === "review_required" ? "it is approved and checks pass" : "checks pass";
+    return `${n} open; GitHub merges it when ${on}.`;
+  }
+  if (pr.mergeable === false) return `${n} open; it conflicts with main.`;
+  if (pr.review === "changes_requested") return `${n} open; changes requested.`;
+  if (pr.checks === "fail") return `${n} open; checks failed.`;
+  if (pr.checks === "pending") return `${n} open; checks running.`;
+  if (pr.review === "review_required") return `${n} open; waiting on review.`;
+  if (pr.review === "approved") return `${n} approved${pr.checks === "pass" ? ", checks pass" : ""}.`;
+  return `${n} open and ready to merge.`;
+}
+
+/** GitHub would take the merge now: nothing waiting, nothing failed, nothing conflicting */
+export function prCanMerge(pr: PrState): boolean {
+  return (
+    pr.state === "open" &&
+    !pr.automerge &&
+    pr.mergeable !== false &&
+    pr.review !== "changes_requested" &&
+    pr.review !== "review_required" &&
+    pr.checks !== "fail" &&
+    pr.checks !== "pending"
+  );
+}
 
 /** The verdict as the placeholder's first line: what would land and whether it can, or what
  * stands in the way. `count` is the files that would go, uncommitted or committed. The model's

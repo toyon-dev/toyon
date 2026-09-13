@@ -13,11 +13,14 @@ import {
   canLand,
   canRemove,
   canRename,
+  DEFAULT_MERGE_METHOD,
   type GitFileStatus,
   hasOwnBranch,
   isMain,
   type Landing,
+  landPolicy,
   type PermissionMode,
+  type PrState,
   type RefKind,
   type RepoInfo,
   type SpareInfo,
@@ -37,7 +40,18 @@ import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
 import { archiveRef, checkOutKept, commitOf, type KeptState, keepState } from "../git/archive.ts";
 import { GIT, git, gitOrThrow, NO_PROMPT, run } from "../git/exec.ts";
-import { commitWorktree, mergeToMain, pullMain, type ShipResult, shipWorktree, syncFromMain } from "../git/land.ts";
+import {
+  commitWorktree,
+  fastForwardMain,
+  landLocally,
+  mergePr,
+  openPr,
+  pullMain,
+  pushMain,
+  type ShipResult,
+  squashMessage,
+  takeMainIn,
+} from "../git/land.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
 import {
@@ -896,10 +910,12 @@ export class WorktreeService {
 
   // ---- landing ----
 
-  setPrUrl(worktreeId: string, url: string) {
+  /** what GitHub last said about the worktree's PR, or none once new work has moved past it */
+  setPr(worktreeId: string, pr: PrState | undefined) {
     const wt = this.d.state.worktree(worktreeId);
-    if (!wt) return;
-    wt.prUrl = url;
+    if (!wt || (wt.pr === undefined && pr === undefined)) return;
+    if (pr) wt.pr = pr;
+    else delete wt.pr;
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
   }
@@ -948,70 +964,124 @@ export class WorktreeService {
     return result;
   }
 
-  /** push + PR, committing first when the tree is dirty. Not under the repo lock: it holds
-   * `git push` + `gh` for seconds. */
-  async ship(worktreeId: string, message?: string): Promise<ShipResult> {
-    const { wt, repo } = this.landable(worktreeId, "ship");
-    const committed = await this.commitIfDirty(wt, message);
-    if (committed && !committed.ok) return committed;
-    const result = await shipWorktree(wt.path, wt.branch, repo.defaultBranch);
-    if (result.prCreated && result.url) this.setPrUrl(wt.id, result.url);
-    return result;
-  }
-
-  /** The one press: commit what is uncommitted, take main in if the branch is behind, and merge.
-   * Each step stops the rest when it fails, and the result says which: a commit stands even when
-   * the sync after it conflicts, since the work is safer committed. The worktree stays, marked
-   * landed, so the conversation can go on; closing it is its own press (the composer offers it,
-   * and a remove is what it is). Returns any variant siblings to offer up. */
+  /** The one press. Commit what is uncommitted, take main in (a rebase for toyon's own branch),
+   * then the repo's route: merge here, merge here and push main, or push the branch and open a
+   * PR; on a worktree whose PR is already open, merge the PR. Each step stops the rest when it
+   * fails, and the result says which: a commit stands even when the rebase after it conflicts,
+   * since the work is safer committed. The worktree stays, marked landed once the work is on main
+   * here, so the conversation can go on; closing it is its own press. Returns any variant
+   * siblings to offer up. */
   async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; removeIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "land");
+    const policy = landPolicy(repo.config);
+    const own = hasOwnBranch(wt);
+    const suggested = wt.landing?.subject
+      ? wt.landing.body
+        ? `${wt.landing.subject}\n\n${wt.landing.body}`
+        : wt.landing.subject
+      : undefined;
+
+    if (policy.land === "pr") {
+      // nothing here touches the main checkout, and gh holds the network for seconds: outside the lock
+      if (wt.pr?.state === "open") {
+        const result = await mergePr(wt.path, wt.pr.number, policy.merge);
+        return { result };
+      }
+      const committed = await this.commitIfDirty(wt, message);
+      if (committed && !committed.ok) return { result: committed };
+      const taken = await takeMainIn(wt.path, repo.defaultBranch, own);
+      if (!taken.ok) return { result: taken };
+      this.headMoved(wt.id);
+      const result = await openPr({
+        worktreePath: wt.path,
+        branch: wt.branch,
+        defaultBr: repo.defaultBranch,
+        subject: wt.landing?.subject,
+        body: wt.landing?.body,
+        automerge: policy.automerge,
+        method: policy.merge,
+      });
+      if (result.ok) {
+        this.setLanding(wt.id, undefined);
+        if (result.pr) this.setPr(wt.id, { ...result.pr, at: Date.now() });
+      }
+      return { result };
+    }
+
+    let mergedHere = false;
     const result = await withRepoLock(repo.path, async (): Promise<ShipResult> => {
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return committed;
-      const { behind } = await aheadBehind(wt.path, repo.defaultBranch);
-      if (behind > 0) {
-        const synced = await syncFromMain(wt.path, repo.defaultBranch);
-        if (!synced.ok) return synced;
+      // main here first takes what origin has, so the push at the end is not refused; a main
+      // with no upstream has nothing to take
+      if (policy.land === "push") {
+        const pulled = await fastForwardMain(repo.path, repo.defaultBranch);
+        if (!pulled.ok && !/no upstream/.test(pulled.message)) return pulled;
       }
-      return mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch);
+      const taken = await takeMainIn(wt.path, repo.defaultBranch, own);
+      if (!taken.ok) return taken;
+      const method = policy.merge ?? DEFAULT_MERGE_METHOD;
+      const squash = method === "squash" ? await squashMessage(wt.path, repo.defaultBranch, suggested) : "";
+      const landed = await landLocally(wt.path, wt.branch, repo.path, repo.defaultBranch, method, squash);
+      if (!landed.ok) return landed;
+      mergedHere = true;
+      await this.restartFromMain(wt, repo.defaultBranch);
+      if (policy.land === "push") {
+        const pushed = await pushMain(repo.path, repo.defaultBranch);
+        if (!pushed.ok) return { ...pushed, message: `merged into ${repo.defaultBranch} here, but ${pushed.message}` };
+      }
+      return landed;
     });
+    if (mergedHere) {
+      // main moved, so every row of this repo counts against it now. The ref watcher clears this
+      // too, but on the fs event's schedule, and the frame setLanded pushes must not carry the old
+      // ahead. The verdict was about work that is on main now; the landed mark is what the box
+      // reads next.
+      this.invalidateCounts();
+      this.setLanding(wt.id, undefined);
+      this.setLanded(wt.id, true);
+    }
     if (!result.ok) return { result };
-    this.invalidateCounts();
-    // the verdict was about work that is on main now; the landed mark is what the box reads next
-    this.setLanding(wt.id, undefined);
-    this.setLanded(wt.id, true);
     const removeIds = wt.variant
       ? this.d.state.worktrees.filter((w) => w.variant?.group === wt.variant?.group && w.id !== wt.id).map((w) => w.id)
       : [];
-    return { result: { ...result, message: `${wt.title} is on ${repo.defaultBranch}` }, removeIds };
+    const where = policy.land === "push" ? `${repo.defaultBranch}, pushed` : repo.defaultBranch;
+    return { result: { ...result, message: `${wt.title} is on ${where}` }, removeIds };
   }
 
-  /** merge into main locally. Returns the worktrees the UI should offer to clean up: landing a
-   * variant ends the tournament. */
-  async merge(worktreeId: string): Promise<{ result: ShipResult; removeIds?: string[] }> {
-    const { wt, repo } = this.landable(worktreeId, "merge");
-    // touches the main checkout: serialize with spare refresh / worktree add on the same repo
-    const result = await withRepoLock(repo.path, () => mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch));
-    if (!result.ok) return { result };
-    // main moved, so every row of this repo counts against it now. The ref watcher clears this
-    // too, but on the fs event's schedule, and the frame setLanded pushes must not carry the old
-    // ahead
-    this.invalidateCounts();
-    this.setLanded(wt.id, true);
-    let removeIds: string[];
-    if (wt.variant) {
-      const group = wt.variant.group;
-      removeIds = this.d.state.worktrees.filter((w) => w.variant?.group === group).map((w) => w.id);
-    } else {
-      removeIds = [wt.id];
+  /** A branch toyon owns restarts from main once its work is there: the next message here builds
+   * on main as it is, and the counts read zero rather than the commits a squash or a rebase on
+   * GitHub left with different hashes. An adopted branch keeps its history. */
+  private async restartFromMain(wt: WorktreeInfo, defaultBr: string) {
+    if (!hasOwnBranch(wt)) return;
+    const r = await git(wt.path, "reset", "--hard", defaultBr);
+    if (!r.ok) log.warn(wt.id, `could not restart ${wt.branch} from ${defaultBr}: ${r.err}`);
+    this.headMoved(wt.id);
+  }
+
+  /** GitHub merged the worktree's PR: main here takes it, the branch restarts from main, and the
+   * row is landed. A main that cannot fast-forward (edits in its way, or commits of its own) is
+   * left, and the box says so; main's own pull is the way through. */
+  async prMerged(worktreeId: string): Promise<ShipResult> {
+    const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
+    const result = await withRepoLock(repo.path, async () => {
+      const pulled = await fastForwardMain(repo.path, repo.defaultBranch);
+      if (!pulled.ok) return pulled;
+      await this.restartFromMain(wt, repo.defaultBranch);
+      return pulled;
+    });
+    if (result.ok) {
+      this.invalidateCounts();
+      this.setLanding(wt.id, undefined);
+      this.setLanded(wt.id, true);
     }
-    return { result, removeIds };
+    return result;
   }
 
-  /** merge main into any row with a branch, a found worktree included: the one git write allowed
-   * without take-over, because syncFromMain refuses a dirty tree before touching it and aborts a
-   * conflicted merge, so the directory is left as it was found in every case but success */
+  /** take main into any row with a branch, a found worktree included: a rebase for toyon's own
+   * branch, a merge for one it found or adopted. The one git write allowed without take-over,
+   * because both refuse a dirty tree before touching it and abort on a conflict, so the directory
+   * is left as it was found in every case but success. */
   async sync(worktreeId: string): Promise<{ result: ShipResult; defaultBranch: string }> {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
@@ -1019,7 +1089,8 @@ export class WorktreeService {
     if (!r.branch) throw new UserError(`${r.name} is detached: check out a branch in it first`);
     if (r.locked) throw new UserError(`${r.name} is held by another tool`);
     const repo = this.d.state.requireRepo(r.repoId);
-    const result = await withRepoLock(repo.path, () => syncFromMain(r.path, repo.defaultBranch));
+    const own = r.wt ? hasOwnBranch(r.wt) : false;
+    const result = await withRepoLock(repo.path, () => takeMainIn(r.path, repo.defaultBranch, own));
     if (result.ok) this.headMoved(worktreeId);
     return { result, defaultBranch: repo.defaultBranch };
   }
@@ -1242,7 +1313,11 @@ export class WorktreeService {
       ]);
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
       const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.defaultBranch) : undefined;
-      if (r.wt?.landed && (files.length > 0 || ahead > 0)) this.setLanded(r.wt.id, false);
+      if (r.wt?.landed && (files.length > 0 || ahead > 0)) {
+        this.setLanded(r.wt.id, false);
+        // new work after a merged PR is a new PR later; the old one is history
+        if (r.wt.pr) this.setPr(r.wt.id, undefined);
+      }
       // a verdict describes one tree: an edit since (by hand, by another tool) retires it, so the
       // composer never offers to land work the check and the message have not seen
       if (

@@ -22,6 +22,7 @@ import type { RouteService } from "../routes/service.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { daylightNow } from "../themes/daylight.ts";
 import type { ThemeStore } from "../themes/store.ts";
+import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
 import type { TurnService } from "../worktrees/turns.ts";
@@ -43,6 +44,8 @@ export interface Services {
   exec: ExecService;
   /** the ref palette: branches and PRs a worktree could be opened on */
   refs: RefSearch;
+  /** what GitHub says about the PRs toyon opened */
+  prs: PrService;
   themes: ThemeStore;
   agents: AgentRegistry;
   /** per-agent login state, and the one write on it (sign out) */
@@ -156,6 +159,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   "refresh-git"(msg, _ctx, s) {
+    // the recount's repoTick also asks GitHub about the repo's open PRs (PrService)
     s.worktrees.recount(msg.repoId);
   },
 
@@ -299,39 +303,29 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     ctx.reply({ t: "git-commit", worktreeId: msg.worktreeId, sha: msg.sha, files });
   },
 
-  async ship(msg, ctx, s) {
-    const result = await s.worktrees.ship(msg.worktreeId, msg.message);
-    await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message, { url: result.url }));
-  },
-
   async land(msg, ctx, s) {
     const { result, removeIds } = await s.worktrees.land(msg.worktreeId, msg.message);
     // the same prefilled prompt sync offers on a conflict: the one failure an agent can be asked to fix
     const suggestion =
       !result.ok && result.conflict
-        ? "Merge main into this branch and resolve the conflicts, then verify the app still works."
+        ? "Bring main into this branch and resolve the conflicts, then verify the app still works."
         : undefined;
+    // a PR opened or merged: GitHub's word on it follows, so the box can say where it stands
+    if (result.ok && (result.pr || s.state.worktree(msg.worktreeId)?.pr)) {
+      fireAndForget(msg.worktreeId, s.prs.refresh(msg.worktreeId), "pr refresh");
+    }
     await notify(
       s,
       ctx,
       msg.worktreeId,
       toast(msg.worktreeId, result.ok, result.message, {
         merged: result.ok,
+        url: result.url,
         // the worktree stays, with close offered in its box; what the toast offers up is its
         // variant siblings, if any
         removeIds: removeIds ?? [],
         ...(suggestion ? { suggestion } : {}),
       }),
-    );
-  },
-
-  async "merge-main"(msg, ctx, s) {
-    const { result, removeIds } = await s.worktrees.merge(msg.worktreeId);
-    await notify(
-      s,
-      ctx,
-      msg.worktreeId,
-      toast(msg.worktreeId, result.ok, result.message, { merged: result.ok, removeIds }),
     );
   },
 

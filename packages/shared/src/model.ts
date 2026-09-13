@@ -19,6 +19,14 @@ export interface ToyonConfig {
   /** a command that must exit 0 before a worktree is offered to land: run in the worktree after
    * every finished turn, its output on the transcript */
   check?: string;
+  /** where landed work ends up: merged into main here (the default), merged here and pushed, or
+   * pushed as a branch with a pull request opened. One per repo; see land.ts */
+  land?: "merge" | "push" | "pr";
+  /** pr only: GitHub merges the PR itself once its rules (checks, reviewers) allow */
+  automerge?: boolean;
+  /** how the commits arrive on main: a merge commit (the local default), one squashed commit, or
+   * the commits as they are. Unset on the PR route follows what the repo allows, squash first */
+  merge?: "merge" | "squash" | "rebase";
   /** proc that the preview iframe should show (defaults to "web", else first proc) */
   preview?: string;
   /** commands can't honor $PORT: only the focused worktree's procs run */
@@ -130,8 +138,9 @@ export interface WorktreeInfo {
   landed?: boolean;
   /** set when spawned as one of N parallel attempts at the same prompt */
   variant?: { group: string; index: number; of: number };
-  /** open PR created from this worktree (via gh) */
-  prUrl?: string;
+  /** the pull request this worktree opened, and what GitHub last said about it; absent until the
+   * PR route has run here. Gone with new work after it merged. */
+  pr?: PrState;
   /** where this worktree came from when it was opened onto something that already existed: a
    * local branch, a remote one, or a PR pulled in to review. The opposite direction from `prUrl`,
    * which is a PR made from the worktree. Absent on a task toyon started from a prompt. */
@@ -169,6 +178,24 @@ export interface WorktreeInfo {
    * picker looks like until something is scaffolded into it. Kept current by every git status
    * read, and stored so the first frame of a page load can say so without asking git. */
   empty?: boolean;
+}
+
+/** A worktree's pull request as GitHub last described it, read through `gh` after it opens, on
+ * focus, and every few minutes while it is open. The composer's line and its verbs read this. */
+export interface PrState {
+  number: number;
+  url: string;
+  state: "open" | "merged" | "closed";
+  /** GitHub's review decision; absent when the repo requires no review */
+  review?: "approved" | "changes_requested" | "review_required";
+  /** the checks, folded to one word; absent when the PR has none */
+  checks?: "pending" | "pass" | "fail";
+  /** GitHub says the merge button would work now */
+  mergeable?: boolean;
+  /** auto-merge is on: GitHub merges it once its rules allow */
+  automerge?: boolean;
+  /** when GitHub was last asked */
+  at: number;
 }
 
 /** how an agent stopped: it finished, someone stopped it, it failed, or it is blocked asking you */

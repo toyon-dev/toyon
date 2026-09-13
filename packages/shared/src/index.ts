@@ -7,6 +7,7 @@ export * from "./chord-labels.ts";
 export * from "./chords.ts";
 export * from "./daemon.ts";
 export * from "./diff.ts";
+export * from "./land.ts";
 export * from "./model.ts";
 export * from "./paste.ts";
 export * from "./ports.ts";

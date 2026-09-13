@@ -47,8 +47,6 @@ describe("a worktree's actions", () => {
       "rename…",
       "|",
       "land",
-      "merge into main",
-      "push + PR",
       "|",
       // nothing written, so the remove asks nothing and loses its ellipsis
       "remove",
@@ -75,8 +73,6 @@ describe("a worktree's actions", () => {
       "|",
       "sync from main (3 behind)",
       "land",
-      "merge into main",
-      "push + PR",
       "|",
       "remove…",
     ]);
@@ -86,11 +82,11 @@ describe("a worktree's actions", () => {
     const items = worktreeItems(
       owned({ behind: 3 }),
       null,
-      { leftOpen: true, termOpen: true, shipping: { w1: "ship" } },
+      { leftOpen: true, termOpen: true, shipping: { w1: "land" } },
       deps,
     );
     const off = items.filter(isItem).filter((i) => i.disabled !== undefined);
-    expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "land", "merge into main", "push + PR"]);
+    expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "land"]);
     expect(off[0]?.disabled).toBe("waiting on the one in progress");
   });
 

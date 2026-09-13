@@ -5,6 +5,8 @@ import {
   canRemove,
   canRename,
   canSync,
+  describeLand,
+  landPolicy,
   type OwnedWorktree,
   type RepoInfo,
   type WorktreeStatus,
@@ -18,7 +20,11 @@ import { copyText, type Deps } from "./deps.ts";
 
 type Dispatch = (a: Action) => void;
 
-/** send a landing op (sync, merge, ship, commit) and mark the worktree in flight in the same
+/** the land row's second line: the repo's route, so the one verb says what it does here */
+const landDetail = (repo: RepoInfo | null) =>
+  describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch).toLowerCase();
+
+/** send a landing op (sync, land, commit, pull) and mark the worktree in flight in the same
  * breath, so no sender can send without the rail's dot and the changes panel's button showing
  * it working. The shipped frame brings it to rest; see `shipping` in the store. */
 export function shipOp(sock: DaemonSocket | null, dispatch: Dispatch, msg: Extract<ClientMsg, { t: ShipOp }>) {
@@ -171,25 +177,13 @@ export function worktreeItems(
     });
   }
   if (canLand(w.worktree)) {
+    // the repo's route, whatever toyon.json says it is: there is one way work lands here
     land.push({
       id: "land",
       label: "land",
-      detail: "commit and merge into main; the worktree stays",
+      detail: landDetail(repo),
       disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "land", worktreeId: id }),
-    });
-    land.push({
-      id: "merge",
-      label: "merge into main",
-      detail: "the merge alone: nothing is committed first",
-      disabled: busy,
-      onClick: () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }),
-    });
-    land.push({
-      id: "ship",
-      label: "push + PR",
-      disabled: busy,
-      onClick: () => shipOp(sock, dispatch, { t: "ship", worktreeId: id }),
     });
   }
   // the ellipsis is the promise of a question, so a remove that asks nothing drops it

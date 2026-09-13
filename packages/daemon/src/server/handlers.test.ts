@@ -17,6 +17,7 @@ import { RepoRegistry } from "../repos/registry.ts";
 import { type RouteFs, RouteService } from "../routes/service.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
+import { PrService } from "../worktrees/prs.ts";
 import { RefSearch } from "../worktrees/refs.ts";
 import { WorktreeService } from "../worktrees/service.ts";
 import { TurnService } from "../worktrees/turns.ts";
@@ -94,6 +95,8 @@ function make() {
   });
   const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, t.paths.themesDir);
   const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
+  // GitHub is not asked in a test: a PR is whatever the test says it is
+  const prs = new PrService({ state, hub, worktrees, view: async () => null, everyMs: 60 * 60_000 });
   const planned: string[][] = [];
   const chosen: Array<string | null> = [];
   const planArgs: Array<[prompt: string, cwd: string, agent: string]> = [];
@@ -109,6 +112,7 @@ function make() {
     runtime,
     exec,
     refs,
+    prs,
     themes,
     agents,
     accounts,
@@ -159,7 +163,7 @@ describe("handlers", () => {
     await expect(dispatch({ t: "chat", worktreeId: "nope", text: "hi" }, ctx, services)).rejects.toBeInstanceOf(
       UserError,
     );
-    await expect(dispatch({ t: "ship", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+    await expect(dispatch({ t: "land", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
     // a write is answered with its refusal rather than thrown: the shell holds the file's next save
     // until the answer comes
     await dispatch({ t: "write-file", worktreeId: "nope", path: "a", content: "", base: null, seq: 1 }, ctx, services);

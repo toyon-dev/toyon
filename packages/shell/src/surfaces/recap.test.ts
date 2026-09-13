@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { Landing, LastTurn, TurnFacts } from "@toyon/shared";
-import { landingLine, recapLine, recapShown } from "./recap.ts";
+import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
+import { landingLine, prCanMerge, prLine, recapLine, recapShown } from "./recap.ts";
 
 const turn = (end: LastTurn["end"], f: Partial<TurnFacts> = {}, minsAgo = 12, text?: string): LastTurn => ({
   at: Date.now() - minsAgo * 60_000,
@@ -65,6 +65,44 @@ describe("landingLine", () => {
     ).toBe("Check failed: src/App.tsx: error TS2322.");
     expect(landingLine(landing({ check: "fail", ready: false }), 3)).toBe("Check failed.");
     expect(landingLine(landing({ check: "pending", ready: false }), 3)).toBe("Checking the work…");
+  });
+});
+
+describe("prLine", () => {
+  const pr = (over: Partial<PrState>): PrState => ({ number: 12, url: "u", state: "open", at: 1, ...over });
+
+  test("says what GitHub is waiting on, in the order a person would fix things", () => {
+    expect(prLine(pr({ mergeable: false, review: "approved" }))).toBe("PR #12 open; it conflicts with main.");
+    expect(prLine(pr({ review: "changes_requested", checks: "fail" }))).toBe("PR #12 open; changes requested.");
+    expect(prLine(pr({ checks: "fail" }))).toBe("PR #12 open; checks failed.");
+    expect(prLine(pr({ checks: "pending", review: "review_required" }))).toBe("PR #12 open; checks running.");
+    expect(prLine(pr({ review: "review_required" }))).toBe("PR #12 open; waiting on review.");
+    expect(prLine(pr({ review: "approved", checks: "pass" }))).toBe("PR #12 approved, checks pass.");
+    expect(prLine(pr({}))).toBe("PR #12 open and ready to merge.");
+  });
+
+  test("auto-merge names what GitHub waits for; merged and closed say so", () => {
+    expect(prLine(pr({ automerge: true }))).toBe("PR #12 open; GitHub merges it when checks pass.");
+    expect(prLine(pr({ automerge: true, review: "review_required" }))).toBe(
+      "PR #12 open; GitHub merges it when it is approved and checks pass.",
+    );
+    expect(prLine(pr({ state: "merged" }))).toBe("PR #12 merged; main here is behind origin.");
+    expect(prLine(pr({ state: "closed" }))).toBe("PR #12 was closed without merging.");
+  });
+
+  test("the merge word shows only when nothing on GitHub stands in the way", () => {
+    expect(prCanMerge(pr({}))).toBe(true);
+    expect(prCanMerge(pr({ review: "approved", checks: "pass" }))).toBe(true);
+    for (const over of [
+      { review: "review_required" as const },
+      { review: "changes_requested" as const },
+      { checks: "pending" as const },
+      { checks: "fail" as const },
+      { mergeable: false },
+      { automerge: true },
+      { state: "merged" as const },
+    ])
+      expect(prCanMerge(pr(over))).toBe(false);
   });
 });
 

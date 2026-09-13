@@ -23,6 +23,7 @@ import { loadOrCreateToken, StateStore } from "./core/state.ts";
 import { DesignService } from "./design/service.ts";
 import { ExecService } from "./exec/service.ts";
 import { FileService } from "./files/service.ts";
+import { viewPr } from "./git/gh.ts";
 import { RepoRegistry } from "./repos/registry.ts";
 import { RouteService } from "./routes/service.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
@@ -30,6 +31,7 @@ import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
 import { LandingService } from "./worktrees/landing.ts";
+import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
 import { TurnService } from "./worktrees/turns.ts";
@@ -106,6 +108,7 @@ new LandingService({
   judge: makeLander(runtime, agents, state),
 });
 const refs = new RefSearch({ state });
+const prs = new PrService({ state, hub, worktrees, view: viewPr });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees });
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);
 themes.load();
@@ -128,6 +131,7 @@ const { branded, stop: stopServer } = startServer({
     runtime,
     exec,
     refs,
+    prs,
     themes,
     agents,
     accounts,
@@ -207,6 +211,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   log.info("daemon", `${signal}: stopping dev servers`);
   repos.stopWatchers();
+  prs.stop();
   stopLagSampler();
   stopServer();
   // the visits still waiting on their coalesced write; a clean stop should not lose them

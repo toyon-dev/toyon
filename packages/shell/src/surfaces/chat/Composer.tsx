@@ -1,5 +1,14 @@
 import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree } from "@toyon/shared";
-import { canLand, canSync, DEFAULT_PERMISSION_MODE, isMain, nextNumbers, numbered } from "@toyon/shared";
+import {
+  canLand,
+  canSync,
+  DEFAULT_PERMISSION_MODE,
+  describeLand,
+  isMain,
+  landPolicy,
+  nextNumbers,
+  numbered,
+} from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
@@ -29,7 +38,7 @@ import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
-import { landingLine, recapLine, recapShown } from "../recap.ts";
+import { landingLine, prCanMerge, prLine, recapLine, recapShown } from "../recap.ts";
 import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl } from "./images.ts";
@@ -215,17 +224,14 @@ export function Composer({
       : undefined;
   // what would land: the uncommitted files, or the committed ones when the tree is clean
   const landCount = dirty || (git?.committed?.length ?? 0);
-  // landed and nothing since: the box offers the one thing left, closing the worktree. The
-  // conversation stays until then, so a follow-up is a message like any other.
-  const landed =
-    !landing &&
-    !drafting &&
-    !greenfield &&
-    blank &&
-    !midTurn &&
-    !!active?.worktree.landed &&
-    dirty === 0 &&
-    (git?.ahead ?? 0) === 0;
+  // the seat's states, in order: landed and nothing since (the box offers the one thing left,
+  // closing the worktree; the conversation stays until then, so a follow-up is a message like any
+  // other), then a PR standing between the work and main, then a verdict on work to land
+  const atRest = !drafting && !greenfield && blank && !midTurn && !!active;
+  const landed = atRest && !!active.worktree.landed && dirty === 0 && (git?.ahead ?? 0) === 0;
+  const pr = atRest && !landed ? active.worktree.pr : undefined;
+  const policy = landPolicy(repo?.config ?? {});
+  const landTip = `${describeLand(policy, repo?.defaultBranch)}. Tab edits the message first.`;
   const compactable = canCompact && !midTurn;
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
   const compactItems = () => [
@@ -344,28 +350,30 @@ export function Composer({
   const title = active?.worktree.title ?? "untitled";
   const placeholderText = !active
     ? "no worktree selected"
-    : landing
-      ? landingLine(landing, landCount)
-      : landed
-        ? `Landed on ${repo?.defaultBranch ?? "main"}.`
-        : recap
-          ? recapLine(recap)
-          : greenfield
-            ? `describe ${title}…`
-            : drafting || spawning
-              ? "describe a change"
-              : onMain
-                ? "message the agent; / for a command, ! for a shell command"
-                : `message agent on ${title}; / for a command, ! for a shell command`;
+    : landed
+      ? `Landed on ${repo?.defaultBranch ?? "main"}.`
+      : pr
+        ? prLine(pr)
+        : landing
+          ? landingLine(landing, landCount)
+          : recap
+            ? recapLine(recap)
+            : greenfield
+              ? `describe ${title}…`
+              : drafting || spawning
+                ? "describe a change"
+                : onMain
+                  ? "message the agent; / for a command, ! for a shell command"
+                  : `message agent on ${title}; / for a command, ! for a shell command`;
   // under a verdict: the recap's sentence when one has been written, else the message the work
   // would land with, which is the next most useful thing to read before pressing
   const subline =
     text !== "" || ghost || !active
       ? null
-      : landing
-        ? (lastTurn?.recap?.text ?? landing.subject ?? null)
-        : landed
-          ? "Close this worktree when you are done here; its chat goes to the archive."
+      : landed
+        ? "Close this worktree when you are done here; its chat goes to the archive."
+        : pr || landing
+          ? (lastTurn?.recap?.text ?? landing?.subject ?? null)
           : recap
             ? null
             : note
@@ -713,34 +721,11 @@ export function Composer({
               <span className="composer-subline">{subline}</span>
             </div>
           )}
-          {/* the verbs take the corner a send button would: present only while the box is empty
-              and the verdict is ready, so typing and landing are never offered at once. The
-              accent is land's; pr only where there is somewhere to push. */}
-          {landing?.ready && id && (
-            <span className="composer-land">
-              <Button
-                tone="primary"
-                busy={op === "land"}
-                disabled={!!op && op !== "land"}
-                data-tip="Commit and merge into main. Tab edits the message first."
-                onClick={() => shipOp(sock, dispatch, { t: "land", worktreeId: id })}
-              >
-                land
-              </Button>
-              {repo?.remote && (
-                <Button
-                  busy={op === "ship"}
-                  disabled={!!op && op !== "ship"}
-                  data-tip="Commit, push and open a PR"
-                  onClick={() => shipOp(sock, dispatch, { t: "ship", worktreeId: id })}
-                >
-                  pr
-                </Button>
-              )}
-            </span>
-          )}
-          {/* the same seat once the work is on main: the row goes at once and comes back with a
-              toast if the daemon refuses, the way any remove does */}
+          {/* the verbs take the corner a send button would: present only while the box is empty,
+              so typing and landing are never offered at once. One accent per state: land while the
+              verdict is ready, merge while GitHub would take the PR, close once the work is on main
+              (the row goes at once and comes back with a toast if the daemon refuses, the way any
+              remove does). */}
           {landed && id && (
             <span className="composer-land">
               <Button
@@ -749,6 +734,37 @@ export function Composer({
                 onClick={() => removeWorktrees(sock, dispatch, [id])}
               >
                 close
+              </Button>
+            </span>
+          )}
+          {pr && pr.state === "open" && id && (
+            <span className="composer-land">
+              {prCanMerge(pr) && (
+                <Button
+                  tone="primary"
+                  busy={op === "land"}
+                  disabled={!!op && op !== "land"}
+                  data-tip="Merge the PR now, by the method the repo allows"
+                  onClick={() => shipOp(sock, dispatch, { t: "land", worktreeId: id })}
+                >
+                  merge
+                </Button>
+              )}
+              <Button data-tip="Open the PR on GitHub" onClick={() => window.open(pr.url, "_blank")}>
+                view
+              </Button>
+            </span>
+          )}
+          {(!pr || pr.state === "closed") && landing?.ready && id && (
+            <span className="composer-land">
+              <Button
+                tone="primary"
+                busy={op === "land"}
+                disabled={!!op && op !== "land"}
+                data-tip={landTip}
+                onClick={() => shipOp(sock, dispatch, { t: "land", worktreeId: id })}
+              >
+                land
               </Button>
             </span>
           )}

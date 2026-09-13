@@ -1,4 +1,4 @@
-import { canSync, isOwned, canLand as landable, type WorktreeStatus } from "@toyon/shared";
+import { canSync, describeLand, isOwned, canLand as landable, landPolicy, type WorktreeStatus } from "@toyon/shared";
 import { useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { shipOp } from "../../state/actions/worktree.ts";
@@ -9,6 +9,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
+import { prCanMerge } from "../recap.ts";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
  * where you are on the left and what you can do on the right. The message box shows the suggested
@@ -73,16 +74,15 @@ export function CommitBox({
     if (op) return;
     shipOp(sock, dispatch, { t: "land", worktreeId: id, ...(typed ? { message: typed } : {}) });
   };
-  const ship = () => {
-    if (op) return;
-    shipOp(sock, dispatch, { t: "ship", worktreeId: id, ...(typed ? { message: typed } : {}) });
-  };
-  // a commit needs a message; a land or a pr can take the suggested one. A failed check holds
-  // both back, the way it holds the composer's word back, until the check passes again.
+  // a commit needs a message; a land can take the suggested one. A failed check holds land back,
+  // the way it holds the composer's word back, until the check passes again.
   const checkFailed = owned?.landing?.check === "fail";
-  const canLand = !!owned && landable(owned) && (dirty || ahead > 0) && !checkFailed;
+  const pr = owned?.pr;
+  const prOpen = pr?.state === "open";
+  const canLand = !!owned && landable(owned) && (dirty || ahead > 0) && !checkFailed && !prOpen;
   const syncable = canSync(active) && !dirty && behind > 0;
-  const remote = useStore((s) => s.repos.find((r) => r.id === active.repoId)?.remote ?? false);
+  const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
+  const landTip = describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch);
 
   return (
     <div className="composer commit-box">
@@ -153,44 +153,33 @@ export function CommitBox({
             </Button>
           )}
           {owned && canLand && (
-            <>
-              <Button
-                tone="primary"
-                busy={op === "land"}
-                disabled={!!op}
-                data-tip={dirty ? "Commit and merge into main" : "Merge into main"}
-                onClick={land}
-              >
-                land
-              </Button>
-              {owned.prUrl ? (
-                <Button
-                  data-tip={`PR open: click to view · ${owned.prUrl}`}
-                  onClick={() => window.open(owned.prUrl, "_blank")}
-                  // the button opens the PR; one level in is the PR as a link
-                  {...cm.contextMenu(() => {
-                    const url = owned.prUrl ?? "";
-                    return [
-                      { id: "open-pr", label: "open on GitHub", onClick: () => window.open(url, "_blank") },
-                      { id: "copy-link", label: "copy link", onClick: () => copyText(url) },
-                    ];
-                  })}
-                >
-                  pr open <Icon name="external" className="icon-inline" />
-                </Button>
-              ) : (
-                remote && (
-                  <Button
-                    busy={op === "ship"}
-                    disabled={!!op}
-                    data-tip={dirty ? "Commit, push and open a PR" : "Push and open a PR"}
-                    onClick={ship}
-                  >
-                    pr <Icon name="external" className="icon-inline" />
-                  </Button>
-                )
-              )}
-            </>
+            <Button tone="primary" busy={op === "land"} disabled={!!op} data-tip={landTip} onClick={land}>
+              land
+            </Button>
+          )}
+          {prOpen && prCanMerge(pr) && (
+            <Button
+              tone="primary"
+              busy={op === "land"}
+              disabled={!!op}
+              data-tip="Merge the PR now, by the method the repo allows"
+              onClick={land}
+            >
+              merge
+            </Button>
+          )}
+          {pr && (
+            <Button
+              data-tip={`Open PR #${pr.number} on GitHub`}
+              onClick={() => window.open(pr.url, "_blank")}
+              // the button opens the PR; one level in is the PR as a link
+              {...cm.contextMenu(() => [
+                { id: "open-pr", label: "open on GitHub", onClick: () => window.open(pr.url, "_blank") },
+                { id: "copy-link", label: "copy link", onClick: () => copyText(pr.url) },
+              ])}
+            >
+              view <Icon name="external" className="icon-inline" />
+            </Button>
           )}
         </span>
       </div>

@@ -1,8 +1,18 @@
-import { isOwned, type RepoInfo } from "@toyon/shared";
+import {
+  DEFAULT_LAND_ROUTE,
+  isOwned,
+  LAND_ROUTES,
+  type LandRoute,
+  landPolicy,
+  MERGE_METHODS,
+  type MergeMethod,
+  type RepoInfo,
+} from "@toyon/shared";
 import { useEffect, useState } from "react";
 import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
+import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
 import { Form } from "../../ui/Form.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
@@ -45,6 +55,10 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   });
   const [install, setInstall] = useState(() => (repo.config.setup ?? []).join("\n"));
   const [check, setCheck] = useState(() => repo.config.check ?? "");
+  // how work lands: the route only matters with somewhere to push, the method always
+  const [land, setLand] = useState<LandRoute>(() => landPolicy(repo.config).land);
+  const [automerge, setAutomerge] = useState(() => landPolicy(repo.config).automerge);
+  const [merge, setMerge] = useState<MergeMethod | "default">(() => repo.config.merge ?? "default");
   const multi = procs.length > 1;
   const canStart = procs.some((p) => p.name.trim() && p.cmd.trim());
   // the agent's button exists for a repo the detector could not read; it leads while the form is
@@ -59,11 +73,19 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
-  // keys the pane does not edit (preview, profiles) survive a hand-written file; an emptied check
-  // leaves the file rather than staying as ""
+  // keys the pane does not edit (preview, profiles) survive a hand-written file; a value at its
+  // default leaves the file rather than being written out, so the file stays as short as it was
   const edited = (): typeof repo.config => {
-    const { check: _check, ...rest } = repo.config;
-    return { ...rest, setup: setupLines(), ...(check.trim() ? { check: check.trim() } : {}) };
+    const { check: _check, land: _land, automerge: _auto, merge: _merge, ...rest } = repo.config;
+    const route = repo.remote ? land : DEFAULT_LAND_ROUTE;
+    return {
+      ...rest,
+      setup: setupLines(),
+      ...(check.trim() ? { check: check.trim() } : {}),
+      ...(route !== DEFAULT_LAND_ROUTE ? { land: route } : {}),
+      ...(route === "pr" && automerge ? { automerge: true } : {}),
+      ...(merge !== "default" ? { merge } : {}),
+    };
   };
   const start = () => {
     sock?.send({
@@ -127,6 +149,49 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
 
       <FormRow label="check" hint="runs after each of the agent's turns; the work lands only when it passes">
         <Field size="md" rule value={check} placeholder="bun run check" onChange={(e) => setCheck(e.target.value)} />
+      </FormRow>
+
+      {/* one route per repo: the land word everywhere does this. Without an origin there is only
+          merging here, so the row would be a choice of one. */}
+      {repo.remote && (
+        <FormRow label="land" hint="how a worktree's work reaches main; one way per repo">
+          <div className="setup-land">
+            <ChipPicker<LandRoute>
+              value={land}
+              options={LAND_ROUTES.map((r) => ({ id: r.id, label: r.name, description: r.description }))}
+              onChange={setLand}
+              hint="click to change"
+              placeholder="how work lands"
+            />
+            {land === "pr" && (
+              <Button
+                variant="field"
+                mono
+                on={automerge}
+                {...tip("GitHub merges the PR itself once its rules allow: checks, reviewers, or nothing")}
+                onClick={() => setAutomerge(!automerge)}
+              >
+                auto-merge {automerge ? "on" : "off"}
+              </Button>
+            )}
+          </div>
+        </FormRow>
+      )}
+
+      <FormRow
+        label="merge as"
+        hint="the default is a merge commit here; on GitHub, what the repo allows, squash first"
+      >
+        <ChipPicker<MergeMethod | "default">
+          value={merge}
+          options={[
+            { id: "default", label: "default", description: "a merge commit here; on GitHub what the repo allows" },
+            ...MERGE_METHODS.map((m) => ({ id: m.id, label: m.name, description: m.description })),
+          ]}
+          onChange={setMerge}
+          hint="click to change"
+          placeholder="how the commits arrive on main"
+        />
       </FormRow>
 
       <FormRow

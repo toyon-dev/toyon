@@ -277,12 +277,18 @@ export const toyonConfigSchema = z
     procs: z.record(declaredProcName, shellCommand),
     setup: z.array(shellCommand).max(50).optional(),
     check: shellCommand.optional(),
+    land: z.enum(["merge", "push", "pr"]).optional(),
+    automerge: z.boolean().optional(),
+    merge: z.enum(["merge", "squash", "rebase"]).optional(),
     preview: procName.optional(),
     exclusive: z.boolean().optional(),
     profiles: z.record(procName, runProfileSchema).optional(),
     defaultProfile: procName.optional(),
   })
   .superRefine((c, ctx) => {
+    // auto-merge is GitHub's; on a local route it would promise something nothing does
+    if (c.automerge !== undefined && c.land !== "pr")
+      ctx.addIssue({ code: "custom", path: ["automerge"], message: 'automerge needs "land": "pr"' });
     // a profile may only name procs that exist, and the default must be a profile: caught here so
     // a typo is a toast at confirm/reload time, not a worktree that silently runs nothing
     if (!c.profiles) {
@@ -390,11 +396,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("git-log"), worktreeId: id }),
   /** the files one commit touched, on expanding it in the history tab */
   z.object({ t: z.literal("git-commit"), worktreeId: id, sha }),
-  /** push and open a PR; a dirty tree is committed first with `message`, else the suggested one */
-  z.object({ t: z.literal("ship"), worktreeId: id, message: z.string().max(5_000).optional() }),
-  z.object({ t: z.literal("merge-main"), worktreeId: id }),
-  /** the one press: sync main in if behind, commit if dirty (with `message`, else the suggested
-   * one), merge into main, archive the worktree. Stops at the first step that fails. */
+  /** the one press: commit if dirty (with `message`, else the suggested one), take main in, then
+   * the repo's route: merge here, merge and push, or push and open a PR. On a worktree whose PR
+   * is open it merges the PR. Stops at the first step that fails. */
   z.object({ t: z.literal("land"), worktreeId: id, message: z.string().max(5_000).optional() }),
   z.object({ t: z.literal("commit"), worktreeId: id, message: z.string().max(5_000) }),
   /** merge the sources' branches into the target worktree and remove them; a local merge, and the

@@ -4,6 +4,8 @@ import {
   isMain,
   isOwned,
   type ProcState,
+  previewOrigin,
+  type RemoteView,
   type RepoInfo,
   type WorktreeInfo,
   type WorktreeStatus,
@@ -25,12 +27,13 @@ import {
  * `<id>.localhost` is its own registrable domain and would be cross-site anyway, so stay on
  * loopback there rather than pretend.
  *
- * A shell served from the remote name (hello's `remoteHost`) came through a TLS front that
- * forwards one port, so every preview rides that port under its own label, and the daemon routes
- * by name. Same site as the shell again, for the same reasons. */
-export function previewUrl(worktreeId: string, proxyPort: number, remoteHost: string | null): string {
+ * A shell served from the public name (hello's `remote`) came through a TLS front, and the daemon
+ * says where previews live under it. Routed by name, every preview rides the front's one port
+ * under its own label: same site as the shell again, for the same reasons. On their own ports the
+ * front holds no wildcard certificate: still same site, but one cookie jar for every worktree. */
+export function previewUrl(worktreeId: string, proxyPort: number, remote: RemoteView | null): string {
   const h = location.hostname;
-  if (remoteHost !== null && h === remoteHost) return `${location.protocol}//w${worktreeId}.${location.host}/`;
+  if (remote !== null && h === remote.host) return `${previewOrigin(remote.previews, worktreeId, proxyPort)}/`;
   if (h.endsWith(".localhost")) return `http://w${worktreeId}.${h}:${proxyPort}/`;
   if (h === "127.0.0.1" || h === "localhost") return `http://127.0.0.1:${proxyPort}/`;
   return `${location.protocol}//${h}:${proxyPort}/`;

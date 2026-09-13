@@ -82,8 +82,8 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     console.log(`toyon: ${url}`);
     openUrl(url);
   }
-  const host = (await health())?.host;
-  if (host) console.log(`toyon: remote at https://${host}/#token=${token}`);
+  const remote = (await health())?.remote;
+  if (remote) console.log(`toyon: remote at https://${remote.host}/#token=${token}`);
   return 0;
 }
 

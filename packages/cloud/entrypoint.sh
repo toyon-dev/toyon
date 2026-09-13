@@ -4,7 +4,13 @@
 # (so ~/.claude and bun's cache survive restarts).
 set -eu
 
-mkdir -p /data/home /data/toyon
+mkdir -p /data/home "${TOYON_HOME:-/data/toyon}"
+# The token arrives as a platform secret, and the daemon reads it only from its file: everything it
+# starts inherits its environment, so the secret leaves the environment here, before it starts.
+if [ -n "${TOYON_TOKEN:-}" ]; then
+  (umask 077 && printf %s "$TOYON_TOKEN" > "${TOYON_HOME:-/data/toyon}/token")
+  unset TOYON_TOKEN
+fi
 chown -R orch:orch /data
 
 exec runuser -u orch -- /bin/sh -c '
@@ -21,7 +27,7 @@ REPO=/data/repo
 if [ ! -d "$REPO/.git" ]; then
   if [ -n "${DEMO_REPO_URL:-}" ]; then
     echo "cloning $DEMO_REPO_URL"
-    git clone --depth 50 "$DEMO_REPO_URL" "$REPO"
+    git clone "$DEMO_REPO_URL" "$REPO"
     (cd "$REPO" && bun install)
   else
     # Vite React starter, scaffolded fresh so the spike needs no GitHub access.
@@ -40,10 +46,11 @@ export default defineConfig({
   },
 });
 EOF
-    # explicit config: without toyon.json the daemon treats the detected
+    # explicit settings: without them the daemon treats the detected
     # procs as a guess and starts nothing until the first-run card confirms
-    cat > "$REPO/toyon.json" <<EOF
-{ "procs": { "web": "bun run dev" }, "setup": ["bun install"] }
+    mkdir -p "$REPO/.toyon"
+    cat > "$REPO/.toyon/settings.json" <<EOF
+{ "setup": ["bun install"], "run": { "web": "bun run dev" } }
 EOF
     (cd "$REPO" && bun install)
     (cd "$REPO" && git init -q && git add -A && git commit -qm "vite react-ts starter")

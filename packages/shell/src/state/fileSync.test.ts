@@ -82,7 +82,7 @@ function harness() {
     defaultAgent: "claude",
     home: "/h",
     folderDialog: false,
-    remoteHost: null,
+    remote: null,
     gitIdentity: true,
     pending: [],
     visits: {},

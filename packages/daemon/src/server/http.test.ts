@@ -35,7 +35,7 @@ const opts: HttpOpts = {
   branded: () => false,
   metrics: () => ({ lag: 0 }),
   noteShellOrigin: (o) => learnedOrigins.push(o),
-  remoteHost: null,
+  remote: null,
   preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
 };
@@ -83,7 +83,7 @@ describe("guards, remote mode", () => {
   };
   const remote = createFetch({
     ...opts,
-    remoteHost: "toyon.example.com",
+    remote: { host: "toyon.example.com", previews: "https://w{id}.toyon.example.com", front: "local" },
     preview: (id) => (id === "a1b2c3" ? app : null),
   });
   const https = { "x-forwarded-proto": "https" };
@@ -92,7 +92,9 @@ describe("guards, remote mode", () => {
   test("the remote name passes when the front on this machine says the hop was https", async () => {
     const r = await remote(req("/health", { host: "toyon.example.com", headers: https }), srv());
     expect(r?.status).toBe(200);
-    expect(await r?.json()).toMatchObject({ host: "toyon.example.com" });
+    expect(await r?.json()).toMatchObject({
+      remote: { host: "toyon.example.com", previews: "https://w{id}.toyon.example.com" },
+    });
   });
   test("the remote name over plain http is refused, saying why", async () => {
     const r = await remote(req("/health", { host: "toyon.example.com" }), srv());
@@ -140,7 +142,7 @@ describe("guards, remote mode", () => {
     const r = await remote(req("/bootstrap?token=secret", { host: "toyon.example.com", headers: https }), srv());
     const cookie = r?.headers.get("set-cookie") ?? "";
     expect(cookie).toStartWith(`toyon_preview=${previewGrant("secret")};`);
-    for (const attr of ["Domain=toyon.example.com", "HttpOnly", "Secure", "SameSite=Lax"])
+    for (const attr of ["Domain=toyon.example.com", "HttpOnly", "Secure", "SameSite=Strict"])
       expect(cookie).toContain(attr);
   });
   test("the grant is not handed out for a wrong token, nor to a local shell", async () => {
@@ -161,6 +163,68 @@ describe("guards, remote mode", () => {
   test("with remote off, the name is refused like any other", async () => {
     const r = await fetch(req("/health", { host: "toyon.example.com", headers: https }), srv());
     expect(r?.status).toBe(403);
+  });
+  test("a refused preview is a page that reloads itself, so a frame that raced the cookie recovers", async () => {
+    const r = await remote(req("/", { host: "wa1b2c3.toyon.example.com", headers: https }), srv());
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+    expect(await r?.text()).toContain('http-equiv="refresh"');
+  });
+});
+
+describe("guards, a local front with previews on ports", () => {
+  const ports = createFetch({
+    ...opts,
+    remote: { host: "box.tail1234.ts.net", previews: "https://box.tail1234.ts.net:{port}", front: "local" },
+  });
+  const https = { "x-forwarded-proto": "https" };
+
+  test("the name is the shell, and hands out the grant", async () => {
+    const r = await ports(req("/bootstrap?token=secret", { host: "box.tail1234.ts.net", headers: https }), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("set-cookie")).toContain("Domain=box.tail1234.ts.net");
+  });
+  test("no preview is routed by name: previews answer on their own ports", async () => {
+    const r = await ports(req("/", { host: "wa1b2c3.box.tail1234.ts.net", headers: https }), srv());
+    expect(r?.status).toBe(403);
+  });
+});
+
+describe("guards, an edge front", () => {
+  const edge = createFetch({
+    ...opts,
+    remote: { host: "app.fly.dev", previews: "https://app.fly.dev:{port}", front: "edge" },
+  });
+  const https = { "x-forwarded-proto": "https" };
+  const flyPeer = "172.19.0.2";
+
+  test("the public name over https passes from a peer that is not loopback, since the edge never is", async () => {
+    const r = await edge(req("/bootstrap?token=secret", { host: "app.fly.dev", headers: https }), srv(flyPeer));
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("set-cookie")).toContain("Domain=app.fly.dev");
+  });
+  test("a foreign name, a loopback name, or the name over plain http is refused", async () => {
+    const tries: [string, Record<string, string>][] = [
+      ["evil.example", https],
+      ["localhost", https],
+      ["toyon.localhost", https],
+      ["app.fly.dev", {}],
+    ];
+    for (const [host, headers] of tries) {
+      expect((await edge(req("/bootstrap?token=secret", { host, headers }), srv(flyPeer)))?.status).toBe(403);
+    }
+  });
+  test("/health answers the platform's own check, which names the machine and not the public name", async () => {
+    const r = await edge(req("/health", { host: "172.19.0.3:4141" }), srv(flyPeer));
+    expect(r?.status).toBe(200);
+  });
+  test("the token still guards the socket behind the edge", async () => {
+    let data: WsData | undefined;
+    const s = srv(flyPeer, ((_r: Request, o: { data: WsData }) => {
+      data = o.data;
+      return true;
+    }) as never);
+    await edge(req("/ws?token=nope", { host: "app.fly.dev", headers: https }), s);
+    expect(data?.authed).toBe(false);
   });
 });
 
@@ -272,7 +336,7 @@ describe("static shell", () => {
     attachments: new AttachmentStore(attachmentsDir),
     branded: () => false,
     noteShellOrigin: () => {},
-    remoteHost: null,
+    remote: null,
     preview: () => null,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),

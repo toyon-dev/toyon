@@ -112,16 +112,10 @@ export function saveState(paths: Paths, state: PersistedState) {
 export function loadOrCreateToken(paths: Paths): string {
   ensureDirs(paths);
   const TOKEN_FILE = paths.tokenFile;
-  // cloud mode seeds the token from a secret so the provisioner can print the URL;
-  // hex-only because the shell's fragment parser (shell/src/ws.ts) only accepts hex
-  const seeded = process.env.TOYON_TOKEN;
-  if (seeded) {
-    if (!/^[a-f0-9]{16,}$/.test(seeded)) {
-      throw new Error("TOYON_TOKEN must be lowercase hex, at least 16 chars");
-    }
-    writeFileSync(TOKEN_FILE, seeded, { mode: 0o600 });
-    return seeded;
-  }
+  // The file is the only source, never the environment: every proc, setup step, terminal and agent
+  // inherits this process's environment, and Bun.spawn without an `env` hands children the one the
+  // process started with, whatever was deleted from process.env since. A machine whose token comes
+  // from a platform secret writes it here before the daemon starts (the cloud entrypoint).
   if (existsSync(TOKEN_FILE)) return readFileSync(TOKEN_FILE, "utf8").trim();
   const token = randomBytes(32).toString("hex");
   writeFileSync(TOKEN_FILE, token, { mode: 0o600 });

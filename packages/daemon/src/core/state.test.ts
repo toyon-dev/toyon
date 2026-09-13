@@ -3,12 +3,27 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDirs, makePaths } from "./paths.ts";
-import { loadState, StateStore, saveState } from "./state.ts";
+import { loadOrCreateToken, loadState, StateStore, saveState } from "./state.ts";
 
 const home = mkdtempSync(join(tmpdir(), "toyon-state-"));
 const paths = makePaths(home);
 ensureDirs(paths);
 afterAll(() => rmSync(home, { recursive: true, force: true }));
+
+describe("token", () => {
+  // every proc, terminal and agent inherits the daemon's environment, and the token is a shell
+  test("the token lives in its file alone; the environment is never read for one", () => {
+    process.env.TOYON_TOKEN = "ab".repeat(16);
+    try {
+      const token = loadOrCreateToken(paths);
+      expect(token).not.toBe("ab".repeat(16));
+      expect(readFileSync(paths.tokenFile, "utf8")).toBe(token);
+      expect(loadOrCreateToken(paths)).toBe(token);
+    } finally {
+      delete process.env.TOYON_TOKEN;
+    }
+  });
+});
 
 const wt = (id: string) => ({
   id,

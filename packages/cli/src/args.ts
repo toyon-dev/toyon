@@ -10,8 +10,8 @@ export type Command =
   | { kind: "logs"; follow: boolean; lines: number }
   | { kind: "version" }
   | { kind: "uninstall"; yes: boolean }
-  /** `to`: a host name, "off", or null to print the setting */
-  | { kind: "remote"; to: string | null }
+  /** `to`: a host name, "off", or null to print the setting; `ports`: previews on ports of the name */
+  | { kind: "remote"; to: string | null; ports: boolean }
   | { kind: "help" }
   | { kind: "error"; message: string };
 
@@ -39,15 +39,22 @@ export function parseArgs(argv: string[]): Command {
         return { kind: "uninstall", yes: rest.length > 0 };
       }
       case "remote": {
-        if (rest.length > 1) return { kind: "error", message: "toyon remote takes one name, or off" };
-        const to = rest[0] ?? null;
+        const ports = rest.includes("--ports");
+        const names = rest.filter((a) => a !== "--ports");
+        const option = names.find((a) => a.startsWith("-"));
+        if (option) return { kind: "error", message: `unknown option ${option}` };
+        if (names.length > 1) return { kind: "error", message: "toyon remote takes one name, or off" };
+        const to = names[0] ?? null;
+        if (ports && (to === null || to === "off")) {
+          return { kind: "error", message: "--ports goes with a name: toyon remote <name> --ports" };
+        }
         if (to !== null && to !== "off" && !isRemoteHost(to)) {
           return {
             kind: "error",
             message: `${to} is not a host name; give the name your TLS front answers for, like toyon.example.com`,
           };
         }
-        return { kind: "remote", to };
+        return { kind: "remote", to, ports };
       }
     }
   }
@@ -93,6 +100,8 @@ usage
                           your repos and the branches toyon made stay
   toyon remote [name|off] open the shell from another device at https://name, through a TLS
                           front on this machine; with no name, print the setting
+    --ports               put each preview on its own port of the name, for a front that cannot
+                          hold a wildcard certificate (tailscale serve)
 
 options for toyon [path]
   --app                   open a Chromium app window (the installed Toyon app when there is one)

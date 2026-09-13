@@ -63,7 +63,8 @@ describe("subtractKnown", () => {
     expect(rows).toEqual([]);
   });
 
-  test("/tmp and /private/tmp are the same worktree on macOS", () => {
+  // only macOS makes /tmp a symlink to /private/tmp; elsewhere they are two different directories
+  test.if(process.platform === "darwin")("/tmp and /private/tmp are the same worktree on macOS", () => {
     // canonical() resolves the deepest existing ancestor, and /tmp is a symlink to /private/tmp,
     // so state.json's spelling and git's need not agree for the subtraction to work
     const rows = subtractKnown("r1", [listed("/tmp/wt-a", { branch: "a" })], [known("/private/tmp/wt-a")]);

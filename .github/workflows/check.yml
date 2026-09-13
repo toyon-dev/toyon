@@ -16,8 +16,8 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    # macOS is the supported platform. The Linux column runs so the gap is measured on every PR,
-    # but it does not block a merge until that pass is done.
+    # macOS and Linux are both supported. The Linux column reports without blocking until it has been
+    # green on a push, then this line goes.
     continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -31,9 +31,8 @@ jobs:
       - run: bun run check
 
   # The package a stranger installs, driven the way they drive it: node and npm, no bun on PATH,
-  # the tarball from `npm pack`, every verb through the shim. The Linux column is the only Linux
-  # run toyon gets until someone sits at a Linux machine;
-  # it reports rather than blocks until it has been green once.
+  # the tarball from `npm pack`, every verb through the shim. The Linux column reports rather than
+  # blocks until it has been green once.
   package:
     strategy:
       fail-fast: false

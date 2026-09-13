@@ -738,12 +738,14 @@ describe("handlers", () => {
   test("create-repo makes a project in a folder that was not one, and opens it", async () => {
     const { services, ctx, replies, repo } = make();
     const parent = dirname(repo); // the tmp root: exists, and outside any repo
-    await dispatch({ t: "create-repo", mode: "create", parent, name: "fresh" }, ctx, services);
-    const r = services.state.repos.find((x) => x.name === "fresh");
-    expect(r).toBeDefined();
-    expect(lastToast(replies)).toBe("created fresh");
-    // registration gives it a main pseudo-worktree, exactly as opening an existing repo does
-    expect(services.state.worktrees.some((w) => w.repoId === r?.id && w.kind === "main")).toBe(true);
+    await withGitConfig(IDENTITY, async () => {
+      await dispatch({ t: "create-repo", mode: "create", parent, name: "fresh" }, ctx, services);
+      const r = services.state.repos.find((x) => x.name === "fresh");
+      expect(r).toBeDefined();
+      expect(lastToast(replies)).toBe("created fresh");
+      // registration gives it a main pseudo-worktree, exactly as opening an existing repo does
+      expect(services.state.worktrees.some((w) => w.repoId === r?.id && w.kind === "main")).toBe(true);
+    });
   });
 
   test("create-repo refuses a bad name, and a spot inside a project toyon manages", async () => {
@@ -802,18 +804,20 @@ describe("handlers", () => {
     const parent = dirname(repo);
     mkdirSync(join(parent, "My App"));
     writeFileSync(join(parent, "My App", ".DS_Store"), "");
-    await dispatch({ t: "create-repo", mode: "init", parent, name: "My App" }, ctx, services);
-    const made = services.state.repos.find((r) => r.path.endsWith("/My App"));
-    expect(made).toBeDefined();
-    expect(lastToast(replies)).toBe("created My App");
-    // Finder's litter must not cost it the first-run screen, which waits for main to read as empty
-    expect(services.state.worktrees.find((w) => w.repoId === made?.id && w.kind === "main")?.empty).toBe(true);
-    // an empty folder inside a project toyon manages is still inside it
-    mkdirSync(join(repo, "inner"));
-    await dispatch({ t: "register-repo", path: repo }, ctx, services);
-    await expect(
-      dispatch({ t: "create-repo", mode: "init", parent: repo, name: "inner" }, ctx, services),
-    ).rejects.toBeInstanceOf(UserError);
+    await withGitConfig(IDENTITY, async () => {
+      await dispatch({ t: "create-repo", mode: "init", parent, name: "My App" }, ctx, services);
+      const made = services.state.repos.find((r) => r.path.endsWith("/My App"));
+      expect(made).toBeDefined();
+      expect(lastToast(replies)).toBe("created My App");
+      // Finder's litter must not cost it the first-run screen, which waits for main to read as empty
+      expect(services.state.worktrees.find((w) => w.repoId === made?.id && w.kind === "main")?.empty).toBe(true);
+      // an empty folder inside a project toyon manages is still inside it
+      mkdirSync(join(repo, "inner"));
+      await dispatch({ t: "register-repo", path: repo }, ctx, services);
+      await expect(
+        dispatch({ t: "create-repo", mode: "init", parent: repo, name: "inner" }, ctx, services),
+      ).rejects.toBeInstanceOf(UserError);
+    });
   });
 
   test("unmake-repo takes back exactly what create-repo made, while it is untouched", async () => {

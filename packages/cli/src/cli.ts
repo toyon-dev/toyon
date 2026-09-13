@@ -12,6 +12,7 @@ import { type Command, HELP, parseArgs } from "./args.ts";
 import { base, health, logFile, port, readToken, shellUrl, startDaemon } from "./daemon.ts";
 import { doctor } from "./doctor.ts";
 import { logs } from "./logs.ts";
+import { remote } from "./remote.ts";
 import { missingSandboxTools, sandboxAdvice } from "./sandboxDeps.ts";
 import { stop } from "./stop.ts";
 import { uninstall } from "./uninstall.ts";
@@ -81,6 +82,8 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     console.log(`toyon: ${url}`);
     openUrl(url);
   }
+  const host = (await health())?.host;
+  if (host) console.log(`toyon: remote at https://${host}/#token=${token}`);
   return 0;
 }
 
@@ -106,6 +109,8 @@ async function run(cmd: Command): Promise<number> {
       return logs(cmd);
     case "uninstall":
       return uninstall(cmd);
+    case "remote":
+      return remote(cmd);
     case "open":
       return open(cmd);
   }

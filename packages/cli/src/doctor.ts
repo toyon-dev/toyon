@@ -88,6 +88,9 @@ export async function doctor(): Promise<number> {
           (h.lag ? `, event loop worst ${h.lag.max}ms${h.lag.maxCause ? ` (${h.lag.maxCause})` : ""}` : ""),
       ),
     );
+    if (h.host) {
+      lines.push(line(true, "remote", `https://${h.host}/ through a TLS front on 127.0.0.1:${port}`));
+    }
     if (h.worktrees) {
       const { total, running } = h.worktrees;
       lines.push(line(true, "running", `${running} of ${total} worktrees started; the rest start when opened`));

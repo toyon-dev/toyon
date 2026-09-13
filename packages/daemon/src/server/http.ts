@@ -34,6 +34,8 @@ export interface HttpOpts {
   metrics: () => unknown;
   /** the origin a shell just authenticated from, for the bridge's list of who may frame a preview */
   noteShellOrigin: (origin: string | null) => void;
+  /** the name a TLS front on this machine answers for (core/remote.ts), or null when remote is off */
+  remoteHost: string | null;
   /** the hello frame, for a page that asks before its socket exists */
   bootstrap: () => Promise<unknown>;
 }
@@ -62,9 +64,20 @@ export function createFetch(opts: HttpOpts) {
       }
       // DNS-rebinding defense: loopback hosts only. *.localhost is safe — browsers hardwire it
       // to loopback and public DNS cannot serve it (RFC 6761).
-      const host = (req.headers.get("host") ?? "").split(":")[0] ?? "";
+      const host = (req.headers.get("host") ?? "").split(":")[0]?.toLowerCase() ?? "";
       if (host !== "127.0.0.1" && host !== "localhost" && !host.endsWith(".localhost")) {
-        return new Response("forbidden", { status: 403 });
+        // Remote mode: the one name a TLS front on this machine answers for. The front is the
+        // loopback peer above, so a request naming it came through the front, and the front says
+        // whether that hop was https. A plain-http front would put the token on the network in the
+        // clear, and the page would not be a secure context either, so that is refused by name.
+        if (opts.remoteHost === null || host !== opts.remoteHost) {
+          return new Response("forbidden", { status: 403 });
+        }
+        if (req.headers.get("x-forwarded-proto") !== "https") {
+          return new Response(`${host} reaches toyon over https only; the front must terminate TLS`, {
+            status: 403,
+          });
+        }
       }
     }
 
@@ -86,6 +99,7 @@ export function createFetch(opts: HttpOpts) {
         version: opts.version,
         pid: process.pid,
         branded: opts.branded(),
+        host: opts.remoteHost,
         ...(opts.metrics() as object),
       });
     }

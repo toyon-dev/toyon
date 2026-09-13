@@ -39,6 +39,8 @@ export interface ServerOpts {
   services: Services;
   /** where a shell authenticated from, passed on to the bridge script (see BridgeScript) */
   noteShellOrigin: (origin: string | null) => void;
+  /** the name a TLS front on this machine answers for (`remote.json`), or null */
+  remoteHost: string | null;
 }
 
 export function startServer(opts: ServerOpts): { server: Server<WsData>; branded: boolean; stop: () => void } {
@@ -301,6 +303,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       branded: () => branded,
       metrics,
       noteShellOrigin: opts.noteShellOrigin,
+      remoteHost: opts.remoteHost,
       bootstrap: helloFrame,
     }),
     websocket: {

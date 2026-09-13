@@ -6,7 +6,7 @@ import type { Server } from "bun";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
-import { createFetch, type WsData } from "./http.ts";
+import { createFetch, type HttpOpts, type WsData } from "./http.ts";
 
 // The daemon's front door in local mode: loopback peers and loopback Host headers only (DNS
 // rebinding), the token on /ws and /register, and /register mapping user mistakes to 400.
@@ -24,7 +24,7 @@ const repos = {
 const attachmentsDir = mkdtempSync(join(tmpdir(), "toyon-http-"));
 afterAll(() => rmSync(attachmentsDir, { recursive: true, force: true }));
 const learnedOrigins: (string | null)[] = [];
-const fetch = createFetch({
+const opts: HttpOpts = {
   token: "secret",
   shellDist: "/nonexistent",
   version: "0",
@@ -33,8 +33,10 @@ const fetch = createFetch({
   branded: () => false,
   metrics: () => ({ lag: 0 }),
   noteShellOrigin: (o) => learnedOrigins.push(o),
+  remoteHost: null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
-});
+};
+const fetch = createFetch(opts);
 const req = (path: string, init: RequestInit & { host?: string } = {}) =>
   new Request(`http://${init.host ?? "localhost"}${path}`, {
     ...init,
@@ -66,6 +68,35 @@ describe("guards", () => {
   test("*.localhost and 127.0.0.1 hosts pass", async () => {
     expect((await fetch(req("/health", { host: "toyon.localhost" }), srv()))?.status).toBe(200);
     expect((await fetch(req("/health", { host: "127.0.0.1:4141" }), srv("::1")))?.status).toBe(200);
+  });
+});
+
+describe("guards, remote mode", () => {
+  const remote = createFetch({ ...opts, remoteHost: "toyon.example.com" });
+  const https = { "x-forwarded-proto": "https" };
+
+  test("the remote name passes when the front on this machine says the hop was https", async () => {
+    const r = await remote(req("/health", { host: "toyon.example.com", headers: https }), srv());
+    expect(r?.status).toBe(200);
+    expect(await r?.json()).toMatchObject({ host: "toyon.example.com" });
+  });
+  test("the remote name over plain http is refused, saying why", async () => {
+    const r = await remote(req("/health", { host: "toyon.example.com" }), srv());
+    expect(r?.status).toBe(403);
+    expect(await r?.text()).toContain("https");
+  });
+  test("a peer off this machine is still refused: the front is local", async () => {
+    const r = await remote(req("/health", { host: "toyon.example.com", headers: https }), srv("100.64.0.7"));
+    expect(r?.status).toBe(403);
+  });
+  test("any other name is refused, including one under the remote name", async () => {
+    for (const host of ["evil.example", "w1.toyon.example.com", "toyon.example.com.evil.example"]) {
+      expect((await remote(req("/health", { host, headers: https }), srv()))?.status).toBe(403);
+    }
+  });
+  test("with remote off, the name is refused like any other", async () => {
+    const r = await fetch(req("/health", { host: "toyon.example.com", headers: https }), srv());
+    expect(r?.status).toBe(403);
   });
 });
 
@@ -177,6 +208,7 @@ describe("static shell", () => {
     attachments: new AttachmentStore(attachmentsDir),
     branded: () => false,
     noteShellOrigin: () => {},
+    remoteHost: null,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
   });

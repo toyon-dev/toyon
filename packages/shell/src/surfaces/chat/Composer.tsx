@@ -27,18 +27,19 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
 import { baseNote, behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
-import { TargetLine } from "../chips/TargetChip.tsx";
+import { TargetChip } from "../chips/TargetChip.tsx";
 import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
 import { fileRow } from "../overlays/QuickOpen.tsx";
 import { rankFiles } from "../overlays/quickOpen.ts";
-import { landingLine, prCanMerge, prLine, recapLine, recapShown } from "../recap.ts";
+import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, recapShown, verbLine } from "../recap.ts";
 import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl } from "./images.ts";
@@ -55,6 +56,17 @@ const NO_CHOICES: ModelChoice[] = [];
 
 /** the keys that move the caret along the text: pressing one in a recalled message is starting to edit it */
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
+
+/** the next step on the work, as the word leading the empty box's line */
+type Verb = {
+  word: string;
+  /** what the line says after the word */
+  line: string;
+  tip: string;
+  run: () => void;
+  /** a press that goes out as a land op, so it wears the op's busy and disabled states */
+  ships?: boolean;
+};
 
 /** what the inline `@` / `/` menu can offer */
 type Row =
@@ -227,14 +239,13 @@ export function Composer({
       : undefined;
   // what would land: the uncommitted files, or the committed ones when the tree is clean
   const landCount = dirty || (git?.committed?.length ?? 0);
-  // the seat's states, in order: landed and nothing since (the box offers the one thing left,
+  // the verb's states, in order: landed and nothing since (the box offers the one thing left,
   // closing the worktree; the conversation stays until then, so a follow-up is a message like any
   // other), then a PR standing between the work and main, then a verdict on work to land
   const atRest = !drafting && !greenfield && blank && !midTurn && !!active;
   const landed = atRest && !!active.worktree.landed && dirty === 0 && (git?.ahead ?? 0) === 0;
   const pr = atRest && !landed ? active.worktree.pr : undefined;
   const policy = landPolicy(repo?.config ?? {});
-  const landTip = `${describeLand(policy, repo?.defaultBranch)}. Tab edits the message first.`;
   const compactable = canCompact && !midTurn;
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
   const compactItems = () => [
@@ -345,20 +356,69 @@ export function Composer({
   const ghost = argGhost ?? shellGhost;
   // the placeholder, and the quieter line under it while the box is empty: what the base leaves
   // behind when there is something, else, on main's own fast path, what the draft tab adds. Where
-  // the message goes is not the placeholder's to say when a line above the box already says it:
-  // main's target line, or the draft tab's lit row.
+  // the message goes is not the placeholder's to say when a chip already says it: main's target
+  // chip, or the draft tab's lit row.
   // The recap takes the placeholder outright while it stands. It is about the box you are looking
   // at, it goes when you type as a placeholder does, and as a line of its own above the box it was
   // a second block of grey text saying something the box already said.
   const title = active?.worktree.title ?? "untitled";
+  // the agent's own sentence about the work, which is what the verb's line says after the word
+  const said = lastTurn?.recap?.text;
+  const land = () => {
+    if (id) shipOp(sock, dispatch, { t: "land", worktreeId: id });
+  };
+  // The next step, when the work has one, is the first word of the empty box's line: a word in the
+  // sentence, bright and never the accent, which reads as an error. What it rests on (the facts,
+  // the route, what the PR waits on) is its tooltip, opening above it so the line under it stays
+  // readable. A check still running or failed offers no word; its line says why.
+  const verb: Verb | null = !id
+    ? null
+    : landed
+      ? {
+          word: "close",
+          line: `landed on ${repo?.defaultBranch ?? "main"}.`,
+          tip: "Close this worktree when you are done here; its chat goes to the archive, and the toast offers restore.",
+          run: () => removeWorktrees(sock, dispatch, [id]),
+        }
+      : pr?.state === "open"
+        ? prCanMerge(pr)
+          ? {
+              word: "merge",
+              line: verbLine(said ?? prLine(pr)),
+              tip: `${prLine(pr)} Merge the PR now, by the method the repo allows.`,
+              run: land,
+              ships: true,
+            }
+          : {
+              word: "view",
+              line: verbLine(said ?? prLine(pr)),
+              tip: `${prLine(pr)} Open the PR on GitHub.`,
+              run: () => window.open(pr.url, "_blank"),
+            }
+        : landing?.ready && !landingLine(landing)
+          ? {
+              word: "land",
+              line: verbLine(said ?? landing.subject ?? (landFacts(landing, landCount) || "ready")),
+              tip: [
+                landFacts(landing, landCount),
+                `${describeLand(policy, repo?.defaultBranch)}.`,
+                "Tab edits the message first.",
+              ]
+                .filter(Boolean)
+                .join(" "),
+              run: land,
+              ships: true,
+            }
+          : null;
+  const blocked = landing ? landingLine(landing) : null;
   const placeholderText = !active
     ? "no worktree selected"
-    : landed
-      ? `Landed on ${repo?.defaultBranch ?? "main"}.`
+    : verb
+      ? ""
       : pr
         ? prLine(pr)
-        : landing
-          ? landingLine(landing, landCount)
+        : blocked
+          ? blocked
           : recap
             ? recapLine(recap)
             : greenfield
@@ -368,15 +428,18 @@ export function Composer({
                 : onMain
                   ? "message the agent; / for a command, ! for a shell command"
                   : `message agent on ${title}; / for a command, ! for a shell command`;
-  // under a verdict: the recap's sentence when one has been written, else the message the work
-  // would land with, which is the next most useful thing to read before pressing
+  // under the verb, the model's doubt as a sentence of its own. Under a line with no word (a check
+  // running or failed, a PR merged or closed): the recap's sentence when one has been written, else
+  // the message the work would land with, the next most useful thing to read.
   const subline =
     text !== "" || ghost || !active
       ? null
-      : landed
-        ? "Close this worktree when you are done here; its chat goes to the archive."
-        : pr || landing
-          ? (lastTurn?.recap?.text ?? landing?.subject ?? null)
+      : verb
+        ? verb.word === "land" && landing
+          ? landCaveat(landing)
+          : null
+        : pr || blocked
+          ? (said ?? landing?.subject ?? null)
           : recap
             ? null
             : note
@@ -540,393 +603,361 @@ export function Composer({
   const dir = active ? wtDir(active.worktree) : null;
 
   return (
-    <>
-      {/* where a message from main goes, on the panel's ground above the box the way the draft's
-          birth-time choices sit there, so the box opens on its placeholder: a worktree's messages
-          only ever go to that worktree (a fork is the row menu's "new worktree from here"), so only
-          main has the choice */}
-      {onMain && !greenfield && !drafting && active && (
-        <div className="hint composer-target">
-          <TargetLine
-            title={title}
-            value={spawnNew ? "new" : "here"}
-            onChange={(t) => setSpawnNew(t === "new")}
-            onClose={refocus}
-          />
-        </div>
-      )}
-      <div className="composer chat-input">
-        {boxId &&
-          numbered(attachments, nextNumbers(sentBefore)).map(([item, n]) => {
-            const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
-            if (item.kind === "image")
-              return (
-                <ImageChip
-                  key={item.key}
-                  src={dataUrl(item)}
-                  n={n}
-                  name={item.name}
-                  width={item.width}
-                  height={item.height}
-                  bytes={item.bytes}
-                  onRemove={detach}
-                />
-              );
-            if (item.kind === "paste")
-              return (
-                <PasteChip
-                  key={item.key}
-                  n={n}
-                  name={item.name}
-                  source={item.source}
-                  lines={item.lines}
-                  chars={item.chars}
-                  preview={item.preview}
-                  onRemove={detach}
-                />
-              );
+    <div className="composer chat-input">
+      {boxId &&
+        numbered(attachments, nextNumbers(sentBefore)).map(([item, n]) => {
+          const detach = () => dispatch({ a: "detach", id: boxId, key: item.key });
+          if (item.kind === "image")
             return (
-              <PickChip
+              <ImageChip
                 key={item.key}
-                pick={item}
-                dir={dir}
-                tipText={item.html}
-                onHover={(entering) =>
-                  frameId &&
-                  previewBus.post(
-                    frameId,
-                    entering
-                      ? { type: "highlight-selector", selector: item.selector, label: pickLabel(item) }
-                      : { type: "highlight-clear" },
-                  )
-                }
-                onOpen={(path, line) => id && openSource(store, sock, id, path, line)}
+                src={dataUrl(item)}
+                n={n}
+                name={item.name}
+                width={item.width}
+                height={item.height}
+                bytes={item.bytes}
                 onRemove={detach}
               />
             );
-          })}
-        {menuOpen && trigger && (
-          <InlinePicker
-            results={rows}
-            keyOf={(r) => (r.kind === "cmd" ? `c:${r.c.name}` : r.kind === "changes" ? "changes" : `f:${r.path}`)}
-            rowClass={(r) =>
-              r.kind === "file" ? "qo-file" : r.kind === "changes" ? "picker-row" : "picker-row picker-cmd"
+          if (item.kind === "paste")
+            return (
+              <PasteChip
+                key={item.key}
+                n={n}
+                name={item.name}
+                source={item.source}
+                lines={item.lines}
+                chars={item.chars}
+                preview={item.preview}
+                onRemove={detach}
+              />
+            );
+          return (
+            <PickChip
+              key={item.key}
+              pick={item}
+              dir={dir}
+              tipText={item.html}
+              onHover={(entering) =>
+                frameId &&
+                previewBus.post(
+                  frameId,
+                  entering
+                    ? { type: "highlight-selector", selector: item.selector, label: pickLabel(item) }
+                    : { type: "highlight-clear" },
+                )
+              }
+              onOpen={(path, line) => id && openSource(store, sock, id, path, line)}
+              onRemove={detach}
+            />
+          );
+        })}
+      {menuOpen && trigger && (
+        <InlinePicker
+          results={rows}
+          keyOf={(r) => (r.kind === "cmd" ? `c:${r.c.name}` : r.kind === "changes" ? "changes" : `f:${r.path}`)}
+          rowClass={(r) =>
+            r.kind === "file" ? "qo-file" : r.kind === "changes" ? "picker-row" : "picker-row picker-cmd"
+          }
+          nav={nav}
+          listRef={listRef}
+          empty={emptyMenu(trigger.kind, files, commands.length, source !== null)}
+          row={(r) => {
+            if (r.kind === "file") return fileRow(r.path, r.status, trigger.query);
+            if (r.kind === "changes")
+              return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
+            return <CommandRow c={r.c} query={trigger.query} />;
+          }}
+        />
+      )}
+      <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
+        <TextArea
+          size="lg"
+          bare
+          font={shellCmd !== null ? "mono" : "ui"}
+          ref={composerRef}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setCaret(e.target.selectionStart ?? e.target.value.length);
+            nav.setIndex(0);
+            setDismissed(null);
+          }}
+          // arrow keys and clicks move the caret without changing the text, and the menu follows it;
+          // a click in a recalled message is starting to edit it
+          onKeyUp={(e) => {
+            onPasteKeyUp();
+            setCaret(e.currentTarget.selectionStart ?? 0);
+          }}
+          onClick={(e) => {
+            setCaret(e.currentTarget.selectionStart ?? 0);
+            keepRecalled();
+          }}
+          onPaste={onPaste}
+          onKeyDown={(e) => {
+            onPasteKey(e);
+            // an IME builds a word out of several keystrokes; a menu opening mid-composition would
+            // fight the candidate list
+            if (e.nativeEvent.isComposing) return;
+            if (menuOpen) {
+              if (e.key === "Escape") {
+                // no overlay is open, so the app-wide esc would toggle the terminal instead
+                e.preventDefault();
+                e.stopPropagation();
+                setDismissed(trigger?.from ?? null);
+                return;
+              }
+              if (nav.onKeyDown(e)) return;
             }
-            nav={nav}
-            listRef={listRef}
-            empty={emptyMenu(trigger.kind, files, commands.length, source !== null)}
-            row={(r) => {
-              if (r.kind === "file") return fileRow(r.path, r.status, trigger.query);
-              if (r.kind === "changes")
-                return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
-              return <CommandRow c={r.c} query={trigger.query} />;
-            }}
-          />
-        )}
-        <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
-          <TextArea
-            size="lg"
-            bare
-            font={shellCmd !== null ? "mono" : "ui"}
-            ref={composerRef}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setCaret(e.target.selectionStart ?? e.target.value.length);
-              nav.setIndex(0);
-              setDismissed(null);
-            }}
-            // arrow keys and clicks move the caret without changing the text, and the menu follows it;
-            // a click in a recalled message is starting to edit it
-            onKeyUp={(e) => {
-              onPasteKeyUp();
-              setCaret(e.currentTarget.selectionStart ?? 0);
-            }}
-            onClick={(e) => {
-              setCaret(e.currentTarget.selectionStart ?? 0);
-              keepRecalled();
-            }}
-            onPaste={onPaste}
-            onKeyDown={(e) => {
-              onPasteKey(e);
-              // an IME builds a word out of several keystrokes; a menu opening mid-composition would
-              // fight the candidate list
-              if (e.nativeEvent.isComposing) return;
-              if (menuOpen) {
-                if (e.key === "Escape") {
-                  // no overlay is open, so the app-wide esc would toggle the terminal instead
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setDismissed(trigger?.from ?? null);
-                  return;
-                }
-                if (nav.onKeyDown(e)) return;
-              }
-              if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                // a message still waiting in the queue is the nearest thing sent and the likeliest to
-                // want changing: up in an empty box takes the newest one back, as its edit button does
-                const queued = queue.at(-1);
-                if (e.key === "ArrowUp" && !walk && text === "" && id && !drafting && queued !== undefined) {
-                  e.preventDefault();
-                  sock?.send({ t: "unqueue", worktreeId: id, index: queue.length - 1 });
-                  walkTo({ walk: null, text: queued });
-                  return;
-                }
-                // while walking the arrows are the walk's however many lines the entry has; in a box
-                // with something typed in it they move the caret
-                const step = id ? stepWalk(chat, walk ?? null, text, e.key === "ArrowUp" ? "up" : "down") : null;
-                if (step) {
-                  e.preventDefault();
-                  if (step.walk !== walk || step.text !== text) walkTo(step);
-                  return;
-                }
-              }
-              if (walk && e.key === "Escape") {
-                // back to the box as it was; the app-wide esc would toggle the terminal instead
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              // a message still waiting in the queue is the nearest thing sent and the likeliest to
+              // want changing: up in an empty box takes the newest one back, as its edit button does
+              const queued = queue.at(-1);
+              if (e.key === "ArrowUp" && !walk && text === "" && id && !drafting && queued !== undefined) {
                 e.preventDefault();
-                e.stopPropagation();
-                walkTo({ walk: null, text: walk.from });
+                sock?.send({ t: "unqueue", worktreeId: id, index: queue.length - 1 });
+                walkTo({ walk: null, text: queued });
                 return;
               }
-              if (e.key === "Escape" && midTurn && id && !drafting) {
-                // esc stops the turn, as it does in a terminal agent: what is typed stays, and what was
-                // queued or is sent next goes as the following turn. The app-wide esc would close a pane.
+              // while walking the arrows are the walk's however many lines the entry has; in a box
+              // with something typed in it they move the caret
+              const step = id ? stepWalk(chat, walk ?? null, text, e.key === "ArrowUp" ? "up" : "down") : null;
+              if (step) {
                 e.preventDefault();
-                e.stopPropagation();
-                sock?.send({ t: "stop-agent", worktreeId: id });
+                if (step.walk !== walk || step.text !== text) walkTo(step);
                 return;
               }
-              if (walk && CARET_KEYS.has(e.key)) keepRecalled();
-              // tab in the empty box, with a message suggested: the changes panel is where a commit
-              // message is edited (Enter breaks its lines there), so tab goes there with it
-              if (e.key === "Tab" && !e.shiftKey && text === "" && landing?.subject) {
-                e.preventDefault();
-                dispatch({ a: "edit-commit" });
-                return;
-              }
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              } else if (e.key === "Backspace" && text === "" && removeLast()) {
-                e.preventDefault();
-              }
-            }}
-            // the ghost draws the placeholder itself when it has a line to put under it
-            placeholder={subline ? "" : placeholderText}
-            disabled={!active}
-          />
-          {ghost && (
-            <div className="composer-ghost" aria-hidden="true">
-              <span className="picker-typed">{text}</span>
-              {ghost}
-            </div>
-          )}
-          {subline && (
-            <div className="composer-ghost" aria-hidden="true">
-              <span className="composer-placeholder">{placeholderText}</span>
-              {"\n"}
-              <span className="composer-subline">{subline}</span>
-            </div>
-          )}
-          {/* the verbs take the corner a send button would: present only while the box is empty,
-              so typing and landing are never offered at once. One accent per state: land while the
-              verdict is ready, merge while GitHub would take the PR, close once the work is on main
-              (the row goes at once and comes back with a toast if the daemon refuses, the way any
-              remove does). */}
-          {landed && id && (
-            <span className="composer-land">
-              <Button
-                tone="primary"
-                data-tip="Archive this worktree and its chat; the toast offers restore"
-                onClick={() => removeWorktrees(sock, dispatch, [id])}
-              >
-                close
-              </Button>
-            </span>
-          )}
-          {pr && pr.state === "open" && id && (
-            <span className="composer-land">
-              {prCanMerge(pr) && (
-                <Button
-                  tone="primary"
-                  busy={op === "land"}
-                  disabled={!!op && op !== "land"}
-                  data-tip="Merge the PR now, by the method the repo allows"
-                  onClick={() => shipOp(sock, dispatch, { t: "land", worktreeId: id })}
-                >
-                  merge
-                </Button>
-              )}
-              <Button data-tip="Open the PR on GitHub" onClick={() => window.open(pr.url, "_blank")}>
-                view
-              </Button>
-            </span>
-          )}
-          {(!pr || pr.state === "closed") && landing?.ready && id && (
-            <span className="composer-land">
-              <Button
-                tone="primary"
-                busy={op === "land"}
-                disabled={!!op && op !== "land"}
-                data-tip={landTip}
-                onClick={() => shipOp(sock, dispatch, { t: "land", worktreeId: id })}
-              >
-                land
-              </Button>
-            </span>
-          )}
-        </div>
-        {/* the row reads left to right as where this goes, then what runs there: each chip after the
-          target is about the target. A chip's panel takes focus while it is up, so the caret goes
-          back when it closes. */}
-        <div className="hint composer-knobs">
-          <span className="spawn-left">
-            {choosing ? (
-              // a draft stacked on a worktree keeps that worktree's agent, so only main's list spans agents
-              onMain && agents.length > 1 ? (
-                <AgentModelChip
-                  agents={agents}
-                  agent={spawnAgent}
-                  model={newModel}
-                  onChange={pickAgentModel}
-                  onClose={refocus}
-                />
-              ) : (
-                <ModelChip models={agentModels} value={newModel} onChange={setNewModel} onClose={refocus} />
-              )
-            ) : (
-              active && (
-                <ModelChip
-                  models={agentModels}
-                  value={active.worktree.model ?? ""}
-                  current={currentModel}
-                  onChange={(model) => sock?.send({ t: "set-worktree-model", worktreeId: active.worktree.id, model })}
-                  onClose={refocus}
-                />
-              )
-            )}
-            {choosing ? (
-              <EffortChip efforts={agentEfforts} value={newEffort} onChange={setNewEffort} onClose={refocus} />
-            ) : (
-              active && (
-                <EffortChip
-                  efforts={agentEfforts}
-                  value={active.worktree.effort ?? ""}
-                  current={currentEffort}
-                  onChange={(effort) =>
-                    sock?.send({ t: "set-worktree-effort", worktreeId: active.worktree.id, effort })
-                  }
-                  onClose={refocus}
-                />
-              )
-            )}
-            {spawning ? (
-              <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
-            ) : (
-              active && (
-                <ModeChip
-                  value={activeMode}
-                  onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
-                  onClose={refocus}
-                />
-              )
-            )}
-            {usage && !spawning && id && (
-              <IconButton
-                icon={<Ring fraction={usage.used / usage.size} />}
-                tone="chrome"
-                label={`${Math.round((100 * usage.used) / usage.size)}% of context`}
-                detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}${compactable ? " · click to compact" : ""}`}
-                // a click does the one thing there is to do about a full context; when it cannot, the
-                // menu says why, and it is the right-click menu at all times
-                onClick={(e) => {
-                  if (compactable) compact();
-                  else cm.openUnder(e.currentTarget, compactItems);
-                }}
-                {...cm.contextMenu(compactItems)}
-              />
-            )}
-          </span>
-          <span className="spawn-tools">
-            {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
-              actions rather than in the app's top bar. Not on an empty project: the pane is hidden
-              there, and a button that flips a hidden pane is a dead button. */}
-            {!greenfield && (
-              <IconButton
-                icon="terminal"
-                tone="chrome"
-                on={termOpen}
-                className="composer-term"
-                disabled={!active}
-                label={trouble ? trouble.tip : "Terminal"}
-                hint={chord("terminal")}
-                badge={trouble && <span className="composer-term-dot" />}
-                onClick={() => {
-                  // opening onto the badge's own tab: the dot is the only thing that says a proc died,
-                  // so following it should land on the crash, not on whichever tab you left open
-                  if (trouble && !termOpen && id) dispatch({ a: "term-stream", id, stream: trouble.stream });
-                  else dispatch({ a: "toggle-terminal" });
-                }}
-                // the button opens the pane, so one level in is its tabs: a restart per proc and the shell
-                {...cm.contextMenu(() =>
-                  active && id ? terminalItems(active.procs, id, termOpen, { sock, dispatch: store.dispatch }) : [],
-                )}
-              />
-            )}
-            {!greenfield && !chatCentred && (
-              <IconButton
-                icon="pick"
-                label="Pick an element on the page to attach"
-                hint={chord("pick")}
-                // the chat's verb only: ⌘I has its own button at the end of the route bar, and a press
-                // here while that one is armed swaps to this verb in place rather than stacking
-                on={picking === "chat"}
-                disabled={!frameId}
-                onClick={() => frameId && togglePick(frameId, picking, dispatch, "chat")}
-              />
-            )}
-          </span>
-        </div>
-        {/* main against origin, and how far a branch trails main, each with its button: their own
-          lines, so the row above keeps its shape (the base note sits in the box, under the
-          placeholder, since it has nothing to press) */}
-        {origin && mainRow && (
-          <div className="hint spawn-note">
-            <span>{origin}</span>
-            <Button
-              variant="outline"
-              busy={mainOp === "pull-main"}
-              disabled={!!mainOp || mainDirty}
-              data-tip={
-                mainDirty
-                  ? `commit or discard the changes on ${repo?.defaultBranch} first`
-                  : "Fast-forward main to origin"
-              }
-              onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: mainRow.id })}
-            >
-              pull
-            </Button>
+            }
+            if (walk && e.key === "Escape") {
+              // back to the box as it was; the app-wide esc would toggle the terminal instead
+              e.preventDefault();
+              e.stopPropagation();
+              walkTo({ walk: null, text: walk.from });
+              return;
+            }
+            if (e.key === "Escape" && midTurn && id && !drafting) {
+              // esc stops the turn, as it does in a terminal agent: what is typed stays, and what was
+              // queued or is sent next goes as the following turn. The app-wide esc would close a pane.
+              e.preventDefault();
+              e.stopPropagation();
+              sock?.send({ t: "stop-agent", worktreeId: id });
+              return;
+            }
+            if (walk && CARET_KEYS.has(e.key)) keepRecalled();
+            // tab in the empty box, with a message suggested: the changes panel is where a commit
+            // message is edited (Enter breaks its lines there), so tab goes there with it
+            if (e.key === "Tab" && !e.shiftKey && text === "" && landing?.subject) {
+              e.preventDefault();
+              dispatch({ a: "edit-commit" });
+              return;
+            }
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            } else if (e.key === "Backspace" && text === "" && removeLast()) {
+              e.preventDefault();
+            }
+          }}
+          // the ghost draws the placeholder itself when it has a line to put under it
+          placeholder={subline || verb ? "" : placeholderText}
+          disabled={!active}
+        />
+        {ghost && (
+          <div className="composer-ghost" aria-hidden="true">
+            <span className="picker-typed">{text}</span>
+            {ghost}
           </div>
         )}
-        {behind && active && id && (
-          <div className="hint spawn-note">
-            <span>{behind}</span>
-            <Button
-              variant="outline"
-              busy={op === "sync-main"}
-              disabled={!!op || dirty > 0}
-              data-tip={
-                dirty > 0
-                  ? "commit or discard the changes here first"
-                  : `Merge ${repo?.defaultBranch} into this worktree`
-              }
-              onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
-            >
-              sync
-            </Button>
+        {/* present only while the box is empty, so typing and landing are never offered at once;
+              close takes the row at once and brings it back with a toast if the daemon refuses, the
+              way any remove does. Not aria-hidden while it holds the word, which is a control. */}
+        {(subline || verb) && (
+          <div className="composer-ghost" aria-hidden={verb ? undefined : "true"}>
+            <span className="composer-placeholder">
+              {verb ? (
+                <>
+                  <Button
+                    variant="inline"
+                    tone="strong"
+                    className="composer-verb"
+                    busy={!!verb.ships && op === "land"}
+                    disabled={!!verb.ships && !!op && op !== "land"}
+                    {...tip(verb.tip, undefined, { placement: "top" })}
+                    onClick={verb.run}
+                  >
+                    {verb.word}
+                  </Button>
+                  {`: ${verb.line}`}
+                </>
+              ) : (
+                placeholderText
+              )}
+            </span>
+            {subline && (
+              <>
+                {"\n"}
+                <span className="composer-subline">{subline}</span>
+              </>
+            )}
           </div>
         )}
       </div>
-    </>
+      {/* the row reads left to right as where this goes, then what runs there: each chip after the
+          target is about the target. A chip's panel takes focus while it is up, so the caret goes
+          back when it closes. */}
+      <div className="hint composer-knobs">
+        <span className="spawn-left">
+          {/* a fork from a worktree is the row menu's "new worktree from here", so only main asks */}
+          {onMain && !greenfield && !drafting && active && (
+            <TargetChip
+              title={title}
+              value={spawnNew ? "new" : "here"}
+              onChange={(t) => setSpawnNew(t === "new")}
+              onClose={refocus}
+            />
+          )}
+          {choosing ? (
+            // a draft stacked on a worktree keeps that worktree's agent, so only main's list spans agents
+            onMain && agents.length > 1 ? (
+              <AgentModelChip
+                agents={agents}
+                agent={spawnAgent}
+                model={newModel}
+                onChange={pickAgentModel}
+                onClose={refocus}
+              />
+            ) : (
+              <ModelChip models={agentModels} value={newModel} onChange={setNewModel} onClose={refocus} />
+            )
+          ) : (
+            active && (
+              <ModelChip
+                models={agentModels}
+                value={active.worktree.model ?? ""}
+                current={currentModel}
+                onChange={(model) => sock?.send({ t: "set-worktree-model", worktreeId: active.worktree.id, model })}
+                onClose={refocus}
+              />
+            )
+          )}
+          {choosing ? (
+            <EffortChip efforts={agentEfforts} value={newEffort} onChange={setNewEffort} onClose={refocus} />
+          ) : (
+            active && (
+              <EffortChip
+                efforts={agentEfforts}
+                value={active.worktree.effort ?? ""}
+                current={currentEffort}
+                onChange={(effort) => sock?.send({ t: "set-worktree-effort", worktreeId: active.worktree.id, effort })}
+                onClose={refocus}
+              />
+            )
+          )}
+          {spawning ? (
+            <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
+          ) : (
+            active && (
+              <ModeChip
+                value={activeMode}
+                onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
+                onClose={refocus}
+              />
+            )
+          )}
+          {usage && !spawning && id && (
+            <IconButton
+              icon={<Ring fraction={usage.used / usage.size} />}
+              tone="chrome"
+              label={`${Math.round((100 * usage.used) / usage.size)}% of context`}
+              detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}${compactable ? " · click to compact" : ""}`}
+              // a click does the one thing there is to do about a full context; when it cannot, the
+              // menu says why, and it is the right-click menu at all times
+              onClick={(e) => {
+                if (compactable) compact();
+                else cm.openUnder(e.currentTarget, compactItems);
+              }}
+              {...cm.contextMenu(compactItems)}
+            />
+          )}
+        </span>
+        <span className="spawn-tools">
+          {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
+              actions rather than in the app's top bar. Not on an empty project: the pane is hidden
+              there, and a button that flips a hidden pane is a dead button. */}
+          {!greenfield && (
+            <IconButton
+              icon="terminal"
+              tone="chrome"
+              on={termOpen}
+              className="composer-term"
+              disabled={!active}
+              label={trouble ? trouble.tip : "Terminal"}
+              hint={chord("terminal")}
+              badge={trouble && <span className="composer-term-dot" />}
+              onClick={() => {
+                // opening onto the badge's own tab: the dot is the only thing that says a proc died,
+                // so following it should land on the crash, not on whichever tab you left open
+                if (trouble && !termOpen && id) dispatch({ a: "term-stream", id, stream: trouble.stream });
+                else dispatch({ a: "toggle-terminal" });
+              }}
+              // the button opens the pane, so one level in is its tabs: a restart per proc and the shell
+              {...cm.contextMenu(() =>
+                active && id ? terminalItems(active.procs, id, termOpen, { sock, dispatch: store.dispatch }) : [],
+              )}
+            />
+          )}
+          {!greenfield && !chatCentred && (
+            <IconButton
+              icon="pick"
+              label="Pick an element on the page to attach"
+              hint={chord("pick")}
+              // the chat's verb only: ⌘I has its own button at the end of the route bar, and a press
+              // here while that one is armed swaps to this verb in place rather than stacking
+              on={picking === "chat"}
+              disabled={!frameId}
+              onClick={() => frameId && togglePick(frameId, picking, dispatch, "chat")}
+            />
+          )}
+        </span>
+      </div>
+      {/* main against origin, and how far a branch trails main, each with its button: their own
+          lines, so the row above keeps its shape (the base note sits in the box, under the
+          placeholder, since it has nothing to press) */}
+      {origin && mainRow && (
+        <div className="hint spawn-note">
+          <span>{origin}</span>
+          <Button
+            variant="outline"
+            busy={mainOp === "pull-main"}
+            disabled={!!mainOp || mainDirty}
+            data-tip={
+              mainDirty
+                ? `commit or discard the changes on ${repo?.defaultBranch} first`
+                : "Fast-forward main to origin"
+            }
+            onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: mainRow.id })}
+          >
+            pull
+          </Button>
+        </div>
+      )}
+      {behind && active && id && (
+        <div className="hint spawn-note">
+          <span>{behind}</span>
+          <Button
+            variant="outline"
+            busy={op === "sync-main"}
+            disabled={!!op || dirty > 0}
+            data-tip={
+              dirty > 0 ? "commit or discard the changes here first" : `Merge ${repo?.defaultBranch} into this worktree`
+            }
+            onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
+          >
+            sync
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

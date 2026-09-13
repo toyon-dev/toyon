@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
-import { landingLine, prCanMerge, prLine, recapLine, recapShown } from "./recap.ts";
+import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, recapShown, verbLine } from "./recap.ts";
 
 const turn = (end: LastTurn["end"], f: Partial<TurnFacts> = {}, minsAgo = 12, text?: string): LastTurn => ({
   at: Date.now() - minsAgo * 60_000,
@@ -46,25 +46,35 @@ describe("landingLine", () => {
     ...over,
   });
 
-  test("says what would land and that the check passed, or that there is no check", () => {
-    expect(landingLine(landing({ check: "pass" }), 3)).toBe("Ready to land: 3 files changed, check passed.");
-    expect(landingLine(landing({ check: "pass" }), 1)).toBe("Ready to land: 1 file changed, check passed.");
-    expect(landingLine(landing({}), 2)).toBe("Ready to land: 2 files changed.");
-    expect(landingLine(landing({}), 0)).toBe("Ready to land.");
-  });
-
-  test("the model's doubt is a caveat on a line that still lands", () => {
-    expect(landingLine(landing({ check: "pass", why: "a question is open" }), 3)).toBe(
-      "Landable, but a question is open.",
-    );
+  test("work that can land has no line of its own: the verb and the recap are the line", () => {
+    expect(landingLine(landing({ check: "pass" }))).toBeNull();
+    expect(landingLine(landing({ check: "pass", why: "a question is open" }))).toBeNull();
   });
 
   test("a failed check names its first line; pending says the check is running", () => {
     expect(
-      landingLine(landing({ check: "fail", ready: false, checkTail: "\nsrc/App.tsx: error TS2322\n2 errors" }), 3),
+      landingLine(landing({ check: "fail", ready: false, checkTail: "\nsrc/App.tsx: error TS2322\n2 errors" })),
     ).toBe("Check failed: src/App.tsx: error TS2322.");
-    expect(landingLine(landing({ check: "fail", ready: false }), 3)).toBe("Check failed.");
-    expect(landingLine(landing({ check: "pending", ready: false }), 3)).toBe("Checking the work…");
+    expect(landingLine(landing({ check: "fail", ready: false }))).toBe("Check failed.");
+    expect(landingLine(landing({ check: "pending", ready: false }))).toBe("Checking the work…");
+  });
+
+  test("the facts say what would land and that the check passed, or nothing to say", () => {
+    expect(landFacts(landing({ check: "pass" }), 3)).toBe("3 files changed, check passed.");
+    expect(landFacts(landing({ check: "pass" }), 1)).toBe("1 file changed, check passed.");
+    expect(landFacts(landing({ check: "pass" }), 0)).toBe("Check passed.");
+    expect(landFacts(landing({}), 2)).toBe("2 files changed.");
+    expect(landFacts(landing({}), 0)).toBe("");
+  });
+
+  test("the model's doubt is a sentence of its own, and none without one", () => {
+    expect(landCaveat(landing({ why: "a question is open" }))).toBe("A question is open.");
+    expect(landCaveat(landing({}))).toBeNull();
+  });
+
+  test("the verb's line ends as a sentence", () => {
+    expect(verbLine("Adding a sticky header")).toBe("Adding a sticky header.");
+    expect(verbLine("landed on main.")).toBe("landed on main.");
   });
 });
 

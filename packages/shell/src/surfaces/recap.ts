@@ -39,10 +39,11 @@ export function prCanMerge(pr: PrState): boolean {
   );
 }
 
-/** The verdict as the placeholder's first line: what would land and whether it can, or what
- * stands in the way. `count` is the files that would go, uncommitted or committed. The model's
- * doubt reads as a caveat on a line that still offers the word, never as a refusal. */
-export function landingLine(l: Landing, count: number): string {
+const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
+/** What stands between the work and landing, as the placeholder's first line: the check running,
+ * or the check failed. Null once the work can land, when the line is the verb and the recap. */
+export function landingLine(l: Landing): string | null {
   if (l.check === "pending") return "Checking the work…";
   if (l.check === "fail") {
     const first = l.checkTail
@@ -51,11 +52,27 @@ export function landingLine(l: Landing, count: number): string {
       ?.trim();
     return `Check failed${first ? `: ${ended(first)}` : "."}`;
   }
-  if (l.why) return `Landable, but ${ended(l.why)}`;
+  return null;
+}
+
+/** What would land, for the verb's tooltip: `count` is the files that would go, uncommitted or
+ * committed. Empty when there is nothing to count and no check ran. */
+export function landFacts(l: Landing, count: number): string {
   const files = count > 0 ? `${count} ${count === 1 ? "file" : "files"} changed` : "";
   const check = l.check === "pass" ? "check passed" : "";
   const facts = [files, check].filter(Boolean).join(", ");
-  return facts ? `Ready to land: ${facts}.` : "Ready to land.";
+  return facts ? ended(capital(facts)) : "";
+}
+
+/** The model's doubt as a sentence of its own under the verb's line: a caveat, never a refusal, so
+ * the word stays */
+export function landCaveat(l: Landing): string | null {
+  return l.why ? ended(capital(l.why)) : null;
+}
+
+/** what the verb's line says after the word, as a whole sentence */
+export function verbLine(text: string): string {
+  return ended(text);
 }
 
 /** How it stopped, for a stop with no sentence to say it: recaps set to facts, a sentence still

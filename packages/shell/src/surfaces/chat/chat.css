@@ -25,7 +25,6 @@
     flex-direction: column;
     & .chat-log,
     & .draft-intro,
-    & .composer-target,
     & .chat-input {
       padding-inline: max(12px, calc((100% - var(--chat-measure)) / 2));
     }
@@ -765,24 +764,12 @@
       box-shadow: 0 0 0 1.5px var(--border0);
     }
   }
-  /* the landing verbs, in the corner of the box a send button would take: the one seat that is
-   free exactly while nothing is being written, since Enter is the send. Over the ghost, which
-   the field's isolation keeps under it, and gone with the ghost the moment a letter is typed. */
-  .composer-land {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    gap: 2px;
+  /* the verb leading the placeholder's line: the ghost lets presses through to the textarea under
+   it, and the word is the one part of the ghost that takes them */
+  .composer-verb {
+    pointer-events: auto;
   }
   /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
-  /* main's target line, outside the box on the panel's ground, where the draft tab's birth-time row
-   sits: inside it, it took the top of the typing surface and the placeholder read as the second
-   line. Indented to the textarea's own left edge, not the panel's, so the sentence and the
-   placeholder start on one column. A sentence, so it flows as text (TargetChip.tsx says why) */
-  .composer-target {
-    padding: 0 10px 8px;
-  }
   /* Spaced by what shows, not by the boxes: the top bar's tools put 24px between glyphs (a 20px gap
    plus each box's 2px), and a text chip already carries 8px of padding a side where an icon box
    carries 2px. So chips sit 8px apart and an icon among them takes the missing 6px as margin. */

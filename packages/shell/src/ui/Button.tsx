@@ -16,7 +16,7 @@ import "./button.css";
  */
 export type ButtonSize = "sm" | "md" | "lg";
 export type ButtonVariant = "ghost" | "outline" | "field" | "inline";
-export type ButtonTone = "primary" | "quiet" | "danger" | "chrome";
+export type ButtonTone = "primary" | "quiet" | "danger" | "strong" | "chrome";
 
 const SIZE: Record<ButtonSize, string> = {
   /** the compact default: toolbars, inline actions, anything in a dense row */
@@ -45,6 +45,8 @@ const TONE: Record<ButtonTone, string> = {
   quiet: "tone-quiet",
   /** deletes something, or stops something mid-flight */
   danger: "tone-danger",
+  /** the word a sentence leads with when it is the one thing to press: bright, never the accent */
+  strong: "tone-strong",
   /** a toolbar switch: `on` is a deeper seat, never accent, and the glyph keeps its colour */
   chrome: "tone-chrome",
 };

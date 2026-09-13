@@ -130,6 +130,11 @@
   .tone-danger {
     color: var(--red);
   }
+  /* the brightest text tier: the word a line leads with when it is the thing to press, where the
+   accent would read as an error (Toyon's accent is red) */
+  .tone-strong {
+    color: var(--text0);
+  }
 
   /* on: a text button's accent, and a toolbar switch's seat (.tone-chrome below says why it is a
    seat). `chrome` is that same switch behaviour named, so a text button can ask for it (the project

@@ -34,6 +34,7 @@ const PRIMITIVES = new Set([
   ".tone-primary",
   ".tone-quiet",
   ".tone-danger",
+  ".tone-strong",
   ".tone-chrome",
   ".field",
   ".field-md",

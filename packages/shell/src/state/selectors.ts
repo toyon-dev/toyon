@@ -5,6 +5,7 @@ import type { ArchivedWorktree, OwnedWorktree, RepoInfo, WorktreeStatus } from "
 import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
 import {
+  asksSetup,
   currentTheme,
   draftSpareOf,
   isChatCentred,
@@ -97,10 +98,11 @@ export const useDraftSpare = () => useStore(draftSpareOf);
 /** the preview on screen: what the element picker and the page context are about */
 export const usePreviewId = () => useStore(previewIdOf);
 
-/** the active worktree's repo while its detected config is still unconfirmed (an element of the repos array) */
+/** the active worktree's repo while its setup is still to be asked (an element of the repos array):
+ * unconfirmed, and not assumed to have nothing to run, which opens on the chat instead */
 export const useActiveRepoNeedingSetup = () =>
   useStore((s) => {
     const wt = rowById(s, s.activeId);
     const repo = wt ? s.repos.find((r) => r.id === wt.repoId) : null;
-    return repo?.needsSetup ? repo : null;
+    return asksSetup(repo) ? repo : null;
   });

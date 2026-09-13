@@ -17,7 +17,7 @@ import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
-import { composerBoxOf, type Draft } from "../../state/store.ts";
+import { asksSetup, composerBoxOf, type Draft } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -137,9 +137,10 @@ export function Composer({
 
   // The target: a new worktree from this one, or this one's own agent. On for main (protect the
   // working copy), off on a worktree (continue that conversation); the chip overrides it per tab.
-  // Off on a main with no confirmed config too: there is no running app to protect yet, and the
-  // conversation there is the one scaffolding it.
-  const spawnDefault = () => onMain && !repo?.needsSetup;
+  // Off on a main whose setup is still to be asked too: there is no running app to protect yet, and
+  // the conversation there is the one scaffolding it. A repo assumed to have nothing to run is an
+  // existing codebase, not a scaffold, so its main is protected like a confirmed one.
+  const spawnDefault = () => onMain && !asksSetup(repo);
   const [spawnNew, setSpawnNew] = useState(spawnDefault);
   useOnChange([id], () => setSpawnNew(spawnDefault()));
   const spawning = drafting || (spawnNew && !greenfield);

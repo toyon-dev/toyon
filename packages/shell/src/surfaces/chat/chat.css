@@ -29,6 +29,10 @@
     & .chat-input {
       padding-inline: max(12px, calc((100% - var(--chat-measure)) / 2));
     }
+    /* what an assumed project opened on: the log's first row, so it takes the log's column */
+    & .chat-centre-note {
+      margin: 0;
+    }
     /* lower than the dock's floor: at this width 160px reads as a form rather than a reply. On the
        centre's ground --sunken is a shade from invisible; the floor's own recess is the one for it */
     & .chat-input {

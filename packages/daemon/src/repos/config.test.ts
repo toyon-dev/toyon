@@ -103,6 +103,49 @@ describe("detectConfig", () => {
     expect(detectConfig(repo({}))).toEqual({ config: { run: {} }, needsSetup: true });
   });
 
+  test("a build file with nothing that serves a page is assumed to have nothing to run", () => {
+    expect(detectConfig(repo({ "Cargo.toml": '[package]\nname = "ledger"\n' }))).toEqual({
+      config: { run: {} },
+      needsSetup: true,
+      assumed: "Cargo.toml",
+    });
+    expect(detectConfig(repo({ "go.mod": "module example.com/tool\n" })).assumed).toBe("go.mod");
+    expect(detectConfig(repo({ "pyproject.toml": '[project]\ndependencies = ["click"]\n' })).assumed).toBe(
+      "pyproject.toml",
+    );
+    expect(detectConfig(repo({ Gemfile: 'gem "rspec"\n' })).assumed).toBe("Gemfile");
+    expect(detectConfig(repo({ "ledger.gemspec": "" })).assumed).toBe("ledger.gemspec");
+    // a package.json with nothing to start, beside the build file, is tooling
+    expect(detectConfig(repo({ "Cargo.toml": "", "package.json": pkg({ fmt: "prettier" }) })).assumed).toBe(
+      "Cargo.toml",
+    );
+    // an assumption names no file to copy a start command from
+    expect(detectConfig(repo({ "Cargo.toml": "" })).from).toBeUndefined();
+  });
+
+  test("anything that serves a page keeps the form, however the repo is built", () => {
+    const assumed = (files: Record<string, string>) => detectConfig(repo(files)).assumed;
+    expect(assumed({ "pyproject.toml": 'dependencies = ["Django>=5"]' })).toBeUndefined();
+    expect(assumed({ "pyproject.toml": "", "requirements.txt": "fastapi==0.110\n" })).toBeUndefined();
+    expect(assumed({ "pyproject.toml": "", "manage.py": "" })).toBeUndefined();
+    expect(assumed({ Gemfile: 'gem "rails", "~> 7.1"' })).toBeUndefined();
+    expect(assumed({ Gemfile: "", "config.ru": "" })).toBeUndefined();
+    expect(assumed({ "Cargo.toml": '[dependencies]\naxum = "0.7"' })).toBeUndefined();
+    expect(assumed({ "go.mod": "require github.com/gin-gonic/gin v1.9.1" })).toBeUndefined();
+    expect(assumed({ "Cargo.toml": "", Procfile: "web: ./server\n" })).toBeUndefined();
+    expect(assumed({ "Cargo.toml": "", "index.html": "" })).toBeUndefined();
+    // a front end one folder down
+    expect(assumed({ "Cargo.toml": "", "web/": "", "web/package.json": pkg({ dev: "vite" }) })).toBeUndefined();
+    // a name inside a longer one is not the framework
+    expect(assumed({ "Cargo.toml": '[dependencies]\nrocketry = "1"' })).toBe("Cargo.toml");
+    // a start command still wins, and a settings file is not a guess at all
+    expect(detectConfig(repo({ "Cargo.toml": "", "package.json": pkg({ dev: "vite" }) })).from).toBe("package.json");
+    expect(detectConfig(repo({ "Cargo.toml": "", "toyon.json": JSON.stringify({ run: {} }) }))).toEqual({
+      config: { run: {} },
+      needsSetup: false,
+    });
+  });
+
   test("a valid toyon.json is confirmed as written, profiles included", () => {
     const cfg = {
       run: { api: "a", web: "w" },

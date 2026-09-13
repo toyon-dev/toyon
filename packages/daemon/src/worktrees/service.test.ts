@@ -611,6 +611,25 @@ describe("redetect at turn end", () => {
     expect(repos).toBe(1);
   });
 
+  test("a build file with no page is assumed until a scaffold or a saved setup says otherwise", async () => {
+    writeFileSync(join(w.repo, "Cargo.toml"), '[package]\nname = "tool"\n');
+    const repo = await w.repos.register(w.repo);
+    const main = w.state.worktrees.find((x) => x.repoId === repo.id && x.kind === "main")!;
+    expect(repo).toMatchObject({ needsSetup: true, assumed: "Cargo.toml", config: { run: {} } });
+    // the agent scaffolds a front end beside it: its start command is the guess, and setup is asked again
+    writeFileSync(join(w.repo, "package.json"), JSON.stringify({ scripts: { dev: "vite" } }));
+    turnEnd(main.id);
+    expect(w.state.requireRepo(repo.id).assumed).toBeUndefined();
+    expect(w.state.requireRepo(repo.id).guess).toBe("package.json");
+    rmSync(join(w.repo, "package.json"));
+    turnEnd(main.id);
+    expect(w.state.requireRepo(repo.id).assumed).toBe("Cargo.toml");
+    // saving setup confirms it and ends the assumption
+    await w.repos.confirmConfig(repo.id, { run: {} });
+    expect(w.state.requireRepo(repo.id)).toMatchObject({ needsSetup: false, config: { run: {} } });
+    expect(w.state.requireRepo(repo.id).assumed).toBeUndefined();
+  });
+
   test("a toyon.json the agent wrote applies at once, like a hand-written one", async () => {
     const repo = await w.repos.register(w.repo);
     const main = w.state.worktrees.find((x) => x.repoId === repo.id && x.kind === "main")!;

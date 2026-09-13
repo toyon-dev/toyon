@@ -276,6 +276,7 @@ export class RepoRegistry {
       configFile: configTarget(root, !!made),
       needsSetup: detected.needsSetup,
       guess: detected.from,
+      assumed: detected.assumed,
       ...(made ? { made } : {}),
       remote: await hasOrigin(root),
     };
@@ -352,6 +353,7 @@ export class RepoRegistry {
     repo.config = back?.ok ? back.config : config;
     repo.needsSetup = false;
     repo.guess = undefined;
+    repo.assumed = undefined;
     this.d.state.save();
     // (re)start procs for this repo's worktrees — spares included, or a spare warmed under the old
     // config would be handed to the next task with stale procs; agents stay. Every worktree, cold
@@ -411,9 +413,15 @@ export class RepoRegistry {
       return;
     }
     const detected = detectConfig(wt.path);
-    if (JSON.stringify(detected.config) === JSON.stringify(repo.config) && detected.from === repo.guess) return;
+    const same =
+      JSON.stringify(detected.config) === JSON.stringify(repo.config) &&
+      detected.from === repo.guess &&
+      detected.assumed === repo.assumed;
+    if (same) return;
+    // a front end scaffolded beside the build file ends the assumption, and the setup pane comes back
     repo.config = detected.config;
     repo.guess = detected.from;
+    repo.assumed = detected.assumed;
     this.d.state.save();
     this.d.hub.emit("reposChanged");
   }
@@ -451,6 +459,7 @@ export class RepoRegistry {
     repo.config = file.config;
     repo.needsSetup = false;
     repo.guess = undefined;
+    repo.assumed = undefined;
     this.d.state.save();
     return true;
   }

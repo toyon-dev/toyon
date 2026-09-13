@@ -7,6 +7,7 @@ import { useStore } from "./context.tsx";
 import {
   currentTheme,
   draftSpareOf,
+  isChatCentred,
   isFirstRun,
   isGreenfield,
   localOf,
@@ -76,6 +77,9 @@ export const useGreenfield = (): boolean => useStore(isGreenfield);
 
 /** the new-project view or a greenfield project: the docks, the rail and the panes are hidden */
 export const useFirstRun = (): boolean => useStore(isFirstRun);
+
+/** the active project runs nothing: the chat is the centre's view, and the chat dock is gone */
+export const useChatCentred = (): boolean => useStore(isChatCentred);
 
 /** the new-project view, while it is up */
 export const useNewProject = () => useStore((s) => s.newProject);

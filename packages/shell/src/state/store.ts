@@ -667,6 +667,26 @@ export function isFirstRun(s: State): boolean {
   return s.newProject !== null || isGreenfield(s);
 }
 
+/** A repo whose settings were confirmed with no processes: a library, a CLI, a backend with no page.
+ * Nothing will ever answer on its preview, so there is no preview to show. */
+export function runsNothing(repo: RepoInfo): boolean {
+  return !repo.needsSetup && Object.keys(repo.config.run).length === 0;
+}
+
+/** The active project runs nothing, so the chat is what the centre shows, and the chat dock and the
+ * controls that work on a page go. Reads only the repos, so the app menu and the palette can ask it
+ * with the state they already hold. */
+export function isChatCentred(s: Pick<State, "repos" | "activeRepoId">): boolean {
+  const repo = s.activeRepoId ? s.repos.find((r) => r.id === s.activeRepoId) : undefined;
+  return !!repo && runsNothing(repo);
+}
+
+/** the chat is about to be written in, so its dock opens; a chat in the centre has no dock to open,
+ * and writing one into the layout would leave the project's remembered panels holding it */
+function revealChat(s: State): State {
+  return s.rightOpen || isChatCentred(s) ? s : { ...s, rightOpen: true };
+}
+
 export function repoById(s: State, id: string | null | undefined): RepoInfo | null {
   return (id && s.repos.find((r) => r.id === id)) || null;
 }
@@ -682,12 +702,18 @@ export function mainOf(s: State, repoId: string | null): OwnedWorktree | null {
 export function draftSpareOf(s: State): SpareInfo | null {
   const base = s.draft ? worktreeById(s, s.draft.base) : null;
   if (!base || !isMain(base.worktree)) return null;
+  // a spare of a repo that runs nothing is warm for its agent, but its preview is only the proxy's
+  // waiting page, which would sit in the centre for as long as the draft is open
+  const repo = repoById(s, base.repoId);
+  if (repo && runsNothing(repo)) return null;
   return s.spares.find((sp) => sp.repoId === base.repoId && sp.ready) ?? null;
 }
 
-/** the preview on screen: the draft's (its spare, else its base's own), or the active worktree's.
- * The element picker and the bridge's page context follow this one, not `activeId`. */
+/** the preview on screen, if there is one: the draft's (its spare, else its base's own), or the
+ * active worktree's, and none while the chat has the centre. The element picker and the bridge's
+ * page context follow this one, not `activeId`. */
 export function previewIdOf(s: State): string | null {
+  if (isChatCentred(s)) return null;
   if (!s.draft) return s.activeId;
   return draftSpareOf(s)?.id ?? s.draft.base;
 }
@@ -939,15 +965,14 @@ function reduce(s: State, action: Action): State {
       const base = action.base ?? mainOf(s, s.activeRepoId)?.id ?? null;
       if (!base || !worktreeById(s, base)) return s;
       if (s.draft?.base === base) return { ...s, draft: null };
-      // the chat dock is where the draft is written, so it has to be on screen; a palette the
-      // chord was pressed over would sit in front of it
-      return {
+      // the chat is where the draft is written, so it has to be on screen; a palette the chord was
+      // pressed over would sit in front of it
+      return revealChat({
         ...activate(s, base),
         draft: { base, variants: 1, batch: false, agent: s.defaultAgent },
-        rightOpen: true,
         overlay: null,
         paletteReturn: null,
-      };
+      });
     }
     case "close-draft":
       return s.draft ? { ...s, draft: null } : s;
@@ -1071,7 +1096,7 @@ function reduce(s: State, action: Action): State {
       }));
     case "attach":
       // the chips are the only sign an attachment landed, so one arriving on a collapsed chat opens it
-      return withLocal({ ...s, rightOpen: true }, action.id, (l) => ({
+      return withLocal(revealChat(s), action.id, (l) => ({
         // attaching is writing the message, which answers the recap the way typing does
         ...withoutRecap(l),
         attachments: [...l.attachments, ...action.items],
@@ -1128,11 +1153,12 @@ function reduce(s: State, action: Action): State {
     case "edit-commit":
       return { ...s, leftOpen: true, leftAuto: false, editCommit: s.editCommit + 1 };
     case "toggle-right":
-      return { ...s, rightOpen: !s.rightOpen };
+      // a chat in the centre has no dock to hide or show
+      return isChatCentred(s) ? s : { ...s, rightOpen: !s.rightOpen };
     case "focus-right":
-      return { ...s, rightOpen: true, focusRight: s.focusRight + 1 };
+      return { ...revealChat(s), focusRight: s.focusRight + 1 };
     case "show-right":
-      return s.rightOpen ? s : { ...s, rightOpen: true };
+      return revealChat(s);
     case "hold-unread":
       return { ...s, unreadHold: action.id };
     case "toggle-rail":
@@ -1150,13 +1176,16 @@ function reduce(s: State, action: Action): State {
       return { ...s, archivedOpen: { ...s.archivedOpen, [repoId]: !s.archivedOpen[repoId] } };
     }
     case "toggle-zen":
+      // zen gives the window to the page, and a project with nothing to run has no page to give it to
+      if (isChatCentred(s)) return s;
       return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
     case "toggle-terminal":
       return { ...s, termOpen: !s.termOpen };
     case "focus-terminal":
       return { ...s, termOpen: true, focusTerm: s.focusTerm + 1 };
     case "toggle-design":
-      return { ...s, designOpen: !s.designOpen };
+      // the pane outlines what it lists in the page; a project with nothing to run keeps it shut
+      return isChatCentred(s) ? s : { ...s, designOpen: !s.designOpen };
     case "term-stream":
       return withLocal({ ...s, termOpen: true }, action.id, (l) => ({ ...l, termStream: action.stream }));
     case "preview-theme":

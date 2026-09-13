@@ -4,7 +4,15 @@ import { restoreArchived } from "../state/actions/archive.ts";
 import { removeWorktrees } from "../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
-import { useActive, useActiveId, useActiveRow, useFirstRun, useRows, useTheme } from "../state/selectors.ts";
+import {
+  useActive,
+  useActiveId,
+  useActiveRow,
+  useChatCentred,
+  useFirstRun,
+  useRows,
+  useTheme,
+} from "../state/selectors.ts";
 import { Center } from "../surfaces/center/Center.tsx";
 import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
 import { RightDock } from "../surfaces/chat/RightDock.tsx";
@@ -52,14 +60,17 @@ export function App() {
   const connected = useStore((s) => s.connected);
   const daylight = useStore((s) => s.daylight);
   const daylightUntil = useStore((s) => s.daylight?.until ?? 0);
-  const zen = useStore((s) => s.zen);
   const firstRun = useFirstRun();
+  // a project with nothing to run has the chat as its centre: no dock beside it, and no page for
+  // zen to give the window to (a zen left on by another project waits for that one)
+  const chatCentred = useChatCentred();
+  const zen = useStore((s) => s.zen) && !chatCentred;
   // both docks are hidden, not closed, on the new-project view and while the composer sits in the
   // centre of an empty project. So is the rail: on the page it lists a project that is not the one
   // being made, and on an empty project its only row is main, already open, with no new worktree to
   // offer, since one off the root commit would take the scaffold to a branch while main stayed blank.
   const leftOpen = useStore((s) => s.leftOpen) && !firstRun;
-  const rightOpen = useStore((s) => s.rightOpen) && !firstRun;
+  const rightOpen = useStore((s) => s.rightOpen) && !firstRun && !chatCentred;
   const railOpen = useStore((s) => s.railOpen);
   const panels = useStore((s) => s.panels);
   const lastActive = useStore((s) => s.lastActive);
@@ -306,7 +317,8 @@ export function App() {
         {leftOpen && <div className="dock-resize left" onPointerDown={dragLeft} />}
         <Center />
         {rightOpen && <div className="dock-resize right" onPointerDown={dragRight} />}
-        <RightDock width={rightW} />
+        {/* the centre shows the chat instead, and one composer at a time is the only kind there is */}
+        {!chatCentred && <RightDock width={rightW} />}
         {!firstRun && <Rail />}
       </div>
       {toast && (

@@ -4,7 +4,14 @@ import { previewItems } from "../../state/actions/preview.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
-import { useActive, useActiveRepo, useFirstRun, useLocalField, usePreviewId } from "../../state/selectors.ts";
+import {
+  useActive,
+  useActiveRepo,
+  useChatCentred,
+  useFirstRun,
+  useLocalField,
+  usePreviewId,
+} from "../../state/selectors.ts";
 import { previewUp } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useOnChange, useWindowWidth } from "../../ui/hooks.ts";
@@ -33,7 +40,10 @@ export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number })
   // menu that answers for them already carries each toggle with its chord.
   const cm = useContextMenu("bar");
   const active = useActive();
-  const zen = useStore((s) => s.zen);
+  // nothing to run: no page for the route cluster, the design outlines or zen to work on, and the
+  // chat is the centre rather than a panel to toggle
+  const chatCentred = useChatCentred();
+  const zen = useStore((s) => s.zen) && !chatCentred;
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
   const firstRun = useFirstRun();
@@ -58,7 +68,7 @@ export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number })
         />
       )}
       <ProjectPill />
-      <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={navCenter} />
+      {!chatCentred && <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={navCenter} />}
       {/* an action, not a switch: chrome's seat is for a toggle */}
       {installEvt && (
         <Button data-tip="Install Toyon as an app (own window, dock icon)" onClick={() => void installEvt.prompt()}>
@@ -82,7 +92,7 @@ export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number })
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
           {...cm.contextMenu(() => settingsItems(store.getState(), { sock, dispatch }))}
         />
-        {!firstRun && (
+        {!firstRun && !chatCentred && (
           <IconButton
             icon="palette"
             label="Design system"
@@ -92,7 +102,7 @@ export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number })
             onClick={() => dispatch({ a: "toggle-design" })}
           />
         )}
-        {!firstRun && (
+        {!firstRun && !chatCentred && (
           <IconButton
             icon="chat"
             label="Chat panel"
@@ -105,15 +115,17 @@ export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number })
         {/* the one control the installed app's zen strip keeps: the strip is the window's title bar
             and stays anyway, and with no browser chrome around it, a lit toggle at the edge is the
             standing sign that this is a mode with a way out */}
-        <IconButton
-          icon="zen"
-          className="bar-zen"
-          label="Full-bleed preview"
-          hint={chord("zen")}
-          tone="chrome"
-          on={zen}
-          onClick={() => dispatch({ a: "toggle-zen" })}
-        />
+        {!chatCentred && (
+          <IconButton
+            icon="zen"
+            className="bar-zen"
+            label="Full-bleed preview"
+            hint={chord("zen")}
+            tone="chrome"
+            on={zen}
+            onClick={() => dispatch({ a: "toggle-zen" })}
+          />
+        )}
       </span>
     </div>
   );

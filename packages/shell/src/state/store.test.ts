@@ -5,9 +5,11 @@ import { createStore } from "./context.tsx";
 import {
   type Action,
   draftKey,
+  draftSpareOf,
   type EditorDisk,
   EMPTY_LOCAL,
   initialState,
+  isChatCentred,
   isFirstRun,
   isGreenfield,
   isSubPicker,
@@ -76,15 +78,17 @@ const opening = (v: Partial<OpenFile> & { path: string; seq: number }): Action =
   a: "open-file",
   v: { worktreeId: "a", focus: true, ...v },
 });
+/** a set-up project with a page to preview; `pageless` is one confirmed with nothing to run */
 const repo = (id: string): RepoInfo => ({
   id,
   path: `/p/${id}`,
   name: id,
   defaultBranch: "main",
-  config: { run: {} },
+  config: { run: { web: "vite" } },
   configFile: ".toyon/settings.json",
   needsSetup: false,
 });
+const pageless = (id: string): RepoInfo => ({ ...repo(id), config: { run: {} } });
 const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
   server({
     t: "hello",
@@ -193,6 +197,49 @@ describe("per-worktree records", () => {
     // hiding the dock leaves no trace: show-right opens it, and only that is remembered
     expect(s.rightOpen).toBe(true);
     expect(reducer({ ...s, rightOpen: false }, { a: "show-right" }).rightOpen).toBe(true);
+  });
+  test("a repo confirmed with nothing to run puts the chat in the centre, with no preview", () => {
+    const s = run([helloIn([pageless("r")], wt("main", "main"))]);
+    expect(isChatCentred(s)).toBe(true);
+    expect(previewIdOf(s)).toBeNull();
+    // a repo that runs something, or one not set up yet, keeps its preview and its dock
+    expect(isChatCentred(run([repos(repo("r"))], s))).toBe(false);
+    expect(isChatCentred(run([repos({ ...pageless("r"), needsSetup: true })], s))).toBe(false);
+    expect(previewIdOf(run([repos(repo("r"))], s))).toBe("main");
+  });
+  test("a draft on a repo that runs nothing previews no spare; a web repo's draft previews its warm one", () => {
+    const spare = { repoId: "r", id: "sp", path: "/w/sp", proxyPort: 2, ready: true };
+    const drafting = (r: RepoInfo) =>
+      run([
+        helloIn([r], wt("main", "main")),
+        server({ t: "worktrees", rows: [wt("main", "main")], spares: [spare] }),
+        { a: "open-draft" },
+      ]);
+    const nothing = drafting(pageless("r"));
+    expect(nothing.draft?.base).toBe("main");
+    expect(draftSpareOf(nothing)).toBeNull();
+    expect(previewIdOf(nothing)).toBeNull();
+    const page = drafting(repo("r"));
+    expect(draftSpareOf(page)?.id).toBe("sp");
+    expect(previewIdOf(page)).toBe("sp");
+  });
+  test("with the chat in the centre, what would open or toggle a panel leaves the layout alone", () => {
+    const s = { ...run([helloIn([pageless("r")], wt("main", "main"))]), rightOpen: false };
+    const moves: Action[] = [
+      { a: "open-draft" },
+      { a: "show-right" },
+      { a: "toggle-right" },
+      { a: "toggle-zen" },
+      { a: "toggle-design" },
+      { a: "attach", id: "main", items: [] },
+    ];
+    for (const move of moves) {
+      const next = reducer(s, move);
+      expect([move.a, next.rightOpen, next.zen, next.designOpen]).toEqual([move.a, false, false, false]);
+      expect(next.panels).toBe(s.panels);
+    }
+    // the box is still asked for: it is the centre's now
+    expect(reducer(s, { a: "focus-right" })).toMatchObject({ rightOpen: false, focusRight: s.focusRight + 1 });
   });
   test("nothing is heard until a hello, from the socket or the bootstrap alike", () => {
     expect(initial.heard).toBe(false);

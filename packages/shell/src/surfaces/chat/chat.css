@@ -13,6 +13,33 @@
     position: relative;
   }
 
+  /* ---- the chat as the centre's view, for a project with nothing to run ----
+     The chat panel, not a view of toyon's own: it keeps its parts (a transcript that scrolls over a
+     composer that stays put) and takes its measure from --chat-measure. The column is padding, not
+     a wrapper, so the scrollbar keeps the region's edge and the transcript's rows stay the log's own
+     children. The box is also the containing block for the drop wash. */
+  .chat-centre {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    & .chat-log,
+    & .draft-intro,
+    & .composer-target,
+    & .chat-input {
+      padding-inline: max(12px, calc((100% - var(--chat-measure)) / 2));
+    }
+    /* lower than the dock's floor: at this width 160px reads as a form rather than a reply. On the
+       centre's ground --sunken is a shade from invisible; the floor's own recess is the one for it */
+    & .chat-input {
+      --composer-min: 120px;
+      background: var(--sunken-floor);
+      & .pick-chip {
+        background: var(--surface0);
+      }
+    }
+  }
+
   .chat-wrap {
     flex: 1;
     min-height: 0;

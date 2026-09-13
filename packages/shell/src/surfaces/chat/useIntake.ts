@@ -7,7 +7,7 @@ import { useStoreInstance } from "../../state/context.tsx";
 import { composerBoxOf, worktreeById } from "../../state/store.ts";
 import { imageFiles, otherFiles, prepareImage, readText } from "./images.ts";
 
-/** the chat panel, registered by RightDock. The drop is handled on the window (a file dropped on
+/** the chat panel, registered by ChatPanel wherever it is placed. The drop is handled on the window (a file dropped on
  * anything that doesn't take it navigates the tab to that file and the session is gone), so the
  * window hit-tests against this to tell a drop that attaches from one it only swallows. */
 export const chatPanel = { el: null as HTMLElement | null };
@@ -111,7 +111,7 @@ function dropFiles(store: Store, files: File[]) {
 export function missedFileDrop(store: Store) {
   const refused = drag?.refused ?? false;
   endFileDrag(store);
-  if (!refused) toast(store, "drop images on the chat panel to attach them");
+  if (!refused) toast(store, "drop images on the chat to attach them");
 }
 
 const toast = (store: Store, message: string) => store.dispatch({ a: "toast", toast: { ok: false, message } });

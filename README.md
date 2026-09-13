@@ -77,7 +77,7 @@ Each copy is a real `git worktree` under `~/.toyon/worktrees.noindex` with its o
 
 ## Somewhere other than your laptop
 
-Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. None of it passes through a toyon server; there is none. These routes are new: a Fly deploy has been run and checked from the command line, live reload included, and the Caddy and Tailscale routes have been checked with requests shaped like theirs. A browser pass from a phone is still to come.
+Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. None of it passes through a toyon server; there is none. These routes are new. On Fly, a browser has opened the shell and two copies' previews, an agent's edit has shown up in a preview without a reload, and every refusal has been checked from outside. The Caddy and Tailscale routes have been checked with requests shaped like theirs, and neither has been opened from a phone yet.
 
 A host needs a process that stays up, a disk that survives restarts, WebSockets, and either a wildcard name or a range of ports it forwards. That rules out serverless hosts and hosts that scale to zero with no disk.
 

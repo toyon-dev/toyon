@@ -33,7 +33,7 @@ import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
-import { TargetLine } from "../chips/TargetChip.tsx";
+import { TargetChip } from "../chips/TargetChip.tsx";
 import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
 import { fileRow } from "../overlays/QuickOpen.tsx";
@@ -345,8 +345,8 @@ export function Composer({
   const ghost = argGhost ?? shellGhost;
   // the placeholder, and the quieter line under it while the box is empty: what the base leaves
   // behind when there is something, else, on main's own fast path, what the draft tab adds. Where
-  // the message goes is not the placeholder's to say when a line above the box already says it:
-  // main's target line, or the draft tab's lit row.
+  // the message goes is not the placeholder's to say when a chip already says it: main's target
+  // chip, or the draft tab's lit row.
   // The recap takes the placeholder outright while it stands. It is about the box you are looking
   // at, it goes when you type as a placeholder does, and as a line of its own above the box it was
   // a second block of grey text saying something the box already said.
@@ -541,20 +541,6 @@ export function Composer({
 
   return (
     <>
-      {/* where a message from main goes, on the panel's ground above the box the way the draft's
-          birth-time choices sit there, so the box opens on its placeholder: a worktree's messages
-          only ever go to that worktree (a fork is the row menu's "new worktree from here"), so only
-          main has the choice */}
-      {onMain && !greenfield && !drafting && active && (
-        <div className="hint composer-target">
-          <TargetLine
-            title={title}
-            value={spawnNew ? "new" : "here"}
-            onChange={(t) => setSpawnNew(t === "new")}
-            onClose={refocus}
-          />
-        </div>
-      )}
       <div className="composer chat-input">
         {boxId &&
           numbered(attachments, nextNumbers(sentBefore)).map(([item, n]) => {
@@ -781,6 +767,15 @@ export function Composer({
           back when it closes. */}
         <div className="hint composer-knobs">
           <span className="spawn-left">
+            {/* a fork from a worktree is the row menu's "new worktree from here", so only main asks */}
+            {onMain && !greenfield && !drafting && active && (
+              <TargetChip
+                title={title}
+                value={spawnNew ? "new" : "here"}
+                onChange={(t) => setSpawnNew(t === "new")}
+                onClose={refocus}
+              />
+            )}
             {choosing ? (
               // a draft stacked on a worktree keeps that worktree's agent, so only main's list spans agents
               onMain && agents.length > 1 ? (

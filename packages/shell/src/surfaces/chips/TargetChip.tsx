@@ -3,15 +3,12 @@ import "./chips.css";
 
 export type Target = "new" | "here";
 
-/** Where a message from main goes: into a new worktree from it, or to main's own agent. A sentence
- * with the chip as its one variable word, so the line says what a send does and the chip is where
- * that changes. The same words lead the chip either way, so it does not move when it flips. It
- * defaults to a new worktree, which is what keeps the working copy out of an agent's hands unless
- * asked; a worktree's messages only ever go to that worktree, so only main has this line.
- *
- * Flow text, not a flex row: the words hug the chip, whose own padding is the space either side,
- * and a narrow dock wraps the sentence where a word ends. */
-export function TargetLine({
+/** Where a message from main goes: into a new worktree from it, or to main's own agent. The first
+ * chip on the knobs row, since every chip after it is about the place it names. The chip carries
+ * the place alone, so the base it forks from is in its tooltip and its rows. It defaults to a new
+ * worktree, which is what keeps the working copy out of an agent's hands unless asked; a worktree's
+ * messages only ever go to that worktree, so only main has this chip. */
+export function TargetChip({
   title,
   value,
   onChange,
@@ -23,21 +20,17 @@ export function TargetLine({
   onClose?: () => void;
 }) {
   return (
-    <>
-      agent works in
-      <ChipPicker<Target>
-        value={value}
-        options={[
-          { id: "new", label: "new worktree", description: `starts an agent in a new worktree from ${title}` },
-          { id: "here", label: title, description: `the agent edits ${title} directly` },
-        ]}
-        onChange={onChange}
-        onClose={onClose}
-        className="target-chip"
-        hint="where the message goes; click to change"
-        placeholder="where the message goes"
-      />
-      {value === "new" ? `from ${title}` : "directly"}
-    </>
+    <ChipPicker<Target>
+      value={value}
+      options={[
+        { id: "new", label: "new worktree", description: `starts an agent in a new worktree from ${title}` },
+        { id: "here", label: title, description: `the agent edits ${title} directly` },
+      ]}
+      onChange={onChange}
+      onClose={onClose}
+      className="target-chip"
+      hint={value === "new" ? `The agent works in a new worktree from ${title}` : `The agent edits ${title} directly`}
+      placeholder="where the message goes"
+    />
   );
 }

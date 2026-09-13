@@ -74,13 +74,25 @@ export function makeRecapper(
 ) {
   return async (wt: WorktreeInfo, prompt: string): Promise<string | null> => {
     const spec = agents.get(wt.agent ?? state.defaultAgent ?? DEFAULT_AGENT_ID);
-    const quick = spec?.quickModel;
-    if (!spec || !quick) return null;
-    const offered = state.cachedOptions(spec.id, "model");
-    if (offered.length > 0 && !offered.some((m) => m.id === quick)) return null;
+    if (!spec || lacksQuickModel(spec, state)) return null;
     const agent = runtime.agentFor(wt.id);
     return agent ? parseRecap(await agent.ask(RECAP_SYSTEM, prompt, { quick: "require" })) : null;
   };
+}
+
+/** Whether what is already known of the agent rules its quick model out, so a question that requires
+ * one is not worth waking the agent for. A fixed id is checked against the models the agent last
+ * listed. An agent that picks from its list (a function) decides on the session, where the current
+ * model is known. */
+function lacksQuickModel(
+  spec: NonNullable<ReturnType<AgentRegistry["get"]>>,
+  state: Pick<StateStore, "cachedOptions">,
+): boolean {
+  const quick = spec.quickModel;
+  if (!quick) return true;
+  if (typeof quick === "function") return false;
+  const offered = state.cachedOptions(spec.id, "model");
+  return offered.length > 0 && !offered.some((m) => m.id === quick);
 }
 
 /** The landing verdict and commit message, on the same terms as the recap: the worktree's own
@@ -92,10 +104,7 @@ export function makeLander(
 ) {
   return async (wt: WorktreeInfo, prompt: string): Promise<LandVerdict | null> => {
     const spec = agents.get(wt.agent ?? state.defaultAgent ?? DEFAULT_AGENT_ID);
-    const quick = spec?.quickModel;
-    if (!spec || !quick) return null;
-    const offered = state.cachedOptions(spec.id, "model");
-    if (offered.length > 0 && !offered.some((m) => m.id === quick)) return null;
+    if (!spec || lacksQuickModel(spec, state)) return null;
     const agent = runtime.agentFor(wt.id);
     return agent ? parseLanding(await agent.ask(LAND_SYSTEM, prompt, { quick: "require" })) : null;
   };

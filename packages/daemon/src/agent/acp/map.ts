@@ -212,8 +212,15 @@ function endOf(toolId: string, memo: ToolMemo, status: "completed" | "failed"): 
     type: "tool-end",
     toolId,
     output: summarizeToolOutput(memo.content, memo.rawOutput),
-    isError: status === "failed",
+    isError: status === "failed" || exitCodeOf(memo.rawOutput) > 0,
   };
+}
+
+/** A command's exit code, where the agent reports one beside the output. OpenCode marks every shell
+ * call it ran as completed, a refused write included, and says how it went only here. */
+function exitCodeOf(rawOutput: unknown): number {
+  const exit = (rawOutput as { metadata?: { exit?: unknown } } | null | undefined)?.metadata?.exit;
+  return typeof exit === "number" ? exit : 0;
 }
 
 /** what the chat shows under a finished tool row: the agent's content blocks, else its raw output */

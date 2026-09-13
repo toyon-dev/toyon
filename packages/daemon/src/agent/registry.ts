@@ -58,8 +58,9 @@ export interface AgentSpec {
    * adapter needs to run one bare, without the chat's tools or a saved conversation */
   sideMeta?: Record<string, unknown>;
   /** the model a side question runs on while the agent still offers it: a short question answered
-   * well by the agent's smallest model should not cost what the chat's model costs */
-  quickModel?: string;
+   * well by the agent's smallest model should not cost what the chat's model costs. An agent whose
+   * models depend on what the person logged into picks one from the offered ids instead (quick.ts). */
+  quickModel?: string | ((offered: readonly string[], current?: string) => string | undefined);
   /** what the person reads when the agent answers a prompt with "not logged in" and offers no way in */
   loginHint: string;
 }

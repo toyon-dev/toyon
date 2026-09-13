@@ -55,6 +55,21 @@ export function readOptions(configOptions: acp.SessionConfigOption[] | null | un
   return out;
 }
 
+/** The agent's session modes, when it advertises them as a config option (OpenCode's `mode`, build
+ * and plan) rather than as ACP's `modes`. Kept apart from OPTION_FIELDS on purpose: a worktree's
+ * `mode` field is toyon's permission mode, which the agent's mode is mapped from, never stored as. */
+export function readModeOption(configOptions: acp.SessionConfigOption[] | null | undefined): LiveOption | null {
+  const opt = configOptions?.find((o) => o.category === "mode" && o.type === "select");
+  if (opt?.type !== "select") return null;
+  const flat = flattenSelect(opt.options);
+  return {
+    id: opt.id,
+    ids: flat.map((o) => String(o.value)),
+    current: String(opt.currentValue),
+    choices: flat.map((o) => ({ id: String(o.value), name: o.name })),
+  };
+}
+
 /** what is currently selected, in the session-info event's fields */
 export function currentValues(options: LiveOptions): Partial<Pick<WorktreeInfo, OptionField>> {
   const out: Partial<Pick<WorktreeInfo, OptionField>> = {};

@@ -1,10 +1,20 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "../git/exec.ts";
 import { canonical, within } from "./bounds.ts";
-import { DENIED_COMMANDS, SETTINGS_REL, worktreeBounds, writeClaudeLocalSettings } from "./sandbox.ts";
+import { claudeDenyRules } from "./commands.ts";
+import type { AgentSpec } from "./registry.ts";
+import {
+  type Bounds,
+  prepareLaunch,
+  SETTINGS_REL,
+  toyonSecrets,
+  worktreeBounds,
+  writeClaudeLocalSettings,
+} from "./sandbox.ts";
 
 let cleanup = () => {};
 afterEach(() => cleanup());
@@ -18,14 +28,49 @@ function linkedWorktree() {
 }
 
 describe("sandbox", () => {
-  test("bounds of a linked worktree allow its root and the main repo's git dir, deny .claude", async () => {
+  test("bounds of a linked worktree allow its root and the main repo's git dir, deny every agent's settings", async () => {
     const { repo, wt } = linkedWorktree();
     const b = await worktreeBounds(wt);
     expect(b.root).toBe(canonical(wt));
     expect(b.gitDir).toBe(canonical(join(repo, ".git")));
     expect(b.allowWrite).toContain(b.gitDir!);
     expect(b.allowWrite.some((p) => within("/tmp/x", p))).toBe(true);
-    expect(b.denyWrite).toEqual([join(b.root, ".claude")]);
+    for (const s of [".claude", ".codex", ".opencode", "opencode.json"]) expect(b.denyWrite).toContain(join(b.root, s));
+  });
+
+  test("the per-user temp directory is writable; toyon's secrets can be neither read nor written", async () => {
+    const { wt } = linkedWorktree();
+    const secret = join(wt, "..", "home", "token");
+    const b = await worktreeBounds(wt, [secret]);
+    expect(b.allowWrite.some((p) => within(canonical(join(tmpdir(), "x")), p))).toBe(true);
+    expect(b.denyRead).toContain(secret);
+    expect(b.denyWrite).toContain(secret);
+  });
+
+  test("the secrets are the daemon's token and its agents file", () => {
+    const secrets = toyonSecrets({ tokenFile: "/h/token", agentsFile: "/h/agents.json" } as never);
+    expect(secrets).toEqual(["/h/token", "/h/agents.json"]);
+  });
+
+  test("a launch is prepared by the agent's own setup, which sees the bounds and adds to the environment", async () => {
+    const { wt } = linkedWorktree();
+    const seen: Bounds[] = [];
+    const spec: AgentSpec = {
+      id: "boxed",
+      name: "Boxed",
+      builtin: false,
+      run: { kind: "command", command: "true" },
+      confinement: "toyon-sandbox",
+      systemPrompt: "prompt-prefix",
+      loginHint: "",
+      setup: async (_cwd, b) => {
+        seen.push(b);
+        return { env: { AGENT_CONFIG: "{}" } };
+      },
+    };
+    const p = await prepareLaunch(wt, spec);
+    expect(p.env).toEqual({ AGENT_CONFIG: "{}" });
+    expect(seen).toEqual([p.bounds]);
   });
 
   test("the main checkout's own .git is inside root, so gitDir is null", async () => {
@@ -43,6 +88,7 @@ describe("sandbox", () => {
     const first = JSON.parse(readFileSync(file, "utf8"));
     expect(first.sandbox.enabled).toBe(true);
     expect(first.sandbox.filesystem.allowWrite).toEqual(b.allowWrite);
+    expect(first.sandbox.filesystem.denyRead).toEqual(b.denyRead);
     expect(first.permissions.defaultMode).toBe("default");
     // the user's own keys survive a rewrite; ours are replaced
     writeFileSync(
@@ -52,7 +98,7 @@ describe("sandbox", () => {
     await writeClaudeLocalSettings(wt, b);
     const second = JSON.parse(readFileSync(file, "utf8"));
     expect(second.hooks).toEqual({ x: 1 });
-    expect(second.permissions).toEqual({ allow: ["Bash(ls)"], defaultMode: "default", deny: DENIED_COMMANDS });
+    expect(second.permissions).toEqual({ allow: ["Bash(ls)"], defaultMode: "default", deny: claudeDenyRules() });
     expect(second.sandbox.enabled).toBe(true);
     expect(existsSync(`${file}.tmp`)).toBe(false);
     // ignored by git, and the exclude line is added once even after two writes
@@ -72,7 +118,7 @@ describe("sandbox", () => {
     const deny: string[] = JSON.parse(readFileSync(file, "utf8")).permissions.deny;
     expect(deny[0]).toBe("Bash(rm -rf:*)");
     expect(deny.filter((r) => r === "Bash(git push:*)")).toHaveLength(1);
-    for (const r of DENIED_COMMANDS) expect(deny).toContain(r);
+    for (const r of claudeDenyRules()) expect(deny).toContain(r);
   });
 
   test("an unparsable existing file is kept as .bak and replaced", async () => {

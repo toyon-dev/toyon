@@ -4,7 +4,9 @@
 // decides: `auto` allows writes and sandboxed commands, `ask` (and `plan`, should a write arrive
 // in it) turns each into a card for a person. A plan approval, `switch_mode` (Claude's
 // ExitPlanMode, Codex's plan review), is a card in every mode: approving a plan nobody read is not
-// a decision toyon can make.
+// a decision toyon can make. An agent with no OS sandbox of any kind has nothing under its commands,
+// so each one is a card even in `auto`; and toyon's own secrets are refused to every tool, reads
+// included.
 
 import { isAbsolute, resolve } from "node:path";
 import type { PermissionOption, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
@@ -38,10 +40,13 @@ export function decide(
   bounds: Bounds,
   cwd: string,
   mode: PermissionMode = "auto",
+  /** the agent's commands run inside an OS sandbox; without one, a person sees each command */
+  sandboxed = true,
 ): Verdict {
   const tool = req.toolCall.name ?? req.toolCall.title ?? "tool";
   const paths = requestedPaths(req);
   const kind = req.toolCall.kind;
+  const commandAsks = kind === "execute" && !sandboxed;
   // Claude's ExitPlanMode arrives here: a plan to read and a set of "yes, and…" options. Allowing
   // it would approve the plan and start the edits without anyone having seen it, so it is the one
   // request a person answers in every mode.
@@ -50,7 +55,7 @@ export function decide(
   // outside write is a refusal with a reason, never a card offering to allow it
   const asks = mode !== "auto";
   if (paths.length === 0) {
-    if (kind === "execute") return asks ? { kind: "prompt" } : { kind: "allow" };
+    if (kind === "execute") return asks || commandAsks ? { kind: "prompt" } : { kind: "allow" };
     if (kind && NON_WRITE_KINDS.has(kind)) return { kind: "allow" };
     if (kind === "edit" || kind === "delete" || kind === "move") {
       return {
@@ -64,12 +69,20 @@ export function decide(
   }
   for (const raw of paths) {
     const target = canonical(isAbsolute(raw) ? raw : resolve(cwd, raw));
+    if (bounds.denyRead.some((d) => within(target, d))) {
+      return {
+        kind: "reject",
+        tool,
+        path: raw,
+        reason: "The file holds Toyon's own credentials, which no agent reads or writes.",
+      };
+    }
     if (bounds.denyWrite.some((d) => within(target, d))) {
       return {
         kind: "reject",
         tool,
         path: raw,
-        reason: "Agent settings under .claude/ are managed by Toyon, not written by the agent.",
+        reason: "Agent settings are managed by Toyon, not written by the agent.",
       };
     }
     if (!bounds.allowWrite.some((a) => within(target, a))) {
@@ -83,7 +96,7 @@ export function decide(
   }
   // a read that names a path (Claude's Read, a search scoped to a directory) is never a card
   if (kind && NON_WRITE_KINDS.has(kind) && kind !== "execute") return { kind: "allow" };
-  return asks ? { kind: "prompt" } : { kind: "allow" };
+  return asks || commandAsks ? { kind: "prompt" } : { kind: "allow" };
 }
 
 /** the rules with nobody to ask. A side session (naming, planning, a recap) has no chat to draw a

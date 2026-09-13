@@ -24,8 +24,8 @@ export interface AuthObservation {
 export interface AgentAccountsDeps {
   /** the spec for an id, or a UserError; the registry's own `require` */
   require: (id: string) => AgentSpec;
-  /** spawn the adapter for a short-lived connection with no session on it */
-  connect: (app: acp.ClientApp, spec: AgentSpec) => AcpLink;
+  /** spawn the adapter for a short-lived connection with no session on it, prepared like any launch */
+  connect: (app: acp.ClientApp, spec: AgentSpec) => Promise<AcpLink>;
 }
 
 export class AgentAccounts {
@@ -78,7 +78,7 @@ export class AgentAccounts {
     const app = acp.client({ name: "toyon" }).onNotification(AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, (c) => {
       if (c.params && signingOut) pushed = c.params;
     });
-    const link = this.d.connect(app, spec);
+    const link = await this.d.connect(app, spec);
     try {
       const init = await link.conn.agent.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,

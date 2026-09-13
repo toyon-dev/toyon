@@ -8,6 +8,7 @@ import { makePaths } from "../../core/paths.ts";
 import { GIT } from "../../git/exec.ts";
 import { AttachmentStore } from "../attachments.ts";
 import { AgentRegistry, BUILTIN_AGENTS } from "../registry.ts";
+import { prepareLaunch } from "../sandbox.ts";
 import { AcpSession } from "./session.ts";
 import { supportsSteering } from "./steering.ts";
 import { spawnAcp } from "./transport.ts";
@@ -36,8 +37,8 @@ function world() {
     worktreeId: "it",
     cwd: wt,
     spec: () => reg.require("codex"),
-    connect: (app, spec) => spawnAcp(app, reg.launch(spec), wt, "it"),
-    launch: (spec) => reg.launch(spec),
+    connect: (app, spec, prepared) => spawnAcp(app, reg.launch(spec, prepared), wt, "it"),
+    launch: (spec) => reg.command(spec),
     transcriptsDir: t.paths.transcriptsDir,
     attachments: new AttachmentStore(t.paths.attachmentsDir),
     getSessionId: () => sessionId,
@@ -62,7 +63,13 @@ describe.skipIf(!enabled)("codex via ACP (integration)", () => {
   test("the adapter advertises steering, which is what turns the queue off", async () => {
     const t = tmpRepo();
     const reg = registry();
-    const link = spawnAcp(acp.client({ name: "toyon" }), reg.launch(reg.require("codex")), t.repo, "it");
+    const spec = reg.require("codex");
+    const link = spawnAcp(
+      acp.client({ name: "toyon" }),
+      reg.launch(spec, await prepareLaunch(t.repo, spec)),
+      t.repo,
+      "it",
+    );
     try {
       const init = await link.conn.agent.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,

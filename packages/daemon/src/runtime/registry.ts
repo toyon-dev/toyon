@@ -116,8 +116,8 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
       }
       return d.agents.require(w.agent);
     },
-    connect: (app, spec) => spawnAcp(app, d.agents.launch(spec), wt.path, wt.id),
-    launch: (spec) => d.agents.launch(spec),
+    connect: (app, spec, prepared) => spawnAcp(app, d.agents.launch(spec, prepared), wt.path, wt.id),
+    launch: (spec) => d.agents.command(spec),
     transcriptsDir: d.paths.transcriptsDir,
     attachments: d.attachments ?? new AttachmentStore(d.paths.attachmentsDir),
     getSessionId: () => d.state.session(wt.id),

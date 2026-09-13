@@ -19,7 +19,13 @@ import type { AcpLink } from "./transport.ts";
 
 const home = realpathSync(mkdtempSync(join(tmpdir(), "toyon-acp-session-")));
 const wt = join(home, "wt");
-const bounds: Bounds = { root: wt, allowWrite: [wt, "/tmp"], denyWrite: [join(wt, ".claude")], gitDir: null };
+const bounds: Bounds = {
+  root: wt,
+  allowWrite: [wt, "/tmp"],
+  denyWrite: [join(wt, ".claude")],
+  denyRead: [],
+  gitDir: null,
+};
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 const claudeSpec: AgentSpec = {
@@ -286,7 +292,7 @@ function world(
     onStatus: (s) => statuses.push(s),
     onAuth: (agentId, o) => auths.push([agentId, o]),
     idleMs,
-    prepare: async () => bounds,
+    prepare: async () => ({ bounds, env: {} }),
     ...extra,
   });
   const idle = async () => {

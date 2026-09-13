@@ -5,12 +5,15 @@
 // machine and possibly holding keys, so not in the repo's settings).
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { AgentInfo } from "@toyon/shared";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import { run } from "../git/exec.ts";
+import { confine } from "./confine.ts";
+import { type Bounds, type Prepared, writeClaudeLocalSettings } from "./sandbox.ts";
 
 /** how shell commands the agent runs are kept inside the worktree */
 export type Confinement =
@@ -18,8 +21,13 @@ export type Confinement =
   | "claude-settings"
   /** the adapter runs its agent under the agent's own OS sandbox */
   | "adapter-sandbox"
-  /** nothing below the permission policy; the shell shows the agent as unsandboxed */
+  /** toyon starts the adapter inside its own OS sandbox (confine.ts), for an agent that brings none */
+  | "toyon-sandbox"
+  /** nothing below the permission policy; the shell shows the agent as unsandboxed, and every
+   * command it runs is a card, even in auto */
   | "none";
+
+const CONFINEMENTS: readonly Confinement[] = ["claude-settings", "adapter-sandbox", "toyon-sandbox", "none"];
 
 export interface AgentSpec {
   id: string;
@@ -33,6 +41,12 @@ export interface AgentSpec {
     | { kind: "command"; command: string; args?: string[] };
   env?: Record<string, string>;
   confinement: Confinement;
+  /** directories under the home directory the agent keeps its own state in: writable inside toyon's
+   * sandbox, which confines everything else to the worktree */
+  stateDirs?: string[];
+  /** runs before every launch, once the bounds are known: writes whatever the agent reads its limits
+   * from, and says what to add to its environment */
+  setup?: (cwd: string, bounds: Bounds) => Promise<{ env?: Record<string, string> } | undefined>;
   /** `_meta.systemPrompt` on session/new, or SYSTEM_APPEND prepended to a session's first prompt */
   systemPrompt: "meta-append" | "prompt-prefix";
   /** session/set_mode after new/load when the agent advertises modes; the write mode */
@@ -58,6 +72,7 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     builtin: true,
     run: { kind: "npm-bin", pkg: "@agentclientprotocol/claude-agent-acp", version: "0.75.1", bin: "claude-agent-acp" },
     confinement: "claude-settings",
+    setup: (cwd, bounds) => writeClaudeLocalSettings(cwd, bounds).then(() => undefined),
     systemPrompt: "meta-append",
     // "default" is Claude's ask-before-changes mode: every write and command reaches the policy,
     // which is what lets toyon decide. Its own "auto" would decide without us.
@@ -172,14 +187,25 @@ export class AgentRegistry {
     return `${cmd} not found on PATH`;
   }
 
-  launch(spec: AgentSpec): Launch {
+  /** the adapter's own command line, unconfined: what a terminal login types */
+  command(spec: AgentSpec): { command: string; args: string[] } {
     const why = this.unavailable(spec);
     if (why) throw new UserError(`${spec.name} is not ready: ${why}`);
-    const env = { ...spec.env };
-    if (spec.run.kind === "npm-bin") {
-      return { command: jsRuntime(), args: [this.npmBin(spec)!, ...(spec.run.args ?? [])], env };
-    }
-    return { command: spec.run.command, args: [...(spec.run.args ?? [])], env };
+    if (spec.run.kind === "npm-bin")
+      return { command: jsRuntime(), args: [this.npmBin(spec)!, ...(spec.run.args ?? [])] };
+    return { command: spec.run.command, args: [...(spec.run.args ?? [])] };
+  }
+
+  /** how to start the adapter once `prepareLaunch` has run: its command, inside toyon's sandbox when
+   * the agent runs in it, with its setup's environment over its own */
+  launch(spec: AgentSpec, prepared: Prepared): Launch {
+    const base = { ...this.command(spec), env: { ...spec.env, ...prepared.env } };
+    if (spec.confinement !== "toyon-sandbox") return base;
+    return confine(
+      base,
+      prepared.bounds,
+      (spec.stateDirs ?? []).map((d) => resolve(homedir(), d)),
+    );
   }
 
   /** Install (or upgrade) an npm adapter into its own directory. Idempotent; concurrent calls share
@@ -283,8 +309,10 @@ export function parseCustomAgents(raw: string): AgentSpec[] {
           : e.env !== undefined &&
               !(e.env && typeof e.env === "object" && Object.values(e.env).every((x) => typeof x === "string"))
             ? '"env" must be an object of strings'
-            : e.confinement !== undefined && e.confinement !== "none" && e.confinement !== "adapter-sandbox"
-              ? '"confinement" must be "none" or "adapter-sandbox"'
+            : // claude-settings is Claude Code's settings file and nothing another agent reads
+              e.confinement !== undefined &&
+                (e.confinement === "claude-settings" || !CONFINEMENTS.includes(e.confinement as Confinement))
+              ? '"confinement" must be "none", "adapter-sandbox" or "toyon-sandbox"'
               : null;
     if (why) {
       log.warn("agents", `agents.json: skipping "${id}": ${why}`);
@@ -308,8 +336,7 @@ export function parseCustomAgents(raw: string): AgentSpec[] {
 }
 
 /** builtins plus the user's file; a custom entry may shadow a builtin id on purpose */
-export function loadAgentRegistry(home: string, agentsDir: string): AgentRegistry {
-  const file = join(home, "agents.json");
-  const custom = existsSync(file) ? parseCustomAgents(readFileSync(file, "utf8")) : [];
+export function loadAgentRegistry(agentsFile: string, agentsDir: string): AgentRegistry {
+  const custom = existsSync(agentsFile) ? parseCustomAgents(readFileSync(agentsFile, "utf8")) : [];
   return new AgentRegistry([...BUILTIN_AGENTS, ...custom], agentsDir);
 }

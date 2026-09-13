@@ -24,6 +24,10 @@ export interface Paths {
   themesDir: string;
   /** one npm install per agent adapter (<id>/node_modules/...), fetched on demand */
   agentsDir: string;
+  /** the user's own ACP agents (agent/registry.ts); commands the daemon runs, so no agent touches it */
+  agentsFile: string;
+  /** where an agent runs with no worktree behind it (a model probe, a sign-out), confined like any other */
+  scratchDir: string;
 }
 
 /** TOYON_HOME lets cloud mode keep state on a mounted volume (see core/cloud.ts) */
@@ -45,6 +49,8 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     themesDir: join(home, "themes"),
     // the cloud image pre-installs the adapters into the image (a volume cannot be filled at build)
     agentsDir: process.env.TOYON_AGENTS_DIR ?? join(home, "agents"),
+    agentsFile: join(home, "agents.json"),
+    scratchDir: join(home, "scratch"),
   };
 }
 
@@ -56,4 +62,5 @@ export function ensureDirs(p: Paths) {
   mkdirSync(p.worktreesDir, { recursive: true });
   mkdirSync(p.themesDir, { recursive: true });
   mkdirSync(p.agentsDir, { recursive: true });
+  mkdirSync(p.scratchDir, { recursive: true });
 }

@@ -86,18 +86,26 @@ export function procUrlEnv(states: ProcState[], previewName: string | undefined)
   return env;
 }
 
+/** what every command toyon runs for a worktree can read about where it is: the id, so a project
+ * can name a database or a compose project of its own, and the main checkout, so a setup step can
+ * copy what git never brings over and toyon does not know to (a local SQLite file, a secrets dir) */
+export function worktreeEnv(wt: { id: string }, repo: { path: string }): Record<string, string> {
+  return { TOYON_WORKTREE: wt.id, TOYON_ROOT: repo.path };
+}
+
 /** a terminal's environment: the daemon's own minus PORT and the supervisor's FORCE_COLOR=0 (a
- * shell wants color and has no port), the sibling URLs, a 256-color TERM, and the worktree id */
+ * shell wants color and has no port), the sibling URLs, a 256-color TERM, and the worktree's own
+ * variables */
 export function terminalEnv(
   base: Record<string, string | undefined>,
-  wt: { id: string },
+  own: Record<string, string>,
   urls: Record<string, string>,
 ): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(base)) {
     if (typeof v === "string" && k !== "PORT" && k !== "FORCE_COLOR") env[k] = v;
   }
-  return { ...env, ...urls, TERM: "xterm-256color", COLORTERM: "truecolor", TOYON_WORKTREE: wt.id };
+  return { ...env, ...urls, TERM: "xterm-256color", COLORTERM: "truecolor", ...own };
 }
 
 export const DEFAULT_AGENT_ID = "claude";
@@ -212,7 +220,8 @@ export class RuntimeRegistry {
     if (!term?.alive) {
       const opts: PtyOpts = {
         cwd,
-        env: { ...terminalEnv(process.env, { id }, {}), PWD: cwd },
+        // a discovered worktree has no repo record, so no TOYON_ROOT to give it
+        env: { ...terminalEnv(process.env, { TOYON_WORKTREE: id }, {}), PWD: cwd },
         cols,
         rows,
         file: process.env.SHELL || "sh",
@@ -308,11 +317,11 @@ export class RuntimeRegistry {
 
     // start non-preview procs first so the preview proc can get their URLs. Every proc gets the
     // profile env; a `$API_URL` in it resolves against whatever siblings are already up, so the
-    // api proc itself sees it unexpanded and the preview proc sees the address. The worktree id
-    // rides along so a proc can name a database or a compose project of its own; the profile env
-    // may reference it the same way it references a sibling's URL
+    // api proc itself sees it unexpanded and the preview proc sees the address. The worktree's own
+    // variables ride along, and the profile env may reference them the same way it references a
+    // sibling's URL
     const envFor = () => {
-      const urls = { ...procUrlEnv(procs.states(), previewName), TOYON_WORKTREE: wt.id };
+      const urls = { ...procUrlEnv(procs.states(), previewName), ...worktreeEnv(wt, repo) };
       return { ...urls, ...expandEnv(run.env, urls) };
     };
     for (const [name, cmd] of Object.entries(run.procs)) {
@@ -425,7 +434,8 @@ export class RuntimeRegistry {
    * same one, so `curl $API_URL` means the same thing typed in either. */
   shellEnv(wt: WorktreeInfo): Record<string, string> {
     const rt = this.runtimes.get(wt.id);
-    return terminalEnv(process.env, wt, procUrlEnv(rt?.procs?.states() ?? [], rt?.previewName));
+    const repo = this.deps.state.requireRepo(wt.repoId);
+    return terminalEnv(process.env, worktreeEnv(wt, repo), procUrlEnv(rt?.procs?.states() ?? [], rt?.previewName));
   }
 
   /** type a command into the worktree's shell: now if a pane has one open, else when one opens */

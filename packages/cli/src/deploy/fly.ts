@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { PREVIEW_PORTS, portPreviews } from "@toyon/shared";
 import type { Command } from "../args.ts";
 import { home } from "../daemon.ts";
+import { launcherAddLink } from "../launcher.ts";
 import { bunVersion, machineSources, writeMachineContext } from "./context.ts";
 
 type DeployCommand = Extract<Command, { kind: "deploy" }>;
@@ -260,9 +261,14 @@ async function up(cmd: DeployCommand, bin: string): Promise<void> {
     if (!up) await Bun.sleep(2000);
   }
   if (!up) console.log(`it has not answered yet; \`fly logs -a ${cmd.name}\` shows what it is doing`);
-  console.log(`\ntoyon: https://${cmd.name}.fly.dev/#token=${token}`);
-  console.log("the link grants a shell on that machine; keep it to yourself");
+  printLinks(cmd.name, token);
   console.log("the volume holds the only copy of anything not pushed to a remote");
+}
+
+function printLinks(app: string, token: string): void {
+  console.log(`\ntoyon: https://${app}.fly.dev/#token=${token}`);
+  console.log("the link grants a shell on that machine; keep it to yourself");
+  console.log(`add it to your list at toyon.cloud: ${launcherAddLink(`https://${app}.fly.dev`)}`);
 }
 
 async function destroy(cmd: DeployCommand, bin: string): Promise<number> {
@@ -297,7 +303,7 @@ export async function deploy(cmd: DeployCommand): Promise<number> {
     if (cmd.action === "up") await up(cmd, bin);
     else if (cmd.action === "destroy") return await destroy(cmd, bin);
     else if (existsSync(tokenFile(cmd.name))) {
-      console.log(`toyon: https://${cmd.name}.fly.dev/#token=${readFileSync(tokenFile(cmd.name), "utf8").trim()}`);
+      printLinks(cmd.name, readFileSync(tokenFile(cmd.name), "utf8").trim());
     } else {
       throw new DeployError(`${cmd.name} was not deployed from this machine; its token is not in ${cloudDir}`);
     }

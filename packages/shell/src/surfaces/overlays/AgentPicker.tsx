@@ -36,7 +36,7 @@ export function AgentPicker() {
         <PaletteRow
           label={a.name}
           current={a.id === current}
-          hint={!a.available ? `not installed: ${a.reason ?? ""}` : a.sandboxed ? undefined : "unsandboxed"}
+          hint={!a.available ? (a.reason ?? "not installed") : a.sandboxed ? undefined : "unsandboxed"}
         />
       )}
     />

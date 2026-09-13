@@ -1,8 +1,9 @@
 // Which agents toyon can run, as data. Every agent speaks ACP over stdio; an entry is a launch
-// command plus how it is confined and told about the worktree. The two builtins are npm packages
-// installed on demand into ~/.toyon/agents/<id> (the daemon starts fetching both at boot, so the
-// app's own install stays small); a user adds any other ACP agent in ~/.toyon/agents.json (per
-// machine and possibly holding keys, so not in the repo's settings).
+// command plus how it is confined and told about the worktree. The builtins are npm packages
+// installed into ~/.toyon/agents/<id>, so the app's own install stays small: Claude's and Codex's
+// adapters are fetched at boot, OpenCode's native binary (large) when someone asks for it. A user
+// adds any other ACP agent in ~/.toyon/agents.json (per machine and possibly holding keys, so not in
+// the repo's settings).
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -13,6 +14,8 @@ import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import { run } from "../git/exec.ts";
 import { confine } from "./confine.ts";
+import { type HostTraits, hostTraits, nativePackage } from "./native.ts";
+import { opencodeEnv, opencodeQuickModel } from "./opencode.ts";
 import { type Bounds, type Prepared, writeClaudeLocalSettings } from "./sandbox.ts";
 
 /** how shell commands the agent runs are kept inside the worktree */
@@ -38,7 +41,13 @@ export interface AgentSpec {
   builtin: boolean;
   run:
     | { kind: "npm-bin"; pkg: string; version: string; bin: string; args?: string[] }
+    /** a native binary shipped as one npm package per platform, `<pkg>-<os>-<arch>…` (native.ts),
+     * run directly with no JS runtime; `bin` is its path inside that package */
+    | { kind: "npm-native"; pkg: string; version: string; bin: string; args?: string[] }
     | { kind: "command"; command: string; args?: string[] };
+  /** fetched only when someone asks for it, never at boot: a download too large to spend on every
+   * machine that will not run it */
+  onDemand?: boolean;
   env?: Record<string, string>;
   confinement: Confinement;
   /** directories under the home directory the agent keeps its own state in: writable inside toyon's
@@ -100,6 +109,22 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     quickModel: "gpt-5.6-luna",
     loginHint: "Codex is not logged in",
   },
+  {
+    id: "opencode",
+    name: "OpenCode",
+    builtin: true,
+    run: { kind: "npm-native", pkg: "opencode", version: "1.18.30", bin: "bin/opencode", args: ["acp"] },
+    onDemand: true,
+    // OpenCode brings no OS sandbox, so it runs inside toyon's, writing only the worktree and its own state
+    confinement: "toyon-sandbox",
+    stateDirs: [".local/share/opencode", ".local/state/opencode", ".cache/opencode"],
+    // on its own OpenCode allows every edit and command; this puts them in front of toyon's policy
+    setup: async () => ({ env: opencodeEnv() }),
+    systemPrompt: "prompt-prefix",
+    modes: { plan: "plan", build: "build" },
+    quickModel: opencodeQuickModel,
+    loginHint: "OpenCode has no provider logged in; run `opencode auth login` in the terminal",
+  },
 ];
 
 export interface Launch {
@@ -138,6 +163,8 @@ export class AgentRegistry {
     specs: AgentSpec[],
     private dir: string,
     private installer: Installer = bunInstall,
+    /** which native build this machine takes; read once, since the files that say do not change */
+    private host: HostTraits = hostTraits(),
   ) {
     for (const s of specs) this.specs.set(s.id, s);
   }
@@ -159,10 +186,25 @@ export class AgentRegistry {
     return spec;
   }
 
-  /** the script an installed npm adapter's `bin` entry points at, or null */
-  private npmBin(spec: AgentSpec): string | null {
-    if (spec.run.kind !== "npm-bin") return null;
-    const pkgJson = join(this.dir, spec.id, "node_modules", spec.run.pkg, "package.json");
+  /** the npm package an adapter is installed from: its own, or this machine's build of a native one;
+   * null for a command, or for a native agent with no build for this machine */
+  private packageName(spec: AgentSpec): string | null {
+    if (spec.run.kind === "npm-bin") return spec.run.pkg;
+    if (spec.run.kind === "npm-native") return nativePackage(spec.run.pkg, this.host);
+    return null;
+  }
+
+  /** what an installed adapter runs: the script an npm adapter's `bin` entry points at, or the
+   * native binary; null while it is not installed */
+  private installed(spec: AgentSpec): string | null {
+    const name = this.packageName(spec);
+    if (!name || spec.run.kind === "command") return null;
+    const pkgDir = join(this.dir, spec.id, "node_modules", name);
+    if (spec.run.kind === "npm-native") {
+      const bin = join(pkgDir, spec.run.bin);
+      return existsSync(bin) ? bin : null;
+    }
+    const pkgJson = join(pkgDir, "package.json");
     if (!existsSync(pkgJson)) return null;
     try {
       const meta = JSON.parse(readFileSync(pkgJson, "utf8")) as { bin?: string | Record<string, string> };
@@ -178,10 +220,11 @@ export class AgentRegistry {
 
   /** null when launchable, else the reason it is not */
   unavailable(spec: AgentSpec): string | null {
-    if (spec.run.kind === "npm-bin") {
-      if (this.npmBin(spec)) return null;
+    if (spec.run.kind !== "command") {
+      if (!this.packageName(spec)) return `no build for ${this.host.platform} ${this.host.arch}`;
+      if (this.installed(spec)) return null;
       if (this.installing.has(spec.id)) return "installing";
-      return this.installErrors.get(spec.id) ?? "not installed yet";
+      return this.installErrors.get(spec.id) ?? (spec.onDemand ? "not installed" : "not installed yet");
     }
     const cmd = spec.run.command;
     if (isAbsolute(cmd) ? existsSync(cmd) : Bun.which(cmd)) return null;
@@ -193,7 +236,8 @@ export class AgentRegistry {
     const why = this.unavailable(spec);
     if (why) throw new UserError(`${spec.name} is not ready: ${why}`);
     if (spec.run.kind === "npm-bin")
-      return { command: jsRuntime(), args: [this.npmBin(spec)!, ...(spec.run.args ?? [])] };
+      return { command: jsRuntime(), args: [this.installed(spec)!, ...(spec.run.args ?? [])] };
+    if (spec.run.kind === "npm-native") return { command: this.installed(spec)!, args: [...(spec.run.args ?? [])] };
     return { command: spec.run.command, args: [...(spec.run.args ?? [])] };
   }
 
@@ -214,11 +258,12 @@ export class AgentRegistry {
   install(id: string): Promise<void> {
     const spec = this.specs.get(id);
     if (!spec) throw new UserError(`unknown agent "${id}"`);
-    if (spec.run.kind !== "npm-bin") return Promise.resolve();
+    const pkg = this.packageName(spec);
+    if (spec.run.kind === "command" || !pkg) return Promise.resolve();
     const running = this.installing.get(id);
     if (running) return running;
-    if (this.npmBin(spec) && this.installedVersion(spec) === spec.run.version) return Promise.resolve();
-    const { pkg, version } = spec.run;
+    if (this.installed(spec) && this.installedVersion(spec) === spec.run.version) return Promise.resolve();
+    const { version } = spec.run;
     const dir = join(this.dir, id);
     const p = (async () => {
       mkdirSync(dir, { recursive: true });
@@ -228,7 +273,7 @@ export class AgentRegistry {
       );
       log.info("agents", `installing ${pkg}@${version} for ${id}`);
       const r = await this.installer(dir, pkg, version);
-      if (r.ok && this.npmBin(spec)) {
+      if (r.ok && this.installed(spec)) {
         this.installErrors.delete(id);
         log.info("agents", `${id} ready`);
       } else {
@@ -246,8 +291,9 @@ export class AgentRegistry {
   }
 
   private installedVersion(spec: AgentSpec): string | null {
-    if (spec.run.kind !== "npm-bin") return null;
-    const pkgJson = join(this.dir, spec.id, "node_modules", spec.run.pkg, "package.json");
+    const name = this.packageName(spec);
+    if (!name) return null;
+    const pkgJson = join(this.dir, spec.id, "node_modules", name, "package.json");
     try {
       return (JSON.parse(readFileSync(pkgJson, "utf8")) as { version?: string }).version ?? null;
     } catch {
@@ -256,11 +302,12 @@ export class AgentRegistry {
     }
   }
 
-  /** boot: fetch every builtin that is missing or on another version, one at a time, default first */
+  /** boot: fetch every builtin that is missing or on another version, one at a time, default first;
+   * an agent fetched on demand waits for someone to ask */
   async installMissing(order: string[] = ["claude", "codex"]): Promise<void> {
     for (const id of order) {
       const spec = this.specs.get(id);
-      if (spec?.run.kind !== "npm-bin") continue;
+      if (!spec || spec.run.kind === "command" || spec.onDemand) continue;
       await this.install(id);
     }
   }
@@ -275,6 +322,7 @@ export class AgentRegistry {
         available: !reason,
         ...(reason ? { reason } : {}),
         ...(this.installing.has(spec.id) ? { installing: true } : {}),
+        ...(spec.onDemand ? { onDemand: true } : {}),
         sandboxed: spec.confinement !== "none",
       };
     });

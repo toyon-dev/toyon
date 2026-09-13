@@ -109,7 +109,7 @@ export function agentModelRows(
           id: agentModelKey(a.id, DEFAULT_OPTION),
           label: short,
           description: !a.available
-            ? `not installed: ${a.reason ?? ""}`
+            ? (a.reason ?? "not installed")
             : "its own default model; the rest are listed once it has run",
           disabled: !a.available,
         },

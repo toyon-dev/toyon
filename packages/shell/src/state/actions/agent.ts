@@ -17,7 +17,8 @@ export function agentItems(a: AgentInfo, { sock }: Deps): MenuItem[] {
   if (!a.available && !a.installing) {
     items.push({
       id: "install",
-      label: "install again",
+      // an agent fetched on demand was never installed; any other is missing because an install failed
+      label: a.onDemand && a.reason === "not installed" ? "install" : "install again",
       onClick: () => sock?.send({ t: "install-agent", agent: a.id }),
     });
   }

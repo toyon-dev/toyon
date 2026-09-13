@@ -339,6 +339,8 @@ export interface AgentInfo {
   reason?: string;
   /** its adapter is being downloaded right now */
   installing?: boolean;
+  /** fetched only when someone asks for it (a large download), so "not installed" is its resting state */
+  onDemand?: boolean;
   /** runs shell commands under an OS sandbox confined to the worktree */
   sandboxed: boolean;
   /** the identity it last reported, from any connection; absent until one has run */

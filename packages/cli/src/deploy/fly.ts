@@ -184,11 +184,9 @@ async function up(cmd: DeployCommand, bin: string): Promise<void> {
   if (!(await capture(bin, ["auth", "whoami"])).ok)
     throw new DeployError("flyctl is not logged in; run `fly auth login`");
   const anthropic = secret("ANTHROPIC_API_KEY", "anthropic.key");
-  if (!anthropic) {
-    throw new DeployError(
-      `no Anthropic key: set ANTHROPIC_API_KEY, or put it in ${join(cloudDir, "anthropic.key")} (mode 600)`,
-    );
-  }
+  // without a key Claude offers its own login at the first message, run in toyon's terminal, and it
+  // keeps the login in HOME on the volume; toyon never holds a plan credential
+  if (!anthropic) console.log("no Anthropic key: sign in with your Claude plan from the first chat");
   const region = cmd.region ?? (await nearestRegion());
   if (!region)
     throw new DeployError(

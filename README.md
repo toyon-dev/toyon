@@ -114,12 +114,12 @@ Toyon reads the box's name from Tailscale and sets up `tailscale serve` for itse
 npx toyon deploy fly up my-toyon
 ```
 
-It needs flyctl signed in (`fly auth login`) and an Anthropic API key in `ANTHROPIC_API_KEY` or `~/.toyon/cloud/anthropic.key`. Toyon builds the machine in your Fly builder from the package you ran, gives it a 5 GB volume in the region closest to you, and prints the link. `--repo https://github.com/you/app.git` clones your repository onto it the first time; a private one needs a GitHub token with access to it in `GITHUB_TOKEN` or `~/.toyon/cloud/github.token`. `toyon deploy fly url my-toyon` prints the link again, and `toyon deploy fly destroy my-toyon` deletes the app and its volume.
+It needs flyctl signed in (`fly auth login`). An Anthropic API key in `ANTHROPIC_API_KEY` or `~/.toyon/cloud/anthropic.key` goes to the machine; without one, the first chat asks you to sign in with your Claude plan, in toyon's terminal, and the login stays on the volume. Toyon builds the machine in your Fly builder from the package you ran, gives it a 5 GB volume in the region closest to you, and prints the link. `--repo https://github.com/you/app.git` clones your repository onto it the first time; a private one needs a GitHub token with access to it in `GITHUB_TOKEN` or `~/.toyon/cloud/github.token`. `toyon deploy fly url my-toyon` prints the link again, and `toyon deploy fly destroy my-toyon` deletes the app and its volume.
 
 - The machine measured about $4-6 a month in ordinary use and $10-11 left running all month, volume included, plus whatever your agents spend.
 - It stops when idle, but an open Toyon tab keeps it awake.
 - The volume holds the only copy of anything you have not pushed.
-- Code you run on it can read the Anthropic key, as it can on your laptop.
+- Code you run on it can read the Anthropic key or the Claude login, as it can on your laptop.
 - The first prompt waits while the agents install.
 - flyctl warns that some preview ports have nothing listening. Each one gets a listener when a copy uses it.
 - The first deploy right after an app is created can fail with "unauthorized". Running `up` again finishes it.

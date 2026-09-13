@@ -82,6 +82,9 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     short: "Claude",
     builtin: true,
     run: { kind: "npm-bin", pkg: "@agentclientprotocol/claude-agent-acp", version: "0.75.1", bin: "claude-agent-acp" },
+    // The adapter reads NO_BROWSER to choose its login: set, it offers the TUI's /login, which
+    // prints a link and takes the pasted code; unset, `auth login` opens a browser the cloud lacks.
+    ...(cloud.enabled ? { env: { NO_BROWSER: "1" } } : {}),
     confinement: "claude-settings",
     setup: (cwd, bounds) => writeClaudeLocalSettings(cwd, bounds).then(() => undefined),
     systemPrompt: "meta-append",

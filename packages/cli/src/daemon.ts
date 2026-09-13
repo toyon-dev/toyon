@@ -14,12 +14,15 @@ export const home = process.env.TOYON_HOME ?? join(homedir(), ".toyon");
 export const tokenFile = join(home, DAEMON_FILES.token);
 export const pidFile = join(home, DAEMON_FILES.pid);
 export const logFile = join(home, DAEMON_FILES.log);
+export const remoteFile = join(home, DAEMON_FILES.remote);
 
 export interface Health {
   ok: boolean;
   version?: string;
   pid?: number;
   branded?: boolean;
+  /** the remote name the daemon started with; null when remote access is off */
+  host?: string | null;
   lag?: { last: number; max: number; maxCause: string | null; over: number };
   worktrees?: { total: number; running: number };
 }

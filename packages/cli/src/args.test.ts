@@ -38,6 +38,15 @@ describe("parseArgs", () => {
     expect(parseArgs(["logs", "--lines", "x"]).kind).toBe("error");
     expect(parseArgs(["logs", "--lines"]).kind).toBe("error");
   });
+  test("remote takes one host name or off, and prints the setting with neither", () => {
+    expect(parseArgs(["remote"])).toEqual({ kind: "remote", to: null });
+    expect(parseArgs(["remote", "off"])).toEqual({ kind: "remote", to: "off" });
+    expect(parseArgs(["remote", "toyon.example.com"])).toEqual({ kind: "remote", to: "toyon.example.com" });
+    for (const bad of ["https://toyon.example.com", "toyon.example.com:443", "box", "10.0.0.5", "toyon.localhost"]) {
+      expect(parseArgs(["remote", bad]).kind).toBe("error");
+    }
+    expect(parseArgs(["remote", "a.example", "b.example"]).kind).toBe("error");
+  });
   test("a directory that happens to be named like a verb still needs a path form", () => {
     expect(parseArgs(["./stop"])).toMatchObject({ kind: "open", path: "./stop" });
   });

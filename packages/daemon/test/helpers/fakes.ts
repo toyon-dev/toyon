@@ -2,7 +2,7 @@ import type { AgentCommand, AgentEvent, AgentStatus, LogLine, ProcState, Worktre
 import { AgentAccounts, type AgentAccountsDeps } from "../../src/agent/accounts.ts";
 import type { AgentAdapter, AskOpts, AskReply, SendOpts } from "../../src/agent/adapter.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
-import type { WorktreeProxy } from "../../src/runtime/proxy.ts";
+import type { PreviewHandler, WorktreeProxy } from "../../src/runtime/proxy.ts";
 import type { PtyHandle, PtyOpts } from "../../src/runtime/pty.ts";
 import type { RuntimeDeps } from "../../src/runtime/registry.ts";
 import type { WorktreeProcs } from "../../src/runtime/supervisor.ts";
@@ -120,6 +120,12 @@ export class FakeProcs {
 
 export class FakeProxy implements WorktreeProxy {
   stopped = false;
+  handler: PreviewHandler = {
+    fetch: async () => new Response("fake preview"),
+    open: () => {},
+    message: () => {},
+    close: () => {},
+  };
   constructor(readonly port: number) {}
   stop() {
     this.stopped = true;

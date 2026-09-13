@@ -19,6 +19,7 @@ import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import { startLagSampler } from "./core/metrics.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
+import { loadRemoteHost } from "./core/remote.ts";
 import { loadOrCreateToken, StateStore } from "./core/state.ts";
 import { DesignService } from "./design/service.ts";
 import { ExecService } from "./exec/service.ts";
@@ -48,6 +49,8 @@ const paths = makePaths();
 ensureDirs(paths);
 const token = loadOrCreateToken(paths);
 const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
+// cloud already answers any host behind its edge; remote mode is the local daemon's opt-in
+const remoteHost = cloud.enabled ? null : loadRemoteHost(paths.remoteFile);
 
 const state = new StateStore(paths);
 const hub = new Hub();
@@ -119,6 +122,7 @@ const { branded, stop: stopServer } = startServer({
   shellDist: SHELL_DIST,
   version: pkg.version,
   noteShellOrigin: (origin) => bridge.learnShellOrigin(origin),
+  remoteHost,
   services: {
     state,
     hub,
@@ -156,6 +160,7 @@ bridge.setShellOrigins(
         // the Vite dev shell frames the same previews
         `http://127.0.0.1:${SHELL_DEV_PORT}`,
         `http://localhost:${SHELL_DEV_PORT}`,
+        ...(remoteHost ? [`https://${remoteHost}`] : []),
       ],
 );
 
@@ -200,6 +205,10 @@ if (cloud.enabled) {
     : `http://toyon.localhost:${port}/#token=${token}`;
   console.log(`toyon daemon on ${shellUrl}`);
   console.log(`         (fallback: http://127.0.0.1:${port}/#token=${token})`);
+  if (remoteHost) {
+    console.log(`         remote: https://${remoteHost}/#token=${token}, through a TLS front on this port`);
+    console.log("         the token grants a shell on this machine; keep the link to yourself");
+  }
 }
 
 // Wait for the dev servers to exit (SIGTERM, then SIGKILL after 3s) before leaving, so the

@@ -8,7 +8,9 @@ import type { AttachmentStore } from "../agent/attachments.ts";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
+import { grantCookie, previewGrant, takeGrant } from "../core/remote.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
+import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
 
 export interface WsData {
   authed: boolean;
@@ -20,7 +22,12 @@ export interface WsData {
   dropped: Set<string>;
   sent: number;
   bytes: number;
+  /** set on a socket a remote preview name upgraded: it is bridged to the app, never a shell */
+  preview?: { handler: PreviewHandler; data: PreviewData };
 }
+
+/** `w<id>` under the remote name: the worktree ids naming.ts makes, lowercase hex */
+const PREVIEW_LABEL = /^w([0-9a-z]+)$/;
 
 export interface HttpOpts {
   token: string;
@@ -34,6 +41,10 @@ export interface HttpOpts {
   metrics: () => unknown;
   /** the origin a shell just authenticated from, for the bridge's list of who may frame a preview */
   noteShellOrigin: (origin: string | null) => void;
+  /** the name a TLS front on this machine answers for (core/remote.ts), or null when remote is off */
+  remoteHost: string | null;
+  /** a worktree's preview handler, for `w<id>.<remoteHost>`; null when its proxy is not up */
+  preview: (worktreeId: string) => PreviewHandler | null;
   /** the hello frame, for a page that asks before its socket exists */
   bootstrap: () => Promise<unknown>;
 }
@@ -48,8 +59,12 @@ const IMMUTABLE = "private, max-age=31536000, immutable";
 const NO_STORE = "no-store";
 
 export function createFetch(opts: HttpOpts) {
+  const grant = previewGrant(opts.token);
   return async function fetch(req: Request, srv: Server<WsData>): Promise<Response | undefined> {
     const url = new URL(req.url);
+    let previewId: string | null = null;
+    /** the request came through the front for the shell's own name */
+    let remoteShell = false;
 
     // Cloud mode sits behind the host's TLS edge: peers and Host headers are remote by design,
     // and the bearer token on /ws and /register is the auth.
@@ -62,10 +77,60 @@ export function createFetch(opts: HttpOpts) {
       }
       // DNS-rebinding defense: loopback hosts only. *.localhost is safe — browsers hardwire it
       // to loopback and public DNS cannot serve it (RFC 6761).
-      const host = (req.headers.get("host") ?? "").split(":")[0] ?? "";
+      const host = (req.headers.get("host") ?? "").split(":")[0]?.toLowerCase() ?? "";
       if (host !== "127.0.0.1" && host !== "localhost" && !host.endsWith(".localhost")) {
-        return new Response("forbidden", { status: 403 });
+        // Remote mode: the one name a TLS front on this machine answers for. The front is the
+        // loopback peer above, so a request naming it came through the front, and the front says
+        // whether that hop was https. A plain-http front would put the token on the network in the
+        // clear, and the page would not be a secure context either, so that is refused by name.
+        // `w<id>.<name>` is that worktree's preview, under the same rule.
+        const name = opts.remoteHost;
+        const label = name !== null && host.endsWith(`.${name}`) ? host.slice(0, -name.length - 1) : null;
+        const preview = label?.match(PREVIEW_LABEL)?.[1] ?? null;
+        if (name === null || (host !== name && preview === null)) {
+          return new Response("forbidden", { status: 403 });
+        }
+        if (req.headers.get("x-forwarded-proto") !== "https") {
+          return new Response(`${host} reaches toyon over https only; the front must terminate TLS`, {
+            status: 403,
+          });
+        }
+        previewId = preview;
+        remoteShell = preview === null;
       }
+    }
+
+    // A preview name is the app, whole: none of toyon's own routes answer under it. Anyone who can
+    // reach the front could otherwise open a dev server, which is a wide surface (dev-only routes,
+    // env values in responses, the bundler's file serving), so it takes the grant cookie the shell
+    // was given, checked before saying whether the worktree exists. The grant is taken off the
+    // request on the way through: the dev server behind it never sees it.
+    if (previewId !== null) {
+      const pass = takeGrant(req.headers.get("cookie"), grant);
+      if (!pass.ok) {
+        return new Response(`this preview opens from toyon: open https://${opts.remoteHost}/ with your link first`, {
+          status: 403,
+        });
+      }
+      const handler = opts.preview(previewId);
+      if (!handler) return new Response("no preview is running for this worktree", { status: 404 });
+      const headers = new Headers(req.headers);
+      if (pass.rest === null) headers.delete("cookie");
+      else headers.set("cookie", pass.rest);
+      // the upgrade stays on the original request, which is the one Bun can hand a socket to
+      return handler.fetch(new Request(req, { headers }), (data) =>
+        srv.upgrade(req, {
+          data: {
+            authed: false,
+            subs: new Set(),
+            terms: new Set(),
+            dropped: new Set(),
+            sent: 0,
+            bytes: 0,
+            preview: { handler, data },
+          },
+        }),
+      );
     }
 
     if (url.pathname === "/ws") {
@@ -76,7 +141,10 @@ export function createFetch(opts: HttpOpts) {
       // a wrong token is still upgraded, then closed with WS_CLOSE_UNAUTHORIZED from `open`: a
       // browser reports a refused handshake as a bare 1006, the same as a daemon that is down, and
       // the shell needs to tell those apart. Nothing is sent on the socket before that close.
-      if (srv.upgrade(req, { data })) return undefined;
+      // a shell on the remote name gets the preview grant here too, for a page that reconnects
+      // without loading again
+      const headers = authed && remoteShell ? { "set-cookie": grantCookie(grant, opts.remoteHost ?? "") } : undefined;
+      if (srv.upgrade(req, { data, headers })) return undefined;
       return new Response(authed ? "upgrade failed" : "unauthorized", { status: authed ? 400 : 401 });
     }
 
@@ -86,6 +154,7 @@ export function createFetch(opts: HttpOpts) {
         version: opts.version,
         pid: process.pid,
         branded: opts.branded(),
+        host: opts.remoteHost,
         ...(opts.metrics() as object),
       });
     }
@@ -96,7 +165,10 @@ export function createFetch(opts: HttpOpts) {
     // like /ws: the page has it before any of its own code runs.
     if (url.pathname === "/bootstrap") {
       if (url.searchParams.get("token") !== opts.token) return new Response("unauthorized", { status: 401 });
-      return Response.json(await opts.bootstrap(), { headers: { "cache-control": NO_STORE } });
+      const headers: Record<string, string> = { "cache-control": NO_STORE };
+      // before first paint, so the preview iframes that paint make their first request with it
+      if (remoteShell) headers["set-cookie"] = grantCookie(grant, opts.remoteHost ?? "");
+      return Response.json(await opts.bootstrap(), { headers });
     }
 
     if (url.pathname === "/register" && req.method === "POST") {

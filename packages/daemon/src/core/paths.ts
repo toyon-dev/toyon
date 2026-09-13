@@ -12,6 +12,8 @@ export interface Paths {
   tokenFile: string;
   /** the running daemon's pid, for `toyon stop`; absent or stale when it is not running */
   pidFile: string;
+  /** the name a TLS front answers for, written by `toyon remote` (core/remote.ts) */
+  remoteFile: string;
   transcriptsDir: string;
   /** images attached to chat messages, by worktree id (agent/attachments.ts) */
   attachmentsDir: string;
@@ -31,6 +33,7 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     stateFile: join(home, DAEMON_FILES.state),
     tokenFile: join(home, DAEMON_FILES.token),
     pidFile: join(home, DAEMON_FILES.pid),
+    remoteFile: join(home, DAEMON_FILES.remote),
     transcriptsDir: join(home, "transcripts"),
     attachmentsDir: join(home, "attachments"),
     archiveDir: join(home, "archive"),

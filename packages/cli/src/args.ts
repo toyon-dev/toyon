@@ -1,6 +1,8 @@
 // The command line, parsed and nothing else: no fs, no network, so the grammar is testable on its
 // own and every verb reads the same table.
 
+import { isRemoteHost } from "@toyon/shared";
+
 export type Command =
   | { kind: "open"; path: string | null; app: boolean; installApp: boolean }
   | { kind: "stop" }
@@ -8,10 +10,12 @@ export type Command =
   | { kind: "logs"; follow: boolean; lines: number }
   | { kind: "version" }
   | { kind: "uninstall"; yes: boolean }
+  /** `to`: a host name, "off", or null to print the setting */
+  | { kind: "remote"; to: string | null }
   | { kind: "help" }
   | { kind: "error"; message: string };
 
-const VERBS = new Set(["stop", "doctor", "logs", "version", "uninstall", "help"]);
+const VERBS = new Set(["stop", "doctor", "logs", "version", "uninstall", "remote", "help"]);
 const DEFAULT_LOG_LINES = 100;
 
 export function parseArgs(argv: string[]): Command {
@@ -33,6 +37,17 @@ export function parseArgs(argv: string[]): Command {
         const extra = rest.filter((a) => a !== "--yes" && a !== "-y");
         if (extra.length > 0) return { kind: "error", message: `unknown option ${extra[0]}` };
         return { kind: "uninstall", yes: rest.length > 0 };
+      }
+      case "remote": {
+        if (rest.length > 1) return { kind: "error", message: "toyon remote takes one name, or off" };
+        const to = rest[0] ?? null;
+        if (to !== null && to !== "off" && !isRemoteHost(to)) {
+          return {
+            kind: "error",
+            message: `${to} is not a host name; give the name your TLS front answers for, like toyon.example.com`,
+          };
+        }
+        return { kind: "remote", to };
       }
     }
   }
@@ -76,6 +91,8 @@ usage
   toyon version           print the CLI version, and the daemon's if one is running
   toyon uninstall [--yes] stop the daemon and remove everything toyon put on this machine;
                           your repos and the branches toyon made stay
+  toyon remote [name|off] open the shell from another device at https://name, through a TLS
+                          front on this machine; with no name, print the setting
 
 options for toyon [path]
   --app                   open a Chromium app window (the installed Toyon app when there is one)

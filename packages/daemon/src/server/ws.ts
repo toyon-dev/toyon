@@ -39,6 +39,8 @@ export interface ServerOpts {
   services: Services;
   /** where a shell authenticated from, passed on to the bridge script (see BridgeScript) */
   noteShellOrigin: (origin: string | null) => void;
+  /** the name a TLS front on this machine answers for (`remote.json`), or null */
+  remoteHost: string | null;
 }
 
 export function startServer(opts: ServerOpts): { server: Server<WsData>; branded: boolean; stop: () => void } {
@@ -284,6 +286,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
+      remoteHost: opts.remoteHost,
       gitIdentity: await s.repos.gitIdentity(),
       pending: s.repos.pending,
       visits: s.routes.historyAll(),
@@ -301,6 +304,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       branded: () => branded,
       metrics,
       noteShellOrigin: opts.noteShellOrigin,
+      remoteHost: opts.remoteHost,
+      preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
     }),
     websocket: {
@@ -308,6 +313,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       // default (16 MB) would drop the socket mid-paste
       maxPayloadLength: 64 * 1024 * 1024,
       async open(ws: ServerWebSocket<WsData>) {
+        const preview = ws.data.preview;
+        if (preview) {
+          preview.handler.open(ws, preview.data);
+          return;
+        }
         if (!ws.data.authed) {
           ws.close(WS_CLOSE_UNAUTHORIZED, "unauthorized");
           return;
@@ -316,9 +326,14 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         send(ws, await helloFrame());
       },
       close(ws: ServerWebSocket<WsData>) {
+        if (ws.data.preview) ws.data.preview.handler.close(ws.data.preview.data);
         sockets.delete(ws);
       },
       async message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
+        if (ws.data.preview) {
+          ws.data.preview.handler.message(ws.data.preview.data, raw);
+          return;
+        }
         // closed in `open`; a frame that raced the close is not a client
         if (!ws.data.authed) return;
         let json: unknown;

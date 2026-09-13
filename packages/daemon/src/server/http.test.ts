@@ -5,8 +5,10 @@ import { join } from "node:path";
 import type { Server } from "bun";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
+import { previewGrant } from "../core/remote.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
-import { createFetch, type WsData } from "./http.ts";
+import type { PreviewHandler } from "../runtime/proxy.ts";
+import { createFetch, type HttpOpts, type WsData } from "./http.ts";
 
 // The daemon's front door in local mode: loopback peers and loopback Host headers only (DNS
 // rebinding), the token on /ws and /register, and /register mapping user mistakes to 400.
@@ -24,7 +26,7 @@ const repos = {
 const attachmentsDir = mkdtempSync(join(tmpdir(), "toyon-http-"));
 afterAll(() => rmSync(attachmentsDir, { recursive: true, force: true }));
 const learnedOrigins: (string | null)[] = [];
-const fetch = createFetch({
+const opts: HttpOpts = {
   token: "secret",
   shellDist: "/nonexistent",
   version: "0",
@@ -33,8 +35,11 @@ const fetch = createFetch({
   branded: () => false,
   metrics: () => ({ lag: 0 }),
   noteShellOrigin: (o) => learnedOrigins.push(o),
+  remoteHost: null,
+  preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
-});
+};
+const fetch = createFetch(opts);
 const req = (path: string, init: RequestInit & { host?: string } = {}) =>
   new Request(`http://${init.host ?? "localhost"}${path}`, {
     ...init,
@@ -66,6 +71,96 @@ describe("guards", () => {
   test("*.localhost and 127.0.0.1 hosts pass", async () => {
     expect((await fetch(req("/health", { host: "toyon.localhost" }), srv()))?.status).toBe(200);
     expect((await fetch(req("/health", { host: "127.0.0.1:4141" }), srv("::1")))?.status).toBe(200);
+  });
+});
+
+describe("guards, remote mode", () => {
+  const app: PreviewHandler = {
+    fetch: async (r) => new Response(`app ${new URL(r.url).pathname} cookie=${r.headers.get("cookie")}`),
+    open: () => {},
+    message: () => {},
+    close: () => {},
+  };
+  const remote = createFetch({
+    ...opts,
+    remoteHost: "toyon.example.com",
+    preview: (id) => (id === "a1b2c3" ? app : null),
+  });
+  const https = { "x-forwarded-proto": "https" };
+  const granted = { ...https, cookie: `theme=dark; toyon_preview=${previewGrant("secret")}; sid=1` };
+
+  test("the remote name passes when the front on this machine says the hop was https", async () => {
+    const r = await remote(req("/health", { host: "toyon.example.com", headers: https }), srv());
+    expect(r?.status).toBe(200);
+    expect(await r?.json()).toMatchObject({ host: "toyon.example.com" });
+  });
+  test("the remote name over plain http is refused, saying why", async () => {
+    const r = await remote(req("/health", { host: "toyon.example.com" }), srv());
+    expect(r?.status).toBe(403);
+    expect(await r?.text()).toContain("https");
+  });
+  test("a peer off this machine is still refused: the front is local", async () => {
+    const r = await remote(req("/health", { host: "toyon.example.com", headers: https }), srv("100.64.0.7"));
+    expect(r?.status).toBe(403);
+  });
+  test("any other name is refused, including labels under the remote name that are not a preview", async () => {
+    for (const host of [
+      "evil.example",
+      "toyon.example.com.evil.example",
+      "x1.toyon.example.com",
+      "w-1.toyon.example.com",
+      "wa1.wb2.toyon.example.com",
+      "w1toyon.example.com",
+    ]) {
+      expect((await remote(req("/health", { host, headers: https }), srv()))?.status).toBe(403);
+    }
+  });
+  test("w<id>.<name> is that worktree's app, whole, and the app never sees the grant", async () => {
+    const r = await remote(req("/health", { host: "wa1b2c3.toyon.example.com", headers: granted }), srv());
+    expect(r?.status).toBe(200);
+    expect(await r?.text()).toBe("app /health cookie=theme=dark; sid=1");
+  });
+  test("a request carrying only the grant reaches the app with no cookie header at all", async () => {
+    const only = { ...https, cookie: `toyon_preview=${previewGrant("secret")}` };
+    const r = await remote(req("/", { host: "wa1b2c3.toyon.example.com", headers: only }), srv());
+    expect(await r?.text()).toBe("app / cookie=null");
+  });
+  test("a preview name for a worktree with no proxy up is 404, once granted", async () => {
+    const r = await remote(req("/", { host: "wffff.toyon.example.com", headers: granted }), srv());
+    expect(r?.status).toBe(404);
+  });
+  test("without the grant, or with a wrong one, a preview is refused before saying whether it exists", async () => {
+    for (const host of ["wa1b2c3.toyon.example.com", "wffff.toyon.example.com"]) {
+      expect((await remote(req("/", { host, headers: https }), srv()))?.status).toBe(403);
+      const wrong = { ...https, cookie: `toyon_preview=${previewGrant("other")}` };
+      expect((await remote(req("/", { host, headers: wrong }), srv()))?.status).toBe(403);
+    }
+  });
+  test("/bootstrap on the remote name hands out the grant for every preview under it", async () => {
+    const r = await remote(req("/bootstrap?token=secret", { host: "toyon.example.com", headers: https }), srv());
+    const cookie = r?.headers.get("set-cookie") ?? "";
+    expect(cookie).toStartWith(`toyon_preview=${previewGrant("secret")};`);
+    for (const attr of ["Domain=toyon.example.com", "HttpOnly", "Secure", "SameSite=Lax"])
+      expect(cookie).toContain(attr);
+  });
+  test("the grant is not handed out for a wrong token, nor to a local shell", async () => {
+    const bad = await remote(req("/bootstrap?token=wrong", { host: "toyon.example.com", headers: https }), srv());
+    expect(bad?.headers.get("set-cookie")).toBeNull();
+    const local = await remote(req("/bootstrap?token=secret", { host: "toyon.localhost" }), srv());
+    expect(local?.headers.get("set-cookie")).toBeNull();
+  });
+  test("the grant is not the token", () => {
+    expect(previewGrant("secret")).not.toContain("secret");
+    expect(previewGrant("secret")).toMatch(/^[0-9a-f]{64}$/);
+  });
+  test("a preview name over plain http, or from off this machine, is refused", async () => {
+    expect((await remote(req("/", { host: "wa1b2c3.toyon.example.com" }), srv()))?.status).toBe(403);
+    const far = await remote(req("/", { host: "wa1b2c3.toyon.example.com", headers: https }), srv("10.0.0.5"));
+    expect(far?.status).toBe(403);
+  });
+  test("with remote off, the name is refused like any other", async () => {
+    const r = await fetch(req("/health", { host: "toyon.example.com", headers: https }), srv());
+    expect(r?.status).toBe(403);
   });
 });
 
@@ -177,6 +272,8 @@ describe("static shell", () => {
     attachments: new AttachmentStore(attachmentsDir),
     branded: () => false,
     noteShellOrigin: () => {},
+    remoteHost: null,
+    preview: () => null,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
   });

@@ -23,9 +23,14 @@ import {
  *
  * Only a shell already served from a *.localhost name can do this. From bare `localhost`,
  * `<id>.localhost` is its own registrable domain and would be cross-site anyway, so stay on
- * loopback there rather than pretend. */
-export function previewUrl(worktreeId: string, proxyPort: number): string {
+ * loopback there rather than pretend.
+ *
+ * A shell served from the remote name (hello's `remoteHost`) came through a TLS front that
+ * forwards one port, so every preview rides that port under its own label, and the daemon routes
+ * by name. Same site as the shell again, for the same reasons. */
+export function previewUrl(worktreeId: string, proxyPort: number, remoteHost: string | null): string {
   const h = location.hostname;
+  if (remoteHost !== null && h === remoteHost) return `${location.protocol}//w${worktreeId}.${location.host}/`;
   if (h.endsWith(".localhost")) return `http://w${worktreeId}.${h}:${proxyPort}/`;
   if (h === "127.0.0.1" || h === "localhost") return `http://127.0.0.1:${proxyPort}/`;
   return `${location.protocol}//${h}:${proxyPort}/`;

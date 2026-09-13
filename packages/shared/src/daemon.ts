@@ -10,7 +10,28 @@ export const DAEMON_FILES = {
   state: "state.json",
   /** where the CLI points the detached daemon's stdout and stderr */
   log: "daemon.log",
+  /** `{ "host": "<name>" }`: written by `toyon remote`, read by the daemon at boot */
+  remote: "remote.json",
 } as const;
+
+const DNS_NAME = /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/** A name a TLS front on this machine can hold a certificate for: a dotted DNS name, lowercase, no
+ * scheme or port. Not an IP (the last label is never all digits) and not a *.localhost name, which
+ * the local guard already admits and which a remote device resolves to itself. */
+export function isRemoteHost(name: string): boolean {
+  return DNS_NAME.test(name) && !/\.\d+$/.test(name) && name !== "localhost" && !name.endsWith(".localhost");
+}
+
+/** `remote.json` as written; null for a file that does not parse or names no valid host */
+export function parseRemote(text: string): { host: string } | null {
+  try {
+    const v = JSON.parse(text) as { host?: unknown };
+    return typeof v?.host === "string" && isRemoteHost(v.host) ? { host: v.host } : null;
+  } catch {
+    return null; // a hand-edited file that is not JSON reads as off; both callers say so
+  }
+}
 
 /** the /ws close code for a wrong token. The upgrade is accepted and then closed with this, because
  * a browser hides an HTTP 401 on a websocket behind a generic 1006, so the shell could not tell a

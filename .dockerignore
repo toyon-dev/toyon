@@ -4,4 +4,3 @@ node_modules
 .git
 *.log
 .env
-packages/cloud/fly.toml

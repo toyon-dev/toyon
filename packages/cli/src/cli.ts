@@ -31,9 +31,8 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   const target = resolve(cmd.path ?? process.cwd());
   const register = explicit || existsSync(join(target, ".git"));
 
-  // the package installs on Linux and nobody has run it there yet; say so before the first gap does
+  // Claude Code's sandbox needs bubblewrap and socat on Linux, which a plain install often lacks
   if (process.platform === "linux") {
-    console.log("toyon on Linux is untested: macOS today, Linux next. Expect gaps, and say so in an issue.");
     const missing = missingSandboxTools();
     if (missing.length > 0) console.log(sandboxAdvice(missing));
   }

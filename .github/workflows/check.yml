@@ -23,9 +23,13 @@ jobs:
           # pinned rather than read from package.json so a runner and a laptop disagree only
           # when someone means them to; engines.bun there is the floor for humans
           bun-version: 1.4.2
-      # the agent sandbox on Linux, so its tests run it for real rather than skip
+      # the agent sandbox on Linux, so its tests run it for real rather than skip. Ubuntu 24.04 blocks
+      # unprivileged user namespaces through AppArmor; the profile is the one `toyon doctor` prints
       - if: runner.os == 'Linux'
-        run: sudo apt-get install -y --no-install-recommends bubblewrap socat
+        run: |
+          sudo apt-get install -y --no-install-recommends bubblewrap socat
+          printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n  include if exists <local/bwrap>\n}\n' | sudo tee /etc/apparmor.d/bwrap >/dev/null
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap
       - run: bun install --frozen-lockfile
       # typecheck + biome + tests + bridge size gate; the daemon tests run real git in temp repos
       - run: bun run check
@@ -48,9 +52,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # what Claude Code's sandbox needs on Linux; `toyon doctor` fails without them, on purpose
+      # what agent sandboxes need on Linux, and on Ubuntu 24.04 the AppArmor profile that lets
+      # bubblewrap start; `toyon doctor` fails without them, on purpose
       - if: runner.os == 'Linux'
-        run: sudo apt-get install -y --no-install-recommends bubblewrap socat
+        run: |
+          sudo apt-get install -y --no-install-recommends bubblewrap socat
+          printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n  include if exists <local/bwrap>\n}\n' | sudo tee /etc/apparmor.d/bwrap >/dev/null
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap
       - run: bun install --frozen-lockfile
       - run: bun run pack
       - run: cd packages/cli && npm pack --pack-destination "$RUNNER_TEMP"

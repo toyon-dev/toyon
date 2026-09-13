@@ -9,6 +9,7 @@ import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
+import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
 
 export interface WsData {
   authed: boolean;
@@ -20,7 +21,12 @@ export interface WsData {
   dropped: Set<string>;
   sent: number;
   bytes: number;
+  /** set on a socket a remote preview name upgraded: it is bridged to the app, never a shell */
+  preview?: { handler: PreviewHandler; data: PreviewData };
 }
+
+/** `w<id>` under the remote name: the worktree ids naming.ts makes, lowercase hex */
+const PREVIEW_LABEL = /^w([0-9a-z]+)$/;
 
 export interface HttpOpts {
   token: string;
@@ -36,6 +42,8 @@ export interface HttpOpts {
   noteShellOrigin: (origin: string | null) => void;
   /** the name a TLS front on this machine answers for (core/remote.ts), or null when remote is off */
   remoteHost: string | null;
+  /** a worktree's preview handler, for `w<id>.<remoteHost>`; null when its proxy is not up */
+  preview: (worktreeId: string) => PreviewHandler | null;
   /** the hello frame, for a page that asks before its socket exists */
   bootstrap: () => Promise<unknown>;
 }
@@ -52,6 +60,7 @@ const NO_STORE = "no-store";
 export function createFetch(opts: HttpOpts) {
   return async function fetch(req: Request, srv: Server<WsData>): Promise<Response | undefined> {
     const url = new URL(req.url);
+    let previewId: string | null = null;
 
     // Cloud mode sits behind the host's TLS edge: peers and Host headers are remote by design,
     // and the bearer token on /ws and /register is the auth.
@@ -70,7 +79,11 @@ export function createFetch(opts: HttpOpts) {
         // loopback peer above, so a request naming it came through the front, and the front says
         // whether that hop was https. A plain-http front would put the token on the network in the
         // clear, and the page would not be a secure context either, so that is refused by name.
-        if (opts.remoteHost === null || host !== opts.remoteHost) {
+        // `w<id>.<name>` is that worktree's preview, under the same rule.
+        const name = opts.remoteHost;
+        const label = name !== null && host.endsWith(`.${name}`) ? host.slice(0, -name.length - 1) : null;
+        const preview = label?.match(PREVIEW_LABEL)?.[1] ?? null;
+        if (name === null || (host !== name && preview === null)) {
           return new Response("forbidden", { status: 403 });
         }
         if (req.headers.get("x-forwarded-proto") !== "https") {
@@ -78,7 +91,27 @@ export function createFetch(opts: HttpOpts) {
             status: 403,
           });
         }
+        previewId = preview;
       }
+    }
+
+    // a preview name is the app, whole: none of toyon's own routes answer under it
+    if (previewId !== null) {
+      const handler = opts.preview(previewId);
+      if (!handler) return new Response("no preview is running for this worktree", { status: 404 });
+      return handler.fetch(req, (data) =>
+        srv.upgrade(req, {
+          data: {
+            authed: false,
+            subs: new Set(),
+            terms: new Set(),
+            dropped: new Set(),
+            sent: 0,
+            bytes: 0,
+            preview: { handler, data },
+          },
+        }),
+      );
     }
 
     if (url.pathname === "/ws") {

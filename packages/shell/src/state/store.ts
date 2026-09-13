@@ -493,6 +493,8 @@ export interface State {
   home: string;
   /** hello's `folderDialog`: whether the view's folder buttons open Finder where the person is */
   folderDialog: boolean;
+  /** hello's `remoteHost`: the name previews ride under when the shell was opened through it */
+  remoteHost: string | null;
   /** hello's `gitIdentity`: git can commit without asking, so the new-project view need not */
   gitIdentity: boolean;
   /** the Finder dialog is up, and which of the new-project view's controls asked for it: where the
@@ -603,6 +605,7 @@ export function initialState(opts: InitialOpts): State {
     paths: { query: "", entries: [], target: null },
     home: "",
     folderDialog: false,
+    remoteHost: null,
     // the page never shows before hello, which is what says otherwise
     gitIdentity: true,
     choosingFolder: false,
@@ -1291,6 +1294,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         defaultAgent: msg.defaultAgent,
         home: msg.home,
         folderDialog: msg.folderDialog,
+        remoteHost: msg.remoteHost,
         gitIdentity: msg.gitIdentity,
         newProject:
           s.newProject ??

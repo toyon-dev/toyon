@@ -6,6 +6,7 @@ import type { Server } from "bun";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
+import type { PreviewHandler } from "../runtime/proxy.ts";
 import { createFetch, type HttpOpts, type WsData } from "./http.ts";
 
 // The daemon's front door in local mode: loopback peers and loopback Host headers only (DNS
@@ -34,6 +35,7 @@ const opts: HttpOpts = {
   metrics: () => ({ lag: 0 }),
   noteShellOrigin: (o) => learnedOrigins.push(o),
   remoteHost: null,
+  preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
 };
 const fetch = createFetch(opts);
@@ -72,7 +74,17 @@ describe("guards", () => {
 });
 
 describe("guards, remote mode", () => {
-  const remote = createFetch({ ...opts, remoteHost: "toyon.example.com" });
+  const app: PreviewHandler = {
+    fetch: async (r) => new Response(`app ${new URL(r.url).pathname}`),
+    open: () => {},
+    message: () => {},
+    close: () => {},
+  };
+  const remote = createFetch({
+    ...opts,
+    remoteHost: "toyon.example.com",
+    preview: (id) => (id === "a1b2c3" ? app : null),
+  });
   const https = { "x-forwarded-proto": "https" };
 
   test("the remote name passes when the front on this machine says the hop was https", async () => {
@@ -89,10 +101,31 @@ describe("guards, remote mode", () => {
     const r = await remote(req("/health", { host: "toyon.example.com", headers: https }), srv("100.64.0.7"));
     expect(r?.status).toBe(403);
   });
-  test("any other name is refused, including one under the remote name", async () => {
-    for (const host of ["evil.example", "w1.toyon.example.com", "toyon.example.com.evil.example"]) {
+  test("any other name is refused, including labels under the remote name that are not a preview", async () => {
+    for (const host of [
+      "evil.example",
+      "toyon.example.com.evil.example",
+      "x1.toyon.example.com",
+      "w-1.toyon.example.com",
+      "wa1.wb2.toyon.example.com",
+      "w1toyon.example.com",
+    ]) {
       expect((await remote(req("/health", { host, headers: https }), srv()))?.status).toBe(403);
     }
+  });
+  test("w<id>.<name> is that worktree's app, whole: toyon's own routes do not answer there", async () => {
+    const r = await remote(req("/health", { host: "wa1b2c3.toyon.example.com", headers: https }), srv());
+    expect(r?.status).toBe(200);
+    expect(await r?.text()).toBe("app /health");
+  });
+  test("a preview name for a worktree with no proxy up is 404", async () => {
+    const r = await remote(req("/", { host: "wffff.toyon.example.com", headers: https }), srv());
+    expect(r?.status).toBe(404);
+  });
+  test("a preview name over plain http, or from off this machine, is refused", async () => {
+    expect((await remote(req("/", { host: "wa1b2c3.toyon.example.com" }), srv()))?.status).toBe(403);
+    const far = await remote(req("/", { host: "wa1b2c3.toyon.example.com", headers: https }), srv("10.0.0.5"));
+    expect(far?.status).toBe(403);
   });
   test("with remote off, the name is refused like any other", async () => {
     const r = await fetch(req("/health", { host: "toyon.example.com", headers: https }), srv());
@@ -209,6 +242,7 @@ describe("static shell", () => {
     branded: () => false,
     noteShellOrigin: () => {},
     remoteHost: null,
+    preview: () => null,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
   });

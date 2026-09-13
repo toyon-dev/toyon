@@ -79,6 +79,7 @@ export function Center() {
   const connected = useStore((s) => s.connected);
   const heard = useStore((s) => s.heard);
   const connectFailure = useStore((s) => s.connectFailure);
+  const remoteHost = useStore((s) => s.remoteHost);
   const editor = useStore((s) => s.editor);
   // an empty project asks what to build before it asks how to start; the panes a previous project
   // left open (a project never laid out adopts what is on screen) hide, not close, until then, and
@@ -342,13 +343,13 @@ export function Center() {
               ref={(el) => {
                 if (el) {
                   frameRefs.current.set(f.id, el);
-                  originRefs.current.set(f.id, new URL(previewUrl(f.id, f.port)).origin);
+                  originRefs.current.set(f.id, new URL(previewUrl(f.id, f.port, remoteHost)).origin);
                 } else {
                   frameRefs.current.delete(f.id);
                   originRefs.current.delete(f.id);
                 }
               }}
-              src={previewUrl(f.id, f.port)}
+              src={previewUrl(f.id, f.port, remoteHost)}
               title={f.title}
               style={{
                 display: f.id === previewId && !setupRepo && !watching && !firstRun && !chatCentred ? "block" : "none",

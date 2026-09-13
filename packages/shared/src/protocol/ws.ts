@@ -59,6 +59,9 @@ export type ServerMsg =
       /** the daemon can open the OS folder dialog where the person is: a macOS daemon running
        * locally. Anywhere else the dialog would open on a screen nobody at this shell can see. */
       folderDialog: boolean;
+      /** the name a TLS front answers for when remote access is on. A shell served from it reaches
+       * each preview at `w<id>.<name>` on the same port, routed by the daemon's own listener. */
+      remoteHost: string | null;
       /** git has a name and email to commit with. Making a project commits, and someone who has
        * never used git has neither, so the new-project page asks for them when this is false. */
       gitIdentity: boolean;

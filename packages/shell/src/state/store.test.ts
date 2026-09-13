@@ -104,6 +104,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     defaultAgent: "claude",
     home: "/home/t",
     folderDialog: false,
+    remoteHost: null,
     gitIdentity: true,
     pending: [],
     visits: {},

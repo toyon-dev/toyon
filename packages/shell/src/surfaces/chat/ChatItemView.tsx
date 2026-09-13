@@ -452,6 +452,11 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
   const [key, setKey] = useState("");
   const [keyFor, setKeyFor] = useState<string | null>(null);
   const started = useRef(false);
+  // the tab is shown once the daemon says the login runs: switched to before that, the pane finds
+  // no such stream and falls back to the shell
+  useOnChange([loginRunning], () => {
+    if (loginRunning && started.current && id) dispatch({ a: "term-stream", id, stream: LOGIN_STREAM, tall: true });
+  });
   useOnChange([item.done], () => {
     if (item.done && started.current && termOpen) dispatch({ a: "toggle-terminal" });
     started.current = false;
@@ -490,9 +495,7 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
                 data-tip={m.kind === "terminal" ? "opens in the terminal pane" : m.description}
                 onClick={() => {
                   go(m.id);
-                  if (m.kind !== "terminal") return;
-                  started.current = true;
-                  dispatch({ a: "term-stream", id, stream: LOGIN_STREAM, tall: true });
+                  if (m.kind === "terminal") started.current = true;
                 }}
               >
                 {m.name}

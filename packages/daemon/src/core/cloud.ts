@@ -6,7 +6,8 @@
 //   TOYON_CLOUD=1               bind every interface (the edge is not loopback), skip the port-80
 //                               branded bind, no folder dialog, no browser logins
 //   TOYON_PUBLIC_HOST=x.fly.dev the name the edge answers for (core/remote.ts)
-//   TOYON_PREVIEWS=port|host    how previews are addressed under it; port by default
+//   TOYON_PREVIEWS=<pattern>    the preview origin under it, `https://x.fly.dev:{port}` by default
+//                               or `https://w{id}.x.example.com` behind a wildcard domain
 //   TOYON_HOME=/data/toyon      state dir override (default ~/.toyon)
 //
 // The token is not an environment variable: children inherit the environment. A platform secret is

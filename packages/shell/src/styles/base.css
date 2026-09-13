@@ -309,6 +309,10 @@
     justify-content: space-between;
     align-items: center;
     gap: 8px;
+    /* the top bar's rule: a text chip beside a 20px icon box takes the box's height */
+    & .btn {
+      min-height: 20px;
+    }
   }
 
   /* ---- the status letter ----

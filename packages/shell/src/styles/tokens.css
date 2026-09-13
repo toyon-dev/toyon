@@ -67,7 +67,7 @@
      the theme's to name (Theme.accent, orange unless it says otherwise) and applyTheme
      overwrites this, so every other theme keeps selecting in orange. */
     --accent: var(--red);
-    /* what a lost connection is painted in: the rail's rows and dots while the daemon is down. Warm,
+    /* what a lost connection is painted in: the rail's dots while the daemon is down. Warm,
      because it is a fault, and never the accent, because it colours whole rows and a row in the
      accent reads as selected. applyTheme overwrites this too (faultKey): orange unless the theme
      selects in orange, then red. */

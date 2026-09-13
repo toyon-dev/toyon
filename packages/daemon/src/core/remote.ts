@@ -53,6 +53,16 @@ export type Door =
   /** a preview under the public name: its worktree when routed by name, null on its own port */
   | { kind: "preview"; worktreeId: string | null };
 
+/** The name and port the browser asked for. A front may drop the port from Host and state it in
+ * x-forwarded-port instead: Fly's proxy does, on every service port, so a preview at
+ * `<app>.fly.dev:10001` arrives as Host `<app>.fly.dev`. The https default port is no port. */
+function requestedAuthority(req: Request): string {
+  const host = (req.headers.get("host") ?? "").toLowerCase();
+  if (host.includes(":")) return host;
+  const port = req.headers.get("x-forwarded-port");
+  return port && /^\d{1,5}$/.test(port) && port !== "443" ? `${host}:${port}` : host;
+}
+
 const forbidden = (body = "forbidden") => ({ kind: "refused", response: new Response(body, { status: 403 }) }) as const;
 
 /** Who comes in. `listener` is the daemon's own port, or a worktree's preview port. With no public
@@ -64,7 +74,7 @@ export function door(req: Request, peer: string, remote: Remote | null, listener
   if (remote?.front !== "edge" && !isLoopbackPeer(peer)) return forbidden();
 
   // DNS-rebinding defense: a name is admitted only if it is loopback, or the one public name
-  const authority = (req.headers.get("host") ?? "").toLowerCase();
+  const authority = requestedAuthority(req);
   const host = authority.split(":")[0] ?? "";
   if (isLoopbackHost(host)) {
     // behind an edge nothing is loopback, so a loopback name there is someone guessing

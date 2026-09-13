@@ -12,10 +12,19 @@ export type Command =
   | { kind: "uninstall"; yes: boolean }
   /** `to`: a host name, "off", or null to print the setting; `ports`: previews on ports of the name */
   | { kind: "remote"; to: string | null; ports: boolean }
+  | {
+      kind: "deploy";
+      provider: "fly";
+      action: "up" | "url" | "destroy";
+      name: string;
+      region: string | null;
+      repo: string | null;
+      yes: boolean;
+    }
   | { kind: "help" }
   | { kind: "error"; message: string };
 
-const VERBS = new Set(["stop", "doctor", "logs", "version", "uninstall", "remote", "help"]);
+const VERBS = new Set(["stop", "doctor", "logs", "version", "uninstall", "remote", "deploy", "help"]);
 const DEFAULT_LOG_LINES = 100;
 
 export function parseArgs(argv: string[]): Command {
@@ -56,6 +65,8 @@ export function parseArgs(argv: string[]): Command {
         }
         return { kind: "remote", to, ports };
       }
+      case "deploy":
+        return parseDeploy(rest);
     }
   }
 
@@ -87,6 +98,43 @@ function parseLogs(rest: string[]): Command {
   return { kind: "logs", follow, lines };
 }
 
+/** what Fly accepts as an app name, which is also the machine's public name under fly.dev */
+const FLY_APP = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
+
+function parseDeploy(rest: string[]): Command {
+  const error = (message: string): Command => ({ kind: "error", message });
+  const [provider, action, ...more] = rest;
+  if (provider !== "fly") return error("toyon deploy knows one host so far: toyon deploy fly up <name>");
+  if (action !== "up" && action !== "url" && action !== "destroy") {
+    return error("toyon deploy fly takes up, url or destroy, then an app name");
+  }
+  let name: string | null = null;
+  let region: string | null = null;
+  let repo: string | null = null;
+  let yes = false;
+  for (let i = 0; i < more.length; i++) {
+    const a = more[i]!;
+    if ((a === "--region" || a === "--repo") && action === "up") {
+      const value = more[++i];
+      if (!value) return error(`${a} needs a value`);
+      if (a === "--region") {
+        if (!/^[a-z]{3}$/.test(value)) return error(`${value} is not a Fly region code, like fra or iad`);
+        region = value;
+      } else {
+        if (!/^https:\/\/\S+$/.test(value))
+          return error("--repo takes an https clone URL, like https://github.com/you/app.git");
+        repo = value;
+      }
+    } else if ((a === "--yes" || a === "-y") && action === "destroy") yes = true;
+    else if (a.startsWith("-")) return error(`unknown option ${a} for toyon deploy fly ${action}`);
+    else if (name !== null) return error("toyon deploy takes one app name");
+    else name = a;
+  }
+  if (name === null) return error(`toyon deploy fly ${action} needs an app name`);
+  if (!FLY_APP.test(name)) return error(`${name} is not a Fly app name: lowercase letters, digits and dashes`);
+  return { kind: "deploy", provider, action, name, region, repo, yes };
+}
+
 export const HELP = `toyon: one chat per git worktree, every worktree running live
 
 usage
@@ -102,6 +150,13 @@ usage
                           front on this machine; with no name, print the setting
     --ports               put each preview on its own port of the name, for a front that cannot
                           hold a wildcard certificate (tailscale serve)
+  toyon deploy fly up <name> [--region code] [--repo url]
+                          run toyon on your own Fly account at https://name.fly.dev with your own
+                          keys; --repo clones that repository onto it the first time
+  toyon deploy fly url <name>
+                          print the link to that machine again
+  toyon deploy fly destroy <name> [--yes]
+                          delete that app and its volume
 
 options for toyon [path]
   --app                   open a Chromium app window (the installed Toyon app when there is one)

@@ -25,7 +25,8 @@
   },
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "cloud"
   ],
   "engines": {
     "node": ">=18"

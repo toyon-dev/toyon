@@ -57,7 +57,7 @@ const withCanonical = (p: string) => [p, canonical(p)];
 
 /** the files no agent reads or writes, for the daemon whose home this is */
 export function toyonSecrets(paths = makePaths()): string[] {
-  return [paths.tokenFile, paths.agentsFile];
+  return [paths.tokenFile, paths.agentsFile, paths.gitCredentialsFile];
 }
 
 export async function worktreeBounds(cwd: string, secrets: string[] = toyonSecrets()): Promise<Bounds> {

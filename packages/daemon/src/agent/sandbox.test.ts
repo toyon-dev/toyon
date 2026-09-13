@@ -47,9 +47,13 @@ describe("sandbox", () => {
     expect(b.denyWrite).toContain(secret);
   });
 
-  test("the secrets are the daemon's token and its agents file", () => {
-    const secrets = toyonSecrets({ tokenFile: "/h/token", agentsFile: "/h/agents.json" } as never);
-    expect(secrets).toEqual(["/h/token", "/h/agents.json"]);
+  test("the secrets are the daemon's token, its agents file and a machine's git credentials", () => {
+    const secrets = toyonSecrets({
+      tokenFile: "/h/token",
+      agentsFile: "/h/agents.json",
+      gitCredentialsFile: "/h/git-credentials",
+    } as never);
+    expect(secrets).toEqual(["/h/token", "/h/agents.json", "/h/git-credentials"]);
   });
 
   test("a launch is prepared by the agent's own setup, which sees the bounds and adds to the environment", async () => {

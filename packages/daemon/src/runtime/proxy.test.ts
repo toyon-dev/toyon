@@ -226,6 +226,26 @@ describe("preview port behind a port-addressed front", () => {
     }
   });
 
+  test("a front that sends the port in x-forwarded-port rather than Host still reaches the app with the grant", async () => {
+    const up = cookieEcho();
+    const proxy = proxyTo(up.port ?? 0, remote);
+    try {
+      const headers = {
+        host: "box.tail1234.ts.net",
+        "x-forwarded-port": String(proxy.port),
+        "x-forwarded-proto": "https",
+      };
+      expect((await fetch(`http://127.0.0.1:${proxy.port}/`, { headers })).status).toBe(403);
+      const res = await fetch(`http://127.0.0.1:${proxy.port}/`, {
+        headers: { ...headers, cookie: `toyon_preview=${grant}` },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      proxy.stop();
+      up.stop(true);
+    }
+  });
+
   test("the name over plain http is refused, and the shell on this machine still frames it by loopback", async () => {
     const up = cookieEcho();
     const proxy = proxyTo(up.port ?? 0, remote);

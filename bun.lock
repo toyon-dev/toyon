@@ -32,10 +32,6 @@
         "@toyon/shared": "workspace:*",
       },
     },
-    "packages/cloud": {
-      "name": "@toyon/cloud",
-      "version": "0.1.0",
-    },
     "packages/daemon": {
       "name": "@toyon/daemon",
       "version": "0.1.0",
@@ -277,8 +273,6 @@
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.63.1", "", { "os": "win32", "cpu": "x64" }, "sha512-at8QVep6S3h5Y6gSbdGU06bRY5WJkf6WUduM9YtvYMbYhB1MOFfUgc6kehitQXzOtMSaT70q7f9ydPhpqu821w=="],
 
     "@toyon/bridge": ["@toyon/bridge@workspace:packages/bridge"],
-
-    "@toyon/cloud": ["@toyon/cloud@workspace:packages/cloud"],
 
     "@toyon/daemon": ["@toyon/daemon@workspace:packages/daemon"],
 

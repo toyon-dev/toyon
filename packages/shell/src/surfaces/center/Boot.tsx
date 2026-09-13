@@ -2,7 +2,7 @@ import type { LogLine, OwnedWorktree, ProcState } from "@toyon/shared";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
-import { Status } from "../../ui/Status.tsx";
+import { View } from "../../ui/View.tsx";
 import { procFixPrompt } from "./fixPrompt.ts";
 
 /** how much of the tail the pane shows: enough to read a stack trace, not a scrollback */
@@ -22,7 +22,7 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
   // the rule, and the daemon restarts the proc when its turn ends
   const askAgent = () => sock?.send({ t: "chat", worktreeId: worktree.id, text: procFixPrompt(worktree, log) });
   return (
-    <Status>
+    <View wide>
       {procs.length === 0 ? (
         <div className="status-line">starting dev servers…</div>
       ) : (
@@ -66,7 +66,7 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
             .join("\n")}
         </pre>
       )}
-    </Status>
+    </View>
   );
 }
 

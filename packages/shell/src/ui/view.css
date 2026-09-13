@@ -1,0 +1,41 @@
+/* View: the one column every view of toyon's own sits in, in the centre. Its parts are in form.css,
+   for a view a person types into, and status.css, for a view the machine reports through. */
+@layer tokens, base, surfaces;
+@layer base {
+  /* One column on the centre's own ground, with no card, no sheet and no box: a ground drawn around
+     the first thing anyone writes reads as a form to fill in, and a ground drawn around a clone's
+     progress is a card around the machine's own voice. view.test.ts holds that.
+     Anchored to the top, because a view grows while it is being read (a process row arrives, git
+     prints a line, setup gains another command) and anything that centres it vertically pushes the
+     lines already under someone's eye. Centred horizontally, which is free: the width is fixed, so
+     the column never moves sideways as content arrives, and pinned to a corner instead a one-line
+     view reads as a stray log line. */
+  .view {
+    height: 100%;
+    overflow: auto;
+    width: min(var(--view-measure), 100%);
+    margin: 0 auto;
+    padding: var(--view-top) var(--view-inset);
+    display: flex;
+    flex-direction: column;
+    gap: var(--view-gap);
+    color: var(--text0);
+    font: var(--type-ui);
+    /* the column resets the margin every part of it would otherwise carry, so no part has to */
+    & > p {
+      margin: 0;
+    }
+  }
+  /* The first run's anchor: the first line drops about a quarter down, so the name typed on the
+     new-project view is exactly where that project's title reads a moment later. Centring would
+     not do it, since each view would then sit by half of whatever is under its first line, and no
+     two of them have the same thing under it. */
+  .view-line {
+    padding-top: var(--view-anchor);
+  }
+  /* output: read rather than written, so its lines are longer and it breathes a step more */
+  .view-wide {
+    width: min(var(--view-measure-wide), 100%);
+    gap: var(--view-gap-wide);
+  }
+}

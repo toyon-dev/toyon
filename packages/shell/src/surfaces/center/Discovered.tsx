@@ -1,7 +1,7 @@
 import type { WorktreeStatus } from "@toyon/shared";
 import { useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
-import { Status } from "../../ui/Status.tsx";
+import { View } from "../../ui/View.tsx";
 
 /** What fills the centre for a worktree git knows about but toyon does not run. There is
  * no preview to show: nothing is serving. The same slot the setup pane uses, for the same reason
@@ -13,7 +13,7 @@ export function Discovered({ row }: { row: WorktreeStatus }) {
   const dir = home && row.path.startsWith(`${home}/`) ? `~${row.path.slice(home.length)}` : row.path;
 
   return (
-    <Status>
+    <View wide>
       <p className="status-line">{row.name}</p>
       <p>
         This worktree exists in git, but toyon did not make it and is not running it: no dev servers, no preview, no
@@ -41,6 +41,6 @@ export function Discovered({ row }: { row: WorktreeStatus }) {
           </div>
         </>
       )}
-    </Status>
+    </View>
   );
 }

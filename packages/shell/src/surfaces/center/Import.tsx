@@ -2,7 +2,7 @@ import type { PendingRepo } from "@toyon/shared";
 import { useEffect, useRef } from "react";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
-import { Status } from "../../ui/Status.tsx";
+import { View } from "../../ui/View.tsx";
 
 /** A clone in flight, in the centre where that project's app will be. Sibling of the setup
  * pane: both take the centre for a project that cannot show one yet, and both are the place
@@ -25,7 +25,7 @@ export function Import({ pending }: { pending: PendingRepo }) {
   useEffect(() => tail.current?.scrollTo({ top: tail.current.scrollHeight }), [pending.lines.length]);
 
   return (
-    <Status>
+    <View wide>
       <p className="status-line">
         {failed ? "could not import" : "importing"} {pending.name}
       </p>
@@ -55,6 +55,6 @@ export function Import({ pending }: { pending: PendingRepo }) {
           {failed ? "dismiss" : "stop"}
         </Button>
       </div>
-    </Status>
+    </View>
   );
 }

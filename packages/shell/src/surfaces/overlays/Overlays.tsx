@@ -13,7 +13,7 @@ import { QuickOpen } from "./QuickOpen.tsx";
 import { RefPicker } from "./RefPicker.tsx";
 import { SearchPalette } from "./SearchPalette.tsx";
 import { ThemePicker } from "./ThemePicker.tsx";
-import "./palettes.css";
+import "./overlays.css";
 
 /** whichever overlay is open (they are mutually exclusive). The project picker's pill form is not
  * here: it hangs off its pill in the top bar, where the click already is. */

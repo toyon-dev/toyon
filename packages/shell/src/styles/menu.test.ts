@@ -42,7 +42,7 @@ describe("the one context menu", () => {
     // the rows the rulings name (notes/BACKLOG.md "Right-click works everywhere"): each file
     // renders a row with a menu, spread from the hook
     const rows = [
-      "surfaces/rail/WtRail.tsx",
+      "surfaces/rail/Rail.tsx",
       "surfaces/changes/GitFileRow.tsx",
       "surfaces/changes/CommitRow.tsx",
       // the terminal's tabs: their menus are the items', spread by the strip they sit in

@@ -73,6 +73,17 @@
      the pill, and the installed app's bar is already this tall (the OS title bar sets it) */
     min-height: 38px;
   }
+  /* zen drops the bar, and the grid row with it, or .docks re-slots into the auto track. Said here,
+   in the file that holds the installed app's exception below, because the two rules are equally
+   specific and only their order in one file decides between them. A media query that negates
+   window-controls-overlay does not: Firefox has no such display mode, an unknown value makes the
+   query neither true nor false, and `not` cannot turn that into a match, so the bar stayed. */
+  .app.zen {
+    grid-template-rows: 1fr;
+  }
+  .app.zen .top-bar {
+    display: none;
+  }
   /* installed PWA with window-controls-overlay: the browser drops its title bar and only the
    traffic lights float top-left, so the top bar becomes the title bar — draggable, inset past
    the controls (env(titlebar-area-*) comes from the OS), controls themselves stay clickable */

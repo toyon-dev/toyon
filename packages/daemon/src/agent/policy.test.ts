@@ -129,6 +129,20 @@ describe("policy.decide", () => {
     }
   });
 
+  test("a read or a command naming a path outside the worktree is not refused; an edit there still is", () => {
+    const outside = join(root, "outside", "theme.ts");
+    const read = req({ kind: "read", name: "Read", rawInput: { file_path: outside } });
+    expect(decide(read, bounds, wt).kind).toBe("allow");
+    expect(decide(read, bounds, wt, "ask").kind).toBe("allow");
+    expect(decide(req({ kind: "search", title: "Grep", rawInput: { path: outside } }), bounds, wt).kind).toBe("allow");
+    const run = req({ kind: "execute", name: "Bash", locations: [{ path: outside }], rawInput: { command: "ls" } });
+    expect(decide(run, bounds, wt).kind).toBe("allow");
+    expect(decide(run, bounds, wt, "ask").kind).toBe("prompt");
+    expect(decide(req({ kind: "edit", name: "Edit", rawInput: { file_path: outside } }), bounds, wt).kind).toBe(
+      "reject",
+    );
+  });
+
   test("an agent with no OS sandbox has each command put to a person, even in auto; its edits are unchanged", () => {
     const run = req({ kind: "execute", title: "bun test", rawInput: { command: "bun test" } });
     expect(decide(run, bounds, wt, "auto", false).kind).toBe("prompt");

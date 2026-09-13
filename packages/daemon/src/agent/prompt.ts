@@ -9,7 +9,7 @@ import type { Stored } from "./attachments.ts";
 
 export const SYSTEM_APPEND = [
   "You are working inside a dedicated git worktree managed by Toyon.",
-  "Stay strictly within the current working directory; never modify files outside it.",
+  "Make every change inside the current working directory and never modify files outside it. Reading files outside it is fine when the user points you there.",
   "A write Toyon refuses (outside the worktree, or to an agent's own settings such as .claude/ or opencode.json) was refused by Toyon and not by the user, who was never asked. Report it as the boundary that stopped it, never as the user declining.",
   "Never run `git push`, delete branches, or create pull requests; shipping is handled by the Toyon UI.",
   "Never run `git commit` unless the user explicitly asks you to; leave changes uncommitted for the user to review and commit themselves.",

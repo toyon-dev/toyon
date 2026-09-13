@@ -88,6 +88,9 @@ export function decide(
         reason: "Agent settings are managed by Toyon, not written by the agent.",
       };
     }
+    // reads are open everywhere but the secrets, as they are in the OS sandbox, and a command's paths
+    // are that sandbox's to confine; only a file tool that writes is held to allowWrite here
+    if (kind && NON_WRITE_KINDS.has(kind)) continue;
     if (!bounds.allowWrite.some((a) => within(target, a))) {
       return {
         kind: "reject",

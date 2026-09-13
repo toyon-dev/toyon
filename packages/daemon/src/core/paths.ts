@@ -28,6 +28,9 @@ export interface Paths {
   agentsFile: string;
   /** where an agent runs with no worktree behind it (a model probe, a sign-out), confined like any other */
   scratchDir: string;
+  /** git's credential store on a machine given a GitHub token (the cloud entrypoint writes it); a
+   * secret the daemon's own git reads and no agent may */
+  gitCredentialsFile: string;
 }
 
 /** TOYON_HOME lets cloud mode keep state on a mounted volume (see core/cloud.ts) */
@@ -47,10 +50,10 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
     // subdirectory, and a symlinked node_modules gets replaced by `npm install`.
     worktreesDir: join(home, "worktrees.noindex"),
     themesDir: join(home, "themes"),
-    // the cloud image pre-installs the adapters into the image (a volume cannot be filled at build)
     agentsDir: process.env.TOYON_AGENTS_DIR ?? join(home, "agents"),
     agentsFile: join(home, "agents.json"),
     scratchDir: join(home, "scratch"),
+    gitCredentialsFile: join(home, "git-credentials"),
   };
 }
 

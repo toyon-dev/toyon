@@ -7,7 +7,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const here = dirname(fileURLToPath(import.meta.url));
-const packaged = existsSync(join(here, "daemon.js"));
+/** running from the npm package, whose dist/ holds the bundles, rather than from a source tree */
+export const packaged = existsSync(join(here, "daemon.js"));
 
 /** what to hand bun to start the daemon */
 export const daemonEntry = packaged ? join(here, "daemon.js") : join(here, "../../daemon/src/index.ts");

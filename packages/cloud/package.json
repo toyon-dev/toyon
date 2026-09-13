@@ -1,9 +1,0 @@
-{
-  "name": "@toyon/cloud",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Spike: run the Toyon daemon in a Fly Machine per user. No accounts, no billing.",
-  "scripts": {
-    "provision": "./provision.sh"
-  }
-}

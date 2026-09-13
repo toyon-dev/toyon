@@ -10,6 +10,7 @@ import pkg from "../package.json" with { type: "json" };
 import { installApp, openAppWindow } from "./app.ts";
 import { type Command, HELP, parseArgs } from "./args.ts";
 import { base, health, logFile, port, readToken, shellUrl, startDaemon } from "./daemon.ts";
+import { deploy } from "./deploy/fly.ts";
 import { doctor } from "./doctor.ts";
 import { logs } from "./logs.ts";
 import { remote } from "./remote.ts";
@@ -111,6 +112,8 @@ async function run(cmd: Command): Promise<number> {
       return uninstall(cmd);
     case "remote":
       return remote(cmd);
+    case "deploy":
+      return deploy(cmd);
     case "open":
       return open(cmd);
   }

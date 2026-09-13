@@ -114,6 +114,16 @@ describe("door", () => {
     });
     expect(door(at("app.fly.dev:10001"), "172.19.0.2", edge, "preview").kind).toBe("refused");
   });
+  test("a front that moves the port out of Host into x-forwarded-port (Fly) is read as the name at that port", () => {
+    const fly = (port: string) => ({ ...https, "x-forwarded-port": port });
+    expect(door(at("app.fly.dev", fly("10001")), "172.19.0.2", edge, "preview")).toEqual({
+      kind: "preview",
+      worktreeId: null,
+    });
+    expect(door(at("app.fly.dev", fly("443")), "172.19.0.2", edge, "daemon").kind).toBe("shell");
+    expect(door(at("app.fly.dev", fly("10001")), "172.19.0.2", edge, "daemon").kind).toBe("refused");
+    expect(door(at("app.fly.dev", fly("not-a-port")), "172.19.0.2", edge, "preview").kind).toBe("refused");
+  });
   test("a port route never reaches the daemon's listener, and the bare name never a preview port", () => {
     expect(door(at("app.fly.dev:10001", https), "172.19.0.2", edge, "daemon").kind).toBe("refused");
     expect(door(at("app.fly.dev", https), "172.19.0.2", edge, "preview").kind).toBe("refused");

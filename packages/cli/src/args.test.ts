@@ -59,6 +59,40 @@ describe("parseArgs", () => {
     expect(parseArgs(["remote", "off", "--ports"]).kind).toBe("error");
     expect(parseArgs(["remote", "toyon.example.com", "--wild"]).kind).toBe("error");
   });
+  test("deploy fly takes an action and an app name, and each action only its own options", () => {
+    expect(parseArgs(["deploy", "fly", "up", "my-toyon"])).toEqual({
+      kind: "deploy",
+      provider: "fly",
+      action: "up",
+      name: "my-toyon",
+      region: null,
+      repo: null,
+      yes: false,
+    });
+    expect(
+      parseArgs(["deploy", "fly", "up", "my-toyon", "--region", "fra", "--repo", "https://github.com/me/app.git"]),
+    ).toMatchObject({ region: "fra", repo: "https://github.com/me/app.git" });
+    expect(parseArgs(["deploy", "fly", "destroy", "my-toyon", "--yes"])).toMatchObject({
+      action: "destroy",
+      yes: true,
+    });
+    expect(parseArgs(["deploy", "fly", "url", "my-toyon"])).toMatchObject({ action: "url", name: "my-toyon" });
+    for (const bad of [
+      ["deploy"],
+      ["deploy", "vercel", "up", "my-toyon"],
+      ["deploy", "fly", "launch", "my-toyon"],
+      ["deploy", "fly", "up"],
+      ["deploy", "fly", "up", "My_Toyon"],
+      ["deploy", "fly", "up", "my-toyon", "--region", "Frankfurt"],
+      ["deploy", "fly", "up", "my-toyon", "--region"],
+      ["deploy", "fly", "up", "my-toyon", "--repo", "git@github.com:me/app.git"],
+      ["deploy", "fly", "url", "my-toyon", "--region", "fra"],
+      ["deploy", "fly", "up", "my-toyon", "--yes"],
+      ["deploy", "fly", "up", "my-toyon", "other"],
+    ]) {
+      expect(parseArgs(bad).kind).toBe("error");
+    }
+  });
   test("a directory that happens to be named like a verb still needs a path form", () => {
     expect(parseArgs(["./stop"])).toMatchObject({ kind: "open", path: "./stop" });
   });

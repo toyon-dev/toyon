@@ -16,6 +16,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
+import { leaseProxyPort, returnProxyPort } from "./ports.ts";
 import { expandEnv, resolveRun } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { type PtyHandle, type PtyOpts, PtyStream } from "./pty.ts";
@@ -288,6 +289,16 @@ export class RuntimeRegistry {
     const rt = this.ensureAgent(wt);
     if (rt.procs) return;
 
+    // before anything starts, so running out of preview ports leaves nothing half up. The record
+    // keeps the port it got, and the rows frame sent once the proxy is up carries it to the shell
+    const live = this.deps.state.requireWorktree(wt.id);
+    const port = leaseProxyPort(live.proxyPort);
+    if (port !== live.proxyPort) {
+      live.proxyPort = port;
+      this.deps.state.save();
+    }
+    this.leased.set(wt.id, port);
+
     const procs = (this.deps.makeProcs ?? defaultProcs)(wt, this.deps);
     rt.procs = procs;
     // unconfirmed detection: no procs until the user confirms the setup pane
@@ -313,11 +324,22 @@ export class RuntimeRegistry {
 
     if (!this.deps.state.worktree(wt.id) || this.runtimes.get(wt.id) !== rt) {
       // removed while the procs were starting: don't leave them running
+      this.returnLease(wt.id);
       await procs.stopAll();
       return;
     }
-    rt.proxy = (this.deps.makeProxy ?? defaultProxy)(wt, previewName, procs, this.deps);
+    rt.proxy = (this.deps.makeProxy ?? defaultProxy)(live, previewName, procs, this.deps);
     this.deps.hub.emit("worktreesChanged");
+  }
+
+  /** the preview port each started worktree holds, returned when its proxy stops */
+  private leased = new Map<string, number>();
+
+  private returnLease(id: string) {
+    const port = this.leased.get(id);
+    if (port === undefined) return;
+    this.leased.delete(id);
+    returnProxyPort(port);
   }
 
   /** stop procs and proxy but keep the agent (config confirmed → restart under the new config) */
@@ -328,6 +350,7 @@ export class RuntimeRegistry {
     rt.procs = null;
     rt.proxy = null;
     proxy?.stop();
+    this.returnLease(id);
     await procs?.stopAll();
   }
 
@@ -337,6 +360,7 @@ export class RuntimeRegistry {
     if (!rt) return;
     this.runtimes.delete(id);
     rt.proxy?.stop();
+    this.returnLease(id);
     await Promise.all([rt.agent.close(), rt.procs?.stopAll(), rt.shell?.kill()]);
   }
 

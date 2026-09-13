@@ -82,8 +82,10 @@ function world(opts: Opts = {}) {
     const row = state.worktree("w1");
     if (row) row.lastTurn = turn;
     hub.emit("turnSettled", "w1", turn);
-    // the verdict is written in the background; it has settled once something was set
-    for (let i = 0; wait && i < 50 && !set.length; i++) await Bun.sleep(10);
+    // the verdict is written in the background; it has settled once something past the pending
+    // mark was set (a clear counts: that is the answer for a tree with nothing to land)
+    const done = () => set.some((l) => l === undefined || l.check !== "pending");
+    for (let i = 0; wait && i < 50 && !done(); i++) await Bun.sleep(10);
   };
   const dirty = () => writeFileSync(join(wtPath, "feature.txt"), `${Date.now()}\n`);
   return { ...t, wtPath, state, hub, set, checks, judged, settle, dirty, wt: () => state.worktree("w1") };
@@ -117,10 +119,11 @@ describe("LandingService", () => {
     });
   });
 
-  test("a passing check and a ready answer make the verdict, message included", async () => {
+  test("the box reads pending while the check runs, then the verdict with its message", async () => {
     w = world({ check: "true", verdict: { ready: true, subject: "add the feature", body: "One file." } });
     w.dirty();
     await w.settle();
+    expect(w.set[0]).toMatchObject({ at: 100, check: "pending", ready: false });
     expect(w.judged.length).toBe(1);
     expect(w.judged[0]).toContain("New files:\nfeature.txt");
     expect(w.wt()?.landing).toMatchObject({
@@ -130,15 +133,21 @@ describe("LandingService", () => {
       subject: "add the feature",
       body: "One file.",
     });
+    expect(w.wt()?.landing?.why).toBeUndefined();
     expect(w.wt()?.landing?.fingerprint).toBe(await treeFingerprint(w.wtPath));
   });
 
-  test("not ready keeps the reason; no check leaves the turn as the whole word", async () => {
+  test("the model's doubt is a sentence beside the word, not a gate; no check leaves the turn as the word", async () => {
     w = world({ verdict: { ready: false, why: "a question is open", subject: "add the feature" } });
     w.dirty();
     await w.settle();
     expect(w.checks).toEqual([]);
-    expect(w.wt()?.landing).toMatchObject({ check: "none", ready: false, why: "a question is open" });
+    expect(w.wt()?.landing).toMatchObject({
+      check: "none",
+      ready: true,
+      why: "a question is open",
+      subject: "add the feature",
+    });
   });
 
   test("without a quick model the check alone decides", async () => {
@@ -175,7 +184,7 @@ describe("LandingService", () => {
     await slow;
     await Bun.sleep(30);
     expect(w.wt()?.landing).toBeUndefined();
-    expect(w.set.every((l) => l === undefined)).toBe(true);
+    expect(w.set.every((l) => l === undefined || l.check === "pending")).toBe(true);
   });
 
   test("the fingerprint moves with the tree", async () => {

@@ -125,7 +125,6 @@ export type CommandState = Pick<
   | "repos"
   | "agents"
   | "defaultAgent"
-  | "prefs"
   | "shipping"
 >;
 
@@ -149,7 +148,6 @@ export function useCommands(): Command[] {
   const repos = useStore((s) => s.repos);
   const agents = useStore((s) => s.agents);
   const defaultAgent = useStore((s) => s.defaultAgent);
-  const prefs = useStore((s) => s.prefs);
   const shipping = useStore((s) => s.shipping);
   return useMemo(() => {
     const st: CommandState = {
@@ -170,7 +168,6 @@ export function useCommands(): Command[] {
       repos,
       agents,
       defaultAgent,
-      prefs,
       shipping,
     };
     return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repoById(st as State, activeRepoId));
@@ -192,7 +189,6 @@ export function useCommands(): Command[] {
     repos,
     agents,
     defaultAgent,
-    prefs,
     shipping,
     dispatch,
     sock,

@@ -158,11 +158,7 @@ export function CommitBox({
                 tone="primary"
                 busy={op === "land"}
                 disabled={!!op}
-                data-tip={
-                  dirty
-                    ? "Commit, merge into main and archive this worktree"
-                    : "Merge into main and archive this worktree"
-                }
+                data-tip={dirty ? "Commit and merge into main" : "Merge into main"}
                 onClick={land}
               >
                 land

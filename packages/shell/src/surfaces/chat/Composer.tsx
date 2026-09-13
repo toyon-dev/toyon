@@ -3,7 +3,7 @@ import { canLand, canSync, DEFAULT_PERMISSION_MODE, isMain, nextNumbers, numbere
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
-import { shipOp } from "../../state/actions/worktree.ts";
+import { removeWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
@@ -215,6 +215,17 @@ export function Composer({
       : undefined;
   // what would land: the uncommitted files, or the committed ones when the tree is clean
   const landCount = dirty || (git?.committed?.length ?? 0);
+  // landed and nothing since: the box offers the one thing left, closing the worktree. The
+  // conversation stays until then, so a follow-up is a message like any other.
+  const landed =
+    !landing &&
+    !drafting &&
+    !greenfield &&
+    blank &&
+    !midTurn &&
+    !!active?.worktree.landed &&
+    dirty === 0 &&
+    (git?.ahead ?? 0) === 0;
   const compactable = canCompact && !midTurn;
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
   const compactItems = () => [
@@ -335,15 +346,17 @@ export function Composer({
     ? "no worktree selected"
     : landing
       ? landingLine(landing, landCount)
-      : recap
-        ? recapLine(recap)
-        : greenfield
-          ? `describe ${title}…`
-          : drafting || spawning
-            ? "describe a change"
-            : onMain
-              ? "message the agent; / for a command, ! for a shell command"
-              : `message agent on ${title}; / for a command, ! for a shell command`;
+      : landed
+        ? `Landed on ${repo?.defaultBranch ?? "main"}.`
+        : recap
+          ? recapLine(recap)
+          : greenfield
+            ? `describe ${title}…`
+            : drafting || spawning
+              ? "describe a change"
+              : onMain
+                ? "message the agent; / for a command, ! for a shell command"
+                : `message agent on ${title}; / for a command, ! for a shell command`;
   // under a verdict: the recap's sentence when one has been written, else the message the work
   // would land with, which is the next most useful thing to read before pressing
   const subline =
@@ -351,13 +364,15 @@ export function Composer({
       ? null
       : landing
         ? (lastTurn?.recap?.text ?? landing.subject ?? null)
-        : recap
-          ? null
-          : note
-            ? note
-            : spawning && onMain && !drafting
-              ? [<Kbd key="k" k={chord("new")} />, " drafts one with variants, batch, agent and profile"]
-              : null;
+        : landed
+          ? "Close this worktree when you are done here; its chat goes to the archive."
+          : recap
+            ? null
+            : note
+              ? note
+              : spawning && onMain && !drafting
+                ? [<Kbd key="k" k={chord("new")} />, " drafts one with variants, batch, agent and profile"]
+                : null;
 
   // On open: the file listing is cached and never invalidated, so refresh it (the agent may have
   // written a file this turn); cached rows render meanwhile so the menu never looks empty. An
@@ -707,7 +722,7 @@ export function Composer({
                 tone="primary"
                 busy={op === "land"}
                 disabled={!!op && op !== "land"}
-                data-tip="Commit, merge into main and archive this worktree. Tab edits the message first."
+                data-tip="Commit and merge into main. Tab edits the message first."
                 onClick={() => shipOp(sock, dispatch, { t: "land", worktreeId: id })}
               >
                 land
@@ -722,6 +737,19 @@ export function Composer({
                   pr
                 </Button>
               )}
+            </span>
+          )}
+          {/* the same seat once the work is on main: the row goes at once and comes back with a
+              toast if the daemon refuses, the way any remove does */}
+          {landed && id && (
+            <span className="composer-land">
+              <Button
+                tone="primary"
+                data-tip="Archive this worktree and its chat; the toast offers restore"
+                onClick={() => removeWorktrees(sock, dispatch, [id])}
+              >
+                close
+              </Button>
             </span>
           )}
         </div>

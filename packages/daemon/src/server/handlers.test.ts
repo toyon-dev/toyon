@@ -516,18 +516,6 @@ describe("handlers", () => {
     expect(broadcasts.length).toBe(0);
   });
 
-  test("set-prefs changes only what it names, persists and emits", async () => {
-    const { services, ctx } = make();
-    let emitted = 0;
-    services.hub.on("prefsChanged", () => emitted++);
-    expect(services.state.prefs).toEqual({ recaps: "summarize" });
-    await dispatch({ t: "set-prefs", prefs: { recaps: "facts" } }, ctx, services);
-    // naming nothing changes nothing, and still says so
-    await dispatch({ t: "set-prefs", prefs: {} }, ctx, services);
-    expect(services.state.prefs).toEqual({ recaps: "facts" });
-    expect(emitted).toBe(2);
-  });
-
   test("agent-auth: an agent method just runs; a terminal method types its line once a pane opens", async () => {
     const { services, ctx, replies, terminals, agents, repo } = make();
     const r = await services.repos.register(repo);

@@ -8,8 +8,10 @@ import { ago } from "./util.ts";
 const ended = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
 
 /** The verdict as the placeholder's first line: what would land and whether it can, or what
- * stands in the way. `count` is the files that would go, uncommitted or committed. */
+ * stands in the way. `count` is the files that would go, uncommitted or committed. The model's
+ * doubt reads as a caveat on a line that still offers the word, never as a refusal. */
 export function landingLine(l: Landing, count: number): string {
+  if (l.check === "pending") return "Checking the work…";
   if (l.check === "fail") {
     const first = l.checkTail
       ?.split("\n")
@@ -17,7 +19,7 @@ export function landingLine(l: Landing, count: number): string {
       ?.trim();
     return `Check failed${first ? `: ${ended(first)}` : "."}`;
   }
-  if (!l.ready) return l.why ? `Not ready to land: ${ended(l.why)}` : "Not ready to land.";
+  if (l.why) return `Landable, but ${ended(l.why)}`;
   const files = count > 0 ? `${count} ${count === 1 ? "file" : "files"} changed` : "";
   const check = l.check === "pass" ? "check passed" : "";
   const facts = [files, check].filter(Boolean).join(", ");

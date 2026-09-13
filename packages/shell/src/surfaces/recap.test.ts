@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { LastTurn, TurnFacts } from "@toyon/shared";
-import { recapLine, recapShown } from "./recap.ts";
+import type { Landing, LastTurn, TurnFacts } from "@toyon/shared";
+import { landingLine, recapLine, recapShown } from "./recap.ts";
 
 const turn = (end: LastTurn["end"], f: Partial<TurnFacts> = {}, minsAgo = 12, text?: string): LastTurn => ({
   at: Date.now() - minsAgo * 60_000,
@@ -34,6 +34,37 @@ describe("recapLine", () => {
 
   test("no line carries a dash or an arrow", () => {
     for (const [t] of lines) expect(recapLine(t)).not.toMatch(/[\u2013\u2014\u2192]/);
+  });
+});
+
+describe("landingLine", () => {
+  const landing = (over: Partial<Landing>): Landing => ({
+    at: 1,
+    check: "none",
+    ready: true,
+    fingerprint: "f",
+    ...over,
+  });
+
+  test("says what would land and that the check passed, or that there is no check", () => {
+    expect(landingLine(landing({ check: "pass" }), 3)).toBe("Ready to land: 3 files changed, check passed.");
+    expect(landingLine(landing({ check: "pass" }), 1)).toBe("Ready to land: 1 file changed, check passed.");
+    expect(landingLine(landing({}), 2)).toBe("Ready to land: 2 files changed.");
+    expect(landingLine(landing({}), 0)).toBe("Ready to land.");
+  });
+
+  test("the model's doubt is a caveat on a line that still lands", () => {
+    expect(landingLine(landing({ check: "pass", why: "a question is open" }), 3)).toBe(
+      "Landable, but a question is open.",
+    );
+  });
+
+  test("a failed check names its first line; pending says the check is running", () => {
+    expect(
+      landingLine(landing({ check: "fail", ready: false, checkTail: "\nsrc/App.tsx: error TS2322\n2 errors" }), 3),
+    ).toBe("Check failed: src/App.tsx: error TS2322.");
+    expect(landingLine(landing({ check: "fail", ready: false }), 3)).toBe("Check failed.");
+    expect(landingLine(landing({ check: "pending", ready: false }), 3)).toBe("Checking the work…");
   });
 });
 

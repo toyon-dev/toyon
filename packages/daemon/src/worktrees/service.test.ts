@@ -602,20 +602,21 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.landed).toBe(false);
   });
 
-  test("land commits with the message it is given, merges, and archives the worktree", async () => {
+  test("land commits with the message it is given and merges; the worktree stays, marked landed", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
-    const { result, archived, removeIds } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
+    w.worktrees.setLanding(wt.id, { at: 1, check: "pass", ready: true, subject: "old words", fingerprint: "f" });
+    const { result, removeIds } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
     expect(result.ok).toBe(true);
     expect(result.message).toBe(`${wt.title} is on main`);
     expect(removeIds).toEqual([]);
-    expect(archived).toMatchObject({ id: wt.id, restorable: true });
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
     // main had not moved, so the merge fast-forwards onto the commit itself
     expect((await git(w.repo, "log", "-1", "--format=%s", "main")).out).toBe("add feature");
-    expect(w.state.worktree(wt.id)).toBeUndefined();
-    expect(existsSync(wt.path)).toBe(false);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+    expect(w.state.worktree(wt.id)?.landing).toBeUndefined();
+    expect(existsSync(wt.path)).toBe(true);
   });
 
   test("land takes the suggested message when none is typed, and refuses with neither", async () => {

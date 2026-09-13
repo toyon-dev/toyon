@@ -1,7 +1,8 @@
 // Whether a worktree is ready to land, decided after every finished turn: the repo's check runs
 // in the worktree with its output on the transcript, and when it passes the agent's quick model is
-// asked whether the work reads as done and what its commit message would be. The verdict sits on
-// the worktree record until a new turn starts or the tree changes under it (service.gitStatus).
+// asked for a commit message and whether the work reads as done. The check decides; the model's
+// doubt is kept as a sentence. The verdict sits on the worktree record until a new turn starts or
+// the tree changes under it (service.gitStatus).
 
 import { canLand, type Landing, type LastTurn, type WorktreeInfo } from "@toyon/shared";
 import { type LandVerdict, landPrompt } from "../agent/landing.ts";
@@ -59,6 +60,9 @@ export class LandingService {
 
     this.judging.set(worktreeId, turn.at);
     const started = Date.now();
+    // the box says the check is running rather than going back to its plain placeholder: the gap
+    // between the agent's last word and the verdict is where a person is reading
+    this.d.worktrees.setLanding(worktreeId, { at: turn.at, check: "pending", ready: false, fingerprint: "" });
     // still the turn being judged: a newer stop or a new turn since means this answer is stale
     const live = () =>
       this.judging.get(worktreeId) === turn.at && this.d.state.worktree(worktreeId)?.lastTurn?.at === turn.at;
@@ -95,9 +99,9 @@ export class LandingService {
       at: turn.at,
       check,
       ...(checkTail ? { checkTail } : {}),
-      // no verdict (no quick model, or an answer off the shape) leaves the check as the whole word
-      ready: check !== "fail" && (verdict ? verdict.ready : true),
-      ...(verdict?.why ? { why: verdict.why } : {}),
+      // the facts decide: the model's doubt rides beside the word as `why`, never in front of it
+      ready: check !== "fail",
+      ...(verdict && !verdict.ready && verdict.why ? { why: verdict.why } : {}),
       ...(verdict?.subject ? { subject: verdict.subject } : {}),
       ...(verdict?.body ? { body: verdict.body } : {}),
       fingerprint: await treeFingerprint(wt.path),
@@ -105,10 +109,7 @@ export class LandingService {
     if (!live()) return;
     this.judging.delete(worktreeId);
     // how long the word took to appear: the check and the side question are the two costs here
-    log.info(
-      worktreeId,
-      `landing: check ${check}, ${landing.ready ? "ready" : "not ready"}, ${Date.now() - started}ms`,
-    );
+    log.info(worktreeId, `landing: check ${check}${landing.why ? ", doubted" : ""}, ${Date.now() - started}ms`);
     this.d.worktrees.setLanding(worktreeId, landing);
   }
 }

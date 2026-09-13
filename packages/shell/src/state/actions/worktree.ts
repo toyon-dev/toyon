@@ -174,14 +174,14 @@ export function worktreeItems(
     land.push({
       id: "land",
       label: "land",
-      detail: "commit, merge into main, archive this worktree",
+      detail: "commit and merge into main; the worktree stays",
       disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "land", worktreeId: id }),
     });
     land.push({
       id: "merge",
       label: "merge into main",
-      detail: "the merge alone: the worktree stays",
+      detail: "the merge alone: nothing is committed first",
       disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }),
     });

@@ -264,7 +264,6 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
-  s.hub.on("prefsChanged", () => broadcast({ t: "prefs", prefs: s.state.prefs }));
   s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
   s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));
 
@@ -283,7 +282,6 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       themePrefs: s.themes.prefs,
       agents: agentInfos(),
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
-      prefs: s.state.prefs,
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
       gitIdentity: await s.repos.gitIdentity(),

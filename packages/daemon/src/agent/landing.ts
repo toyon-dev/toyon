@@ -9,7 +9,8 @@ export const LAND_SYSTEM =
   "You judge whether a coding task is finished and write its commit message. Reply in exactly the format asked, nothing else.";
 
 const LAND_ASK = [
-  "A coding agent just stopped in a git worktree. Decide whether the work is finished and ready to merge, or still in progress (a question left open, a step the agent said it would do next, a change the user asked to review first).",
+  "A coding agent just stopped in a git worktree. Decide whether the work is finished and ready to merge, or still in progress: a question the agent is waiting on, a step it said it would do next, or a part of the request it did not get to.",
+  "The agent never commits: every change is left uncommitted for the user, and the agent saying so is normal, not a sign the work is unfinished.",
   "Reply with exactly this shape and nothing else:",
   "Line 1: READY, or NOT READY: <reason under 12 words>",
   "Line 2: blank",

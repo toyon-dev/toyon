@@ -1,7 +1,7 @@
 import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveTheme } from "@toyon/shared";
 import { agentItems } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
-import { appearanceLabel, recapsItem } from "../../state/actions/settings.ts";
+import { appearanceLabel } from "../../state/actions/settings.ts";
 import { useDarkNow, useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
@@ -20,7 +20,7 @@ const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
  * settings live here as well as in the palette; esc from a picker opened here comes back. The
  * settings card is the shortcut card's grid: sections in two columns, so the two read as one
  * shape, and a row means what its section says (a row under Agents is an agent, not a
- * preference). The project and its agents are the left column, appearance and recaps the right. */
+ * preference). The project and its agents are the left column, appearance the right. */
 export function KeysHelp() {
   const dispatch = useDispatch();
   const sock = useSock();
@@ -29,8 +29,6 @@ export function KeysHelp() {
   const themes = useStore((s) => s.themes);
   const dark = useDarkNow();
   const agents = useStore((s) => s.agents);
-  const globalPrefs = useStore((s) => s.prefs);
-  const recaps = recapsItem({ prefs: globalPrefs }, { sock });
   const repo = useActiveRepo();
   const open = (a: Action) => {
     dispatch({ a: "palette-return", v: { mode: "keys", q: "" } });
@@ -85,19 +83,6 @@ export function KeysHelp() {
             <span className="keys-d">theme</span>
             <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
               {resolveTheme(prefs, themes, dark).name}
-            </Button>
-          </div>
-          {/* its own section, not a row under Agents: a row there is an agent */}
-          <div className="section-title keys-h">Recaps</div>
-          <div className="keys-setting">
-            <span className="keys-d">summary</span>
-            <Button
-              variant="field"
-              mono
-              data-tip="When you come back to a worktree, one sentence from the agent's quick model. Off keeps the facts and never calls a model."
-              onClick={recaps.onClick}
-            >
-              {globalPrefs.recaps === "summarize" ? "on" : "off"}
             </Button>
           </div>
         </div>

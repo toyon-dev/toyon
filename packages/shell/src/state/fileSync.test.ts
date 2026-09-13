@@ -80,7 +80,6 @@ function harness() {
     themePrefs: initial.themePrefs,
     agents: [],
     defaultAgent: "claude",
-    prefs: initial.prefs,
     home: "/h",
     folderDialog: false,
     gitIdentity: true,

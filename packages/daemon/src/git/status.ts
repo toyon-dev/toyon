@@ -1,35 +1,37 @@
 // Working-tree and branch state: porcelain parsing, line counts, changed ranges, ahead/behind.
 // The parsers are pure; the functions around them shell out through git/exec.
 
-import { statSync } from "node:fs";
 import { join } from "node:path";
 import type { GitFileStatus } from "@toyon/shared";
 import { git, gitRaw } from "./exec.ts";
 
-/** The tree's shape in one string: HEAD, the line counts of every change against it, and the
- * untracked files with their size and mtime (git has no counts for those). A landing verdict is
- * written against this and retired when it no longer matches. Cheap enough to take on every
- * status read; an edit to a tracked file that keeps its line counts exactly slips past it, which
- * is rare and costs a stale suggestion, not a wrong merge. */
+/** The tree's content in one string: HEAD, a hash of the whole diff against it, and a hash of
+ * each untracked file. A landing verdict is written against this and retired when it no longer
+ * matches. Exact, since the verdict and the message were written about these bytes, and cheap
+ * enough to take on every status read: the diff is what the changes panel already draws. */
 export async function treeFingerprint(worktreePath: string): Promise<string> {
   const [head, diff, untracked] = await Promise.all([
     git(worktreePath, "rev-parse", "HEAD"),
-    git(worktreePath, "diff", "HEAD", "--numstat", "--no-renames"),
+    gitRaw(worktreePath, "diff", "HEAD", "--no-renames"),
     git(worktreePath, "ls-files", "--others", "--exclude-standard"),
   ]);
-  const others = untracked.out
-    .split("\n")
-    .filter(Boolean)
-    .map((p) => {
-      try {
-        const s = statSync(join(worktreePath, p));
-        return `${p}:${s.size}:${s.mtimeMs}`;
-      } catch {
-        // gone between the listing and the stat: its absence is the fact
-        return `${p}:-`;
-      }
-    });
-  return `${head.out}:${Bun.hash(`${diff.out}\n${others.join("\n")}`).toString(36)}`;
+  const others = await Promise.all(
+    untracked.out
+      .split("\n")
+      .filter(Boolean)
+      .map(async (p) => {
+        try {
+          const f = Bun.file(join(worktreePath, p));
+          // a dumped database or a video is its size, not its bytes
+          const body = f.size > 2_000_000 ? String(f.size) : Bun.hash(await f.arrayBuffer()).toString(36);
+          return `${p}:${body}`;
+        } catch {
+          // gone between the listing and the read: its absence is the fact
+          return `${p}:-`;
+        }
+      }),
+  );
+  return `${head.out}:${Bun.hash(diff.out).toString(36)}:${Bun.hash(others.join("\n")).toString(36)}`;
 }
 
 /** `only` narrows the status to those exact paths: a question about one file should not walk the tree */

@@ -28,15 +28,6 @@ describe("state", () => {
     expect(loadState(paths).sessions).toEqual({ a: "s1" });
   });
 
-  test("prefs read their defaults until changed, and only what was named is saved", () => {
-    const store = new StateStore(paths, { repos: [], worktrees: [], sessions: {} });
-    expect(store.prefs).toEqual({ recaps: "summarize" });
-    store.setPrefs({ recaps: "facts" });
-    expect(loadState(paths).prefs).toEqual({ recaps: "facts" });
-    store.setPrefs({});
-    expect(store.prefs).toEqual({ recaps: "facts" });
-  });
-
   test("load prunes sessions whose worktree is gone", () => {
     saveState(paths, { repos: [], worktrees: [wt("a")], sessions: { a: "s1", gone: "s2" } });
     expect(loadState(paths).sessions).toEqual({ a: "s1" });

@@ -204,18 +204,21 @@ export interface LastTurn {
 }
 
 /** What the daemon knows about landing a worktree after a turn: whether the repo's check passed,
- * whether the work reads as finished, and a commit message for it. The composer offers `land`
- * only while `ready`; the changes panel shows the message as its box's placeholder. */
+ * a commit message for the work, and the model's doubt about it if it had one. The composer
+ * offers `land` while `ready`, which facts alone decide; the doubt is a sentence beside the word,
+ * never a gate, since a wrong gate hides the feature and a wrong sentence costs a line. The
+ * changes panel shows the message as its box's placeholder. */
 export interface Landing {
   /** the turn end it describes */
   at: number;
-  /** `none`: the repo has no check command, so the verdict rests on the turn alone */
-  check: "pass" | "fail" | "none";
+  /** `pending` while the check runs and the message is written; `none`: the repo has no check
+   * command, so the turn alone is the word */
+  check: "pending" | "pass" | "fail" | "none";
   /** the last lines of a failed check, for the placeholder */
   checkTail?: string;
-  /** the check passed (or there is none) and the turn read as finished */
+  /** the check passed, or there is none, and the verdict is in: the word can show */
   ready: boolean;
-  /** why not, in one line, when the turn did not read as finished */
+  /** the model's doubt, in one line, when the work did not read as finished to it */
   why?: string;
   /** the suggested commit message: a subject, and a body when there was more to say */
   subject?: string;
@@ -561,14 +564,6 @@ export interface ThemePrefs {
   light: string;
   dark: string;
 }
-
-/** preferences the daemon holds for every browser that connects. `recaps`: whether coming back to
- * a worktree also asks its agent's quick model for a sentence, or shows the facts alone. */
-export interface Prefs {
-  recaps: "summarize" | "facts";
-}
-
-export const DEFAULT_PREFS: Prefs = { recaps: "summarize" };
 
 // ---- Design system ----
 

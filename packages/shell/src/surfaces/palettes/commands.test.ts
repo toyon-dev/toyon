@@ -45,7 +45,6 @@ describe("buildCommands", () => {
       repos: [repo],
       agents: [],
       defaultAgent: "claude",
-      prefs: { recaps: "summarize" },
       shipping: {},
     } as unknown as CommandState;
     const ids = buildCommands(state, () => {}, null, wt, repo).map((c) => c.id);

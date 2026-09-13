@@ -208,17 +208,15 @@ describe("recaps", () => {
     expect(calls).toBe(0);
   });
 
-  test("facts only, a refused login, or no sentence back: the recap is due and carries no text", async () => {
+  test("a refused login, or no sentence back: the recap is due and carries no text", async () => {
     let calls = 0;
     const summarize = async () => {
       calls++;
       return null;
     };
     const w = build({ delayMs: DELAY, summarize }, [record("a"), record("b"), record("c")]);
-    w.state.setPrefs({ recaps: "facts" });
     finish(w, "a");
     await past();
-    w.state.setPrefs({ recaps: "summarize" });
     w.say("b", user("go", 10), start(11), auth);
     w.status("b", "working", "error");
     finish(w, "c");
@@ -227,8 +225,8 @@ describe("recaps", () => {
       expect(w.wt(id).lastTurn?.recap?.at).toBeNumber();
       expect(w.wt(id).lastTurn?.recap?.text).toBeUndefined();
     }
-    // only c was asked, and nothing came back
-    expect(calls).toBe(1);
+    // a and c were asked and nothing came back; a login problem is never a question
+    expect(calls).toBe(2);
   });
 
   test("a sentence for a stop that has been replaced is dropped, and the same time away asks once", async () => {

@@ -96,7 +96,6 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     themePrefs: initial.themePrefs,
     agents: [],
     defaultAgent: "claude",
-    prefs: initial.prefs,
     home: "/home/t",
     folderDialog: false,
     gitIdentity: true,
@@ -393,13 +392,6 @@ describe("chat folding", () => {
     s = reducer(reducer(s, { a: "activate", id: "a" }), { a: "set-draft", id: "a", text: "" });
     s = reducer(reducer(s, { a: "arrive", id: "a" }), { a: "activate", id: "b" });
     expect(latched(s, "a")).toBeUndefined();
-  });
-
-  test("hello and prefs carry the daemon's preferences", () => {
-    let s = run([hello(wt("a"))]);
-    expect(s.prefs).toEqual({ recaps: "summarize" });
-    s = reducer(s, server({ t: "prefs", prefs: { recaps: "facts" } }));
-    expect(s.prefs).toEqual({ recaps: "facts" });
   });
 
   test("backfill rebuilds the chat from the transcript", () => {
@@ -1477,7 +1469,7 @@ describe("a landing op in flight", () => {
     expect(s.shipping).toEqual({});
   });
 
-  test("a land's toast offers restore, not a remove of the worktree that is already gone", () => {
+  test("a land's toast offers nothing to remove: the worktree stays, with close in its box", () => {
     const s = run([
       three(),
       { a: "shipping", id: "a", op: "land" },
@@ -1488,11 +1480,11 @@ describe("a landing op in flight", () => {
         message: "a is on main",
         merged: true,
         removeIds: [],
-        restoreId: "a",
       }),
     ]);
     expect(s.shipping).toEqual({});
-    expect(s.toast).toMatchObject({ ok: true, message: "a is on main", removeIds: [], restoreId: "a" });
+    expect(s.toast).toMatchObject({ ok: true, message: "a is on main", removeIds: [] });
+    expect(s.toast?.restoreId).toBeUndefined();
   });
 });
 

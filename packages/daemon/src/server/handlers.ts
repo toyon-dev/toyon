@@ -305,7 +305,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async land(msg, ctx, s) {
-    const { result, archived, removeIds } = await s.worktrees.land(msg.worktreeId, msg.message);
+    const { result, removeIds } = await s.worktrees.land(msg.worktreeId, msg.message);
     // the same prefilled prompt sync offers on a conflict: the one failure an agent can be asked to fix
     const suggestion =
       !result.ok && result.conflict
@@ -317,9 +317,9 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       msg.worktreeId,
       toast(msg.worktreeId, result.ok, result.message, {
         merged: result.ok,
-        // the landed worktree is gone already; what is offered up is its variant siblings, if any
+        // the worktree stays, with close offered in its box; what the toast offers up is its
+        // variant siblings, if any
         removeIds: removeIds ?? [],
-        ...(archived?.restorable ? { restoreId: archived.id } : {}),
         ...(suggestion ? { suggestion } : {}),
       }),
     );
@@ -576,11 +576,6 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.agents.require(msg.agent);
     s.state.setDefaultAgent(msg.agent);
     s.hub.emit("agentsChanged");
-  },
-
-  "set-prefs"(msg, _ctx, s) {
-    s.state.setPrefs(msg.prefs);
-    s.hub.emit("prefsChanged");
   },
 
   "rescan-themes"(_msg, _ctx, s) {

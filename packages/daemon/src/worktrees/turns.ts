@@ -3,8 +3,8 @@
 // record stamped here, of how the agent last stopped and what the turns since you looked did.
 //
 // A stop that stays unseen past the recap delay gets its recap: the facts at once, and a sentence
-// from the agent's quick model when recaps summarize. One sentence per time away, however many
-// turns ran while you were gone.
+// from the agent's quick model where it has one. One sentence per time away, however many turns
+// ran while you were gone.
 
 import type { AgentStatus, TurnEnd, WorktreeInfo } from "@toyon/shared";
 import { factsOf, firstAskOf, openAskOf, recapPrompt, turnsSince } from "../agent/recap.ts";
@@ -117,7 +117,7 @@ export class TurnService {
     // to the one sentence: its line is the facts, rather than a second model call.
     const seenAt = wt.seenAt ?? 0;
     const summarize = this.d.summarize;
-    if (!summarize || this.d.state.prefs.recaps !== "summarize" || turn.facts.auth) return;
+    if (!summarize || turn.facts.auth) return;
     if (this.summarized.get(worktreeId) === seenAt) return;
     this.summarized.set(worktreeId, seenAt);
     const entries = this.d.transcript(worktreeId);

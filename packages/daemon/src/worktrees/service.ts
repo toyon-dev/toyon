@@ -959,15 +959,12 @@ export class WorktreeService {
     return result;
   }
 
-  /** The one press: commit what is uncommitted, take main in if the branch is behind, merge, and
-   * archive the worktree. Each step stops the rest when it fails, and the result says which: a
-   * commit stands even when the sync after it conflicts, since the work is safer committed. The
-   * remove runs outside the lock (it takes its own) and after the agent and procs are stopped.
-   * Returns the archived record for the toast's restore, and any variant siblings to offer up. */
-  async land(
-    worktreeId: string,
-    message?: string,
-  ): Promise<{ result: ShipResult; archived?: ArchivedWorktree | null; removeIds?: string[] }> {
+  /** The one press: commit what is uncommitted, take main in if the branch is behind, and merge.
+   * Each step stops the rest when it fails, and the result says which: a commit stands even when
+   * the sync after it conflicts, since the work is safer committed. The worktree stays, marked
+   * landed, so the conversation can go on; closing it is its own press (the composer offers it,
+   * and a remove is what it is). Returns any variant siblings to offer up. */
+  async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; removeIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "land");
     const result = await withRepoLock(repo.path, async (): Promise<ShipResult> => {
       const committed = await this.commitIfDirty(wt, message);
@@ -981,12 +978,13 @@ export class WorktreeService {
     });
     if (!result.ok) return { result };
     this.invalidateCounts();
+    // the verdict was about work that is on main now; the landed mark is what the box reads next
+    this.setLanding(wt.id, undefined);
     this.setLanded(wt.id, true);
-    const archived = await this.remove(wt.id);
     const removeIds = wt.variant
       ? this.d.state.worktrees.filter((w) => w.variant?.group === wt.variant?.group && w.id !== wt.id).map((w) => w.id)
       : [];
-    return { result: { ...result, message: `${wt.title} is on ${repo.defaultBranch}` }, archived, removeIds };
+    return { result: { ...result, message: `${wt.title} is on ${repo.defaultBranch}` }, removeIds };
   }
 
   /** merge into main locally. Returns the worktrees the UI should offer to clean up: landing a
@@ -1247,7 +1245,11 @@ export class WorktreeService {
       if (r.wt?.landed && (files.length > 0 || ahead > 0)) this.setLanded(r.wt.id, false);
       // a verdict describes one tree: an edit since (by hand, by another tool) retires it, so the
       // composer never offers to land work the check and the message have not seen
-      if (r.wt?.landing && r.wt.landing.fingerprint !== (await treeFingerprint(r.path)))
+      if (
+        r.wt?.landing &&
+        r.wt.landing.check !== "pending" &&
+        r.wt.landing.fingerprint !== (await treeFingerprint(r.path))
+      )
         this.setLanding(r.wt.id, undefined);
       // the empty-tree fact lives on main's record, so the rows frame carries it without git: a
       // task worktree of an empty repo is not the greenfield surface, so only main keeps it

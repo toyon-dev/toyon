@@ -1,4 +1,4 @@
-import { type ChordId, matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
+import { type ChordId, LOGIN_STREAM, matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
 import { markUnread } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
@@ -145,7 +145,7 @@ export function useChords() {
           case "term-tab": {
             const wt = s.rows.find((w) => w.id === s.activeId);
             if (!wt) break;
-            const streams = [SHELL_STREAM, ...wt.procs.map((p) => p.name)];
+            const streams = [SHELL_STREAM, ...(wt.login ? [LOGIN_STREAM] : []), ...wt.procs.map((p) => p.name)];
             const at = streams.indexOf(localOf(s, s.activeId).termStream);
             dispatch({
               a: "term-stream",

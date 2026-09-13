@@ -48,11 +48,17 @@ export class FakeAgent implements AgentAdapter {
   auths: Array<[string, string | undefined]> = [];
   async authenticate(methodId: string, apiKey?: string) {
     this.auths.push([methodId, apiKey]);
-    return methodId === "terminal" ? { kind: "terminal" as const, line: "login --now" } : { kind: "done" as const };
+    return methodId === "terminal"
+      ? { kind: "terminal" as const, run: { command: "/bin/login", args: ["--now"], env: { NO_BROWSER: "1" } } }
+      : { kind: "done" as const };
   }
   retries = 0;
   retry() {
     this.retries++;
+  }
+  logins = 0;
+  loggedIn() {
+    this.logins++;
   }
   unqueue() {}
   /** what the daemon put on the transcript itself (exec results); an agent's own events never

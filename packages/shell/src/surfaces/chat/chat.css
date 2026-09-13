@@ -237,6 +237,9 @@
     flex-wrap: wrap;
     gap: 6px;
   }
+  .auth-hint {
+    margin-top: 8px;
+  }
   .auth-key {
     display: flex;
     gap: 6px;

@@ -474,6 +474,8 @@ export interface State {
   termOpen: boolean;
   /** bumped to put the keyboard in the terminal */
   focusTerm: number;
+  /** bumped when a stream opens that needs room to be read (a login's link and its prompt) */
+  termTall: number;
   /** the design pane: the worktree's own design system, beside the preview */
   designOpen: boolean;
   /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
@@ -598,6 +600,7 @@ export function initialState(opts: InitialOpts): State {
     zen: false,
     termOpen: false,
     focusTerm: 0,
+    termTall: 0,
     designOpen: false,
     themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
@@ -909,8 +912,9 @@ export type Action =
   /** open the terminal pane if it is shut, and ask the terminal for the keyboard either way */
   | { a: "focus-terminal" }
   | { a: "toggle-design" }
-  /** show this worktree's stream in the terminal pane, opening the pane if it was hidden */
-  | { a: "term-stream"; id: string; stream: string }
+  /** show this worktree's stream in the terminal pane, opening the pane if it was hidden; `tall`
+   * asks for room to read it */
+  | { a: "term-stream"; id: string; stream: string; tall?: boolean }
   | { a: "preview-theme"; theme: Theme | null }
   | { a: "system-dark"; v: boolean }
   | { a: "toast"; toast: NonNullable<State["toast"]> }
@@ -1199,7 +1203,11 @@ function reduce(s: State, action: Action): State {
       // the pane outlines what it lists in the page; a project with nothing to run keeps it shut
       return isChatCentred(s) ? s : { ...s, designOpen: !s.designOpen };
     case "term-stream":
-      return withLocal({ ...s, termOpen: true }, action.id, (l) => ({ ...l, termStream: action.stream }));
+      return withLocal(
+        { ...s, termOpen: true, termTall: action.tall ? s.termTall + 1 : s.termTall },
+        action.id,
+        (l) => ({ ...l, termStream: action.stream }),
+      );
     case "preview-theme":
       return { ...s, previewTheme: action.theme };
     case "system-dark":

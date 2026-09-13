@@ -2,12 +2,12 @@
 // setup has run, its process group and preview proxy.
 
 import type { LogLine, ProcState, Remote, RepoInfo, WorktreeInfo } from "@toyon/shared";
-import { DEFAULT_PERMISSION_MODE, SHELL_STREAM } from "@toyon/shared";
+import { DEFAULT_PERMISSION_MODE, LOGIN_STREAM, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import { OPTION_FIELDS } from "../agent/acp/options.ts";
 import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
-import type { AgentAdapter } from "../agent/adapter.ts";
+import type { AgentAdapter, LoginRun } from "../agent/adapter.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { cloud } from "../core/cloud.ts";
@@ -31,8 +31,8 @@ export interface Runtime {
   previewName: string | undefined;
   /** null until a pane first opens it; survives hiding the pane, dies with the worktree */
   shell: PtyHandle | null;
-  /** a command line to type into the shell once a pane opens one (agent login) */
-  pendingLine: string | null;
+  /** the agent's terminal login while it runs, and after it fails so its tab can say why */
+  login: { pty: PtyHandle; run: LoginRun } | null;
 }
 
 export interface RuntimeDeps {
@@ -285,7 +285,7 @@ export class RuntimeRegistry {
       proxy: null,
       previewName: undefined,
       shell: null,
-      pendingLine: null,
+      login: null,
     };
     this.runtimes.set(wt.id, rt);
     return rt;
@@ -370,7 +370,9 @@ export class RuntimeRegistry {
     this.runtimes.delete(id);
     rt.proxy?.stop();
     this.returnLease(id);
-    await Promise.all([rt.agent.close(), rt.procs?.stopAll(), rt.shell?.kill()]);
+    const login = rt.login;
+    rt.login = null;
+    await Promise.all([rt.agent.close(), rt.procs?.stopAll(), rt.shell?.kill(), login?.pty.kill()]);
   }
 
   /** one of the worktree's streams: its shell (spawned on the first open or after it exited) or a
@@ -378,6 +380,7 @@ export class RuntimeRegistry {
    * before snapshotting: a TUI redraws on SIGWINCH and that redraw arrives as live data after the
    * snapshot, so the tab ends up showing the current screen. */
   openTerminal(id: string, stream: string, cols: number, rows: number): { snapshot: string; alive: boolean } {
+    if (stream === LOGIN_STREAM) return this.openLoginStream(id, cols, rows);
     if (stream !== SHELL_STREAM) return this.openProcStream(id, stream, cols, rows);
     const wt = this.deps.state.requireWorktree(id);
     if (wt.kind === "spare") throw new UserError("no terminal for a spare worktree");
@@ -408,14 +411,58 @@ export class RuntimeRegistry {
     } else if (term.cols !== cols || term.rows !== rows) {
       term.resize(cols, rows);
     }
-    if (rt.pendingLine) {
-      // after the shell has printed its prompt, so the line reads as typed rather than pasted first
-      const line = rt.pendingLine;
-      rt.pendingLine = null;
-      const t = term;
-      setTimeout(() => t.alive && t.write(`${line}\r`), 300);
-    }
     return { snapshot: term.snapshot(), alive: term.alive };
+  }
+
+  /** Run the agent's terminal login as the worktree's login stream. A process of its own rather
+   * than a line typed into the shell, so its exit is known: a clean one tells the agent it is logged
+   * in, which closes the card and sends the refused message again, and any other leaves the tab
+   * showing why. It starts before a pane opens, and the tab replays what it printed. A second
+   * start replaces the first. */
+  startLogin(id: string, run: LoginRun): void {
+    const wt = this.deps.state.requireWorktree(id);
+    const rt = this.ensureAgent(wt);
+    const prev = rt.login;
+    rt.login = null;
+    if (prev) fireAndForget(id, Promise.resolve(prev.pty.kill()), "replace the agent login");
+    const cwd = wt.linkPath ?? wt.path;
+    let pty: PtyHandle;
+    try {
+      pty = (this.deps.makeTerminal ?? defaultTerminal)(
+        wt,
+        {
+          cwd,
+          env: { ...this.shellEnv(wt), ...run.env, PWD: cwd },
+          cols: 100,
+          rows: 30,
+          file: run.command,
+          args: run.args,
+        },
+        (data) => this.deps.hub.emit("termData", id, LOGIN_STREAM, data),
+        (code) => {
+          this.deps.hub.emit("termExit", id, LOGIN_STREAM, code);
+          // a login that was replaced, or whose worktree went away, says nothing about credentials
+          if (rt.login?.pty !== pty) return;
+          if (code === 0) {
+            rt.login = null;
+            rt.agent.loggedIn();
+          }
+          this.deps.hub.emit("worktreesChanged");
+        },
+      );
+    } catch (e) {
+      throw new UserError(`could not start the login: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    rt.login = { pty, run };
+    this.deps.hub.emit("worktreesChanged");
+  }
+
+  /** the login tab attaches to the login running, or to the one that failed */
+  private openLoginStream(id: string, cols: number, rows: number): { snapshot: string; alive: boolean } {
+    const pty = this.runtimes.get(id)?.login?.pty;
+    if (!pty) return { snapshot: "", alive: false };
+    if (pty.cols !== cols || pty.rows !== rows) pty.resize(cols, rows);
+    return { snapshot: pty.snapshot(), alive: pty.alive };
   }
 
   /** a proc's stream: the supervisor owns it, so a tab only attaches to what is already running */
@@ -438,16 +485,9 @@ export class RuntimeRegistry {
     return terminalEnv(process.env, worktreeEnv(wt, repo), procUrlEnv(rt?.procs?.states() ?? [], rt?.previewName));
   }
 
-  /** type a command into the worktree's shell: now if a pane has one open, else when one opens */
-  terminalLine(id: string, line: string) {
-    const rt = this.runtimes.get(id);
-    if (!rt) return;
-    if (rt.shell?.alive) rt.shell.write(`${line}\r`);
-    else rt.pendingLine = line;
-  }
-
   terminalInput(id: string, stream: string, data: string) {
     const rt = this.runtimes.get(id);
+    if (stream === LOGIN_STREAM) return rt?.login?.pty.write(data);
     if (stream !== SHELL_STREAM) return rt?.procs?.write(stream, data);
     // a keystroke that lands after the shell exited (or before a pane opened one) is not an error
     if (!rt?.shell?.alive) return log.debug("terminal", `input for ${id} with no live shell dropped`);
@@ -457,13 +497,17 @@ export class RuntimeRegistry {
   terminalResize(id: string, stream: string, cols: number, rows: number) {
     const rt = this.runtimes.get(id);
     if (stream === SHELL_STREAM) rt?.shell?.resize(cols, rows);
+    else if (stream === LOGIN_STREAM) rt?.login?.pty.resize(cols, rows);
     else rt?.procs?.resize(stream, cols, rows);
   }
 
-  /** restart a stream: a proc goes back under supervision, the shell dies and the tab reopens it */
+  /** restart a stream: a proc goes back under supervision, the shell dies and the tab reopens it,
+   * and the login runs again */
   async restartStream(id: string, stream: string): Promise<void> {
     const rt = this.runtimes.get(id);
-    if (stream === SHELL_STREAM) await rt?.shell?.kill();
+    if (stream === LOGIN_STREAM) {
+      if (rt?.login) this.startLogin(id, rt.login.run);
+    } else if (stream === SHELL_STREAM) await rt?.shell?.kill();
     else rt?.procs?.restart(stream);
   }
 

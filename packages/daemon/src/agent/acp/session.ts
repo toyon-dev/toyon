@@ -477,13 +477,20 @@ export class AcpSession implements AgentAdapter {
     const login = terminalLogin(method);
     if (login) {
       const l = this.d.launch(conn.spec);
+      const instead = conn.spec.terminalLogins?.[methodId];
       // ACP's terminal method adds arguments to the adapter's own command line. A terminal-auth
       // `_meta` names a command of its own (OpenCode's `opencode auth login`), which is the agent
-      // binary this toyon installed, without the arguments that start it as an adapter.
-      const base = login.own
-        ? [l.command, ...l.args.slice(0, l.args.length - (conn.spec.run.args?.length ?? 0))]
-        : [l.command, ...l.args];
-      return { kind: "terminal", line: [...base, ...login.args].map(shellQuote).join(" ") };
+      // binary this toyon installed, without the arguments that start it as an adapter. A spec's
+      // own replacement follows the adapter's command line, as ACP's does.
+      const head = login.own && !instead ? l.args.slice(0, l.args.length - (conn.spec.run.args?.length ?? 0)) : l.args;
+      return {
+        kind: "terminal",
+        run: {
+          command: l.command,
+          args: [...head, ...(instead?.args ?? login.args)],
+          env: { ...conn.spec.env, ...instead?.env },
+        },
+      };
     }
     try {
       await conn.ctx.request(acp.methods.agent.authenticate, {
@@ -493,9 +500,13 @@ export class AcpSession implements AgentAdapter {
     } catch (e) {
       throw new UserError(`${conn.spec.name} login failed: ${e instanceof Error ? e.message : String(e)}`);
     }
+    this.loggedIn();
+    return { kind: "done" };
+  }
+
+  loggedIn() {
     this.emit({ type: "agent-auth-ok", ts: Date.now() });
     this.retry();
-    return { kind: "done" };
   }
 
   retry() {
@@ -1066,10 +1077,6 @@ function authMethodInfo(m: acp.AuthMethod): AuthMethodInfo {
     kind: terminal ? "terminal" : "agent",
     ...(!terminal && /api[-_ ]?key/i.test(`${m.id} ${m.name}`) ? { needsKey: true } : {}),
   };
-}
-
-function shellQuote(s: string): string {
-  return /^[A-Za-z0-9_/.:=@%+,-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 function sameCommands(a: AgentCommand[], b: AgentCommand[]): boolean {

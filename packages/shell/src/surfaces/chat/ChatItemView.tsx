@@ -1,4 +1,4 @@
-import type { PickMeta } from "@toyon/shared";
+import { LOGIN_STREAM, type PickMeta } from "@toyon/shared";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -11,7 +11,7 @@ import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
-import { useReveal } from "../../ui/hooks.ts";
+import { useOnChange, useReveal } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
@@ -438,17 +438,24 @@ export const ToolRow = memo(
 );
 
 /** the agent asked for credentials: one button per login method it offered. A terminal method runs
- * in the worktree's terminal pane (the daemon types the command once the pane is open); an agent
- * method runs inside the adapter (browser, or the key pasted here). The refused message is sent
- * again by the daemon after a successful login; "send again" covers the terminal path. `rejected`
- * means the agent had a credential and the provider refused it: the error above says what it said. */
+ * as the worktree's login tab, which the card opens tall enough to read a link in; an agent method
+ * runs inside the adapter (browser, or the key pasted here). Either way the daemon sends the
+ * refused message again once the login succeeds, and a login started here closes the pane it
+ * opened. "send again" is for a login done somewhere else. `rejected` means the agent had a
+ * credential and the provider refused it: the error above says what it said. */
 function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
   const sock = useSock();
   const dispatch = useDispatch();
   const id = useStore((s) => s.activeId);
   const termOpen = useStore((s) => s.termOpen);
+  const loginRunning = useStore((s) => s.rows.find((r) => r.id === s.activeId)?.login ?? false);
   const [key, setKey] = useState("");
   const [keyFor, setKeyFor] = useState<string | null>(null);
+  const started = useRef(false);
+  useOnChange([item.done], () => {
+    if (item.done && started.current && termOpen) dispatch({ a: "toggle-terminal" });
+    started.current = false;
+  });
   if (!id) return null;
   const go = (methodId: string, apiKey?: string) => {
     sock?.send({ t: "agent-auth", worktreeId: id, methodId, ...(apiKey ? { apiKey } : {}) });
@@ -480,10 +487,12 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
               <Button
                 key={m.id}
                 variant="outline"
-                data-tip={m.kind === "terminal" ? "runs in the terminal pane" : m.description}
+                data-tip={m.kind === "terminal" ? "opens in the terminal pane" : m.description}
                 onClick={() => {
                   go(m.id);
-                  if (m.kind === "terminal" && !termOpen) dispatch({ a: "toggle-terminal" });
+                  if (m.kind !== "terminal") return;
+                  started.current = true;
+                  dispatch({ a: "term-stream", id, stream: LOGIN_STREAM, tall: true });
                 }}
               >
                 {m.name}
@@ -498,6 +507,9 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
             send again
           </Button>
         </div>
+      )}
+      {!item.done && loginRunning && (
+        <div className="hint auth-hint">finish in the login tab below; your message sends once you are in</div>
       )}
       {!item.done && keyMethod && (
         <form

@@ -36,6 +36,18 @@ function fakeInstaller(fail = new Set<string>()): { installer: Installer; calls:
   return { installer, calls };
 }
 
+describe("claude's terminal login", () => {
+  test("replaces a method of the adapter version it was read from", () => {
+    const claude = BUILTIN_AGENTS.find((a) => a.id === "claude")!;
+    // claude-agent-acp names its no-browser login `claude-login` and takes `--cli auth login`: a new
+    // adapter version is checked for both before this pin moves
+    expect(claude.run).toMatchObject({ pkg: "@agentclientprotocol/claude-agent-acp", version: "0.75.1" });
+    expect(claude.terminalLogins).toEqual({
+      "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], env: { NO_BROWSER: "1" } },
+    });
+  });
+});
+
 const dirs: string[] = [];
 afterAll(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });

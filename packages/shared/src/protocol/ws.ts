@@ -28,7 +28,7 @@ import type {
   WorktreeInfo,
   WorktreeStatus,
 } from "../model.ts";
-import { SHELL_STREAM } from "../model.ts";
+import { LOGIN_STREAM, SHELL_STREAM } from "../model.ts";
 import type { PageEntry, WorktreePages } from "../routes.ts";
 import type { AgentCommand, AgentEvent, AskAnswer, PasteSource, PickMeta, PickRef } from "./events.ts";
 import { FILE_MAX_CHARS, IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, IMAGE_MIME_TYPES, PASTE_MAX_CHARS } from "./limits.ts";
@@ -268,8 +268,10 @@ const askAnswerSchema = z.object({
 });
 
 const procName = z.string().max(100);
-/** a proc is a tab in the terminal pane, so it cannot take the shell's name out from under it */
-const declaredProcName = procName.refine((n) => n !== SHELL_STREAM, `"${SHELL_STREAM}" is reserved for the shell tab`);
+/** a proc is a tab in the terminal pane, so it cannot take the shell's or the login's name */
+const declaredProcName = procName
+  .refine((n) => n !== SHELL_STREAM, `"${SHELL_STREAM}" is reserved for the shell tab`)
+  .refine((n) => n !== LOGIN_STREAM, `"${LOGIN_STREAM}" is reserved for the login tab`);
 const runProfileSchema = z.object({
   run: z.array(procName).max(50),
   env: z.record(z.string().max(100), z.string().max(2_000)).optional(),

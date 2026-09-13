@@ -56,6 +56,7 @@ function wt(
     },
     procs: [],
     agent: "idle",
+    login: false,
   };
 }
 
@@ -1290,6 +1291,7 @@ describe("discovered worktrees", () => {
     branch: path.split("/").pop()!,
     procs: [],
     agent: "idle",
+    login: false,
   });
   const withFound = (...d: WorktreeStatus[]): Action => worktrees(wt("main", "main"), ...d);
   // the remembered-section map is keyed by repo, so these need the repo to actually exist

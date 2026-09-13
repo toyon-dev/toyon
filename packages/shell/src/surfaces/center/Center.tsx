@@ -297,6 +297,12 @@ export function Center() {
     const n = Number(raw);
     return Number.isFinite(n) && n >= 140 ? n : undefined;
   });
+  // a stream opened to be read (a login's link and the prompt under it) gets half the column
+  const termTall = useStore((s) => s.termTall);
+  useOnChange([termTall], () => {
+    const center = centerRef.current;
+    if (termTall && center) setTermH(Math.max(termH, Math.round(center.clientHeight / 2)));
+  });
   // a pane's new height is the pointer's distance from the pane's own bottom edge, which the panes
   // stacked below hold in place whichever of them are open. The room to grow is what the column
   // has left once the other fixed-height panes are laid out, less the 80px the preview (or a

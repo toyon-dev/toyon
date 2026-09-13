@@ -1,4 +1,4 @@
-import { SHELL_STREAM } from "@toyon/shared";
+import { LOGIN_STREAM, SHELL_STREAM } from "@toyon/shared";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActive, useLocalField, useTheme } from "../../state/selectors.ts";
@@ -30,16 +30,17 @@ export function TerminalPane({
   const focusReq = useStore((s) => s.focusTerm);
   const active = useActive();
   const procs = active?.procs ?? [];
+  const login = active?.login ?? false;
   const stream = useLocalField(worktreeId, "termStream");
   // the open stream has exited. A snapshot of a stream that was already dead carries no code, so
   // the card says only what it knows.
   const [exit, setExit] = useState<{ code?: number } | null>(null);
-  // a proc that leaves the config (a profile switch) would strand the tab on a stream nobody runs
+  // a proc that leaves the config (a profile switch), or a login that finished, would strand the
+  // tab on a stream nobody runs
   useEffect(() => {
-    if (stream !== SHELL_STREAM && !procs.some((p) => p.name === stream)) {
-      dispatch({ a: "term-stream", id: worktreeId, stream: SHELL_STREAM });
-    }
-  }, [procs, stream, worktreeId, dispatch]);
+    const runs = stream === SHELL_STREAM || (stream === LOGIN_STREAM ? login : procs.some((p) => p.name === stream));
+    if (!runs) dispatch({ a: "term-stream", id: worktreeId, stream: SHELL_STREAM });
+  }, [procs, login, stream, worktreeId, dispatch]);
   const pick = (next: string) => {
     if (next === stream) return;
     setExit(null);
@@ -54,6 +55,11 @@ export function TerminalPane({
   const restart = (id: string) => {
     if (id === SHELL_STREAM && id === stream) reopen.current = true;
     sock?.send({ t: "term-restart", worktreeId, stream: id });
+    // the daemon starts a new login before it reads the next frame, so the tab reopens on it now
+    if (id === LOGIN_STREAM && id === stream) {
+      setExit(null);
+      setGen((g) => g + 1);
+    }
   };
   const onAlive = (alive: boolean, code?: number) => {
     if (alive) return setExit(null);
@@ -64,7 +70,7 @@ export function TerminalPane({
     }
     setExit({ code });
   };
-  const tabs = useTermTabs({ worktreeId, procs, onRestart: restart });
+  const tabs = useTermTabs({ worktreeId, procs, login, onRestart: restart });
   return (
     <Pane
       className="term-pane"
@@ -95,7 +101,13 @@ export function TerminalPane({
       {exit !== null && (
         <CrashCard
           pane
-          title={stream === SHELL_STREAM ? "the shell exited" : `${stream} exited`}
+          title={
+            stream === SHELL_STREAM
+              ? "the shell exited"
+              : stream === LOGIN_STREAM
+                ? "the login did not finish"
+                : `${stream} exited`
+          }
           body={exit.code === undefined ? undefined : `exit code ${exit.code}`}
           action={
             <Button variant="outline" onClick={() => restart(stream)}>

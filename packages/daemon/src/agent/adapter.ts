@@ -3,10 +3,17 @@
 
 import type { AgentCommand, AgentEvent, AgentStatus, AskAnswer, AttachmentInput } from "@toyon/shared";
 
+/** a login the agent's own CLI runs in a terminal */
+export interface LoginRun {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
 /** what a login attempt needs from the caller next */
 export type AuthOutcome =
-  /** run this line in the worktree's terminal; the agent's own CLI takes it from there */
-  | { kind: "terminal"; line: string }
+  /** run this as the worktree's login stream; `loggedIn` once it exits cleanly */
+  | { kind: "terminal"; run: LoginRun }
   /** the adapter did it; the refused message has been sent again */
   | { kind: "done" };
 
@@ -60,6 +67,8 @@ export interface AgentAdapter {
   authenticate(methodId: string, apiKey?: string): Promise<AuthOutcome>;
   /** send the message that was refused for want of credentials again */
   retry(): void;
+  /** a terminal login finished cleanly: the card closes and the refused message goes again */
+  loggedIn(): void;
   /** answer (or skip) an open ask card. An id that already settled is a no-op: two shells can
    * be watching the same worktree, and the other one may have answered first. */
   answer(askId: string, reply: AskReply): void;

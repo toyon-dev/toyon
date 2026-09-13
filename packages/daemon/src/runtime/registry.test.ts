@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
+import { LOGIN_STREAM, type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
@@ -207,6 +207,38 @@ describe("RuntimeRegistry terminals", () => {
     expect(t.resizes).toEqual([]);
     registry.openTerminal(wt.id, SHELL_STREAM, 120, 40);
     expect(t.resizes).toEqual([[120, 40]]);
+  });
+
+  test("a login is its own stream: a failed one stays and runs again, a clean exit tells the agent", async () => {
+    const { registry, terminals, agents } = make();
+    registry.startLogin(wt.id, { command: "/bin/login", args: ["--now"], env: { NO_BROWSER: "1" } });
+    const first = terminals.get(wt.id)![0]!;
+    expect(first.opts.cwd).toBe(wt.path);
+    expect(first.opts.env.NO_BROWSER).toBe("1");
+    expect(first.opts.env.TOYON_WORKTREE).toBe(wt.id);
+    first.emit("paste code: ");
+    expect(registry.openTerminal(wt.id, LOGIN_STREAM, 80, 24)).toEqual({ snapshot: "paste code: ", alive: true });
+    first.exit(1);
+    expect(agents.get(wt.id)?.logins).toBe(0);
+    expect(registry.get(wt.id)?.login).not.toBeNull();
+    await registry.restartStream(wt.id, LOGIN_STREAM);
+    const second = terminals.get(wt.id)![1]!;
+    expect(second.opts.args).toEqual(["--now"]);
+    second.exit(0);
+    expect(agents.get(wt.id)?.logins).toBe(1);
+    expect(registry.get(wt.id)?.login).toBeNull();
+    expect(registry.openTerminal(wt.id, LOGIN_STREAM, 80, 24)).toEqual({ snapshot: "", alive: false });
+  });
+
+  test("a login that was replaced or stopped says nothing about credentials", async () => {
+    const { registry, terminals, agents } = make();
+    const run = { command: "/bin/login", args: [], env: {} };
+    registry.startLogin(wt.id, run);
+    registry.startLogin(wt.id, run);
+    terminals.get(wt.id)![0]!.exit(0);
+    expect(agents.get(wt.id)?.logins).toBe(0);
+    await registry.stop(wt.id);
+    expect(agents.get(wt.id)?.logins).toBe(0);
   });
 
   test("output and exit reach the hub; input after the exit is dropped; the next open respawns", () => {

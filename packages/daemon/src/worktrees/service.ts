@@ -1434,6 +1434,7 @@ export class WorktreeService {
             worktree: wt,
             procs: rt?.procs?.states() ?? [],
             agent: rt?.agent.status ?? "idle",
+            login: !!rt?.login,
             ahead,
             behind,
             dirty,
@@ -1455,7 +1456,7 @@ export class WorktreeService {
           : quick
             ? this.countsQuick(f.id, quick)
             : await this.counts(f.id, f.path, repo.defaultBranch, !!f.branch);
-        return { ...f, procs: [], agent: "idle" as const, ahead, behind, dirty };
+        return { ...f, procs: [], agent: "idle" as const, login: false, ahead, behind, dirty };
       }),
     );
   }

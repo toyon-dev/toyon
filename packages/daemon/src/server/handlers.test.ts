@@ -2,7 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { clientMsgSchema, FILE_MAX_CHARS, type RepoInfo, type ServerMsg, SHELL_STREAM, streamKey } from "@toyon/shared";
+import {
+  clientMsgSchema,
+  FILE_MAX_CHARS,
+  LOGIN_STREAM,
+  type RepoInfo,
+  type ServerMsg,
+  SHELL_STREAM,
+  streamKey,
+} from "@toyon/shared";
 import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
@@ -534,22 +542,31 @@ describe("handlers", () => {
     expect(broadcasts.length).toBe(0);
   });
 
-  test("agent-auth: an agent method just runs; a terminal method types its line once a pane opens", async () => {
+  test("agent-auth: an agent method just runs; a terminal method runs as the login stream", async () => {
     const { services, ctx, replies, terminals, agents, repo } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
     const agent = agents.get(main.id)!;
     await dispatch({ t: "agent-auth", worktreeId: main.id, methodId: "api-key", apiKey: "sk-1" }, ctx, services);
     expect(agent.auths).toEqual([["api-key", "sk-1"]]);
-    // no pane yet: the line waits for term-open, then lands after the prompt has painted
+    // the login starts with no pane open, and the tab replays what it printed
     await dispatch({ t: "agent-auth", worktreeId: main.id, methodId: "terminal" }, ctx, services);
-    await dispatch({ t: "term-open", worktreeId: main.id, stream: SHELL_STREAM, cols: 80, rows: 24 }, ctx, services);
-    expect(replies.at(-1)?.t).toBe("term-snapshot");
-    await Bun.sleep(350);
-    expect(terminals.get(main.id)?.[0]?.writes).toEqual(["login --now\r"]);
-    // a live pane gets it straight away
-    await dispatch({ t: "agent-auth", worktreeId: main.id, methodId: "terminal" }, ctx, services);
-    expect(terminals.get(main.id)?.[0]?.writes).toEqual(["login --now\r", "login --now\r"]);
+    const login = terminals.get(main.id)![0]!;
+    expect(login.opts.file).toBe("/bin/login");
+    expect(login.opts.args).toEqual(["--now"]);
+    expect(login.opts.env.NO_BROWSER).toBe("1");
+    login.emit("visit the link\n");
+    await dispatch({ t: "term-open", worktreeId: main.id, stream: LOGIN_STREAM, cols: 80, rows: 24 }, ctx, services);
+    expect(replies.at(-1)).toMatchObject({
+      t: "term-snapshot",
+      stream: LOGIN_STREAM,
+      data: "visit the link\n",
+      alive: true,
+    });
+    await dispatch({ t: "term-input", worktreeId: main.id, stream: LOGIN_STREAM, data: "code\r" }, ctx, services);
+    expect(login.writes).toEqual(["code\r"]);
+    login.exit(0);
+    expect(agent.logins).toBe(1);
     await dispatch({ t: "agent-retry", worktreeId: main.id }, ctx, services);
     expect(agent.retries).toBe(1);
   });

@@ -845,9 +845,9 @@ describe("AcpSession", () => {
     expect(w.links).toHaveLength(1);
     expect(w.links[0]!.killed).toBe(false);
     // a terminal method hands back the adapter's own command line with the method's args
-    expect(await w.session.authenticate("claude-login")).toEqual({
+    expect(await w.session.authenticate("claude-login")).toMatchObject({
       kind: "terminal",
-      line: "/bin/agent run.js --cli auth login",
+      run: { command: "/bin/agent", args: ["run.js", "--cli", "auth", "login"] },
     });
     // an agent method runs over the live connection, then the refused message goes again
     expect(await w.session.authenticate("api-key", "sk-test")).toEqual({ kind: "done" });
@@ -877,7 +877,36 @@ describe("AcpSession", () => {
     expect(fake.inits[0]?.clientCapabilities?._meta).toEqual({ "terminal-auth": true });
     const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-auth-required" }>;
     expect(card.methods).toContainEqual({ id: "opencode-login", name: "Login with opencode", kind: "terminal" });
-    expect(await w.session.authenticate("opencode-login")).toEqual({ kind: "terminal", line: "/bin/agent auth login" });
+    expect(await w.session.authenticate("opencode-login")).toMatchObject({
+      kind: "terminal",
+      run: { command: "/bin/agent", args: ["auth", "login"] },
+    });
+    await w.session.close();
+  });
+
+  test("a spec's own login for a method replaces the adapter's arguments and adds its environment", async () => {
+    const fake = fakeAgent(
+      async () => {
+        throw acp.RequestError.authRequired();
+      },
+      { authMeta: true },
+    );
+    const w = world(fake, {
+      ...codexSpec,
+      run: { kind: "command", command: "/bin/agent", args: ["run.js"] },
+      terminalLogins: { "opencode-login": { args: ["--cli", "auth", "login"], env: { NO_BROWSER: "1" } } },
+    });
+    w.session.send("a");
+    await w.idle();
+    const out = await w.session.authenticate("opencode-login");
+    expect(out).toMatchObject({
+      kind: "terminal",
+      run: { command: "/bin/agent", args: ["run.js", "--cli", "auth", "login"], env: { NO_BROWSER: "1" } },
+    });
+    // the card closes and the refused message goes again only once the login says it finished
+    expect(w.types()).not.toContain("agent-auth-ok");
+    w.session.loggedIn();
+    expect(w.types()).toContain("agent-auth-ok");
     await w.session.close();
   });
 

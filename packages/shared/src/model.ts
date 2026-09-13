@@ -299,6 +299,10 @@ export interface ProcState {
  * toyon.json, which is why that key cannot be this. */
 export const SHELL_STREAM = "shell";
 
+/** the agent's terminal login, as a stream name: a tab of its own while the login runs, and after
+ * it fails, so a proc cannot be named this either */
+export const LOGIN_STREAM = "login";
+
 /** how both sides key a stream in their own maps: the ws watch sets, the shell's terminal bus */
 export function streamKey(worktreeId: string, stream: string): string {
   return `${worktreeId}/${stream}`;
@@ -465,6 +469,8 @@ export interface WorktreeStatus {
   procs: ProcState[];
   /** "idle" for a row toyon does not run */
   agent: AgentStatus;
+  /** the agent's terminal login is running here, or failed and still shows why: the login tab */
+  login: boolean;
   /** commits ahead/behind the default branch (cached, ~10s freshness); absent on a detached
    * worktree, which has nothing to count against. On main, `behind` counts against its upstream
    * as of the last fetch (the daemon fetches now and then while main is on screen), and `ahead`

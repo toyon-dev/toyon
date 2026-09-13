@@ -10,6 +10,7 @@ const row = (id: string, w: Partial<WorktreeInfo> = {}): OwnedWorktree => ({
   branch: `toyon/${id}`,
   procs: [],
   agent: "idle",
+  login: false,
   worktree: {
     id,
     repoId: "r",

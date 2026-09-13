@@ -50,6 +50,9 @@ export interface AgentSpec {
    * machine that will not run it */
   onDemand?: boolean;
   env?: Record<string, string>;
+  /** terminal login methods run with other arguments than the adapter offers, by method id: `args`
+   * follow the adapter's own command line and `env` is added to the login's */
+  terminalLogins?: Record<string, { args: string[]; env?: Record<string, string> }>;
   confinement: Confinement;
   /** directories under the home directory the agent keeps its own state in: writable inside toyon's
    * sandbox, which confines everything else to the worktree */
@@ -85,6 +88,11 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     // The adapter reads NO_BROWSER to choose its login: set, it offers the TUI's /login, which
     // prints a link and takes the pasted code; unset, `auth login` opens a browser the cloud lacks.
     ...(cloud.enabled ? { env: { NO_BROWSER: "1" } } : {}),
+    // That login opens the whole Claude Code app for its /login: a folder trust prompt, a theme
+    // picker, and a session left running once it is done. `auth login` is the same Anthropic flow
+    // alone, the link and the pasted code, and it exits, which is how toyon knows it finished.
+    // The method id and these arguments are claude-agent-acp's at the version pinned above.
+    terminalLogins: { "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], env: { NO_BROWSER: "1" } } },
     confinement: "claude-settings",
     setup: (cwd, bounds) => writeClaudeLocalSettings(cwd, bounds).then(() => undefined),
     systemPrompt: "meta-append",

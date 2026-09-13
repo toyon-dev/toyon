@@ -5,7 +5,7 @@ import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
-import { procUrlEnv, RuntimeRegistry, terminalEnv } from "./registry.ts";
+import { procUrlEnv, RuntimeRegistry, terminalEnv, worktreeEnv } from "./registry.ts";
 
 const repo: RepoInfo = {
   id: "r",
@@ -123,11 +123,12 @@ describe("RuntimeRegistry", () => {
     await registry.start({ ...wt, profile: "full" }, profiled);
     const started = procs.get(wt.id)!.started;
     expect(started.map((p) => p.name)).toEqual(["api", "web"]);
-    // nothing is up when api starts: the reference stays literal; the worktree id is always there
+    // nothing is up when api starts: the reference stays literal; the worktree's own are always there
     expect(started[0]?.env).toEqual({
       VITE_BACKEND_URL: "$API_URL",
       MODE: "local",
       TOYON_WORKTREE: wt.id,
+      TOYON_ROOT: repo.path,
       DATABASE_URL: `postgres://localhost/app_${wt.id}`,
     });
     expect(started[1]?.env.VITE_BACKEND_URL).toBe(started[1]?.env.API_URL);
@@ -138,7 +139,11 @@ describe("RuntimeRegistry", () => {
     await registry.stopProcs(wt.id);
     await registry.start(wt, profiled); // no profile on the row → the default
     expect(procs.get(wt.id)!.started.map((p) => p.name)).toEqual(["web"]);
-    expect(procs.get(wt.id)!.started[0]?.env).toEqual({ VITE_ENVIRONMENT: "staging", TOYON_WORKTREE: wt.id });
+    expect(procs.get(wt.id)!.started[0]?.env).toEqual({
+      VITE_ENVIRONMENT: "staging",
+      TOYON_WORKTREE: wt.id,
+      TOYON_ROOT: repo.path,
+    });
   });
 
   test("previewTarget() is the running preview proc", async () => {
@@ -161,14 +166,17 @@ describe("terminal env", () => {
     });
   });
 
-  test("terminalEnv keeps the daemon's env minus PORT/FORCE_COLOR and adds TERM + the worktree id", () => {
-    const env = terminalEnv({ PATH: "/bin", PORT: "1", FORCE_COLOR: "0", GONE: undefined }, wt, { API_URL: "u" });
+  test("terminalEnv keeps the daemon's env minus PORT/FORCE_COLOR and adds TERM + the worktree's own", () => {
+    const env = terminalEnv({ PATH: "/bin", PORT: "1", FORCE_COLOR: "0", GONE: undefined }, worktreeEnv(wt, repo), {
+      API_URL: "u",
+    });
     expect(env).toEqual({
       PATH: "/bin",
       API_URL: "u",
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
       TOYON_WORKTREE: "w1",
+      TOYON_ROOT: "/nowhere",
     });
   });
 });
@@ -185,6 +193,7 @@ describe("RuntimeRegistry terminals", () => {
     expect(spawned[0]!.opts.env.API_URL).toBe("http://127.0.0.1:40001");
     expect(spawned[0]!.opts.env.TERM).toBe("xterm-256color");
     expect(spawned[0]!.opts.env.TOYON_WORKTREE).toBe(wt.id);
+    expect(spawned[0]!.opts.env.TOYON_ROOT).toBe(repo.path);
     spawned[0]!.emit("$ ");
     expect(registry.openTerminal(wt.id, SHELL_STREAM, 80, 24)).toEqual({ snapshot: "$ ", alive: true });
     expect(spawned.length).toBe(1);

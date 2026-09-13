@@ -68,7 +68,7 @@ Copies start when you open them, not when the daemon boots. `toyon stop` stops t
 - It is not an editor. There is no file tree, no multi-file editing, no debugger, no extensions, no inline completion. The diff is editable and there is a one-keystroke jump to the editor you already use.
 - It does not commit, push or open pull requests on its own. The agent is told not to push or delete branches.
 - It works on git repositories, and the product uses git's words for what it does. A new project starts one for you.
-- It does not keep copies apart from services they share. Each copy runs your setup and your commands on its own, so a database or a compose stack they all point at is shared, migrations included. `TOYON_WORKTREE` is in the environment of every command and terminal so a project can keep them apart: `app_$TOYON_WORKTREE` as the database name, `COMPOSE_PROJECT_NAME=$TOYON_WORKTREE`.
+- It does not keep copies apart from services they share. Each copy runs your setup and your commands on its own, so a database or a compose stack they all point at is shared, migrations included. `TOYON_WORKTREE` is in the environment of every command and terminal so a project can keep them apart: `app_$TOYON_WORKTREE` as the database name, `COMPOSE_PROJECT_NAME=$TOYON_WORKTREE`. `TOYON_ROOT` is the main checkout, so a setup step can copy over what git leaves behind and Toyon does not already copy (it copies `node_modules` and the `.env` files): `cp "$TOYON_ROOT/data/dev.db" data/`.
 - It does not carry a login between copies. Each preview has its own cookies, so a new chat's app starts signed out, and an OAuth provider cannot redirect into a preview at all.
 
 ## Disk

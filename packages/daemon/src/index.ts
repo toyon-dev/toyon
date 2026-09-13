@@ -213,7 +213,7 @@ const previewsAt = (r: NonNullable<typeof remote>) =>
 
 if (remote?.front === "edge") {
   console.log(`toyon daemon on https://${remote.host}/ behind the edge, ${previewsAt(remote)}`);
-  console.log(`         token is seeded from TOYON_TOKEN; not printed`);
+  console.log(`         token read from ${paths.tokenFile}; not printed`);
 } else {
   const shellUrl = branded
     ? `http://toyon.localhost/#token=${token}`

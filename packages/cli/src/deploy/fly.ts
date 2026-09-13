@@ -4,6 +4,7 @@
 // deploys the current CLI onto the same app and volume.
 
 import { randomBytes } from "node:crypto";
+import { Resolver } from "node:dns/promises";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -146,6 +147,25 @@ function namesApp(json: string, app: string): boolean {
   }
 }
 
+/** Once public DNS has the name. Public resolvers are asked directly because asking the OS before
+ * the record exists caches the miss for fly.dev's negative TTL (300s), and the printed link then
+ * fails to open for minutes after the machine is up. A resolver this network cannot reach says
+ * nothing either way, so that goes ahead. */
+async function published(host: string): Promise<boolean> {
+  const r = new Resolver({ timeout: 3000, tries: 1 });
+  r.setServers(["1.1.1.1", "8.8.8.8"]);
+  for (let i = 0; i < 60; i++) {
+    try {
+      if ((await r.resolve4(host)).length) return true;
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code !== "ENOTFOUND" && code !== "ENODATA") return true;
+    }
+    await Bun.sleep(2000);
+  }
+  return false;
+}
+
 async function answers(url: string): Promise<boolean> {
   try {
     return (await fetch(url, { signal: AbortSignal.timeout(5000) })).ok;
@@ -212,6 +232,13 @@ async function up(cmd: DeployCommand, bin: string): Promise<void> {
   });
   must(await capture(bin, ["secrets", "import", ...app, "--stage"], secrets), "could not set the secrets");
 
+  // addresses before the first deploy, so the name exists before flyctl or this command looks it up
+  const ips = (await capture(bin, ["ips", "list", ...app, "--json"])).out;
+  if (!/"Type":\s*"(shared_)?v4"/.test(ips))
+    must(await capture(bin, ["ips", "allocate-v4", "--shared", ...app]), "could not add an IPv4 address");
+  if (!/"Type":\s*"v6"/.test(ips))
+    must(await capture(bin, ["ips", "allocate-v6", ...app]), "could not add an IPv6 address");
+
   const ctx = mkdtempSync(join(tmpdir(), "toyon-machine-"));
   try {
     writeMachineContext(src, ctx);
@@ -225,14 +252,9 @@ async function up(cmd: DeployCommand, bin: string): Promise<void> {
     rmSync(ctx, { recursive: true, force: true });
   }
 
-  const ips = (await capture(bin, ["ips", "list", ...app, "--json"])).out;
-  if (!/"Type":\s*"(shared_)?v4"/.test(ips))
-    must(await capture(bin, ["ips", "allocate-v4", "--shared", ...app]), "could not add an IPv4 address");
-  if (!/"Type":\s*"v6"/.test(ips))
-    must(await capture(bin, ["ips", "allocate-v6", ...app]), "could not add an IPv6 address");
-
   console.log("waiting for the machine to answer");
   let up = false;
+  if (!(await published(`${cmd.name}.fly.dev`))) console.log(`${cmd.name}.fly.dev is not in public DNS yet`);
   for (let i = 0; i < 60 && !up; i++) {
     up = await answers(`https://${cmd.name}.fly.dev/health`);
     if (!up) await Bun.sleep(2000);

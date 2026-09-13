@@ -23,9 +23,14 @@ jobs:
           # pinned rather than read from package.json so a runner and a laptop disagree only
           # when someone means them to; engines.bun there is the floor for humans
           bun-version: 1.4.2
+      # the agent sandbox on Linux, so its tests run it for real rather than skip
+      - if: runner.os == 'Linux'
+        run: sudo apt-get install -y --no-install-recommends bubblewrap socat
       - run: bun install --frozen-lockfile
       # typecheck + biome + tests + bridge size gate; the daemon tests run real git in temp repos
       - run: bun run check
+        env:
+          TOYON_SANDBOX_REQUIRED: "1"
 
   # The package a stranger installs, driven the way they drive it: node and npm, no bun on PATH,
   # the tarball from `npm pack`, every verb through the shim.

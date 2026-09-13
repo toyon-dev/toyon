@@ -39,11 +39,20 @@ describe("procFixPrompt", () => {
 });
 
 describe("setupFixPrompt", () => {
-  test("asks for toyon.json at the repo root in the shape the daemon reads", () => {
-    const repo = { id: "r", name: "shop", path: "/p", defaultBranch: "main", config: { procs: {} }, needsSetup: true };
-    const text = setupFixPrompt(repo as RepoInfo);
+  test("asks for the file a save would write, in the shape the daemon reads", () => {
+    const repo: RepoInfo = {
+      id: "r",
+      name: "shop",
+      path: "/p",
+      defaultBranch: "main",
+      config: { run: {} },
+      configFile: ".toyon/settings.local.json",
+      needsSetup: true,
+    };
+    const text = setupFixPrompt(repo);
     expect(text).toContain("shop");
-    expect(text).toContain('"procs": { "web": "<start command>" }');
+    expect(text).toContain("write `.toyon/settings.local.json`");
+    expect(text).toContain('"run": { "web": "<start command>" }');
     expect(text).toContain("Do not start any server yourself");
   });
 });

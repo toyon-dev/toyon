@@ -7,7 +7,8 @@ const base: RepoInfo = {
   path: "/nowhere",
   name: "x",
   defaultBranch: "main",
-  config: { procs: { api: "a", web: "w", worker: "k" } },
+  config: { run: { api: "a", web: "w", worker: "k" } },
+  configFile: ".toyon/settings.json",
   needsSetup: false,
 };
 const withProfiles: RepoInfo = {
@@ -15,9 +16,9 @@ const withProfiles: RepoInfo = {
   config: {
     ...base.config,
     profiles: {
-      full: { procs: ["api", "web"], env: { VITE_BACKEND_URL: "$API_URL" } },
-      staging: { procs: ["web"], env: { VITE_ENVIRONMENT: "staging" } },
-      jobs: { procs: ["worker", "api"], preview: "api" },
+      full: { run: ["api", "web"], env: { VITE_BACKEND_URL: "$API_URL" } },
+      staging: { run: ["web"], env: { VITE_ENVIRONMENT: "staging" } },
+      jobs: { run: ["worker", "api"], preview: "api" },
     },
     defaultProfile: "staging",
   },
@@ -34,7 +35,7 @@ describe("resolveRun", () => {
 
   test("no profiles: config.preview wins when it names a proc, else first proc", () => {
     expect(resolveRun({ ...base, config: { ...base.config, preview: "api" } }, { id: "w" }).preview).toBe("api");
-    expect(resolveRun({ ...base, config: { procs: { job: "j" } } }, { id: "w" }).preview).toBe("job");
+    expect(resolveRun({ ...base, config: { run: { job: "j" } } }, { id: "w" }).preview).toBe("job");
   });
 
   test("a worktree without a profile runs the default; an explicit one narrows and orders the procs", () => {

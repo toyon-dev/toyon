@@ -81,7 +81,8 @@ const repo = (id: string): RepoInfo => ({
   path: `/p/${id}`,
   name: id,
   defaultBranch: "main",
-  config: { procs: {} },
+  config: { run: {} },
+  configFile: ".toyon/settings.json",
   needsSetup: false,
 });
 const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>

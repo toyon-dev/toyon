@@ -410,7 +410,7 @@ export function Composer({
     if (pc.title) parts.push(`page title: ${pc.title}`);
     if (pc.errors.length) parts.push(`recent console errors:\n${pc.errors.map((e) => `- ${e}`).join("\n")}`);
     const blocks: string[] = [];
-    if (greenfield) blocks.push(greenfieldContext(active.worktree.title));
+    if (greenfield) blocks.push(greenfieldContext(active.worktree.title, repo?.configFile));
     if (parts.length > 0)
       blocks.push(
         `[Live preview context, attached automatically. This is what the user is looking at right now:\n${parts.join("\n")}]`,

@@ -177,7 +177,7 @@ export function worktreeItems(
     });
   }
   if (canLand(w.worktree)) {
-    // the repo's route, whatever toyon.json says it is: there is one way work lands here
+    // the repo's route, whatever the settings say it is: there is one way work lands here
     land.push({
       id: "land",
       label: "land",

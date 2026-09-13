@@ -39,7 +39,7 @@ export function KeysHelp() {
       <div className="keys-card">
         <div>
           {/* the current project first, as its own section: how it installs and starts
-              (toyon.json); the pane replaces the preview. Other projects are a switch away
+              (its settings file); the pane replaces the preview. Other projects are a switch away
               (⌘O), not rows here. A long process list truncates rather than widening the column. */}
           {repo && (
             <>
@@ -50,11 +50,11 @@ export function KeysHelp() {
                   variant="field"
                   mono
                   className="keys-chip"
-                  data-tip={`edit the install + start commands in ${repo.name}'s toyon.json`}
+                  data-tip={`edit the install + start commands in ${repo.configFile}`}
                   onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
                   {...cm.contextMenu(() => projectItems(repo, repo.id, { sock, dispatch }))}
                 >
-                  <span className="keys-v">{Object.keys(repo.config.procs).join(" + ") || "not set up"}</span>
+                  <span className="keys-v">{Object.keys(repo.config.run).join(" + ") || "not set up"}</span>
                 </Button>
               </div>
             </>

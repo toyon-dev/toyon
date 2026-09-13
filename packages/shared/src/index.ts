@@ -5,6 +5,7 @@ export * from "./agent-tools.ts";
 export * from "./attachment.ts";
 export * from "./chord-labels.ts";
 export * from "./chords.ts";
+export * from "./config.ts";
 export * from "./daemon.ts";
 export * from "./diff.ts";
 export * from "./land.ts";

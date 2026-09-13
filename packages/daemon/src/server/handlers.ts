@@ -442,8 +442,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     }
   },
 
-  "confirm-config"(msg, _ctx, s) {
-    s.repos.confirmConfig(msg.repoId, msg.config);
+  async "confirm-config"(msg, _ctx, s) {
+    await s.repos.confirmConfig(msg.repoId, msg.config);
   },
 
   async "register-repo"(msg, ctx, s) {

@@ -104,10 +104,11 @@ describe("a worktree's actions", () => {
       name: "r",
       defaultBranch: "main",
       config: {
-        procs: { web: "w" },
-        profiles: { fe: { procs: ["web"] }, full: { procs: ["web"] } },
+        run: { web: "w" },
+        profiles: { fe: { run: ["web"] }, full: { run: ["web"] } },
         defaultProfile: "fe",
       },
+      configFile: ".toyon/settings.json",
       needsSetup: false,
     };
     const items = worktreeItems(owned(), repo, { leftOpen: true, termOpen: true, shipping: {} }, deps);

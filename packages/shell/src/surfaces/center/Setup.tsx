@@ -36,7 +36,7 @@ const proc = (name: string, cmd: string): Proc => ({ id: nextProcId++, name, cmd
 export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void }) {
   const sock = useSock();
   const store = useStoreInstance();
-  // the repo's main worktree is where the agent writes toyon.json: the daemon watches that copy
+  // the repo's main worktree is where the agent writes the settings: the daemon watches that copy
   const main = useStore(
     (s) => s.rows.find((r) => isOwned(r) && r.repoId === repo.id && r.worktree.kind === "main") ?? null,
   );
@@ -48,9 +48,9 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   // read once: the form remounts on a fresh guess (see Center), so mount is the guess
-  const [guessed] = useState(() => Object.keys(repo.config.procs).length > 0);
+  const [guessed] = useState(() => Object.keys(repo.config.run).length > 0);
   const [procs, setProcs] = useState<Proc[]>(() => {
-    const detected = Object.entries(repo.config.procs).map(([name, cmd]) => proc(name, cmd));
+    const detected = Object.entries(repo.config.run).map(([name, cmd]) => proc(name, cmd));
     return detected.length > 0 ? detected : [proc("web", "")];
   });
   const [install, setInstall] = useState(() => (repo.config.setup ?? []).join("\n"));
@@ -58,7 +58,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // how work lands: the route only matters with somewhere to push, the method always
   const [land, setLand] = useState<LandRoute>(() => landPolicy(repo.config).land);
   const [automerge, setAutomerge] = useState(() => landPolicy(repo.config).automerge);
-  const [merge, setMerge] = useState<MergeMethod | "default">(() => repo.config.merge ?? "default");
+  const [merge, setMerge] = useState<MergeMethod | "default">(() => landPolicy(repo.config).merge ?? "default");
   const multi = procs.length > 1;
   const canStart = procs.some((p) => p.name.trim() && p.cmd.trim());
   // the agent's button exists for a repo the detector could not read; it leads while the form is
@@ -76,15 +76,18 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // keys the pane does not edit (preview, profiles) survive a hand-written file; a value at its
   // default leaves the file rather than being written out, so the file stays as short as it was
   const edited = (): typeof repo.config => {
-    const { check: _check, land: _land, automerge: _auto, merge: _merge, ...rest } = repo.config;
+    const { check: _check, land: _land, ...rest } = repo.config;
     const route = repo.remote ? land : DEFAULT_LAND_ROUTE;
+    const landing = {
+      ...(route !== DEFAULT_LAND_ROUTE ? { route } : {}),
+      ...(route === "pr" && automerge ? { automerge: true } : {}),
+      ...(merge !== "default" ? { method: merge } : {}),
+    };
     return {
       ...rest,
       setup: setupLines(),
       ...(check.trim() ? { check: check.trim() } : {}),
-      ...(route !== DEFAULT_LAND_ROUTE ? { land: route } : {}),
-      ...(route === "pr" && automerge ? { automerge: true } : {}),
-      ...(merge !== "default" ? { merge } : {}),
+      ...(Object.keys(landing).length > 0 ? { land: landing } : {}),
     };
   };
   const start = () => {
@@ -93,7 +96,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       repoId: repo.id,
       config: {
         ...edited(),
-        procs: Object.fromEntries(
+        run: Object.fromEntries(
           procs.filter((p) => p.name.trim() && p.cmd.trim()).map((p) => [p.name.trim(), p.cmd.trim()]),
         ),
       },
@@ -103,7 +106,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // a library, a CLI, a backend with no HTTP server: nothing to preview, everything else works.
   // Confirmed with no procs so the pane stops asking and the worktrees get their agents.
   const nothingToRun = () => {
-    sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...edited(), procs: {} } });
+    sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...edited(), run: {} } });
     onClose?.();
   };
   const askAgent = () => main && sock?.send({ t: "chat", worktreeId: main.id, text: setupFixPrompt(repo) });
@@ -236,7 +239,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       <div className="form-knobs">
         {/* the file the button writes, the way the new-project form shows the folder it makes;
               the repo is named in the lead, so the path is only the file */}
-        <span className="form-sign">toyon.json</span>
+        <span className="form-sign">{repo.configFile}</span>
         {onClose && <Button onClick={onClose}>cancel</Button>}
         {/* the third answer, only where it is one: beside a guessed start command it read as a
               verdict on the repo. A repo the detector could not read gets it, and so does the
@@ -257,7 +260,9 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
             variant="outline"
             size="lg"
             disabled={main.agent !== "idle"}
-            {...tip("The agent reads the repo and writes toyon.json; the daemon picks the file up as soon as it lands")}
+            {...tip(
+              "The agent reads the repo and writes the settings file; the daemon picks it up as soon as it lands",
+            )}
             onClick={askAgent}
           >
             let the agent work it out

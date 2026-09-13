@@ -61,7 +61,7 @@ export function buildCommands(
   // where to go, the panels and the app's own: the same list a right-click on bare chrome shows,
   // minus the line that opens this palette
   addItems(appItems(state, deps).filter((it) => !isItem(it) || it.id !== "commands"));
-  // the open project's own verbs (its toyon.json, forget), each saying which project; the others
+  // the open project's own verbs (its settings, forget), each saying which project; the others
   // are listed by name below
   if (repo) addItems(projectItems(repo, repo.id, deps), { scope: "project", name: repo.name });
   if (id) {

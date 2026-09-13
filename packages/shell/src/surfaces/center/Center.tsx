@@ -101,7 +101,7 @@ export function Center() {
   // set up on purpose with nothing to run: the boot pane would wait for a server forever
   const activeRepo = useActiveRepo();
   const noProcs =
-    activeRepo && !activeRepo.needsSetup && Object.keys(activeRepo.config.procs).length === 0 ? activeRepo : null;
+    activeRepo && !activeRepo.needsSetup && Object.keys(activeRepo.config.run).length === 0 ? activeRepo : null;
   // reopened from settings / the palette for a repo that is already configured
   const reopened = useStore((s) =>
     s.overlay?.kind === "setup"

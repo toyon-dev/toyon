@@ -267,42 +267,46 @@ const procName = z.string().max(100);
 /** a proc is a tab in the terminal pane, so it cannot take the shell's name out from under it */
 const declaredProcName = procName.refine((n) => n !== SHELL_STREAM, `"${SHELL_STREAM}" is reserved for the shell tab`);
 const runProfileSchema = z.object({
-  procs: z.array(procName).max(50),
+  run: z.array(procName).max(50),
   env: z.record(z.string().max(100), z.string().max(2_000)).optional(),
   preview: procName.optional(),
 });
 
+export const landConfigSchema = z.object({
+  route: z.enum(["merge", "push", "pr"]).optional(),
+  automerge: z.boolean().optional(),
+  method: z.enum(["merge", "squash", "rebase"]).optional(),
+});
+
 export const toyonConfigSchema = z
   .object({
-    procs: z.record(declaredProcName, shellCommand),
+    $schema: z.string().max(2_000).optional(),
     setup: z.array(shellCommand).max(50).optional(),
+    run: z.record(declaredProcName, shellCommand),
     check: shellCommand.optional(),
-    land: z.enum(["merge", "push", "pr"]).optional(),
-    automerge: z.boolean().optional(),
-    merge: z.enum(["merge", "squash", "rebase"]).optional(),
+    land: landConfigSchema.optional(),
     preview: procName.optional(),
-    exclusive: z.boolean().optional(),
     profiles: z.record(procName, runProfileSchema).optional(),
     defaultProfile: procName.optional(),
   })
   .superRefine((c, ctx) => {
     // auto-merge is GitHub's; on a local route it would promise something nothing does
-    if (c.automerge !== undefined && c.land !== "pr")
-      ctx.addIssue({ code: "custom", path: ["automerge"], message: 'automerge needs "land": "pr"' });
-    // a profile may only name procs that exist, and the default must be a profile: caught here so
-    // a typo is a toast at confirm/reload time, not a worktree that silently runs nothing
+    if (c.land?.automerge !== undefined && c.land.route !== "pr")
+      ctx.addIssue({ code: "custom", path: ["land", "automerge"], message: 'automerge needs "route": "pr"' });
+    // a profile may only name processes that exist, and the default must be a profile: caught here
+    // so a typo is a toast at confirm/reload time, not a worktree that silently runs nothing
     if (!c.profiles) {
       if (c.defaultProfile !== undefined)
         ctx.addIssue({ code: "custom", path: ["defaultProfile"], message: "defaultProfile without profiles" });
       return;
     }
     for (const [name, p] of Object.entries(c.profiles)) {
-      for (const proc of p.procs) {
-        if (!(proc in c.procs))
-          ctx.addIssue({ code: "custom", path: ["profiles", name, "procs"], message: `unknown proc "${proc}"` });
+      for (const proc of p.run) {
+        if (!(proc in c.run))
+          ctx.addIssue({ code: "custom", path: ["profiles", name, "run"], message: `"${proc}" is not in run` });
       }
-      if (p.preview !== undefined && !p.procs.includes(p.preview))
-        ctx.addIssue({ code: "custom", path: ["profiles", name, "preview"], message: "preview is not in procs" });
+      if (p.preview !== undefined && !p.run.includes(p.preview))
+        ctx.addIssue({ code: "custom", path: ["profiles", name, "preview"], message: "preview is not in run" });
     }
     if (c.defaultProfile === undefined)
       ctx.addIssue({ code: "custom", path: ["defaultProfile"], message: "required when profiles are set" });

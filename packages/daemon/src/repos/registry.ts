@@ -1,14 +1,15 @@
 // Repos: registration, config confirmation, default-branch watchers, and boot (bring every
 // persisted repo and worktree back up).
 
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
-import type { PendingRepo, RepoInfo, ToyonConfig, WorktreeInfo } from "@toyon/shared";
+import { basename, dirname, join } from "node:path";
+import { isLocalConfigFile, type PendingRepo, type RepoInfo, type ToyonConfig, type WorktreeInfo } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
+import { excludeFromGit } from "../git/exclude.ts";
 import { defaultBranch, git, isGitRepo, repoRoot } from "../git/exec.ts";
 import { statusFiles, treeEmpty } from "../git/status.ts";
 import { allocateProxyPort, releasePort, reservePort } from "../runtime/ports.ts";
@@ -16,7 +17,7 @@ import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
 import { expandTilde } from "./browse.ts";
-import { detectConfig, readConfigFile } from "./config.ts";
+import { configBody, configTarget, detectConfig, readConfigFile } from "./config.ts";
 import {
   type CreateOpts,
   cloneInto,
@@ -77,8 +78,9 @@ export class RepoRegistry {
     // would have taken it, rather than leaving its transcript behind with nothing pointing at it
     const gone = state.worktrees.filter((wt) => !existsSync(wt.path) || !state.repos.some((r) => r.id === wt.repoId));
     for (const wt of gone) await this.d.worktrees.forgetGone(wt);
-    // toyon.json may have been edited while the daemon was down, and so may the remotes
+    // the settings may have been edited or moved while the daemon was down, and so may the remotes
     for (const repo of state.repos) {
+      this.placeConfig(repo);
       this.applyConfigFile(repo, false);
       repo.remote = await hasOrigin(repo.path);
     }
@@ -271,6 +273,7 @@ export class RepoRegistry {
       name: basename(root),
       defaultBranch: await defaultBranch(root),
       config: detected.config,
+      configFile: configTarget(root, !!made),
       needsSetup: detected.needsSetup,
       guess: detected.from,
       ...(made ? { made } : {}),
@@ -328,18 +331,28 @@ export class RepoRegistry {
     this.d.hub.emit("worktreesChanged");
   }
 
-  confirmConfig(repoId: string, config: ToyonConfig) {
+  async confirmConfig(repoId: string, config: ToyonConfig) {
     const repo = this.d.state.requireRepo(repoId);
-    repo.config = config;
+    const current = readConfigFile(repo.path);
+    // settings in two places is the person's to settle; a save that picked one would hide it
+    if (current && !current.ok && current.conflict) throw new UserError(current.reason);
+    this.placeConfig(repo);
+    const rel = repo.configFile;
+    // before the write, so no status pass in between lists one person's file as a change
+    if (isLocalConfigFile(rel)) await excludeFromGit(repo.path, rel);
+    const file = join(repo.path, rel);
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, `${JSON.stringify(configBody(repo.path, rel, config), null, 2)}\n`);
+    } catch (e) {
+      log.warn(repoId, `could not write ${rel}`, e);
+    }
+    // what the files say now, so the watcher's reload of this same write finds nothing new
+    const back = readConfigFile(repo.path);
+    repo.config = back?.ok ? back.config : config;
     repo.needsSetup = false;
     repo.guess = undefined;
     this.d.state.save();
-    // persist next to the code so it's shared/committed and future registers skip the card
-    try {
-      writeFileSync(join(repo.path, "toyon.json"), `${JSON.stringify(config, null, 2)}\n`);
-    } catch (e) {
-      log.warn(repoId, "could not write toyon.json", e);
-    }
     // (re)start procs for this repo's worktrees — spares included, or a spare warmed under the old
     // config would be handed to the next task with stale procs; agents stay. Every worktree, cold
     // ones too: the person is sitting in front of this repo's setup pane.
@@ -356,12 +369,19 @@ export class RepoRegistry {
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** toyon.json changed on disk (an editor, the agent, a checkout): take it as the config. Profiles
-   * are file-only, so without this a JSON edit would be invisible until the repo was re-registered.
-   * A broken file keeps the last good config and says so in the main worktree's log. */
+  /** A settings file changed on disk (an editor, the agent, a checkout): take it as the config.
+   * Profiles are file-only, so without this a JSON edit would be invisible until the repo was
+   * re-registered. A broken file keeps the last good config and says so in the main worktree's log. */
   reloadConfig(repoId: string) {
     const repo = this.d.state.requireRepo(repoId);
-    if (!this.applyConfigFile(repo, true)) return;
+    const moved = this.placeConfig(repo);
+    if (!this.applyConfigFile(repo, true)) {
+      if (moved) {
+        this.d.state.save();
+        this.d.hub.emit("reposChanged");
+      }
+      return;
+    }
     // only what is running comes back under the new file; a cold worktree stays cold and reads
     // the file when it is opened
     for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId && this.d.runtime.get(w.id)?.procs)) {
@@ -377,7 +397,7 @@ export class RepoRegistry {
   }
 
   /** An unconfirmed repo re-reads its guess after every agent turn: the agent may have written
-   * toyon.json, in which case it applies like any hand-written file, or it may have scaffolded
+   * a settings file, in which case it applies like any hand-written one, or it may have scaffolded
    * something detection recognises, in which case the setup pane comes back prefilled. Never a
    * confirmed repo: its file is the config, and only the watcher replaces it. The guess is never
    * confirmed here either; the person does that. Detection is a few existsSync calls on the
@@ -398,17 +418,33 @@ export class RepoRegistry {
     this.d.hub.emit("reposChanged");
   }
 
-  /** read the file into the repo record; true when the config actually changed */
+  /** Which file a save writes, read again from disk: a file moved between the root and .toyon/, or
+   * a local one written by hand or by the agent, changes it. A local file is kept out of git
+   * whoever wrote it. True when the answer changed. */
+  private placeConfig(repo: RepoInfo): boolean {
+    const rel = configTarget(repo.path, !!repo.made);
+    if (isLocalConfigFile(rel) && existsSync(join(repo.path, rel))) {
+      fireAndForget(repo.id, excludeFromGit(repo.path, rel), "exclude local settings");
+    }
+    if (repo.configFile === rel) return false;
+    repo.configFile = rel;
+    return true;
+  }
+
+  /** read the files into the repo record; true when the config actually changed */
   private applyConfigFile(repo: RepoInfo, announce: boolean): boolean {
     const file = readConfigFile(repo.path);
     if (!file) return false; // deleted or never written: keep what we have
     if (!file.ok) {
       log.warn(repo.id, file.reason);
-      if (announce) {
-        const main = this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main");
-        if (main) this.d.hub.emit("log", main.id, "config", `${file.reason}; keeping the previous config`);
-      }
+      if (announce) this.tellMain(repo, `${file.reason}; keeping the previous config`);
       return false;
+    }
+    // before the sameness check: a misspelt key changes nothing, which is exactly when it needs saying
+    if (file.ignored) {
+      const line = `ignoring ${file.ignored.join(", ")}, which toyon does not know`;
+      log.warn(repo.id, line);
+      if (announce) this.tellMain(repo, line);
     }
     const same = !repo.needsSetup && JSON.stringify(repo.config) === JSON.stringify(file.config);
     if (same) return false;
@@ -417,6 +453,12 @@ export class RepoRegistry {
     repo.guess = undefined;
     this.d.state.save();
     return true;
+  }
+
+  /** a line in the main worktree's log pane, where a person editing the settings is looking */
+  private tellMain(repo: RepoInfo, line: string) {
+    const main = this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main");
+    if (main) this.d.hub.emit("log", main.id, "config", line);
   }
 
   private startWatcher(repo: RepoInfo) {

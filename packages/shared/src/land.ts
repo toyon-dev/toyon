@@ -1,6 +1,6 @@
 // How a repo lands work on main: the route (where the work ends up) and the merge method (how the
-// commits arrive). Both live in toyon.json, since a team picks one route and never alternates;
-// the defaults live here so the daemon and the setup pane never restate them.
+// commits arrive). Both live under `land` in the repo's settings, since a team picks one route and
+// never alternates; the defaults live here so the daemon and the setup pane never restate them.
 
 import type { ToyonConfig } from "./model.ts";
 
@@ -35,12 +35,12 @@ export interface LandPolicy {
 }
 
 /** the route and method a repo lands by, defaults filled in */
-export function landPolicy(config: Pick<ToyonConfig, "land" | "automerge" | "merge">): LandPolicy {
-  const land = config.land ?? DEFAULT_LAND_ROUTE;
+export function landPolicy(config: Pick<ToyonConfig, "land">): LandPolicy {
+  const land = config.land?.route ?? DEFAULT_LAND_ROUTE;
   return {
     land,
-    automerge: land === "pr" && config.automerge === true,
-    ...(config.merge ? { merge: config.merge } : {}),
+    automerge: land === "pr" && config.land?.automerge === true,
+    ...(config.land?.method ? { merge: config.land.method } : {}),
   };
 }
 

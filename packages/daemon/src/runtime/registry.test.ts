@@ -12,7 +12,8 @@ const repo: RepoInfo = {
   path: "/nowhere",
   name: "x",
   defaultBranch: "main",
-  config: { procs: { api: "true", web: "true" } },
+  config: { run: { api: "true", web: "true" } },
+  configFile: ".toyon/settings.json",
   needsSetup: false,
 };
 const wt: WorktreeInfo = {
@@ -104,17 +105,17 @@ describe("RuntimeRegistry", () => {
     const profiled: RepoInfo = {
       ...repo,
       config: {
-        procs: { api: "true", web: "true", worker: "true" },
+        run: { api: "true", web: "true", worker: "true" },
         profiles: {
           full: {
-            procs: ["api", "web"],
+            run: ["api", "web"],
             env: {
               VITE_BACKEND_URL: "$API_URL",
               MODE: "local",
               DATABASE_URL: "postgres://localhost/app_$TOYON_WORKTREE",
             },
           },
-          fe: { procs: ["web"], env: { VITE_ENVIRONMENT: "staging" } },
+          fe: { run: ["web"], env: { VITE_ENVIRONMENT: "staging" } },
         },
         defaultProfile: "fe",
       },

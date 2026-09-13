@@ -2,8 +2,8 @@
 
 /** one way to run a repo: which of its procs, with what extra environment */
 export interface RunProfile {
-  /** keys of ToyonConfig.procs, started in this order */
-  procs: string[];
+  /** keys of ToyonConfig.run, started in this order */
+  run: string[];
   /** merged into every proc of the profile; `$API_URL` / `${API_URL}` expand to the sibling-URL
    * variables the daemon computes for the procs already up (unknown refs are left as written) */
   env?: Record<string, string>;
@@ -11,26 +11,33 @@ export interface RunProfile {
   preview?: string;
 }
 
-export interface ToyonConfig {
-  /** name -> foreground shell command; must listen on $PORT */
-  procs: Record<string, string>;
-  /** shell commands run once when a worktree is created */
-  setup?: string[];
-  /** a command that must exit 0 before a worktree is offered to land: run in the worktree after
-   * every finished turn, its output on the transcript */
-  check?: string;
+/** how a repo lands work on main; every field has a default, see land.ts */
+export interface LandConfig {
   /** where landed work ends up: merged into main here (the default), merged here and pushed, or
-   * pushed as a branch with a pull request opened. One per repo; see land.ts */
-  land?: "merge" | "push" | "pr";
+   * pushed as a branch with a pull request opened */
+  route?: "merge" | "push" | "pr";
   /** pr only: GitHub merges the PR itself once its rules (checks, reviewers) allow */
   automerge?: boolean;
   /** how the commits arrive on main: a merge commit (the local default), one squashed commit, or
    * the commits as they are. Unset on the PR route follows what the repo allows, squash first */
-  merge?: "merge" | "squash" | "rebase";
+  method?: "merge" | "squash" | "rebase";
+}
+
+/** a repo's settings file (see config.ts for where it lives), shared and local merged */
+export interface ToyonConfig {
+  /** the JSON schema an editor validates the file against; toyon itself ignores it */
+  $schema?: string;
+  /** shell commands run once when a worktree is created */
+  setup?: string[];
+  /** what keeps running: name -> foreground shell command, each a process with its own terminal
+   * tab; one serving HTTP must listen on $PORT */
+  run: Record<string, string>;
+  /** a command that must exit 0 before a worktree is offered to land: run in the worktree after
+   * every finished turn, its output on the transcript */
+  check?: string;
+  land?: LandConfig;
   /** proc that the preview iframe should show (defaults to "web", else first proc) */
   preview?: string;
-  /** commands can't honor $PORT: only the focused worktree's procs run */
-  exclusive?: boolean;
   /** named subsets of procs a worktree can run (full stack vs frontend-against-staging) */
   profiles?: Record<string, RunProfile>;
   /** the profile a worktree runs when it has none; required when profiles exist */
@@ -43,6 +50,9 @@ export interface RepoInfo {
   name: string;
   defaultBranch: string;
   config: ToyonConfig;
+  /** the settings file a save writes, relative to the root: the one already there, else where a
+   * new one goes. What the setup pane and the agent's prompts name. */
+  configFile: string;
   /** config was auto-detected and not yet confirmed by the user */
   needsSetup: boolean;
   /** the file the unconfirmed guess was read from, relative to the root (package.json, start.sh):

@@ -39,7 +39,7 @@ describe("the one context menu", () => {
   });
 
   test("every row idiom that has actions answers a right-click", async () => {
-    // the rows the rulings name (notes/BACKLOG.md "Right-click works everywhere"): each file
+    // every row that promises a right-click: each file
     // renders a row with a menu, spread from the hook
     const rows = [
       "surfaces/rail/Rail.tsx",

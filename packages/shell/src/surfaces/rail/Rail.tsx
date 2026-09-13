@@ -334,7 +334,7 @@ export function Rail() {
                 {/* not .row-dim: it is only there while the row is lifted, and its three dots are the
                     thinnest mark in the column, so it takes the row's own colour rather than a tier
                     under it. Full size for the same reason: at the inline size the dots go hairline. */}
-                {/* biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row) */}
+                {/* biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured */}
                 <span
                   className="rail-more"
                   {...tip("Actions")}
@@ -368,7 +368,7 @@ export function Rail() {
             ) : null;
           })()}
         {owned?.worktree.variant && (
-          // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
+          // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured
           <span
             className="rail-badge badge-variant clickable"
             data-tip="Keep this variant, remove the others"
@@ -431,7 +431,7 @@ export function Rail() {
           const unseen = w.unseen ? " unseen" : "";
           if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}${unseen}`} />;
           return (
-            // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured (notes/STYLES.md, Row)
+            // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured
             <span
               className={`dot crashed clickable${unseen}`}
               {...tip(trouble.tip)}

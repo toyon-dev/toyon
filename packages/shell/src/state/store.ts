@@ -1701,13 +1701,11 @@ function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
           done: false,
         },
       ];
-    case "agent-auth-ok": {
-      const idx = items.findLastIndex((i) => i.kind === "auth" && !i.done);
-      if (idx === -1) return items;
-      const next = items.slice();
-      next[idx] = { ...(next[idx] as Extract<ChatItem, { kind: "auth" }>), done: true };
-      return next;
-    }
+    case "agent-auth-ok":
+      // every message sent before the login left a card of its own, and one login answers them all
+      return items.some((i) => i.kind === "auth" && !i.done)
+        ? items.map((i) => (i.kind === "auth" && !i.done ? { ...i, done: true } : i))
+        : items;
     case "agent-question":
       return addAsk(items, event.toolId, {
         kind: "ask",

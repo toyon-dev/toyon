@@ -512,7 +512,10 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
         </div>
       )}
       {!item.done && loginRunning && (
-        <div className="hint auth-hint">finish in the login tab below; your message sends once you are in</div>
+        <div className="hint auth-hint">
+          paste the code into the login tab below and press Enter; it stays hidden as you paste. Your message sends once
+          you are in.
+        </div>
       )}
       {!item.done && keyMethod && (
         <form

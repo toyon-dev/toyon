@@ -360,15 +360,15 @@ describe("chat folding", () => {
     ]);
   });
 
-  test("an auth request becomes a card that closes on auth-ok", () => {
+  test("an auth request becomes a card, and auth-ok closes every card still open", () => {
     const methods = [{ id: "api-key", name: "API Key", kind: "agent" as const, needsKey: true }];
-    let s = run([
-      hello(wt("a")),
-      agent("a", { type: "agent-auth-required", agent: "codex", agentName: "Codex", methods, ts: 0 }),
-    ]);
+    const required = agent("a", { type: "agent-auth-required", agent: "codex", agentName: "Codex", methods, ts: 0 });
+    let s = run([hello(wt("a")), required]);
     expect(s.local.a?.chat).toEqual([{ kind: "auth", agent: "codex", agentName: "Codex", methods, done: false }]);
+    // a second message sent before logging in leaves a second card
+    s = reducer(s, required);
     s = reducer(s, agent("a", { type: "agent-auth-ok", ts: 1 }));
-    expect(s.local.a?.chat[0]).toMatchObject({ kind: "auth", done: true });
+    expect(s.local.a?.chat.map((i) => i.kind === "auth" && i.done)).toEqual([true, true]);
   });
 
   const questions = [{ id: "question_0", text: "", options: [{ value: "a", label: "A" }] }];

@@ -4,7 +4,7 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CHECK_TOOL, DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared";
+import { addressedByPort, CHECK_TOOL, DAEMON_DEFAULT_PORT, PREVIEW_PORTS, SHELL_DEV_PORT } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { AgentAccounts } from "./agent/accounts.ts";
 import { spawnAcp } from "./agent/acp/transport.ts";
@@ -13,13 +13,12 @@ import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { makeLander, makePlanner, makeRecapper } from "./agent/tasks.ts";
 import { locateAssets } from "./core/assets.ts";
-import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
 import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import { startLagSampler } from "./core/metrics.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
-import { loadRemoteHost } from "./core/remote.ts";
+import { loadRemote, previewGrant } from "./core/remote.ts";
 import { loadOrCreateToken, StateStore } from "./core/state.ts";
 import { DesignService } from "./design/service.ts";
 import { ExecService } from "./exec/service.ts";
@@ -28,6 +27,7 @@ import { viewPr } from "./git/gh.ts";
 import { RepoRegistry } from "./repos/registry.ts";
 import { RouteService } from "./routes/service.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
+import { pinProxyPorts } from "./runtime/ports.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
@@ -49,8 +49,10 @@ const paths = makePaths();
 ensureDirs(paths);
 const token = loadOrCreateToken(paths);
 const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
-// cloud already answers any host behind its edge; remote mode is the local daemon's opt-in
-const remoteHost = cloud.enabled ? null : loadRemoteHost(paths.remoteFile);
+// the public name: an edge's from the environment, a local front's from `toyon remote`
+const remote = loadRemote(paths.remoteFile);
+// a front that addresses previews by port has each one declared to it, so they cannot be ephemeral
+if (remote && addressedByPort(remote.previews)) pinProxyPorts(PREVIEW_PORTS);
 
 const state = new StateStore(paths);
 const hub = new Hub();
@@ -88,6 +90,8 @@ const runtime = new RuntimeRegistry({
   accounts,
   attachments,
   bridgeScript: () => bridge.get(),
+  remote,
+  grant: previewGrant(token),
 });
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
@@ -122,7 +126,7 @@ const { branded, stop: stopServer } = startServer({
   shellDist: SHELL_DIST,
   version: pkg.version,
   noteShellOrigin: (origin) => bridge.learnShellOrigin(origin),
-  remoteHost,
+  remote,
   services: {
     state,
     hub,
@@ -146,12 +150,10 @@ const { branded, stop: stopServer } = startServer({
 });
 
 // every origin the shell can be loaded from: the injected bridge accepts commands from, and
-// reports to, these only. Cloud without a known public host leaves it open (bridge falls back to "*").
-bridge.setShellOrigins(
-  cloud.enabled
-    ? cloud.publicHost
-      ? [`https://${cloud.publicHost}`]
-      : []
+// reports to, these only. Behind an edge nothing is loopback, so the public name is the one.
+bridge.setShellOrigins([
+  ...(remote?.front === "edge"
+    ? []
     : [
         `http://127.0.0.1:${port}`,
         `http://localhost:${port}`,
@@ -160,19 +162,14 @@ bridge.setShellOrigins(
         // the Vite dev shell frames the same previews
         `http://127.0.0.1:${SHELL_DEV_PORT}`,
         `http://localhost:${SHELL_DEV_PORT}`,
-        ...(remoteHost ? [`https://${remoteHost}`] : []),
-      ],
-);
+      ]),
+  ...(remote ? [`https://${remote.host}`] : []),
+]);
 
 // after the bind, so a second daemon that lost the port never overwrites the first one's pid
 writeFileSync(paths.pidFile, `${process.pid}\n`);
 
 const stopLagSampler = startLagSampler();
-if (cloud.enabled) {
-  // decided, not implicit: preview proxies bind 0.0.0.0 with no auth of their own. The platform
-  // (fly-replay / edge session check) must front them.
-  log.warn("daemon", "cloud mode: preview proxy ports are unauthenticated; the platform edge must gate them");
-}
 
 await repos.boot();
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default
@@ -194,10 +191,14 @@ if (repoArg) {
   }
 }
 
-if (cloud.enabled) {
-  const range = cloud.proxyPorts ? `${cloud.proxyPorts.from}-${cloud.proxyPorts.to}` : "ephemeral";
-  const where = cloud.publicHost ? `https://${cloud.publicHost}/` : `http://0.0.0.0:${port}/`;
-  console.log(`toyon daemon (cloud mode) on ${where}  proxy ports: ${range}`);
+/** where previews live under the public name, for the startup lines */
+const previewsAt = (r: NonNullable<typeof remote>) =>
+  addressedByPort(r.previews)
+    ? `previews at ${r.previews}, ports ${PREVIEW_PORTS.from}-${PREVIEW_PORTS.to}`
+    : `previews at ${r.previews}`;
+
+if (remote?.front === "edge") {
+  console.log(`toyon daemon on https://${remote.host}/ behind the edge, ${previewsAt(remote)}`);
   console.log(`         token is seeded from TOYON_TOKEN; not printed`);
 } else {
   const shellUrl = branded
@@ -205,8 +206,9 @@ if (cloud.enabled) {
     : `http://toyon.localhost:${port}/#token=${token}`;
   console.log(`toyon daemon on ${shellUrl}`);
   console.log(`         (fallback: http://127.0.0.1:${port}/#token=${token})`);
-  if (remoteHost) {
-    console.log(`         remote: https://${remoteHost}/#token=${token}, through a TLS front on this port`);
+  if (remote) {
+    console.log(`         remote: https://${remote.host}/#token=${token}, through a TLS front on this port`);
+    console.log(`         ${previewsAt(remote)}`);
     console.log("         the token grants a shell on this machine; keep the link to yourself");
   }
 }

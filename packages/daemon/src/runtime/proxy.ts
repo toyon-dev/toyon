@@ -8,8 +8,9 @@
 // (`startProxy`), and in remote mode the daemon's listener routes `w<id>.<remote host>` to the same
 // handler, so a TLS front forwards one port and holds one wildcard certificate.
 
+import type { Remote } from "@toyon/shared";
 import type { ServerWebSocket } from "bun";
-import { cloud } from "../core/cloud.ts";
+import { door, passPreview, setsGrant } from "../core/remote.ts";
 
 export interface PreviewData {
   upstream: WebSocket;
@@ -111,27 +112,24 @@ export function previewHandler(opts: PreviewOpts): PreviewHandler {
         });
       }
 
-      const ct = res.headers.get("content-type") ?? "";
-      if (ct.includes("text/html")) {
-        const html = await res.text();
-        const injected = injectBridge(html);
-        const h = new Headers(res.headers);
-        h.delete("content-length");
-        h.delete("content-encoding");
-        return new Response(injected, { status: res.status, headers: h });
-      }
+      const html = (res.headers.get("content-type") ?? "").includes("text/html");
       // fetch() decompresses transparently but leaves the upstream's content-encoding on the
       // response. Passing that header back with an already decoded body makes the browser try to
       // gunzip plain text: it fails with ERR_CONTENT_DECODING_FAILED and drops the resource, so a
-      // preview loads its HTML and none of its script or style. The html branch above already
-      // strips it; every other response needs the same treatment.
-      if (res.headers.has("content-encoding")) {
-        const h = new Headers(res.headers);
-        h.delete("content-encoding");
-        h.delete("content-length");
-        return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+      // preview loads its HTML and none of its script or style.
+      const encoded = res.headers.has("content-encoding");
+      const cookies = res.headers.getSetCookie();
+      const grantSet = cookies.some(setsGrant);
+      if (!html && !encoded && !grantSet) return res;
+      const h = new Headers(res.headers);
+      h.delete("content-length");
+      h.delete("content-encoding");
+      if (grantSet) {
+        h.delete("set-cookie");
+        for (const c of cookies) if (!setsGrant(c)) h.append("set-cookie", c);
       }
-      return res;
+      if (html) return new Response(injectBridge(await res.text()), { status: res.status, headers: h });
+      return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
     },
 
     open(ws, data) {
@@ -179,6 +177,12 @@ export function previewHandler(opts: PreviewOpts): PreviewHandler {
 export function startProxy(
   opts: PreviewOpts & {
     port: number;
+    /** loopback, or every interface behind an edge where each preview port is a public TLS port */
+    hostname: string;
+    /** the public name, whose front may forward this port (core/remote.ts) */
+    remote: Remote | null;
+    /** what a preview reached through the public name must carry */
+    grant: string;
     /** message from the injected bridge script (element picker etc.) */
     onBridgeMessage?: (msg: unknown) => void;
   },
@@ -186,9 +190,21 @@ export function startProxy(
   const handler = previewHandler(opts);
   const server = Bun.serve<PreviewData, string>({
     port: opts.port,
-    // loopback locally; cloud mode exposes each proxy as its own public TLS port
-    hostname: cloud.bindHost,
-    fetch: (req, srv) => handler.fetch(req, (data) => srv.upgrade(req, { data })) as Promise<Response>,
+    hostname: opts.hostname,
+    fetch: async (req, srv) => {
+      // the same door as the daemon's own listener: a front that addresses previews by port
+      // forwards this one, and it gets the same Host, https and grant rules
+      const d = door(req, srv.requestIP(req)?.address ?? "", opts.remote, "preview");
+      if (d.kind === "refused") return d.response;
+      let admitted = req;
+      if (d.kind === "preview") {
+        const pass = passPreview(req, opts.grant);
+        if (!pass.ok) return pass.response;
+        admitted = pass.req;
+      }
+      // the upgrade stays on the original request, which is the one Bun can hand a socket to
+      return (await handler.fetch(admitted, (data) => srv.upgrade(req, { data }))) as Response;
+    },
     websocket: {
       open: (ws) => handler.open(ws, ws.data),
       message: (ws, message) => handler.message(ws.data, message),

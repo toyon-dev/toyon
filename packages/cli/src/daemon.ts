@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DAEMON_DEFAULT_PORT, DAEMON_FILES } from "@toyon/shared";
+import { DAEMON_DEFAULT_PORT, DAEMON_FILES, type RemoteView } from "@toyon/shared";
 import { daemonEntry } from "./layout.ts";
 
 export const port = Number(process.env.TOYON_PORT ?? DAEMON_DEFAULT_PORT);
@@ -21,8 +21,8 @@ export interface Health {
   version?: string;
   pid?: number;
   branded?: boolean;
-  /** the remote name the daemon started with; null when remote access is off */
-  host?: string | null;
+  /** the public name the daemon started with; null when remote access is off */
+  remote?: RemoteView | null;
   lag?: { last: number; max: number; maxCause: string | null; over: number };
   worktrees?: { total: number; running: number };
 }

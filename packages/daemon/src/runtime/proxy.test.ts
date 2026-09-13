@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import type { Remote } from "@toyon/shared";
+import { previewGrant } from "../core/remote.ts";
 import { startProxy } from "./proxy.ts";
 
 // A real upstream that compresses, because the bug only appears when fetch() decodes a body and
@@ -23,8 +25,15 @@ function freePort(): number {
   return p;
 }
 
-function proxyTo(port: number) {
-  return startProxy({ port: freePort(), bridgeScript: () => "", getTarget: () => ({ port, host: "127.0.0.1" }) });
+function proxyTo(port: number, remote: Remote | null = null) {
+  return startProxy({
+    port: freePort(),
+    hostname: "127.0.0.1",
+    remote,
+    grant: previewGrant("secret"),
+    bridgeScript: () => "",
+    getTarget: () => ({ port, host: "127.0.0.1" }),
+  });
 }
 
 /** an upstream that either takes websockets (greeting on open, echoing after) or refuses them the
@@ -115,6 +124,28 @@ describe("preview proxy", () => {
     }
   });
 
+  test("an upstream that sets the grant cookie cannot overwrite it; its own cookies still reach the browser", async () => {
+    const up = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: () =>
+        new Response("ok", {
+          headers: [
+            ["set-cookie", "toyon_preview=stolen; Path=/"],
+            ["set-cookie", "sid=1; Path=/"],
+          ],
+        }),
+    });
+    const proxy = proxyTo(up.port ?? 0);
+    try {
+      const res = await fetch(`http://127.0.0.1:${proxy.port}/`);
+      expect(res.headers.getSetCookie()).toEqual(["sid=1; Path=/"]);
+    } finally {
+      proxy.stop();
+      up.stop(true);
+    }
+  });
+
   test("an accepted websocket bridges both ways, including what the upstream says on connect", async () => {
     const up = wsUpstream(true);
     const proxy = proxyTo(up.port ?? 0);
@@ -135,6 +166,105 @@ describe("preview proxy", () => {
       clearTimeout(bail);
       ws.close();
       expect(got).toEqual(["greeting", "echo:ping"]);
+    } finally {
+      proxy.stop();
+      up.stop(true);
+    }
+  });
+});
+
+// A front that cannot hold a wildcard certificate (tailscale serve, *.fly.dev) forwards each preview
+// port as the public name at that port. The port gets the same rules as the daemon's own listener.
+describe("preview port behind a port-addressed front", () => {
+  const remote: Remote = {
+    host: "box.tail1234.ts.net",
+    previews: "https://box.tail1234.ts.net:{port}",
+    front: "local",
+  };
+  const grant = previewGrant("secret");
+  const through = (proxyPort: number, extra: Record<string, string> = {}) => ({
+    host: `box.tail1234.ts.net:${proxyPort}`,
+    "x-forwarded-proto": "https",
+    ...extra,
+  });
+  const cookieEcho = () =>
+    Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: (req) =>
+        new Response(`cookie=${req.headers.get("cookie")}`, { headers: { "content-type": "text/plain" } }),
+    });
+
+  test("without the grant, or with a stale one, the preview is refused", async () => {
+    const up = cookieEcho();
+    const proxy = proxyTo(up.port ?? 0, remote);
+    try {
+      const bare = await fetch(`http://127.0.0.1:${proxy.port}/`, { headers: through(proxy.port) });
+      expect(bare.status).toBe(403);
+      const stale = await fetch(`http://127.0.0.1:${proxy.port}/`, {
+        headers: through(proxy.port, { cookie: `toyon_preview=${previewGrant("old")}` }),
+      });
+      expect(stale.status).toBe(403);
+    } finally {
+      proxy.stop();
+      up.stop(true);
+    }
+  });
+
+  test("with the grant it is the app, and the app never sees the grant", async () => {
+    const up = cookieEcho();
+    const proxy = proxyTo(up.port ?? 0, remote);
+    try {
+      const res = await fetch(`http://127.0.0.1:${proxy.port}/`, {
+        headers: through(proxy.port, { cookie: `sid=1; toyon_preview=${grant}` }),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("cookie=sid=1");
+    } finally {
+      proxy.stop();
+      up.stop(true);
+    }
+  });
+
+  test("the name over plain http is refused, and the shell on this machine still frames it by loopback", async () => {
+    const up = cookieEcho();
+    const proxy = proxyTo(up.port ?? 0, remote);
+    try {
+      const plain = await fetch(`http://127.0.0.1:${proxy.port}/`, {
+        headers: { host: `box.tail1234.ts.net:${proxy.port}`, cookie: `toyon_preview=${grant}` },
+      });
+      expect(plain.status).toBe(403);
+      const local = await fetch(`http://127.0.0.1:${proxy.port}/`);
+      expect(local.status).toBe(200);
+    } finally {
+      proxy.stop();
+      up.stop(true);
+    }
+  });
+
+  test("a websocket without the grant is refused before the upstream is dialled", async () => {
+    let dialled = false;
+    const up = Bun.serve<undefined, string>({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch(req, srv) {
+        dialled = true;
+        return srv.upgrade(req) ? (undefined as unknown as Response) : new Response("no", { status: 400 });
+      },
+      websocket: { message() {} },
+    });
+    const proxy = proxyTo(up.port ?? 0, remote);
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${proxy.port}/socket`, { headers: through(proxy.port) } as never);
+      const opened = await new Promise<boolean>((resolve) => {
+        ws.onopen = () => resolve(true);
+        ws.onerror = () => resolve(false);
+        ws.onclose = () => resolve(false);
+        setTimeout(() => resolve(false), 3000);
+      });
+      ws.close();
+      expect(opened).toBe(false);
+      expect(dialled).toBe(false);
     } finally {
       proxy.stop();
       up.stop(true);

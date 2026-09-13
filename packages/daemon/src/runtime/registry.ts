@@ -1,7 +1,7 @@
 // One Runtime per worktree: its agent session (from the moment the worktree exists) plus, once
 // setup has run, its process group and preview proxy.
 
-import type { LogLine, ProcState, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { LogLine, ProcState, Remote, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import { OPTION_FIELDS } from "../agent/acp/options.ts";
@@ -10,6 +10,7 @@ import { spawnAcp } from "../agent/acp/transport.ts";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
+import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -43,6 +44,10 @@ export interface RuntimeDeps {
   /** shared with the http layer that serves the images back; built from paths when absent */
   attachments?: AttachmentStore;
   bridgeScript: () => string;
+  /** the public name a front may forward preview ports under, and the grant they take
+   * (core/remote.ts); absent in tests, where previews answer loopback only */
+  remote?: Remote | null;
+  grant?: string;
   /** factories, overridable so tests run without spawning anything */
   makeAgent?: (wt: WorktreeInfo, deps: RuntimeDeps) => AgentAdapter;
   makeProcs?: (wt: WorktreeInfo, deps: RuntimeDeps) => WorktreeProcs;
@@ -168,6 +173,9 @@ function defaultTerminal(
 function defaultProxy(wt: WorktreeInfo, previewName: string | undefined, procs: WorktreeProcs, d: RuntimeDeps) {
   return startProxy({
     port: wt.proxyPort,
+    hostname: cloud.bindHost,
+    remote: d.remote ?? null,
+    grant: d.grant ?? "",
     bridgeScript: d.bridgeScript,
     getTarget: () => previewTargetOf(procs, previewName),
   });

@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import {
   PROTOCOL_VERSION,
   parseClientMsg,
+  type Remote,
   type ServerMsg,
   SHELL_STREAM,
   streamKey,
@@ -39,8 +40,8 @@ export interface ServerOpts {
   services: Services;
   /** where a shell authenticated from, passed on to the bridge script (see BridgeScript) */
   noteShellOrigin: (origin: string | null) => void;
-  /** the name a TLS front on this machine answers for (`remote.json`), or null */
-  remoteHost: string | null;
+  /** the public name and its front (core/remote.ts), or null */
+  remote: Remote | null;
 }
 
 export function startServer(opts: ServerOpts): { server: Server<WsData>; branded: boolean; stop: () => void } {
@@ -286,7 +287,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
-      remoteHost: opts.remoteHost,
+      remote: opts.remote && { host: opts.remote.host, previews: opts.remote.previews },
       gitIdentity: await s.repos.gitIdentity(),
       pending: s.repos.pending,
       visits: s.routes.historyAll(),
@@ -304,7 +305,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       branded: () => branded,
       metrics,
       noteShellOrigin: opts.noteShellOrigin,
-      remoteHost: opts.remoteHost,
+      remote: opts.remote,
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
     }),

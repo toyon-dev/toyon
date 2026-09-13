@@ -2,13 +2,20 @@
 // The small TOCTOU race is acceptable; allocations are tracked to avoid handing
 // the same port out twice within one daemon lifetime.
 //
-// Cloud mode (TOYON_PROXY_PORTS=a-b) allocates worktree proxy ports from a
-// fixed range instead, because each one must be declared as a public TLS port.
+// A front that addresses previews by port (TOYON_PROXY_PORTS=a-b, or a public name with port
+// previews) allocates worktree proxy ports from a fixed range instead, because each one must be
+// declared to the front as its own TLS port.
 
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 
 const allocated = new Set<number>();
+let range = cloud.proxyPorts;
+
+/** pin the proxy range when the environment did not; called once at boot, before any allocation */
+export function pinProxyPorts(r: { from: number; to: number }) {
+  range ??= r;
+}
 
 function tryBind(port: number, hostname: string): number | null {
   try {
@@ -33,9 +40,8 @@ export async function allocatePort(): Promise<number> {
   throw new Error("could not allocate a free port");
 }
 
-/** port for a worktree's preview proxy: fixed range in cloud mode, else ephemeral */
+/** port for a worktree's preview proxy: the fixed range when there is one, else ephemeral */
 export async function allocateProxyPort(): Promise<number> {
-  const range = cloud.proxyPorts;
   if (!range) return allocatePort();
   for (let port = range.from; port <= range.to; port++) {
     if (allocated.has(port)) continue;

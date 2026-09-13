@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { cloud } from "../core/cloud.ts";
 
 /** how many framing origins one daemon will remember; a browser can only teach it the handful of
  * ports its shells are served from, so anything past this is noise */
@@ -52,11 +51,9 @@ export class BridgeScript {
   }
 }
 
-/** Locally the daemon answers loopback only (see server/http.ts), so the origins it will report to
- * are held to the same rule. Cloud mode sits behind the platform's edge and its host is remote by
- * design, so there the handshake's own auth is the check. */
+/** Only a loopback origin is learned: the public name, the one other origin a shell is served from,
+ * is set up front with the rest (index.ts), so nothing a handshake says can widen the list. */
 function servedLocally(origin: string): boolean {
-  if (cloud.enabled) return true;
   let url: URL;
   try {
     url = new URL(origin);

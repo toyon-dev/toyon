@@ -1,14 +1,17 @@
-// Cloud mode: opt-in, env-gated. The daemon's defaults are loopback-only and
-// must stay that way; every relaxation lives behind TOYON_CLOUD=1 so the
-// README security story remains true for local installs.
+// Cloud mode: a daemon on a machine nobody sits at, behind a platform's edge. Opt-in and
+// env-gated; the daemon's defaults are loopback-only and must stay that way. What the edge changes
+// about who is admitted lives with every other front in core/remote.ts; this is only what a
+// headless, edge-fronted machine changes about the process itself.
 //
-//   TOYON_CLOUD=1              bind 0.0.0.0, skip loopback peer/Host checks,
-//                                   skip the port-80 branded bind
-//   TOYON_HOME=/data/toyon state dir override (default ~/.toyon)
-//   TOYON_TOKEN=<hex>          seed the bearer token instead of generating one
-//   TOYON_PROXY_PORTS=a-b      fixed proxy port range (one public TLS port per
-//                                   worktree) instead of ephemeral port 0
-//   TOYON_PUBLIC_HOST=x.fly.dev printed in the startup URL only
+//   TOYON_CLOUD=1               bind every interface (the edge is not loopback), skip the port-80
+//                               branded bind, no folder dialog, no browser logins
+//   TOYON_PUBLIC_HOST=x.fly.dev the name the edge answers for (core/remote.ts)
+//   TOYON_PREVIEWS=port|host    how previews are addressed under it; port by default
+//   TOYON_HOME=/data/toyon      state dir override (default ~/.toyon)
+//
+// The token is not an environment variable: children inherit the environment. A platform secret is
+// written to $TOYON_HOME/token by the entrypoint, which unsets it before the daemon starts.
+//   TOYON_PROXY_PORTS=a-b       fixed proxy port range (one TLS port per worktree)
 
 const enabled = process.env.TOYON_CLOUD === "1";
 
@@ -29,5 +32,4 @@ export const cloud = {
   /** address the daemon and every worktree proxy bind to */
   bindHost: enabled ? "0.0.0.0" : "127.0.0.1",
   proxyPorts: parseRange(process.env.TOYON_PROXY_PORTS),
-  publicHost: process.env.TOYON_PUBLIC_HOST ?? null,
 };

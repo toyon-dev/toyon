@@ -8,6 +8,7 @@ const plain: RepoInfo = {
   name: "r",
   defaultBranch: "main",
   config: { procs: {} },
+  configFile: ".toyon/settings.json",
   needsSetup: false,
 };
 const profiled: RepoInfo = {

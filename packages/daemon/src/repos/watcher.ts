@@ -2,8 +2,9 @@
 // pull). fs events are noisy (.git/index churn etc.), so changes are debounced
 // and confirmed via rev-parse before firing.
 
-import { type FSWatcher, watch } from "node:fs";
-import { join } from "node:path";
+import { existsSync, type FSWatcher, watch } from "node:fs";
+import { basename, join } from "node:path";
+import { CONFIG_DIR, CONFIG_FILES } from "@toyon/shared";
 import { fireAndForget, log } from "../core/log.ts";
 import { git } from "../git/exec.ts";
 
@@ -127,26 +128,53 @@ export function watchWorktreeDir(repoPath: string, onChange: () => void): () => 
   };
 }
 
-/** fires (debounced) when `<repo>/toyon.json` is written, created or replaced. Watches the
- * directory, not the file: editors save by rename, which would orphan a watcher on the inode. */
+/** Fires (debounced) when any of a repo's settings files is written, created, replaced or removed:
+ * the pair at the root and the pair in .toyon/. Watches directories, not files: editors save by
+ * rename, which would orphan a watcher on the inode. The folder may not exist yet, so the root
+ * watcher arms the inner one whenever .toyon itself changes, the way watchWorktreeDir does. */
 export function watchConfigFile(repoPath: string, onChange: () => void): () => void {
+  const atRoot = new Set<string>([CONFIG_FILES.root.shared, CONFIG_FILES.root.local, CONFIG_DIR]);
+  const inDir = new Set([CONFIG_FILES.folder.shared, CONFIG_FILES.folder.local].map((rel) => basename(rel)));
+  const dir = join(repoPath, CONFIG_DIR);
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let watcher: FSWatcher | null = null;
+  let outer: FSWatcher | null = null;
+  let inner: FSWatcher | null = null;
+
+  const schedule = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      onChange();
+    }, 300);
+  };
+  const armInner = () => {
+    inner?.close();
+    inner = null;
+    if (!existsSync(dir)) return;
+    try {
+      inner = watch(dir, (_event, filename) => {
+        if (filename && !inDir.has(filename)) return;
+        schedule();
+      });
+      inner.on("error", (e) => log.warn(repoPath, "settings watcher error", e));
+    } catch (e) {
+      log.debug(repoPath, `not watching ${dir}`, e);
+    }
+  };
   try {
-    watcher = watch(repoPath, (_event, filename) => {
-      if (filename && filename !== "toyon.json") return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        onChange();
-      }, 300);
+    outer = watch(repoPath, (_event, filename) => {
+      if (filename && !atRoot.has(filename)) return;
+      if (!filename || filename === CONFIG_DIR) armInner();
+      schedule();
     });
-    watcher.on("error", (e) => log.warn(repoPath, "toyon.json watcher error", e));
+    outer.on("error", (e) => log.warn(repoPath, "settings watcher error", e));
   } catch (e) {
-    log.warn(repoPath, "not watching toyon.json", e);
+    log.warn(repoPath, "not watching the settings files", e);
   }
+  armInner();
   return () => {
-    watcher?.close();
+    outer?.close();
+    inner?.close();
     if (timer) clearTimeout(timer);
   };
 }

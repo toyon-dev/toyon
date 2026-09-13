@@ -33,6 +33,7 @@ function world(opts: Opts = {}) {
     name: "repo",
     defaultBranch: "main",
     config: { procs: {}, ...(opts.check ? { check: opts.check } : {}) },
+    configFile: ".toyon/settings.json",
     needsSetup: false,
   };
   const wt: WorktreeInfo = {

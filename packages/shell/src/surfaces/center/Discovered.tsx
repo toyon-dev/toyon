@@ -27,7 +27,7 @@ export function Discovered({ row }: { row: WorktreeStatus }) {
       ) : (
         <>
           <p>
-            Taking it over gives it a port, starts the processes from <code>toyon.json</code> and lists it with your
+            Taking it over gives it a port, starts the processes from the project's settings and lists it with your
             other worktrees. Your files are left alone: the install and setup commands do not re-run.
           </p>
           <div className="status-actions">

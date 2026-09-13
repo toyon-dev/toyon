@@ -257,7 +257,7 @@ export async function openPr(o: OpenPr): Promise<ShipResult> {
   };
 }
 
-/** merge an open PR through gh, by the method toyon.json asks for or the repo allows */
+/** merge an open PR through gh, by the method the settings ask for or the repo allows */
 export async function mergePr(worktreePath: string, number: number, wanted?: MergeMethod): Promise<ShipResult> {
   const method = await ghMethod(worktreePath, wanted);
   if (!method) return { ok: false, message: "the repo allows no merge method gh can use" };

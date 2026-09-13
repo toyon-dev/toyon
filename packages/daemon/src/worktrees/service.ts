@@ -374,7 +374,7 @@ export class WorktreeService {
   /** Promote a worktree git knows about into one toyon runs.
    *
    * The directory already exists and someone else made it, so this allocates a port, records it and
-   * starts the procs. It deliberately does not run `toyon.json`'s setup commands (see
+   * starts the procs. It deliberately does not run the settings' setup commands (see
    * `setupAndStart`) and does not start an agent: take-over is not a task, and the agent comes up
    * on the first message like it does anywhere else. */
   async adopt(worktreeId: string, createdBy?: string): Promise<WorktreeInfo> {
@@ -422,7 +422,7 @@ export class WorktreeService {
   /** a profile name the repo actually has, or undefined for "the default"; a typo is a toast */
   private checkProfile(repo: RepoInfo, name: string | undefined): string | undefined {
     if (name === undefined) return undefined;
-    if (!repo.config.profiles?.[name]) throw new UserError(`no profile "${name}" in ${repo.name}'s toyon.json`);
+    if (!repo.config.profiles?.[name]) throw new UserError(`no profile "${name}" in ${repo.configFile}`);
     return name;
   }
 
@@ -861,7 +861,7 @@ export class WorktreeService {
   /** Clone deps from the base checkout, run the repo's setup commands, then start the runtime.
    *
    * `setupCommands: false` keeps the two copies (both no-ops when the destination already has the
-   * files) and skips `toyon.json`'s `setup` list, which has no such guard. Adoption uses it: those
+   * files) and skips the settings' `setup` list, which has no such guard. Adoption uses it: those
    * commands are `bun install`, migrations, `docker compose up`, and a directory someone has been
    * working in is the last place to re-run them behind their back. */
   async setupAndStart(

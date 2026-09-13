@@ -64,7 +64,7 @@ export async function uninstall(opts: { yes: boolean }): Promise<number> {
   console.log(
     "it keeps: your repos, every branch toyon made" +
       (branches.length ? ` (${branches.length} under toyon/)` : "") +
-      ", and toyon.json in each repo.",
+      ", and toyon's settings in each repo (.toyon/ or toyon.json).",
   );
   if (!opts.yes && !(await confirm("continue?"))) {
     console.log("nothing removed");

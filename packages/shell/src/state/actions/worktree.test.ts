@@ -108,6 +108,7 @@ describe("a worktree's actions", () => {
         profiles: { fe: { procs: ["web"] }, full: { procs: ["web"] } },
         defaultProfile: "fe",
       },
+      configFile: ".toyon/settings.json",
       needsSetup: false,
     };
     const items = worktreeItems(owned(), repo, { leftOpen: true, termOpen: true, shipping: {} }, deps);

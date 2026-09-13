@@ -18,6 +18,7 @@ const repo = (name: string, path: string): RepoInfo => ({
   path,
   defaultBranch: "main",
   config: { procs: {} },
+  configFile: ".toyon/settings.json",
   needsSetup: false,
 });
 const dir = (name: string, path: string, isRepo = false): PathEntry => ({ name, path, isRepo });

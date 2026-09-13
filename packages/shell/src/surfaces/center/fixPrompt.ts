@@ -21,7 +21,7 @@ export function procFixPrompt(w: WorktreeStatus, log: LogLine[]): string {
     "",
     tail ? `Last output:\n\`\`\`\n${tail}\n\`\`\`` : "It produced no output.",
     "",
-    "Find the cause and fix it. The command must run in the foreground and listen on the port in the PORT environment variable, which toyon sets differently for each worktree. If the tool takes its port from a flag instead (Vite does), make the app read PORT, for Vite `server.port: Number(process.env.PORT)` with `strictPort: true`, or add the flag to the start command in `toyon.json` at the repo root. When your turn ends toyon restarts the process and checks again.",
+    "Find the cause and fix it. The command must run in the foreground and listen on the port in the PORT environment variable, which toyon sets differently for each worktree. If the tool takes its port from a flag instead (Vite does), make the app read PORT, for Vite `server.port: Number(process.env.PORT)` with `strictPort: true`, or add the flag to the start command in toyon's settings file. When your turn ends toyon restarts the process and checks again.",
   ].join("\n");
 }
 
@@ -32,12 +32,13 @@ function describe(p: ProcState): string {
 }
 
 /** What "let the agent work it out" sends from the setup pane: the daemon watches the repo's
- * `toyon.json`, so the file the agent writes is picked up the moment it lands. */
+ * settings files, so the file the agent writes is picked up the moment it lands. It names the one
+ * a save would write, which in a repo that was opened is the local file git never sees. */
 export function setupFixPrompt(repo: RepoInfo): string {
   return [
-    `This repo (${repo.name}) has no toyon.json yet, so toyon does not know how to install its dependencies or start its dev server.`,
+    `This repo (${repo.name}) has no toyon settings yet, so toyon does not know how to install its dependencies or start its dev server.`,
     "",
-    "Work it out from the repo itself (package manager, scripts, framework, a README) and write `toyon.json` at the repo root in this shape:",
+    `Work it out from the repo itself (package manager, scripts, framework, a README) and write \`${repo.configFile}\` in this shape:`,
     "```json",
     '{ "setup": ["<install command>"], "procs": { "web": "<start command>" } }',
     "```",

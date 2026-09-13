@@ -1,32 +1,126 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { issueReason, type ToyonConfig, toyonConfigSchema } from "@toyon/shared";
+import { CONFIG_FILES, issueReason, landConfigSchema, type ToyonConfig, toyonConfigSchema } from "@toyon/shared";
 import { log } from "../core/log.ts";
 
 export interface DetectedConfig {
   config: ToyonConfig;
-  /** false when read from toyon.json (user-authored = confirmed) */
+  /** false when read from a settings file (user-authored = confirmed) */
   needsSetup: boolean;
   /** the file the guess was read from, relative to the root: what the setup pane offers to open
    * so the person can copy the script they meant. Absent for a confirmed file or an empty guess. */
   from?: string;
 }
 
-export type ConfigFile = { ok: true; config: ToyonConfig } | { ok: false; reason: string } | null;
+export type ConfigFile =
+  | { ok: true; config: ToyonConfig }
+  /** `conflict`: settings in both places, which a save must not quietly pick between */
+  | { ok: false; reason: string; conflict?: true }
+  | null;
 
-/** the repo's toyon.json: parsed and validated, invalid with a one-line reason, or null when absent */
+type Place = (typeof CONFIG_FILES)[keyof typeof CONFIG_FILES];
+const PLACES: Place[] = [CONFIG_FILES.folder, CONFIG_FILES.root];
+
+/** the files of a place that exist, shared first, which is the order they merge in */
+const present = (repoPath: string, place: Place) =>
+  [place.shared, place.local].filter((rel) => existsSync(join(repoPath, rel)));
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** The repo's settings: the shared file with the local one merged over it, parsed and validated;
+ * invalid with a one-line reason; or null when there are none. Files in both places are invalid
+ * too, since which one wins is the question nobody reading the repo could answer. */
 export function readConfigFile(repoPath: string): ConfigFile {
-  const p = join(repoPath, "toyon.json");
-  if (!existsSync(p)) return null;
-  let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(p, "utf8"));
-  } catch (e) {
-    return { ok: false, reason: `toyon.json is not valid JSON: ${e instanceof Error ? e.message : String(e)}` };
+  const found = PLACES.map((p) => present(repoPath, p)).filter((files) => files.length > 0);
+  const [files] = found;
+  if (!files) return null;
+  if (found.length > 1) {
+    return { ok: false, conflict: true, reason: `settings are in two places (${found.flat().join(", ")}); keep one` };
   }
-  const r = toyonConfigSchema.safeParse(raw);
+  let merged: unknown = {};
+  for (const rel of files) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(readFileSync(join(repoPath, rel), "utf8"));
+    } catch (e) {
+      return { ok: false, reason: `${rel} is not valid JSON: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    if (!isObject(raw)) return { ok: false, reason: `${rel} must hold a JSON object` };
+    const unknown = unknownKeys(raw);
+    if (unknown.length > 0) log.warn(repoPath, `${rel}: ignoring ${unknown.join(", ")}, which toyon does not know`);
+    merged = mergePatch(merged, raw);
+  }
+  const r = toyonConfigSchema.safeParse(merged);
   if (r.success) return { ok: true, config: r.data };
-  return { ok: false, reason: `toyon.json: ${issueReason(r.error, "invalid")}` };
+  return { ok: false, reason: `${files.join(" + ")}: ${issueReason(r.error, "invalid")}` };
+}
+
+/** Keys toyon does not know, named in the log so a typo is visible rather than silently doing
+ * nothing. Never a refusal: a file written for a newer toyon still runs on this one. */
+function unknownKeys(raw: Record<string, unknown>): string[] {
+  const top = Object.keys(raw).filter((k) => !(k in toyonConfigSchema.shape));
+  const land = isObject(raw.land)
+    ? Object.keys(raw.land)
+        .filter((k) => !(k in landConfigSchema.shape))
+        .map((k) => `land.${k}`)
+    : [];
+  return [...top, ...land];
+}
+
+/** RFC 7396, the local file over the shared one: objects merge key by key all the way down, null
+ * removes a key, and anything else (a list, a string) replaces what was there. A standard rather
+ * than a rule of our own, so what a local file does is something people can look up. */
+export function mergePatch(target: unknown, patch: unknown): unknown {
+  if (!isObject(patch)) return patch;
+  const out: Record<string, unknown> = isObject(target) ? { ...target } : {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete out[k];
+    else out[k] = mergePatch(out[k], v);
+  }
+  return out;
+}
+
+/** the merge patch that turns `from` into `to` */
+function diffPatch(from: Record<string, unknown>, to: Record<string, unknown>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const k of Object.keys(from)) if (!(k in to)) patch[k] = null;
+  for (const [k, v] of Object.entries(to)) {
+    const was = from[k];
+    if (!(k in from)) patch[k] = v;
+    else if (JSON.stringify(was) !== JSON.stringify(v)) patch[k] = isObject(was) && isObject(v) ? diffPatch(was, v) : v;
+  }
+  return patch;
+}
+
+/** Where a save writes, relative to the root. The local file when there is one, since that is
+ * where this person's settings already are; the shared file when that is all there is. With
+ * neither, a new file in .toyon/: shared in a project toyon made, where the settings are part of
+ * how it runs, and local in a repo that was opened, so a team that does not use toyon never finds
+ * a file it did not ask for. */
+export function configTarget(repoPath: string, made: boolean): string {
+  for (const place of PLACES) {
+    const files = present(repoPath, place);
+    if (files.includes(place.local)) return place.local;
+    if (files.includes(place.shared)) return place.shared;
+  }
+  return made ? CONFIG_FILES.folder.shared : CONFIG_FILES.folder.local;
+}
+
+/** What a save writes to `rel`. A local file beside a shared one holds only what differs from it,
+ * as a merge patch (a removal is a null), so later changes to the shared file still reach this
+ * person and a process taken out in the setup pane stays out. Anything else is the whole config. */
+export function configBody(repoPath: string, rel: string, config: ToyonConfig): unknown {
+  const place = PLACES.find((p) => p.local === rel);
+  const abs = place && join(repoPath, place.shared);
+  if (!abs || !existsSync(abs)) return config;
+  let shared: unknown;
+  try {
+    shared = JSON.parse(readFileSync(abs, "utf8"));
+  } catch {
+    // a broken shared file is reported by readConfigFile; the save stands on its own meanwhile
+    return config;
+  }
+  return isObject(shared) ? diffPatch(shared, { ...config }) : config;
 }
 
 export function detectConfig(repoPath: string): DetectedConfig {
@@ -53,9 +147,7 @@ export function detectConfig(repoPath: string): DetectedConfig {
     if (scripts["dev:api"]) procs.api = procCommand(runner, "dev:api", scripts["dev:api"]);
     if (Object.keys(procs).length > 0) {
       return {
-        // a `check` script is the one name that means "everything must pass"; test or lint alone
-        // would gate landing on half the story
-        config: { procs, setup: [`${runner} install`], ...(scripts.check ? { check: `${runner} run check` } : {}) },
+        config: { procs, setup: [`${runner} install`] },
         needsSetup: true,
         from: "package.json",
       };

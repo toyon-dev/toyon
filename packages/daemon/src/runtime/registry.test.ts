@@ -13,6 +13,7 @@ const repo: RepoInfo = {
   name: "x",
   defaultBranch: "main",
   config: { procs: { api: "true", web: "true" } },
+  configFile: ".toyon/settings.json",
   needsSetup: false,
 };
 const wt: WorktreeInfo = {

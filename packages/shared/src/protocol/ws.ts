@@ -272,23 +272,27 @@ const runProfileSchema = z.object({
   preview: procName.optional(),
 });
 
+export const landConfigSchema = z.object({
+  route: z.enum(["merge", "push", "pr"]).optional(),
+  automerge: z.boolean().optional(),
+  method: z.enum(["merge", "squash", "rebase"]).optional(),
+});
+
 export const toyonConfigSchema = z
   .object({
+    $schema: z.string().max(2_000).optional(),
     procs: z.record(declaredProcName, shellCommand),
     setup: z.array(shellCommand).max(50).optional(),
     check: shellCommand.optional(),
-    land: z.enum(["merge", "push", "pr"]).optional(),
-    automerge: z.boolean().optional(),
-    merge: z.enum(["merge", "squash", "rebase"]).optional(),
+    land: landConfigSchema.optional(),
     preview: procName.optional(),
-    exclusive: z.boolean().optional(),
     profiles: z.record(procName, runProfileSchema).optional(),
     defaultProfile: procName.optional(),
   })
   .superRefine((c, ctx) => {
     // auto-merge is GitHub's; on a local route it would promise something nothing does
-    if (c.automerge !== undefined && c.land !== "pr")
-      ctx.addIssue({ code: "custom", path: ["automerge"], message: 'automerge needs "land": "pr"' });
+    if (c.land?.automerge !== undefined && c.land.route !== "pr")
+      ctx.addIssue({ code: "custom", path: ["land", "automerge"], message: 'automerge needs "route": "pr"' });
     // a profile may only name procs that exist, and the default must be a profile: caught here so
     // a typo is a toast at confirm/reload time, not a worktree that silently runs nothing
     if (!c.profiles) {

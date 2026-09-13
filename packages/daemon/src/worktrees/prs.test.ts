@@ -30,6 +30,7 @@ function world(answers: Array<PrState | null>, rows: Partial<WorktreeInfo>[] = [
     name: "r",
     defaultBranch: "main",
     config: { procs: {} },
+    configFile: ".toyon/settings.json",
     needsSetup: false,
   };
   const worktrees: WorktreeInfo[] = rows.map((over, i) => ({

@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -351,9 +360,15 @@ describe("confirmConfig", () => {
     await settle();
     const agent = w.runtime.get(wt.id)!.agent;
     const procsBefore = w.procs.get(wt.id)!;
-    w.repos.confirmConfig(repoId, { procs: { web: "true", api: "true" } });
+    await w.repos.confirmConfig(repoId, { procs: { web: "true", api: "true" } });
     await settle();
     expect(w.runtime.get(wt.id)!.agent).toBe(agent);
+    // an opened repo gets one person's file, which git does not list
+    expect(w.state.requireRepo(repoId).configFile).toBe(".toyon/settings.local.json");
+    expect(JSON.parse(readFileSync(join(w.repo, ".toyon/settings.local.json"), "utf8"))).toEqual({
+      procs: { web: "true", api: "true" },
+    });
+    expect((await git(w.repo, "status", "--porcelain")).out).toBe("");
     expect(procsBefore.stopped).toBe(true);
     expect(
       w.procs
@@ -465,6 +480,25 @@ describe("config reload", () => {
     expect(w.procs.get(wt.id)).toBe(procsNow);
     expect(lines[0]).toMatch(/not valid JSON/);
     expect(repos).toBe(1);
+  });
+
+  test("a file in .toyon/ is read like one at the root, and moving it there changes where a save goes", async () => {
+    const repoId = await registered();
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ procs: { web: "true" } }));
+    w.repos.reloadConfig(repoId);
+    expect(w.state.requireRepo(repoId).configFile).toBe("toyon.json");
+    rmSync(join(w.repo, "toyon.json"));
+    mkdirSync(join(w.repo, ".toyon"));
+    writeFileSync(join(w.repo, ".toyon/settings.json"), JSON.stringify({ procs: { web: "true", api: "true" } }));
+    writeFileSync(join(w.repo, ".toyon/settings.local.json"), JSON.stringify({ procs: { api: null } }));
+    w.repos.reloadConfig(repoId);
+    expect(w.state.requireRepo(repoId).config.procs).toEqual({ web: "true" });
+    expect(w.state.requireRepo(repoId).configFile).toBe(".toyon/settings.local.json");
+    // a save over the shared file keeps only the difference, so the team's later edits still arrive
+    await w.repos.confirmConfig(repoId, { procs: { web: "true", api: "true" }, setup: ["make"] });
+    expect(JSON.parse(readFileSync(join(w.repo, ".toyon/settings.local.json"), "utf8"))).toEqual({ setup: ["make"] });
+    // one person's file is out of git, the shared one is not
+    expect((await git(w.repo, "status", "--porcelain", "--untracked-files=all")).out).toBe("?? .toyon/settings.json");
   });
 
   test("boot picks up a toyon.json written while the daemon was down", async () => {
@@ -618,7 +652,7 @@ describe("landing", () => {
     sh(wt.path, "git", "add", "-A");
     sh(wt.path, "git", "commit", "-qm", "add feature");
     sh(w.repo, "git", "commit", "--allow-empty", "-qm", "main moves on");
-    w.state.requireRepo(repoId).config.merge = "rebase";
+    w.state.requireRepo(repoId).config.land = { method: "rebase" };
     const { result } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(true);
     // a fast-forward: the feature commit sits on top of main's own, and nothing merged anything
@@ -634,7 +668,7 @@ describe("landing", () => {
       sh(wt.path, "git", "add", "-A");
       sh(wt.path, "git", "commit", "-qm", `step ${n}`);
     }
-    w.state.requireRepo(repoId).config.merge = "squash";
+    w.state.requireRepo(repoId).config.land = { method: "squash" };
     w.worktrees.setLanding(wt.id, {
       at: 1,
       check: "none",
@@ -672,7 +706,7 @@ describe("landing", () => {
     sh(w.repo, "git", "init", "-q", "--bare", origin);
     sh(w.repo, "git", "remote", "add", "origin", origin);
     sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
-    w.state.requireRepo(repoId).config.land = "push";
+    w.state.requireRepo(repoId).config.land = { route: "push" };
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     const { result } = await w.worktrees.land(wt.id, "add feature");
@@ -694,7 +728,7 @@ describe("landing", () => {
 
   test("the pr route refuses without an origin", async () => {
     const repoId = await registered();
-    w.state.requireRepo(repoId).config.land = "pr";
+    w.state.requireRepo(repoId).config.land = { route: "pr" };
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     const { result } = await w.worktrees.land(wt.id, "add feature");

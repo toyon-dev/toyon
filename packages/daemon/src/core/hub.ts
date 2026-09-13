@@ -22,7 +22,7 @@ export interface HubEvents {
   worktreesChanged: () => void;
   /** the repo's default branch moved, or a recount was asked for: badges + git-status need refreshing */
   repoTick: (repoId: string) => void;
-  /** a repo's config or setup state changed (confirmed, or toyon.json edited) */
+  /** a repo's config or setup state changed (confirmed, or a settings file edited) */
   reposChanged: () => void;
   /** a clone started, moved, finished or failed */
   pendingChanged: () => void;

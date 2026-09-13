@@ -66,7 +66,7 @@ describe("parsePrView", () => {
 });
 
 describe("pickMethod", () => {
-  test("what toyon.json asks for when allowed, else squash, merge, rebase in that order", () => {
+  test("what the settings ask for when allowed, else squash, merge, rebase in that order", () => {
     const all = { merge: true, squash: true, rebase: true };
     expect(pickMethod(all)).toBe("squash");
     expect(pickMethod(all, "rebase")).toBe("rebase");

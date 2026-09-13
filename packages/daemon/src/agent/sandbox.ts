@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { log } from "../core/log.ts";
+import { excludeFromGit } from "../git/exclude.ts";
 import { git } from "../git/exec.ts";
 import { canonical, within } from "./bounds.ts";
 
@@ -112,15 +113,4 @@ export async function writeClaudeLocalSettings(cwd: string, b: Bounds): Promise<
   writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
   renameSync(tmp, file);
   await excludeFromGit(cwd, SETTINGS_REL);
-}
-
-/** add a pattern to the repo's info/exclude (shared by linked worktrees) once */
-async function excludeFromGit(cwd: string, pattern: string): Promise<void> {
-  const r = await git(cwd, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude");
-  if (!r.ok || !r.out) return log.warn("sandbox", `cannot locate info/exclude for ${cwd}: ${r.err}`);
-  const file = r.out;
-  const current = existsSync(file) ? readFileSync(file, "utf8") : "";
-  if (current.split("\n").some((l) => l.trim() === pattern)) return;
-  mkdirSync(join(file, ".."), { recursive: true });
-  writeFileSync(file, `${current}${current && !current.endsWith("\n") ? "\n" : ""}${pattern}\n`);
 }

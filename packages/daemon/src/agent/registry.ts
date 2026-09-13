@@ -2,7 +2,7 @@
 // command plus how it is confined and told about the worktree. The two builtins are npm packages
 // installed on demand into ~/.toyon/agents/<id> (the daemon starts fetching both at boot, so the
 // app's own install stays small); a user adds any other ACP agent in ~/.toyon/agents.json (per
-// machine and possibly holding keys, so not in the repo's toyon.json).
+// machine and possibly holding keys, so not in the repo's settings).
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";

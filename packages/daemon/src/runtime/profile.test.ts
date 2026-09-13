@@ -8,6 +8,7 @@ const base: RepoInfo = {
   name: "x",
   defaultBranch: "main",
   config: { procs: { api: "a", web: "w", worker: "k" } },
+  configFile: ".toyon/settings.json",
   needsSetup: false,
 };
 const withProfiles: RepoInfo = {

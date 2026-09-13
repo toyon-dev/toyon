@@ -23,7 +23,7 @@ export interface AllowedMethods {
   rebase: boolean;
 }
 
-/** the method a PR merges by: what toyon.json asks for when the repo allows it, else what the
+/** the method a PR merges by: what the settings ask for when the repo allows it, else what the
  * repo allows, squash first (one commit per landing is what a team that opens PRs usually
  * wants). Null when nothing is allowed, which a ruleset can do. */
 export function pickMethod(allowed: AllowedMethods, wanted?: MergeMethod): MergeMethod | null {

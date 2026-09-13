@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detectConfig, procCommand, readConfigFile } from "./config.ts";
+import { configBody, configTarget, detectConfig, mergePatch, procCommand, readConfigFile } from "./config.ts";
 
 // a test can make several repos, so each one is kept for cleanup, not only the last
 let dirs: string[] = [];
@@ -124,5 +124,72 @@ describe("detectConfig", () => {
     const t = readConfigFile(typo);
     if (t && !t.ok) expect(t.reason).toMatch(/profiles\.a\.procs: unknown proc "nope"/);
     expect(readConfigFile(repo({}))).toBeNull();
+  });
+});
+
+describe("settings files", () => {
+  const folder = (shared?: unknown, local?: unknown) =>
+    repo({
+      ".toyon/": "",
+      ...(shared === undefined ? {} : { ".toyon/settings.json": JSON.stringify(shared) }),
+      ...(local === undefined ? {} : { ".toyon/settings.local.json": JSON.stringify(local) }),
+    });
+
+  test("the local file merges over the shared one: maps by key, lists replace, null removes", () => {
+    const d = folder(
+      { procs: { web: "w", api: "a" }, setup: ["bun install"], check: "c", land: { route: "pr", automerge: true } },
+      { procs: { api: "a2", docs: "d" }, setup: ["make"], check: null, land: { method: "squash" } },
+    );
+    expect(readConfigFile(d)).toEqual({
+      ok: true,
+      config: {
+        procs: { web: "w", api: "a2", docs: "d" },
+        setup: ["make"],
+        land: { route: "pr", automerge: true, method: "squash" },
+      },
+    });
+  });
+
+  test("a local file alone is a whole config; settings in both places are refused", () => {
+    expect(readConfigFile(folder(undefined, { procs: { web: "w" } }))?.ok).toBe(true);
+    const both = repo({
+      "toyon.json": JSON.stringify({ procs: {} }),
+      ".toyon/": "",
+      ".toyon/settings.local.json": JSON.stringify({ procs: {} }),
+    });
+    const r = readConfigFile(both);
+    expect(r).toMatchObject({ ok: false, conflict: true });
+    if (r && !r.ok) expect(r.reason).toContain("toyon.json");
+    expect(detectConfig(both).needsSetup).toBe(true);
+  });
+
+  test("an unknown key is ignored rather than refused, so a file for a newer toyon still runs", () => {
+    const r = readConfigFile(folder({ $schema: "./schema.json", procs: { web: "w" }, someday: 1, land: { later: 1 } }));
+    expect(r).toEqual({ ok: true, config: { $schema: "./schema.json", procs: { web: "w" }, land: {} } });
+  });
+
+  test("auto-merge needs the pr route", () => {
+    const r = readConfigFile(folder({ procs: {}, land: { automerge: true } }));
+    expect(r?.ok).toBe(false);
+    if (r && !r.ok) expect(r.reason).toMatch(/land\.automerge/);
+  });
+
+  test("a save writes the local file, else the shared one, else a new file by how the project arrived", () => {
+    expect(configTarget(repo({}), false)).toBe(".toyon/settings.local.json");
+    expect(configTarget(repo({}), true)).toBe(".toyon/settings.json");
+    expect(configTarget(repo({ "toyon.json": "{}" }), false)).toBe("toyon.json");
+    expect(configTarget(repo({ "toyon.json": "{}", "toyon.local.json": "{}" }), true)).toBe("toyon.local.json");
+    expect(configTarget(folder({ procs: {} }), false)).toBe(".toyon/settings.json");
+  });
+
+  test("a save beside a shared file writes only the difference, a removal as null", () => {
+    const shared = { procs: { web: "w", api: "a" }, setup: ["bun install"], check: "c" };
+    const next = { procs: { web: "w2" }, setup: ["bun install"] };
+    const body = configBody(folder(shared), ".toyon/settings.local.json", next);
+    expect(body).toEqual({ procs: { web: "w2", api: null }, check: null });
+    expect(mergePatch(shared, body)).toEqual(next);
+    // nothing shared to differ from, or a save to the shared file itself: the whole config
+    expect(configBody(repo({}), ".toyon/settings.local.json", next)).toEqual(next);
+    expect(configBody(folder(shared), ".toyon/settings.json", next)).toEqual(next);
   });
 });

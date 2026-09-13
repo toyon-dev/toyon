@@ -29,7 +29,7 @@ export function resolveRun(repo: RepoInfo, wt: Pick<WorktreeInfo, "id" | "profil
   let name = wt.profile ?? cfg.defaultProfile;
   if (!(name in cfg.profiles)) {
     // the file changed under a running worktree: run the default rather than nothing
-    log.warn(wt.id, `profile "${name}" is not in toyon.json; running "${cfg.defaultProfile}"`);
+    log.warn(wt.id, `profile "${name}" is not in ${repo.configFile}; running "${cfg.defaultProfile}"`);
     name = cfg.defaultProfile;
   }
   const profile = cfg.profiles[name]!;

@@ -34,10 +34,11 @@ export function ProfileChip({
   const names = profileNames(repo);
   if (names.length === 0 || !value) return null;
   const profiles = repo?.config.profiles ?? {};
+  const file = repo?.configFile ?? "the settings";
   const runs = (name: string) => {
     const procs = profiles[name]?.procs ?? [];
     const what = procs.length > 0 ? `runs ${procs.join(", ")}` : "runs nothing";
-    return name === repo?.config.defaultProfile ? `${what}; the default in toyon.json` : what;
+    return name === repo?.config.defaultProfile ? `${what}; the default in ${file}` : what;
   };
   return (
     <ChipPicker
@@ -45,7 +46,7 @@ export function ProfileChip({
       options={names.map((n) => ({ id: n, description: runs(n) }))}
       onChange={onChange}
       onClose={onClose}
-      hint={names.length > 1 ? `${value}: ${runs(value)}. Click to change` : "the only profile in toyon.json"}
+      hint={names.length > 1 ? `${value}: ${runs(value)}. Click to change` : `the only profile in ${file}`}
       placeholder="the profile the worktree runs"
     />
   );

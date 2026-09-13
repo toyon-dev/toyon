@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // Both defaults are for `bun run shell:dev` against the daemon you started by hand. Run as a
-// toyon proc (toyon.json), the supervisor hands us $PORT to listen on and the sibling daemon's
+// toyon proc (.toyon/settings.json), the supervisor hands us $PORT to listen on and the sibling daemon's
 // URL: 4141 is then the outer daemon, the one running this worktree, and talking to it would
 // make the preview a mirror of the shell framing it rather than its own instance.
 const port = Number(process.env.PORT) || SHELL_DEV_PORT;

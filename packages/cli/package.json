@@ -1,7 +1,7 @@
 {
   "name": "toyon",
   "version": "0.1.0",
-  "description": "Browser-first workbench for parallel AI coding agents: one chat per git worktree, every worktree running live.",
+  "description": "Checking an agent's work means running it. Toyon gives every chat its own copy of your web app, with a live preview.",
   "license": "MIT",
   "type": "module",
   "homepage": "https://toyon.dev",

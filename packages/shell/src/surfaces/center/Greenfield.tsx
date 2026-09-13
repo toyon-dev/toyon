@@ -3,8 +3,8 @@ import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/co
 import { useActiveRepo } from "../../state/selectors.ts";
 import { localOf, newProjectState } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
-import { Form } from "../../ui/Form.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { View } from "../../ui/View.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { parentFolder } from "../overlays/projectPicker.ts";
 
@@ -43,7 +43,7 @@ export function Greenfield({ active }: { active: OwnedWorktree }) {
   };
 
   return (
-    <Form>
+    <View anchor="line">
       <p className="form-title">
         {repo?.made ? (
           <Button variant="inline" onClick={back} {...tip("Rename or move this project")}>
@@ -56,6 +56,6 @@ export function Greenfield({ active }: { active: OwnedWorktree }) {
       <div className="form-body form-body-lg">
         <Composer active={active} greenfield />
       </div>
-    </Form>
+    </View>
   );
 }

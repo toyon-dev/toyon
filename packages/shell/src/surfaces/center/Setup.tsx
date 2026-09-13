@@ -4,10 +4,10 @@ import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
-import { Form } from "../../ui/Form.tsx";
 import { FormRow } from "../../ui/FormRow.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
+import { View } from "../../ui/View.tsx";
 import { setupFixPrompt } from "./fixPrompt.ts";
 
 type Proc = { id: number; name: string; cmd: string };
@@ -107,7 +107,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   );
 
   return (
-    <Form anchor="top">
+    <View>
       <p className="form-title">how does {repo.name} start?</p>
       <FormRow label="install" hint="once per new worktree; one command per line">
         <TextArea
@@ -202,6 +202,6 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
           </Button>
         )}
       </div>
-    </Form>
+    </View>
   );
 }

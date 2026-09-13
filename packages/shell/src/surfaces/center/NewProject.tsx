@@ -5,9 +5,9 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { NewProjectState } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
-import { Form } from "../../ui/Form.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { tip } from "../../ui/Tooltip.tsx";
+import { View } from "../../ui/View.tsx";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { destination, expandHome, folderName, splitTypedPath } from "../overlays/projectPicker.ts";
@@ -190,7 +190,7 @@ export function NewProject({ project }: { project: NewProjectState }) {
           : nameError);
 
   return (
-    <Form>
+    <View anchor="line">
       {clone && <p className="new-project-url">{project.url}</p>}
 
       <div className="form-head">
@@ -320,6 +320,6 @@ export function NewProject({ project }: { project: NewProjectState }) {
           or open a folder you already have
         </Button>
       )}
-    </Form>
+    </View>
   );
 }

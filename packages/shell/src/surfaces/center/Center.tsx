@@ -31,7 +31,7 @@ import { hasToken } from "../../ws.ts";
 /** read once at load (the token arrives in the URL fragment); calling it during render would write storage */
 const HAS_TOKEN = hasToken();
 
-import { Status } from "../../ui/Status.tsx";
+import { View } from "../../ui/View.tsx";
 import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
@@ -398,9 +398,9 @@ export function Center() {
                 !greenfield &&
                 !incompatible &&
                 (say !== null ? (
-                  <Status>
+                  <View wide>
                     <p className="status-line">{say}</p>
-                  </Status>
+                  </View>
                 ) : noProcs ? (
                   <NoPreview repo={noProcs} />
                 ) : (

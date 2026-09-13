@@ -2,13 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { cssRules, shellCss } from "./cssRules.ts";
 
 /**
- * The status dress: top anchored, in the reading face, with no card.
+ * Status parts: never centred inside the view, in the reading face, with no card.
  *
- * Top anchored, which is the half that matters: a status grows while it is being read, so anything
- * that centres it vertically pushes the lines already under someone's eye. Its column is centred
- * like every other view's, which is safe because the width is fixed and the horizontal position
- * therefore never moves as content arrives. That distinction was got wrong once in the other
- * direction: pinned to the corner, a one-line status read as a stray log line.
+ * The column's top anchor is View's and view.test.ts holds it. A part can still undo it from the
+ * inside by centring its own text or contents, and a status grows while it is being read, so a
+ * centred part moves lines already under someone's eye.
  *
  * The face rule is the other half. Prose here is the shell's own voice explaining a state, so it
  * reads in the UI face; mono is for the machine's literal output, which is one part.
@@ -35,8 +33,8 @@ const SINKING: Record<string, string[]> = {
 
 const isStatus = (sel: string) => /(^|\s|>)\.status(-[\w-]+)?\b/.test(sel);
 
-describe("the status dress", () => {
-  test("a status is top anchored, so growing it never moves what is being read", async () => {
+describe("the status parts", () => {
+  test("no status part centres itself inside the view", async () => {
     const offenders: string[] = [];
     for (const rule of cssRules(await shellCss())) {
       for (const sel of rule.selectors) {
@@ -63,7 +61,7 @@ describe("the status dress", () => {
     expect(offenders.sort()).toEqual([]);
   });
 
-  test("a status draws no ground", async () => {
+  test("no status part draws a ground", async () => {
     const offenders: string[] = [];
     for (const rule of cssRules(await shellCss())) {
       for (const sel of rule.selectors) {

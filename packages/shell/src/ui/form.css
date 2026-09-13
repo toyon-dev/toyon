@@ -1,35 +1,7 @@
-/* Form: the dress a view wears when a person puts something into it. Its column, its title, the
-   region it is written in, and the row of knobs under that. */
+/* Form parts: what a view uses when a person puts something into it. Its title, the region it is
+   written in, and the row of knobs under that. The column is View's (view.css). */
 @layer tokens, base, surfaces;
 @layer base {
-  /* One column on the centre's own ground. No background, no border, no radius and no shadow
-     anywhere on this dress: a box drawn around the first thing anyone writes reads as a form to
-     fill in rather than a page to write on, which is the whole of what separates this from the
-     card it replaced. form.test.ts holds that. */
-  .form {
-    height: 100%;
-    overflow: auto;
-    width: min(var(--form-measure), 100%);
-    margin: 0 auto;
-    padding-inline: var(--view-inset);
-    padding-bottom: var(--view-top);
-    display: flex;
-    flex-direction: column;
-    gap: var(--form-gap);
-    color: var(--text0);
-    font: var(--type-ui);
-    /* the column resets the margin every part of it would otherwise carry, so no part has to */
-    & > p {
-      margin: 0;
-    }
-  }
-  /* the two anchors, and nothing else about the column: see Form.tsx for which is for what */
-  .form-line {
-    padding-top: var(--form-anchor);
-  }
-  .form-top {
-    padding-top: var(--view-top);
-  }
   /* The one line the form is about, at the size it arrives in. It is the same size the name is
      typed at (Field's `font="lead"`), because on the first run they are the same words a moment
      apart and the line must not move or resize between them. */
@@ -80,7 +52,7 @@
   .form-knobs {
     display: flex;
     align-items: center;
-    gap: var(--form-gap);
+    gap: var(--view-gap);
     min-width: 0;
   }
   /* the one primary, at the end of the knobs row */

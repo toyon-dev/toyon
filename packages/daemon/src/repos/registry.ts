@@ -412,6 +412,7 @@ export class RepoRegistry {
       this.reloadConfig(repo.id);
       return;
     }
+    if (wt.path !== repo.path && this.adoptConfig(repo, wt)) return;
     const detected = detectConfig(wt.path);
     const same =
       JSON.stringify(detected.config) === JSON.stringify(repo.config) &&
@@ -424,6 +425,30 @@ export class RepoRegistry {
     repo.assumed = detected.assumed;
     this.d.state.save();
     this.d.hub.emit("reposChanged");
+  }
+
+  /** A new project's first turn runs in a worktree, so the settings file it writes is there and
+   * not on main until the worktree lands. It is the repo's config from now, or the worktree that
+   * was just scaffolded would have no preview until it had landed. Only that worktree restarts:
+   * main and any other worktree have none of the scaffold its commands run, and a cold one reads
+   * the config when it is opened. The main watcher keeps it, since a file that is not there
+   * changes nothing, and landing brings the same file. True when a valid file was taken. */
+  private adoptConfig(repo: RepoInfo, wt: WorktreeInfo): boolean {
+    const file = readConfigFile(wt.path);
+    if (!file?.ok) return false;
+    repo.config = file.config;
+    repo.needsSetup = false;
+    repo.guess = undefined;
+    repo.assumed = undefined;
+    this.d.state.save();
+    fireAndForget(
+      wt.id,
+      this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),
+      "runtime restart",
+    );
+    this.d.hub.emit("reposChanged");
+    this.d.hub.emit("worktreesChanged");
+    return true;
   }
 
   /** Which file a save writes, read again from disk: a file moved between the root and .toyon/, or

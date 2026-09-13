@@ -17,7 +17,7 @@ import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
-import { asksSetup, composerBoxOf, type Draft } from "../../state/store.ts";
+import { composerBoxOf, type Draft } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -149,13 +149,12 @@ export function Composer({
 
   // The target: a new worktree from this one, or this one's own agent. On for main (protect the
   // working copy), off on a worktree (continue that conversation); the chip overrides it per tab.
-  // Off on a main whose setup is still to be asked too: there is no running app to protect yet, and
-  // the conversation there is the one scaffolding it. A repo assumed to have nothing to run is an
-  // existing codebase, not a scaffold, so its main is protected like a confirmed one.
-  const spawnDefault = () => onMain && !asksSetup(repo);
+  // A new project's first message always starts one, and its screen has no chip: the scaffold is
+  // work to land like any other, so main is never where an agent starts writing.
+  const spawnDefault = () => onMain;
   const [spawnNew, setSpawnNew] = useState(spawnDefault);
   useOnChange([id], () => setSpawnNew(spawnDefault()));
-  const spawning = drafting || (spawnNew && !greenfield);
+  const spawning = drafting || spawnNew || !!greenfield;
   // A main that has never run has no agent on its record, so its first message starts a fresh chat:
   // the agent and model are chosen the way a new worktree's are, and the send stamps them.
   const fresh = !spawning && !!active && !active.worktree.agent;

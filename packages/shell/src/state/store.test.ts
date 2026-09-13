@@ -193,7 +193,9 @@ describe("per-worktree records", () => {
     expect(isGreenfield(run([worktrees(main)], s))).toBe(false);
     expect(isGreenfield(run([repos(repo("r"))], s))).toBe(false);
     expect(isGreenfield(run([worktrees({ ...empty, agent: "working" })], s))).toBe(false);
-    // the daemon echoes the message back, and that ends it for good
+    // the first message starts a worktree, and its row ends it while main stays empty
+    expect(isGreenfield(run([worktrees(empty, wt("make-a-site"))], s))).toBe(false);
+    // a message said on main itself ends it for good
     const spoken = run([agent("main", { type: "user-message", text: "make a site", ts: 0 })], s);
     expect(isGreenfield(spoken)).toBe(false);
     // hiding the dock leaves no trace: show-right opens it, and only that is remembered

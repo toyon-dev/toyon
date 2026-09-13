@@ -424,6 +424,20 @@ describe("handlers", () => {
     expect(wt).toMatchObject({ kind: "worktree", createdBy: "tab", from: { kind: "branch", ref: "parked" } });
   });
 
+  test("settings written in a new project's first worktree are its config, and only that worktree runs them", async () => {
+    const { services, repo, procs } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = true;
+    const wt = await services.worktrees.create(r.id, "make a site");
+    await Bun.write(join(wt.path, "toyon.json"), JSON.stringify({ run: { web: "vite --port $PORT" } }));
+    services.hub.emit("agent", wt.id, 0, { type: "turn-end", stopReason: "end_turn", ts: 0 });
+    expect(r).toMatchObject({ needsSetup: false, config: { run: { web: "vite --port $PORT" } } });
+    await until(() => procs.get(wt.id)?.started.some((p) => p.command === "vite --port $PORT") ?? false);
+    // main has none of the scaffold the command needs until the worktree lands
+    const main = services.state.worktrees.find((x) => x.repoId === r.id && x.kind === "main")!;
+    expect(procs.get(main.id)?.started ?? []).toEqual([]);
+  });
+
   test("sync-main on a dirty tree toasts the refusal with no prompt to prefill", async () => {
     const { services, ctx, replies, repo } = make();
     const r = await services.repos.register(repo);

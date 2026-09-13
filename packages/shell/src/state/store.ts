@@ -656,14 +656,15 @@ export function worktreeById(s: State, id: string | null | undefined): OwnedWork
 }
 
 /** A project with nothing in it and nothing said yet: main's tree is empty, the repo has no
- * confirmed config, and the transcript is blank. The composer moves to the centre for exactly as
- * long as this holds; the first message ends it on its own, since the daemon echoes it back. */
+ * confirmed config, and no worktree has been started from it. The composer moves to the centre for
+ * exactly as long as this holds; the first message starts a worktree, and that row ends it. */
 export function isGreenfield(s: State): boolean {
   const wt = worktreeById(s, s.activeId);
   // the empty-tree fact rides on main's record, so the first frame already answers this
   if (!wt || !isMain(wt.worktree) || wt.agent !== "idle" || wt.worktree.empty !== true) return false;
   const repo = repoById(s, wt.repoId);
-  return !!repo?.needsSetup && localOf(s, wt.id).chat.length === 0;
+  const started = s.rows.some((w) => w.repoId === wt.repoId && w.worktree?.kind === "worktree");
+  return !!repo?.needsSetup && !started && localOf(s, wt.id).chat.length === 0;
 }
 
 /** Either first-run screen: the new-project view, or a project nobody has spoken to yet. The docks,
@@ -1243,8 +1244,8 @@ function pruneByRepo<T>(flags: Record<string, T>, repos: RepoInfo[]): Record<str
  * first-run screen, and the description typed on the view lands in that row's box.
  *
  * It goes from there rather than from the view, so the first message of a project made here is the
- * same message as any other first message: the composer's, with its context blocks, the model and
- * effort it stamps on a main that has never run, and the chat dock coming back with the reply. With
+ * same message as any other first message: the composer's, with its context blocks, the worktree it
+ * starts with the chosen model and effort, and the chat dock coming back with the reply. With
  * nothing described, the box is left empty and waiting, which is where a project opened from the
  * terminal starts. */
 function settleView(s: State): State {

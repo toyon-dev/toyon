@@ -39,6 +39,9 @@ await bundle(join(pkgs, "daemon", "src", "index.ts"), "daemon.js", ["bun-pty"]);
 await bundle(join(pkgs, "cli", "src", "cli.ts"), "cli.js");
 cpSync(join(pkgs, "shell", "dist"), join(out, "shell"), { recursive: true });
 cpSync(join(pkgs, "bridge", "dist", "bridge.js"), join(out, "bridge.js"));
+// npm reads the package page from a README beside package.json, and a LICENSE there too; the
+// real ones live at the repo root, so the pack carries copies in (gitignored, refreshed every run)
+for (const f of ["README.md", "LICENSE"]) cpSync(join(root, f), join(pkgs, "cli", f));
 
 for (const f of ["daemon.js", "cli.js", "bridge.js", "shell/index.html"]) {
   const p = join(out, f);

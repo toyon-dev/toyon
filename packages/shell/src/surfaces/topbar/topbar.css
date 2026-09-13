@@ -107,24 +107,33 @@
     }
     /* zen keeps a bare title strip here: the top bar *is* the window's title bar (drag region,
      traffic lights, ⌄ ⋮ overlay), so dropping it would leave the preview under the controls
-     and the window undraggable. Worktree name centered, nothing else; preview fills below. */
+     and the window undraggable. The worktree name centred, and the zen toggle alone at its usual
+     edge, lit: the strip stands anyway, so the button costs the preview nothing, and with no
+     browser chrome around the window it is the one standing sign of a way out. The other
+     toggles are what zen removes, and each is a chord away once out. */
     .app.zen {
       grid-template-rows: auto 1fr;
     }
     .app.zen .top-bar {
       display: flex;
-      justify-content: center;
     }
-    .app.zen .top-bar > :not(.bar-zen-title) {
+    .app.zen .top-bar > :not(.bar-zen-title, .bar-grow, .bar-tools),
+    .app.zen .bar-tools > :not(.bar-zen) {
       display: none;
     }
     .app.zen .top-bar .bar-zen-title {
       display: block;
     }
   }
-  /* only the window-controls-overlay zen strip shows this */
+  /* only the window-controls-overlay zen strip shows this. Laid over the strip's full width and
+   centred as text, so the toggle at the right edge does not push it off the window's centre; no
+   pointer so the toggle under it stays pressable and the strip under it stays a drag region */
   .bar-zen-title {
     display: none;
+    position: absolute;
+    inset-inline: 0;
+    text-align: center;
+    pointer-events: none;
     color: var(--text2);
   }
   /* Safari-style: nav+path anchored to the window center — never moves when

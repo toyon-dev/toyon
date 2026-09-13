@@ -102,11 +102,16 @@ export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number })
             onClick={() => dispatch({ a: "toggle-right" })}
           />
         )}
+        {/* the one control the installed app's zen strip keeps: the strip is the window's title bar
+            and stays anyway, and with no browser chrome around it, a lit toggle at the edge is the
+            standing sign that this is a mode with a way out */}
         <IconButton
           icon="zen"
+          className="bar-zen"
           label="Full-bleed preview"
           hint={chord("zen")}
           tone="chrome"
+          on={zen}
           onClick={() => dispatch({ a: "toggle-zen" })}
         />
       </span>

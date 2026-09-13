@@ -3,7 +3,15 @@ import type { OwnedWorktree, RepoInfo, Theme } from "@toyon/shared";
 import { buildCommands, type Command, type CommandState, commandHits, filterCommands } from "./commands.ts";
 
 describe("buildCommands", () => {
-  const repo = { id: "r", path: "/r", name: "r", defaultBranch: "main", config: {}, needsSetup: false } as RepoInfo;
+  const repo = {
+    id: "r",
+    path: "/r",
+    name: "r",
+    defaultBranch: "main",
+    config: { run: { web: "vite" } },
+    configFile: ".toyon/settings.json",
+    needsSetup: false,
+  } as RepoInfo;
   const wt = {
     id: "w1",
     repoId: "r",
@@ -52,6 +60,15 @@ describe("buildCommands", () => {
     expect(ids).toContain("terminal");
     expect(ids).toContain("wt:terminal");
     expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+  });
+  test("a project with nothing to run offers none of a page's verbs, and no chat panel to toggle", () => {
+    const pageVerbs = ["pick", "inspect", "reload", "right", "design", "zen"];
+    const web = buildCommands(state, () => {}, null, wt, repo).map((c) => c.id);
+    for (const id of pageVerbs) expect(web).toContain(id);
+    const bare = { ...repo, config: { run: {} } } as RepoInfo;
+    const ids = buildCommands({ ...state, repos: [bare] }, () => {}, null, wt, bare).map((c) => c.id);
+    for (const id of pageVerbs) expect(ids).not.toContain(id);
+    expect(ids).toContain("terminal");
   });
   // the settings menu shows the theme rows as a group under a rule; the palette has no rules, so
   // the group is a word in front of each, and typing that word lists them all

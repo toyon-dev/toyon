@@ -137,6 +137,10 @@
     --view-gap: 12px;
     --view-measure-wide: 720px;
     --view-gap-wide: 16px;
+    /* the chat's column when it is the centre (a project with nothing to run). The chat panel is not
+     a view, so it does not borrow a view's measure; it holds code and tool output as well as prose,
+     which is why it runs as wide as the widest view. */
+    --chat-measure: 720px;
     /* the box a person writes in before a word is in it. The -lg tier is the same box carrying its
      own knobs row, which is the composer on the first-run screen. */
     --form-body: 96px;

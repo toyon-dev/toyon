@@ -16,7 +16,7 @@ import { removeWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
-import { useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
+import { useChatCentred, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
 import { composerBoxOf, type Draft } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -126,6 +126,8 @@ export function Composer({
   // the picker picks from and the page context describes
   const frameId = usePreviewId();
   const page = useLocalField(frameId, "page");
+  // a project with nothing to run has no page to pick from, so the picker's button goes
+  const chatCentred = useChatCentred();
   const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id);
   const setText = (t: string) => boxId && dispatch({ a: "set-draft", id: boxId, text: t });
   const clientId = useStore((s) => s.clientId);
@@ -870,7 +872,7 @@ export function Composer({
                 )}
               />
             )}
-            {!greenfield && (
+            {!greenfield && !chatCentred && (
               <IconButton
                 icon="pick"
                 label="Pick an element on the page to attach"

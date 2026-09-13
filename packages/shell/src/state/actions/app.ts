@@ -1,6 +1,6 @@
 import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
-import { routeTarget, type State, worktreeById } from "../store.ts";
+import { isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
 import type { Deps } from "./deps.ts";
 
 export type AppState = Pick<
@@ -109,5 +109,8 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       onClick: () => dispatch({ a: "open", overlay: { kind: "keys" } }),
     },
   ];
-  return grouped([go, panels, app]);
+  // a project with nothing to run has the chat as its centre, so there is no chat panel to toggle,
+  // and no page for zen or the design pane's outlines to work on
+  const pageless = isChatCentred(s) ? new Set(["right", "design", "zen"]) : null;
+  return grouped([go, pageless ? panels.filter((it) => !pageless.has(it.id)) : panels, app]);
 }

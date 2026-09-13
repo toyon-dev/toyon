@@ -14,7 +14,7 @@ import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
 import { worktreeItems } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { type Action, repoById, type State, worktreeById } from "../../state/store.ts";
+import { type Action, isChatCentred, repoById, type State, worktreeById } from "../../state/store.ts";
 import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { chord, rowLabel } from "../util.ts";
@@ -64,7 +64,8 @@ export function buildCommands(
   // the open project's own verbs (its settings, forget), each saying which project; the others
   // are listed by name below
   if (repo) addItems(projectItems(repo, repo.id, deps), { scope: "project", name: repo.name });
-  if (id) {
+  // the page's own verbs, for a worktree that has a page: a project with nothing to run has none
+  if (id && !isChatCentred(state)) {
     add(
       "pick",
       state.picking === "chat" ? "cancel element picker" : "pick an element for the chat",

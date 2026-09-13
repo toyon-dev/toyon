@@ -9,9 +9,9 @@ import { openSource } from "../../state/openSource.ts";
 import {
   useActive,
   useActiveId,
-  useActiveRepo,
   useActiveRepoNeedingSetup,
   useActiveRow,
+  useChatCentred,
   useDraftSpare,
   useFirstRun,
   useGreenfield,
@@ -32,6 +32,7 @@ import { hasToken } from "../../ws.ts";
 const HAS_TOKEN = hasToken();
 
 import { View } from "../../ui/View.tsx";
+import { ChatPanel } from "../chat/ChatPanel.tsx";
 import { missedFileDrop, noteFileDrag } from "../chat/useIntake.ts";
 import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
@@ -43,7 +44,6 @@ import { Discovered } from "./Discovered.tsx";
 import { Greenfield } from "./Greenfield.tsx";
 import { Import } from "./Import.tsx";
 import { NewProject } from "./NewProject.tsx";
-import { NoPreview } from "./NoPreview.tsx";
 import { Setup } from "./Setup.tsx";
 import { waitingText } from "./waiting.ts";
 import "./center.css";
@@ -87,7 +87,10 @@ export function Center() {
   const newProject = useNewProject();
   const firstRun = useFirstRun();
   const termOpen = useStore((s) => s.termOpen) && !firstRun;
-  const designOpen = useStore((s) => s.designOpen) && !firstRun;
+  // set up on purpose with nothing to run: no page will come, so the chat is what the centre shows
+  const chatCentred = useChatCentred();
+  // the design pane outlines what it lists in the page, and a project with nothing to run has none
+  const designOpen = useStore((s) => s.designOpen) && !firstRun && !chatCentred;
   const reloadReq = useStore((s) => s.reloadReq);
   const theme = useTheme();
   const themeRef = useRef(theme);
@@ -98,10 +101,6 @@ export function Center() {
   const log = useLocalField(activeId, "log");
   const incompatible = useStore((s) => s.incompatible);
   const needsSetup = useActiveRepoNeedingSetup();
-  // set up on purpose with nothing to run: the boot pane would wait for a server forever
-  const activeRepo = useActiveRepo();
-  const noProcs =
-    activeRepo && !activeRepo.needsSetup && Object.keys(activeRepo.config.run).length === 0 ? activeRepo : null;
   // reopened from settings / the palette for a repo that is already configured
   const reopened = useStore((s) =>
     s.overlay?.kind === "setup"
@@ -352,7 +351,7 @@ export function Center() {
               src={previewUrl(f.id, f.port)}
               title={f.title}
               style={{
-                display: f.id === previewId && !setupRepo && !watching && !firstRun ? "block" : "none",
+                display: f.id === previewId && !setupRepo && !watching && !firstRun && !chatCentred ? "block" : "none",
               }}
             />
           ))}
@@ -401,8 +400,9 @@ export function Center() {
                   <View wide>
                     <p className="status-line">{say}</p>
                   </View>
-                ) : noProcs ? (
-                  <NoPreview repo={noProcs} />
+                ) : chatCentred ? (
+                  // nothing runs, so no server is ever ready and no spare is shown: this slot is always the chat's
+                  <ChatPanel placement="centre" />
                 ) : (
                   active && <Boot worktree={active} log={log} />
                 ))}

@@ -2,7 +2,7 @@ import { type ChordId, matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/sh
 import { useEffect } from "react";
 import { markUnread } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
-import { isSubPicker, localOf, previewIdOf, routeTarget } from "../state/store.ts";
+import { isChatCentred, isSubPicker, localOf, previewIdOf, routeTarget } from "../state/store.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
 import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
@@ -32,7 +32,8 @@ export function useChords() {
       // zen mirrors the bridge: the preview owns the keyboard and only the chord that leaves zen
       // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
       // picker holds shell focus, so those keep the full ladder or there is no way back out.
-      if (s.zen && !s.overlay && !s.picking && chord?.id !== "zen") return;
+      // A zen left on by another project is not in force on one with nothing to run, which has no page.
+      if (s.zen && !isChatCentred(s) && !s.overlay && !s.picking && chord?.id !== "zen") return;
       // ⌘D, ⌘K and ⌘G are Monaco's (add cursor, chord prefix, find next) while it has the keyboard, and
       // so is every ⌥ chord: ⌥↑/↓ is move line and ⌥⇧↑/↓ copy line. Taking them from a focused editor
       // made a design scan out of a second cursor, and would make a worktree switch out of a line move;
@@ -124,7 +125,10 @@ export function useChords() {
             dispatch(s.leftOpen && inside(".changes-list") ? { a: "toggle-left" } : { a: "focus-left" });
             break;
           case "composer":
-            dispatch(s.rightOpen && inside(".chat-input") ? { a: "toggle-right" } : { a: "focus-right" });
+            // a chat in the centre is not a panel: there is nothing to close, only the box to reach
+            dispatch(
+              s.rightOpen && !isChatCentred(s) && inside(".chat-input") ? { a: "toggle-right" } : { a: "focus-right" },
+            );
             break;
           case "rail":
             dispatch(s.railOpen && inside(".rail-list") ? { a: "toggle-rail" } : { a: "focus-rail" });

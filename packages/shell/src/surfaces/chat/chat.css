@@ -752,12 +752,18 @@
   .composer-target {
     padding: 0 10px 8px;
   }
+  /* Spaced by what shows, not by the boxes: the top bar's tools put 24px between glyphs (a 20px gap
+   plus each box's 2px), and a text chip already carries 8px of padding a side where an icon box
+   carries 2px. So chips sit 8px apart and an icon among them takes the missing 6px as margin. */
   .spawn-left {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     min-width: 0;
+    & > .btn-icon {
+      margin-left: 6px;
+    }
   }
   /* a sentence about the base or the branch, under the knobs row, with sync beside it when there is one */
   .spawn-note {
@@ -769,7 +775,7 @@
   .spawn-tools {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 20px;
     flex-shrink: 0;
   }
 

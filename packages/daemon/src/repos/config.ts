@@ -53,7 +53,9 @@ export function detectConfig(repoPath: string): DetectedConfig {
     if (scripts["dev:api"]) procs.api = procCommand(runner, "dev:api", scripts["dev:api"]);
     if (Object.keys(procs).length > 0) {
       return {
-        config: { procs, setup: [`${runner} install`] },
+        // a `check` script is the one name that means "everything must pass"; test or lint alone
+        // would gate landing on half the story
+        config: { procs, setup: [`${runner} install`], ...(scripts.check ? { check: `${runner} run check` } : {}) },
         needsSetup: true,
         from: "package.json",
       };

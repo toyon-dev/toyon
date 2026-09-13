@@ -734,6 +734,16 @@
       box-shadow: 0 0 0 1.5px var(--border0);
     }
   }
+  /* the landing verbs, in the corner of the box a send button would take: the one seat that is
+   free exactly while nothing is being written, since Enter is the send. Over the ghost, which
+   the field's isolation keeps under it, and gone with the ghost the moment a letter is typed. */
+  .composer-land {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    gap: 2px;
+  }
   /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
   /* main's target line, outside the box on the panel's ground, where the draft tab's birth-time row
    sits: inside it, it took the top of the typing surface and the placeholder read as the second

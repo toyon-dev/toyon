@@ -300,8 +300,29 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async ship(msg, ctx, s) {
-    const result = await s.worktrees.ship(msg.worktreeId);
+    const result = await s.worktrees.ship(msg.worktreeId, msg.message);
     await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message, { url: result.url }));
+  },
+
+  async land(msg, ctx, s) {
+    const { result, archived, removeIds } = await s.worktrees.land(msg.worktreeId, msg.message);
+    // the same prefilled prompt sync offers on a conflict: the one failure an agent can be asked to fix
+    const suggestion =
+      !result.ok && result.conflict
+        ? "Merge main into this branch and resolve the conflicts, then verify the app still works."
+        : undefined;
+    await notify(
+      s,
+      ctx,
+      msg.worktreeId,
+      toast(msg.worktreeId, result.ok, result.message, {
+        merged: result.ok,
+        // the landed worktree is gone already; what is offered up is its variant siblings, if any
+        removeIds: removeIds ?? [],
+        ...(archived?.restorable ? { restoreId: archived.id } : {}),
+        ...(suggestion ? { suggestion } : {}),
+      }),
+    );
   },
 
   async "merge-main"(msg, ctx, s) {

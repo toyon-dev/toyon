@@ -55,4 +55,17 @@ describe("shellContext", () => {
     const long = `\`\`\`\n${"x".repeat(7_000)}\n\`\`\``;
     expect(shellContext([run("cat big", long)])).toContain("[output cut here]");
   });
+
+  test("the repo's check rides along too, so 'fix it' after a failed check carries the failure", () => {
+    const check: ChatItem = {
+      kind: "tool",
+      id: "check",
+      name: "check",
+      input: { command: "bun run check" },
+      output: "```\n2 errors\n```\nexit 1",
+      done: true,
+      toolKind: "execute",
+    };
+    expect(shellContext([user("hi"), check])).toContain("$ bun run check\n2 errors\nexit 1]");
+  });
 });

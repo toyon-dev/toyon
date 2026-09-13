@@ -48,6 +48,11 @@ export async function mergeToMain(
   if (current.out !== defaultBr) {
     return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr}; switch it first` };
   }
+  // the merge writes into the main checkout, and someone may be editing there: git would carry
+  // their edits through a clean merge and stop on a touched file, leaving them mid-merge
+  if ((await statusFiles(repoPath)).length > 0) {
+    return { ok: false, message: `${defaultBr} has uncommitted changes: commit or stash them there first` };
+  }
   const m = await git(repoPath, "merge", "--no-edit", branch);
   if (!m.ok) return mergeFailure(repoPath, m, `merge conflicts with ${defaultBr}: sync this worktree first`);
   return { ok: true, message: `merged ${branch} into ${defaultBr}` };

@@ -7,6 +7,7 @@
 import type { WorktreeInfo } from "@toyon/shared";
 import type { StateStore } from "../core/state.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
+import { LAND_SYSTEM, type LandVerdict, parseLanding } from "./landing.ts";
 import { askFreshAgent } from "./oneshot.ts";
 import { parseRecap, RECAP_SYSTEM } from "./recap.ts";
 import type { AgentRegistry } from "./registry.ts";
@@ -79,6 +80,24 @@ export function makeRecapper(
     if (offered.length > 0 && !offered.some((m) => m.id === quick)) return null;
     const agent = runtime.agentFor(wt.id);
     return agent ? parseRecap(await agent.ask(RECAP_SYSTEM, prompt, { quick: "require" })) : null;
+  };
+}
+
+/** The landing verdict and commit message, on the same terms as the recap: the worktree's own
+ * agent, its quick model or nothing. Without one, readiness rests on the check alone. */
+export function makeLander(
+  runtime: Pick<RuntimeRegistry, "agentFor">,
+  agents: Pick<AgentRegistry, "get">,
+  state: Pick<StateStore, "cachedOptions" | "defaultAgent">,
+) {
+  return async (wt: WorktreeInfo, prompt: string): Promise<LandVerdict | null> => {
+    const spec = agents.get(wt.agent ?? state.defaultAgent ?? DEFAULT_AGENT_ID);
+    const quick = spec?.quickModel;
+    if (!spec || !quick) return null;
+    const offered = state.cachedOptions(spec.id, "model");
+    if (offered.length > 0 && !offered.some((m) => m.id === quick)) return null;
+    const agent = runtime.agentFor(wt.id);
+    return agent ? parseLanding(await agent.ask(LAND_SYSTEM, prompt, { quick: "require" })) : null;
   };
 }
 

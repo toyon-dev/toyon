@@ -1,11 +1,28 @@
 // The recap line: what happened while you were away, as the agent's own sentence about it. The
 // composer opens on it as its placeholder, and the rail row's tip carries it.
 
-import type { LastTurn, TurnFacts } from "@toyon/shared";
+import type { Landing, LastTurn, TurnFacts } from "@toyon/shared";
 import { ago } from "./util.ts";
 
 /** a clause that ends the line gets its full stop, unless it brought its own */
 const ended = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+
+/** The verdict as the placeholder's first line: what would land and whether it can, or what
+ * stands in the way. `count` is the files that would go, uncommitted or committed. */
+export function landingLine(l: Landing, count: number): string {
+  if (l.check === "fail") {
+    const first = l.checkTail
+      ?.split("\n")
+      .find((line) => line.trim())
+      ?.trim();
+    return `Check failed${first ? `: ${ended(first)}` : "."}`;
+  }
+  if (!l.ready) return l.why ? `Not ready to land: ${ended(l.why)}` : "Not ready to land.";
+  const files = count > 0 ? `${count} ${count === 1 ? "file" : "files"} changed` : "";
+  const check = l.check === "pass" ? "check passed" : "";
+  const facts = [files, check].filter(Boolean).join(", ");
+  return facts ? `Ready to land: ${facts}.` : "Ready to land.";
+}
 
 /** How it stopped, for a stop with no sentence to say it: recaps set to facts, a sentence still
  * being written, or none that came back. The counts of turns and edits are not among them; they

@@ -4,14 +4,14 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared";
+import { CHECK_TOOL, DAEMON_DEFAULT_PORT, SHELL_DEV_PORT } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { AgentAccounts } from "./agent/accounts.ts";
 import { spawnAcp } from "./agent/acp/transport.ts";
 import { AttachmentStore } from "./agent/attachments.ts";
 import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
-import { makePlanner, makeRecapper } from "./agent/tasks.ts";
+import { makeLander, makePlanner, makeRecapper } from "./agent/tasks.ts";
 import { locateAssets } from "./core/assets.ts";
 import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
@@ -29,6 +29,7 @@ import { BridgeScript } from "./runtime/bridge-script.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
+import { LandingService } from "./worktrees/landing.ts";
 import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
 import { TurnService } from "./worktrees/turns.ts";
@@ -95,6 +96,15 @@ const files = new FileService(state, runtime, (id) => worktrees.readable(id));
 const design = new DesignService((id) => worktrees.readable(id));
 const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
 const exec = new ExecService({ state, runtime });
+// after the turn service: its verdict follows the turnSettled the turn service emits
+new LandingService({
+  state,
+  hub,
+  worktrees,
+  transcript: (id) => runtime.agentFor(id)?.transcript() ?? [],
+  check: (id, command) => exec.exec(id, command, CHECK_TOOL),
+  judge: makeLander(runtime, agents, state),
+});
 const refs = new RefSearch({ state });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees });
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);

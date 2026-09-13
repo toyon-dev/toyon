@@ -1,9 +1,36 @@
 // Working-tree and branch state: porcelain parsing, line counts, changed ranges, ahead/behind.
 // The parsers are pure; the functions around them shell out through git/exec.
 
+import { statSync } from "node:fs";
 import { join } from "node:path";
 import type { GitFileStatus } from "@toyon/shared";
 import { git, gitRaw } from "./exec.ts";
+
+/** The tree's shape in one string: HEAD, the line counts of every change against it, and the
+ * untracked files with their size and mtime (git has no counts for those). A landing verdict is
+ * written against this and retired when it no longer matches. Cheap enough to take on every
+ * status read; an edit to a tracked file that keeps its line counts exactly slips past it, which
+ * is rare and costs a stale suggestion, not a wrong merge. */
+export async function treeFingerprint(worktreePath: string): Promise<string> {
+  const [head, diff, untracked] = await Promise.all([
+    git(worktreePath, "rev-parse", "HEAD"),
+    git(worktreePath, "diff", "HEAD", "--numstat", "--no-renames"),
+    git(worktreePath, "ls-files", "--others", "--exclude-standard"),
+  ]);
+  const others = untracked.out
+    .split("\n")
+    .filter(Boolean)
+    .map((p) => {
+      try {
+        const s = statSync(join(worktreePath, p));
+        return `${p}:${s.size}:${s.mtimeMs}`;
+      } catch {
+        // gone between the listing and the stat: its absence is the fact
+        return `${p}:-`;
+      }
+    });
+  return `${head.out}:${Bun.hash(`${diff.out}\n${others.join("\n")}`).toString(36)}`;
+}
 
 /** `only` narrows the status to those exact paths: a question about one file should not walk the tree */
 export async function statusFiles(worktreePath: string, ...only: string[]): Promise<GitFileStatus[]> {

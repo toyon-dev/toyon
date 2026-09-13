@@ -38,12 +38,20 @@ export class ExecService {
 
   /** start the command; the result reaches the shell through the agent stream, not a reply */
   run(worktreeId: string, command: string): void {
+    fireAndForget(worktreeId, this.exec(worktreeId, command), `exec ${command}`);
+  }
+
+  /** the same run, for a caller that needs the answer too: the repo's check after a turn reads
+   * the exit code, and the transcript still gets the rows so the output is in the conversation.
+   * Synchronous up to the spawn, so a refusal (a spare, an agent not up yet) throws to the
+   * handler as a UserError rather than surfacing as a rejected promise nobody awaits. */
+  exec(worktreeId: string, command: string, name: string = SHELL_TOOL): Promise<ExecResult> {
     const wt = this.deps.state.requireWorktree(worktreeId);
     if (wt.kind === "spare") throw new UserError("no shell for a spare worktree");
     const agent = this.deps.runtime.agentFor(worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
-    const toolId = `${SHELL_TOOL}-${Date.now().toString(36)}-${++this.n}`;
-    agent.note({ type: "tool-start", toolId, name: SHELL_TOOL, input: { command }, kind: "execute" });
+    const toolId = `${name}-${Date.now().toString(36)}-${++this.n}`;
+    agent.note({ type: "tool-start", toolId, name, input: { command }, kind: "execute" });
     // PWD keeps the shell on the logical path, the same as the terminal pane
     const cwd = wt.linkPath ?? wt.path;
     // a login shell so PATH is the person's own; TERM=dumb and NO_COLOR because escape codes would
@@ -61,11 +69,11 @@ export class ExecService {
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       agent.note({ type: "tool-end", toolId, output: `could not run: ${reason}`, isError: true });
-      return;
+      return Promise.resolve({ exit: reason, text: "" });
     }
     const timer = setTimeout(() => this.kill(worktreeId, toolId), TIMEOUT_MS);
     this.track(worktreeId, toolId, { proc, timer });
-    fireAndForget(worktreeId, this.collect(worktreeId, toolId, proc, agent), `exec ${command}`);
+    return this.collect(worktreeId, toolId, proc, agent);
   }
 
   /** kill everything still running for the worktree; each records its own end as it goes */
@@ -100,7 +108,12 @@ export class ExecService {
     }, KILL_GRACE_MS);
   }
 
-  private async collect(worktreeId: string, toolId: string, proc: Subprocess, agent: AgentAdapter) {
+  private async collect(
+    worktreeId: string,
+    toolId: string,
+    proc: Subprocess,
+    agent: AgentAdapter,
+  ): Promise<ExecResult> {
     // both pipes into one buffer in arrival order, which is as close to what a terminal would have
     // shown as two pipes allow; a separate stderr block would put the error under the output it
     // interrupted
@@ -137,7 +150,15 @@ export class ExecService {
       if (r) clearTimeout(r.timer);
     }
     agent.note({ type: "tool-end", toolId, output: formatOutput(text, exit, truncated), isError: exit !== 0 });
+    return { exit, text };
   }
+}
+
+/** what a command left: its exit status (a signal name when killed, a reason when it never ran)
+ * and what it printed, both pipes in arrival order */
+export interface ExecResult {
+  exit: number | string | null;
+  text: string;
 }
 
 /** the output as the transcript renders it: the text fenced, so it draws as a block rather than

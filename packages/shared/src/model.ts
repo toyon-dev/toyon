@@ -16,6 +16,9 @@ export interface ToyonConfig {
   procs: Record<string, string>;
   /** shell commands run once when a worktree is created */
   setup?: string[];
+  /** a command that must exit 0 before a worktree is offered to land: run in the worktree after
+   * every finished turn, its output on the transcript */
+  check?: string;
   /** proc that the preview iframe should show (defaults to "web", else first proc) */
   preview?: string;
   /** commands can't honor $PORT: only the focused worktree's procs run */
@@ -41,6 +44,8 @@ export interface RepoInfo {
    * the person already had. What going back from the first-run screen may take away again, and
    * only while the project is still exactly as it was made. Absent on a repo that was opened. */
   made?: "folder" | "git";
+  /** an `origin` remote exists, read at register and boot: what decides whether a PR is offered */
+  remote?: boolean;
 }
 
 /** one directory offered by the project picker's path completion */
@@ -148,6 +153,9 @@ export interface WorktreeInfo {
   /** how the agent last stopped here, and what the turns since someone looked did. Absent until a
    * turn has run. The rail's ring and the recap both read it. */
   lastTurn?: LastTurn;
+  /** whether the work here is ready to land, and the message it would land with. Written after a
+   * finished turn once the check has run; gone when the tree changes or a new turn starts. */
+  landing?: Landing;
   /** when the person last sent something here, a chat message or a `!` command. The rail sorts on
    * it, so a row rises because someone worked in it and never because its agent did. Absent on a
    * row nothing has been sent to since the field landed. */
@@ -193,6 +201,27 @@ export interface LastTurn {
    * agent's one-sentence summary: absent while it is written, when recaps show facts only, or when
    * none came back. */
   recap?: { at: number; text?: string };
+}
+
+/** What the daemon knows about landing a worktree after a turn: whether the repo's check passed,
+ * whether the work reads as finished, and a commit message for it. The composer offers `land`
+ * only while `ready`; the changes panel shows the message as its box's placeholder. */
+export interface Landing {
+  /** the turn end it describes */
+  at: number;
+  /** `none`: the repo has no check command, so the verdict rests on the turn alone */
+  check: "pass" | "fail" | "none";
+  /** the last lines of a failed check, for the placeholder */
+  checkTail?: string;
+  /** the check passed (or there is none) and the turn read as finished */
+  ready: boolean;
+  /** why not, in one line, when the turn did not read as finished */
+  why?: string;
+  /** the suggested commit message: a subject, and a body when there was more to say */
+  subject?: string;
+  body?: string;
+  /** HEAD plus the diff's shape when this was written: a tree that no longer matches retires it */
+  fingerprint: string;
 }
 
 /** the branch is toyon's to manage: made by create or a spare claim, so removing the

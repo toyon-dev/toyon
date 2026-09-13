@@ -172,8 +172,16 @@ export function worktreeItems(
   }
   if (canLand(w.worktree)) {
     land.push({
+      id: "land",
+      label: "land",
+      detail: "commit, merge into main, archive this worktree",
+      disabled: busy,
+      onClick: () => shipOp(sock, dispatch, { t: "land", worktreeId: id }),
+    });
+    land.push({
       id: "merge",
       label: "merge into main",
+      detail: "the merge alone: the worktree stays",
       disabled: busy,
       onClick: () => shipOp(sock, dispatch, { t: "merge-main", worktreeId: id }),
     });

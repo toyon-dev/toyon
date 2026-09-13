@@ -44,6 +44,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
     return detected.length > 0 ? detected : [proc("web", "")];
   });
   const [install, setInstall] = useState(() => (repo.config.setup ?? []).join("\n"));
+  const [check, setCheck] = useState(() => repo.config.check ?? "");
   const multi = procs.length > 1;
   const canStart = procs.some((p) => p.name.trim() && p.cmd.trim());
   // the agent's button exists for a repo the detector could not read; it leads while the form is
@@ -58,17 +59,21 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
+  // keys the pane does not edit (preview, profiles) survive a hand-written file; an emptied check
+  // leaves the file rather than staying as ""
+  const edited = (): typeof repo.config => {
+    const { check: _check, ...rest } = repo.config;
+    return { ...rest, setup: setupLines(), ...(check.trim() ? { check: check.trim() } : {}) };
+  };
   const start = () => {
     sock?.send({
       t: "confirm-config",
       repoId: repo.id,
       config: {
-        // keys the pane does not edit (preview, profiles) survive a hand-written file
-        ...repo.config,
+        ...edited(),
         procs: Object.fromEntries(
           procs.filter((p) => p.name.trim() && p.cmd.trim()).map((p) => [p.name.trim(), p.cmd.trim()]),
         ),
-        setup: setupLines(),
       },
     });
     onClose?.();
@@ -76,7 +81,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // a library, a CLI, a backend with no HTTP server: nothing to preview, everything else works.
   // Confirmed with no procs so the pane stops asking and the worktrees get their agents.
   const nothingToRun = () => {
-    sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...repo.config, procs: {}, setup: setupLines() } });
+    sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...edited(), procs: {} } });
     onClose?.();
   };
   const askAgent = () => main && sock?.send({ t: "chat", worktreeId: main.id, text: setupFixPrompt(repo) });
@@ -118,6 +123,10 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
           placeholder="bun install"
           onChange={(e) => setInstall(e.target.value)}
         />
+      </FormRow>
+
+      <FormRow label="check" hint="runs after each of the agent's turns; the work lands only when it passes">
+        <Field size="md" rule value={check} placeholder="bun run check" onChange={(e) => setCheck(e.target.value)} />
       </FormRow>
 
       <FormRow

@@ -6,6 +6,11 @@
  * keys on the name to open the row, since its output is the reason it was run */
 export const SHELL_TOOL = "shell";
 
+/** the tool name on the repo's check, run by the daemon after a finished turn: the same row as a
+ * `!` command (its output belongs in the conversation, and rides into the next message the same
+ * way), but toyon's to run rather than the person's, so the shell does not open it as theirs */
+export const CHECK_TOOL = "check";
+
 /** ACP's tool categories; what the shell keys "did this turn edit anything" on */
 export type ToolKind =
   | "read"

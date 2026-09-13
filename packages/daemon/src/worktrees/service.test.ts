@@ -602,6 +602,80 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.landed).toBe(false);
   });
 
+  test("land commits with the message it is given, merges, and archives the worktree", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const { result, archived, removeIds } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe(`${wt.title} is on main`);
+    expect(removeIds).toEqual([]);
+    expect(archived).toMatchObject({ id: wt.id, restorable: true });
+    expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
+    // main had not moved, so the merge fast-forwards onto the commit itself
+    expect((await git(w.repo, "log", "-1", "--format=%s", "main")).out).toBe("add feature");
+    expect(w.state.worktree(wt.id)).toBeUndefined();
+    expect(existsSync(wt.path)).toBe(false);
+  });
+
+  test("land takes the suggested message when none is typed, and refuses with neither", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    await expect(w.worktrees.land(wt.id)).rejects.toBeInstanceOf(UserError);
+    w.worktrees.setLanding(wt.id, { at: 1, check: "none", ready: true, subject: "add the feature", fingerprint: "f" });
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect((await git(w.repo, "log", "-1", "--format=%s", "main")).out).toBe("add the feature");
+  });
+
+  test("land syncs main in first when the branch is behind, and a dirty main checkout refuses", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(w.repo, "git", "commit", "--allow-empty", "-qm", "main moves on");
+    writeFileSync(join(w.repo, "README.md"), "edited on main\n");
+    const refused = await w.worktrees.land(wt.id, "add feature");
+    expect(refused.result.ok).toBe(false);
+    expect(refused.result.message).toContain("uncommitted changes");
+    // the commit stood: the work is safer committed, and the worktree is still there to try again
+    expect(w.state.worktree(wt.id)).toBeDefined();
+    expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
+    sh(w.repo, "git", "checkout", "-q", "--", "README.md");
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect((await git(w.repo, "log", "--format=%s", "-n", "4")).out.split("\n")).toContain("main moves on");
+  });
+
+  test("ship commits first when the tree is dirty", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    // no origin in a temp repo: the commit lands and the ship says so instead of pushing
+    const result = await w.worktrees.ship(wt.id, "add feature");
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("no 'origin' remote");
+    expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
+  });
+
+  test("a status read retires a verdict once the tree no longer matches it", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const fingerprint = (await import("../git/status.ts")).treeFingerprint;
+    w.worktrees.setLanding(wt.id, {
+      at: 1,
+      check: "none",
+      ready: true,
+      subject: "add the feature",
+      fingerprint: await fingerprint(wt.path),
+    });
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landing?.ready).toBe(true);
+    writeFileSync(join(wt.path, "feature.txt"), "x\ny\n");
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landing).toBeUndefined();
+  });
+
   test("merge refuses uncommitted work and main", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");

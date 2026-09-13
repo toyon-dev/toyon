@@ -16,6 +16,7 @@ import {
   type GitFileStatus,
   hasOwnBranch,
   isMain,
+  type Landing,
   type PermissionMode,
   type RefKind,
   type RepoInfo,
@@ -46,6 +47,7 @@ import {
   statusFiles,
   statusFilesWithCounts,
   treeEmpty,
+  treeFingerprint,
 } from "../git/status.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
@@ -910,6 +912,17 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
   }
 
+  /** the landing verdict for a worktree, or none: written after a turn, retired by a new turn or
+   * a tree that no longer matches it */
+  setLanding(worktreeId: string, landing: Landing | undefined) {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt || (wt.landing === undefined && landing === undefined)) return;
+    if (landing) wt.landing = landing;
+    else delete wt.landing;
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
+  }
+
   private landable(worktreeId: string, verb: string): { wt: WorktreeInfo; repo: RepoInfo } {
     const pair = this.d.state.requireWorktreeWithRepo(worktreeId);
     if (isMain(pair.wt)) throw new UserError(`${verb} from a worktree, not main`);
@@ -917,12 +930,63 @@ export class WorktreeService {
     return pair;
   }
 
-  /** push + PR. Not under the repo lock: it holds `git push` + `gh` for seconds. */
-  async ship(worktreeId: string): Promise<ShipResult> {
+  /** the message a land or a ship commits with: what the person typed, else what the landing
+   * verdict suggested. Neither means the press cannot commit, and the box to type one is named. */
+  private commitMessage(wt: WorktreeInfo, typed?: string): string {
+    const m = typed?.trim();
+    if (m) return m;
+    const s = wt.landing?.subject;
+    if (s) return wt.landing?.body ? `${s}\n\n${wt.landing.body}` : s;
+    throw new UserError("no commit message yet: write one in the changes panel");
+  }
+
+  /** commit everything when there is anything, with the message a land or a ship was given */
+  private async commitIfDirty(wt: WorktreeInfo, typed?: string): Promise<ShipResult | null> {
+    if ((await statusFiles(wt.path)).length === 0) return null;
+    const result = await commitWorktree(wt.path, this.commitMessage(wt, typed));
+    if (result.ok) this.headMoved(wt.id);
+    return result;
+  }
+
+  /** push + PR, committing first when the tree is dirty. Not under the repo lock: it holds
+   * `git push` + `gh` for seconds. */
+  async ship(worktreeId: string, message?: string): Promise<ShipResult> {
     const { wt, repo } = this.landable(worktreeId, "ship");
+    const committed = await this.commitIfDirty(wt, message);
+    if (committed && !committed.ok) return committed;
     const result = await shipWorktree(wt.path, wt.branch, repo.defaultBranch);
     if (result.prCreated && result.url) this.setPrUrl(wt.id, result.url);
     return result;
+  }
+
+  /** The one press: commit what is uncommitted, take main in if the branch is behind, merge, and
+   * archive the worktree. Each step stops the rest when it fails, and the result says which: a
+   * commit stands even when the sync after it conflicts, since the work is safer committed. The
+   * remove runs outside the lock (it takes its own) and after the agent and procs are stopped.
+   * Returns the archived record for the toast's restore, and any variant siblings to offer up. */
+  async land(
+    worktreeId: string,
+    message?: string,
+  ): Promise<{ result: ShipResult; archived?: ArchivedWorktree | null; removeIds?: string[] }> {
+    const { wt, repo } = this.landable(worktreeId, "land");
+    const result = await withRepoLock(repo.path, async (): Promise<ShipResult> => {
+      const committed = await this.commitIfDirty(wt, message);
+      if (committed && !committed.ok) return committed;
+      const { behind } = await aheadBehind(wt.path, repo.defaultBranch);
+      if (behind > 0) {
+        const synced = await syncFromMain(wt.path, repo.defaultBranch);
+        if (!synced.ok) return synced;
+      }
+      return mergeToMain(wt.path, wt.branch, repo.path, repo.defaultBranch);
+    });
+    if (!result.ok) return { result };
+    this.invalidateCounts();
+    this.setLanded(wt.id, true);
+    const archived = await this.remove(wt.id);
+    const removeIds = wt.variant
+      ? this.d.state.worktrees.filter((w) => w.variant?.group === wt.variant?.group && w.id !== wt.id).map((w) => w.id)
+      : [];
+    return { result: { ...result, message: `${wt.title} is on ${repo.defaultBranch}` }, archived, removeIds };
   }
 
   /** merge into main locally. Returns the worktrees the UI should offer to clean up: landing a
@@ -1181,6 +1245,10 @@ export class WorktreeService {
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
       const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.defaultBranch) : undefined;
       if (r.wt?.landed && (files.length > 0 || ahead > 0)) this.setLanded(r.wt.id, false);
+      // a verdict describes one tree: an edit since (by hand, by another tool) retires it, so the
+      // composer never offers to land work the check and the message have not seen
+      if (r.wt?.landing && r.wt.landing.fingerprint !== (await treeFingerprint(r.path)))
+        this.setLanding(r.wt.id, undefined);
       // the empty-tree fact lives on main's record, so the rows frame carries it without git: a
       // task worktree of an empty repo is not the greenfield surface, so only main keeps it
       if (r.wt && isMain) this.setEmpty(r.wt, files.length === 0 ? await treeEmpty(r.path) : false);

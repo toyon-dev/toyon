@@ -33,6 +33,9 @@ import {
 } from "./create.ts";
 import { watchConfigFile, watchDefaultBranch, watchWorktreeDir } from "./watcher.ts";
 
+/** whether `pr` has anywhere to push: read once at register and boot, since remotes rarely change */
+const hasOrigin = async (path: string) => (await git(path, "remote", "get-url", "origin")).ok;
+
 export interface RepoRegistryDeps {
   state: StateStore;
   hub: Hub;
@@ -74,8 +77,11 @@ export class RepoRegistry {
     // would have taken it, rather than leaving its transcript behind with nothing pointing at it
     const gone = state.worktrees.filter((wt) => !existsSync(wt.path) || !state.repos.some((r) => r.id === wt.repoId));
     for (const wt of gone) await this.d.worktrees.forgetGone(wt);
-    // toyon.json may have been edited while the daemon was down
-    for (const repo of state.repos) this.applyConfigFile(repo, false);
+    // toyon.json may have been edited while the daemon was down, and so may the remotes
+    for (const repo of state.repos) {
+      this.applyConfigFile(repo, false);
+      repo.remote = await hasOrigin(repo.path);
+    }
     for (const wt of state.worktrees) reservePort(wt.proxyPort);
     state.save();
     for (const repo of state.repos) {
@@ -268,6 +274,7 @@ export class RepoRegistry {
       needsSetup: detected.needsSetup,
       guess: detected.from,
       ...(made ? { made } : {}),
+      remote: await hasOrigin(root),
     };
     this.d.state.addRepo(repo);
 

@@ -280,6 +280,7 @@ export const toyonConfigSchema = z
   .object({
     procs: z.record(declaredProcName, shellCommand),
     setup: z.array(shellCommand).max(50).optional(),
+    check: shellCommand.optional(),
     preview: procName.optional(),
     exclusive: z.boolean().optional(),
     profiles: z.record(procName, runProfileSchema).optional(),
@@ -397,8 +398,12 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("git-log"), worktreeId: id }),
   /** the files one commit touched, on expanding it in the history tab */
   z.object({ t: z.literal("git-commit"), worktreeId: id, sha }),
-  z.object({ t: z.literal("ship"), worktreeId: id }),
+  /** push and open a PR; a dirty tree is committed first with `message`, else the suggested one */
+  z.object({ t: z.literal("ship"), worktreeId: id, message: z.string().max(5_000).optional() }),
   z.object({ t: z.literal("merge-main"), worktreeId: id }),
+  /** the one press: sync main in if behind, commit if dirty (with `message`, else the suggested
+   * one), merge into main, archive the worktree. Stops at the first step that fails. */
+  z.object({ t: z.literal("land"), worktreeId: id, message: z.string().max(5_000).optional() }),
   z.object({ t: z.literal("commit"), worktreeId: id, message: z.string().max(5_000) }),
   /** merge the sources' branches into the target worktree and remove them; a local merge, and the
    * target keeps its agent, procs and port */

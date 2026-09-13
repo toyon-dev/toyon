@@ -1,7 +1,7 @@
 // The composer's `!` mode: a draft that leads with `!` is a command for the worktree's shell rather
 // than a message for the agent. Pure, like mentions.ts, so the rules have tests.
 
-import { SHELL_TOOL } from "@toyon/shared";
+import { CHECK_TOOL, SHELL_TOOL } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import { parseToolOutput } from "./toolCall.ts";
 
@@ -14,10 +14,10 @@ export function shellCommandOf(text: string): string | null {
   return text.slice(1).trim();
 }
 
-/** the command a row of the transcript ran from the composer; null for anything else, the agent's
- * own shell calls included */
+/** the command a row of the transcript ran from the composer, or the repo's check toyon ran after
+ * a turn; null for anything else, the agent's own shell calls included */
 export function commandOf(item: ChatItem): string | null {
-  if (item.kind !== "tool" || item.name !== SHELL_TOOL) return null;
+  if (item.kind !== "tool" || (item.name !== SHELL_TOOL && item.name !== CHECK_TOOL)) return null;
   const input = item.input as { command?: unknown } | null;
   return typeof input?.command === "string" ? input.command : null;
 }

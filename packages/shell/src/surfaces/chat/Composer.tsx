@@ -1,5 +1,5 @@
 import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree } from "@toyon/shared";
-import { canSync, DEFAULT_PERMISSION_MODE, isMain, nextNumbers, numbered } from "@toyon/shared";
+import { canLand, canSync, DEFAULT_PERMISSION_MODE, isMain, nextNumbers, numbered } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
@@ -29,7 +29,7 @@ import { CommandRow } from "../palettes/CommandRow.tsx";
 import { PaletteRow } from "../palettes/PaletteRow.tsx";
 import { fileRow } from "../palettes/QuickOpen.tsx";
 import { rankFiles } from "../palettes/quickOpen.ts";
-import { recapLine, recapShown } from "../recap.ts";
+import { landingLine, recapLine, recapShown } from "../recap.ts";
 import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl } from "./images.ts";
@@ -206,6 +206,15 @@ export function Composer({
   const recapFor = useLocalField(id, "recapFor");
   const blank = !text.trim() && attachments.length === 0;
   const recap = !drafting && !greenfield && recapShown(lastTurn, recapFor, blank, midTurn) ? lastTurn : undefined;
+  // the landing verdict, read while the box is empty and the agent is not on it: once the work is
+  // done the empty box is where the next step is offered, and it goes with the first letter typed
+  // the way the recap does. A PR under review has no landing here, so it never shows one.
+  const landing =
+    !drafting && !greenfield && blank && !midTurn && active && canLand(active.worktree)
+      ? active.worktree.landing
+      : undefined;
+  // what would land: the uncommitted files, or the committed ones when the tree is clean
+  const landCount = dirty || (git?.committed?.length ?? 0);
   const compactable = canCompact && !midTurn;
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
   const compactItems = () => [
@@ -324,23 +333,31 @@ export function Composer({
   const title = active?.worktree.title ?? "untitled";
   const placeholderText = !active
     ? "no worktree selected"
-    : recap
-      ? recapLine(recap)
-      : greenfield
-        ? `describe ${title}…`
-        : drafting || spawning
-          ? "describe a change"
-          : onMain
-            ? "message the agent; / for a command, ! for a shell command"
-            : `message agent on ${title}; / for a command, ! for a shell command`;
+    : landing
+      ? landingLine(landing, landCount)
+      : recap
+        ? recapLine(recap)
+        : greenfield
+          ? `describe ${title}…`
+          : drafting || spawning
+            ? "describe a change"
+            : onMain
+              ? "message the agent; / for a command, ! for a shell command"
+              : `message agent on ${title}; / for a command, ! for a shell command`;
+  // under a verdict: the recap's sentence when one has been written, else the message the work
+  // would land with, which is the next most useful thing to read before pressing
   const subline =
-    text !== "" || ghost || !active || recap
+    text !== "" || ghost || !active
       ? null
-      : note
-        ? note
-        : spawning && onMain && !drafting
-          ? [<Kbd key="k" k={chord("new")} />, " drafts one with variants, batch, agent and profile"]
-          : null;
+      : landing
+        ? (lastTurn?.recap?.text ?? landing.subject ?? null)
+        : recap
+          ? null
+          : note
+            ? note
+            : spawning && onMain && !drafting
+              ? [<Kbd key="k" k={chord("new")} />, " drafts one with variants, batch, agent and profile"]
+              : null;
 
   // On open: the file listing is cached and never invalidated, so refresh it (the agent may have
   // written a file this turn); cached rows render meanwhile so the menu never looks empty. An
@@ -650,6 +667,13 @@ export function Composer({
                 return;
               }
               if (walk && CARET_KEYS.has(e.key)) keepRecalled();
+              // tab in the empty box, with a message suggested: the changes panel is where a commit
+              // message is edited (Enter breaks its lines there), so tab goes there with it
+              if (e.key === "Tab" && !e.shiftKey && text === "" && landing?.subject) {
+                e.preventDefault();
+                dispatch({ a: "edit-commit" });
+                return;
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 send();
@@ -673,6 +697,32 @@ export function Composer({
               {"\n"}
               <span className="composer-subline">{subline}</span>
             </div>
+          )}
+          {/* the verbs take the corner a send button would: present only while the box is empty
+              and the verdict is ready, so typing and landing are never offered at once. The
+              accent is land's; pr only where there is somewhere to push. */}
+          {landing?.ready && id && (
+            <span className="composer-land">
+              <Button
+                tone="primary"
+                busy={op === "land"}
+                disabled={!!op && op !== "land"}
+                data-tip="Commit, merge into main and archive this worktree. Tab edits the message first."
+                onClick={() => shipOp(sock, dispatch, { t: "land", worktreeId: id })}
+              >
+                land
+              </Button>
+              {repo?.remote && (
+                <Button
+                  busy={op === "ship"}
+                  disabled={!!op && op !== "ship"}
+                  data-tip="Commit, push and open a PR"
+                  onClick={() => shipOp(sock, dispatch, { t: "ship", worktreeId: id })}
+                >
+                  pr
+                </Button>
+              )}
+            </span>
           )}
         </div>
         {/* the row reads left to right as where this goes, then what runs there: each chip after the

@@ -46,6 +46,7 @@ describe("a worktree's actions", () => {
       "|",
       "rename…",
       "|",
+      "land",
       "merge into main",
       "push + PR",
       "|",
@@ -73,6 +74,7 @@ describe("a worktree's actions", () => {
       "graft with…",
       "|",
       "sync from main (3 behind)",
+      "land",
       "merge into main",
       "push + PR",
       "|",
@@ -88,7 +90,7 @@ describe("a worktree's actions", () => {
       deps,
     );
     const off = items.filter(isItem).filter((i) => i.disabled !== undefined);
-    expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "merge into main", "push + PR"]);
+    expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "land", "merge into main", "push + PR"]);
     expect(off[0]?.disabled).toBe("waiting on the one in progress");
   });
 

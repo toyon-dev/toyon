@@ -1476,6 +1476,24 @@ describe("a landing op in flight", () => {
     s = run([three(), sync("a"), three()]);
     expect(s.shipping).toEqual({});
   });
+
+  test("a land's toast offers restore, not a remove of the worktree that is already gone", () => {
+    const s = run([
+      three(),
+      { a: "shipping", id: "a", op: "land" },
+      server({
+        t: "shipped",
+        worktreeId: "a",
+        ok: true,
+        message: "a is on main",
+        merged: true,
+        removeIds: [],
+        restoreId: "a",
+      }),
+    ]);
+    expect(s.shipping).toEqual({});
+    expect(s.toast).toMatchObject({ ok: true, message: "a is on main", removeIds: [], restoreId: "a" });
+  });
 });
 
 describe("usage", () => {

@@ -11,6 +11,11 @@ describe("toyonConfigSchema", () => {
     expect(r.success).toBe(false);
     expect(r.error && issueReason(r.error, "invalid")).toBe('procs.shell: "shell" is reserved for the shell tab');
   });
+
+  test("check is one shell command, or absent", () => {
+    expect(toyonConfigSchema.safeParse({ procs: {}, check: "bun run check" }).success).toBe(true);
+    expect(toyonConfigSchema.safeParse({ procs: {}, check: ["bun run check"] }).success).toBe(false);
+  });
 });
 
 describe("parseClientMsg", () => {

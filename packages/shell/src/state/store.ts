@@ -452,6 +452,8 @@ export interface State {
   leftOpen: boolean;
   /** bumped to put the keyboard in the changes list; focus is the DOM's, so this only asks */
   focusLeft: number;
+  /** bumped to put the suggested commit message in the changes panel's box and the caret after it */
+  editCommit: number;
   rightOpen: boolean;
   /** bumped to put the keyboard in the composer, the same way */
   focusRight: number;
@@ -585,6 +587,7 @@ export function initialState(opts: InitialOpts): State {
     incompatible: false,
     leftOpen: true,
     focusLeft: 0,
+    editCommit: 0,
     rightOpen: true,
     focusRight: 0,
     railOpen: opts.storedRailOpen ?? false,
@@ -735,8 +738,8 @@ function landingIn(s: State, repoId: string | null, rows = s.rows): string | nul
   return (mine.find((w) => isMain(w.worktree)) ?? mine[0])?.id ?? null;
 }
 
-/** the four client messages that end in a `shipped` frame: the daemon's word for them */
-export type ShipOp = "sync-main" | "merge-main" | "ship" | "commit" | "pull-main";
+/** the client messages that end in a `shipped` frame: the daemon's word for them */
+export type ShipOp = "sync-main" | "merge-main" | "ship" | "commit" | "pull-main" | "land";
 
 /** `shipping` minus the entries `done` says are over, the same object when none are, so a
  * selector on it stays stable across the proc events that push most snapshots */
@@ -854,6 +857,8 @@ export type Action =
   | { a: "toggle-left" }
   /** open the changes panel if it is shut, and ask it for the keyboard either way */
   | { a: "focus-left" }
+  /** open the changes panel on its message box, the suggested commit message in it, to edit */
+  | { a: "edit-commit" }
   | { a: "toggle-right" }
   /** open the chat panel if it is shut, and ask the composer for the keyboard either way */
   | { a: "focus-right" }
@@ -1125,6 +1130,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, leftOpen: !s.leftOpen, leftAuto: false };
     case "focus-left":
       return { ...s, leftOpen: true, leftAuto: false, focusLeft: s.focusLeft + 1 };
+    case "edit-commit":
+      return { ...s, leftOpen: true, leftAuto: false, editCommit: s.editCommit + 1 };
     case "toggle-right":
       return { ...s, rightOpen: !s.rightOpen };
     case "focus-right":

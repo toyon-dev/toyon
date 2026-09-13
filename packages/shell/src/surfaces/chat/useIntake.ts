@@ -1,5 +1,5 @@
 import { isLongPaste, limitMessage } from "@toyon/shared";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { readCopiedSource } from "../../app/copiedSource.ts";
 import { attachText, roomIn } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
@@ -164,12 +164,22 @@ export function useFileDrop() {
  * file (a Finder copy carries no text to fall through to); then a selection copied in the editor
  * that takes in a line break, which is a piece of the file rather than words for the sentence, on a
  * chip named for its file and lines; then text long enough to bury the textarea. Anything shorter
- * is typed in as usual. `boxId` is where the attachment waits; `worktreeId` is the worktree on
- * screen, whose files a copy has to come from for its lines to mean anything to the agent.
+ * is typed in as usual. ⌘⇧V types any text in, however long or wherever it was copied from.
+ * `boxId` is where the attachment waits; `worktreeId` is the worktree on screen, whose files a copy
+ * has to come from for its lines to mean anything to the agent.
  */
 export function useComposerPaste(boxId: string | null, worktreeId: string | null) {
   const store = useStoreInstance();
-  return (e: React.ClipboardEvent) => {
+  // a paste event carries no modifiers, so the chord is noted on its keydown, which the browser
+  // follows with the paste before the keyup that clears it
+  const plain = useRef(false);
+  const onPasteKey = (e: React.KeyboardEvent) => {
+    plain.current = (e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "v";
+  };
+  const onPasteKeyUp = () => {
+    plain.current = false;
+  };
+  const onPaste = (e: React.ClipboardEvent) => {
     const images = imageFiles(e.clipboardData);
     if (images.length > 0) {
       e.preventDefault();
@@ -180,6 +190,7 @@ export function useComposerPaste(boxId: string | null, worktreeId: string | null
       e.preventDefault();
       return void attachTextFiles(store, boxId, files);
     }
+    if (plain.current) return;
     // text/plain, never text/html: an editor or a web page offers both, and the markup is style
     // noise the model has no use for
     const text = e.clipboardData.getData("text/plain");
@@ -188,4 +199,5 @@ export function useComposerPaste(boxId: string | null, worktreeId: string | null
     e.preventDefault();
     attachText(store, boxId, text, source ? { source } : {});
   };
+  return { onPaste, onPasteKey, onPasteKeyUp };
 }

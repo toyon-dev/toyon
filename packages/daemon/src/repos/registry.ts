@@ -437,11 +437,14 @@ export class RepoRegistry {
     if (!file) return false; // deleted or never written: keep what we have
     if (!file.ok) {
       log.warn(repo.id, file.reason);
-      if (announce) {
-        const main = this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main");
-        if (main) this.d.hub.emit("log", main.id, "config", `${file.reason}; keeping the previous config`);
-      }
+      if (announce) this.tellMain(repo, `${file.reason}; keeping the previous config`);
       return false;
+    }
+    // before the sameness check: a misspelt key changes nothing, which is exactly when it needs saying
+    if (file.ignored) {
+      const line = `ignoring ${file.ignored.join(", ")}, which toyon does not know`;
+      log.warn(repo.id, line);
+      if (announce) this.tellMain(repo, line);
     }
     const same = !repo.needsSetup && JSON.stringify(repo.config) === JSON.stringify(file.config);
     if (same) return false;
@@ -450,6 +453,12 @@ export class RepoRegistry {
     repo.guess = undefined;
     this.d.state.save();
     return true;
+  }
+
+  /** a line in the main worktree's log pane, where a person editing the settings is looking */
+  private tellMain(repo: RepoInfo, line: string) {
+    const main = this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main");
+    if (main) this.d.hub.emit("log", main.id, "config", line);
   }
 
   private startWatcher(repo: RepoInfo) {

@@ -13,7 +13,8 @@ export interface DetectedConfig {
 }
 
 export type ConfigFile =
-  | { ok: true; config: ToyonConfig }
+  /** `ignored`: keys toyon does not know, as "<file>: <key>", for the caller to say where it is seen */
+  | { ok: true; config: ToyonConfig; ignored?: string[] }
   /** `conflict`: settings in both places, which a save must not quietly pick between */
   | { ok: false; reason: string; conflict?: true }
   | null;
@@ -38,6 +39,7 @@ export function readConfigFile(repoPath: string): ConfigFile {
     return { ok: false, conflict: true, reason: `settings are in two places (${found.flat().join(", ")}); keep one` };
   }
   let merged: unknown = {};
+  const ignored: string[] = [];
   for (const rel of files) {
     let raw: unknown;
     try {
@@ -46,17 +48,16 @@ export function readConfigFile(repoPath: string): ConfigFile {
       return { ok: false, reason: `${rel} is not valid JSON: ${e instanceof Error ? e.message : String(e)}` };
     }
     if (!isObject(raw)) return { ok: false, reason: `${rel} must hold a JSON object` };
-    const unknown = unknownKeys(raw);
-    if (unknown.length > 0) log.warn(repoPath, `${rel}: ignoring ${unknown.join(", ")}, which toyon does not know`);
+    ignored.push(...unknownKeys(raw).map((k) => `${rel}: ${k}`));
     merged = mergePatch(merged, raw);
   }
   const r = toyonConfigSchema.safeParse(merged);
-  if (r.success) return { ok: true, config: r.data };
+  if (r.success) return { ok: true, config: r.data, ...(ignored.length > 0 ? { ignored } : {}) };
   return { ok: false, reason: `${files.join(" + ")}: ${issueReason(r.error, "invalid")}` };
 }
 
-/** Keys toyon does not know, named in the log so a typo is visible rather than silently doing
- * nothing. Never a refusal: a file written for a newer toyon still runs on this one. */
+/** Keys toyon does not know, named so a typo is visible rather than silently doing nothing. Never a
+ * refusal: a file written for a newer toyon still runs on this one. */
 function unknownKeys(raw: Record<string, unknown>): string[] {
   const top = Object.keys(raw).filter((k) => !(k in toyonConfigSchema.shape));
   const land = isObject(raw.land)
@@ -138,16 +139,15 @@ export function detectConfig(repoPath: string): DetectedConfig {
     const pages = detectPages(repoPath, scripts, runner);
     // the pages command is built from the wrangler file, but the scripts a person would copy from
     // are package.json's
-    if (pages)
-      return { config: { procs: pages, setup: [`${runner} install`] }, needsSetup: true, from: "package.json" };
-    const procs: Record<string, string> = {};
+    if (pages) return { config: { setup: [`${runner} install`], run: pages }, needsSetup: true, from: "package.json" };
+    const run: Record<string, string> = {};
     // `dev` is the vite/next convention, `start` the CRA/yarn one; a repo with both means dev
-    if (scripts.dev) procs.web = procCommand(runner, "dev", scripts.dev);
-    else if (scripts.start) procs.web = procCommand(runner, "start", scripts.start);
-    if (scripts["dev:api"]) procs.api = procCommand(runner, "dev:api", scripts["dev:api"]);
-    if (Object.keys(procs).length > 0) {
+    if (scripts.dev) run.web = procCommand(runner, "dev", scripts.dev);
+    else if (scripts.start) run.web = procCommand(runner, "start", scripts.start);
+    if (scripts["dev:api"]) run.api = procCommand(runner, "dev:api", scripts["dev:api"]);
+    if (Object.keys(run).length > 0) {
       return {
-        config: { procs, setup: [`${runner} install`] },
+        config: { setup: [`${runner} install`], run },
         needsSetup: true,
         from: "package.json",
       };
@@ -155,10 +155,10 @@ export function detectConfig(repoPath: string): DetectedConfig {
   }
 
   if (existsSync(join(repoPath, "start.sh"))) {
-    return { config: { procs: { app: "./start.sh" } }, needsSetup: true, from: "start.sh" };
+    return { config: { run: { app: "./start.sh" } }, needsSetup: true, from: "start.sh" };
   }
 
-  return { config: { procs: {} }, needsSetup: true };
+  return { config: { run: {} }, needsSetup: true };
 }
 
 /** Tools that take their port from a flag and never read $PORT, with the flag each one wants. A

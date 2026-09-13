@@ -54,7 +54,7 @@ export function KeysHelp() {
                   onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: repo.id } })}
                   {...cm.contextMenu(() => projectItems(repo, repo.id, { sock, dispatch }))}
                 >
-                  <span className="keys-v">{Object.keys(repo.config.procs).join(" + ") || "not set up"}</span>
+                  <span className="keys-v">{Object.keys(repo.config.run).join(" + ") || "not set up"}</span>
                 </Button>
               </div>
             </>

@@ -52,7 +52,7 @@ afterEach(async () => {
 async function registered(): Promise<string> {
   const repo = await w.repos.register(w.repo);
   repo.needsSetup = false;
-  repo.config = { procs: { web: "true" } };
+  repo.config = { run: { web: "true" } };
   w.state.save();
   return repo.id;
 }
@@ -360,13 +360,13 @@ describe("confirmConfig", () => {
     await settle();
     const agent = w.runtime.get(wt.id)!.agent;
     const procsBefore = w.procs.get(wt.id)!;
-    await w.repos.confirmConfig(repoId, { procs: { web: "true", api: "true" } });
+    await w.repos.confirmConfig(repoId, { run: { web: "true", api: "true" } });
     await settle();
     expect(w.runtime.get(wt.id)!.agent).toBe(agent);
     // an opened repo gets one person's file, which git does not list
     expect(w.state.requireRepo(repoId).configFile).toBe(".toyon/settings.local.json");
     expect(JSON.parse(readFileSync(join(w.repo, ".toyon/settings.local.json"), "utf8"))).toEqual({
-      procs: { web: "true", api: "true" },
+      run: { web: "true", api: "true" },
     });
     expect((await git(w.repo, "status", "--porcelain")).out).toBe("");
     expect(procsBefore.stopped).toBe(true);
@@ -381,8 +381,8 @@ describe("confirmConfig", () => {
 
 describe("profiles", () => {
   const profiled = {
-    procs: { api: "true", web: "true" },
-    profiles: { full: { procs: ["api", "web"] }, fe: { procs: ["web"] } },
+    run: { api: "true", web: "true" },
+    profiles: { full: { run: ["api", "web"] }, fe: { run: ["web"] } },
     defaultProfile: "fe",
   };
   async function registeredWithProfiles(): Promise<string> {
@@ -457,10 +457,10 @@ describe("config reload", () => {
     const procsBefore = w.procs.get(wt.id)!;
     let repos = 0;
     w.hub.on("reposChanged", () => repos++);
-    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ procs: { web: "true", api: "true" } }));
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "true", api: "true" } }));
     w.repos.reloadConfig(repoId);
     await settle();
-    expect(w.state.requireRepo(repoId).config.procs).toEqual({ web: "true", api: "true" });
+    expect(w.state.requireRepo(repoId).config.run).toEqual({ web: "true", api: "true" });
     expect(procsBefore.stopped).toBe(true);
     expect(
       w.procs
@@ -476,26 +476,36 @@ describe("config reload", () => {
     writeFileSync(join(w.repo, "toyon.json"), "{ broken");
     w.repos.reloadConfig(repoId);
     await settle();
-    expect(w.state.requireRepo(repoId).config.procs).toEqual({ web: "true", api: "true" });
+    expect(w.state.requireRepo(repoId).config.run).toEqual({ web: "true", api: "true" });
     expect(w.procs.get(wt.id)).toBe(procsNow);
     expect(lines[0]).toMatch(/not valid JSON/);
     expect(repos).toBe(1);
   });
 
+  test("a key toyon does not know is named in main's log, even when nothing else changed", async () => {
+    const repoId = await registered();
+    const lines: string[] = [];
+    w.hub.on("log", (_id, proc, line) => proc === "config" && lines.push(line));
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "true" }, chek: "bun test" }));
+    w.repos.reloadConfig(repoId);
+    expect(w.state.requireRepo(repoId).config).toEqual({ run: { web: "true" } });
+    expect(lines).toEqual(["ignoring toyon.json: chek, which toyon does not know"]);
+  });
+
   test("a file in .toyon/ is read like one at the root, and moving it there changes where a save goes", async () => {
     const repoId = await registered();
-    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ procs: { web: "true" } }));
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "true" } }));
     w.repos.reloadConfig(repoId);
     expect(w.state.requireRepo(repoId).configFile).toBe("toyon.json");
     rmSync(join(w.repo, "toyon.json"));
     mkdirSync(join(w.repo, ".toyon"));
-    writeFileSync(join(w.repo, ".toyon/settings.json"), JSON.stringify({ procs: { web: "true", api: "true" } }));
-    writeFileSync(join(w.repo, ".toyon/settings.local.json"), JSON.stringify({ procs: { api: null } }));
+    writeFileSync(join(w.repo, ".toyon/settings.json"), JSON.stringify({ run: { web: "true", api: "true" } }));
+    writeFileSync(join(w.repo, ".toyon/settings.local.json"), JSON.stringify({ run: { api: null } }));
     w.repos.reloadConfig(repoId);
-    expect(w.state.requireRepo(repoId).config.procs).toEqual({ web: "true" });
+    expect(w.state.requireRepo(repoId).config.run).toEqual({ web: "true" });
     expect(w.state.requireRepo(repoId).configFile).toBe(".toyon/settings.local.json");
     // a save over the shared file keeps only the difference, so the team's later edits still arrive
-    await w.repos.confirmConfig(repoId, { procs: { web: "true", api: "true" }, setup: ["make"] });
+    await w.repos.confirmConfig(repoId, { run: { web: "true", api: "true" }, setup: ["make"] });
     expect(JSON.parse(readFileSync(join(w.repo, ".toyon/settings.local.json"), "utf8"))).toEqual({ setup: ["make"] });
     // one person's file is out of git, the shared one is not
     expect((await git(w.repo, "status", "--porcelain", "--untracked-files=all")).out).toBe("?? .toyon/settings.json");
@@ -503,12 +513,12 @@ describe("config reload", () => {
 
   test("boot picks up a toyon.json written while the daemon was down", async () => {
     const repoId = await registered();
-    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ procs: { api: "true" } }));
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { api: "true" } }));
     // a second registry over the same state, as a restart would build
     const again = new RepoRegistry({ state: w.state, hub: w.hub, runtime: w.runtime, worktrees: w.worktrees });
     await again.boot();
     again.stopWatchers();
-    expect(w.state.requireRepo(repoId).config.procs).toEqual({ api: "true" });
+    expect(w.state.requireRepo(repoId).config.run).toEqual({ api: "true" });
     expect(w.state.requireRepo(repoId).needsSetup).toBe(false);
   });
 });
@@ -591,7 +601,7 @@ describe("redetect at turn end", () => {
     writeFileSync(join(w.repo, "bun.lock"), "");
     turnEnd(main.id);
     expect(w.state.requireRepo(repo.id).config).toEqual({
-      procs: { web: "bun run dev --port $PORT --strictPort" },
+      run: { web: "bun run dev --port $PORT --strictPort" },
       setup: ["bun install"],
     });
     expect(w.state.requireRepo(repo.id).needsSetup).toBe(true);
@@ -604,10 +614,10 @@ describe("redetect at turn end", () => {
   test("a toyon.json the agent wrote applies at once, like a hand-written one", async () => {
     const repo = await w.repos.register(w.repo);
     const main = w.state.worktrees.find((x) => x.repoId === repo.id && x.kind === "main")!;
-    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ procs: { web: "true" } }));
+    writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { web: "true" } }));
     turnEnd(main.id);
     expect(w.state.requireRepo(repo.id).needsSetup).toBe(false);
-    expect(w.state.requireRepo(repo.id).config.procs).toEqual({ web: "true" });
+    expect(w.state.requireRepo(repo.id).config.run).toEqual({ web: "true" });
   });
 
   test("a confirmed repo keeps its config whatever lands in the tree", async () => {
@@ -615,7 +625,7 @@ describe("redetect at turn end", () => {
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
     writeFileSync(join(w.repo, "package.json"), JSON.stringify({ scripts: { dev: "vite" } }));
     turnEnd(main.id);
-    expect(w.state.requireRepo(repoId).config).toEqual({ procs: { web: "true" } });
+    expect(w.state.requireRepo(repoId).config).toEqual({ run: { web: "true" } });
   });
 });
 

@@ -7,13 +7,13 @@ const plain: RepoInfo = {
   path: "/r",
   name: "r",
   defaultBranch: "main",
-  config: { procs: {} },
+  config: { run: {} },
   configFile: ".toyon/settings.json",
   needsSetup: false,
 };
 const profiled: RepoInfo = {
   ...plain,
-  config: { procs: { web: "w" }, profiles: { fe: { procs: ["web"] }, full: { procs: ["web"] } }, defaultProfile: "fe" },
+  config: { run: { web: "w" }, profiles: { fe: { run: ["web"] }, full: { run: ["web"] } }, defaultProfile: "fe" },
 };
 
 describe("profiles", () => {

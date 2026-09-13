@@ -24,7 +24,7 @@ function previewOf(procs: Record<string, string>, preferred: string | undefined)
 export function resolveRun(repo: RepoInfo, wt: Pick<WorktreeInfo, "id" | "profile">): ResolvedRun {
   const cfg = repo.config;
   if (!cfg.profiles || !cfg.defaultProfile) {
-    return { procs: cfg.procs, env: {}, preview: previewOf(cfg.procs, cfg.preview), profile: undefined };
+    return { procs: cfg.run, env: {}, preview: previewOf(cfg.run, cfg.preview), profile: undefined };
   }
   let name = wt.profile ?? cfg.defaultProfile;
   if (!(name in cfg.profiles)) {
@@ -34,8 +34,8 @@ export function resolveRun(repo: RepoInfo, wt: Pick<WorktreeInfo, "id" | "profil
   }
   const profile = cfg.profiles[name]!;
   const procs: Record<string, string> = {};
-  for (const p of profile.procs) {
-    if (cfg.procs[p] !== undefined) procs[p] = cfg.procs[p]!;
+  for (const p of profile.run) {
+    if (cfg.run[p] !== undefined) procs[p] = cfg.run[p]!;
   }
   return {
     procs,

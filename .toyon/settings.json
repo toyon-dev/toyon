@@ -1,13 +1,13 @@
 {
-  "procs": {
+  "setup": ["bun install", "bun run --cwd packages/bridge build"],
+  "run": {
     "daemon": "./scripts/dev-daemon.sh",
     "web": "TOYON_DAEMON_URL=$DAEMON_URL bun run --cwd packages/shell dev",
     "app": "bun run build && ./scripts/dev-daemon.sh"
   },
-  "setup": ["bun install", "bun run --cwd packages/bridge build"],
   "profiles": {
-    "dev": { "procs": ["daemon", "web"], "preview": "web" },
-    "built": { "procs": ["app"], "preview": "app" }
+    "dev": { "run": ["daemon", "web"], "preview": "web" },
+    "built": { "run": ["app"], "preview": "app" }
   },
   "defaultProfile": "dev"
 }

@@ -2,8 +2,8 @@
 
 /** one way to run a repo: which of its procs, with what extra environment */
 export interface RunProfile {
-  /** keys of ToyonConfig.procs, started in this order */
-  procs: string[];
+  /** keys of ToyonConfig.run, started in this order */
+  run: string[];
   /** merged into every proc of the profile; `$API_URL` / `${API_URL}` expand to the sibling-URL
    * variables the daemon computes for the procs already up (unknown refs are left as written) */
   env?: Record<string, string>;
@@ -27,10 +27,11 @@ export interface LandConfig {
 export interface ToyonConfig {
   /** the JSON schema an editor validates the file against; toyon itself ignores it */
   $schema?: string;
-  /** name -> foreground shell command; must listen on $PORT */
-  procs: Record<string, string>;
   /** shell commands run once when a worktree is created */
   setup?: string[];
+  /** what keeps running: name -> foreground shell command, each a process with its own terminal
+   * tab; one serving HTTP must listen on $PORT */
+  run: Record<string, string>;
   /** a command that must exit 0 before a worktree is offered to land: run in the worktree after
    * every finished turn, its output on the transcript */
   check?: string;

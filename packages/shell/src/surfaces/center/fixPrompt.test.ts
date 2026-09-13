@@ -45,14 +45,14 @@ describe("setupFixPrompt", () => {
       name: "shop",
       path: "/p",
       defaultBranch: "main",
-      config: { procs: {} },
+      config: { run: {} },
       configFile: ".toyon/settings.local.json",
       needsSetup: true,
     };
     const text = setupFixPrompt(repo);
     expect(text).toContain("shop");
     expect(text).toContain("write `.toyon/settings.local.json`");
-    expect(text).toContain('"procs": { "web": "<start command>" }');
+    expect(text).toContain('"run": { "web": "<start command>" }');
     expect(text).toContain("Do not start any server yourself");
   });
 });

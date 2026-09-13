@@ -29,7 +29,7 @@ function world(answers: Array<PrState | null>, rows: Partial<WorktreeInfo>[] = [
     path: "/nowhere",
     name: "r",
     defaultBranch: "main",
-    config: { procs: {} },
+    config: { run: {} },
     configFile: ".toyon/settings.json",
     needsSetup: false,
   };

@@ -48,9 +48,9 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   // read once: the form remounts on a fresh guess (see Center), so mount is the guess
-  const [guessed] = useState(() => Object.keys(repo.config.procs).length > 0);
+  const [guessed] = useState(() => Object.keys(repo.config.run).length > 0);
   const [procs, setProcs] = useState<Proc[]>(() => {
-    const detected = Object.entries(repo.config.procs).map(([name, cmd]) => proc(name, cmd));
+    const detected = Object.entries(repo.config.run).map(([name, cmd]) => proc(name, cmd));
     return detected.length > 0 ? detected : [proc("web", "")];
   });
   const [install, setInstall] = useState(() => (repo.config.setup ?? []).join("\n"));
@@ -96,7 +96,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       repoId: repo.id,
       config: {
         ...edited(),
-        procs: Object.fromEntries(
+        run: Object.fromEntries(
           procs.filter((p) => p.name.trim() && p.cmd.trim()).map((p) => [p.name.trim(), p.cmd.trim()]),
         ),
       },
@@ -106,7 +106,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   // a library, a CLI, a backend with no HTTP server: nothing to preview, everything else works.
   // Confirmed with no procs so the pane stops asking and the worktrees get their agents.
   const nothingToRun = () => {
-    sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...edited(), procs: {} } });
+    sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...edited(), run: {} } });
     onClose?.();
   };
   const askAgent = () => main && sock?.send({ t: "chat", worktreeId: main.id, text: setupFixPrompt(repo) });

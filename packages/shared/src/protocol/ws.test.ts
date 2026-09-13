@@ -6,15 +6,15 @@ import { issueReason, parseClientMsg, toyonConfigSchema } from "./ws.ts";
 describe("toyonConfigSchema", () => {
   // the terminal pane's shell tab is the stream named "shell", so a proc by that name would be unreachable
   test("refuses a proc named shell, and says why rather than that a key was invalid", () => {
-    expect(toyonConfigSchema.safeParse({ procs: { web: "bun dev" } }).success).toBe(true);
-    const r = toyonConfigSchema.safeParse({ procs: { shell: "bun dev" } });
+    expect(toyonConfigSchema.safeParse({ run: { web: "bun dev" } }).success).toBe(true);
+    const r = toyonConfigSchema.safeParse({ run: { shell: "bun dev" } });
     expect(r.success).toBe(false);
-    expect(r.error && issueReason(r.error, "invalid")).toBe('procs.shell: "shell" is reserved for the shell tab');
+    expect(r.error && issueReason(r.error, "invalid")).toBe('run.shell: "shell" is reserved for the shell tab');
   });
 
   test("check is one shell command, or absent", () => {
-    expect(toyonConfigSchema.safeParse({ procs: {}, check: "bun run check" }).success).toBe(true);
-    expect(toyonConfigSchema.safeParse({ procs: {}, check: ["bun run check"] }).success).toBe(false);
+    expect(toyonConfigSchema.safeParse({ run: {}, check: "bun run check" }).success).toBe(true);
+    expect(toyonConfigSchema.safeParse({ run: {}, check: ["bun run check"] }).success).toBe(false);
   });
 });
 
@@ -45,13 +45,13 @@ describe("parseClientMsg", () => {
       { t: "agent-decide", worktreeId: "a", askId: "k1", choiceId: "allow_once" },
       { t: "agent-logout", agent: "codex" },
       { t: "graft", targetId: "a", sourceIds: ["b"] },
-      { t: "confirm-config", repoId: "r", config: { procs: { web: "bun dev" } } },
+      { t: "confirm-config", repoId: "r", config: { run: { web: "bun dev" } } },
       {
         t: "confirm-config",
         repoId: "r",
         config: {
-          procs: { web: "w", api: "a" },
-          profiles: { full: { procs: ["api", "web"], env: { X: "$API_URL" } }, fe: { procs: ["web"], preview: "web" } },
+          run: { web: "w", api: "a" },
+          profiles: { full: { run: ["api", "web"], env: { X: "$API_URL" } }, fe: { run: ["web"], preview: "web" } },
           defaultProfile: "fe",
         },
       },
@@ -89,7 +89,7 @@ describe("parseClientMsg", () => {
   test("names the offending field", () => {
     const r = parseClientMsg({ t: "confirm-config", repoId: "r", config: {} });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toMatch(/config\.procs/);
+    if (!r.ok) expect(r.reason).toMatch(/config\.run/);
     const w = parseClientMsg({ t: "write-file", worktreeId: "a", path: "", content: "", base: null, seq: 0 });
     if (!w.ok) expect(w.reason).toMatch(/^path/);
     const a = parseClientMsg({ t: "agent-answer", worktreeId: "a", askId: "k", answers: [{ selected: "one" }] });
@@ -107,19 +107,19 @@ describe("parseClientMsg", () => {
     expect(parseClientMsg({ t: "agent-decide", worktreeId: "a", askId: "k" }).ok).toBe(false);
   });
 
-  test("profiles must name real procs, a default, and a preview inside the profile", () => {
+  test("profiles must name real processes, a default, and a preview inside the profile", () => {
     const cfg = (config: unknown) => parseClientMsg({ t: "confirm-config", repoId: "r", config });
-    const procs = { web: "w", api: "a" };
+    const run = { web: "w", api: "a" };
     const bad = [
-      { procs, profiles: { a: { procs: ["nope"] } }, defaultProfile: "a" },
-      { procs, profiles: { a: { procs: ["web"] } } },
-      { procs, profiles: { a: { procs: ["web"] } }, defaultProfile: "b" },
-      { procs, profiles: { a: { procs: ["web"], preview: "api" } }, defaultProfile: "a" },
-      { procs, defaultProfile: "a" },
+      { run, profiles: { a: { run: ["nope"] } }, defaultProfile: "a" },
+      { run, profiles: { a: { run: ["web"] } } },
+      { run, profiles: { a: { run: ["web"] } }, defaultProfile: "b" },
+      { run, profiles: { a: { run: ["web"], preview: "api" } }, defaultProfile: "a" },
+      { run, defaultProfile: "a" },
     ];
     for (const c of bad) expect(cfg(c).ok, JSON.stringify(c)).toBe(false);
     const r = cfg(bad[0]);
-    if (!r.ok) expect(r.reason).toMatch(/profiles\.a\.procs: unknown proc "nope"/);
+    if (!r.ok) expect(r.reason).toMatch(/profiles\.a\.run: "nope" is not in run/);
   });
 
   test("a paste must have text, and there are caps on size and on each kind's count", () => {

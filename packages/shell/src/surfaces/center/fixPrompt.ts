@@ -40,8 +40,8 @@ export function setupFixPrompt(repo: RepoInfo): string {
     "",
     `Work it out from the repo itself (package manager, scripts, framework, a README) and write \`${repo.configFile}\` in this shape:`,
     "```json",
-    '{ "setup": ["<install command>"], "procs": { "web": "<start command>" } }',
+    '{ "setup": ["<install command>"], "run": { "web": "<start command>" } }',
     "```",
-    '`setup` runs once in each new worktree. Every command in `procs` must run in the foreground and listen on the port in the PORT environment variable, which toyon sets per worktree; a tool that takes its port from a flag needs the flag (Vite: `--port $PORT --strictPort`, and with npm the `--` before it). Name one proc per server if there are several. If the project has nothing to run (a library, a CLI), write `"procs": {}` and say so. Do not start any server yourself; toyon picks the file up as soon as it is written.',
+    '`setup` runs once in each new worktree. Every command in `run` must run in the foreground and listen on the port in the PORT environment variable, which toyon sets per worktree; a tool that takes its port from a flag needs the flag (Vite: `--port $PORT --strictPort`, and with npm the `--` before it). Name one entry per server if there are several. If the project has nothing to run (a library, a CLI), write `"run": {}` and say so. Do not start any server yourself; toyon picks the file up as soon as it is written.',
   ].join("\n");
 }

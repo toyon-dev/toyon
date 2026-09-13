@@ -36,7 +36,7 @@ export function ProfileChip({
   const profiles = repo?.config.profiles ?? {};
   const file = repo?.configFile ?? "the settings";
   const runs = (name: string) => {
-    const procs = profiles[name]?.procs ?? [];
+    const procs = profiles[name]?.run ?? [];
     const what = procs.length > 0 ? `runs ${procs.join(", ")}` : "runs nothing";
     return name === repo?.config.defaultProfile ? `${what}; the default in ${file}` : what;
   };

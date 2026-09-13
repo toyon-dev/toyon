@@ -124,7 +124,19 @@ It needs flyctl signed in (`fly auth login`) and an Anthropic API key in `ANTHRO
 - flyctl warns that some preview ports have nothing listening. Each one gets a listener when a copy uses it.
 - The first deploy right after an app is created can fail with "unauthorized". Running `up` again finishes it.
 
-The Dockerfile that machine is built from ships in the package under `cloud/`, for other hosts that meet the needs above. A host with a single public port needs your own wildcard domain, as on the first route.
+**Another host.** The Dockerfile that machine is built from ships in the package under `cloud/`, and runs on any host that meets the needs above. It reads:
+
+| Setting | What it is |
+| --- | --- |
+| `TOYON_PUBLIC_HOST` | The name your host answers for, like `toyon.example.com`. Required. |
+| `TOYON_PREVIEWS` | Where previews live under that name: `https://toyon.example.com:{port}` when the host forwards ports 10001-10008 (the default), or `https://w{id}.toyon.example.com` behind your own wildcard domain. |
+| `TOYON_TOKEN` | A long random string; the link is `https://<host>/#token=<it>`. |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | For the agents. |
+| `GITHUB_TOKEN`, `TOYON_REPO_URL` | Optional: a repository to clone on first start, and access to it. |
+| `/data` | A disk that survives restarts. |
+| Ports | 4141 for toyon, over https with the host's TLS in front, and 10001-10008 when previews use ports. |
+
+A host with a single public port needs your own wildcard domain and the `w{id}` form.
 
 On every route, the link carries the token, and the token is a shell on that machine: keep it to yourself. A project whose server bakes another server's address into its bundle (`API_URL` and the like) points the browser at `127.0.0.1`, which a phone cannot reach; a project with one server works.
 

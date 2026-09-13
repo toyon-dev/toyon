@@ -25,9 +25,17 @@ export function cleanTitle(title: string): string {
     .slice(0, 40);
 }
 
-/** perspective-diverse variants: same goal, different emphasis per attempt */
-export const VARIANT_LENSES = [
-  "(You are attempt 1 of several parallel attempts at this task. Take the straightforward, balanced approach: the version most people would expect.)",
-  "(You are attempt 2 of several parallel attempts at this task. Take a bolder visual/design-led approach: prioritize form, polish, and delight.)",
-  "(You are attempt 3 of several parallel attempts at this task. Take a function-led approach: prioritize capability, detail, and edge cases over visual flair.)",
+// The lens rides last in the user's own message, so it outweighs the system prompt's scope rule
+// wherever the two disagree: each lens changes what an attempt leans toward, never how much it
+// changes, and the task may be prose as easily as UI.
+const VARIANT_LENSES = [
+  "Take the most direct approach: the change most people would expect, in the smallest diff.",
+  "Lean toward how it looks and reads: polish what the task touches using only the design tokens, components and voice the project already has. Add no new colours, fonts or effects, and restyle nothing outside the task.",
+  "Lean toward behaviour: edge cases, empty and error states, and what can go wrong, over visual change.",
 ];
+
+/** the note that follows a variant's first prompt: which attempt it is, the shared bounds, its lens */
+export function variantLens(index: number): string {
+  const lens = VARIANT_LENSES[(index - 1) % VARIANT_LENSES.length];
+  return `(You are attempt ${index} of several parallel attempts at this task. Stay within the task and follow the project's existing styles, components, tokens and writing conventions; the attempts differ in emphasis, not in how much they change. ${lens})`;
+}

@@ -71,7 +71,7 @@ import { DEFAULT_AGENT_ID, type RuntimeRegistry, worktreeEnv } from "../runtime/
 import { runSetup } from "../runtime/setup.ts";
 import { type ArchiveRecord, type ChatFiles, firstPrompt, summarize, WorktreeArchive } from "./archive.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
-import { cleanTitle, shortId, slugify, VARIANT_LENSES } from "./naming.ts";
+import { cleanTitle, shortId, slugify, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 import { isUnseen } from "./turns.ts";
 
@@ -225,10 +225,7 @@ export class WorktreeService {
     const fromMain = !base || base.kind === "main";
 
     // perspective-diverse variants: same goal, different emphasis per attempt
-    const agentPrompt =
-      variant && variant.of >= 2
-        ? `${prompt}\n\n${VARIANT_LENSES[(variant.index - 1) % VARIANT_LENSES.length]}`
-        : prompt;
+    const agentPrompt = variant && variant.of >= 2 ? `${prompt}\n\n${variantLens(variant.index)}` : prompt;
 
     // fast path: claim the pre-warmed spare (main-based tasks only). Its runtime — agent
     // included — already exists, so the task's first message goes to the spare's agent.

@@ -316,6 +316,13 @@ export function Center() {
   const startDesignDrag = useDragResize(measurePane(160), (h) => setDesignH(Math.round(h)));
   const startTermDrag = useDragResize(measurePane(140), (h) => setTermH(Math.round(h)));
 
+  // a new project starts in a worktree, so its main stays empty until that worktree lands
+  const landsFrom = useStore((s) =>
+    active?.worktree.kind === "main"
+      ? (s.rows.find((r) => r.repoId === active.worktree.repoId && r.worktree?.kind === "worktree")?.worktree?.title ??
+        null)
+      : null,
+  );
   // the sentence the centre says when nothing of theirs can be shown and no view stands in; null
   // hands the slot to one that does (see waiting.ts for the order and why it is that order)
   const say = waitingText({
@@ -328,6 +335,7 @@ export function Center() {
     needsSetup: !!needsSetup,
     busy,
     treeEmpty,
+    landsFrom,
   });
 
   return (

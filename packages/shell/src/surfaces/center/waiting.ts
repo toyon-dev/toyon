@@ -38,6 +38,8 @@ export type Waiting = {
   needsSetup: boolean;
   busy: boolean;
   treeEmpty: boolean;
+  /** on an empty main, the worktree the project was started in: main has none of it until it lands */
+  landsFrom: string | null;
 };
 
 /** the sentence, or null when a view of its own (boot, no preview) should stand here instead */
@@ -53,5 +55,7 @@ export function waitingText(w: Waiting): string | null {
   }
   if (w.needsSetup && w.busy) return `building in ${w.title}; the preview appears once it starts`;
   if (w.needsSetup && w.treeEmpty) return `${w.title} is empty so far; say what to build`;
+  // boot would say its dev servers are starting, and none will until the worktree brings the code
+  if (w.treeEmpty && w.landsFrom) return `nothing runs on main until ${w.landsFrom} lands`;
   return null;
 }

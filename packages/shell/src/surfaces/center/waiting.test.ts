@@ -17,6 +17,7 @@ const w = (over: Partial<Waiting> = {}): Waiting => ({
   needsSetup: false,
   busy: false,
   treeEmpty: false,
+  landsFrom: null,
   ...over,
 });
 
@@ -59,5 +60,14 @@ describe("what the centre says while it waits", () => {
 
   test("a set-up project that is merely idle says nothing; boot has more to tell than a sentence", () => {
     expect(waitingText(w({ needsSetup: false, treeEmpty: true }))).toBeNull();
+  });
+
+  test("an empty main of a project started in a worktree names the worktree it is waiting on", () => {
+    // main's row carries the project's name, so the sentence names the branch itself
+    expect(waitingText(w({ treeEmpty: true, landsFrom: "hello-page" }))).toBe(
+      "nothing runs on main until hello-page lands",
+    );
+    // main with code of its own boots like any worktree, whatever else is open
+    expect(waitingText(w({ landsFrom: "hello-page" }))).toBeNull();
   });
 });

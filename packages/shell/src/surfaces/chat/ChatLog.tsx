@@ -35,8 +35,10 @@ function useQuietSeconds(items: unknown, busy: boolean): number {
   return busy ? Math.floor((now - since.current) / 1000) : 0;
 }
 
-/** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill */
-export function ChatLog({ active }: { active: OwnedWorktree | null }) {
+/** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
+ * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
+ * composer in an empty chat and scrolls up as the conversation grows, the way a message would. */
+export function ChatLog({ active, lead }: { active: OwnedWorktree | null; lead?: React.ReactNode }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
@@ -164,6 +166,7 @@ export function ChatLog({ active }: { active: OwnedWorktree | null }) {
   return (
     <div className="chat-wrap">
       <div className="chat-log" ref={logRef} onScroll={onScroll}>
+        {lead}
         {entries.map((entry, i) =>
           "tools" in entry ? (
             <ToolRow

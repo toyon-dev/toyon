@@ -58,6 +58,10 @@ export interface RepoInfo {
   /** the file the unconfirmed guess was read from, relative to the root (package.json, start.sh):
    * the setup pane opens it so the person can copy the script they meant. Gone once confirmed. */
   guess?: string;
+  /** detection found a build file that says there is nothing to preview (Cargo.toml, go.mod) and
+   * nothing that serves a page: the project opens on the chat rather than the setup pane. Only with
+   * `needsSetup`, never written anywhere, and gone once setup is saved. */
+  assumed?: string;
   /** toyon made this project from nothing: the whole folder, or only the `.git` in an empty folder
    * the person already had. What going back from the first-run screen may take away again, and
    * only while the project is still exactly as it was made. Absent on a repo that was opened. */

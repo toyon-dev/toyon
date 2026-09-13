@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIG_FILES, issueReason, landConfigSchema, type ToyonConfig, toyonConfigSchema } from "@toyon/shared";
 import { log } from "../core/log.ts";
@@ -10,6 +10,10 @@ export interface DetectedConfig {
   /** the file the guess was read from, relative to the root: what the setup pane offers to open
    * so the person can copy the script they meant. Absent for a confirmed file or an empty guess. */
   from?: string;
+  /** the build file that says there is nothing to preview (Cargo.toml, go.mod), when nothing in the
+   * repo says otherwise: the project opens on the chat without asking. Only on a guess, and never
+   * beside `from`, which names a file a start command was read from. */
+  assumed?: string;
 }
 
 export type ConfigFile =
@@ -158,7 +162,131 @@ export function detectConfig(repoPath: string): DetectedConfig {
     return { config: { run: { app: "./start.sh" } }, needsSetup: true, from: "start.sh" };
   }
 
+  const assumed = assumeNothingToRun(repoPath);
+  if (assumed) return { config: { run: {} }, needsSetup: true, assumed };
+
   return { config: { run: {} }, needsSetup: true };
+}
+
+/** Build files that say what a repo is, checked at the root in this order: the first one present is
+ * the one the shell names. Not a Makefile, which too many web repos have, nor deno.json, whose
+ * projects are as often a page as not. */
+const NO_PAGE_MARKERS = [
+  "Cargo.toml",
+  "go.mod",
+  "pyproject.toml",
+  "setup.py",
+  "Gemfile",
+  "mix.exs",
+  "composer.json",
+  "Package.swift",
+  "pom.xml",
+  "build.gradle",
+  "build.gradle.kts",
+  "CMakeLists.txt",
+  "pubspec.yaml",
+];
+/** build files named for the project rather than fixed, found by extension */
+const NO_PAGE_EXTENSIONS = [".gemspec", ".csproj", ".sln"];
+
+/** files whose presence alone says a page is served: Django, Rack, Rails, Laravel, a Rust front end,
+ * a static site */
+const WEB_FILES = ["manage.py", "config.ru", "bin/rails", "artisan", "Trunk.toml", "index.html"];
+
+/** frameworks that serve a page, looked for by name in the files that declare a project's dependencies */
+const WEB_DEPENDENCIES: Array<[files: string[], names: string[]]> = [
+  [
+    ["pyproject.toml", "setup.py", "requirements.txt", "requirements-dev.txt", "Pipfile"],
+    ["django", "flask", "fastapi", "uvicorn", "starlette", "streamlit", "gradio", "sanic", "aiohttp"],
+  ],
+  [["Gemfile"], ["rails", "sinatra", "hanami", "roda"]],
+  [["Cargo.toml"], ["axum", "actix-web", "rocket", "warp", "leptos", "dioxus", "yew", "poem"]],
+  [["go.mod"], ["gin-gonic/gin", "labstack/echo", "gofiber/fiber", "go-chi/chi", "gorilla/mux"]],
+  [["mix.exs"], ["phoenix"]],
+  [["composer.json"], ["laravel/framework", "symfony/framework-bundle", "symfony/http-kernel"]],
+];
+
+/** folders that hold dependencies or build output, never a front end of the repo's own */
+const NOT_A_PACKAGE = new Set(["node_modules", "target", "vendor", "dist", "build"]);
+
+/** enough of a dependency file to find a framework's name in, however large the file is */
+const READ_CAP = 256 * 1024;
+
+/** The build file that says this repo has nothing to preview, when there is one and nothing in the
+ * repo says otherwise: a Rust CLI or a Go library opens on the chat instead of a form about dev
+ * servers. Anything that looks like it serves a page keeps the form, since how that page starts is
+ * the person's to say. A heuristic, which is why the answer is an assumption and never written. */
+function assumeNothingToRun(repoPath: string): string | undefined {
+  const marker = markerIn(repoPath);
+  return marker && !servesPage(repoPath) ? marker : undefined;
+}
+
+function markerIn(repoPath: string): string | undefined {
+  const named = NO_PAGE_MARKERS.find((f) => existsSync(join(repoPath, f)));
+  if (named) return named;
+  let entries: string[];
+  try {
+    entries = readdirSync(repoPath);
+  } catch {
+    // the repo was just registered from this path, so an unreadable root only loses the guess
+    return undefined;
+  }
+  return entries.find((f) => NO_PAGE_EXTENSIONS.some((ext) => f.endsWith(ext)));
+}
+
+function servesPage(repoPath: string): boolean {
+  if (WEB_FILES.some((f) => existsSync(join(repoPath, f)))) return true;
+  if (/^web:/m.test(head(join(repoPath, "Procfile")))) return true;
+  for (const [files, names] of WEB_DEPENDENCIES) {
+    const text = files.map((f) => head(join(repoPath, f))).join("\n");
+    if (text.trim() && names.some((n) => mentions(text, n))) return true;
+  }
+  return frontEndBeside(repoPath);
+}
+
+/** a package one folder down with a dev script: a front end living beside the build file at the root */
+function frontEndBeside(repoPath: string): boolean {
+  let dirs: Dirent[];
+  try {
+    dirs = readdirSync(repoPath, { withFileTypes: true });
+  } catch {
+    // as in markerIn: an unreadable root has no front end to find
+    return false;
+  }
+  return dirs.some((d) => {
+    if (!d.isDirectory() || d.name.startsWith(".") || NOT_A_PACKAGE.has(d.name)) return false;
+    const pkg = head(join(repoPath, d.name, "package.json"));
+    if (!pkg) return false;
+    try {
+      return !!JSON.parse(pkg).scripts?.dev;
+    } catch {
+      // a package.json past the read cap, or a broken one, cannot say it has a dev script
+      return false;
+    }
+  });
+}
+
+/** a dependency by name, not inside a longer one: `rocket` is not `rocketry` */
+function mentions(text: string, name: string): boolean {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`, "i").test(text);
+}
+
+/** the start of a file, or "" when there is none */
+function head(path: string): string {
+  if (!existsSync(path)) return "";
+  try {
+    const fd = openSync(path, "r");
+    try {
+      const buf = Buffer.alloc(READ_CAP);
+      return buf.toString("utf8", 0, readSync(fd, buf, 0, READ_CAP, 0));
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    // a directory by the file's name, or one this user cannot read: it says nothing either way
+    return "";
+  }
 }
 
 /** Tools that take their port from a flag and never read $PORT, with the flag each one wants. A

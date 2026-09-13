@@ -27,6 +27,7 @@ import {
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
+import { asksSetup } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
@@ -268,7 +269,7 @@ export function Rail() {
         // over a row painted in the fault colour, a green "Running" over an orange dot: the tip
         // names the fault instead, with no dot, since there is no live state for one to restate.
         {...(owned
-          ? tip(offline ? OFFLINE_TIP : stateLabel(w, repoOf(owned)?.needsSetup), undefined, {
+          ? tip(offline ? OFFLINE_TIP : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
               placement: "left",
               // an unseen stop says what happened above the path, so a hover is enough to triage it
               detail:

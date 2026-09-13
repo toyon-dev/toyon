@@ -667,10 +667,16 @@ export function isFirstRun(s: State): boolean {
   return s.newProject !== null || isGreenfield(s);
 }
 
-/** A repo whose settings were confirmed with no processes: a library, a CLI, a backend with no page.
+/** A repo with nothing to run: its settings were confirmed with no processes, or detection assumed
+ * so from its build file (a Rust CLI, a Go library) and nobody has opened setup to say otherwise.
  * Nothing will ever answer on its preview, so there is no preview to show. */
 export function runsNothing(repo: RepoInfo): boolean {
-  return !repo.needsSetup && Object.keys(repo.config.run).length === 0;
+  return (!repo.needsSetup || !!repo.assumed) && Object.keys(repo.config.run).length === 0;
+}
+
+/** the repo's setup is still to be asked: unconfirmed, and not a guess toyon opens on without asking */
+export function asksSetup(repo: RepoInfo | null | undefined): boolean {
+  return !!repo?.needsSetup && !repo.assumed;
 }
 
 /** The active project runs nothing, so the chat is what the centre shows, and the chat dock and the

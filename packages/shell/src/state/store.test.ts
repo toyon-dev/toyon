@@ -4,6 +4,7 @@ import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
 import {
   type Action,
+  asksSetup,
   draftKey,
   draftSpareOf,
   type EditorDisk,
@@ -206,6 +207,16 @@ describe("per-worktree records", () => {
     expect(isChatCentred(run([repos(repo("r"))], s))).toBe(false);
     expect(isChatCentred(run([repos({ ...pageless("r"), needsSetup: true })], s))).toBe(false);
     expect(previewIdOf(run([repos(repo("r"))], s))).toBe("main");
+  });
+  test("a repo assumed to have nothing to run opens on the chat and asks no setup", () => {
+    const assumed: RepoInfo = { ...pageless("r"), needsSetup: true, assumed: "Cargo.toml" };
+    const s = run([helloIn([assumed], wt("main", "main"))]);
+    expect(isChatCentred(s)).toBe(true);
+    expect(asksSetup(assumed)).toBe(false);
+    // unconfirmed with nothing assumed is still asked; a scaffold that ends the assumption asks again
+    expect(asksSetup({ ...assumed, assumed: undefined })).toBe(true);
+    const scaffolded = { ...assumed, assumed: undefined, config: { run: { web: "vite" } } };
+    expect(isChatCentred(run([repos(scaffolded)], s))).toBe(false);
   });
   test("a draft on a repo that runs nothing previews no spare; a web repo's draft previews its warm one", () => {
     const spare = { repoId: "r", id: "sp", path: "/w/sp", proxyPort: 2, ready: true };

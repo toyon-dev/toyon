@@ -1,5 +1,6 @@
-import { useStore } from "../../state/context.tsx";
-import { useActive, useDraft } from "../../state/selectors.ts";
+import { useDispatch, useStore } from "../../state/context.tsx";
+import { useActive, useActiveRepo, useDraft } from "../../state/selectors.ts";
+import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ChatLog } from "./ChatLog.tsx";
 import { Composer } from "./Composer.tsx";
@@ -20,8 +21,13 @@ export function ChatPanel({
   className?: string;
   width?: number;
 }) {
+  const dispatch = useDispatch();
   const active = useActive();
   const draft = useDraft();
+  const repo = useActiveRepo();
+  // a project toyon opened on the chat without asking says what it went by, where the conversation
+  // starts, with the way to say otherwise; a confirmed one was answered by the person and needs no line
+  const assumed = placement === "centre" && repo?.assumed ? repo : null;
   // dropped files attach here, but the drop is taken on the window (see useFileDrop): this only
   // lends it the panel's bounds and shows the highlight while the pointer is inside them
   const over = useStore((s) => s.dragFiles);
@@ -35,7 +41,26 @@ export function ChatPanel({
         else if (!chatPanel.el?.isConnected) chatPanel.el = null;
       }}
     >
-      {draft ? <DraftIntro draft={draft} base={active} /> : <ChatLog active={active} />}
+      {draft ? (
+        <DraftIntro draft={draft} base={active} />
+      ) : (
+        <ChatLog
+          active={active}
+          lead={
+            assumed && (
+              <p className="hint chat-centre-note">
+                {assumed.name} has <code>{assumed.assumed}</code> and no dev server, so it is chat only for now.{" "}
+                <Button
+                  variant="inline"
+                  onClick={() => dispatch({ a: "open", overlay: { kind: "setup", repoId: assumed.id } })}
+                >
+                  add a dev server
+                </Button>
+              </p>
+            )
+          }
+        />
+      )}
       <Composer active={active} draft={draft} />
     </div>
   );

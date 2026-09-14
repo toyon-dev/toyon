@@ -423,11 +423,13 @@ export function Composer({
             ? recapLine(recap)
             : greenfield
               ? `describe ${title}…`
-              : drafting || spawning
-                ? "describe a change"
-                : onMain
-                  ? "message the agent; / for a command, ! for a shell command"
-                  : `message agent on ${title}; / for a command, ! for a shell command`;
+              : draft?.sent
+                ? "starting the worktree…"
+                : drafting || spawning
+                  ? "describe a change"
+                  : onMain
+                    ? "message the agent; / for a command, ! for a shell command"
+                    : `message agent on ${title}; / for a command, ! for a shell command`;
   // under the verb, the model's doubt as a sentence of its own. Under a line with no word (a check
   // running or failed, a PR merged or closed): the recap's sentence when one has been written, else
   // the message the work would land with, the next most useful thing to read.
@@ -491,6 +493,8 @@ export function Composer({
   // attachments alone are a message: a pasted error or a picked element often says it all
   const send = () => {
     if (!active || !id || !boxId || blank) return;
+    // the draft's message is on its way; a second enter before its worktree lands would start another
+    if (draft?.sent) return;
     if (shellCmd !== null) {
       // a command runs where the draft was typed, whatever the target says: attachments are for
       // the agent and stay for the next message
@@ -563,8 +567,11 @@ export function Composer({
     setText("");
     // the reply lands in the dock, so the dock comes back with the message that started it
     if (greenfield) dispatch({ a: "show-right" });
-    // the worktree the draft was for is on its way and takes the selection when it lands
-    if (drafting) dispatch({ a: "close-draft" });
+    // The worktree the draft was for is on its way and takes the selection when it lands, so the
+    // tab holds until then: closing it now would show the base's row for as long as the create
+    // takes. A batch plans first and its rows are not this tab's, so nothing would close it; it
+    // closes here and the rows arrive in the rail.
+    if (drafting) dispatch({ a: draft?.batch ? "close-draft" : "draft-sent" });
   };
 
   // The description typed on the new-project view, in the box of the project it just made. It is
@@ -768,6 +775,9 @@ export function Composer({
           // the ghost draws the placeholder itself when it has a line to put under it
           placeholder={subline || verb ? "" : placeholderText}
           disabled={!active}
+          // read-only rather than disabled while the draft's worktree starts: the caret stays, and
+          // the same box is that worktree's when it lands
+          readOnly={!!draft?.sent}
         />
         {ghost && (
           <div className="composer-ghost" aria-hidden="true">

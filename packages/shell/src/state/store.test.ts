@@ -548,6 +548,20 @@ describe("the draft tab", () => {
     expect(after.activeId).toBe("b");
   });
 
+  test("a sent draft holds the tab until its row lands; a refusal opens it for editing again", () => {
+    const s = run([{ a: "open-draft" }, { a: "draft-sent" }], found(wt("main", "main")));
+    expect(s.draft?.sent).toBe(true);
+    // the base's snapshots keep arriving while the create runs; none of them shows main
+    const waiting = run([worktrees(wt("main", "main"))], s);
+    expect(waiting.draft?.sent).toBe(true);
+    expect(waiting.activeId).toBe("main");
+    const landed = run([worktrees(wt("main", "main"), wt("b", "worktree", ME))], waiting);
+    expect(landed.draft).toBeNull();
+    expect(landed.activeId).toBe("b");
+    const refused = run([server({ t: "error", message: "no such agent" })], s);
+    expect(refused.draft).toEqual({ base: "main", variants: 1, batch: false, agent: "claude" });
+  });
+
   test("its text lives under the repo's key, which no snapshot prunes", () => {
     const s = run(
       [{ a: "open-draft" }, { a: "set-draft", id: draftKey("r"), text: "hi" }, worktrees(wt("main", "main"))],

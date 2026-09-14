@@ -194,6 +194,9 @@ export interface Draft {
   agent: string;
   /** one of the repo's profiles; the repo's default when absent */
   profile?: string;
+  /** the message went; the tab holds until the worktree it started lands and takes the selection,
+   * so the base's row never shows in between. Cleared by a refusal, so the draft can be sent again. */
+  sent?: true;
 }
 
 /** the `local` record a repo's draft is written under; never a row id, and never pruned by one */
@@ -844,6 +847,8 @@ export type Action =
    * same base again closes it, so the chord toggles; another base moves it. */
   | { a: "open-draft"; base?: string }
   | { a: "close-draft" }
+  /** the draft's message was sent: the tab waits for its worktree instead of closing on main */
+  | { a: "draft-sent" }
   | { a: "draft-variants"; n: Draft["variants"] }
   | { a: "draft-batch"; v: boolean }
   | { a: "draft-agent"; id: string }
@@ -1002,6 +1007,8 @@ function reduce(s: State, action: Action): State {
     }
     case "close-draft":
       return s.draft ? { ...s, draft: null } : s;
+    case "draft-sent":
+      return s.draft ? { ...s, draft: { ...s.draft, sent: true } } : s;
     case "draft-variants":
       return s.draft ? { ...s, draft: { ...s.draft, variants: action.n } } : s;
     case "draft-batch":
@@ -1599,6 +1606,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // project it was taking back stays, so the view gives way to its first-run screen again.
       const page = s.newProject;
       const refused = page?.phase === "creating" && !page.repoId;
+      // a sent draft is waiting on a worktree that may be what was refused: it opens for editing again
+      const { sent, ...draft } = s.draft ?? {};
       return {
         ...s,
         toast: { ok: false, message: msg.message },
@@ -1606,6 +1615,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         shipping: retireShipping(s.shipping, () => true),
         newProject: refused ? { ...page, phase: "editing" } : page?.phase === "unmaking" ? null : page,
         pendingOpen: refused ? false : s.pendingOpen,
+        draft: sent ? (draft as Draft) : s.draft,
       };
     }
     default: {

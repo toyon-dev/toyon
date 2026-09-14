@@ -40,6 +40,34 @@ describe("modelWords", () => {
     expect(modelWords({ id: "gpt-6-astra", name: "GPT-6-Astra" })).toEqual({ label: "Astra", version: "6" });
     expect(modelWords({ id: "gpt-5.5", name: "GPT-5.5" })).toEqual({ label: "GPT", version: "5.5" });
   });
+  test("a Claude model id listed as its own name reads as the model, the id under it", () => {
+    const words = (name: string) => modelWords({ id: name, name });
+    expect(words("us.anthropic.claude-opus-4-6-v1:0")).toEqual({
+      label: "Opus",
+      version: "4.6",
+      description: "us.anthropic.claude-opus-4-6-v1:0",
+    });
+    expect(words("global.anthropic.claude-sonnet-4-5-20250929-v1:0")).toMatchObject({
+      label: "Sonnet",
+      version: "4.5",
+    });
+    expect(words("anthropic.claude-3-5-sonnet-20241022-v2:0")).toMatchObject({ label: "Sonnet", version: "3.5" });
+    expect(
+      words("arn:aws:bedrock:us-east-1:123456789012:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    ).toMatchObject({ label: "Haiku", version: "4.5" });
+    expect(words("claude-opus-4-6@20250805")).toMatchObject({ label: "Opus", version: "4.6" });
+    // a date straight after a single-number version is not a minor version
+    expect(words("claude-opus-5-20260101")).toMatchObject({ label: "Opus", version: "5" });
+    expect(words("claude-opus-5[1m]")).toEqual({
+      label: "Opus",
+      version: "5",
+      description: "1M context · claude-opus-5[1m]",
+    });
+    // an application inference profile names no model, so it stays as written
+    expect(words("arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/a1b2c3")).toEqual({
+      label: "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/a1b2c3",
+    });
+  });
   test("left alone when neither shape fits", () => {
     const effort = { id: "low", name: "Low", description: "Fast responses with lighter reasoning" };
     expect(modelWords(effort)).toEqual({ label: "Low", description: effort.description });

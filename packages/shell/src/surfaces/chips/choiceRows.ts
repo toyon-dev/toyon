@@ -10,8 +10,18 @@ export const DEFAULT_OPTION = "";
  * Best for everyday, complex tasks", so the row says "Opus 5" over "1M context · Best for everyday,
  * complex tasks". Codex puts the version inside the name, "GPT-5.6-Sol", and its description never
  * repeats it, so the row says "Sol 5.6", or "GPT 5.5" for a model with no codename. Anything else
- * (every effort level, a name with more parts than that) is left as the agent wrote it. */
+ * (every effort level, a name with more parts than that) is left as the agent wrote it.
+ *
+ * A model Claude Code does not know by name (a Bedrock or Vertex id kept by `availableModels`) is
+ * listed with the raw id as its name, "us.anthropic.claude-opus-4-6-v1:0", which the row cuts off
+ * before the part that says which model it is. That reads "Opus 4.6", and the id moves to the line
+ * under it, where it wraps, because the region prefix is what tells two such rows apart. */
 export function modelWords(c: ModelChoice): { label: string; version?: string; description?: string } {
+  const claude = claudeIdWords(c.name);
+  if (claude) {
+    const description = [claude.qualifier, c.description || c.name].filter(Boolean).join(" · ");
+    return { label: claude.label, version: claude.version, description };
+  }
   // only a capitalised word counts as a codename, so a slug like "gemini-2.5-pro" stays whole
   const dashed = c.name.match(/^([A-Za-z]+)-(\d+(?:\.\d+)*)(?:-([A-Z][a-z]+))?$/);
   if (dashed?.[1] && dashed[2]) {
@@ -29,6 +39,26 @@ export function modelWords(c: ModelChoice): { label: string; version?: string; d
   const qualifier = m[3] ?? c.name.match(/\(([^)]*)\)$/)?.[1];
   const description = [qualifier, ...rest].filter(Boolean).join(" · ");
   return { label: base, version: m[2], ...(description ? { description } : {}) };
+}
+
+/* A Claude model id in any provider's spelling: "claude-opus-5", "claude-sonnet-4-5-20250929",
+ Bedrock's "global.anthropic.claude-opus-4-6-v1:0" (bare or at the end of an inference profile ARN)
+ and its older "anthropic.claude-3-5-sonnet-20241022-v2:0", Vertex's "claude-opus-4-6@20250805", any
+ of them with a "[1m]" hint. A version part is one or two digits not followed by another, so a date
+ is never read as a minor version. */
+const CLAUDE_ID =
+  /(?:^|[./])claude-(?:(\d{1,2}(?:-\d{1,2}(?!\d))?)-)?([a-z]+)(?:-(\d{1,2}(?:-\d{1,2}(?!\d))?))?(?:-\d{8})?(?:-v\d+(?::\d+)?)?(?:@\d{8})?(?:\[(\d+m)\])?$/;
+
+function claudeIdWords(name: string): { label: string; version: string; qualifier?: string } | undefined {
+  const m = name.match(CLAUDE_ID);
+  const family = m?.[2];
+  const version = m?.[3] ?? m?.[1];
+  if (!family || !version) return undefined;
+  return {
+    label: family.charAt(0).toUpperCase() + family.slice(1),
+    version: version.replace("-", "."),
+    ...(m[4] ? { qualifier: `${m[4].toUpperCase()} context` } : {}),
+  };
 }
 
 /** The rows for one of an agent's select options (its model, its effort level) and which row the

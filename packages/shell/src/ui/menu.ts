@@ -78,9 +78,14 @@ export type MenuSpec = {
   owner: string;
   /** what it is about, for the row that wants to look open while its menu is up */
   key?: string;
-  /** the element it is about: a pointerdown on it does not dismiss, a dropdown's second click
-   * toggles it shut, and the menu goes when the element leaves the DOM */
+  /** the element it is about: a menu opened from inside another float is that float's child
+   * through it, and the menu goes when the element leaves the DOM */
   target: Element;
+  /** the target is the control that opened it, and a second press on it closes it rather than
+   * opening it again: a dropdown's button, the kebab. Off for a right-click menu, which is about
+   * its target rather than opened by it, so a left click on the row closes the menu like a click
+   * anywhere else outside the box. */
+  toggles?: boolean;
   /** which opening this is, so a menu about another row is drawn as another box rather than the
    * same one moved: the highlight starts again and it takes its place on top of the floats */
   id?: number;
@@ -201,13 +206,28 @@ export function useContextMenu(owner: string) {
             // the window click that would dismiss the menu is this one; keep it here
             e.stopPropagation();
             const el = e.currentTarget;
-            menuStore.toggle({ items: build(), owner, target: el, anchor: el.getBoundingClientRect(), align });
+            menuStore.toggle({
+              items: build(),
+              owner,
+              target: el,
+              toggles: true,
+              anchor: el.getBoundingClientRect(),
+              align,
+            });
           },
         };
       },
       /** open under an element from code (the rail's kebab, which sits inside its row) */
       openUnder(el: Element, build: () => MenuEntry[], key?: string) {
-        menuStore.open({ items: build(), owner, key, target: el, anchor: el.getBoundingClientRect(), align: "left" });
+        menuStore.open({
+          items: build(),
+          owner,
+          key,
+          target: el,
+          toggles: true,
+          anchor: el.getBoundingClientRect(),
+          align: "left",
+        });
       },
     }),
     [owner],

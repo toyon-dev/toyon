@@ -165,6 +165,23 @@ describe("the gesture a float opened in", () => {
     h.fire("doc:pointerdown", { target: node() });
     expect(h.stack.register({ box: asElement(node()), trigger: asElement(row) }).trigger).toBe(asElement(row));
   });
+
+  test("a menu about a row stands under the row's float and has no trigger, so a click on the row closes it", () => {
+    const h = harness();
+    const picker = node();
+    const row = picker.child();
+    const closed: string[] = [];
+    const p = h.stack.register({ box: asElement(picker), dismiss: () => closed.push("picker") });
+    // the right-click that opened it landed on the row, which must not become its toggle
+    h.fire("doc:pointerdown", { target: row });
+    const m = h.stack.register({ box: asElement(node()), from: asElement(row), dismiss: () => closed.push("menu") });
+    expect(m.trigger).toBeNull();
+    expect(m.parent).toBe(p);
+    h.fire("doc:pointerup", {});
+    h.flush();
+    h.fire("doc:pointerdown", { target: row });
+    expect(closed).toEqual(["menu"]);
+  });
 });
 
 describe("the keyboard and the preview", () => {

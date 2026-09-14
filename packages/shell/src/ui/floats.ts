@@ -11,6 +11,11 @@
  * again. A float is rarely told its trigger, so the stack watches the live gesture instead and hands
  * each float whatever control was pressed as it opened; `aria-controls` names it outright for a
  * float opened by a chord and closed by its lit button.
+ *
+ * A right-click menu is the other case: it is about its row rather than opened by a control, so
+ * the row is where it stands in the stack and nothing more. A left click on the row closes the
+ * menu like a click anywhere else outside the box. The app's own menu is about the whole app, and
+ * a row that toggled would have kept that one open under every click in the chrome.
  */
 
 import type { Point } from "./place.ts";
@@ -31,7 +36,11 @@ export type Entry = {
 
 export type Registration = {
   box: Element;
+  /** the control that opened it, whose own press toggles it */
   trigger?: Element | null;
+  /** the element it is about, for its place in the stack alone: a menu's row. Naming it says the
+   * float has no trigger, so the gesture it opened in is not read as one either. */
+  from?: Element | null;
   dismiss?: (why: DismissReason) => void;
   onKey?: (e: KeyboardEvent) => void;
 };
@@ -95,11 +104,14 @@ export function createFloats({ schedule = defer }: { schedule?: (fn: () => void)
 
   return {
     register(r: Registration): Entry {
-      const trigger = r.trigger ?? press ?? null;
+      // a float that names what it is about was not opened by the pressed control: the press was a
+      // right-click on that row, and reading it as a trigger would keep the menu open under the
+      // left click that follows
+      const trigger = r.trigger ?? (r.from === undefined ? press : null);
       const entry: Entry = {
         box: r.box,
         trigger,
-        parent: parentOf(entries, trigger),
+        parent: parentOf(entries, r.from ?? trigger),
         dismiss: r.dismiss,
         onKey: r.onKey,
       };

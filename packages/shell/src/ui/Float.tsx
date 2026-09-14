@@ -49,8 +49,11 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "style"> & {
   raiseKey?: unknown;
   onDismiss?: (why: DismissReason) => void;
   onKey?: (e: KeyboardEvent) => void;
-  /** the control it opened from, when the gesture cannot say (a menu names its row) */
+  /** the control it opened from, when the gesture cannot say: a dropdown names its button */
   trigger?: Element | null;
+  /** the element it is about, which places it in the stack without toggling it: a right-click
+   * menu names its row, and a left click on that row closes the menu */
+  from?: Element | null;
   boxRef?: MutableRefObject<HTMLDivElement | null>;
   handle?: Ref<FloatHandle>;
 };
@@ -83,6 +86,7 @@ export function Float({
   onDismiss,
   onKey,
   trigger,
+  from,
   boxRef,
   handle,
   children,
@@ -90,8 +94,8 @@ export function Float({
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   // the props the effects read, so none of them re-runs when a callback is rebuilt
-  const live = useRef({ anchor, placement, coverBy, onDismiss, onKey, trigger });
-  live.current = { anchor, placement, coverBy, onDismiss, onKey, trigger };
+  const live = useRef({ anchor, placement, coverBy, onDismiss, onKey, trigger, from });
+  live.current = { anchor, placement, coverBy, onDismiss, onKey, trigger, from };
 
   const placeNow = useCallback(() => {
     const el = ref.current;
@@ -131,12 +135,13 @@ export function Float({
       el.popover = "manual";
       if (!el.matches(":popover-open")) el.showPopover();
     }
-    const { onDismiss: dismiss, onKey: key, trigger: from } = live.current;
+    const { onDismiss: dismiss, onKey: key, trigger: by, from: about } = live.current;
     const entry =
       dismiss || key
         ? floats.register({
             box: el,
-            trigger: from,
+            trigger: by,
+            from: about,
             dismiss: dismiss ? (why) => live.current.onDismiss?.(why) : undefined,
             onKey: key ? (e) => live.current.onKey?.(e) : undefined,
           })

@@ -19,11 +19,13 @@ const MODIFIERS = new Set(["Shift", "Meta", "Control", "Alt", "CapsLock", "Fn"])
  * the rail's panel clips and stacks, a picker's overlay scrims, and a menu inside either was
  * under something.
  *
- * Everything that closes a menu is here, once: a pointerdown anywhere but the box and the thing
- * the menu is about (a right-click on another row, or into the terminal, whose own menu must
- * not open over ours), a click outside the box, a chord, Escape, window blur (a click inside the
- * preview iframe never reaches this document but does steal focus), a scroll or a resize under a
- * fixed box, and the target leaving the DOM while its menu is up.
+ * Everything that closes a menu is here, once: a pointerdown anywhere but the box (a right-click
+ * on another row, or into the terminal, whose own menu must not open over ours; a left click on
+ * the row the menu is about counts too, since the menu is about the row rather than opened by
+ * it, and only a dropdown's own button is exempt so that its second press toggles), a click
+ * outside the box, a chord, Escape, window blur (a click inside the preview iframe never reaches
+ * this document but does steal focus), a scroll or a resize under a fixed box, and the target
+ * leaving the DOM while its menu is up.
  */
 export function Menus() {
   const spec = useMenu();
@@ -133,7 +135,10 @@ function Menu({ spec }: { spec: MenuSpec }) {
       anchor={() => rect}
       placement={placement}
       track={false}
-      trigger={spec.target}
+      // the row it is about places it in the stack; only a button that toggles it is also exempt
+      // from its own press
+      from={spec.target}
+      trigger={spec.toggles ? spec.target : null}
       onDismiss={() => menuStore.close()}
       onKey={onKey}
       // a right-click on the menu itself is not a request for another one

@@ -16,11 +16,13 @@ import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
+import { SelfWatch } from "../core/self.ts";
 import { StateStore } from "../core/state.ts";
 import { DesignService } from "../design/service.ts";
 import { ExecService } from "../exec/service.ts";
 import { FileService } from "../files/service.ts";
 import { GIT } from "../git/exec.ts";
+import { AfterLand } from "../repos/afterLand.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { type RouteFs, RouteService } from "../routes/service.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
@@ -89,7 +91,10 @@ function make() {
   });
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
-  const repos = new RepoRegistry({ state, hub, runtime, worktrees });
+  // no tree behind this daemon, so nothing lands on it and afterLand has nothing to run
+  const self = new SelfWatch(null);
+  const afterLand = new AfterLand({ state, hub, self });
+  const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self });
   const files = new FileService(state, runtime, (id) => worktrees.readable(id));
   const design = new DesignService((id) => worktrees.readable(id));
   const exec = new ExecService({ state, runtime });
@@ -107,6 +112,7 @@ function make() {
   const prs = new PrService({ state, hub, worktrees, view: async () => null, everyMs: 60 * 60_000 });
   const planned: string[][] = [];
   const chosen: Array<string | null> = [];
+  const restarts: number[] = [];
   const planArgs: Array<[prompt: string, cwd: string, agent: string]> = [];
   const services: Services = {
     state,
@@ -125,6 +131,12 @@ function make() {
     agents,
     accounts,
     attachments,
+    self,
+    afterLand,
+    restart: () => {
+      restarts.push(Date.now());
+      return null;
+    },
     planTasks: async (prompt, cwd, agent) => {
       planArgs.push([prompt, cwd, agent]);
       return planned.shift() ?? null;
@@ -147,7 +159,7 @@ function make() {
     watchTerminal: (id, stream) => terms.add(streamKey(id, stream)),
     unwatchTerminal: (id, stream) => terms.delete(streamKey(id, stream)),
   };
-  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, chosen, planArgs, ...f };
+  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, chosen, planArgs, restarts, ...f };
 }
 
 /** the repo registered, and its main row, which the file tests read and write through */
@@ -1102,5 +1114,38 @@ describe("handlers", () => {
     await dispatch({ t: "discard-file", worktreeId: main.id, path: "new.txt" }, ctx, services);
     expect(existsSync(join(repo, "new.txt"))).toBe(false);
     expect(changed).toEqual([main.id, main.id]);
+  });
+
+  test("run-after-land on a project with no afterLand says where to put one", async () => {
+    const { services, ctx, repo } = make();
+    const r = await services.repos.register(repo);
+    await expect(dispatch({ t: "run-after-land", repoId: r.id }, ctx, services)).rejects.toThrow(
+      /no afterLand commands/,
+    );
+  });
+
+  test("run-after-land starts the commands and answers with the state they are in", async () => {
+    const { services, ctx, replies, repo } = make();
+    const r = await services.repos.register(repo);
+    r.config = { ...r.config, afterLand: ["true"] };
+    await dispatch({ t: "run-after-land", repoId: r.id }, ctx, services);
+    expect(lastOf(replies, "self")).toBeDefined();
+    // the run reports itself from here on; what matters is that the handler did not wait for it
+    await until(() => !services.afterLand.busy(r.id));
+  });
+
+  test("a restart waits for a turn to settle rather than taking the session down with it", async () => {
+    const { services, ctx, restarts, repo, agents } = make();
+    const main = await mainOf(services, repo);
+    services.runtime.ensureAgent(main);
+    const agent = agents.get(main.id);
+    if (!agent) throw new Error("no agent for main");
+    agent.status = "working";
+    await expect(dispatch({ t: "restart-daemon" }, ctx, services)).rejects.toThrow(/still working on/);
+    expect(restarts).toHaveLength(0);
+
+    agent.status = "idle";
+    await dispatch({ t: "restart-daemon" }, ctx, services);
+    expect(restarts).toHaveLength(1);
   });
 });

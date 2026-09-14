@@ -16,6 +16,7 @@ export type AppState = Pick<
   | "repos"
   | "rows"
   | "remote"
+  | "self"
 >;
 
 /** The app's own actions, in three groups: somewhere to go, the panels, and the app itself. What
@@ -119,6 +120,15 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       onClick: () => dispatch({ a: "open", overlay: { kind: "keys" } }),
     },
   ];
+  // only where there is something to restart into: toyon running from a checkout that has moved
+  // on without it. Everywhere else this would be a way to lose every running agent for nothing.
+  if (s.self?.restart) {
+    app.push({
+      id: "restart-daemon",
+      label: "restart Toyon",
+      onClick: () => sock?.send({ t: "restart-daemon" }),
+    });
+  }
   // A machine with a public name is listed at toyon.cloud per browser, so a phone or a second
   // laptop that opened it here adds it from here. The link carries the name, never the token.
   if (s.remote) {

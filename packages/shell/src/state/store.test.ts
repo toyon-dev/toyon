@@ -110,6 +110,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     gitIdentity: true,
     pending: [],
     visits: {},
+    self: null,
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, spares: [] });

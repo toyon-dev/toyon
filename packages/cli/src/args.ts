@@ -6,6 +6,7 @@ import { isRemoteHost } from "@toyon/shared";
 export type Command =
   | { kind: "open"; path: string | null; app: boolean; installApp: boolean }
   | { kind: "stop" }
+  | { kind: "restart" }
   | { kind: "doctor" }
   | { kind: "logs"; follow: boolean; lines: number }
   | { kind: "version" }
@@ -25,7 +26,7 @@ export type Command =
   | { kind: "help" }
   | { kind: "error"; message: string };
 
-const VERBS = new Set(["stop", "doctor", "logs", "version", "uninstall", "remote", "deploy", "help"]);
+const VERBS = new Set(["stop", "restart", "doctor", "logs", "version", "uninstall", "remote", "deploy", "help"]);
 const DEFAULT_LOG_LINES = 100;
 
 export function parseArgs(argv: string[]): Command {
@@ -36,6 +37,7 @@ export function parseArgs(argv: string[]): Command {
   if (first !== undefined && VERBS.has(first)) {
     switch (first) {
       case "stop":
+      case "restart":
       case "doctor":
       case "version":
       case "help":
@@ -149,6 +151,8 @@ usage
   toyon [path]            start the daemon if it is not running, register the repo at path
                           (default: the current directory) and open the shell
   toyon stop              stop the daemon and every dev server and agent it runs
+  toyon restart           stop the daemon and start it again, for a Toyon you have just rebuilt;
+                          every shell reconnects on its own
   toyon doctor            check the daemon, the token, the shell build and the tools Toyon needs
   toyon logs [-f] [-n N]  print the daemon log; -f keeps following it, -n sets how many lines
   toyon version           print the CLI version, and the daemon's if one is running

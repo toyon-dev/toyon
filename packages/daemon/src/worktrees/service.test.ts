@@ -15,14 +15,23 @@ import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
+import { SelfWatch } from "../core/self.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT, git } from "../git/exec.ts";
+import { AfterLand } from "../repos/afterLand.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { WorktreeService } from "./service.ts";
 import { TurnService } from "./turns.ts";
 
 // Real git in a throwaway repo; fake agent/procs/proxy so nothing is spawned and no SDK is called.
+
+/** No daemon of toyon's own runs here, so nothing that lands in these repos can get ahead of one:
+ * a registry needs the two anyway, and these are the pair that never has anything to say. */
+function noSelf(state: StateStore, hub: Hub) {
+  const self = new SelfWatch(null);
+  return { self, afterLand: new AfterLand({ state, hub, self }) };
+}
 
 type World = ReturnType<typeof world>;
 function world() {
@@ -34,7 +43,7 @@ function world() {
   const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
-  const repos = new RepoRegistry({ state, hub, runtime, worktrees });
+  const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
   return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, ...f };
 }
 
@@ -568,7 +577,13 @@ describe("config reload", () => {
     const repoId = await registered();
     writeFileSync(join(w.repo, "toyon.json"), JSON.stringify({ run: { api: "true" } }));
     // a second registry over the same state, as a restart would build
-    const again = new RepoRegistry({ state: w.state, hub: w.hub, runtime: w.runtime, worktrees: w.worktrees });
+    const again = new RepoRegistry({
+      state: w.state,
+      hub: w.hub,
+      runtime: w.runtime,
+      worktrees: w.worktrees,
+      ...noSelf(w.state, w.hub),
+    });
     await again.boot();
     again.stopWatchers();
     expect(w.state.requireRepo(repoId).config.run).toEqual({ api: "true" });
@@ -1099,7 +1114,13 @@ describe("boot", () => {
       agents: w.registry,
       namer: async () => null,
     });
-    const repos2 = new RepoRegistry({ state: state2, hub: hub2, runtime: runtime2, worktrees: worktrees2 });
+    const repos2 = new RepoRegistry({
+      state: state2,
+      hub: hub2,
+      runtime: runtime2,
+      worktrees: worktrees2,
+      ...noSelf(state2, hub2),
+    });
     await repos2.boot();
     await settle();
     expect(state2.worktree(wt.id)).toBeUndefined();
@@ -1154,7 +1175,13 @@ describe("boot", () => {
         agents: w.registry,
         namer: async () => null,
       });
-      const repos2 = new RepoRegistry({ state: state2, hub: hub2, runtime: runtime2, worktrees: worktrees2 });
+      const repos2 = new RepoRegistry({
+        state: state2,
+        hub: hub2,
+        runtime: runtime2,
+        worktrees: worktrees2,
+        ...noSelf(state2, hub2),
+      });
       await repos2.boot();
       await settle();
       expect(runtime2.runningCount()).toBe(0);

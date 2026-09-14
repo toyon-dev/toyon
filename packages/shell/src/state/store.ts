@@ -36,6 +36,7 @@ import type {
   RemoteView,
   RepoInfo,
   SearchHit,
+  SelfState,
   ServerMsg,
   SpareInfo,
   TermServerMsg,
@@ -513,6 +514,10 @@ export interface State {
   remote: RemoteView | null;
   /** hello's `gitIdentity`: git can commit without asking, so the new-project view need not */
   gitIdentity: boolean;
+  /** toyon is running out of a checkout that has moved on without it: work landed there that the
+   * running daemon, or the bundle it is serving this page from, does not have. Null the rest of
+   * the time, which is every install that is not someone working on toyon itself. */
+  self: SelfState | null;
   /** the Finder dialog is up, and which of the new-project view's controls asked for it: where the
    * project goes, or a folder to open. Escape is the dialog's while it is up. */
   choosingFolder: false | "location" | "open";
@@ -635,6 +640,7 @@ export function initialState(opts: InitialOpts): State {
     remote: null,
     // the page never shows before hello, which is what says otherwise
     gitIdentity: true,
+    self: null,
     choosingFolder: false,
     newProject: null,
     autoSend: null,
@@ -1368,10 +1374,13 @@ function onServer(s: State, msg: StoreServerMsg): State {
           (msg.repos.length === 0 && msg.rows.length === 0 && msg.pending.length === 0 ? firstProject() : null),
         pending: msg.pending,
         visits: msg.visits,
+        self: msg.self,
         // an import this tab was watching may have finished while it was away
         activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
       };
     }
+    case "self":
+      return { ...s, self: msg.self };
     case "visits":
       return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages } };
     case "themes":

@@ -65,6 +65,8 @@ const NEVER_LIFTS = [
   ".hint",
   ".import-error",
   ".import-idle",
+  /* the last line a failed rebuild printed, on a float with no seat under it */
+  ".self-notice-detail",
   ".picker-ghost",
   ".key-hints",
   ".working-row",

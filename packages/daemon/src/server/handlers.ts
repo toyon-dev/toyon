@@ -12,10 +12,12 @@ import type { FolderDialog } from "../core/dialog.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
+import type { SelfWatch } from "../core/self.ts";
 import type { StateStore } from "../core/state.ts";
 import type { DesignService } from "../design/service.ts";
 import type { ExecService } from "../exec/service.ts";
 import type { FileService } from "../files/service.ts";
+import type { AfterLand } from "../repos/afterLand.ts";
 import { browsePath, describeFolder } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { RouteService } from "../routes/service.ts";
@@ -52,6 +54,12 @@ export interface Services {
   accounts: AgentAccounts;
   /** images attached to chat messages; the http layer serves them back to the shell */
   attachments: AttachmentStore;
+  /** whether the checkout this daemon runs from has moved on without it */
+  self: SelfWatch;
+  /** the repo's catch-up commands, so the notice above can offer to run them */
+  afterLand: AfterLand;
+  /** stop and start again; answers a refusal, or null having begun to go away */
+  restart: () => string | null;
   /** request → 1–5 independent tasks, asked of the agent that will run them (tests inject a stub) */
   planTasks: (prompt: string, cwd: string, agentId: string) => Promise<string[] | null>;
   /** the OS folder dialog behind the new-project form's folder button (tests inject a stub) */
@@ -349,6 +357,30 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async "pull-main"(msg, ctx, s) {
     const result = await s.worktrees.pull(msg.worktreeId);
     await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message));
+  },
+
+  "run-after-land"(msg, ctx, s) {
+    // the run reports itself: `building` goes out on a self frame the moment it starts, and again
+    // with whatever stopped it. All that is left here is the case where there is nothing to run.
+    const repo = s.state.repo(msg.repoId);
+    if (!repo) throw new UserError("no such project");
+    if ((repo.config.afterLand ?? []).length === 0) {
+      throw new UserError(`${repo.name} has no afterLand commands in ${repo.configFile}`);
+    }
+    s.afterLand.run(msg.repoId);
+    ctx.reply({ t: "self", self: s.self.get() });
+  },
+
+  "restart-daemon"(_msg, _ctx, s) {
+    // a turn in flight is work someone is waiting on, and the daemon holds the session: stopping
+    // now would lose the part that has not reached the transcript
+    const busy = s.state.worktrees.filter((w) => s.runtime.agentFor(w.id)?.status === "working");
+    if (busy.length > 0) {
+      const names = busy.map((w) => w.title).join(", ");
+      throw new UserError(`still working on ${names}; restart once that settles`);
+    }
+    const refused = s.restart();
+    if (refused) throw new UserError(refused);
   },
 
   async commit(msg, ctx, s) {

@@ -31,6 +31,7 @@ import { useContextMenu } from "../ui/menu.ts";
 import { Tooltips } from "../ui/Tooltip.tsx";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
+import { SelfNotice } from "./SelfNotice.tsx";
 import "./app.css";
 import { cx } from "../ui/cx.ts";
 
@@ -326,6 +327,7 @@ export function App() {
         {!chatCentred && <RightDock width={rightW} />}
         {!firstRun && <Rail />}
       </div>
+      <SelfNotice />
       {toast && (
         // shown again for each new message, which puts it over whatever has opened since
         <Float className={cx("toast", !toast.ok && "err")} role="status" raiseKey={toast}>

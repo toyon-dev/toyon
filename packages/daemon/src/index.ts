@@ -14,18 +14,21 @@ import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
 import { makeLander, makePlanner, makeRecapper } from "./agent/tasks.ts";
-import { locateAssets } from "./core/assets.ts";
+import { locateAssets, pruneAssets } from "./core/assets.ts";
 import { folderDialog } from "./core/dialog.ts";
 import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
 import { startLagSampler } from "./core/metrics.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
 import { loadRemote, previewGrant } from "./core/remote.ts";
+import { respawn, restartable } from "./core/restart.ts";
+import { SelfWatch } from "./core/self.ts";
 import { loadOrCreateToken, StateStore } from "./core/state.ts";
 import { DesignService } from "./design/service.ts";
 import { ExecService } from "./exec/service.ts";
 import { FileService } from "./files/service.ts";
 import { viewPr } from "./git/gh.ts";
+import { AfterLand } from "./repos/afterLand.ts";
 import { RepoRegistry } from "./repos/registry.ts";
 import { RouteService } from "./routes/service.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
@@ -45,7 +48,11 @@ process.on("unhandledRejection", (e) => log.error("daemon", "unhandled rejection
 process.on("uncaughtException", (e) => log.error("daemon", "uncaught exception", e));
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { shellDist: SHELL_DIST, bridgeJs: BRIDGE_JS } = locateAssets(here);
+const { shellDist: SHELL_DIST, bridgeJs: BRIDGE_JS, sourceRoot: SOURCE_ROOT } = locateAssets(here);
+// the shell keeps every build's chunks so a tab open across a rebuild can still load its own; the
+// ones no tab can still be holding go here, once, where no build is part-way through writing
+const pruned = pruneAssets(SHELL_DIST);
+if (pruned > 0) log.debug("daemon", `pruned ${pruned} assets from builds this one has outlived`);
 
 const paths = makePaths();
 ensureDirs(paths);
@@ -134,7 +141,11 @@ new LandingService({
 });
 const refs = new RefSearch({ state });
 const prs = new PrService({ state, hub, worktrees, view: viewPr });
-const repos = new RepoRegistry({ state, hub, runtime, worktrees });
+// toyon opened on its own checkout: what landing there leaves behind for the process serving it
+const self = new SelfWatch(SOURCE_ROOT);
+await self.start();
+const afterLand = new AfterLand({ state, hub, self });
+const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self });
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);
 themes.load();
 
@@ -162,6 +173,14 @@ const { branded, stop: stopServer } = startServer({
     agents,
     accounts,
     attachments,
+    self,
+    afterLand,
+    restart: () => {
+      const can = restartable();
+      if (!can.ok) return can.reason;
+      fireAndForget("daemon", shutdown("restart", { respawn: true }), "restart");
+      return null;
+    },
     planTasks: makePlanner(agents),
     folderDialog: folderDialog(),
   },
@@ -235,7 +254,7 @@ if (remote?.front === "edge") {
 // detached process groups don't outlive the daemon and squat their ports. Bounded: a stuck exit
 // can't hold the terminal hostage.
 let shuttingDown = false;
-async function shutdown(signal: string) {
+async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info("daemon", `${signal}: stopping dev servers`);
@@ -249,6 +268,13 @@ async function shutdown(signal: string) {
   await Promise.race([runtime.shutdown(), deadline]);
   // a crash leaves the file behind on purpose: `toyon stop` checks the pid is alive before trusting it
   rmSync(paths.pidFile, { force: true });
+  if (opts.respawn) {
+    // last, and after a beat: the replacement binds this port and does not retry, so it must not
+    // be racing a listener that is still on its way down
+    await Bun.sleep(250);
+    log.info("daemon", "starting the replacement");
+    respawn(paths.logFile);
+  }
   process.exit(0);
 }
 process.on("SIGINT", () => fireAndForget("daemon", shutdown("SIGINT"), "shutdown"));

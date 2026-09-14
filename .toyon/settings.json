@@ -5,6 +5,7 @@
     "web": "TOYON_DAEMON_URL=$DAEMON_URL bun run --cwd packages/shell dev",
     "app": "bun run build && ./scripts/dev-daemon.sh"
   },
+  "afterLand": ["bun install", "bun run build"],
   "land": { "method": "rebase" },
   "profiles": {
     "dev": { "run": ["daemon", "web"], "preview": "web" },

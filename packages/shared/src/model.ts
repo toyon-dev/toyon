@@ -35,6 +35,10 @@ export interface ToyonConfig {
   /** a command that must exit 0 before a worktree is offered to land: run in the worktree after
    * every finished turn, its output on the transcript */
   check?: string;
+  /** shell commands run in the main checkout, in order, once work has landed on the default
+   * branch: the build, the migration, the install a person would otherwise remember to do by
+   * hand. Nothing waits on them, and a failure stops the rest. */
+  afterLand?: string[];
   land?: LandConfig;
   /** proc that the preview iframe should show (defaults to "web", else first proc) */
   preview?: string;
@@ -68,6 +72,26 @@ export interface RepoInfo {
   made?: "folder" | "git";
   /** an `origin` remote exists, read at register and boot: what decides whether a PR is offered */
   remote?: boolean;
+}
+
+/** Toyon running out of a checkout that is also one of its own projects: what landing work on
+ * that project's default branch has left behind. Null for the npm package, which has no tree to
+ * fall behind, and for a checkout nobody opened as a project.
+ *
+ * Two halves fall behind separately. The shell and the bridge are read off disk on every request,
+ * so a rebuild is enough and nothing has to stop; the daemon's own code is in memory from the
+ * moment it booted, so only a restart picks it up. Work that touched `shared` is both. */
+export interface SelfState {
+  /** the project whose default branch moved: the checkout the daemon is running from */
+  repoId: string;
+  /** the bundles on disk are behind the branch; the repo's `afterLand` is what catches them up */
+  rebuild: boolean;
+  /** the running process is behind the branch */
+  restart: boolean;
+  /** `afterLand` is running right now */
+  building: boolean;
+  /** why the last `afterLand` stopped, when it did not finish cleanly */
+  buildFailed?: string;
 }
 
 /** one directory offered by the project picker's path completion */

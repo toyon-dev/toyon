@@ -16,6 +16,7 @@ import {
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
+import type { SelfWatch } from "../core/self.ts";
 import type { StateStore } from "../core/state.ts";
 import { excludeFromGit, unexcludeFromGit } from "../git/exclude.ts";
 import { defaultBranch, git, isGitRepo, repoRoot } from "../git/exec.ts";
@@ -24,6 +25,7 @@ import { allocateProxyPort, releasePort, reservePort } from "../runtime/ports.ts
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
+import type { AfterLand } from "./afterLand.ts";
 import { expandTilde } from "./browse.ts";
 import { configBody, configTarget, detectConfig, readConfigFile } from "./config.ts";
 import {
@@ -50,6 +52,10 @@ export interface RepoRegistryDeps {
   hub: Hub;
   runtime: RuntimeRegistry;
   worktrees: WorktreeService;
+  /** the repo's own catch-up commands, started when its default branch moves */
+  afterLand: AfterLand;
+  /** whether that branch moving left the running daemon behind (core/self.ts) */
+  self: SelfWatch;
 }
 
 /** git's progress redraws many times a second; the pane only has to look alive */
@@ -519,12 +525,21 @@ export class RepoRegistry {
     if (main) this.d.hub.emit("log", main.id, "config", line);
   }
 
+  private async checkSelf(repo: RepoInfo): Promise<void> {
+    if (await this.d.self.check(repo)) this.d.hub.emit("selfChanged");
+  }
+
   private startWatcher(repo: RepoInfo) {
     if (this.watchers.has(repo.id)) return;
     const stopRef = watchDefaultBranch(repo.path, repo.defaultBranch, () => {
       this.d.worktrees.invalidateCounts();
       this.d.hub.emit("repoTick", repo.id);
       fireAndForget(repo.id, this.d.worktrees.spare.refresh(repo.id), "spare refresh");
+      // work arrived on the branch: catch the main checkout up to it, and say whether the daemon
+      // serving this very page is one of the things now out of date. Both read the repo as it is
+      // now, so this covers a pull and a land from another window as well as a land from here.
+      this.d.afterLand.run(repo.id);
+      fireAndForget(repo.id, this.checkSelf(repo), "self check");
     });
     const stopCfg = watchConfigFile(repo.path, () => this.reloadConfig(repo.id));
     // someone added or removed a worktree outside toyon: what git knows and what we last read

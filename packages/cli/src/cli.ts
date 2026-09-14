@@ -14,6 +14,7 @@ import { doctor } from "./doctor.ts";
 import { logs } from "./logs.ts";
 import { openUrl } from "./openUrl.ts";
 import { remote } from "./remote.ts";
+import { restart } from "./restart.ts";
 import {
   bwrapBlockedAdvice,
   bwrapStartError,
@@ -106,6 +107,8 @@ async function run(cmd: Command): Promise<number> {
     }
     case "stop":
       return stop();
+    case "restart":
+      return restart();
     case "doctor":
       return doctor();
     case "logs":

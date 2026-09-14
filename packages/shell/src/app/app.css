@@ -104,4 +104,39 @@
   .toast-action {
     margin-left: 4px;
   }
+
+  /* Placed against the window like the toast, and in the corner rather than under it: this one
+     stays until it is acted on or dismissed, and the two have to be able to be up together. */
+  .self-notice {
+    right: 16px;
+    bottom: 38px;
+    max-width: 320px;
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-left: 3px solid var(--yellow);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    box-shadow: var(--elevation-float);
+  }
+  .self-notice-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .self-notice-detail {
+    display: block;
+    margin-top: 4px;
+    color: var(--text2);
+    font: var(--type-mono-sm);
+    /* one build's last line, whatever it printed: wrap it rather than let it widen the box */
+    overflow-wrap: anywhere;
+  }
+  .self-notice-action {
+    display: block;
+    margin-top: 8px;
+  }
+  .self-notice-dismiss {
+    float: right;
+    margin: -2px -6px 0 8px;
+  }
 }

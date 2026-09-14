@@ -21,6 +21,7 @@ import type {
   PendingRepo,
   RefHit,
   RepoInfo,
+  SelfState,
   SpareInfo,
   Theme,
   ThemePrefs,
@@ -72,8 +73,12 @@ export type ServerMsg =
       /** each repo's remembered preview pages, best first, with their titles: the route bar's
        * history, there on first paint */
       visits: Record<string, PageEntry[]>;
+      /** toyon is running from a checkout that has moved on without it; null the rest of the time */
+      self: SelfState | null;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
+  /** the daemon fell behind the checkout it runs from, caught up, or started catching up */
+  | { t: "self"; self: SelfState | null }
   /** the answer to a `zone`: whether the sun is down where that browser is, and when that changes.
    * Only the appearance mode that follows daylight reads it, and the shell asks again at `until`. */
   | { t: "daylight"; dark: boolean; until: number }
@@ -293,6 +298,7 @@ export const toyonConfigSchema = z
     setup: z.array(shellCommand).max(50).optional(),
     run: z.record(declaredProcName, shellCommand),
     check: shellCommand.optional(),
+    afterLand: z.array(shellCommand).max(50).optional(),
     land: landConfigSchema.optional(),
     preview: procName.optional(),
     profiles: z.record(procName, runProfileSchema).optional(),
@@ -418,6 +424,12 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * target keeps its agent, procs and port */
   z.object({ t: z.literal("graft"), targetId: id, sourceIds: z.array(id).min(1).max(20) }),
   z.object({ t: z.literal("sync-main"), worktreeId: id }),
+  /** run the repo's `afterLand` now: the manual half of the notice that toyon's own bundles are
+   * behind the checkout it runs from */
+  z.object({ t: z.literal("run-after-land"), repoId: id }),
+  /** stop the daemon and start it again from the same entry, once nothing is mid-turn. Every
+   * shell reconnects on its own, so this is the only frame that answers by going away. */
+  z.object({ t: z.literal("restart-daemon") }),
   /** fast-forward the main checkout (`worktreeId` is main's row) to its upstream */
   z.object({ t: z.literal("pull-main"), worktreeId: id }),
   /** save the editor's text only over `base`, the version it was read or last saved as (null: no

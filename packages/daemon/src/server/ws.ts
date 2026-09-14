@@ -268,6 +268,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       agentChosen: s.state.defaultAgent !== undefined,
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
+  s.hub.on("selfChanged", () => broadcast({ t: "self", self: s.self.get() }));
   s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
   s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));
 
@@ -293,6 +294,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       gitIdentity: await s.repos.gitIdentity(),
       pending: s.repos.pending,
       visits: s.routes.historyAll(),
+      self: s.self.get(),
     }) satisfies ServerMsg;
 
   let branded = false;

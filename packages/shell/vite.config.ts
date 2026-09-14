@@ -12,6 +12,14 @@ const target = { target: daemon, changeOrigin: true };
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // A rebuild rotates every hashed chunk name, and the daemon serves this directory straight off
+    // disk: clearing it first pulls the chunks out from under whatever tabs are already open, which
+    // is the whole of the stale-build card people see after landing. Every name here is
+    // fingerprinted, so leaving the old ones costs disk and nothing else; the daemon prunes builds
+    // it has outlived at boot (core/assets.ts).
+    emptyOutDir: false,
+  },
   server: {
     port,
     // under toyon the supervisor polls this exact port and the preview proxy forwards to it, so

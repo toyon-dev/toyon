@@ -8,11 +8,14 @@
     grid-template-rows: auto 1fr;
     height: 100%;
 
-    /* zen: full-bleed preview, all chrome hidden (⌘. exits; esc belongs to the page) */
+    /* zen: full-bleed preview, all chrome hidden (⌘. exits; esc belongs to the page). The panes
+       stacked under the preview (editor, design, terminal) are chrome too: hidden, not closed, so
+       they are back where they were on the way out. */
     &.zen .left-dock,
     &.zen .right-dock,
     &.zen .rail,
-    &.zen .dock-resize {
+    &.zen .dock-resize,
+    &.zen .pane {
       display: none;
     }
   }

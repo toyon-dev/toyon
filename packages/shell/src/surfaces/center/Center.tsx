@@ -346,9 +346,14 @@ export function Center() {
 
   return (
     <div className="center" ref={centerRef}>
+      {/* a full-height pane takes the preview's place; in zen the panes are hidden (app.css), so
+          the preview comes back for the window rather than leaving the column blank */}
       <div
         className="center-area"
-        style={{ display: (editor && editorFull) || (designOpen && designFull) ? "none" : undefined }}
+        style={{
+          display:
+            !(zen && !chatCentred) && ((editor && editorFull) || (designOpen && designFull)) ? "none" : undefined,
+        }}
       >
         <div className="frames-wrap">
           {frames.map((f) => (

@@ -32,6 +32,7 @@ const opts: HttpOpts = {
   version: "0",
   repos,
   attachments: new AttachmentStore(attachmentsDir),
+  archivedAttachment: () => null,
   branded: () => false,
   metrics: () => ({ lag: 0 }),
   noteShellOrigin: (o) => learnedOrigins.push(o),
@@ -313,6 +314,16 @@ describe("/attachments", () => {
     expect(r?.headers.get("cache-control")).toContain("immutable");
     expect(Buffer.from(await r!.arrayBuffer()).toString("base64")).toBe(png);
   });
+  test("an image the archive holds is served once the store no longer has it", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "toyon-archive-"));
+    mkdirSync(join(archiveDir, "wt2"));
+    writeFileSync(join(archiveDir, "wt2", "1.png"), Buffer.from(png, "base64"));
+    const serve = createFetch({ ...opts, archivedAttachment: (id, file) => join(archiveDir, id, file) });
+    const r = await serve(req("/attachments/wt2/1.png?token=secret"), srv());
+    expect(r?.status).toBe(200);
+    expect(Buffer.from(await r!.arrayBuffer()).toString("base64")).toBe(png);
+    rmSync(archiveDir, { recursive: true, force: true });
+  });
   test("no token is 401; a missing or malformed path is 404", async () => {
     expect((await fetch(req("/attachments/wt1/1.png"), srv()))?.status).toBe(401);
     expect((await fetch(req("/attachments/wt1/9.png?token=secret"), srv()))?.status).toBe(404);
@@ -334,6 +345,7 @@ describe("static shell", () => {
     version: "0",
     repos,
     attachments: new AttachmentStore(attachmentsDir),
+    archivedAttachment: () => null,
     branded: () => false,
     noteShellOrigin: () => {},
     remote: null,

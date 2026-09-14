@@ -1,20 +1,11 @@
 import { useStore } from "../../state/context.tsx";
-import { useArchivedPage, useFirstRun } from "../../state/selectors.ts";
+import { useFirstRun } from "../../state/selectors.ts";
 import { ChatPanel } from "./ChatPanel.tsx";
 
 /** the chat in its dock beside the preview */
 export function ChatDock({ width }: { width: number }) {
   const chatOpen = useStore((s) => s.chatOpen);
-  // hidden, not closed, on a first-run screen: the layout remembers nothing of it. The same on an
-  // archived worktree's page: the chat here is the row's underneath, and the page is about one
-  // whose chat is with the daemon until it comes back
+  // hidden, not closed, on a first-run screen: the layout remembers nothing of it
   const firstRun = useFirstRun();
-  const archivedPage = useArchivedPage() !== null;
-  return (
-    <ChatPanel
-      placement="dock"
-      className={!chatOpen || firstRun || archivedPage ? "collapsed" : undefined}
-      width={width}
-    />
-  );
+  return <ChatPanel placement="dock" className={!chatOpen || firstRun ? "collapsed" : undefined} width={width} />;
 }

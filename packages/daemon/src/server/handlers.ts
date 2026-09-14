@@ -126,7 +126,18 @@ const requireRun = (s: Services, id: string): WorktreeInfo => {
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async subscribe(msg, ctx, s) {
     const r = s.worktrees.readable(msg.worktreeId);
-    if (!r) throw new UserError("unknown worktree");
+    if (!r) {
+      // an archived worktree: its chat as it was, read in place. Nothing runs and nothing is on
+      // disk to have a status, so the transcript is the whole stream; the subscription is under
+      // the same id the worktree comes back with, so a restore's events reach this socket
+      const kept = s.worktrees.archivedTranscript(msg.worktreeId);
+      if (!kept) throw new UserError("unknown worktree");
+      if (!ctx.subscribe(msg.worktreeId)) return;
+      ctx.reply({ t: "backfill", worktreeId: msg.worktreeId, events: coalesce(kept), log: [] });
+      ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: [] });
+      ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: [] });
+      return;
+    }
     // the shell re-asserts its whole subscription set on every switch; only a NEW subscription
     // needs the backfill (an existing one has been receiving the stream all along)
     if (!ctx.subscribe(msg.worktreeId)) return;
@@ -275,7 +286,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "restore-worktree"(msg, _ctx, s) {
-    await s.worktrees.restore(msg.archiveId, msg.clientId);
+    await s.worktrees.restore(msg.archiveId, msg.clientId, msg.message);
   },
 
   async "delete-archived"(msg, _ctx, s) {

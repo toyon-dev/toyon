@@ -28,11 +28,11 @@ import {
   type WorktreeStatus,
 } from "@toyon/shared";
 import type { OptionField } from "../agent/acp/options.ts";
-import { attachmentsDirFor } from "../agent/attachments.ts";
+import { attachmentsDirFor, isAttachmentFile } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
-import { coalesce, transcriptPathFor } from "../agent/transcript.ts";
+import { coalesce, Transcript, type TranscriptEntry, transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -121,6 +121,12 @@ export interface GitInfo {
   behind?: number;
   /** HEAD's sha, so the history tab knows when its log went stale */
   head?: string;
+}
+
+/** what was typed into an archived chat, sent once the worktree is back */
+export interface RestoreMessage {
+  text: string;
+  attachments?: AttachmentInput[];
 }
 
 export interface CreateOpts {
@@ -717,6 +723,20 @@ export class WorktreeService {
     return repo ? this.archive.list(repo) : [];
   }
 
+  /** an archived worktree's chat, read where it lies: its page shows the chat as it was, and only
+   * a restore moves it. Null when no archive has the id. */
+  archivedTranscript(archiveId: string): TranscriptEntry[] | null {
+    const files = this.archive.chatFiles(archiveId);
+    return files ? new Transcript(files.transcript, archiveId).entries : null;
+  }
+
+  /** an image in an archived chat, for the page that shows it; null unless the id names an archive
+   * and the name is one the attachment store would have written */
+  archivedAttachment(archiveId: string, file: string): string | null {
+    const files = this.archive.chatFiles(archiveId);
+    return files && isAttachmentFile(file) ? join(files.attachments, file) : null;
+  }
+
   /** the project a record belongs to now: by id, or by checkout when it was forgotten and reopened */
   private repoOf(rec: ArchiveRecord): RepoInfo | undefined {
     return this.d.state.repo(rec.worktree.repoId) ?? this.d.state.repos.find((r) => r.path === rec.repoPath);
@@ -724,8 +744,9 @@ export class WorktreeService {
 
   /** Put an archived worktree back as it was removed: its branch at the commit it was on, its
    * uncommitted work over that, unstaged, and its chat. The agent resumes its own session when the
-   * directory is the same one, since that is what the session is keyed by. */
-  async restore(archiveId: string, createdBy?: string): Promise<WorktreeInfo> {
+   * directory is the same one, since that is what the session is keyed by. A `message` was typed
+   * into the archived chat: it goes to the agent the way a new worktree's first one does. */
+  async restore(archiveId: string, createdBy?: string, message?: RestoreMessage): Promise<WorktreeInfo> {
     const rec = this.archive.get(archiveId);
     if (!rec) throw new UserError("that archived worktree is gone");
     const old = rec.worktree;
@@ -786,6 +807,8 @@ export class WorktreeService {
     this.countsCache.delete(wt.id);
     this.refreshLink(wt);
     this.launch(wt, repo, repo.path);
+    // setup and procs warm in the background; the agent takes the message now, as on create
+    if (message) this.d.runtime.ensureAgent(wt).agent.send(message.text, { attachments: message.attachments });
     this.d.hub.emit("archiveChanged", repo.id);
     return wt;
   }

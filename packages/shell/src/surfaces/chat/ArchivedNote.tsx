@@ -2,7 +2,6 @@ import type { ArchivedWorktree } from "@toyon/shared";
 import { restoreArchived } from "../../state/actions/archive.ts";
 import { useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
-import { View } from "../../ui/View.tsx";
 import { ago } from "../util.ts";
 
 /** how long ago, in a sentence: the gutter's "3m" and "2d" read as units here rather than as a time */
@@ -14,11 +13,12 @@ function since(at: number): string {
   return `${n} ${unit}${n === 1 ? "" : "s"} ago`;
 }
 
-/** What fills the centre for a removed worktree. Nothing of it can be shown: its directory and
- * branch are gone, and its chat is with the daemon until it is restored. The same slot the found
- * worktree's page uses, for the same reason, and it is where the restore button lives: a rail row
- * that restored on its own click was too easy to hit on the way to another row. */
-export function Archived({ item }: { item: ArchivedWorktree }) {
+/** The last thing in a removed worktree's chat: what happened to it, and the way back. It is in
+ * the log's flow rather than over it, since the removal is the newest thing that happened to this
+ * conversation. The restore button lives here, and a message sent from the box below restores as
+ * well: a rail row that restored on its own click was too easy to hit on the way to another row,
+ * and typing is not something that happens on the way past. */
+export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
   const sock = useSock();
   const clientId = useStore((s) => s.clientId);
   const kept = item.restorable
@@ -27,10 +27,7 @@ export function Archived({ item }: { item: ArchivedWorktree }) {
       : "its chat and its commits"
     : "its chat";
   return (
-    <View wide>
-      <p className="status-line">{item.title}</p>
-      {/* the first message sent to it: what the work was, which the title only abbreviates */}
-      {item.prompt && <p>{item.prompt}</p>}
+    <div className="hint chat-archived">
       <p>
         This worktree was removed {since(item.archivedAt)}
         {item.landed ? ", after it was merged into main" : ""}: its directory and branch are gone, and nothing runs.
@@ -40,20 +37,18 @@ export function Archived({ item }: { item: ArchivedWorktree }) {
         <>
           <p>
             Restoring checks its commits out again on the same branch, puts the uncommitted changes back over them,
-            unstaged, and brings the chat with it. The directory is new, so the install and setup commands run, and then
-            the processes from the project's settings start.
+            unstaged, and picks the chat up from here. The directory is new, so the install and setup commands run, and
+            then the processes from the project's settings start. A message sent below restores it first.
           </p>
-          <div className="status-actions">
-            <Button variant="outline" size="lg" onClick={() => restoreArchived(sock, item.id, clientId)}>
-              restore
-            </Button>
-          </div>
+          <Button variant="outline" onClick={() => restoreArchived(sock, item.id, clientId)}>
+            restore
+          </Button>
         </>
       ) : (
         <p>
           Its commits were not kept, so there is nothing to restore. Its row's menu on the rail can delete it for good.
         </p>
       )}
-    </View>
+    </div>
   );
 }

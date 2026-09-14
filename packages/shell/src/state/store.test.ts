@@ -1472,6 +1472,7 @@ describe("an archived worktree's page", () => {
         repoId,
         title: id,
         branch: `toyon/${id}`,
+        path: `/tmp/${id}`,
         createdAt: 0,
         archivedAt: 0,
         restorable: true,
@@ -1515,6 +1516,28 @@ describe("an archived worktree's page", () => {
     const back = run([worktrees(wt("main", "main"), wt("a"), wt("x", "worktree", ME))], s);
     expect(back.archivedPage).toBeNull();
     expect(back.activeId).toBe("x");
+    // the row is listed before the archive list catches up: the page ends on the row all the same
+    const listedFirst = run([worktrees(wt("main", "main"), wt("a"), wt("x", "worktree"))], s);
+    expect(listedFirst.archivedPage).toBeNull();
+    expect(listedFirst.activeId).toBe("a");
+  });
+
+  test("its chat is under its own id, kept while the page is up and the row's once it is back", () => {
+    const said = { type: "user-message" as const, text: "tidy the footer", ts: 1 };
+    const s = run(
+      [{ a: "open-archived", id: "x" }, server({ t: "backfill", worktreeId: "x", events: [{ seq: 0, event: said }] })],
+      listed(),
+    );
+    expect(s.local.x?.chat).toHaveLength(1);
+    // a rows frame prunes what no row holds, and the page holds this
+    const ticked = run([worktrees(wt("main", "main"), wt("a"))], s);
+    expect(ticked.local.x?.chat).toHaveLength(1);
+    // restored: the same record is the row's
+    const back = run([worktrees(wt("main", "main"), wt("a"), wt("x", "worktree", ME))], s);
+    expect(back.local.x?.chat).toHaveLength(1);
+    // closed without a restore: the next rows frame lets it go
+    const left = run([{ a: "close-archived" }, worktrees(wt("main", "main"), wt("a"))], s);
+    expect(left.local.x).toBeUndefined();
   });
 });
 

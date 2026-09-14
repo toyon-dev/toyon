@@ -32,6 +32,9 @@ export interface HttpOpts {
   version: string;
   repos: RepoRegistry;
   attachments: AttachmentStore;
+  /** an image from an archived worktree's chat, which the store no longer holds; null when the
+   * id or name is not one of ours */
+  archivedAttachment: (worktreeId: string, file: string) => string | null;
   /** whether the portless http://toyon.localhost listener came up (known after bind) */
   branded: () => boolean;
   /** event-loop lag + per-socket traffic, for /health */
@@ -157,8 +160,13 @@ export function createFetch(opts: HttpOpts) {
     if (url.pathname.startsWith("/attachments/")) {
       if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
       const [worktreeId, file, extra] = url.pathname.slice("/attachments/".length).split("/");
-      const path = worktreeId && file && !extra ? opts.attachments.fileFor(worktreeId, file) : null;
-      if (!path || !existsSync(path)) return new Response("not found", { status: 404 });
+      // a removed worktree's chat is shown from the archive, where its images went with it
+      const places =
+        worktreeId && file && !extra
+          ? [opts.attachments.fileFor(worktreeId, file), opts.archivedAttachment(worktreeId, file)]
+          : [];
+      const path = places.find((p): p is string => !!p && existsSync(p));
+      if (!path) return new Response("not found", { status: 404 });
       return new Response(Bun.file(path), { headers: { "cache-control": IMMUTABLE } });
     }
 

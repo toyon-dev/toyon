@@ -106,6 +106,16 @@ export function App() {
     if (!sock || !connected) return;
     for (const id of subsRef.current) sock.send({ t: "subscribe", worktreeId: id });
   }, [connected, sock]);
+  // An archived worktree's page reads its chat over the same stream, under the id the worktree
+  // comes back with. The subscription goes with the page: the page closes as the restored row is
+  // listed, so the row's own subscribe above is a new one and gets the live backfill. Left in the
+  // set, a restore would find itself already subscribed and get nothing.
+  const archivedId = archivedPage?.id ?? null;
+  useEffect(() => {
+    if (!sock || !connected || !archivedId) return;
+    sock.send({ t: "subscribe", worktreeId: archivedId });
+    return () => sock.send({ t: "unsubscribe", worktreeId: archivedId });
+  }, [archivedId, connected, sock]);
   // worktrees that disappeared drop out of the set
   useEffect(() => {
     const alive = new Set(rows.map((w) => w.id));
@@ -327,7 +337,9 @@ export function App() {
         <Center onRoot={setCenterEl} />
         {chatOpen && <div className="dock-resize right" onPointerDown={dragChat} />}
         {/* the centre shows the chat instead, and one composer at a time is the only kind there is */}
-        {!chatCentred && <ChatDock width={chatW} />}
+        {/* an archived chat in the centre is the one chat panel: a second composer, hidden, would
+            answer the focus chord and take a dropped file's bounds */}
+        {!chatCentred && !archivedPage && <ChatDock width={chatW} />}
         {!firstRun && <Rail />}
       </div>
       <SelfNotice />

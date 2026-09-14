@@ -221,6 +221,25 @@ describe("archive", () => {
     expect(w.worktrees.archived(repoId)).toEqual([]);
   });
 
+  test("the archived chat is readable in place, and a message on restore goes to the agent", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    await w.worktrees.remove(wt.id);
+    expect(w.worktrees.archived(repoId)[0]).toMatchObject({ path: wt.path });
+    expect(w.worktrees.archivedTranscript(wt.id)).toEqual([
+      { seq: 0, event: { type: "user-message", text: "tidy the footer", ts: 1 } },
+    ]);
+    expect(w.worktrees.archivedTranscript("nope")).toBeNull();
+    expect(w.worktrees.archivedAttachment(wt.id, "1.png")).toBe(
+      join(w.paths.archiveDir, wt.id, "attachments", "1.png"),
+    );
+    expect(w.worktrees.archivedAttachment(wt.id, "../record.json")).toBeNull();
+    await w.worktrees.restore(wt.id, undefined, { text: "and the header" });
+    await settle();
+    expect(w.agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "and the header" });
+    expect(w.worktrees.archivedTranscript(wt.id)).toBeNull();
+  });
+
   test("a restore whose branch name was taken since comes back on a new branch", async () => {
     const repoId = await registered();
     const { wt, head } = await workedOn(repoId);

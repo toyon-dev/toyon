@@ -1,4 +1,11 @@
-import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree, PermissionMode } from "@toyon/shared";
+import type {
+  AgentCommand,
+  ArchivedWorktree,
+  GitFileStatus,
+  ModelChoice,
+  OwnedWorktree,
+  PermissionMode,
+} from "@toyon/shared";
 import {
   canLand,
   canSync,
@@ -103,18 +110,23 @@ function insertionFor(r: Row): string {
  * and paste attachments, the row saying what runs where the message goes, and the per-worktree
  * tools (terminal, element picker).
  *
- * Two ways to send from here. A message to the worktree's own agent. And main's message, where
+ * Three ways to send from here. A message to the worktree's own agent. Main's message, where
  * `draft` is set, which starts a worktree from main: main has no agent of its own. The intro's
  * variants and batch apply, main's uncommitted files move with it when the row under the knobs says
- * so, and the draft gives way as the worktree it was for arrives. */
+ * so, and the draft gives way as the worktree it was for arrives. And a message into an `archived`
+ * worktree's chat, which restores it and then goes to its agent: the box is that worktree's under
+ * the id it comes back with, and nothing here that needs a running worktree is offered. */
 export function Composer({
   active,
   draft,
+  archived,
   greenfield,
 }: {
   /** the worktree, or main while drafting */
   active: OwnedWorktree | null;
   draft?: Draft | null;
+  /** a removed worktree whose chat is on screen; `active` is null with it */
+  archived?: ArchivedWorktree | null;
   /** rendered in the centre of an empty project: the scaffolding brief rides with the first
    * message, and the knobs that assume a preview or a second worktree stay out of the way */
   greenfield?: boolean;
@@ -125,7 +137,7 @@ export function Composer({
   const drafting = !!draft;
   const id = active?.worktree.id ?? null;
   const repoId = active?.worktree.repoId;
-  const boxId = composerBoxOf(active, drafting);
+  const boxId = archived ? archived.id : composerBoxOf(active, drafting);
   const text = useLocalField(boxId, "draft");
   const attachments = useLocalField(boxId, "attachments");
   // up and down in a blank box walk back through what was sent from it (recall.ts): this is where
@@ -258,7 +270,8 @@ export function Composer({
   const [inserted, setInserted] = useState<{ name: string; hint: string } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const trigger = boxId ? triggerAt(text, caret) : null;
+  // an archived chat has no files to name and no session to take a command: no menu there
+  const trigger = boxId && !archived ? triggerAt(text, caret) : null;
   // opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
   // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
   // the arrows the walk is using.
@@ -347,7 +360,7 @@ export function Composer({
 
   // `!` mode: the draft is a command for the worktree's shell, not a message. The box wears the
   // mono face while it is one, so the change of contract shows before anything runs.
-  const shellCmd = id ? shellCommandOf(text) : null;
+  const shellCmd = id || archived ? shellCommandOf(text) : null;
 
   // what the inserted command still expects, drawn after the caret. Only while nothing has been
   // typed after it: once the arguments are being written, the hint is in the way rather than help.
@@ -415,23 +428,25 @@ export function Composer({
             }
           : null;
   const blocked = landing ? landingLine(landing) : null;
-  const placeholderText = !active
-    ? "no worktree selected"
-    : verb
-      ? ""
-      : pr
-        ? prLine(pr)
-        : blocked
-          ? blocked
-          : recap
-            ? recapLine(recap)
-            : greenfield
-              ? `describe ${title}…`
-              : draft?.sent
-                ? "starting the worktree…"
-                : spawning
-                  ? "describe a change"
-                  : `message agent on ${title}; / for a command, ! for a shell command`;
+  // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
+  // the next step on the work, then what the work is waiting on, then how to start
+  const placeholderFor = (): string => {
+    if (archived) {
+      return archived.restorable
+        ? `message agent on ${archived.title}; sending restores it first`
+        : "its commits were not kept, so it cannot come back";
+    }
+    if (!active) return "no worktree selected";
+    if (verb) return "";
+    if (pr) return prLine(pr);
+    if (blocked) return blocked;
+    if (recap) return recapLine(recap);
+    if (greenfield) return `describe ${title}…`;
+    if (draft?.sent) return "starting the worktree…";
+    if (spawning) return "describe a change";
+    return `message agent on ${title}; / for a command, ! for a shell command`;
+  };
+  const placeholderText = placeholderFor();
   // under the verb, the model's doubt as a sentence of its own. Under a line with no word (a check
   // running or failed, a PR merged or closed): the recap's sentence when one has been written, else
   // the message the work would land with, the next most useful thing to read.
@@ -511,7 +526,27 @@ export function Composer({
 
   // attachments alone are a message: a pasted error or a picked element often says it all
   const send = () => {
-    if (!active || !id || !boxId || blank) return;
+    if (!boxId || blank) return;
+    // into an archived chat: one frame restores the worktree and hands the message to its agent,
+    // so the two cannot come apart. Nothing runs there yet, so a `!` command has nowhere to go.
+    if (archived) {
+      if (!archived.restorable) return;
+      if (shellCmd !== null) {
+        dispatch({ a: "toast", toast: { ok: false, message: "nothing runs here until it is restored" } });
+        return;
+      }
+      const sent = attachments.length ? attachments.map(toInput) : undefined;
+      sock?.send({
+        t: "restore-worktree",
+        archiveId: archived.id,
+        clientId,
+        message: { text: text.trim(), attachments: sent },
+      });
+      if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
+      setText("");
+      return;
+    }
+    if (!active || !id) return;
     // the draft's message is on its way; a second enter before its worktree lands would start another
     if (draft?.sent) return;
     if (shellCmd !== null) {
@@ -809,7 +844,7 @@ export function Composer({
           }}
           // the ghost draws the placeholder itself when it has a line to put under it
           placeholder={subline || verb ? "" : placeholderText}
-          disabled={!active}
+          disabled={!active && !archived?.restorable}
           // read-only rather than disabled while the draft's worktree starts: the caret stays, and
           // the same box is that worktree's when it lands
           readOnly={!!draft?.sent}
@@ -924,9 +959,9 @@ export function Composer({
         </span>
         <span className="spawn-tools">
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
-              actions rather than in the app's top bar. Not on an empty project: the pane is hidden
-              there, and a button that flips a hidden pane is a dead button. */}
-          {!greenfield && (
+              actions rather than in the app's top bar. Not on an empty project or an archived chat:
+              the pane is hidden there, and a button that flips a hidden pane is a dead button. */}
+          {!greenfield && !archived && (
             <IconButton
               icon="terminal"
               tone="chrome"
@@ -948,7 +983,7 @@ export function Composer({
               )}
             />
           )}
-          {!greenfield && !chatCentred && (
+          {!greenfield && !chatCentred && !archived && (
             <IconButton
               icon="pick"
               label="Pick an element on the page to attach"

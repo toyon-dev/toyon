@@ -452,6 +452,8 @@ export interface ArchivedWorktree {
   repoId: string;
   title: string;
   branch: string;
+  /** the directory it had, so the paths in its chat still read relative to it */
+  path: string;
   createdAt: number;
   archivedAt: number;
   /** the first message sent, so a row can say what the work was */

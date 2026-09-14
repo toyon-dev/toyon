@@ -39,7 +39,6 @@ import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, isBusy, previewUrl, relFile, wtDir } from "../util.ts";
-import { Archived } from "./Archived.tsx";
 import { Boot } from "./Boot.tsx";
 import { Discovered } from "./Discovered.tsx";
 import { Greenfield } from "./Greenfield.tsx";
@@ -406,7 +405,10 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
                 />
               )}
               {activeDiscovered && !setupRepo && !watching && !archivedPage && <Discovered row={activeDiscovered} />}
-              {archivedPage && !setupRepo && !watching && <Archived key={archivedPage.id} item={archivedPage} />}
+              {/* a removed worktree's chat, as it was: the chat panel, not a view of toyon's own */}
+              {archivedPage && !setupRepo && !watching && (
+                <ChatPanel key={archivedPage.id} placement="centre" archived={archivedPage} />
+              )}
               {/* a stale build is the same card wherever it is noticed: here, or a chunk that failed to load */}
               {!activeReady &&
                 !activeDiscovered &&

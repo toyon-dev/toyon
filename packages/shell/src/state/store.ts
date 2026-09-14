@@ -1012,7 +1012,11 @@ export function reducer(s: State, action: Action): State {
   if (next.unreadHold !== null && next.activeId !== next.unreadHold) next = { ...next, unreadHold: null };
   // the page is for an item in the project on screen: the item restored or deleted, or the project
   // switched under it, and it is gone. Checked here, so every list refresh and repo move counts.
-  if (next.archivedPage !== null && archivedPageOf(next) === null) next = { ...next, archivedPage: null };
+  // A restore lists the row before the archive list catches up, and the page ends on the row: its
+  // chat carries on as the row's, under the same id.
+  if (next.archivedPage !== null && (archivedPageOf(next) === null || worktreeById(next, next.archivedPage) !== null)) {
+    next = { ...next, archivedPage: null };
+  }
   // every open/close routes through here, so the layout is remembered in one place rather than in
   // the dozen actions (a chord, a rail click, a dropped file) that move it
   if (next.activeRepoId !== s.activeRepoId) next = enterRepo(next);
@@ -1304,8 +1308,15 @@ function reduce(s: State, action: Action): State {
  * hold git status and history too, and a push arrives on every proc event. A spare's record (the
  * page state its preview reports) lives as long as it is listed; a draft's is never a row's and
  * stays until the draft is sent. */
-function pruneLocal(local: State["local"], rows: WorktreeStatus[], spares: SpareInfo[]): State["local"] {
+function pruneLocal(
+  local: State["local"],
+  rows: WorktreeStatus[],
+  spares: SpareInfo[],
+  archivedPage: string | null,
+): State["local"] {
   const keep = new Set([...rows.map((w) => w.id), ...spares.map((sp) => sp.id)]);
+  // the archived page's chat is under an id no row has, for as long as the page is up
+  if (archivedPage) keep.add(archivedPage);
   const kept = (id: string) => keep.has(id) || id.startsWith(DRAFT_PREFIX);
   if (Object.keys(local).every(kept)) return local;
   return Object.fromEntries(Object.entries(local).filter(([id]) => kept(id)));
@@ -1371,7 +1382,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         spares: msg.spares,
         removing: s.removing.length ? [] : s.removing,
         shipping: retireShipping(s.shipping, () => true),
-        local: pruneLocal(s.local, msg.rows, msg.spares),
+        local: pruneLocal(s.local, msg.rows, msg.spares, s.archivedPage),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
@@ -1502,7 +1513,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
             spares: msg.spares,
             removing: removing.length === s.removing.length ? s.removing : removing,
             shipping: retireShipping(s.shipping, (id) => !msg.rows.some((w) => w.id === id)),
-            local: pruneLocal(s.local, msg.rows, msg.spares),
+            local: pruneLocal(s.local, msg.rows, msg.spares, s.archivedPage),
           },
           activeId,
         ),

@@ -14,6 +14,7 @@ import {
 import { fakeAccounts, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
+import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { SelfWatch } from "../core/self.ts";
@@ -400,6 +401,29 @@ describe("handlers", () => {
     expect(services.runtime.get(found.id)).toBeUndefined();
     expect(agents.get(found.id)).toBeUndefined();
     await expect(dispatch({ t: "subscribe", worktreeId: "nope" }, ctx, services)).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("subscribe to an archived worktree replies its chat in place; a message on restore goes to the agent", async () => {
+    const { services, ctx, replies, subs, repo, agents, paths } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    // a commit of its own, so the remove keeps something to restore
+    writeFileSync(join(wt.path, "done.txt"), "x\n");
+    sh(wt.path, "git", "add", "done.txt");
+    sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "done");
+    const said = { type: "user-message" as const, text: "tidy the footer", ts: 1 };
+    writeFileSync(transcriptPathFor(paths.transcriptsDir, wt.id), `${JSON.stringify({ seq: 0, event: said })}\n`);
+    await dispatch({ t: "remove-worktree", worktreeId: wt.id }, ctx, services);
+    expect(services.state.worktree(wt.id)).toBeUndefined();
+    replies.length = 0;
+    await dispatch({ t: "subscribe", worktreeId: wt.id }, ctx, services);
+    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands"]);
+    expect(replies[0]).toMatchObject({ t: "backfill", events: [{ seq: 0, event: said }], log: [] });
+    expect([...subs]).toEqual([wt.id]);
+    await dispatch({ t: "restore-worktree", archiveId: wt.id, message: { text: "and the header" } }, ctx, services);
+    expect(services.state.worktree(wt.id)).toBeDefined();
+    expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "and the header" });
   });
 
   test("a discovered worktree scans its design system, and its agent actions say to take it over", async () => {

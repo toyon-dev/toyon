@@ -1,4 +1,4 @@
-import { type OwnedWorktree, type PickMeta, SHELL_TOOL } from "@toyon/shared";
+import { type ArchivedWorktree, type OwnedWorktree, type PickMeta, SHELL_TOOL } from "@toyon/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { useDispatch, useSock, useStoreInstance } from "../../state/context.tsx";
@@ -37,12 +37,24 @@ function useQuietSeconds(items: unknown, busy: boolean): number {
 
 /** the transcript for the active worktree: items, working indicator, waiting messages, jump-down pill.
  * `lead` is a line the conversation starts from: the first child of the log, so it sits on the
- * composer in an empty chat and scrolls up as the conversation grows, the way a message would. */
-export function ChatLog({ active, lead }: { active: OwnedWorktree | null; lead?: React.ReactNode }) {
+ * composer in an empty chat and scrolls up as the conversation grows, the way a message would.
+ * `tail` is the last thing said, after every message. A removed worktree's chat is `archived`
+ * instead of `active`: the same log under the same id, with nothing running in it. */
+export function ChatLog({
+  active,
+  archived,
+  lead,
+  tail,
+}: {
+  active: OwnedWorktree | null;
+  archived?: ArchivedWorktree | null;
+  lead?: React.ReactNode;
+  tail?: React.ReactNode;
+}) {
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
-  const id = active?.worktree.id ?? null;
+  const id = active?.worktree.id ?? archived?.id ?? null;
   const items = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
   const logRef = useRef<HTMLDivElement>(null);
@@ -132,8 +144,10 @@ export function ChatLog({ active, lead }: { active: OwnedWorktree | null; lead?:
 
   const busy = !!active && isBusy(active);
   const wt = active?.worktree;
-  // one array per worktree: a fresh one on every render would defeat the rows' memo
-  const roots = useMemo(() => [wt?.path, wt?.linkPath].filter((p): p is string => !!p), [wt?.path, wt?.linkPath]);
+  // one array per worktree: a fresh one on every render would defeat the rows' memo. An archived
+  // chat's paths are under the directory it had, which is gone but is still what they are relative to
+  const root = wt?.path ?? archived?.path;
+  const roots = useMemo(() => [root, wt?.linkPath].filter((p): p is string => !!p), [root, wt?.linkPath]);
   // calls that did the same thing to the same file, back to back, are one row carrying a count,
   // and a subagent's calls are the run under the row that started it
   const entries = useMemo(() => groupTools(items, roots), [items, roots]);
@@ -257,6 +271,7 @@ export function ChatLog({ active, lead }: { active: OwnedWorktree | null; lead?:
               </span>
             </div>
           ))}
+        {tail}
       </div>
       {showJump && (
         <button className="jump-down" onClick={jumpDown} data-tip="Jump to latest">

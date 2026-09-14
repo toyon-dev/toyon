@@ -154,9 +154,12 @@ export function useChords() {
             dispatch(s.changesOpen && inside(".changes-list") ? { a: "toggle-changes" } : { a: "focus-changes" });
             break;
           case "composer":
-            // a chat in the centre is not a panel: there is nothing to close, only the box to reach
+            // a chat in the centre, a project's or an archived worktree's, is not a panel: there is
+            // nothing to close, only the box to reach
             dispatch(
-              s.chatOpen && !isChatCentred(s) && inside(".chat-input") ? { a: "toggle-chat" } : { a: "focus-chat" },
+              s.chatOpen && !isChatCentred(s) && !s.archivedPage && inside(".chat-input")
+                ? { a: "toggle-chat" }
+                : { a: "focus-chat" },
             );
             break;
           case "rail":

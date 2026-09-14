@@ -21,6 +21,10 @@ const EXT: Record<ImageInput["mimeType"], string> = {
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const FILE = /^\d{1,6}\.(png|jpg|gif|webp|txt)$/;
 
+/** whether a name is one `write` would have given a file: the shape a URL segment must have
+ * before it is joined onto any attachments directory, a live worktree's or an archive's */
+export const isAttachmentFile = (file: string): boolean => FILE.test(file);
+
 /** where one worktree's attachments live; removed with its transcript */
 export function attachmentsDirFor(attachmentsDir: string, worktreeId: string): string {
   return join(attachmentsDir, worktreeId);

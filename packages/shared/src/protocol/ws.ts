@@ -398,6 +398,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     archiveId: id,
     /** as on create-worktree: only the tab that asked focuses the restored row */
     clientId: z.string().max(64).optional(),
+    /** typed into the archived chat: the message goes to the agent once the worktree is back */
+    message: z.object({ text: prose, attachments }).optional(),
   }),
   /** delete an archived worktree for good: its chat, attachments and the commits kept for it */
   z.object({ t: z.literal("delete-archived"), archiveId: id }),

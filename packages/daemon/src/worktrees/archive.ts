@@ -85,6 +85,14 @@ export class WorktreeArchive {
       .map((r) => summarize(r, repo.id));
   }
 
+  /** where an archived worktree's chat sits, for reading it in place: the page shows the chat as
+   * it was, and only a restore moves it */
+  chatFiles(id: string): ChatFiles | undefined {
+    if (!this.records.has(id)) return undefined;
+    const at = this.filesOf(id);
+    return { transcript: at.transcript, attachments: at.attachments };
+  }
+
   private filesOf(id: string) {
     const dir = join(this.dir, id);
     return {
@@ -104,6 +112,7 @@ export function summarize(r: ArchiveRecord, repoId: string): ArchivedWorktree {
     repoId,
     title: r.worktree.title,
     branch: r.worktree.branch,
+    path: r.worktree.path,
     createdAt: r.worktree.createdAt,
     archivedAt: r.archivedAt,
     ...(r.prompt ? { prompt: r.prompt } : {}),

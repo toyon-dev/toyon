@@ -40,6 +40,7 @@ describe("a worktree's actions", () => {
     expect(labels(quiet)).toEqual([
       "open terminal",
       "reveal in Finder",
+      "copy path",
       "mark as unread",
       "|",
       "rename…",
@@ -62,6 +63,7 @@ describe("a worktree's actions", () => {
       "view changes (2)",
       "open terminal",
       "reveal in Finder",
+      "copy path",
       "mark as unread",
       "|",
       "rename…",

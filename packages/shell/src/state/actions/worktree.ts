@@ -136,6 +136,7 @@ export function worktreeItems(
     });
   }
   look.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
+  look.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
   // a ring to come back to; a row that already has one has nothing to add
   look.push({
     id: "unread",

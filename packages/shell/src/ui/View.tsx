@@ -24,5 +24,5 @@ export type ViewAnchor = "top" | "line";
  * for output, which is read rather than written and runs longer than prose.
  */
 export function View({ anchor = "top", wide, children }: { anchor?: ViewAnchor; wide?: boolean; children: ReactNode }) {
-  return <div className={cx("view", anchor === "line" && "view-line", wide && "view-wide")}>{children}</div>;
+  return <div className={cx("view", anchor === "line" && "view-anchored", wide && "view-wide")}>{children}</div>;
 }

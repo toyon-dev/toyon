@@ -29,8 +29,11 @@
   /* The first run's anchor: the first line drops about a quarter down, so the name typed on the
      new-project view is exactly where that project's title reads a moment later. Centring would
      not do it, since each view would then sit by half of whatever is under its first line, and no
-     two of them have the same thing under it. */
-  .view-line {
+     two of them have the same thing under it.
+     Not `.view-line`: monaco gives that class to every text line it renders, and in an inline
+     diff the deleted lines sit in flow inside view zones, so the anchor's padding slid them down
+     the pane. */
+  .view-anchored {
     padding-top: var(--view-anchor);
   }
   /* output: read rather than written, so its lines are longer and it breathes a step more */

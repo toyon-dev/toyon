@@ -13,7 +13,7 @@ import { cssRules, shellCss } from "./cssRules.ts";
  * The column is anchored to the top and draws no ground; view.css says why for both.
  */
 
-const COLUMN = new Set([".view", ".view-line", ".view-wide"]);
+const COLUMN = new Set([".view", ".view-anchored", ".view-wide"]);
 const OWNED = /var\(--view-(inset|top|anchor|measure|measure-wide)\)/;
 
 /** every way a column gets pushed down the region it sits in, which a view that grows must never be */

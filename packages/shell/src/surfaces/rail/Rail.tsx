@@ -82,6 +82,8 @@ export function Rail() {
   const offline = useOffline();
   const leftOpen = useStore((s) => s.leftOpen);
   const railOpen = useStore((s) => s.railOpen);
+  // the worktree walk holds the strip's peek open while its modifier is down (app/keys.ts)
+  const railPeek = useStore((s) => s.railPeek);
   // ⌘⇧K hands the keyboard to the row marked current (the active worktree, or the new-worktree row
   // while drafting) so ↑↓ walk on from there; only a bump seen after mount counts
   const focusReq = useStore((s) => s.focusRail);
@@ -451,7 +453,7 @@ export function Rail() {
     <div
       className={cx(
         "rail",
-        (graftMode || menu?.owner === "rail") && "hold",
+        (graftMode || menu?.owner === "rail" || railPeek) && "hold",
         railOpen && "pinned",
         offline && "offline",
       )}

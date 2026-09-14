@@ -4,6 +4,7 @@ import { markUnread } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import { isChatCentred, isSubPicker, localOf, previewIdOf, routeTarget } from "../state/store.ts";
 import { previewBus, togglePick } from "./previewBus.ts";
+import { PEEK_FALLBACK_MS, type WalkModifier, walkModifier } from "./railPeek.ts";
 import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
 
@@ -23,6 +24,27 @@ export function useChords() {
   const store = useStoreInstance();
   const sock = useSock();
   useEffect(() => {
+    // The walk's peek (railPeek.ts): the modifier the last walk press rode, while the collapsed
+    // rail is held open for it, and the timer that closes the peek if that key's release is
+    // never seen. Holding the modifier and pressing again keeps the same peek and resets the timer.
+    let peekMod: WalkModifier | null = null;
+    let peekTimer: ReturnType<typeof setTimeout> | undefined;
+    const endPeek = () => {
+      clearTimeout(peekTimer);
+      peekMod = null;
+      store.dispatch({ a: "rail-peek", on: false });
+    };
+    const peek = (e: KeyboardEvent) => {
+      // a pinned rail is already wide; the peek is only for the strip
+      if (store.getState().railOpen) return;
+      peekMod = walkModifier(e);
+      clearTimeout(peekTimer);
+      peekTimer = setTimeout(endPeek, PEEK_FALLBACK_MS);
+      store.dispatch({ a: "rail-peek", on: true });
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (peekMod && e.key === peekMod) endPeek();
+    };
     const onKey = (e: KeyboardEvent) => {
       const s = store.getState();
       const { dispatch } = store;
@@ -58,6 +80,8 @@ export function useChords() {
             const to = railWalk(s.visible, s.visibleDiscovered, s.activeId, !!s.draft, chord.id === "wt-next" ? 1 : -1);
             if (to && "draft" in to) dispatch({ a: "open-draft" });
             else if (to) dispatch({ a: "activate", id: to.activate });
+            // the peek shows the row landed on, and a walk with nowhere to go shows why
+            peek(e);
             break;
           }
           case "wt-unseen-prev":
@@ -192,7 +216,15 @@ export function useChords() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    // the release lands in whatever window took the keyboard, so leaving this one ends the peek
+    window.addEventListener("blur", endPeek);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", endPeek);
+      clearTimeout(peekTimer);
+    };
   }, [store, sock]);
 
   // The picker's second verb rides alt and its second destination rides shift, and the chord that

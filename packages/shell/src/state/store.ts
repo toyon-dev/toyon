@@ -460,6 +460,9 @@ export interface State {
   railOpen: boolean;
   /** bumped to put the keyboard on the rail's current row */
   focusRail: number;
+  /** the collapsed rail is peeked open by the worktree walk (⌥↑/↓, ⌃Tab), the way an alt-tab
+   * switcher shows while the modifier is down; app/keys.ts drops it on the release */
+  railPeek: boolean;
   /** a worktree marked unread while it was the one on screen: its ring stays until another row is
    * selected, where the moment of looking would otherwise clear it again (App.tsx) */
   unreadHold: string | null;
@@ -597,6 +600,7 @@ export function initialState(opts: InitialOpts): State {
     focusRight: 0,
     railOpen: opts.storedRailOpen ?? false,
     focusRail: 0,
+    railPeek: false,
     unreadHold: null,
     panels: opts.storedPanels ?? {},
     leftAuto: true,
@@ -907,6 +911,8 @@ export type Action =
   | { a: "toggle-rail" }
   /** pin the worktree panel if it is not, and ask its current row for the keyboard either way */
   | { a: "focus-rail" }
+  /** hold the collapsed rail's peek open while the worktree walk runs, or let it fall closed */
+  | { a: "rail-peek"; on: boolean }
   /** open or close the active project's discovered section */
   | { a: "toggle-discovered" }
   /** open or close the active project's archived section */
@@ -1185,6 +1191,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, railOpen: !s.railOpen };
     case "focus-rail":
       return { ...s, railOpen: true, focusRail: s.focusRail + 1 };
+    case "rail-peek":
+      return s.railPeek === action.on ? s : { ...s, railPeek: action.on };
     case "toggle-discovered": {
       const repoId = s.activeRepoId;
       if (!repoId) return s;

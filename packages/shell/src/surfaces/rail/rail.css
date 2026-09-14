@@ -167,7 +167,8 @@
   }
 
   /* ---- far-right worktree rail: 40px dot strip, hover peeks the full panel
-   as an overlay (no reflow), pin (« ») keeps it wide ---- */
+   as an overlay (no reflow), pin (« ») keeps it wide. The walk (⌥↑/↓, ⌃Tab) holds the same
+   peek while its modifier is down, the way an alt-tab switcher shows ---- */
   .rail {
     /* the control column, a name, three count columns and the dot: 280 is where a sixteen-letter
      branch name fits with all three columns drawn */

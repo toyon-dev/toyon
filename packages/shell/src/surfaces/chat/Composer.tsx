@@ -1,4 +1,4 @@
-import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree } from "@toyon/shared";
+import type { AgentCommand, GitFileStatus, ModelChoice, OwnedWorktree, PermissionMode } from "@toyon/shared";
 import {
   canLand,
   canSync,
@@ -44,6 +44,7 @@ import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts"
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl } from "./images.ts";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
+import { isMode, mergeCommands, ownCommandOf, ownCommands } from "./ownCommands.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { type Step, stepWalk } from "./recall.ts";
@@ -233,19 +234,21 @@ export function Composer({
   // the landing verdict, read while the box is empty and the agent is not on it: once the work is
   // done the empty box is where the next step is offered, and it goes with the first letter typed
   // the way the recap does. A PR under review has no landing here, so it never shows one.
-  const landing =
-    !drafting && !greenfield && blank && !midTurn && active && canLand(active.worktree)
-      ? active.worktree.landing
-      : undefined;
+  const verdict = !drafting && !greenfield && active && canLand(active.worktree) ? active.worktree.landing : undefined;
+  const landing = blank && !midTurn ? verdict : undefined;
   // what would land: the uncommitted files, or the committed ones when the tree is clean
   const landCount = dirty || (git?.committed?.length ?? 0);
   // the verb's states, in order: landed and nothing since (the box offers the one thing left,
   // closing the worktree; the conversation stays until then, so a follow-up is a message like any
   // other), then a PR standing between the work and main, then a verdict on work to land
   const atRest = !drafting && !greenfield && blank && !midTurn && !!active;
-  const landed = atRest && !!active.worktree.landed && dirty === 0 && (git?.ahead ?? 0) === 0;
+  const hasLanded = !!active?.worktree.landed && dirty === 0 && (git?.ahead ?? 0) === 0;
+  const landed = atRest && hasLanded;
   const pr = atRest && !landed ? active.worktree.pr : undefined;
   const policy = landPolicy(repo?.config ?? {});
+  // toyon's own `/` rows, ahead of the agent's: the modes and the seat's verbs, typed by name
+  // (ownCommands.ts has the rules)
+  const ownRows = useMemo(() => ownCommands(describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch)), [repo]);
   const compactable = canCompact && !midTurn;
   const compact = () => id && sock?.send({ t: "chat", worktreeId: id, text: "/compact" });
   const compactItems = () => [
@@ -274,7 +277,8 @@ export function Composer({
   const triggerQuery = trigger?.query;
   const rows = useMemo((): Row[] => {
     if (triggerQuery === undefined) return [];
-    if (triggerKind === "command") return filterCommands(commands, triggerQuery).slice(0, 8).map(cmdRow);
+    if (triggerKind === "command")
+      return filterCommands(mergeCommands(ownRows, commands), triggerQuery).slice(0, 8).map(cmdRow);
     const out: Row[] = [];
     // "review @changes" is the common ask and should not need one chip per file
     const changed = git?.files.length ?? 0;
@@ -282,7 +286,7 @@ export function Composer({
     for (const r of rankFiles(files ?? [], git?.files ?? [], triggerQuery, 8).rows)
       out.push({ kind: "file", path: r.path, status: r.status });
     return out;
-  }, [triggerKind, triggerQuery, files, git, commands]);
+  }, [triggerKind, triggerQuery, files, git, commands, ownRows]);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const refocus = () => composerRef.current?.focus();
@@ -490,6 +494,29 @@ export function Composer({
     return blocks.length > 0 ? blocks.join("\n\n") : undefined;
   };
 
+  // the mode, set the way its chip sets it: the new worktree's while spawning, else this one's
+  const setMode = (mode: PermissionMode) => {
+    if (spawning) setNewMode(mode);
+    else if (id && mode !== activeMode) sock?.send({ t: "set-worktree-mode", worktreeId: id, mode });
+  };
+  // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
+  // under it rather than the seat, and says why when there is nothing for the word to do.
+  const runSeat = (name: "land" | "close") => {
+    const refuse = (message: string) => dispatch({ a: "toast", toast: { ok: false, message } });
+    if (!active || !id) return;
+    if (name === "close") {
+      if (hasLanded) removeWorktrees(sock, dispatch, [id]);
+      else refuse("close is for a landed worktree; this one has not landed");
+      return;
+    }
+    const stuck = verdict ? landingLine(verdict) : null;
+    if (spawning || !canLand(active.worktree)) refuse("nothing to land from here");
+    else if (hasLanded) refuse(`already landed on ${repo?.defaultBranch ?? "main"}`);
+    else if (midTurn) refuse("wait for the turn to end");
+    else if (stuck) refuse(stuck);
+    else land();
+  };
+
   // attachments alone are a message: a pasted error or a picked element often says it all
   const send = () => {
     if (!active || !id || !boxId || blank) return;
@@ -499,6 +526,21 @@ export function Composer({
       // a command runs where the draft was typed, whatever the target says: attachments are for
       // the agent and stay for the next message
       if (shellCmd) sock?.send({ t: "exec", worktreeId: id, command: shellCmd });
+      setText("");
+      return;
+    }
+    // one of toyon's own commands: the chip's or the seat's action, run from here rather than sent.
+    // A description after a mode goes on as the message, in that mode; a bare one only sets it,
+    // and what is attached stays for the next message the way it does for `!`.
+    const typed = ownCommandOf(text, ownRows);
+    const mode = typed && isMode(typed.name) ? typed.name : undefined;
+    if (typed && !mode) {
+      runSeat(typed.name as "land" | "close");
+      setText("");
+      return;
+    }
+    if (mode && !typed?.args) {
+      setMode(mode);
       setText("");
       return;
     }
@@ -516,9 +558,11 @@ export function Composer({
       dispatch({ a: "toast", toast: { ok: false, message: "choose an agent first" } });
       return;
     }
-    const prompt = text.trim();
+    const prompt = typed ? typed.args : text.trim();
     const context = buildContext();
     const sent = attachments.length ? attachments.map(toInput) : undefined;
+    // a typed mode is the chip's next value too, so the box remembers it the way the chip does
+    if (mode) setMode(mode);
     if (spawning) {
       const from = {
         clientId,
@@ -529,7 +573,7 @@ export function Composer({
         attachments: sent,
         agent: spawnAgent,
         profile,
-        mode: newMode,
+        mode: mode ?? newMode,
         ...(newModel ? { model: newModel } : {}),
         ...(newEffort ? { effort: newEffort } : {}),
       };

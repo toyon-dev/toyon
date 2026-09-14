@@ -192,8 +192,11 @@
     &.starting {
       background: var(--text2);
     }
+    /* the same green as `running`, told apart by the pulse alone: a worktree with its server up
+   and its agent busy is one healthy thing in two tenses, and the breath is the tense. Each dot
+   starts its own pulse the moment its agent starts, so two working rows beat out of step. */
     &.working {
-      background: var(--yellow);
+      background: var(--green);
       animation: pulse 1.2s ease-in-out infinite;
     }
     /* blocked on you, not on the model. Steady rather than pulsing: working's motion means "leave it
@@ -235,10 +238,12 @@
       opacity: 0.3;
     }
   }
-  /* the working dot stops breathing and keeps its colour: the pulse says "busy" a second time, and
-   yellow against green, accent and red already carries the state on its own */
+  /* the pulse is the whole difference between working and running, so with motion off the working
+   dot takes the change colour instead: the yellow the status letters and the dirty count use for
+   something under way, against green, accent and red */
   @media (prefers-reduced-motion: reduce) {
     .dot.working {
+      background: var(--yellow);
       animation: none;
     }
   }

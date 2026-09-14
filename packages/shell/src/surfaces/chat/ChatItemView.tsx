@@ -346,7 +346,6 @@ export const ThoughtRow = memo(function ThoughtRow({
         <>
           <Icon name="bulb" className="tool-icon" />
           <span className={cx("tool-name", streaming && "live-text")}>{word}</span>
-          {streaming && <span className="live-dot" />}
         </>
       }
     >
@@ -403,7 +402,6 @@ export const ToolRow = memo(
       <Fold
         className={cx(
           "tool-row",
-          running && "live-row",
           tools.some((t) => t.isError) && "error",
           head.parentToolId && "nested",
           run && "spawn",
@@ -424,7 +422,6 @@ export const ToolRow = memo(
             {name && <span className={cx("tool-name", running && "live-text")}>{name}</span>}
             {hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>}
             {count && <span className="tool-count">{count}</span>}
-            {running && <span className="live-dot" />}
           </>
         }
       >

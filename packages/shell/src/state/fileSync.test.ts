@@ -61,12 +61,30 @@ function buffer(text: string) {
 
 type Written = { ok: true; version: string } | { ok: false; reason: "changed" | "refused"; version: string | null };
 
+/** the window's events, as fileSync listens for them */
+function fakeWindow() {
+  const listeners = new Map<string, Set<() => void>>();
+  return {
+    addEventListener: (type: string, fn: unknown) => {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type)!.add(fn as () => void);
+    },
+    removeEventListener: (type: string, fn: unknown) => {
+      listeners.get(type)?.delete(fn as () => void);
+    },
+    fire: (type: string) => {
+      for (const fn of listeners.get(type) ?? []) fn();
+    },
+  };
+}
+
 function harness() {
   const initial = initialState({ clientId: "t" });
   const store = createStore(initial);
   const sent: ClientMsg[] = [];
   const timers = fakeTimers();
-  const sync = new FileSync({ store, send: (m) => sent.push(m), timers });
+  const win = fakeWindow();
+  const sync = new FileSync({ store, send: (m) => sent.push(m), timers, win: win as never });
   sync.start();
   const server = (msg: Exclude<ServerMsg, FileServerMsg>) => store.dispatch({ a: "server", msg } as never);
   server({
@@ -94,6 +112,7 @@ function harness() {
     store,
     sent,
     timers,
+    win,
     sync,
     last,
     count: (t: ClientMsg["t"]) => sent.filter((m) => m.t === t).length,
@@ -176,6 +195,20 @@ describe("the open file and the disk", () => {
     expect(h.count("write-file")).toBe(1);
     h.written({ ok: true, version: "v2" });
     expect(h.last("write-file")).toMatchObject({ content: "abc", base: "v2" });
+  });
+
+  test("the page going saves an edit still inside the pause", () => {
+    const h = harness();
+    h.open("x.ts");
+    h.read({ after: "a" });
+    const b = h.attach("x.ts", "a");
+    h.edit("x.ts", b, "ab");
+    expect(h.count("write-file")).toBe(0);
+    h.win.fire("pagehide");
+    expect(h.last("write-file")).toMatchObject({ content: "ab", base: "v1" });
+    // the timer went with the save: the pause ending sends nothing more
+    h.timers.pass();
+    expect(h.count("write-file")).toBe(1);
   });
 
   test("a read asked for while a save is out waits for the save's answer", () => {

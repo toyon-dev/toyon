@@ -562,6 +562,9 @@ export interface InitialOpts {
   storedDiscoveredOpen?: Record<string, boolean>;
   /** which projects had the archived section open, for the same reason */
   storedArchivedOpen?: Record<string, boolean>;
+  /** the unsent text in every composer box, by box id, so a reload gives back what was being
+   * written; a box whose worktree is gone is pruned on hello like any other local record */
+  storedDrafts?: Record<string, string>;
 }
 
 export function initialState(opts: InitialOpts): State {
@@ -587,7 +590,9 @@ export function initialState(opts: InitialOpts): State {
     storedActive: opts.storedActive ?? null,
     storedRepo: opts.storedRepo ?? null,
     heard: false,
-    local: {},
+    local: Object.fromEntries(
+      Object.entries(opts.storedDrafts ?? {}).map(([id, draft]) => [id, { ...EMPTY_LOCAL, draft }]),
+    ),
     editor: null,
     toast: null,
     reloadReq: null,

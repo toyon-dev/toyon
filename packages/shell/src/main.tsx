@@ -79,6 +79,41 @@ function storedSectionOpen(key: string): Record<string, boolean> {
   return out;
 }
 
+/** the unsent text in every composer box, by box id; anything that is not a non-empty string is
+ * dropped, since the cost of a bad value is an empty box, which is the default anyway */
+function storedDrafts(): Record<string, string> {
+  const out: Record<string, string> = {};
+  try {
+    const raw: unknown = JSON.parse(read(localStorage, STORAGE.drafts) ?? "{}");
+    if (!raw || typeof raw !== "object") return out;
+    for (const [id, text] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof text === "string" && text) out[id] = text;
+    }
+  } catch {}
+  return out;
+}
+
+/** the unsent text, by box id, as the store holds it now: only the boxes with something in them */
+function draftsOf(local: Record<string, { draft: string }>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [id, l] of Object.entries(local)) if (l.draft) out[id] = l.draft;
+  return out;
+}
+
+/** write the drafts as they change. A store subscription rather than an App effect: the `local`
+ * record changes on every chat frame, and this compares the drafts alone before touching storage. */
+function keepDrafts() {
+  let last = JSON.stringify(draftsOf(store.getState().local));
+  store.subscribe(() => {
+    const next = JSON.stringify(draftsOf(store.getState().local));
+    if (next === last) return;
+    last = next;
+    try {
+      localStorage.setItem(STORAGE.drafts, next);
+    } catch {}
+  });
+}
+
 /** per-tab id: a worktree created from this tab steals focus here and nowhere else */
 function clientId(): string {
   const existing = read(sessionStorage, STORAGE.client);
@@ -102,6 +137,7 @@ const store = createStore(
     storedLastActive: storedLastActive(),
     storedDiscoveredOpen: storedSectionOpen(STORAGE.discoveredOpen),
     storedArchivedOpen: storedSectionOpen(STORAGE.archivedOpen),
+    storedDrafts: storedDrafts(),
     clientId: clientId(),
   }),
 );
@@ -143,18 +179,10 @@ files.start();
 // to undefined and crash inside React.lazy anyway.
 window.addEventListener("vite:preloadError", markStaleBuild);
 
-// ⌘W is the browser's, in a tab and in the installed app alike: the page never sees the key, and
-// this dialog is the only hook. Nothing is lost when the window goes (the daemon keeps every
-// agent and process, and the shell reopens where it was), so it asks only while an agent is
-// mid-turn or waiting on an answer, when closing reads as walking out on it.
-window.addEventListener("beforeunload", (e) => {
-  const busy = store.getState().rows.some((r) => r.agent === "working" || r.agent === "waiting");
-  if (!busy) return;
-  e.preventDefault();
-  // Chrome honours preventDefault, older engines the string; no browser shows the text itself.
-  // Chrome also shows nothing until the page has been clicked or typed in once since load.
-  e.returnValue = "an agent is still working";
-});
+// No leave dialog: the daemon keeps every agent and process, the shell reopens where it was, the
+// drafts are written to storage as they are typed and the editor flushes on pagehide, so a reload
+// or a ⌘W has nothing to ask about.
+keepDrafts();
 
 // The hello the inline script in index.html asked for before this bundle loaded. Applied through
 // the same reducer as the socket's, so the first paint is the real project; a daemon that is down

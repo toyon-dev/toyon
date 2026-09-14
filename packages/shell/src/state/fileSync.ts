@@ -109,9 +109,17 @@ export class FileSync {
       if (e) this.refresh(keyOf(e));
     };
     this.d.win?.addEventListener("focus", onFocus);
+    // the page is going (a reload, a close): an edit still inside the pause is saved now rather
+    // than lost with the timer. Best effort, as everything at unload is: a write already out
+    // keeps its turn, and what it is holding back goes with the page.
+    const onHide = () => {
+      for (const [key, t] of this.files) if (t.timer !== undefined) this.saveNow(key);
+    };
+    this.d.win?.addEventListener("pagehide", onHide);
     return () => {
       unsubscribe();
       this.d.win?.removeEventListener("focus", onFocus);
+      this.d.win?.removeEventListener("pagehide", onHide);
     };
   }
 

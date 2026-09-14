@@ -10,6 +10,9 @@ export const STORAGE = {
   discoveredOpen: "toyon-disc",
   /** which projects had the rail's archived section open, keyed by repo id */
   archivedOpen: "toyon-arch",
+  /** the unsent text in every composer box, keyed by box id (a worktree id, or a repo's draft key),
+   * so a reload gives back what was being written: {"<box>":"<text>"} */
+  drafts: "toyon-drafts",
   /** daemon token; an installed PWA launches without the #token fragment */
   token: "toyon-token",
   /** last painted theme, applied before the daemon's hello to avoid a flash */

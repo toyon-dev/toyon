@@ -52,6 +52,9 @@ export type ServerMsg =
       /** the daemon's agent registry and which entry new worktrees get by default */
       agents: AgentInfo[];
       defaultAgent: string;
+      /** someone has picked that default. Until then it is toyon's own choice, and the first-run
+       * screens ask before the first message goes to an agent nobody named. */
+      agentChosen: boolean;
       /** clones already in flight, so a tab that connects mid-import sees it straight away */
       pending: PendingRepo[];
       /** the daemon's home directory. RepoInfo.path is absolute while PathEntry.path is
@@ -74,7 +77,7 @@ export type ServerMsg =
   /** the answer to a `zone`: whether the sun is down where that browser is, and when that changes.
    * Only the appearance mode that follows daylight reads it, and the shell asks again at `until`. */
   | { t: "daylight"; dark: boolean; until: number }
-  | { t: "agents"; agents: AgentInfo[]; defaultAgent: string }
+  | { t: "agents"; agents: AgentInfo[]; defaultAgent: string; agentChosen: boolean }
   /** the files an agent reads and the MCP servers it will load, on request from settings */
   | ({ t: "agent-config" } & AgentConfigInfo)
   | { t: "repos"; repos: RepoInfo[] }

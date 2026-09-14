@@ -520,6 +520,9 @@ export interface State {
   /** the daemon's agent registry and the default for new worktrees */
   agents: AgentInfo[];
   defaultAgent: string;
+  /** a person picked that default; until then the first-run screens ask which agent before the
+   * first message is written to one */
+  agentChosen: boolean;
   /** what settings asked the daemon about an agent's setup, by agent id */
   agentConfigs: Record<string, AgentConfigInfo>;
   /** the new worktree being drafted, if the draft tab is open */
@@ -621,6 +624,7 @@ export function initialState(opts: InitialOpts): State {
     activeImportId: null,
     agents: [],
     defaultAgent: "claude",
+    agentChosen: false,
     agentConfigs: {},
     draft: null,
     spares: [],
@@ -1303,6 +1307,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         themePrefs: msg.themePrefs ?? s.themePrefs,
         agents: msg.agents,
         defaultAgent: msg.defaultAgent,
+        agentChosen: msg.agentChosen,
         home: msg.home,
         folderDialog: msg.folderDialog,
         remote: msg.remote,
@@ -1323,7 +1328,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
     case "daylight":
       return { ...s, daylight: { dark: msg.dark, until: msg.until } };
     case "agents":
-      return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent };
+      return { ...s, agents: msg.agents, defaultAgent: msg.defaultAgent, agentChosen: msg.agentChosen };
     case "agent-config": {
       const { t: _t, ...info } = msg;
       return { ...s, agentConfigs: { ...s.agentConfigs, [info.agent]: info } };

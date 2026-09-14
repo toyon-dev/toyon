@@ -7,6 +7,7 @@ import { tip } from "../../ui/Tooltip.tsx";
 import { View } from "../../ui/View.tsx";
 import { Composer } from "../chat/Composer.tsx";
 import { parentFolder } from "../overlays/projectPicker.ts";
+import { AgentAsk } from "./AgentAsk.tsx";
 
 /** What fills the centre for a project with nothing in it yet. The same slot the setup
  * and discovered panes use, and the one time the composer sits here instead of in its dock: there
@@ -53,6 +54,9 @@ export function Greenfield({ active }: { active: OwnedWorktree }) {
           title
         )}
       </p>
+      {/* a project that arrived empty without the new-project page still gets the question before
+          the box: the box's first send is the first message to an agent */}
+      <AgentAsk />
       <div className="form-body form-body-lg">
         <Composer active={active} greenfield />
       </div>

@@ -103,6 +103,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     themePrefs: initial.themePrefs,
     agents: [],
     defaultAgent: "claude",
+    agentChosen: true,
     home: "/home/t",
     folderDialog: false,
     remote: null,
@@ -420,13 +421,15 @@ describe("chat folding", () => {
     expect(s.local.a?.chat[0]).toMatchObject({ outcome: "expired" });
   });
 
-  test("hello and agents carry the registry and the default", () => {
+  test("hello and agents carry the registry, the default and whether anyone picked it", () => {
     const list = [{ id: "claude", name: "Claude", available: true, sandboxed: true }];
     let s = run([hello(wt("a"))]);
     expect(s.agents).toEqual([]);
-    s = reducer(s, server({ t: "agents", agents: list, defaultAgent: "claude" }));
+    expect(s.agentChosen).toBe(true);
+    s = reducer(s, server({ t: "agents", agents: list, defaultAgent: "claude", agentChosen: false }));
     expect(s.agents).toEqual(list);
     expect(s.defaultAgent).toBe("claude");
+    expect(s.agentChosen).toBe(false);
   });
 
   test("arriving latches an unseen stop's recap; writing, a new turn, leaving or hiding clears it", () => {

@@ -265,6 +265,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       t: "agents",
       agents: agentInfos(),
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
+      agentChosen: s.state.defaultAgent !== undefined,
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
   s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
@@ -285,6 +286,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       themePrefs: s.themes.prefs,
       agents: agentInfos(),
       defaultAgent: s.state.defaultAgent ?? DEFAULT_AGENT_ID,
+      agentChosen: s.state.defaultAgent !== undefined,
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
       remote: opts.remote && { host: opts.remote.host, previews: opts.remote.previews },

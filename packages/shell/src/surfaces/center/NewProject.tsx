@@ -11,6 +11,7 @@ import { View } from "../../ui/View.tsx";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { destination, expandHome, folderName, splitTypedPath } from "../overlays/projectPicker.ts";
+import { AgentAsk } from "./AgentAsk.tsx";
 
 /** how long the name sits still before the project asks whether a folder by that name is already there */
 const ASK_AFTER_MS = 150;
@@ -53,6 +54,7 @@ export function NewProject({ project }: { project: NewProjectState }) {
   const paths = useStore((s) => s.paths);
   const agents = useStore((s) => s.agents);
   const defaultAgent = useStore((s) => s.defaultAgent);
+  const agentChosen = useStore((s) => s.agentChosen);
   const [identity, setIdentity] = useState({ name: "", email: "" });
   /** a folder picked as the location that is already a project */
   const [existing, setExisting] = useState<string | null>(null);
@@ -75,7 +77,10 @@ export function NewProject({ project }: { project: NewProjectState }) {
   // a clone brings its own commits, so only a create or an init needs git to know who is making it
   const askIdentity = !knowsIdentity && !clone;
   const identityOk = !askIdentity || (identity.name.trim() !== "" && EMAIL.test(identity.email.trim()));
-  const ready = editing && !existing && (inPlace || (typed !== "" && !nameError && !taken)) && identityOk;
+  // the description goes to an agent the moment the project exists, so create waits on the one
+  // question asked above it: which agent
+  const ready =
+    editing && !existing && (inPlace || (typed !== "" && !nameError && !taken)) && identityOk && agentChosen;
 
   // the chips choose for a project that does not exist yet, so they write where a new worktree's
   // choices are remembered; the composer of the project this makes reads the same memory back
@@ -238,6 +243,8 @@ export function NewProject({ project }: { project: NewProjectState }) {
 
       {hint && <p className="hint">{hint}</p>}
 
+      <AgentAsk />
+
       <div className="form-body">
         <TextArea
           ref={describeRef}
@@ -275,7 +282,13 @@ export function NewProject({ project }: { project: NewProjectState }) {
             disabled={!ready}
             onClick={submit}
             {...tip(
-              clone ? "Clone the project" : prompt.trim() ? "Make it and start on this" : "Make the project",
+              !agentChosen
+                ? "Choose an agent first"
+                : clone
+                  ? "Clone the project"
+                  : prompt.trim()
+                    ? "Make it and start on this"
+                    : "Make the project",
               "⏎",
             )}
           >

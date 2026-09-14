@@ -80,6 +80,7 @@ function harness() {
     themePrefs: initial.themePrefs,
     agents: [],
     defaultAgent: "claude",
+    agentChosen: true,
     home: "/h",
     folderDialog: false,
     remote: null,

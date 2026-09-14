@@ -72,6 +72,14 @@
       min-width: 0;
     }
   }
+  /* the question asked before the first description, with its answers on the same line: the
+     question's words are quiet, and each answer keeps a button's own colour */
+  .agent-ask {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
   /* a quiet line rather than a second action: the ghost button's padding hangs into the gutter, so
      its words start where the text above them does */
   .new-project-open {

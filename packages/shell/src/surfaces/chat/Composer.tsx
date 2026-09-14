@@ -145,6 +145,7 @@ export function Composer({
   const clientId = useStore((s) => s.clientId);
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
   const defaultAgent = useStore((s) => s.defaultAgent);
+  const agentChosen = useStore((s) => s.agentChosen);
   const onMain = !!active && isMain(active.worktree);
 
   // The target: a new worktree from this one, or this one's own agent. On for main (protect the
@@ -504,6 +505,11 @@ export function Composer({
         a: "toast",
         toast: { ok: false, message: "a batch takes no attachments; remove them or turn batch off" },
       });
+      return;
+    }
+    // the empty project's page asks which agent above this box; its first message waits on that
+    if (greenfield && !agentChosen) {
+      dispatch({ a: "toast", toast: { ok: false, message: "choose an agent first" } });
       return;
     }
     const prompt = text.trim();

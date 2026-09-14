@@ -329,22 +329,14 @@ export function App() {
       {toast && (
         // shown again for each new message, which puts it over whatever has opened since
         <Float className={cx("toast", !toast.ok && "err")} role="status" raiseKey={toast}>
-          {toast.message}
-          <IconButton
-            icon="close"
-            label="Dismiss"
-            tone="quiet"
-            className="toast-dismiss"
-            onClick={() => dispatch({ a: "dismiss-toast" })}
-          />
+          <span className="toast-text">{toast.message}</span>
+          {/* the one thing the toast offers, said as a word on the line the way a picker's key strip
+              says its verbs, not as a pill of its own under the text */}
           {toast.removeIds && toast.removeIds.length > 0 && (
             <Button
-              variant="outline"
-              size="md"
               tone="primary"
               className="toast-action"
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 removeWorktrees(sock, dispatch, toast.removeIds ?? []);
                 dispatch({ a: "dismiss-toast" });
               }}
@@ -354,12 +346,9 @@ export function App() {
           )}
           {toast.restoreId && (
             <Button
-              variant="outline"
-              size="md"
               tone="primary"
               className="toast-action"
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 if (toast.restoreId) restoreArchived(sock, toast.restoreId, clientId);
                 dispatch({ a: "dismiss-toast" });
               }}
@@ -367,6 +356,13 @@ export function App() {
               restore
             </Button>
           )}
+          <IconButton
+            icon="close"
+            label="Dismiss"
+            tone="quiet"
+            className="toast-dismiss"
+            onClick={() => dispatch({ a: "dismiss-toast" })}
+          />
         </Float>
       )}
     </div>

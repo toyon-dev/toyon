@@ -414,7 +414,7 @@ describe("chat folding", () => {
     ]);
     expect(s.local.a?.chat).toHaveLength(1);
     expect(s.local.a?.chat[0]).toMatchObject({ kind: "ask", outcome: "expired" });
-    // an end for a card that scrolled out of the backfill window has nothing to close
+    // an end whose card never arrived (a torn transcript line) has nothing to close
     s = reducer(s, agent("a", { type: "agent-ask-end", id: "gone", outcome: "answered", ts: 2 }));
     expect(s.local.a?.chat).toHaveLength(1);
     // and the card only closes once

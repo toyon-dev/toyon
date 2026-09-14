@@ -8,6 +8,7 @@ import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
+import { coalesce } from "../agent/transcript.ts";
 import type { FolderDialog } from "../core/dialog.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -140,13 +141,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     }
     // opening is what starts a cold worktree; the reply does not wait for it
     s.repos.touch(msg.worktreeId);
-    // the adapter, not the runtime: a cold worktree has its transcript on disk and nothing else
+    // the adapter, not the runtime: a cold worktree has its transcript on disk and nothing else.
+    // The whole session goes: scrolling up has to reach the first prompt
     const agent = s.runtime.ensureAgent(r.wt).agent;
-    const events = agent.transcript();
     ctx.reply({
       t: "backfill",
       worktreeId: msg.worktreeId,
-      events: events.slice(-1000),
+      events: coalesce(agent.transcript()),
       log: s.runtime.recentLogs(msg.worktreeId),
     });
     ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: agent.queueItems });

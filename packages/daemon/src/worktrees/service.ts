@@ -32,7 +32,7 @@ import { attachmentsDirFor } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
-import { cutPoint, transcriptPathFor } from "../agent/transcript.ts";
+import { coalesce, transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -849,7 +849,7 @@ export class WorktreeService {
     for (const w of sources) {
       const entries = this.d.runtime.ensureAgent(w).agent.transcript();
       agent.note({ type: "grafted", title: w.title, branch: w.branch, ts: Date.now() });
-      for (const { event } of entries.slice(cutPoint(entries))) agent.note(withoutAttachments(event));
+      for (const { event } of coalesce(entries)) agent.note(withoutAttachments(event));
     }
     for (const w of sources) await this.remove(w.id, { archive: false });
     this.setLanded(target.id, false);

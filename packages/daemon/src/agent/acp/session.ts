@@ -179,9 +179,10 @@ export class AcpSession implements AgentAdapter {
   /** the number the next attachment of each kind takes in this worktree's session; continues across
    * daemon restarts because the transcript remembers every attachment sent */
   private seq: Record<AttachmentKind, number>;
-  /** the live session's advertised commands. Deliberately not a transcript event: the backfill is
-   * the last 1000 entries, so a long session would trim the list away. An instance field survives
-   * the adapter reap, which is the point; it starts empty again after a daemon restart. */
+  /** the live session's advertised commands. Deliberately not a transcript event: the list is
+   * the live session's state, not history, and an old list would be replayed as if current. An
+   * instance field survives the adapter reap, which is the point; it starts empty again after a
+   * daemon restart. */
   private commandList: AgentCommand[] = [];
 
   constructor(private d: AcpSessionDeps) {

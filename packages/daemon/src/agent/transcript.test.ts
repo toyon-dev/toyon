@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { KEEP_ENTRIES, MAX_ENTRIES, Transcript, transcriptPathFor } from "./transcript.ts";
+import { coalesce, Transcript, transcriptPathFor } from "./transcript.ts";
 
 function withDir(fn: (dir: string) => Promise<void> | void) {
   const dir = mkdtempSync(join(tmpdir(), "toyon-transcript-"));
@@ -21,6 +21,27 @@ function turns(n: number, perTurn: number): string {
   }
   return `${lines.join("\n")}\n`;
 }
+
+describe("coalesce", () => {
+  test("adjacent deltas of one kind fold into one entry with the run's last seq; anything between breaks the run", () => {
+    const entries = [
+      { seq: 0, event: { type: "user-message", text: "go", ts: 1 } },
+      { seq: 1, event: { type: "thinking-delta", text: "a" } },
+      { seq: 2, event: { type: "thinking-delta", text: "b" } },
+      { seq: 3, event: { type: "text-delta", text: "he" } },
+      { seq: 4, event: { type: "text-delta", text: "llo" } },
+      { seq: 5, event: { type: "turn-end", stopReason: "end_turn", ts: 2 } },
+      { seq: 6, event: { type: "text-delta", text: "!" } },
+    ] as const;
+    expect(coalesce([...entries])).toEqual([
+      entries[0],
+      { seq: 2, event: { type: "thinking-delta", text: "ab" } },
+      { seq: 4, event: { type: "text-delta", text: "hello" } },
+      entries[5],
+      entries[6],
+    ]);
+  });
+});
 
 describe("Transcript", () => {
   test("appends land in order and are readable back with continuing seqs", () =>
@@ -46,38 +67,22 @@ describe("Transcript", () => {
       expect(t.append({ type: "turn-start", ts: 3 }).seq).toBe(1);
     }));
 
-  test("a file past the cap is cut to the newest turns at load, on a turn boundary, seqs continuing", () =>
-    withDir((dir) => {
-      const p = transcriptPathFor(dir, "w3");
-      const perTurn = 10;
-      const total = MAX_ENTRIES + 500;
-      writeFileSync(p, turns(total / perTurn, perTurn));
-      const t = new Transcript(p, "w3");
-      expect(t.entries.length).toBeLessThanOrEqual(KEEP_ENTRIES);
-      expect(t.entries.length).toBeGreaterThan(KEEP_ENTRIES - perTurn);
-      expect(t.entries[0]!.event.type).toBe("turn-start");
-      // the file was rewritten to match
-      expect(readFileSync(p, "utf8").trim().split("\n").length).toBe(t.entries.length);
-      expect(t.append({ type: "turn-end", stopReason: "end_turn", ts: 9 }).seq).toBe(total);
-    }));
-
-  test("appending past the cap compacts in memory and, in order with the appends, on disk", () =>
+  test("a long session is kept whole: the first turn is still there after a reload and more appends", () =>
     withDir(async (dir) => {
-      const p = transcriptPathFor(dir, "w4");
-      const t = new Transcript(p, "w4");
-      for (let i = 0; i <= MAX_ENTRIES; i++) {
-        t.append(i % 10 === 0 ? { type: "turn-start", ts: i } : { type: "text-delta", text: "x" });
-      }
-      // one past the cap: cut back to the tail, the array the session holds included
-      const held = t.entries;
-      expect(held.length).toBeLessThanOrEqual(KEEP_ENTRIES);
-      expect(held[0]!.event.type).toBe("turn-start");
-      const after = t.append({ type: "text-delta", text: "after" });
-      expect(after.seq).toBe(MAX_ENTRIES + 1);
+      const p = transcriptPathFor(dir, "w3");
+      const total = 20_000;
+      writeFileSync(p, turns(total / 10, 10));
+      const t = new Transcript(p, "w3");
+      expect(t.entries.length).toBe(total);
+      expect(t.entries[0]).toEqual({ seq: 0, event: { type: "turn-start", ts: 0 } });
+      // nothing rewritten at load
+      expect(readFileSync(p, "utf8").trim().split("\n").length).toBe(total);
+      const after = t.append({ type: "turn-end", stopReason: "end_turn", ts: 9 });
+      expect(after.seq).toBe(total);
       await t.flush();
       const lines = readFileSync(p, "utf8").trim().split("\n");
-      expect(lines.length).toBe(held.length);
+      expect(lines.length).toBe(total + 1);
+      expect(JSON.parse(lines[0]!).seq).toBe(0);
       expect(JSON.parse(lines.at(-1)!).seq).toBe(after.seq);
-      expect(JSON.parse(lines[0]!).seq).toBe(held[0]!.seq);
     }));
 });

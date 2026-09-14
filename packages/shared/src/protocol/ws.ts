@@ -172,7 +172,8 @@ export type ServerMsg =
   | { t: "design-index"; worktreeId: string; index: DesignIndex }
   | { t: "queue"; worktreeId: string; items: string[] }
   /** the slash commands this worktree's agent session advertises. Ephemeral, never a transcript
-   * event (the backfill trims to the last 1000), so it is replayed on subscribe like `queue`. */
+   * event (it is the live session's state, not history), so it is replayed on subscribe like
+   * `queue`. */
   | { t: "agent-commands"; worktreeId: string; commands: AgentCommand[] }
   | { t: "changed-ranges"; worktreeId: string; path: string; ranges: Array<[number, number]>; lineOffset: number }
   /** raw stream output; only to sockets that opened that exact tab (term-open) */

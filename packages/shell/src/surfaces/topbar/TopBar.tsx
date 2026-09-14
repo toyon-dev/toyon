@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { type ComponentProps, type ReactNode, useEffect, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
+import { selfNotice } from "../../app/selfNotice.ts";
 import { previewItems } from "../../state/actions/preview.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
@@ -15,8 +16,9 @@ import {
 import { previewUp } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useEdges, useEdgesOf, useOnChange, useWindowWidth } from "../../ui/hooks.ts";
-import { Icon } from "../../ui/Icon.tsx";
+import { Icon, type IconName } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
+import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
 import { chord, isInstalledApp } from "../util.ts";
@@ -92,12 +94,17 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
       <span className="bar-lead" ref={leadRef}>
         {chatLeft ? chatToggle : changesToggle}
         <ProjectPill />
-        {/* an action, not a switch: chrome's seat is for a toggle */}
+        {/* what Toyon offers about itself, after the project it is scoped to */}
         {installEvt && (
-          <Button data-tip="Install Toyon as an app (own window, dock icon)" onClick={() => void installEvt.prompt()}>
-            <Icon name="download" className="icon-inline" /> install app
-          </Button>
+          <Offer
+            icon="download"
+            data-tip="Install Toyon as an app (own window, dock icon)"
+            onClick={() => void installEvt.prompt()}
+          >
+            install app
+          </Offer>
         )}
+        <SelfOffer />
       </span>
       {!chatCentred && (
         <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
@@ -300,6 +307,48 @@ function RouteBar({
         onClick={() => frameId && togglePick(frameId, picking, dispatch, "code")}
       />
     </div>
+  );
+}
+
+/** An offer about Toyon itself, in the bar's lead: an action and not a switch, so it takes no
+ * chrome tone, and a word beside its icon rather than a bare icon, since it is not in the bar
+ * every day and has to say what it is. While it is being done the icon gives way to the spinner
+ * and the word says so, rather than Button's own `busy`, which hides the word. */
+function Offer({
+  icon,
+  busy,
+  children,
+  ...rest
+}: { icon: IconName; busy?: boolean; children: ReactNode } & Omit<ComponentProps<typeof Button>, "children">) {
+  return (
+    <Button disabled={busy} {...rest}>
+      {busy ? <Spinner /> : <Icon name={icon} className="icon-inline" />} {children}
+    </Button>
+  );
+}
+
+/** Toyon behind the checkout it runs from, and the one catch-up that is next. A chip here rather
+ * than a notice in the corner: landing a change is meant to be the end of the job, and a build
+ * that runs for minutes has no business holding the composer, or the corner the next toast lands
+ * in, while it does. The word is the verb; what the state means is the chip's tip, with the last
+ * line a failed build printed under it. There is no dismiss: the checkout does not move back, so
+ * the chip stays until it is acted on. */
+function SelfOffer() {
+  const self = useStore((s) => s.self);
+  const repos = useStore((s) => s.repos);
+  const sock = useSock();
+  const notice = selfNotice(self, repos);
+  if (!notice || !self) return null;
+  const word = notice.busy
+    ? "rebuilding"
+    : notice.build === "rebuild"
+      ? "rebuild Toyon"
+      : (notice.build ?? "restart Toyon");
+  const act = () => sock?.send(notice.build ? { t: "run-after-land", repoId: self.repoId } : { t: "restart-daemon" });
+  return (
+    <Offer icon="reload" busy={notice.busy} onClick={act} {...tip(notice.text, undefined, { detail: notice.detail })}>
+      {word}
+    </Offer>
   );
 }
 

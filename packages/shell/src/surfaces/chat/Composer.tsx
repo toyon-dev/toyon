@@ -17,24 +17,22 @@ import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
-import { composerBoxOf, type Draft } from "../../state/store.ts";
+import { canCarry, composerBoxOf, type Draft } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
-import { Kbd } from "../../ui/Kbd.tsx";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
-import { baseNote, behindNote, originNote } from "../chips/baseNote.ts";
+import { behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
 import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
-import { TargetChip } from "../chips/TargetChip.tsx";
 import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
 import { fileRow } from "../overlays/QuickOpen.tsx";
@@ -102,19 +100,19 @@ function insertionFor(r: Row): string {
 }
 
 /** The message box: the text (kept per worktree, or per repo for a draft), picked-element, image
- * and paste attachments, the row saying where the message goes and what runs there, and the
- * per-worktree tools (terminal, element picker).
+ * and paste attachments, the row saying what runs where the message goes, and the per-worktree
+ * tools (terminal, element picker).
  *
- * Three ways to send from here. A message to the worktree's own agent. A message that starts a
- * new worktree from this one, which is the target chip's other value and main's default. And the
- * draft tab's message, where `draft` is set: the same send with the intro's variants and batch
- * applied, and the tab closes as the worktree it was for arrives. */
+ * Two ways to send from here. A message to the worktree's own agent. And main's message, where
+ * `draft` is set, which starts a worktree from main: main has no agent of its own. The intro's
+ * variants and batch apply, main's uncommitted files move with it when the row under the knobs says
+ * so, and the draft gives way as the worktree it was for arrives. */
 export function Composer({
   active,
   draft,
   greenfield,
 }: {
-  /** the worktree, or the draft's base while drafting */
+  /** the worktree, or main while drafting */
   active: OwnedWorktree | null;
   draft?: Draft | null;
   /** rendered in the centre of an empty project: the scaffolding brief rides with the first
@@ -147,32 +145,25 @@ export function Composer({
   const repo = useStore((s) => s.repos.find((r) => r.id === active?.worktree.repoId) ?? null);
   const defaultAgent = useStore((s) => s.defaultAgent);
   const agentChosen = useStore((s) => s.agentChosen);
-  const onMain = !!active && isMain(active.worktree);
 
-  // The target: a new worktree from this one, or this one's own agent. On for main (protect the
-  // working copy), off on a worktree (continue that conversation); the chip overrides it per tab.
-  // A new project's first message always starts one, and its screen has no chip: the scaffold is
-  // work to land like any other, so main is never where an agent starts writing.
-  const spawnDefault = () => onMain;
-  const [spawnNew, setSpawnNew] = useState(spawnDefault);
-  useOnChange([id], () => setSpawnNew(spawnDefault()));
-  const spawning = drafting || spawnNew || !!greenfield;
+  // A draft starts a worktree, and so does a new project's first message: the scaffold is work to
+  // land like any other, so main is never where an agent starts writing.
+  const spawning = drafting || !!greenfield;
   // A main that has never run has no agent on its record, so its first message starts a fresh chat:
   // the agent and model are chosen the way a new worktree's are, and the send stamps them.
   const fresh = !spawning && !!active && !active.worktree.agent;
   const choosing = spawning || fresh;
-  // the agent a new worktree runs: the draft's choice, or the daemon's default on main's own fast
-  // path; inherited from the base otherwise (a stacked worktree continues with its parent's agent)
-  const spawnAgent = onMain ? (draft?.agent ?? defaultAgent) : (active?.worktree.agent ?? defaultAgent);
+  // the agent a new worktree runs: the draft's choice, else the daemon's default
+  const spawnAgent = draft?.agent ?? defaultAgent;
   // the chips list what the agent in question advertised: the one being chosen, or this one's
   const agentInfo = useStore((s) => s.agents.find((a) => a.id === (choosing ? spawnAgent : active?.worktree.agent)));
   const agentModels = agentInfo?.models ?? NO_CHOICES;
   const agentEfforts = agentInfo?.efforts ?? NO_CHOICES;
   const [newModel, setNewModel] = useNewWorktreeModel(spawnAgent);
   const [newEffort, setNewEffort] = useNewWorktreeEffort(spawnAgent);
-  // A worktree born from main lists every agent's models, and picking another agent's model
-  // switches the agent with it: on the draft, or as the daemon's default on main's fast path,
-  // which is what the send would have remembered anyway.
+  // A new worktree lists every agent's models, and picking another agent's model switches the
+  // agent with it: on the draft, or as the daemon's default for a project's first message, which
+  // is what the send would have remembered anyway.
   const agents = useStore((s) => s.agents);
   const pickAgentModel = (agent: string, model: string) => {
     if (agent === spawnAgent) {
@@ -188,7 +179,7 @@ export function Composer({
   // how full this agent's context is: the stream's last word, else the row's (a cold worktree)
   const usage = useLocalField(id, "usage") ?? active?.usage;
 
-  // the draft's row above the box holds the profile; main's fast path takes the remembered one
+  // the draft's row above the box holds the profile; a first message takes the remembered one
   const [remembered] = useNewWorktreeProfile(repo);
   const profile = draft?.profile ?? remembered;
   const [newMode, setNewMode] = useNewWorktreeMode(repo);
@@ -202,12 +193,12 @@ export function Composer({
   // global esc handler would close this from anywhere in the app.
   const files = useLocalField(id, "files");
   const git = useLocalField(id, "git");
-  // what a new worktree leaves behind on its base, and how far this one trails main: the live
-  // status when the worktree is subscribed, else the rail's ten-second count
+  // main's uncommitted files while drafting, and how far a worktree trails main: the live status
+  // when the row is subscribed, else the rail's ten-second count
   const dirty = git?.files.length ?? active?.dirty ?? 0;
   const op = useStore((s) => (id ? s.shipping[id] : undefined));
-  const note =
-    !active || !repo ? null : spawning ? baseNote(onMain ? repo.defaultBranch : active.worktree.title, dirty) : null;
+  // one set of changes can only go into one worktree, so variants and batch put the toggle off
+  const carryable = !!draft && !draft.batch && draft.variants === 1;
   const behind =
     !active || !repo || spawning || !canSync(active) ? null : behindNote(repo.defaultBranch, active.behind);
   // main against origin: a new worktree starts from main as it is, so a main nobody has pulled
@@ -216,7 +207,7 @@ export function Composer({
     (s) => s.rows.find((r) => r.repoId === repoId && r.worktree !== undefined && isMain(r.worktree)) ?? null,
   );
   const mainOp = useStore((s) => (mainRow ? s.shipping[mainRow.id] : undefined));
-  const origin = mainRow && (onMain || spawning) ? originNote(mainRow.behind) : null;
+  const origin = mainRow && spawning ? originNote(mainRow.behind) : null;
   const mainDirty = (mainRow?.dirty ?? 0) > 0;
   // a draft has no session of its own to ask for commands: a worktree of this repo that runs the
   // same agent stands in, main first (commandSource says why that is sound)
@@ -290,12 +281,6 @@ export function Composer({
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const refocus = () => composerRef.current?.focus();
-  // the draft tab opened: the box is what it is for, so the caret goes there
-  useEffect(() => {
-    if (!drafting) return;
-    const f = requestAnimationFrame(() => composerRef.current?.focus());
-    return () => cancelAnimationFrame(f);
-  }, [drafting]);
   // An empty project's page is this one box, so it takes the caret when a project lands on it: made
   // from the form, whose close left focus on the body, or switched to. Only when nothing else has
   // the keyboard, so a palette opened in the meantime keeps it.
@@ -368,15 +353,15 @@ export function Composer({
   // typed after it: once the arguments are being written, the hint is in the way rather than help.
   const argGhost = inserted && text === `/${inserted.name} ` ? inserted.hint : null;
   // the same idea for a bare `!`: what the mode is, told once, at the moment someone finds it
+  // A draft has no transcript to put the output on, so its command goes to the terminal instead
   const shellGhost =
     shellCmd === "" && active
-      ? ` a command to run in ${active.worktree.title}; its output goes on the transcript`
+      ? drafting
+        ? ` a command to run in ${active.worktree.title}'s terminal`
+        : ` a command to run in ${active.worktree.title}; its output goes on the transcript`
       : null;
   const ghost = argGhost ?? shellGhost;
-  // the placeholder, and the quieter line under it while the box is empty: what the base leaves
-  // behind when there is something, else, on main's own fast path, what the draft tab adds. Where
-  // the message goes is not the placeholder's to say when a chip already says it: main's target
-  // chip, or the draft tab's lit row.
+  // the placeholder, and the quieter line under it while the box is empty.
   // The recap takes the placeholder outright while it stands. It is about the box you are looking
   // at, it goes when you type as a placeholder does, and as a line of its own above the box it was
   // a second block of grey text saying something the box already said.
@@ -444,11 +429,9 @@ export function Composer({
               ? `describe ${title}…`
               : draft?.sent
                 ? "starting the worktree…"
-                : drafting || spawning
+                : spawning
                   ? "describe a change"
-                  : onMain
-                    ? "message the agent; / for a command, ! for a shell command"
-                    : `message agent on ${title}; / for a command, ! for a shell command`;
+                  : `message agent on ${title}; / for a command, ! for a shell command`;
   // under the verb, the model's doubt as a sentence of its own. Under a line with no word (a check
   // running or failed, a PR merged or closed): the recap's sentence when one has been written, else
   // the message the work would land with, the next most useful thing to read.
@@ -461,13 +444,7 @@ export function Composer({
           : null
         : pr || blocked
           ? (said ?? landing?.subject ?? null)
-          : recap
-            ? null
-            : note
-              ? note
-              : spawning && onMain && !drafting
-                ? [<Kbd key="k" k={chord("new")} />, " drafts one with variants, batch, agent and profile"]
-                : null;
+          : null;
 
   // On open: the file listing is cached and never invalidated, so refresh it (the agent may have
   // written a file this turn); cached rows render meanwhile so the menu never looks empty. An
@@ -538,9 +515,10 @@ export function Composer({
     // the draft's message is on its way; a second enter before its worktree lands would start another
     if (draft?.sent) return;
     if (shellCmd !== null) {
-      // a command runs where the draft was typed, whatever the target says: attachments are for
-      // the agent and stay for the next message
-      if (shellCmd) sock?.send({ t: "exec", worktreeId: id, command: shellCmd });
+      // a command runs where it was typed: in the worktree's own transcript, or for a draft, which
+      // has none, in the base's terminal. Attachments are for the agent and stay for the next message.
+      if (shellCmd && drafting) dispatch({ a: "term-run", id, command: shellCmd });
+      else if (shellCmd) sock?.send({ t: "exec", worktreeId: id, command: shellCmd });
       setText("");
       return;
     }
@@ -582,8 +560,6 @@ export function Composer({
       const from = {
         clientId,
         repoId: active.worktree.repoId,
-        // main is what a worktree branches from when no base is named; a task names itself
-        ...(onMain ? {} : { baseWorktreeId: id }),
         context,
         attachments: sent,
         agent: spawnAgent,
@@ -591,11 +567,12 @@ export function Composer({
         mode: mode ?? newMode,
         ...(newModel ? { model: newModel } : {}),
         ...(newEffort ? { effort: newEffort } : {}),
+        ...(canCarry(draft) ? { carry: true } : {}),
       };
       // the box remembers what it last started with, the way its mode and model chips do; the
       // agent is the daemon's default rather than this browser's so a spare or an adopted worktree
       // gets the same one. Settings has no row for it because this is where it is chosen.
-      if (onMain && spawnAgent !== defaultAgent) sock?.send({ t: "set-default-agent", agent: spawnAgent });
+      if (spawnAgent !== defaultAgent) sock?.send({ t: "set-default-agent", agent: spawnAgent });
       if (draft?.batch) {
         sock?.send({
           t: "batch-worktrees",
@@ -627,10 +604,9 @@ export function Composer({
     // the reply lands in the dock, so the dock comes back with the message that started it
     if (greenfield) dispatch({ a: "show-right" });
     // The worktree the draft was for is on its way and takes the selection when it lands, so the
-    // tab holds until then: closing it now would show the base's row for as long as the create
-    // takes. A batch plans first and its rows are not this tab's, so nothing would close it; it
-    // closes here and the rows arrive in the rail.
-    if (drafting) dispatch({ a: draft?.batch ? "close-draft" : "draft-sent" });
+    // box holds read-only until then. A batch plans first and its rows are not this tab's, so
+    // nothing would release it; its box stays open and the rows arrive in the rail.
+    if (drafting && !draft?.batch) dispatch({ a: "draft-sent" });
   };
 
   // The description typed on the new-project view, in the box of the project it just made. It is
@@ -883,18 +859,8 @@ export function Composer({
           back when it closes. */}
       <div className="hint composer-knobs">
         <span className="spawn-left">
-          {/* a fork from a worktree is the row menu's "new worktree from here", so only main asks */}
-          {onMain && !greenfield && !drafting && active && (
-            <TargetChip
-              title={title}
-              value={spawnNew ? "new" : "here"}
-              onChange={(t) => setSpawnNew(t === "new")}
-              onClose={refocus}
-            />
-          )}
           {choosing ? (
-            // a draft stacked on a worktree keeps that worktree's agent, so only main's list spans agents
-            onMain && agents.length > 1 ? (
+            agents.length > 1 ? (
               <AgentModelChip
                 agents={agents}
                 agent={spawnAgent}
@@ -996,9 +962,41 @@ export function Composer({
           )}
         </span>
       </div>
+      {/* What main's uncommitted files do when the box starts a worktree. Default: stay, since main
+          is dirty for reasons that often have nothing to do with the message (a local config tweak,
+          last week's debug line), and files leaving main unasked is the one surprise this row exists
+          to rule out. The count wears the rail's dirty colour, and the row stays while you type, so
+          the choice is still in view at Enter. */}
+      {drafting && repo && dirty > 0 && (
+        <div className="hint spawn-note">
+          <span>
+            <span className="badge-dirty">~{dirty}</span> on {repo.defaultBranch}{" "}
+            {canCarry(draft) ? "come along" : "stay behind"}
+          </span>
+          <Button
+            variant="ghost"
+            tone="chrome"
+            className="spawn-move"
+            on={canCarry(draft)}
+            disabled={!carryable}
+            data-tip={
+              carryable
+                ? canCarry(draft)
+                  ? `Leave the ${dirty === 1 ? "file" : "files"} on ${repo.defaultBranch}`
+                  : `Move the ${dirty} uncommitted ${dirty === 1 ? "file" : "files"} into the new worktree, leaving ${repo.defaultBranch} clean`
+                : "One set of changes can only go into one worktree"
+            }
+            onClick={() => {
+              dispatch({ a: "draft-carry", v: !draft?.carry });
+              refocus();
+            }}
+          >
+            move
+          </Button>
+        </div>
+      )}
       {/* main against origin, and how far a branch trails main, each with its button: their own
-          lines, so the row above keeps its shape (the base note sits in the box, under the
-          placeholder, since it has nothing to press) */}
+          lines, so the row above keeps its shape */}
       {origin && mainRow && (
         <div className="hint spawn-note">
           <span>{origin}</span>

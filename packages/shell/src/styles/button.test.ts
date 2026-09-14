@@ -48,16 +48,16 @@ const PRIMITIVES = new Set([
 /**
  * Controls that are deliberately not one of the sizes, each for a reason:
  * - .jump-down is a floating pill over the transcript, sized to clear the composer
- * - .rail-new and .rail-disc-head are full-width rail rows that happen to be buttons
+ * - .rail-disc-head is a full-width rail row that happens to be a button
  * - .bar-path is the address strip: chrome, so quieter at rest than a form field, with the bar's
  *   own inset
  */
-const ONE_OFFS = new Set([".jump-down", ".rail-new", ".rail-disc-head", ".bar-path"]);
+const ONE_OFFS = new Set([".jump-down", ".rail-disc-head", ".bar-path"]);
 
 /**
  * A raw <button> is a row, or one of three inline controls that are text rather than a chip:
  * .pick-open is a link inside a chip's sentence, .dl.more the last line of a diff block, and the
- * rail's two full-width rows are above. A tab (.tab-btn) is a band in a strip, and its box is the
+ * rail's full-width row is above. A tab (.tab-btn) is a band in a strip, and its box is the
  * strip's the way a picker row's is the list's. Anything else pressable is a Button or an
  * IconButton.
  */
@@ -65,7 +65,6 @@ const RAW_BUTTON_OK = new Set([
   "row",
   "picker-item",
   "design-row",
-  "rail-new",
   "rail-disc-head",
   "jump-down",
   "pick-open",

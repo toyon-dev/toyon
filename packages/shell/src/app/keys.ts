@@ -86,33 +86,27 @@ export function useChords() {
           }
           case "wt-prev":
           case "wt-next": {
-            const to = railWalk(s.visible, s.visibleDiscovered, s.activeId, !!s.draft, chord.id === "wt-next" ? 1 : -1);
-            if (to && "draft" in to) dispatch({ a: "open-draft" });
-            else if (to) land(to.activate);
+            const to = railWalk(s.visible, s.visibleDiscovered, s.activeId, chord.id === "wt-next" ? 1 : -1);
+            if (to) land(to.activate);
             // the peek shows the row landed on, and a walk with nowhere to go shows why
             peek(e);
             break;
           }
           case "wt-unseen-prev":
           case "wt-unseen-next": {
-            const to = unseenJump(s.visible, s.activeId, !!s.draft, chord.id === "wt-unseen-next" ? 1 : -1);
-            if (to && "draft" in to) dispatch({ a: "open-draft" });
-            else if (to) land(to.activate);
+            const to = unseenJump(s.visible, s.activeId, chord.id === "wt-unseen-next" ? 1 : -1);
+            if (to) land(to.activate);
             break;
           }
           case "mark-unread":
-            // the worktree on screen, when it is one of ours; a draft is not a worktree yet
+            // the worktree on screen, when it is one of ours; main has no turns to mark
             if (s.activeId && !s.draft && s.visible.some((w) => w.id === s.activeId)) {
               markUnread(sock, dispatch, s.activeId);
             }
             break;
           case "new":
-            // the chord means "get me to the box", not a switch: pressed blind with a draft
-            // already open it keeps the draft and puts the caret back in it, so a hand that has
-            // not looked is never dropped back on the row it left. The rail's row still toggles,
-            // since a click on the picked row is a deliberate second look; Escape is the way back.
-            if (s.draft) dispatch({ a: "focus-right" });
-            else dispatch({ a: "open-draft" });
+            // main's box, with the caret in it; from main itself this is only the caret
+            dispatch({ a: "open-draft" });
             break;
           case "project":
             // over the preview, where the eyes are when a key is pressed; the pill's dropdown is for
@@ -210,9 +204,6 @@ export function useChords() {
           if (id) previewBus.post(id, { type: "pick-cancel" });
           dispatch({ a: "set-picking", v: false });
         }
-        // the draft tab: back to the row it was from. What was typed stays in its record, so the
-        // next open picks it up rather than starting over.
-        else if (s.draft) dispatch({ a: "close-draft" });
         // an archived worktree's page: back to the row it is over
         else if (s.archivedPage) dispatch({ a: "close-archived" });
         // an import pane: stop watching it. Escape deliberately does NOT abort the clone, which

@@ -184,21 +184,26 @@ export interface WorktreeLocal {
  * the base it will branch from. While it is open the base is the active row, so the left dock,
  * the terminal and ⌘1-9 keep meaning it; only the rail's mark, the centre frame and the chat dock
  * read this. Its text and attachments live in `local` under `draftKey(repoId)`. */
+/** the worktree main's box is about to start: open for as long as main is the row on screen */
 export interface Draft {
-  base: string;
   /** the same prompt in N parallel worktrees, keep the best */
   variants: 1 | 2 | 3;
   /** an agent splits the prompt into a worktree per task instead */
   batch: boolean;
-  /** the agent that works on it: the daemon's default when the tab opens; a draft from a task
-   * inherits that task's agent whatever this says */
+  /** the agent that works on it: the daemon's default when main is selected */
   agent: string;
   /** one of the repo's profiles; the repo's default when absent */
   profile?: string;
-  /** the message went; the tab holds until the worktree it started lands and takes the selection,
-   * so the base's row never shows in between. Cleared by a refusal, so the draft can be sent again. */
+  /** main's uncommitted changes move into the worktree; honoured only for a single one (canCarry) */
+  carry?: boolean;
+  /** the message went; the box holds read-only until the worktree it started lands and takes the
+   * selection. Cleared by a refusal, so the draft can be sent again. */
   sent?: true;
 }
+
+/** the draft moves its base's changes: asked for, and making one worktree, since one set of changes
+ * cannot move into three */
+export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry && !d.batch && d.variants === 1;
 
 /** the `local` record a repo's draft is written under; never a row id, and never pruned by one */
 const DRAFT_PREFIX = "draft:";
@@ -490,6 +495,8 @@ export interface State {
   termOpen: boolean;
   /** bumped to put the keyboard in the terminal */
   focusTerm: number;
+  /** a `!` command typed on a draft, waiting for that worktree's shell to be up to type it into */
+  termRun: { id: string; command: string } | null;
   /** bumped when a stream opens that needs room to be read (a login's link and its prompt) */
   termTall: number;
   /** the design pane: the worktree's own design system, beside the preview */
@@ -631,6 +638,7 @@ export function initialState(opts: InitialOpts): State {
     zen: false,
     termOpen: false,
     focusTerm: 0,
+    termRun: null,
     termTall: 0,
     designOpen: false,
     themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
@@ -744,28 +752,14 @@ export function mainOf(s: State, repoId: string | null): OwnedWorktree | null {
   return (repoId && s.rows.filter(isOwned).find((w) => w.repoId === repoId && isMain(w.worktree))) || null;
 }
 
-/** the spare behind the draft: the base repo's, when the draft is from main and one is ready.
- * Its preview is the code the worktree will start from. An element of `spares`, so stable across
- * renders that carry the same frame. */
-export function draftSpareOf(s: State): SpareInfo | null {
-  const base = s.draft ? worktreeById(s, s.draft.base) : null;
-  if (!base || !isMain(base.worktree)) return null;
-  // a spare of a repo that runs nothing is warm for its agent, but its preview is only the proxy's
-  // waiting page, which would sit in the centre for as long as the draft is open
-  const repo = repoById(s, base.repoId);
-  if (repo && runsNothing(repo)) return null;
-  return s.spares.find((sp) => sp.repoId === base.repoId && sp.ready) ?? null;
-}
-
-/** the preview on screen, if there is one: the draft's (its spare, else its base's own), or the
- * active worktree's, and none while the chat has the centre. The element picker and the bridge's
- * page context follow this one, not `activeId`. */
+/** the preview on screen, if there is one: the active worktree's (main's own app while main drafts),
+ * and none while the chat has the centre. The element picker and the bridge's page context follow
+ * this one. */
 export function previewIdOf(s: State): string | null {
   if (isChatCentred(s)) return null;
   // an archived worktree's page covers the preview: what is on screen has no page to pick from
   if (s.archivedPage) return null;
-  if (!s.draft) return s.activeId;
-  return draftSpareOf(s)?.id ?? s.draft.base;
+  return s.activeId;
 }
 
 /** the worktree's app is running or on its way up, so its preview can be told where to go */
@@ -835,10 +829,9 @@ function activate(s: State, id: string | null): State {
   const leaving = s.activeId !== id ? s.activeId : null;
   const was = leaving ? s.local[leaving] : undefined;
   const local = leaving && was?.recapFor !== undefined ? { ...s.local, [leaving]: withoutRecap(was) } : s.local;
-  // choosing a row is leaving the draft, the base's own row included, and leaving an archived
-  // worktree's page: a snapshot that only re-asserts the selection puts both back itself (see
-  // the worktrees frame)
-  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, draft: null, archivedPage: null, local };
+  // choosing a row is leaving an archived worktree's page: a snapshot that only re-asserts the
+  // selection puts it back itself (see the worktrees frame). The draft follows main (withLauncher).
+  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, archivedPage: null, local };
 }
 
 /** the archived worktree whose page is up, if its project is the one on screen and it is still listed */
@@ -849,13 +842,6 @@ export function archivedPageOf(s: State): ArchivedWorktree | null {
 
 function withoutRecap({ recapFor: _recapFor, ...l }: WorktreeLocal): WorktreeLocal {
   return l;
-}
-
-/** the draft after a frame: kept while its base is still listed, dropped once the worktree it was
- * for exists (the row this tab created lands, and the draft's text went with it) */
-function draftAfter(s: State, rows: WorktreeStatus[], created: boolean): Draft | null {
-  if (!s.draft || created) return null;
-  return rows.some((w) => w.id === s.draft?.base) ? s.draft : null;
 }
 
 export const isSubPicker = (o: Overlay) =>
@@ -875,10 +861,10 @@ export type Action =
   | { a: "activate"; id: string }
   /** keep the ring on a row just marked unread for as long as it stays the one on screen */
   | { a: "hold-unread"; id: string }
-  /** open the draft tab: a new worktree from `base`, the active project's main when absent. The
-   * same base again closes it, so the chord toggles; another base moves it. */
-  | { a: "open-draft"; base?: string }
-  | { a: "close-draft" }
+  /** start a new worktree: select the project's main, whose box drafts one, and put the caret there */
+  | { a: "open-draft" }
+  /** main's uncommitted changes go into the worktree the box starts */
+  | { a: "draft-carry"; v: boolean }
   /** the draft's message was sent: the tab waits for its worktree instead of closing on main */
   | { a: "draft-sent" }
   | { a: "draft-variants"; n: Draft["variants"] }
@@ -967,6 +953,10 @@ export type Action =
   /** show this worktree's stream in the terminal pane, opening the pane if it was hidden; `tall`
    * asks for room to read it */
   | { a: "term-stream"; id: string; stream: string; tall?: boolean }
+  /** type a command into this worktree's shell, opening the terminal on it */
+  | { a: "term-run"; id: string; command: string }
+  /** the shell took the command */
+  | { a: "term-ran" }
   | { a: "preview-theme"; theme: Theme | null }
   | { a: "system-dark"; v: boolean }
   | { a: "toast"; toast: NonNullable<State["toast"]> }
@@ -998,8 +988,26 @@ function guessed(action: Action): boolean {
   return action.a === "server" && action.msg.t === "git-status";
 }
 
+/** a draft with nothing chosen yet: one worktree, the daemon's default agent */
+function freshDraft(s: State): Draft {
+  return { variants: 1, batch: false, agent: s.defaultAgent };
+}
+
+/** Main has no agent of its own: its box always starts a worktree, so while main is the row on
+ * screen a draft is open. Not on a first-run screen, which sends its first message from the centre,
+ * and not under an archived worktree's page, which is about something else. Checked after every
+ * action, so a snapshot, a reload or a click that lands on main opens it the same way, and leaving
+ * main for anything else drops it: what was chosen (variants, moving main's changes) is for a send
+ * from this visit. */
+function withLauncher(s: State): State {
+  const active = worktreeById(s, s.activeId);
+  const launching = !!active && isMain(active.worktree) && !s.archivedPage && !isFirstRun(s);
+  if (launching) return s.draft ? s : { ...s, draft: freshDraft(s) };
+  return s.draft ? { ...s, draft: null } : s;
+}
+
 export function reducer(s: State, action: Action): State {
-  let next = reduce(s, action);
+  let next = withLauncher(reduce(s, action));
   // a hold is only for the row it was made on: selecting anything else, however it happened, ends it
   if (next.unreadHold !== null && next.activeId !== next.unreadHold) next = { ...next, unreadHold: null };
   // the page is for an item in the project on screen: the item restored or deleted, or the project
@@ -1033,20 +1041,14 @@ function reduce(s: State, action: Action): State {
       // not on an empty project: a worktree off the root commit would take the scaffold to a
       // branch while main stayed blank. Nor from the new-project view, over a project not on screen.
       if (isFirstRun(s)) return s;
-      const base = action.base ?? mainOf(s, s.activeRepoId)?.id ?? null;
-      if (!base || !worktreeById(s, base)) return s;
-      if (s.draft?.base === base) return { ...s, draft: null };
+      const main = mainOf(s, s.activeRepoId)?.id ?? null;
+      if (!main) return s;
       // the chat is where the draft is written, so it has to be on screen; a palette the chord was
-      // pressed over would sit in front of it
-      return revealChat({
-        ...activate(s, base),
-        draft: { base, variants: 1, batch: false, agent: s.defaultAgent },
-        overlay: null,
-        paletteReturn: null,
-      });
+      // pressed over would sit in front of it. The launcher rule in `reducer` makes the draft itself.
+      return revealChat({ ...activate(s, main), overlay: null, paletteReturn: null, focusRight: s.focusRight + 1 });
     }
-    case "close-draft":
-      return s.draft ? { ...s, draft: null } : s;
+    case "draft-carry":
+      return s.draft ? { ...s, draft: { ...s.draft, carry: action.v } } : s;
     case "draft-sent":
       return s.draft ? { ...s, draft: { ...s.draft, sent: true } } : s;
     case "draft-variants":
@@ -1059,9 +1061,9 @@ function reduce(s: State, action: Action): State {
       return s.draft ? { ...s, draft: { ...s.draft, profile: action.profile } } : s;
     case "open-archived": {
       if (!s.activeRepoId || !s.archived[s.activeRepoId]?.some((a) => a.id === action.id)) return s;
-      // a page over the row underneath: the file open there and a draft both belong to what was
-      // on screen, and neither is what the page is about
-      return { ...s, archivedPage: action.id, editor: null, draft: null };
+      // a page over the row underneath: the file open there belongs to what was on screen, and is
+      // not what the page is about (the draft follows main and goes by itself, see withLauncher)
+      return { ...s, archivedPage: action.id, editor: null };
     }
     case "close-archived":
       return s.archivedPage ? { ...s, archivedPage: null } : s;
@@ -1098,7 +1100,6 @@ function reduce(s: State, action: Action): State {
         overlay: null,
         paletteReturn: null,
         previewTheme: null,
-        draft: null,
         editor: null,
       };
     case "new-project-set":
@@ -1277,6 +1278,15 @@ function reduce(s: State, action: Action): State {
         action.id,
         (l) => ({ ...l, termStream: action.stream }),
       );
+    case "term-run":
+      // the shell's tab, with the keyboard, since what the command prints may ask for an answer
+      return withLocal(
+        { ...s, termOpen: true, focusTerm: s.focusTerm + 1, termRun: { id: action.id, command: action.command } },
+        action.id,
+        (l) => ({ ...l, termStream: SHELL_STREAM }),
+      );
+    case "term-ran":
+      return s.termRun ? { ...s, termRun: null } : s;
     case "preview-theme":
       return { ...s, previewTheme: action.theme };
     case "system-dark":
@@ -1359,7 +1369,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeId,
         activeRepoId: wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
         spares: msg.spares,
-        draft: draftAfter(s, msg.rows, false),
         removing: s.removing.length ? [] : s.removing,
         shipping: retireShipping(s.shipping, () => true),
         local: pruneLocal(s.local, msg.rows, msg.spares),
@@ -1457,9 +1466,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // a project made from nothing was committed to, so git has a name and email now, whoever typed them
       const gitIdentity = s.gitIdentity || msg.repos.some((r) => r.made && !known.has(r.id));
       if (activeRepoId === s.activeRepoId) return { ...s, repos: msg.repos, pendingOpen, newProject, gitIdentity };
-      // A draft is for a worktree in the project it was opened in. Carried into this one, it hides
-      // behind a new project's first-run screen and takes over the moment that screen gives way,
-      // with the other project's preview behind it.
       return settleView({
         ...s,
         repos: msg.repos,
@@ -1469,7 +1475,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeRepoId,
         activeId: landingIn(s, activeRepoId),
         editor: null,
-        draft: null,
       });
     }
     case "worktrees": {
@@ -1501,7 +1506,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
           },
           activeId,
         ),
-        draft: draftAfter(s, msg.rows, !!fresh),
         // activate closes the file because choosing a row is leaving it, but a frame that keeps the
         // selection chose nothing: status reads push one whenever a count moves, and one landing
         // between a file opening and its read closed the pane under the person who opened it

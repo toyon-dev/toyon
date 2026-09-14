@@ -5,7 +5,7 @@ import { hex8, matchChord, streamKey, type Theme } from "@toyon/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { terminalBus } from "../../app/terminalBus.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import type { DaemonSocket } from "../../ws.ts";
@@ -65,6 +65,8 @@ export default function XTerm({
   focusOnMount,
   focusReq,
   onAlive,
+  run,
+  onRan,
   onEscape,
 }: {
   worktreeId: string;
@@ -80,6 +82,9 @@ export default function XTerm({
   focusReq: number;
   /** the shell's state as the daemon reports it: alive after a snapshot, dead (with its code) on exit */
   onAlive: (alive: boolean, exitCode?: number) => void;
+  /** a command to type at the prompt as soon as the shell is up, then `onRan` */
+  run: string | null;
+  onRan: () => void;
   /** Escape at the prompt (xterm stops propagation on every key it consumes, so the window
    * ladder never sees it; the pane closes itself instead) */
   onEscape: () => void;
@@ -92,7 +97,12 @@ export default function XTerm({
   onAliveRef.current = onAlive;
   const onEscapeRef = useRef(onEscape);
   onEscapeRef.current = onEscape;
+  const onRanRef = useRef(onRan);
+  onRanRef.current = onRan;
   const takeFocus = useRef(focusOnMount);
+  // the shell has answered: a snapshot of a live pty, or output after it came back. Input sent
+  // before that goes to a pty that may not exist yet.
+  const [up, setUp] = useState(false);
 
   useEffect(() => {
     const el = box.current;
@@ -149,16 +159,19 @@ export default function XTerm({
           dead = false;
           onAliveRef.current(true);
         }
+        setUp(true);
       } else if (m.t === "term-snapshot") {
         // the daemon replays raw output into a fresh terminal (a reopen, a reconnect, a respawn)
         term.reset();
         term.write(m.data);
         dead = !m.alive;
         onAliveRef.current(m.alive);
+        setUp(m.alive);
       } else {
         term.write(`\r\n\x1b[2m[exited ${m.exitCode}]\x1b[0m\r\n`);
         dead = true;
         onAliveRef.current(false, m.exitCode);
+        setUp(false);
       }
     });
     const ro = new ResizeObserver(() => fit.fit());
@@ -186,6 +199,13 @@ export default function XTerm({
   useEffect(() => {
     if (termRef.current) termRef.current.options.theme = toXtermTheme(theme);
   }, [theme]);
+
+  // typed as if at the keyboard, return included, so it lands in the shell's own history
+  useEffect(() => {
+    if (!run || !up || !sock) return;
+    sock.send({ t: "term-input", worktreeId, stream, data: `${run}\r` });
+    onRanRef.current();
+  }, [run, up, sock, worktreeId, stream]);
 
   // ⌘J from outside an open pane asks for the keyboard by bumping a counter. Only a bump seen after
   // mount counts: a press that opened the pane, or remounted it on another worktree, is already

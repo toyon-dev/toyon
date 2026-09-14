@@ -8,7 +8,6 @@ import {
   archivedPageOf,
   asksSetup,
   currentTheme,
-  draftSpareOf,
   isChatCentred,
   isFirstRun,
   isGreenfield,
@@ -94,10 +93,6 @@ export const useAutoSend = () => useStore((s) => s.autoSend);
 
 /** the new worktree being drafted, while the draft tab is open */
 export const useDraft = () => useStore((s) => s.draft);
-
-/** the spare whose preview the draft shows (an element of the spares array); null when the draft
- * is not from main, none is ready, or there is no draft */
-export const useDraftSpare = () => useStore(draftSpareOf);
 
 /** the preview on screen: what the element picker and the page context are about */
 export const usePreviewId = () => useStore(previewIdOf);

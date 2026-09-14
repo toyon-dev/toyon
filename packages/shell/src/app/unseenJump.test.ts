@@ -12,67 +12,61 @@ const rows = (...flags: (0 | 1 | "w" | "r")[]) =>
 describe("unseenJump", () => {
   test("nearest unseen in the direction pressed", () => {
     const r = rows(0, 1, 0, 1, 0);
-    expect(unseenJump(r, "w0", false, 1)).toEqual({ activate: "w1" });
-    expect(unseenJump(r, "w2", false, 1)).toEqual({ activate: "w3" });
-    expect(unseenJump(r, "w4", false, -1)).toEqual({ activate: "w3" });
-    expect(unseenJump(r, "w2", false, -1)).toEqual({ activate: "w1" });
+    expect(unseenJump(r, "w0", 1)).toEqual({ activate: "w1" });
+    expect(unseenJump(r, "w2", 1)).toEqual({ activate: "w3" });
+    expect(unseenJump(r, "w4", -1)).toEqual({ activate: "w3" });
+    expect(unseenJump(r, "w2", -1)).toEqual({ activate: "w1" });
   });
   test("wraps when the direction runs out", () => {
     const r = rows(0, 1, 0, 1, 0);
-    expect(unseenJump(r, "w4", false, 1)).toEqual({ activate: "w1" });
-    expect(unseenJump(r, "w0", false, -1)).toEqual({ activate: "w3" });
+    expect(unseenJump(r, "w4", 1)).toEqual({ activate: "w1" });
+    expect(unseenJump(r, "w0", -1)).toEqual({ activate: "w3" });
   });
   test("the row on screen never counts, even if flagged", () => {
     const r = rows(0, 1, 0);
-    expect(unseenJump(r, "w1", false, 1)).toEqual({ draft: true });
-    expect(unseenJump(r, "w1", false, -1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", -1)).toEqual({ activate: "w0" });
   });
-  test("with none unseen, up is the first row and down is the draft", () => {
+  test("with none unseen, either direction is the first row, and nowhere once there", () => {
     const r = rows(0, 0, 0);
-    expect(unseenJump(r, "w1", false, -1)).toEqual({ activate: "w0" });
-    expect(unseenJump(r, "w1", false, 1)).toEqual({ draft: true });
-    // already drafting: down has nowhere to go
-    expect(unseenJump(r, "w1", true, 1)).toBeNull();
-    expect(unseenJump([], null, false, -1)).toBeNull();
-  });
-  test("from a draft, here is its seat under the first row", () => {
-    const r = rows(1, 0, 1);
-    expect(unseenJump(r, "w1", true, -1)).toEqual({ activate: "w0" });
-    expect(unseenJump(r, "w1", true, 1)).toEqual({ activate: "w2" });
+    expect(unseenJump(r, "w1", -1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w0", 1)).toBeNull();
+    expect(unseenJump([], null, -1)).toBeNull();
   });
   test("a waiting agent outranks a nearer unseen turn, in either direction", () => {
     const r = rows(1, 0, 0, "w", 1);
-    expect(unseenJump(r, "w1", false, 1)).toEqual({ activate: "w3" });
+    expect(unseenJump(r, "w1", 1)).toEqual({ activate: "w3" });
     // w0 is one step up and unseen, but the waiting row wins by wrapping round
-    expect(unseenJump(r, "w1", false, -1)).toEqual({ activate: "w3" });
+    expect(unseenJump(r, "w1", -1)).toEqual({ activate: "w3" });
   });
   test("waiting rows wrap and take turns like unseen ones", () => {
     const r = rows("w", 0, "w", 0);
-    expect(unseenJump(r, "w0", false, 1)).toEqual({ activate: "w2" });
-    expect(unseenJump(r, "w2", false, 1)).toEqual({ activate: "w0" });
-    expect(unseenJump(r, "w3", true, -1)).toEqual({ activate: "w0" });
-    expect(unseenJump(r, "w3", true, 1)).toEqual({ activate: "w2" });
+    expect(unseenJump(r, "w0", 1)).toEqual({ activate: "w2" });
+    expect(unseenJump(r, "w2", 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w3", -1)).toEqual({ activate: "w2" });
+    expect(unseenJump(r, "w3", 1)).toEqual({ activate: "w0" });
   });
   test("once the only waiting row is on screen, unseen ones are next", () => {
     const r = rows(1, "w", 0);
-    expect(unseenJump(r, "w1", false, 1)).toEqual({ activate: "w0" });
-    expect(unseenJump(r, "w1", false, -1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", -1)).toEqual({ activate: "w0" });
   });
   test("a finished turn outranks a nearer running one", () => {
     const r = rows(1, "r", 0, "r");
-    expect(unseenJump(r, "w2", false, 1)).toEqual({ activate: "w0" });
-    expect(unseenJump(r, "w2", false, -1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w2", 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w2", -1)).toEqual({ activate: "w0" });
   });
   test("with nothing waiting or unseen, running rows take turns", () => {
     const r = rows("r", 0, "r", 0);
-    expect(unseenJump(r, "w1", false, 1)).toEqual({ activate: "w2" });
-    expect(unseenJump(r, "w1", false, -1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", 1)).toEqual({ activate: "w2" });
+    expect(unseenJump(r, "w1", -1)).toEqual({ activate: "w0" });
     // wraps the way the other tiers do
-    expect(unseenJump(r, "w3", false, 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w3", 1)).toEqual({ activate: "w0" });
   });
-  test("the running row on screen is not the answer, so the walk's end still is", () => {
+  test("the running row on screen is not the answer, so the first row still is", () => {
     const r = rows(0, "r", 0);
-    expect(unseenJump(r, "w1", false, 1)).toEqual({ draft: true });
-    expect(unseenJump(r, "w1", false, -1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", -1)).toEqual({ activate: "w0" });
   });
 });

@@ -31,7 +31,6 @@ import {
 import { asksSetup } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
-import { Kbd } from "../../ui/Kbd.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -55,7 +54,7 @@ export function Rail() {
   const dispatch = useDispatch();
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
-  // main leads and the new-worktree row sits under it, above the tasks (state/railOrder.ts)
+  // main leads, above the tasks (state/railOrder.ts)
   const lead = worktrees[0] && isMain(worktrees[0].worktree) ? worktrees[0] : null;
   const tasks = lead ? worktrees.slice(1) : worktrees;
   // the gutter's times read in minutes, and a quiet rail can go a long while without a frame
@@ -64,8 +63,6 @@ export function Rail() {
     const t = setInterval(() => setMinute((n) => n + 1), 60_000);
     return () => clearInterval(t);
   }, []);
-  // the draft tab: the new-worktree row is the selected one while a worktree is being drafted
-  const draftOpen = useStore((s) => s.draft !== null);
   const discovered = useVisibleDiscovered();
   const discOpen = useDiscoveredOpen();
   const archived = useVisibleArchived();
@@ -87,8 +84,8 @@ export function Rail() {
   const railOpen = useStore((s) => s.railOpen);
   // the worktree walk holds the strip's peek open while its modifier is down (app/keys.ts)
   const railPeek = useStore((s) => s.railPeek);
-  // ⌘⇧K hands the keyboard to the row marked current (the active worktree, or the new-worktree row
-  // while drafting) so ↑↓ walk on from there; only a bump seen after mount counts
+  // ⌘⇧K hands the keyboard to the row marked current so ↑↓ walk on from there; only a bump seen
+  // after mount counts
   const focusReq = useStore((s) => s.focusRail);
   const answered = useRef(focusReq);
   const listRef = useRef<HTMLDivElement>(null);
@@ -154,44 +151,6 @@ export function Rail() {
       ? worktreeItems(w, repoOf(w), { leftOpen, shipping }, deps, { graft: graftWith })
       : discoveredItems(w, { clientId }, deps);
 
-  /* Under main and above the tasks: a new worktree is the newest task, so it appears right below the
-   * row that made it. */
-  const newRow = (
-    <button
-      // a row like the worktree rows around it, since the draft tab it opens is one: the
-      // same seat under the pointer and the same edge and lift when it is the one picked
-      type="button"
-      className="row row-edge rail-new"
-      data-state={rowState({ current: draftOpen })}
-      data-tip={draftOpen ? "The worktree being drafted; esc leaves it" : "New worktree"}
-      data-tip-key={draftOpen ? undefined : chord("new")}
-      data-tip-placement="left"
-      onClick={() => dispatch({ a: "open-draft" })}
-      // between main and the tasks: up is main, down is the newest task, and the ends stop
-      onKeyDown={(e) => {
-        if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-        // a modified arrow is the global walk's, as on the rows
-        if (e.altKey || e.ctrlKey || e.metaKey) return;
-        e.preventDefault();
-        const to = e.key === "ArrowUp" ? lead : tasks[0];
-        if (!to) return;
-        dispatch({ a: "activate", id: to.id });
-        e.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-wt="${to.id}"]`)?.focus();
-      }}
-    >
-      <span className="rail-gut">
-        <Icon name="plus" className="icon-inline" />
-      </span>
-      <span className="rail-label">new worktree</span>
-      <Kbd k={chord("new")} className="rail-new-kbd" />
-      {/* the strip has no left edge to show a plus on, so a second one waits in the dot
-          column and hands off to the one above as the panel opens */}
-      <span className="rail-glyph rail-new-strip">
-        <Icon name="plus" />
-      </span>
-    </button>
-  );
-
   /** A removed worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
    * row and has no dot; the gutter says how long ago it was archived. A click opens its page in the
    * centre, the way a found row's does, and the restore button is there: a row that restored on
@@ -248,6 +207,7 @@ export function Rail() {
    * column at the far left, the column the plus and the caret already share. */
   const railRow = (w: WorktreeStatus) => {
     const owned = isOwned(w) ? w : null;
+    const onMain = !!owned && isMain(owned.worktree);
     const id = w.id;
     const menuOpen = menu?.owner === "rail" && menu.key === id;
     const showCheck = owned && graftMode && canGraft(owned.worktree) && id !== activeId;
@@ -256,10 +216,8 @@ export function Rail() {
         key={id}
         type="button"
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
-        // while a worktree is being drafted the draft's row is the selected one, and the base it
-        // branches from stays the active id underneath without reading as picked; an archived
-        // worktree's page marks its own row the same way
-        data-state={rowState({ current: id === activeId && !draftOpen && !archivedPage, checked: sel.includes(id) })}
+        // an archived worktree's page marks its own row, and the row underneath does not read as picked
+        data-state={rowState({ current: id === activeId && !archivedPage, checked: sel.includes(id) })}
         // one tip per row, on the row: the dot's state in words with the dot restated beside it,
         // since the real one is at the far end of the row from where the tip sits, and where the
         // worktree is on the line under. A tip per element would swap fifty times as the mouse
@@ -292,9 +250,9 @@ export function Rail() {
               : tip(wtDirLabel(w), undefined, { placement: "left" }))}
         data-wt={id}
         // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
-        // is picked and takes the focus, so the next press keeps walking. The new-worktree row sits
-        // between main and the tasks, the ends stop the way a list's do, and the found list below
-        // is its own section. ⌥↑/↓ and ⌃Tab are the walk from anywhere, and that one wraps (app/keys.ts).
+        // is picked and takes the focus, so the next press keeps walking. The ends stop the way a
+        // list's do, and the found list below is its own section. ⌥↑/↓ and ⌃Tab are the walk from
+        // anywhere, and that one wraps (app/keys.ts).
         onKeyDown={(e) => {
           if (!owned || graftMode || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
           // a modified arrow is the global walk's, which runs after this: stepping here too moved two rows
@@ -302,12 +260,6 @@ export function Rail() {
           e.preventDefault();
           const down = e.key === "ArrowDown";
           const at = worktrees.findIndex((w) => w.id === id);
-          if (lead && at === (down ? 0 : 1)) {
-            // stepping onto the new-worktree row opens the draft, which hands the keyboard to the
-            // composer, which is what it is for; ⌥↑/↓ walks on from there
-            if (!draftOpen) dispatch({ a: "open-draft" });
-            return;
-          }
           const next = worktrees[at + (down ? 1 : -1)];
           if (!next) return;
           dispatch({ a: "activate", id: next.id });
@@ -320,7 +272,11 @@ export function Rail() {
           if (owned && (graftMode || e.shiftKey)) {
             if (id === activeId) setGraftMode(true);
             else toggleSel(owned);
-          } else dispatch({ a: "activate", id });
+          }
+          // main is where new work is written, so a click on it puts the caret in its box; the
+          // arrows above only select it, so a walk down the list keeps the keyboard on the list
+          else if (onMain) dispatch({ a: "open-draft" });
+          else dispatch({ a: "activate", id });
         }}
         {...cm.contextMenu(() => rowItems(w), id)}
       >
@@ -330,11 +286,17 @@ export function Rail() {
           ) : (
             !graftMode && (
               <>
-                {owned && !isMain(owned.worktree) && (
-                  // at rest the column says how long since anyone sent something here, the time the
-                  // rail is sorted by; the kebab takes its seat while the row is lifted (rail.css)
-                  <span className="rail-at row-dim">{ago(sentAt(owned.worktree))}</span>
-                )}
+                {owned &&
+                  (onMain ? (
+                    // main is never sent to: its seat says what its box does, starting new work
+                    <span className="rail-at rail-plus row-dim" data-tip="New worktree" data-tip-key={chord("new")}>
+                      <Icon name="plus" className="icon-inline" />
+                    </span>
+                  ) : (
+                    // at rest the column says how long since anyone sent something here, the time
+                    // the rail is sorted by; the kebab takes its seat while the row is lifted (rail.css)
+                    <span className="rail-at row-dim">{ago(sentAt(owned.worktree))}</span>
+                  ))}
                 {/* not .row-dim: it is only there while the row is lifted, and its three dots are the
                     thinnest mark in the column, so it takes the row's own colour rather than a tier
                     under it. Full size for the same reason: at the inline size the dots go hairline. */}
@@ -433,7 +395,22 @@ export function Rail() {
           const trouble = graftMode || offline ? null : procTrouble(w.procs);
           // the ring is a modifier, not a state: it rides on whatever the dot already says
           const unseen = w.unseen ? " unseen" : "";
-          if (!trouble || dotClass(w) !== "crashed") return <span className={`dot ${dotClass(w)}${unseen}`} />;
+          const state = dotClass(w);
+          // Main's seat in the strip is a plus: new work starts here, and the strip has no other
+          // place to say so. The dot takes the seat back whenever it has something to say (main's
+          // server down, the daemon gone), and it is drawn underneath either way, since the peek
+          // shows both, the plus at the far left of the row.
+          if (onMain && !trouble && state !== "crashed" && !offline) {
+            return (
+              <>
+                <span className={`dot ${state} rail-main-dot`} />
+                <span className="rail-glyph rail-main-strip">
+                  <Icon name="plus" />
+                </span>
+              </>
+            );
+          }
+          if (!trouble || state !== "crashed") return <span className={`dot ${state}${unseen}`} />;
           return (
             // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured
             <span
@@ -465,7 +442,6 @@ export function Rail() {
       <div className="rail-panel" data-tip={offline ? OFFLINE_TIP : undefined} data-tip-placement="follow">
         <div className="rail-list" ref={listRef}>
           {lead && railRow(lead)}
-          {!graftMode && newRow}
           {tasks.map(railRow)}
           {graftMode && (
             <div className="rail-graft">

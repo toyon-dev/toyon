@@ -13,7 +13,6 @@ import {
   useActiveRow,
   useArchivedPage,
   useChatCentred,
-  useDraftSpare,
   useFirstRun,
   useGreenfield,
   useLocalField,
@@ -273,26 +272,16 @@ export function Center() {
   // the frame mounts once a server answers; until then the boot pane shows what the procs are
   // doing, because the proxy's placeholder cannot tell compiling from crashed from the wrong port
   const activeReady = !!active && active.procs.some((p) => p.status === "running");
-  // the draft tab shows its base's preview, or the warm spare's when the draft is from main: the
-  // code the worktree will start from, running since the spare warmed, so it mounts on sight
-  const spares = useStore((s) => s.spares);
-  const draftSpare = useDraftSpare();
+  // a draft shows its base's own preview, which is the active row's
   const previewId = usePreviewId();
-  const previewReady = previewId !== null && (previewId === draftSpare?.id || (previewId === activeId && activeReady));
+  const previewReady = previewId !== null && previewId === activeId && activeReady;
   useEffect(() => {
     if (previewId && previewReady && !mounted.includes(previewId)) setMounted((m) => [...m, previewId]);
   }, [previewId, previewReady, mounted]);
-  const frames = [
-    ...rows
-      .filter(isOwned)
-      .filter((w) => mounted.includes(w.id))
-      .map((w) => ({ id: w.worktree.id, port: w.worktree.proxyPort, title: w.worktree.title })),
-    // a spare's frame outlives the draft: on claim the same id is a row above, and the element
-    // stays mounted under its key, so the preview the prompt was typed against becomes the task's
-    ...spares
-      .filter((sp) => mounted.includes(sp.id) && !rows.some((r) => r.id === sp.id))
-      .map((sp) => ({ id: sp.id, port: sp.proxyPort, title: "new worktree" })),
-  ];
+  const frames = rows
+    .filter(isOwned)
+    .filter((w) => mounted.includes(w.id))
+    .map((w) => ({ id: w.worktree.id, port: w.worktree.proxyPort, title: w.worktree.title }));
 
   // editor pane: draggable height + full-height toggle, persisted
   const centerRef = useRef<HTMLDivElement>(null);
@@ -412,7 +401,6 @@ export function Center() {
               {archivedPage && !setupRepo && !watching && <Archived key={archivedPage.id} item={archivedPage} />}
               {/* a stale build is the same card wherever it is noticed: here, or a chunk that failed to load */}
               {!activeReady &&
-                !draftSpare &&
                 !activeDiscovered &&
                 !archivedPage &&
                 !setupRepo &&
@@ -430,7 +418,6 @@ export function Center() {
                   />
                 )}
               {!activeReady &&
-                !draftSpare &&
                 !activeDiscovered &&
                 !archivedPage &&
                 !setupRepo &&
@@ -442,7 +429,7 @@ export function Center() {
                     <p className="status-line">{say}</p>
                   </View>
                 ) : chatCentred ? (
-                  // nothing runs, so no server is ever ready and no spare is shown: this slot is always the chat's
+                  // nothing runs, so no server is ever ready: this slot is always the chat's
                   <ChatPanel placement="centre" />
                 ) : (
                   active && <Boot worktree={active} log={log} />

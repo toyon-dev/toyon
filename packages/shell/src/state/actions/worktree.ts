@@ -143,11 +143,6 @@ export function worktreeItems(
     disabled: w.unseen ? "already unread" : undefined,
     onClick: () => markUnread(sock, dispatch, id),
   });
-  // the draft tab with this row as its base: from main it is what ⌘K opens; from a task it is a
-  // stacked worktree, for a follow-up that depends on work not landed yet
-  const spawn: MenuItem[] = [
-    { id: "draft", label: "new worktree from here", onClick: () => dispatch({ a: "open-draft", base: id }) },
-  ];
   // main runs procs too, and is where switching is wanted most; flat items, the menu has no
   // submenus. The one running now is on the list with its check, so the list also answers which.
   const current = profileOf(w.worktree, repo);
@@ -191,7 +186,7 @@ export function worktreeItems(
   if (canRemove(w.worktree)) {
     gone.push({ id: "remove", label: hasWork(w) ? "remove…" : "remove", danger: true, onClick: () => acts.remove(w) });
   }
-  return grouped([stop, look, spawn, run, change, land, gone]);
+  return grouped([stop, look, run, change, land, gone]);
 }
 
 /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.

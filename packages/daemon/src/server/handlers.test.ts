@@ -516,6 +516,49 @@ describe("handlers", () => {
     expect(bad.success).toBe(false);
   });
 
+  test("create-worktree with carry moves main's changes, new files included, and leaves main clean", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const readme = readFileSync(join(repo, "README.md"), "utf8");
+    writeFileSync(join(repo, "README.md"), `${readme}started by hand\n`);
+    writeFileSync(join(repo, "notes.txt"), "a new file\n");
+    // one set of changes cannot go three ways
+    await expect(
+      dispatch(
+        { t: "create-worktree", repoId: r.id, prompt: "x", carry: true, variant: { group: "g", index: 1, of: 2 } },
+        ctx,
+        services,
+      ),
+    ).rejects.toBeInstanceOf(UserError);
+    expect(readFileSync(join(repo, "README.md"), "utf8")).toBe(`${readme}started by hand\n`);
+
+    // without a move the files stay, and the agent is told they are not in its tree
+    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "unrelated", context: "ctx" }, ctx, services);
+    const fresh = services.state.worktrees.find((x) => x.kind === "worktree")!;
+    expect(existsSync(join(fresh.path, "notes.txt"))).toBe(false);
+    expect(readFileSync(join(repo, "notes.txt"), "utf8")).toBe("a new file\n");
+    expect(agents.get(fresh.id)?.sent[0]?.context).toBe(
+      "ctx\n\n[main has 2 uncommitted files the person chose to leave there. This worktree does not have them.]",
+    );
+
+    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "finish it", carry: true }, ctx, services);
+    const made = services.state.worktrees.find((x) => x.kind === "worktree" && x.id !== fresh.id)!;
+    expect(readFileSync(join(made.path, "README.md"), "utf8")).toBe(`${readme}started by hand\n`);
+    expect(readFileSync(join(made.path, "notes.txt"), "utf8")).toBe("a new file\n");
+    expect(readFileSync(join(repo, "README.md"), "utf8")).toBe(readme);
+    expect(existsSync(join(repo, "notes.txt"))).toBe(false);
+    // the agent's first look is at the tree with the changes in it, and it is told so
+    expect(agents.get(made.id)?.sent[0]?.text).toBe("finish it");
+    expect(agents.get(made.id)?.sent[0]?.context).toBe(
+      "[This worktree started with 2 uncommitted files the person moved here from main by hand. They are part of the task, not something to clean up.]",
+    );
+    // a clean main says nothing
+    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "next" }, ctx, services);
+    const next = services.state.worktrees.find((x) => x.kind === "worktree" && x.id !== fresh.id && x.id !== made.id)!;
+    expect(agents.get(next.id)?.sent[0]?.context).toBeUndefined();
+  });
+
   test("create-worktree forwards the agent; set-default-agent validates, persists and broadcasts", async () => {
     const { services, ctx, broadcasts, repo, agents } = make();
     const r = await services.repos.register(repo);

@@ -6,6 +6,7 @@
 import {
   type AttachmentInput,
   type AttachmentKind,
+  isMain,
   limitMessage,
   PASTE_MAX_CHARS,
   type PasteSource,
@@ -97,24 +98,19 @@ export function addToChat(store: Store, taken: Taken | null) {
   store.dispatch({ a: "focus-right" });
 }
 
-/** the box a pick from frame `frameId` belongs in. While drafting, the frame on screen is the
- * draft's base or its warm spare, and which spare that is can change under an armed picker, so
- * anything that is not some other worktree's own row goes to the draft. Otherwise the frame is a
- * worktree's preview, and the box is that worktree's. */
+/** the box a pick from frame `frameId` belongs in: main's frame while main drafts goes to the
+ * repo's draft; otherwise the frame is a worktree's preview, and the box is that worktree's */
 function pickBox(s: State, frameId: string): string | null {
-  const base = s.draft ? worktreeById(s, s.draft.base) : null;
   const row = worktreeById(s, frameId);
-  if (base && (frameId === base.id || !row)) return draftKey(base.repoId);
-  return row ? frameId : null;
+  if (!row) return null;
+  return s.draft && frameId === s.activeId && isMain(row.worktree) ? draftKey(row.repoId) : frameId;
 }
 
 /** the directories a frame's source paths can start with: a worktree's checkout and the link it
- * is reached by, or a spare's checkout */
+ * is reached by */
 function checkoutOf(s: State, frameId: string): string[] {
   const wt = worktreeById(s, frameId)?.worktree;
-  if (wt) return [wt.path, wt.linkPath].filter((p): p is string => !!p);
-  const spare = s.spares.find((sp) => sp.id === frameId);
-  return spare ? [spare.path] : [];
+  return wt ? [wt.path, wt.linkPath].filter((p): p is string => !!p) : [];
 }
 
 /** `path` relative to the checkout when it lies inside it, else as it came: a guessed root would

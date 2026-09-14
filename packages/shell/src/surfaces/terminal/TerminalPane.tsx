@@ -35,6 +35,8 @@ export function TerminalPane({
   const procs = active?.procs ?? [];
   const login = active?.login ?? false;
   const stream = useLocalField(worktreeId, "termStream");
+  // a `!` command from a draft's box, typed into this shell once it answers
+  const run = useStore((s) => (s.termRun?.id === worktreeId && stream === SHELL_STREAM ? s.termRun.command : null));
   // the open stream has exited. A snapshot of a stream that was already dead carries no code, so
   // the card says only what it knows.
   const [exit, setExit] = useState<{ code?: number } | null>(null);
@@ -102,6 +104,8 @@ export function TerminalPane({
               focusOnMount={focusOnMount}
               focusReq={focusReq}
               onAlive={onAlive}
+              run={run}
+              onRan={() => dispatch({ a: "term-ran" })}
               onEscape={() => dispatch({ a: "toggle-terminal" })}
             />
           </Suspense>

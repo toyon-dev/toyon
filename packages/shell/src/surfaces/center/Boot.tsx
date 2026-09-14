@@ -1,5 +1,5 @@
-import type { LogLine, OwnedWorktree, ProcState } from "@toyon/shared";
-import { useDispatch, useSock } from "../../state/context.tsx";
+import { isMain, type LogLine, type OwnedWorktree, type ProcState } from "@toyon/shared";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { View } from "../../ui/View.tsx";
@@ -18,9 +18,15 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
   const procs = worktree.procs;
   const restart = (p: ProcState) => sock?.send({ t: "term-restart", worktreeId: worktree.id, stream: p.name });
   const bad = procs.some((p) => p.status === "crashed" || p.status === "unreachable");
+  const clientId = useStore((s) => s.clientId);
   // the diagnosis is specific enough to hand over: the agent gets it, the command, the tail and
-  // the rule, and the daemon restarts the proc when its turn ends
-  const askAgent = () => sock?.send({ t: "chat", worktreeId: worktree.id, text: procFixPrompt(worktree, log) });
+  // the rule, and the daemon restarts the proc when its turn ends. Main has no agent, so its fix is
+  // a worktree of its own, whose procs start from the same broken command.
+  const askAgent = () => {
+    const prompt = procFixPrompt(worktree, log);
+    if (isMain(worktree.worktree)) sock?.send({ t: "create-worktree", clientId, repoId: worktree.repoId, prompt });
+    else sock?.send({ t: "chat", worktreeId: worktree.id, text: prompt });
+  };
   return (
     <View wide>
       {procs.length === 0 ? (

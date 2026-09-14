@@ -8,8 +8,8 @@ import { DraftIntro } from "./DraftIntro.tsx";
 import { chatPanel } from "./useIntake.ts";
 import "./chat.css";
 
-/** The chat: transcript above, composer below. While a worktree is being drafted the transcript's
- * place holds the draft's intro, and the composer writes the draft. It sits in the dock beside the
+/** The chat: transcript above, composer below. On main, which has no chat, the transcript's place
+ * holds the draft's intro, and the composer writes the draft. It sits in the dock beside the
  * preview, or is what the centre shows for a project with nothing to run. Only one placement is
  * ever mounted, so there is one composer to focus and one panel a dropped file lands on. */
 export function ChatPanel({
@@ -42,7 +42,7 @@ export function ChatPanel({
       }}
     >
       {draft ? (
-        <DraftIntro draft={draft} base={active} />
+        <DraftIntro draft={draft} main={active} />
       ) : (
         <ChatLog
           active={active}

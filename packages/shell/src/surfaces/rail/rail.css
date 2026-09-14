@@ -46,9 +46,9 @@
   }
 
   /* The control column. Every label in the panel starts at its right edge, and what sits in it says
-   what the row is: the plus on "new worktree", the caret on "discovered", the kebab on a worktree
-   row while the pointer is on it, the checkbox while a graft is being picked, and at rest the time
-   since anyone sent something there, which costs the name no width. It is also as far as
+   what the row is: the plus on main, where new work starts, the caret on "discovered", the kebab on
+   a worktree row while the pointer is on it, the checkbox while a graft is being picked, and at rest
+   the time since anyone sent something there, which costs the name no width. It is also as far as
    the row gets from the dot, which matters: the peek unfurls from under a pointer resting on the
    dot, and this is where a control can sit without a small drift landing on it.
    It is the row's left padding with the glyph laid over it, not a flex item: as an item the row's
@@ -68,18 +68,9 @@
     align-items: center;
     justify-content: center;
   }
-  /* a .row: it rests, lifts and reads as picked the way the worktree rows above it do, because the
-   draft tab it opens is a worktree row that does not exist yet. Only the chord hint is its own. */
-  .rail-new {
-    & .rail-new-kbd {
-      margin-left: auto;
-      color: var(--text1);
-      opacity: 0;
-      transition: opacity 0.1s;
-    }
-    &:hover .rail-new-kbd {
-      opacity: 0.7;
-    }
+  /* the plus holds main's seat the way the time holds a task's, and gives it to the kebab the same way */
+  .rail-plus {
+    display: flex;
   }
   .rail-graft {
     display: flex;
@@ -271,12 +262,43 @@
       transition: opacity 0.12s ease 50ms;
     }
   }
+  /* Main's seat in the strip is a plus, drawn over the dot column out of the flow; as the panel
+   opens it hands off to the plus in the control column and the dot underneath shows through, so
+   the open row reads like every other: plus far left, status far right. */
+  .rail-main-strip {
+    position: absolute;
+    right: 12px;
+    top: 0;
+    bottom: 0;
+    margin-left: 0;
+    display: flex;
+    align-items: center;
+    transition: opacity 0.12s ease 120ms;
+  }
+  .rail-main-dot {
+    opacity: 0;
+    transition: opacity 0.12s ease 120ms;
+  }
+  .rail {
+    &:hover .rail-main-strip,
+    &.hold .rail-main-strip,
+    &.pinned .rail-main-strip {
+      opacity: 0;
+      transition: opacity 0.12s ease 50ms;
+    }
+    &:hover .rail-main-dot,
+    &.hold .rail-main-dot,
+    &.pinned .rail-main-dot {
+      opacity: 1;
+      transition: opacity 0.12s ease 50ms;
+    }
+  }
   /* ---- discovered: worktrees git knows about that toyon did not create ---- */
   /* The section belongs to the open panel and nothing of it reaches the strip: no header, no rows,
    no rule. The strip is toyon's own worktrees, and a section you cannot read the label of is not
    worth the pixels it would take. This is the one place the rail lays out differently in the two
-   states, and it is safe where the rail-list comment above is not: everything here sits below
-   "new worktree", so nothing anyone aims at moves when it appears.
+   states, and it is safe where the rail-list comment above is not: everything here sits below the
+   worktree rows, so nothing anyone aims at moves when it appears.
    Marked by type and colour alone, like .section-title: a rule across the rail read as a
    divider between two peers, and these rows are not main's peers. */
   .rail-disc-head,
@@ -294,8 +316,7 @@
       position: relative;
       gap: 8px;
       padding: 0 16px 0 var(--rail-gut);
-      /* a section's worth of air above it, not a row's: at 6px it read as one more row under
-       "new worktree" */
+      /* a section's worth of air above it, not a row's: at 6px it read as one more worktree row */
       margin-top: 14px;
       font: var(--type-ui-sm);
       color: var(--text2);
@@ -401,55 +422,12 @@
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 35%, transparent);
     }
   }
-  .rail {
-    & .rail-new {
-      height: var(--row-height);
-      position: relative;
-      padding: 0 12px 0 var(--rail-gut);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      /* the draft tab is this row selected, marked the way a worktree row is: same edge, same seat */
-      --row-edge-x: var(--rail-edge, 0px);
-    }
-    & .rail-new[data-state~="current"] {
-      --row-edge-color: var(--accent);
-      color: var(--text0);
-      background: var(--element1);
-    }
-  }
-  /* the label takes the slack, so the hint and the glyph sit against the right edge */
+  /* the label takes the slack */
   .rail-label {
     flex: 1;
     text-align: left;
   }
-  /* 4px in from the row's own padding, which lands the hint on the dots' right edge */
   .rail {
-    & .rail-new .rail-new-kbd {
-      margin-right: 4px;
-    }
-  }
-  /* the strip's plus fades out as the one beside the label comes into view. It sits over the dot
-   column out of the flow, so the chord hint takes the row's right edge instead of stopping short
-   of an invisible glyph. */
-  .rail-new-strip {
-    position: absolute;
-    right: 12px;
-    top: 0;
-    bottom: 0;
-    margin-left: 0;
-    display: flex;
-    align-items: center;
-    transition: opacity 0.12s ease 120ms;
-  }
-  .rail {
-    &:hover .rail-new-strip,
-    &.hold .rail-new-strip,
-    &.pinned .rail-new-strip {
-      opacity: 0;
-      transition: opacity 0.12s ease 50ms;
-    }
-
     & .rail-item .branch {
       white-space: nowrap;
     }

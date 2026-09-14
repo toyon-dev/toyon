@@ -355,7 +355,6 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     clientId: z.string().max(64).optional(),
     repoId: id,
     prompt,
-    baseWorktreeId: id.optional(),
     variant: variantSchema.optional(),
     context: prose.optional(),
     attachments,
@@ -369,6 +368,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     model: z.string().max(200).optional(),
     /** one of the agent's advertised effort levels; its own default when absent */
     effort: z.string().max(100).optional(),
+    /** move main's uncommitted changes into the new worktree; only for a single worktree from main */
+    carry: z.boolean().optional(),
   }),
   z.object({
     t: z.literal("batch-worktrees"),

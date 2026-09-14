@@ -5,11 +5,9 @@
   .mode-chip.mode-held {
     color: var(--yellow);
   }
-  /* a model id or a worktree title can be a long slug; the chip keeps the row's height and cuts
-   the tail instead */
+  /* a model id can be a long slug; the chip keeps the row's height and cuts the tail instead */
   .model-chip,
-  .effort-chip,
-  .target-chip {
+  .effort-chip {
     max-width: 16em;
     overflow: hidden;
     text-overflow: ellipsis;

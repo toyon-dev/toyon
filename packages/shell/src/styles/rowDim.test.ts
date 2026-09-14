@@ -70,7 +70,6 @@ const NEVER_LIFTS = [
   ".picker-ghost",
   ".key-hints",
   ".working-row",
-  ".rail-new .rail-new-kbd",
   ".form-sign",
   ".pick-chip .pick-file",
   ".pick-chip button",

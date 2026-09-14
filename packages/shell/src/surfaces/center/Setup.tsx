@@ -49,7 +49,8 @@ const FILE_KINDS: { id: ConfigFileKind; label: string; description: string }[] =
 export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void }) {
   const sock = useSock();
   const store = useStoreInstance();
-  // the repo's main worktree is where the agent writes the settings: the daemon watches that copy
+  const clientId = useStore((s) => s.clientId);
+  // the repo's main worktree, whose files the pane opens and whose settings the daemon watches
   const main = useStore(
     (s) => s.rows.find((r) => isOwned(r) && r.repoId === repo.id && r.worktree.kind === "main") ?? null,
   );
@@ -133,7 +134,10 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
     sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...edited(), run: {} }, kind });
     onClose?.();
   };
-  const askAgent = () => main && sock?.send({ t: "chat", worktreeId: main.id, text: setupFixPrompt(repo, file) });
+  // in a worktree, like any other work: a settings file written there is adopted while the repo is
+  // unconfirmed, and a fix to the code itself (a server that ignores PORT) lands with its branch
+  const askAgent = () =>
+    sock?.send({ t: "create-worktree", clientId, repoId: repo.id, prompt: setupFixPrompt(repo, file) });
 
   const procRow = (p: Proc, i: number) => (
     <div className="setup-proc" key={p.id}>

@@ -775,11 +775,16 @@
       margin-left: 6px;
     }
   }
-  /* a sentence about the base or the branch, under the knobs row, with sync beside it when there is one */
+  /* a sentence about main or the branch, under the knobs row, with its button at the end */
   .spawn-note {
     display: flex;
     align-items: center;
     gap: 8px;
+    /* the count ticks with the status; `font` on the hint resets the variant */
+    font-variant-numeric: tabular-nums;
+  }
+  .spawn-move {
+    margin-left: auto;
   }
   /* .btn-icon is a grid box, so an inline wrapper would stack the two tools; keep them on one line */
   .spawn-tools {

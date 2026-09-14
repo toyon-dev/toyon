@@ -128,7 +128,6 @@ export interface CreateOpts {
   createdBy?: string;
   /** registry id; the daemon's default when absent */
   agent?: string;
-  baseWorktreeId?: string;
   variant?: Variant;
   context?: string;
   /** in the order they were attached */
@@ -141,6 +140,30 @@ export interface CreateOpts {
   model?: string;
   /** one of the agent's advertised effort levels; its default when absent */
   effort?: string;
+  /** move main's uncommitted changes into the new worktree before its agent starts */
+  carry?: boolean;
+}
+
+/** what became of main's uncommitted files when a worktree was made from it */
+interface Carried {
+  branch: string;
+  moved: boolean;
+  /** main's uncommitted files before anything moved */
+  count: number;
+  /** a move was asked for and did not happen: the reason, for the toast */
+  unmoved?: string;
+}
+
+/** The first prompt says what the tree it starts in owes to main's working copy. An agent that
+ * finds a dirty tree with no word about it commits it or cleans it up; one told main still has
+ * files it cannot see will not hunt for them. */
+function withCarry(context: string | undefined, c: Carried): string | undefined {
+  if (c.count === 0) return context;
+  const files = `${c.count} uncommitted ${c.count === 1 ? "file" : "files"}`;
+  const line = c.moved
+    ? `[This worktree started with ${files} the person moved here from ${c.branch} by hand. They are part of the task, not something to clean up.]`
+    : `[${c.branch} has ${files} the person chose to leave there. This worktree does not have them.]`;
+  return context ? `${context}\n\n${line}` : line;
 }
 
 export interface WorktreeServiceDeps {
@@ -222,46 +245,50 @@ export class WorktreeService {
     }
     const branch = `toyon/${slug}`;
 
-    // fork point: main's branch by default, or the base worktree's branch (stacking)
-    const base = opts.baseWorktreeId ? this.d.state.worktree(opts.baseWorktreeId) : undefined;
-    const fromMain = !base || base.kind === "main";
+    // one set of changes can only move once
+    if (opts.carry && variant && variant.of > 1) {
+      throw new UserError(`only a single worktree can take the changes on ${repo.defaultBranch}`);
+    }
 
     // perspective-diverse variants: same goal, different emphasis per attempt
     const agentPrompt =
       variant && variant.of >= 2 ? [prompt, variantLens(variant.index)].filter(Boolean).join("\n\n") : prompt;
 
-    // fast path: claim the pre-warmed spare (main-based tasks only). Its runtime — agent
-    // included — already exists, so the task's first message goes to the spare's agent.
-    if (fromMain) {
-      const claimed = await this.spare.claim(repoId, branch, slug);
-      if (claimed) {
-        if (variant) claimed.variant = variant;
-        if (opts.createdBy) claimed.createdBy = opts.createdBy;
-        // made from a prompt, which is a send
-        claimed.promptedAt = claimed.createdAt;
-        // the spare's agent has no process yet; it reads the stamps on its first prompt
-        claimed.agent = agent;
-        if (opts.mode) claimed.mode = opts.mode;
-        if (opts.model) claimed.model = opts.model;
-        if (opts.effort) claimed.effort = opts.effort;
-        this.refreshLink(claimed);
-        // the spare was warmed under the default profile; another one means its procs restart
-        // (the agent stays, and gets the prompt now rather than after the restart)
-        if (profile !== undefined && profile !== resolveRun(repo, claimed).profile) {
-          claimed.profile = profile;
-          this.restartProcs(claimed, repo);
-        }
-        this.d.state.save();
-        this.d.hub.emit("worktreesChanged");
-        this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, { context, attachments });
-        this.scheduleNaming(claimed, task, variant);
-        return claimed;
+    // fast path: claim the pre-warmed spare. Its runtime — agent included — already exists, so the
+    // task's first message goes to the spare's agent.
+    const claimed = await this.spare.claim(repoId, branch, slug);
+    if (claimed) {
+      if (variant) claimed.variant = variant;
+      if (opts.createdBy) claimed.createdBy = opts.createdBy;
+      // made from a prompt, which is a send
+      claimed.promptedAt = claimed.createdAt;
+      // the spare's agent has no process yet; it reads the stamps on its first prompt
+      claimed.agent = agent;
+      if (opts.mode) claimed.mode = opts.mode;
+      if (opts.model) claimed.model = opts.model;
+      if (opts.effort) claimed.effort = opts.effort;
+      this.refreshLink(claimed);
+      // the spare was warmed under the default profile; another one means its procs restart
+      // (the agent stays, and gets the prompt now rather than after the restart)
+      if (profile !== undefined && profile !== resolveRun(repo, claimed).profile) {
+        claimed.profile = profile;
+        this.restartProcs(claimed, repo);
       }
+      const carried = await this.carryMain(repo, claimed, !!opts.carry);
+      this.d.state.save();
+      this.d.hub.emit("worktreesChanged");
+      this.d.runtime
+        .ensureAgent(claimed)
+        .agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
+      this.scheduleNaming(claimed, task, variant);
+      if (carried.unmoved) throw new UserError(carried.unmoved);
+      return claimed;
     }
 
     const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
-    const baseBranch = fromMain ? repo.defaultBranch : base!.branch;
-    await withRepoLock(repo.path, () => gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, baseBranch));
+    await withRepoLock(repo.path, () =>
+      gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch),
+    );
 
     const wt: WorktreeInfo = {
       id: shortId(),
@@ -282,11 +309,63 @@ export class WorktreeService {
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.effort ? { effort: opts.effort } : {}),
     };
+    // before the setup reads the tree and before the agent's first look at it
+    const carried = await this.carryMain(repo, wt, !!opts.carry);
     // setup + procs warm in the background; the agent starts immediately
-    this.launch(wt, repo, base?.path ?? repo.path);
-    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context, attachments });
+    this.launch(wt, repo, repo.path);
+    this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
     this.scheduleNaming(wt, task, variant);
+    if (carried.unmoved) throw new UserError(carried.unmoved);
     return wt;
+  }
+
+  /** What became of main's uncommitted work when a worktree was made from it. Asked to `move`, the
+   * stash takes the changes (untracked files included) and clears main in one git step, so an edit
+   * saved on main in the meantime is either in it or still on main, never lost between a read and a
+   * clean; the stash is applied in the new worktree and dropped. A stash that will not apply goes
+   * back onto main, which it came off cleanly, and the worktree starts without it, with `unmoved`
+   * saying why for the toast. Not asked to move, the files are only counted, so the agent can be
+   * told they were left behind on purpose. */
+  private async carryMain(repo: RepoInfo, wt: WorktreeInfo, move: boolean): Promise<Carried> {
+    const main = repo.defaultBranch;
+    if (!move) return { branch: main, moved: false, count: (await statusFiles(repo.path)).length };
+    let count = 0;
+    const unmoved = await withRepoLock(repo.path, async (): Promise<string | undefined> => {
+      count = (await statusFiles(repo.path)).length;
+      if (count === 0) return undefined;
+      const before = await git(repo.path, "rev-parse", "-q", "--verify", "refs/stash");
+      const pushed = await git(repo.path, "stash", "push", "--include-untracked", "-m", `toyon: into ${wt.title}`);
+      if (!pushed.ok) return `the changes on ${main} could not be moved: ${pushed.err.trim()}`;
+      const after = await git(repo.path, "rev-parse", "-q", "--verify", "refs/stash");
+      const sha = after.out.trim();
+      // nothing was taken after all (ignored files only), so nothing needs putting anywhere
+      if (!after.ok || (before.ok && before.out.trim() === sha)) return undefined;
+      // stash drop and pop take stash@{n}, never a sha, and a stash pushed outside toyon in the
+      // meantime would move ours down the list
+      const entry = async () => {
+        const list = await git(repo.path, "stash", "list", "--format=%H");
+        const i = list.out.split("\n").indexOf(sha);
+        return i < 0 ? null : `stash@{${i}}`;
+      };
+      const applied = await git(wt.path, "stash", "apply", sha);
+      if (applied.ok) {
+        const ref = await entry();
+        if (ref) await git(repo.path, "stash", "drop", ref);
+        return undefined;
+      }
+      log.warn(wt.id, `moving ${main}'s changes failed`, applied.err);
+      await git(wt.path, "reset", "--hard");
+      await git(wt.path, "clean", "-fd");
+      const ref = await entry();
+      const back = ref ? await git(repo.path, "stash", "pop", ref) : null;
+      return back?.ok
+        ? `the changes on ${main} did not apply in ${wt.title}, so they stayed on ${main}`
+        : `the changes on ${main} did not apply in ${wt.title}; they are kept in git stash as "toyon: into ${wt.title}"`;
+    });
+    // main's count in the rail is cached; it is clean now, or back to what it was
+    const mainWt = this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main");
+    if (mainWt) this.countsCache.delete(mainWt.id);
+    return { branch: main, moved: count > 0 && !unmoved, count, unmoved };
   }
 
   /** the record goes in, the rail hears about it, and the slow part (a deps clone, setup

@@ -41,8 +41,9 @@
     isolation: isolate;
   }
 
-  /* zero-width in layout: the dock's own 1px border is the only seam you see.
-   The grab strip lives inside the panel and only shows on hover / while dragging */
+  /* zero-width in layout: the dock's own 1px border is the only seam you see. The grab strip lives
+   inside the panel and only shows on hover / while dragging; the handle's class names the side its
+   dock stands on, and the drag measure (App.tsx) reads the same class. */
   .dock-resize {
     position: relative;
     width: 0;

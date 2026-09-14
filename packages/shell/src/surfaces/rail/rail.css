@@ -4,18 +4,20 @@
 
 @layer surfaces {
   .rail-item {
-    /* the active/graft marker rides the panel's left edge rather than the row's, because the row's
-     own left edge is off screen while the rail is collapsed */
+    /* the active/graft marker rides the panel's far edge rather than the row's, because the row's
+     own far edge is off screen while the rail is collapsed */
     --row-edge-x: var(--rail-edge, 0px);
-    /* it travels on the same curve and the same delay as the panel width, so the two move as one */
+    /* it travels on the same curve and the same delay as the panel width, so the two move as one.
+     inset, not left: the mirror pins the marker by right (the block at the foot), and a shorthand
+     transitions whichever of its longhands moves */
     &::before {
-      transition: left 0.12s ease 120ms;
+      transition: inset 0.12s ease 120ms;
     }
   }
 
   .rail {
     &:hover .rail-item::before {
-      transition: left 0.12s ease 50ms;
+      transition: inset 0.12s ease 50ms;
     }
   }
   /* --dot-gap follows the row's own background so the unseen ring keeps a clean gap instead of a
@@ -45,22 +47,24 @@
     text-align: left;
   }
 
-  /* The control column. Every label in the panel starts at its right edge, and what sits in it says
-   what the row is: the plus on main, where new work starts, the caret on "discovered", the kebab on
-   a worktree row while the pointer is on it, the checkbox while a graft is being picked, and at rest
-   the time since anyone sent something there, which costs the name no width. It is also as far as
-   the row gets from the dot, which matters: the peek unfurls from under a pointer resting on the
-   dot, and this is where a control can sit without a small drift landing on it.
-   It is the row's left padding with the glyph laid over it, not a flex item: as an item the row's
-   gap sat between it and the label, and a glyph centred in the item read as pushed left, since
-   the space to its right was the gap on top of the column's own. The column's right edge is the
-   text, so the glyph is centred between the panel edge and the text. */
+  /* The control column, at the panel's far edge. Every label in the panel starts at its inner
+   edge, and what sits in it says what the row is: the plus on main, where new work starts, the
+   caret on "discovered", the kebab on a worktree row while the pointer is on it, the checkbox while
+   a graft is being picked, and at rest the time since anyone sent something there, which costs the
+   name no width. It is also as far as the row gets from the dot, which matters: the peek unfurls
+   from under a pointer resting on the dot, and this is where a control can sit without a small
+   drift landing on it.
+   It is the row's far padding with the glyph laid over it, not a flex item: as an item the row's
+   gap sat between it and the label, and a glyph centred in the item read as pushed outward, since
+   the space on its label side was the gap on top of the column's own. The column's inner edge is
+   the text, so the glyph is centred between the panel edge and the text. */
   .rail {
     --rail-gut: 30px;
   }
   .rail-gut {
     position: absolute;
-    left: 0;
+    left: var(--rail-far-l);
+    right: var(--rail-far-r);
     top: 0;
     bottom: 0;
     width: var(--rail-gut);
@@ -84,8 +88,9 @@
     pointer-events: none;
     margin: 0;
   }
-  /* The counts: one fixed column per kind, dirty then behind then ahead, right-aligned tabular
-   digits, so the numbers form straight edges down the list and the column says which is which.
+  /* The counts: one fixed column per kind, dirty nearest the name then behind then ahead, tabular
+   digits aligned toward the dot, so the numbers form straight edges down the list and the column
+   says which is which.
    They are read, not pressed (see .badge-* in base.css): the verbs live in the row menu. */
   .rail-counts {
     display: flex;
@@ -157,17 +162,33 @@
     }
   }
 
-  /* ---- far-right worktree rail: 40px dot strip, hover peeks the full panel
-   as an overlay (no reflow), pin (« ») keeps it wide. The walk (⌥↑/↓, ⌃Tab) holds the same
-   peek while its modifier is down, the way an alt-tab switcher shows ---- */
+  /* ---- the worktree rail: a 40px dot strip at one window edge, the chat's side, outside the chat
+   dock. Hover peeks the full panel as an overlay toward the centre (no reflow), pin (« ») keeps it
+   wide. The walk (⌥↑/↓, ⌃Tab) holds the same peek while its modifier is down, the way an alt-tab
+   switcher shows ---- */
   .rail {
     /* the control column, a name, three count columns and the dot: 280 is where a sixteen-letter
      branch name fits with all three columns drawn */
     --rail-width: 280px;
-    /* the list sits inside the panel's 1px left border, so both states line up on the same pixel */
+    /* the list sits inside the panel's 1px inner border, so both states line up on the same pixel */
     --rail-inner: calc(var(--rail-width) - 1px);
-    /* x of the panel's left edge within a row: the strip's edge collapsed, the row's own edge open */
+    /* the panel's far edge within a row, measured from the row's far side: the strip's edge
+     collapsed, the row's own edge open */
     --rail-edge: calc(var(--rail-width) - 40px);
+    /* The rail stands at one window edge, its near edge, and peeks from there toward the centre,
+       its far edge. Which physical side is which follows the chat (the app root's data-chat-side):
+       every pin, pad and margin in this file reads one of these pairs, and the mirrored block at
+       the foot swaps the pairs and restates the four things a pair cannot carry. */
+    --rail-near-r: 0;
+    --rail-near-l: auto;
+    --rail-far-r: auto;
+    --rail-far-l: 0;
+    /* a row: the control column at the far edge, 16px at the near */
+    --rail-pad-l: var(--rail-gut);
+    --rail-pad-r: 16px;
+    /* the dot's inset from the counts: its centre lands 20px from the near edge */
+    --rail-dot-ml: 12px;
+    --rail-dot-mr: 0;
     width: 40px;
     flex-shrink: 0;
     position: relative;
@@ -181,20 +202,22 @@
   .rail-panel {
     position: absolute;
     top: 0;
-    right: 0;
+    right: var(--rail-near-r);
+    left: var(--rail-near-l);
     bottom: 0;
     width: 100%;
     min-width: 40px;
     display: flex;
     flex-direction: column;
     background: var(--surface1);
+    /* the seam faces the chat dock; the mirror turns it */
     border-left: 1px solid var(--border0);
     overflow: hidden;
-    /* the peek grows left over the chat dock and its grab strip, which are its neighbours inside
-       .docks and the only things it covers */
+    /* the peek grows toward the centre over the chat dock and its grab strip, which are its
+       neighbours inside .docks and the only things it covers */
     z-index: 2;
-    /* the shadow only ever escapes to the left, never over the top bar. The clip has to hold while the
-     panel collapses too, or the blur pops out on all four sides on the way back in. */
+    /* the shadow only ever escapes toward the centre, never over the top bar. The clip has to hold
+     while the panel collapses too, or the blur pops out on all four sides on the way back in. */
     clip-path: inset(0 0 0 -32px);
     /* leaving is forgiving: a flick off the rail on the way somewhere else does not shut it */
     transition:
@@ -222,13 +245,14 @@
       box-shadow: none;
     }
   }
-  /* the list is always the full width and pinned to the right edge; the peek only widens the window
+  /* the list is always the full width and pinned to the near edge; the peek only widens the window
    onto it (the panel clips the rest). Laying the rows out twice — once for 40px, once for the
    open width — is what made the dots swing and the labels wrap halfway through the animation. */
   .rail-list {
     position: absolute;
     top: 0;
-    right: 0;
+    right: var(--rail-near-r);
+    left: var(--rail-near-l);
     bottom: var(--row-height);
     width: var(--rail-inner);
     overflow-y: auto;
@@ -238,16 +262,17 @@
    control, so it only exists while the drawer is open: in the strip there is nothing to pin yet. */
   .rail-foot {
     position: absolute;
-    right: 0;
+    right: var(--rail-near-r);
+    left: var(--rail-near-l);
     bottom: 0;
     width: var(--rail-inner);
     /* the pin is a row of the drawer, so it takes the row height rather than a number of its own */
     height: var(--row-height);
     display: flex;
     align-items: center;
+    /* at the dots' end: the 16px glyph sits in a 20px box, so 10px in puts it on their centre line */
     justify-content: flex-end;
-    /* the 16px glyph sits in a 20px box, so 10px in puts it on the dots' centre line */
-    padding-right: 10px;
+    padding: 0 10px;
     background: var(--surface1);
     opacity: 0;
     pointer-events: none;
@@ -264,15 +289,19 @@
   }
   /* Main's seat in the strip is a plus, drawn over the dot column out of the flow; as the panel
    opens it hands off to the plus in the control column and the dot underneath shows through, so
-   the open row reads like every other: plus far left, status far right. */
-  .rail-main-strip {
+   the open row reads like every other: plus at the far edge, status at the near. The glyph is
+   centred in the strip's 40px, the dots' centre line. */
+  .rail .rail-main-strip {
     position: absolute;
-    right: 12px;
+    right: var(--rail-near-r);
+    left: var(--rail-near-l);
     top: 0;
     bottom: 0;
-    margin-left: 0;
+    width: 40px;
+    margin: 0;
     display: flex;
     align-items: center;
+    justify-content: center;
     transition: opacity 0.12s ease 120ms;
   }
   .rail-main-dot {
@@ -315,7 +344,7 @@
       align-items: center;
       position: relative;
       gap: 8px;
-      padding: 0 16px 0 var(--rail-gut);
+      padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
       /* a section's worth of air above it, not a row's: at 6px it read as one more worktree row */
       margin-top: 14px;
       font: var(--type-ui-sm);
@@ -343,7 +372,7 @@
       /* the same padding and edge-marker anchoring as .rail-item: these rows sit in the same column and
      their dots have to land on the same centre line. A rung down in height as well as colour,
      because these are not main's peers and nine of them should not outweigh one of yours. */
-      padding: 0 16px 0 var(--rail-gut);
+      padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
       min-height: var(--row-height-sm);
       --row-edge-x: var(--rail-edge, 0px);
     }
@@ -361,14 +390,14 @@
     }
   }
   /* the lock stands in for the dot, so it is centred on the dot's x: the 13px glyph overhangs the
-   8px dot by 2.5px on each side, and the negative right margin keeps the row's right edge */
+   8px dot by 2.5px on each side, taken off the dot's own margins so the row's near edge holds */
   .rail-lock {
     display: flex;
-    margin-right: -2.5px;
   }
   .rail .rail-item .rail-lock,
   .rail .rail-disc-item .rail-lock {
-    margin-left: 9.5px;
+    margin-left: calc(var(--rail-dot-ml) - 2.5px);
+    margin-right: calc(var(--rail-dot-mr) - 2.5px);
   }
   /* the socket is down: every row is stale and nothing you click will answer. The dots say so, in
    the fault colour: what they were reporting is exactly what we have stopped hearing, and the dot
@@ -387,22 +416,23 @@
       background: none;
       box-shadow: inset 0 0 0 1px var(--fault);
     }
-    /* identical row heights in both modes, and the dot keeps its x too: 20px from the right edge, the
-   centre of the collapsed strip. The peek then unfurls leftward from under the pointer that opened
-   it, so the pointer is still resting on the row. Nothing beside the dot is pressable: the counts
-   are read and the kebab is in the control column at the far left, so a drift while the panel
-   opens has nothing to land on but the row itself. */
+    /* identical row heights in both modes, and the dot keeps its x too: 20px from the near edge, the
+   centre of the collapsed strip. The peek then unfurls toward the centre from under the pointer
+   that opened it, so the pointer is still resting on the row. Nothing beside the dot is pressable:
+   the counts are read and the kebab is in the control column at the far edge, so a drift while
+   the panel opens has nothing to land on but the row itself. */
     & .rail-item {
       height: var(--row-height);
-      /* the dot keeps its x: 20px from the right edge, the centre of the collapsed strip */
-      padding: 0 16px 0 var(--rail-gut);
+      /* the dot keeps its x: 20px from the near edge, the centre of the collapsed strip */
+      padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
     }
     & .rail-item .dot,
     & .rail-disc-item .dot,
     & .rail-item .spinner,
     & .rail-disc-item .spinner,
     & .rail-glyph {
-      margin-left: 12px;
+      margin-left: var(--rail-dot-ml);
+      margin-right: var(--rail-dot-mr);
     }
   }
   /* the crashed dot is the one dot you can press, so it needs a target bigger than its eight pixels;
@@ -430,6 +460,50 @@
   .rail {
     & .rail-item .branch {
       white-space: nowrap;
+    }
+  }
+
+  /* ---- the mirror: the chat on the window's left, and the rail outside it. The pairs swap, and
+   the four things a pair cannot carry are restated: the rows' order, the marker's side, the seam
+   with its clip and shadow, and the digits' edge. ---- */
+  .app[data-chat-side="left"] .rail {
+    --rail-near-r: auto;
+    --rail-near-l: 0;
+    --rail-far-r: 0;
+    --rail-far-l: auto;
+    --rail-pad-l: 16px;
+    --rail-pad-r: var(--rail-gut);
+    --rail-dot-ml: 0;
+    --rail-dot-mr: 12px;
+    /* the rows read from the near edge, dot first, as flex items reversed rather than under
+       direction: rtl, which would reorder the bidi-neutral characters in a name, a +3 or a v2/5.
+       The names keep their left alignment and their ellipsis at the right: a short name floats off
+       the gutter here, which is the one asymmetry left as it is. */
+    & .rail-item,
+    & .rail-disc-item,
+    & .rail-disc-head,
+    & .rail-counts,
+    & .rail-foot {
+      flex-direction: row-reverse;
+    }
+    /* the marker rides the panel's far edge, which is now the row's right */
+    & .rail-item::before,
+    & .rail-disc-item::before {
+      left: auto;
+      right: var(--row-edge-x, 0);
+    }
+    & .rail-panel {
+      border-left: 0;
+      border-right: 1px solid var(--border0);
+      clip-path: inset(0 -32px 0 0);
+    }
+    &:hover .rail-panel,
+    &.hold .rail-panel {
+      box-shadow: 10px 0 20px -10px var(--shadow);
+    }
+    /* the digits' straight edge stays on the dot's side */
+    & .rail-count {
+      text-align: left;
     }
   }
 }

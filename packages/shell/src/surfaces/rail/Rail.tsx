@@ -33,7 +33,7 @@ import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
-import { tip } from "../../ui/Tooltip.tsx";
+import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
 import { dollars, tokens } from "../chat/usage.ts";
 import { recapLine } from "../recap.ts";
 import { ago, chord, dotClass, procTrouble, rowLabel, stateLabel } from "../util.ts";
@@ -48,9 +48,12 @@ const count = (n: number) => (n > 999 ? "1k+" : String(n));
 /** what every row and the panel's ground say while the socket is down */
 const OFFLINE_TIP = "Lost the daemon; retrying";
 
-/** far-right worktree rail: 40px dot strip, hover peeks the full panel; shift-click / "graft with…"
- * enters a multi-select for grafting, bulk sync and bulk remove */
+/** the worktree rail, at the chat's side of the window: 40px dot strip, hover peeks the full panel
+ * toward the centre; shift-click / "graft with…" enters a multi-select for grafting, bulk sync and
+ * bulk remove */
 export function Rail() {
+  // a row's tip stands off the rail toward the centre, whichever edge the rail is at
+  const tipSide: TipPlacement = useStore((s) => s.chatSide) === "left" ? "right" : "left";
   const dispatch = useDispatch();
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
@@ -165,7 +168,7 @@ export function Rail() {
         menu?.owner === "rail" && menu.key === a.id && "menu-open",
       )}
       data-state={rowState({ current: archivedPage?.id === a.id })}
-      {...tip(a.branch, undefined, { placement: "left", detail: archivedHint(a) })}
+      {...tip(a.branch, undefined, { placement: tipSide, detail: archivedHint(a) })}
       onClick={() => dispatch({ a: "open-archived", id: a.id })}
       {...cm.contextMenu(() => archivedItems(a, clientId, deps), a.id)}
     >
@@ -201,10 +204,10 @@ export function Rail() {
    * found worktree wears the same counts, since they are as real as anyone's, and its menu is the
    * short one. The dot is hollow, which is the one place the row says whose it is.
    *
-   * Nothing on the right end of the row does anything but switch. In the strip the pointer lands on
-   * the dot, the panel unfurls leftward under it, and a small drift while it opens used to land on
-   * the kebab or on a count's verb; the counts are read now and the kebab sits in the control
-   * column at the far left, the column the plus and the caret already share. */
+   * Nothing at the dot's end of the row does anything but switch. In the strip the pointer lands on
+   * the dot, the panel unfurls toward the centre under it, and a small drift while it opens used to
+   * land on the kebab or on a count's verb; the counts are read now and the kebab sits in the
+   * control column at the far edge, the column the plus and the caret already share. */
   const railRow = (w: WorktreeStatus) => {
     const owned = isOwned(w) ? w : null;
     const onMain = !!owned && isMain(owned.worktree);
@@ -231,7 +234,7 @@ export function Rail() {
         // names the fault instead, with no dot, since there is no live state for one to restate.
         {...(owned
           ? tip(offline ? OFFLINE_TIP : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
-              placement: "left",
+              placement: tipSide,
               // an unseen stop says what happened above the path, so a hover is enough to triage it
               detail:
                 w.unseen && owned.worktree.lastTurn
@@ -241,13 +244,13 @@ export function Rail() {
               lead: leadOf(w, isMain(owned.worktree) ? (repoOf(owned)?.name ?? null) : null),
             })
           : offline
-            ? tip(OFFLINE_TIP, undefined, { placement: "left", detail: wtDirLabel(w) })
+            ? tip(OFFLINE_TIP, undefined, { placement: tipSide, detail: wtDirLabel(w) })
             : w.locked
               ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, {
-                  placement: "left",
+                  placement: tipSide,
                   detail: wtDirLabel(w),
                 })
-              : tip(wtDirLabel(w), undefined, { placement: "left" }))}
+              : tip(wtDirLabel(w), undefined, { placement: tipSide }))}
         data-wt={id}
         // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
         // is picked and takes the focus, so the next press keeps walking. The ends stop the way a
@@ -399,7 +402,7 @@ export function Rail() {
           // Main's seat in the strip is a plus: new work starts here, and the strip has no other
           // place to say so. The dot takes the seat back whenever it has something to say (main's
           // server down, the daemon gone), and it is drawn underneath either way, since the peek
-          // shows both, the plus at the far left of the row.
+          // shows both, the plus at the far end of the row.
           if (onMain && !trouble && state !== "crashed" && !offline) {
             return (
               <>
@@ -532,7 +535,7 @@ export function Rail() {
                 {...tip(
                   `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that Toyon did not make`,
                   undefined,
-                  { placement: "left" },
+                  { placement: tipSide },
                 )}
                 onClick={() => dispatch({ a: "toggle-discovered" })}
               >
@@ -554,7 +557,7 @@ export function Rail() {
                 {...tip(
                   `${archived.length} removed worktree${archived.length === 1 ? "" : "s"}, kept with ${archived.length === 1 ? "its chat" : "their chats"}`,
                   undefined,
-                  { placement: "left" },
+                  { placement: tipSide },
                 )}
                 onClick={() => dispatch({ a: "toggle-archived" })}
               >

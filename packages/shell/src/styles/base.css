@@ -160,8 +160,9 @@
    shared component (a ListPicker row) can't take the class, so it puts a <span class="row-current">
    in its own markup instead; same bar, same geometry.
 
-   --row-edge-x moves the bar off the row's own left edge, for the worktree rail, whose rows start
-   off screen while it is collapsed. */
+   --row-edge-x moves the bar off the row's own leading edge, for the worktree rail, whose rows
+   start off screen while it is collapsed; the rail pins the bar by right instead when it stands
+   at the window's left (rail.css). */
   .row-edge {
     position: relative;
     &::before {

@@ -27,6 +27,14 @@ export async function shellCss(): Promise<string> {
   return texts.join("\n");
 }
 
+/** a selector's declarations across every rule that names it, later ones winning as they cascade */
+export function declsOf(rules: CssRule[], selector: string): Map<string, string> {
+  const decls = new Map<string, string>();
+  for (const r of rules) if (r.selectors.includes(selector)) for (const [k, v] of r.decls) decls.set(k, v);
+  if (decls.size === 0) throw new Error(`no rule for ${selector}`);
+  return decls;
+}
+
 export function cssRules(css: string): CssRule[] {
   const out: CssRule[] = [];
   visit(postcss.parse(css), [], out);

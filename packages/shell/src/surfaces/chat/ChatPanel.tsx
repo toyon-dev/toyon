@@ -33,7 +33,7 @@ export function ChatPanel({
   const over = useStore((s) => s.dragFiles);
   return (
     <div
-      className={cx(placement === "dock" ? "right-dock" : "chat-centre", className, over && "drop-over")}
+      className={cx(placement === "dock" ? "chat-dock" : "chat-centre", className, over && "drop-over")}
       style={width === undefined ? undefined : { width }}
       ref={(el) => {
         // the placement leaving must not clear the one arriving in the same commit

@@ -13,7 +13,7 @@ export type NavClusterInput = {
 
 /** Where the nav cluster sits: centred over the centre, as wide as 520px, 40% of the window or the
  * centre less a gap allow, whichever is least. Then held off the bar's lead and tools: the lead can
- * reach past a narrow left dock (a long project name, the install button), and with the dock closed
+ * reach past a narrow changes dock (a long project name, the install button), and with the dock closed
  * the centre begins under it. The cluster slides just far enough to clear them, and no further, so
  * it keeps its place over the preview wherever there is room. */
 export function navCluster({ winW, centre, leadRight, toolsLeft }: NavClusterInput): { left: number; width: number } {

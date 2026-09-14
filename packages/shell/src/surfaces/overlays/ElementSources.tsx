@@ -11,7 +11,7 @@ import { wtDir } from "../util.ts";
 export function ElementSources({ worktreeId, hits }: { worktreeId: string; hits: SearchHit[] }) {
   const dispatch = useDispatch();
   const sock = useSock();
-  const leftOpen = useStore((s) => s.leftOpen);
+  const changesOpen = useStore((s) => s.changesOpen);
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId)?.worktree;
     return w ? wtDir(w) : null;
@@ -29,7 +29,7 @@ export function ElementSources({ worktreeId, hits }: { worktreeId: string; hits:
       rowTitle={(h) => `${h.path}:${h.line}`}
       onPick={(hit) => {
         openFile({ sock, dispatch }, { worktreeId, path: hit.path, view: "file", line: { n: hit.line } });
-        if (!leftOpen) dispatch({ a: "toggle-left" });
+        if (!changesOpen) dispatch({ a: "toggle-changes" });
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close" })}

@@ -8,7 +8,7 @@ export type ChordId =
   | "quick-open"
   | "commands"
   | "search"
-  | "left"
+  | "changes"
   | "composer"
   | "rail"
   | "keys"
@@ -75,7 +75,7 @@ export const CHORDS: readonly Chord[] = [
     aliases: ["e"],
   },
   { id: "search", key: "f", shift: true },
-  { id: "left", key: "b" },
+  { id: "changes", key: "b" },
   // ⌘L is Cursor's key for the chat, so it is the one a hand already reaches for, and the chat's only
   // chord: from elsewhere it puts the caret in the box, opening the panel if it must, and from the
   // box it closes the panel (app/keys.ts). From the editor it brings the selection along as Cursor's

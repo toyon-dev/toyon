@@ -112,8 +112,8 @@ export function buildCommands(
 export type CommandState = Pick<
   State,
   | "picking"
-  | "leftOpen"
-  | "rightOpen"
+  | "changesOpen"
+  | "chatOpen"
   | "railOpen"
   | "termOpen"
   | "designOpen"
@@ -137,8 +137,8 @@ export function useCommands(): Command[] {
   const dispatch = useDispatch();
   const sock = useSock();
   const picking = useStore((s) => s.picking);
-  const leftOpen = useStore((s) => s.leftOpen);
-  const rightOpen = useStore((s) => s.rightOpen);
+  const changesOpen = useStore((s) => s.changesOpen);
+  const chatOpen = useStore((s) => s.chatOpen);
   const railOpen = useStore((s) => s.railOpen);
   const termOpen = useStore((s) => s.termOpen);
   const designOpen = useStore((s) => s.designOpen);
@@ -159,8 +159,8 @@ export function useCommands(): Command[] {
   return useMemo(() => {
     const st: CommandState = {
       picking,
-      leftOpen,
-      rightOpen,
+      changesOpen,
+      chatOpen,
       railOpen,
       termOpen,
       designOpen,
@@ -182,8 +182,8 @@ export function useCommands(): Command[] {
     return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repoById(st as State, activeRepoId));
   }, [
     picking,
-    leftOpen,
-    rightOpen,
+    changesOpen,
+    chatOpen,
     railOpen,
     termOpen,
     designOpen,

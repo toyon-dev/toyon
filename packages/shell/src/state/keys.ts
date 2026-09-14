@@ -20,8 +20,8 @@ export const STORAGE = {
   /** the daemon's last answer about the sun, so a page that opens while following daylight paints
    * from it rather than waiting a round trip: {"dark":true,"until":<epoch ms>} */
   daylight: "toyon-sun",
-  leftWidth: "toyon-lw",
-  rightWidth: "toyon-rw",
+  changesWidth: "toyon-changes-w",
+  chatWidth: "toyon-chat-w",
   editorHeight: "toyon-dh",
   editorFull: "toyon-dfull",
   designHeight: "toyon-dsh",
@@ -29,7 +29,7 @@ export const STORAGE = {
   termHeight: "toyon-th",
   /** the worktree panel is kept open instead of peeking on hover */
   rail: "toyon-rail",
-  /** every project's panel layout, keyed by repo id: {"<repo>":{left,right,term,design}} */
+  /** every project's panel layout, keyed by repo id: {"<repo>":{changes,chat,term,design}} */
   panels: "toyon-panels",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */
   client: "toyon-client",
@@ -47,7 +47,7 @@ export const STORAGE = {
 const LEGACY_PREFIX = "orch-";
 export function migrateStorage() {
   for (const [storage, keys] of [
-    [localStorage, ["active", "token", "theme", "leftWidth", "rightWidth", "editorHeight", "editorFull"]],
+    [localStorage, ["active", "token", "theme", "editorHeight", "editorFull"]],
     [sessionStorage, ["client"]],
   ] as const) {
     for (const k of keys) {

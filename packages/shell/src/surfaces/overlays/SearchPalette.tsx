@@ -16,7 +16,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const results = useLocal(worktreeId).search;
-  const leftOpen = useStore((s) => s.leftOpen);
+  const changesOpen = useStore((s) => s.changesOpen);
   // a hit is a file: open in an editor or reveal it, as the changes panel's rows offer
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId)?.worktree;
@@ -43,7 +43,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
       onPick={(hit) => {
         // a hit is a line in the file, as a ⌘P jump is a file: neither is a question about a diff
         openFile({ sock, dispatch }, { worktreeId, path: hit.path, view: "file", line: { n: hit.line } });
-        if (!leftOpen) dispatch({ a: "toggle-left" });
+        if (!changesOpen) dispatch({ a: "toggle-changes" });
         dispatch({ a: "close" });
       }}
       onBack={() => dispatch({ a: "close" })}

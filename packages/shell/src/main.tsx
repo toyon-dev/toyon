@@ -41,8 +41,8 @@ function storedPanels(): Record<string, Panels> {
     for (const [id, p] of Object.entries(raw as Record<string, Partial<Panels>>)) {
       if (!p || typeof p !== "object") continue;
       out[id] = {
-        left: bool(p.left, defaultPanels.left),
-        right: bool(p.right, defaultPanels.right),
+        changes: bool(p.changes, defaultPanels.changes),
+        chat: bool(p.chat, defaultPanels.chat),
         term: bool(p.term, defaultPanels.term),
         design: bool(p.design, defaultPanels.design),
       };

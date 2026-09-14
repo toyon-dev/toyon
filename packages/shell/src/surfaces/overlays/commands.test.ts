@@ -36,8 +36,8 @@ describe("buildCommands", () => {
   } as unknown as OwnedWorktree;
   const state = {
     picking: null,
-    leftOpen: true,
-    rightOpen: true,
+    changesOpen: true,
+    chatOpen: true,
     railOpen: true,
     termOpen: false,
     designOpen: false,
@@ -63,7 +63,7 @@ describe("buildCommands", () => {
     expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
   });
   test("a project with nothing to run offers none of a page's verbs, and no chat panel to toggle", () => {
-    const pageVerbs = ["pick", "inspect", "reload", "right", "design", "zen"];
+    const pageVerbs = ["pick", "inspect", "reload", "chat", "design", "zen"];
     const web = buildCommands(state, () => {}, null, wt, repo).map((c) => c.id);
     for (const id of pageVerbs) expect(web).toContain(id);
     const bare = { ...repo, config: { run: {} } } as RepoInfo;

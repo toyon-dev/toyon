@@ -6,8 +6,8 @@ import type { Deps } from "./deps.ts";
 
 export type AppState = Pick<
   State,
-  | "leftOpen"
-  | "rightOpen"
+  | "changesOpen"
+  | "chatOpen"
   | "railOpen"
   | "termOpen"
   | "designOpen"
@@ -75,16 +75,16 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
   });
   const panels: MenuItem[] = [
     {
-      id: "left",
-      label: `${show(s.leftOpen)} changes panel`,
-      key: chord("left"),
-      onClick: () => dispatch({ a: "toggle-left" }),
+      id: "changes",
+      label: `${show(s.changesOpen)} changes panel`,
+      key: chord("changes"),
+      onClick: () => dispatch({ a: "toggle-changes" }),
     },
     {
-      id: "right",
-      label: `${show(s.rightOpen)} chat panel`,
+      id: "chat",
+      label: `${show(s.chatOpen)} chat panel`,
       key: chord("composer"),
-      onClick: () => dispatch({ a: "toggle-right" }),
+      onClick: () => dispatch({ a: "toggle-chat" }),
     },
     {
       id: "terminal",
@@ -137,6 +137,6 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
   }
   // a project with nothing to run has the chat as its centre, so there is no chat panel to toggle,
   // and no page for zen or the design pane's outlines to work on
-  const pageless = isChatCentred(s) ? new Set(["right", "design", "zen"]) : null;
+  const pageless = isChatCentred(s) ? new Set(["chat", "design", "zen"]) : null;
   return grouped([go, pageless ? panels.filter((it) => !pageless.has(it.id)) : panels, app]);
 }

@@ -202,9 +202,9 @@ describe("per-worktree records", () => {
     // a message said on main itself ends it for good
     const spoken = run([agent("main", { type: "user-message", text: "make a site", ts: 0 })], s);
     expect(isGreenfield(spoken)).toBe(false);
-    // hiding the dock leaves no trace: show-right opens it, and only that is remembered
-    expect(s.rightOpen).toBe(true);
-    expect(reducer({ ...s, rightOpen: false }, { a: "show-right" }).rightOpen).toBe(true);
+    // hiding the dock leaves no trace: show-chat opens it, and only that is remembered
+    expect(s.chatOpen).toBe(true);
+    expect(reducer({ ...s, chatOpen: false }, { a: "show-chat" }).chatOpen).toBe(true);
   });
   test("a repo confirmed with nothing to run puts the chat in the centre, with no preview", () => {
     const s = run([helloIn([pageless("r")], wt("main", "main"))]);
@@ -233,22 +233,22 @@ describe("per-worktree records", () => {
     expect(previewIdOf(drafting(repo("r")))).toBe("main");
   });
   test("with the chat in the centre, what would open or toggle a panel leaves the layout alone", () => {
-    const s = { ...run([helloIn([pageless("r")], wt("main", "main"))]), rightOpen: false };
+    const s = { ...run([helloIn([pageless("r")], wt("main", "main"))]), chatOpen: false };
     const moves: Action[] = [
       { a: "open-draft" },
-      { a: "show-right" },
-      { a: "toggle-right" },
+      { a: "show-chat" },
+      { a: "toggle-chat" },
       { a: "toggle-zen" },
       { a: "toggle-design" },
       { a: "attach", id: "main", items: [] },
     ];
     for (const move of moves) {
       const next = reducer(s, move);
-      expect([move.a, next.rightOpen, next.zen, next.designOpen]).toEqual([move.a, false, false, false]);
+      expect([move.a, next.chatOpen, next.zen, next.designOpen]).toEqual([move.a, false, false, false]);
       expect(next.panels).toBe(s.panels);
     }
     // the box is still asked for: it is the centre's now
-    expect(reducer(s, { a: "focus-right" })).toMatchObject({ rightOpen: false, focusRight: s.focusRight + 1 });
+    expect(reducer(s, { a: "focus-chat" })).toMatchObject({ chatOpen: false, focusChat: s.focusChat + 1 });
   });
   test("nothing is heard until a hello, from the socket or the bootstrap alike", () => {
     expect(initial.heard).toBe(false);
@@ -568,10 +568,10 @@ describe("drafting a worktree", () => {
     const s = run([{ a: "activate", id: "a" }, { a: "open-draft" }], found(wt("main", "main"), wt("a")));
     expect(s.activeId).toBe("main");
     expect(s.draft).toEqual(fresh());
-    expect(s.rightOpen).toBe(true);
+    expect(s.chatOpen).toBe(true);
     const again = reducer(s, { a: "open-draft" });
     expect(again.draft).toEqual(fresh());
-    expect(again.focusRight).toBe(s.focusRight + 1);
+    expect(again.focusChat).toBe(s.focusChat + 1);
   });
 
   test("carrying main's changes holds for a single worktree only", () => {
@@ -752,8 +752,8 @@ describe("attachments", () => {
     expect(s.local.a?.attachments).toEqual([]);
   });
   test("an attachment opens a collapsed chat, since its chip is the only sign it landed", () => {
-    const s = run([hello(wt("a")), { a: "toggle-right" }, { a: "attach", id: "a", items: [paste] }]);
-    expect(s.rightOpen).toBe(true);
+    const s = run([hello(wt("a")), { a: "toggle-chat" }, { a: "attach", id: "a", items: [paste] }]);
+    expect(s.chatOpen).toBe(true);
   });
   test("a sent message keeps its refs for the bubble, in the order they were attached", () => {
     const refs = [
@@ -818,34 +818,34 @@ describe("drafts", () => {
 describe("git status", () => {
   test("a clean main on first load auto-closes the changes panel, once", () => {
     const s = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
-    expect(s.leftOpen).toBe(false);
-    expect(s.leftAuto).toBe(false);
-    const reopened = reducer(s, { a: "toggle-left" });
-    expect(reducer(reopened, server({ t: "git-status", worktreeId: "main", files: [] })).leftOpen).toBe(true);
+    expect(s.changesOpen).toBe(false);
+    expect(s.changesAuto).toBe(false);
+    const reopened = reducer(s, { a: "toggle-changes" });
+    expect(reducer(reopened, server({ t: "git-status", worktreeId: "main", files: [] })).changesOpen).toBe(true);
   });
   test("a dirty worktree keeps the panel open", () => {
     const s = run([
       hello(wt("main", "main")),
       server({ t: "git-status", worktreeId: "main", files: [{ xy: " M", path: "a" }] }),
     ]);
-    expect(s.leftOpen).toBe(true);
+    expect(s.changesOpen).toBe(true);
   });
-  test("focus-left opens a shut panel and asks for the keyboard every time", () => {
+  test("focus-changes opens a shut panel and asks for the keyboard every time", () => {
     const shut = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
-    expect(shut.leftOpen).toBe(false);
-    const once = reducer(shut, { a: "focus-left" });
-    expect(once.leftOpen).toBe(true);
-    expect(once.focusLeft).toBe(shut.focusLeft + 1);
+    expect(shut.changesOpen).toBe(false);
+    const once = reducer(shut, { a: "focus-changes" });
+    expect(once.changesOpen).toBe(true);
+    expect(once.focusChanges).toBe(shut.focusChanges + 1);
     // already open and already asked: the request still has to be new, or the panel would only
     // take focus the first time
-    expect(reducer(once, { a: "focus-left" }).focusLeft).toBe(once.focusLeft + 1);
+    expect(reducer(once, { a: "focus-changes" }).focusChanges).toBe(once.focusChanges + 1);
   });
-  test("focus-right and focus-rail open their panels and ask for the keyboard every time", () => {
+  test("focus-chat and focus-rail open their panels and ask for the keyboard every time", () => {
     const s = run([hello(wt("main", "main"))]);
-    const shut = reducer(reducer(s, { a: "toggle-right" }), { a: "toggle-rail" });
-    const right = reducer(shut, { a: "focus-right" });
-    expect([shut.rightOpen, right.rightOpen, right.focusRight]).toEqual([false, true, shut.focusRight + 1]);
-    expect(reducer(right, { a: "focus-right" }).focusRight).toBe(right.focusRight + 1);
+    const shut = reducer(reducer(s, { a: "toggle-chat" }), { a: "toggle-rail" });
+    const right = reducer(shut, { a: "focus-chat" });
+    expect([shut.chatOpen, right.chatOpen, right.focusChat]).toEqual([false, true, shut.focusChat + 1]);
+    expect(reducer(right, { a: "focus-chat" }).focusChat).toBe(right.focusChat + 1);
     const rail = reducer({ ...shut, railOpen: false }, { a: "focus-rail" });
     expect([rail.railOpen, rail.focusRail]).toEqual([true, shut.focusRail + 1]);
     expect(reducer(rail, { a: "focus-rail" }).focusRail).toBe(rail.focusRail + 1);
@@ -1037,10 +1037,10 @@ describe("the editor's open file", () => {
     const sources = (seq: number, hits: ReturnType<typeof hit>[], sure: boolean) =>
       server({ t: "element-sources", worktreeId: "a", seq, hits, sure });
     const booted = run([hello(wt("a"))]);
-    const closed = booted.leftOpen ? reducer(booted, { a: "toggle-left" }) : booted;
+    const closed = booted.changesOpen ? reducer(booted, { a: "toggle-changes" }) : booted;
     const sure = reducer(closed, sources(5, [hit("src/render.ts", 33)], true));
     expect(sure.editor).toMatchObject({ path: "src/render.ts", view: "file", line: { n: 33 }, seq: 5, focus: true });
-    expect(sure.leftOpen).toBe(true);
+    expect(sure.changesOpen).toBe(true);
     const listed = reducer(closed, sources(5, [hit("src/a.ts", 3), hit("src/b.ts", 7)], false));
     expect(listed.editor).toBeNull();
     expect(listed.overlay).toMatchObject({
@@ -1268,8 +1268,8 @@ describe("panel layout", () => {
     helloIn([repo("r1"), repo("r2")], wt("m1", "main", undefined, "r1"), wt("m2", "main", undefined, "r2"));
 
   test("opening a panel remembers it under the active project", () => {
-    const s = run([two(), { a: "toggle-design" }, { a: "toggle-left" }]);
-    expect(s.panels.r1).toEqual({ left: false, right: true, term: false, design: true });
+    const s = run([two(), { a: "toggle-design" }, { a: "toggle-changes" }]);
+    expect(s.panels.r1).toEqual({ changes: false, chat: true, term: false, design: true });
   });
 
   test("switching projects paints that project's layout, and switching back restores this one", () => {
@@ -1297,31 +1297,31 @@ describe("panel layout", () => {
     const from = initialState({
       clientId: ME,
       storedRepo: "r2",
-      storedPanels: { r2: { left: false, right: true, term: false, design: true } },
+      storedPanels: { r2: { changes: false, chat: true, term: false, design: true } },
     });
-    expect(from.leftOpen).toBe(false);
+    expect(from.changesOpen).toBe(false);
     expect(from.designOpen).toBe(true);
     const s = run([two()], from);
     expect(s.activeRepoId).toBe("r2");
-    expect(s.leftOpen).toBe(false);
+    expect(s.changesOpen).toBe(false);
     expect(s.designOpen).toBe(true);
   });
 
   test("the clean-main auto-close is not learned as the project's layout", () => {
     const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [] })]);
-    expect(s.leftOpen).toBe(false);
+    expect(s.changesOpen).toBe(false);
     // it closed for this session only: a reload with changes waiting opens the panel again
-    expect(s.panels.r1?.left).toBe(true);
+    expect(s.panels.r1?.changes).toBe(true);
   });
 
   test("a remembered layout outranks the clean-main auto-close", () => {
     const from = initialState({
       clientId: ME,
       storedRepo: "r1",
-      storedPanels: { r1: { left: true, right: true, term: false, design: false } },
+      storedPanels: { r1: { changes: true, chat: true, term: false, design: false } },
     });
     const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [] })], from);
-    expect(s.leftOpen).toBe(true);
+    expect(s.changesOpen).toBe(true);
   });
 });
 
@@ -1403,13 +1403,17 @@ describe("discovered worktrees", () => {
   });
 
   test("git status for one fills its record and never closes the changes panel: only main does", () => {
-    const from = { ...run([helloR(wt("main", "main")), withFound(found("/w/stray"))]), leftOpen: true, leftAuto: true };
+    const from = {
+      ...run([helloR(wt("main", "main")), withFound(found("/w/stray"))]),
+      changesOpen: true,
+      changesAuto: true,
+    };
     const s = run(
       [{ a: "activate", id: "disc-/w/stray" }, server({ t: "git-status", worktreeId: "disc-/w/stray", files: [] })],
       from,
     );
     expect(localOf(s, "disc-/w/stray").git?.files).toEqual([]);
-    expect(s.leftOpen).toBe(true);
+    expect(s.changesOpen).toBe(true);
   });
 
   test("they are narrowed to the active project, like worktrees are", () => {
@@ -1722,21 +1726,21 @@ describe("add to chat", () => {
 
   test("a selection joins the active box as a chip named for its lines, and the box takes the keyboard", () => {
     const store = storeOn();
-    const asked = store.getState().focusRight;
+    const asked = store.getState().focusChat;
     addToChat(store, { worktreeId: "a", source, text: "one\ntwo\nthree\n" });
     expect(store.getState().local.a?.attachments).toMatchObject([
       { kind: "paste", text: "one\ntwo\nthree", source, lines: 3 },
     ]);
-    expect(store.getState().focusRight).toBe(asked + 1);
+    expect(store.getState().focusChat).toBe(asked + 1);
   });
   test("the same lines again, or nothing selected, only move the keyboard", () => {
     const store = storeOn();
-    const asked = store.getState().focusRight;
+    const asked = store.getState().focusChat;
     addToChat(store, { worktreeId: "a", source, text: "x" });
     addToChat(store, { worktreeId: "a", source, text: "x" });
     addToChat(store, null);
     expect(store.getState().local.a?.attachments).toHaveLength(1);
-    expect(store.getState().focusRight).toBe(asked + 3);
+    expect(store.getState().focusChat).toBe(asked + 3);
   });
   test("lines from a worktree that is not on screen attach nothing", () => {
     const store = storeOn();
@@ -1763,7 +1767,7 @@ describe("attach a pick", () => {
 
   test("the element joins its frame's box with paths relative to that checkout, once, and picking ends", () => {
     const store = createStore(run([hello(wt("a")), { a: "set-picking", v: "chat" }]));
-    const asked = store.getState().focusRight;
+    const asked = store.getState().focusChat;
     attachPick(store, "a", picked);
     attachPick(store, "a", picked);
     const s = store.getState();
@@ -1772,7 +1776,7 @@ describe("attach a pick", () => {
       { kind: "pick", file: "src/ui/Button.tsx", callFile: "src/pages/Home.tsx", selector: "main > button" },
     ]);
     // the click left the keyboard in the frame, so each pick hands it back to the box
-    expect(s.focusRight).toBe(asked + 2);
+    expect(s.focusChat).toBe(asked + 2);
   });
   test("a second element stacks beside the first rather than replacing it", () => {
     const store = createStore(run([hello(wt("a"))]));

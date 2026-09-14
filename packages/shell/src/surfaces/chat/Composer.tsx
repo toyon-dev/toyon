@@ -295,7 +295,7 @@ export function Composer({
   // ⌘K and ⌘L ask for the box by bumping a counter; focus is the DOM's. Only a bump seen after
   // mount counts, or a box mounting later (an empty project's) would take a request long answered.
   // On an empty project the dock's copy is hidden, so the centre's answers.
-  const focusReq = useStore((s) => s.focusRight);
+  const focusReq = useStore((s) => s.focusChat);
   const answered = useRef(focusReq);
   const centred = !!useGreenfield();
   useOnChange([focusReq], () => {
@@ -602,7 +602,7 @@ export function Composer({
     if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
     setText("");
     // the reply lands in the dock, so the dock comes back with the message that started it
-    if (greenfield) dispatch({ a: "show-right" });
+    if (greenfield) dispatch({ a: "show-chat" });
     // The worktree the draft was for is on its way and takes the selection when it lands, so the
     // box holds read-only until then. A batch plans first and its rows are not this tab's, so
     // nothing would release it; its box stays open and the rows arrive in the rail.

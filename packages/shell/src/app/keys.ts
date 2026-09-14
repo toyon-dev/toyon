@@ -150,13 +150,13 @@ export function useChords() {
           // it is shut and hand it the keyboard (the changes list, the chat box, the terminal, the
           // current worktree row); from inside that spot they close it. A press that shut a panel
           // already on screen took it from a hand that had come to type in it.
-          case "left":
-            dispatch(s.leftOpen && inside(".changes-list") ? { a: "toggle-left" } : { a: "focus-left" });
+          case "changes":
+            dispatch(s.changesOpen && inside(".changes-list") ? { a: "toggle-changes" } : { a: "focus-changes" });
             break;
           case "composer":
             // a chat in the centre is not a panel: there is nothing to close, only the box to reach
             dispatch(
-              s.rightOpen && !isChatCentred(s) && inside(".chat-input") ? { a: "toggle-right" } : { a: "focus-right" },
+              s.chatOpen && !isChatCentred(s) && inside(".chat-input") ? { a: "toggle-chat" } : { a: "focus-chat" },
             );
             break;
           case "rail":

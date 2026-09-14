@@ -31,7 +31,7 @@ describe("the docks row fits the window", () => {
   });
   test("a dock gives from its width, down to the row's floor", async () => {
     const rules = cssRules(await shellCss());
-    for (const dock of [".left-dock", ".right-dock"]) {
+    for (const dock of [".changes-dock", ".chat-dock"]) {
       const decls = rule(rules, dock);
       expect(decls.get("flex")).toBe("0 1 auto");
       expect(decls.get("min-width")).toBe("var(--dock-min)");

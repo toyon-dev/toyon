@@ -1,8 +1,8 @@
 /* The chat panel: the transcript, tool rows, cards, chips, the composer. */
 @layer tokens, base, surfaces;
 @layer surfaces {
-  /* ---- right dock (chat) ---- */
-  .right-dock {
+  /* ---- chat dock ---- */
+  .chat-dock {
     width: 380px;
     /* gives when the row is short, down to the row's floor (app.css, .docks) */
     flex: 0 1 auto;
@@ -684,7 +684,7 @@
   /* the frame is base's (.composer); the tall floor is the dock's own. Scoped to the dock rather
      than written on every composer, because the only other one stands on a form in the centre,
      where the region it sits in owns the height and a floor from here would fight it. */
-  .right-dock .chat-input {
+  .chat-dock .chat-input {
     --composer-min: 160px;
   }
   /* the argument hint sits left of the key hints, where the eye lands after picking */
@@ -961,7 +961,7 @@
    the marker only has to confirm the target, not shout at it. The line is the accent at full
    strength; it used to be the accent at 35%, which is a colour that appears in no swatch and so
    read as a fourth hue rather than as the accent doing something. */
-  .right-dock {
+  .chat-dock {
     &.drop-over::after {
       content: "";
       position: absolute;

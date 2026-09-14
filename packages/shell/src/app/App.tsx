@@ -15,8 +15,8 @@ import {
   useTheme,
 } from "../state/selectors.ts";
 import { Center } from "../surfaces/center/Center.tsx";
-import { LeftDock } from "../surfaces/changes/LeftDock.tsx";
-import { RightDock } from "../surfaces/chat/RightDock.tsx";
+import { ChangesDock } from "../surfaces/changes/ChangesDock.tsx";
+import { ChatDock } from "../surfaces/chat/ChatDock.tsx";
 import { useFileDrop } from "../surfaces/chat/useIntake.ts";
 import { Rail } from "../surfaces/rail/Rail.tsx";
 import { TopBar } from "../surfaces/topbar/TopBar.tsx";
@@ -70,8 +70,8 @@ export function App() {
   // The same on an archived worktree's page: the docks would show the changes and the chat of the
   // row underneath, beside a page about a worktree whose chat is with the daemon until it comes back.
   const archivedPage = useArchivedPage();
-  const leftOpen = useStore((s) => s.leftOpen) && !firstRun && !archivedPage;
-  const rightOpen = useStore((s) => s.rightOpen) && !firstRun && !chatCentred && !archivedPage;
+  const changesOpen = useStore((s) => s.changesOpen) && !firstRun && !archivedPage;
+  const chatOpen = useStore((s) => s.chatOpen) && !firstRun && !chatCentred && !archivedPage;
   const railOpen = useStore((s) => s.railOpen);
   const panels = useStore((s) => s.panels);
   const lastActive = useStore((s) => s.lastActive);
@@ -289,18 +289,18 @@ export function App() {
   // resizable docks, widths persisted per browser. A drag measures the dock from its own far edge,
   // the one the handle is not on, so nothing here knows what else stands in the row or in which
   // order; the row's fit to the window is the docks' CSS (app.css)
-  const [leftW, setLeftW] = usePersisted(STORAGE.leftWidth, 220, (raw) => (raw ? clampW(Number(raw), 220) : undefined));
-  const [rightW, setRightW] = usePersisted(STORAGE.rightWidth, 380, (raw) =>
-    raw ? clampW(Number(raw), 380) : undefined,
+  const [changesW, setChangesW] = usePersisted(STORAGE.changesWidth, 220, (raw) =>
+    raw ? clampW(Number(raw), 220) : undefined,
   );
-  const dragLeft = useDragResize((ev, handle) => {
+  const [chatW, setChatW] = usePersisted(STORAGE.chatWidth, 380, (raw) => (raw ? clampW(Number(raw), 380) : undefined));
+  const dragChanges = useDragResize((ev, handle) => {
     const dock = handle.previousElementSibling;
     return dock ? clampW(ev.clientX - dock.getBoundingClientRect().left, 220) : null;
-  }, setLeftW);
-  const dragRight = useDragResize((ev, handle) => {
+  }, setChangesW);
+  const dragChat = useDragResize((ev, handle) => {
     const dock = handle.nextElementSibling;
     return dock ? clampW(dock.getBoundingClientRect().right - ev.clientX, 380) : null;
-  }, setRightW);
+  }, setChatW);
   // the centre column's element, for the top bar: its cluster sits over the preview
   const [centerEl, setCenterEl] = useState<HTMLDivElement | null>(null);
 
@@ -322,12 +322,12 @@ export function App() {
       <Menus />
       <TopBar center={centerEl} />
       <div className="docks">
-        <LeftDock width={leftW} />
-        {leftOpen && <div className="dock-resize left" onPointerDown={dragLeft} />}
+        <ChangesDock width={changesW} />
+        {changesOpen && <div className="dock-resize left" onPointerDown={dragChanges} />}
         <Center onRoot={setCenterEl} />
-        {rightOpen && <div className="dock-resize right" onPointerDown={dragRight} />}
+        {chatOpen && <div className="dock-resize right" onPointerDown={dragChat} />}
         {/* the centre shows the chat instead, and one composer at a time is the only kind there is */}
-        {!chatCentred && <RightDock width={rightW} />}
+        {!chatCentred && <ChatDock width={chatW} />}
         {!firstRun && <Rail />}
       </div>
       <SelfNotice />

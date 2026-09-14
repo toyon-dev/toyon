@@ -35,18 +35,18 @@ type Tab = "changes" | "history";
 type HistRow = { commit: CommitEntry; file?: GitFileStatus };
 
 /** the changes panel: the working tree over a commit box, or the branch's history */
-export function LeftDock({ width }: { width: number }) {
+export function ChangesDock({ width }: { width: number }) {
   const sock = useSock();
   const dispatch = useDispatch();
   const activeId = useActiveId();
   const active = useActive();
-  const leftOpen = useStore((s) => s.leftOpen);
+  const changesOpen = useStore((s) => s.changesOpen);
   // hidden, not closed, on a first-run screen: the layout remembers nothing of it and the panel is
   // back, as it was, with the first message. The same on an archived worktree's page, whose files
   // are gone: the changes here are the row's underneath
   const firstRun = useFirstRun();
   const archivedPage = useArchivedPage() !== null;
-  const focusReq = useStore((s) => s.focusLeft);
+  const focusReq = useStore((s) => s.focusChanges);
   const gitInfo = useLocalField(activeId, "git");
   // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
   const openPath = useStore((s) => (s.editor && s.editor.worktreeId === activeId ? s.editor.path : null));
@@ -308,7 +308,7 @@ export function LeftDock({ width }: { width: number }) {
   const noHover = useCallback(() => {}, []);
 
   return (
-    <div className={cx("left-dock", (!leftOpen || firstRun || archivedPage) && "collapsed")} style={{ width }}>
+    <div className={cx("changes-dock", (!changesOpen || firstRun || archivedPage) && "collapsed")} style={{ width }}>
       {/* the count is the working tree's: the committed section under it keeps its own title */}
       <Tabs<Tab>
         fill

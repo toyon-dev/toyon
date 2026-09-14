@@ -18,11 +18,11 @@ describe("navCluster", () => {
     expect(c.width).toBe(320 - 2 * NAV_GAP_PX);
     expect(c.left).toBe(300 + NAV_GAP_PX);
   });
-  test("a lead reaching past the left dock pushes it right, no further than it must", () => {
+  test("a lead reaching past the changes dock pushes it right, no further than it must", () => {
     const c = navCluster({ ...bar, leadRight: 260, centre: centre(192, 600) });
     expect(c.left).toBe(260 + NAV_GAP_PX);
   });
-  test("with the left dock closed the pill is still cleared", () => {
+  test("with the changes dock closed the pill is still cleared", () => {
     const c = navCluster({ ...bar, centre: centre(0, 400) });
     expect(c.left).toBeGreaterThanOrEqual(180 + NAV_GAP_PX);
   });

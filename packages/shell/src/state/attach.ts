@@ -95,7 +95,7 @@ export function addToChat(store: Store, taken: Taken | null) {
     );
     if (!waiting) attachText(store, boxId, taken.text, { source: taken.source });
   }
-  store.dispatch({ a: "focus-right" });
+  store.dispatch({ a: "focus-chat" });
 }
 
 /** the box a pick from frame `frameId` belongs in: main's frame while main drafts goes to the
@@ -138,5 +138,5 @@ export function attachPick(store: Store, frameId: string, picked: PickedElement)
   const waiting = (s.local[boxId]?.attachments ?? []).some((a) => a.kind === "pick" && a.selector === pick.selector);
   if (!waiting && roomIn(store, boxId, "pick") > 0)
     store.dispatch({ a: "attach", id: boxId, items: [{ kind: "pick", key: crypto.randomUUID(), ...pick }] });
-  store.dispatch({ a: "focus-right" });
+  store.dispatch({ a: "focus-chat" });
 }

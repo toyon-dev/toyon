@@ -181,7 +181,7 @@ export interface WorktreeLocal {
 }
 
 /** The new worktree being drafted: a tab in the rail for a worktree that does not exist yet, with
- * the base it will branch from. While it is open the base is the active row, so the left dock,
+ * the base it will branch from. While it is open the base is the active row, so the changes dock,
  * the terminal and ⌘1-9 keep meaning it; only the rail's mark, the centre frame and the chat dock
  * read this. Its text and attachments live in `local` under `draftKey(repoId)`. */
 /** the worktree main's box is about to start: open for as long as main is the row on screen */
@@ -304,26 +304,26 @@ const firstProject = () => newProjectState({ mode: "create", name: "", parent: `
  * comes back to it and switching projects carries each one's own back (zen is deliberately not in
  * here: it is a mode you leave, not a layout). */
 export interface Panels {
-  left: boolean;
-  right: boolean;
+  changes: boolean;
+  chat: boolean;
   term: boolean;
   design: boolean;
 }
 
 /** what a project that has never been laid out gets: the docks open, the panes shut */
-export const defaultPanels: Panels = Object.freeze({ left: true, right: true, term: false, design: false });
+export const defaultPanels: Panels = Object.freeze({ changes: true, chat: true, term: false, design: false });
 
 function panelsOf(s: State): Panels {
-  return { left: s.leftOpen, right: s.rightOpen, term: s.termOpen, design: s.designOpen };
+  return { changes: s.changesOpen, chat: s.chatOpen, term: s.termOpen, design: s.designOpen };
 }
 
 function samePanels(a: Panels, b: Panels): boolean {
-  return a.left === b.left && a.right === b.right && a.term === b.term && a.design === b.design;
+  return a.changes === b.changes && a.chat === b.chat && a.term === b.term && a.design === b.design;
 }
 
 function applyPanels(s: State, p: Panels): State {
   // a remembered layout is a decision, so the clean-main auto-close must not second-guess it
-  return { ...s, leftOpen: p.left, rightOpen: p.right, termOpen: p.term, designOpen: p.design, leftAuto: false };
+  return { ...s, changesOpen: p.changes, chatOpen: p.chat, termOpen: p.term, designOpen: p.design, changesAuto: false };
 }
 
 /** what the editor pane draws for its file: the diff against main, or the file with none over it */
@@ -463,14 +463,14 @@ export interface State {
   paletteReturn: { mode: "commands" | "quick-open" | "keys"; q: string } | null;
   /** the daemon speaks another protocol version than this build: stop, ask for a reload */
   incompatible: boolean;
-  leftOpen: boolean;
+  changesOpen: boolean;
   /** bumped to put the keyboard in the changes list; focus is the DOM's, so this only asks */
-  focusLeft: number;
+  focusChanges: number;
   /** bumped to put the suggested commit message in the changes panel's box and the caret after it */
   editCommit: number;
-  rightOpen: boolean;
+  chatOpen: boolean;
   /** bumped to put the keyboard in the composer, the same way */
-  focusRight: number;
+  focusChat: number;
   /** bumped when a keyboard walk lands on a row: the composer takes the caret only if nothing
    * better (an editor, a terminal, an ask card) holds it */
   walked: number;
@@ -488,7 +488,7 @@ export interface State {
   panels: Record<string, Panels>;
   /** one-shot: auto-close the changes panel if the session starts on a clean main, unless the
    * project already has a remembered layout */
-  leftAuto: boolean;
+  changesAuto: boolean;
   /** full-bleed preview: all chrome hidden */
   zen: boolean;
   /** the terminal pane under the preview (one per worktree; the shells keep running when hidden) */
@@ -623,18 +623,18 @@ export function initialState(opts: InitialOpts): State {
     overlay: null,
     paletteReturn: null,
     incompatible: false,
-    leftOpen: true,
-    focusLeft: 0,
+    changesOpen: true,
+    focusChanges: 0,
     editCommit: 0,
-    rightOpen: true,
-    focusRight: 0,
+    chatOpen: true,
+    focusChat: 0,
     walked: 0,
     railOpen: opts.storedRailOpen ?? false,
     focusRail: 0,
     railPeek: false,
     unreadHold: null,
     panels: opts.storedPanels ?? {},
-    leftAuto: true,
+    changesAuto: true,
     zen: false,
     termOpen: false,
     focusTerm: 0,
@@ -740,7 +740,7 @@ export function isChatCentred(s: Pick<State, "repos" | "activeRepoId">): boolean
 /** the chat is about to be written in, so its dock opens; a chat in the centre has no dock to open,
  * and writing one into the layout would leave the project's remembered panels holding it */
 function revealChat(s: State): State {
-  return s.rightOpen || isChatCentred(s) ? s : { ...s, rightOpen: true };
+  return s.chatOpen || isChatCentred(s) ? s : { ...s, chatOpen: true };
 }
 
 export function repoById(s: State, id: string | null | undefined): RepoInfo | null {
@@ -924,18 +924,18 @@ export type Action =
   | { a: "choosing-folder"; v: State["choosingFolder"] }
   | { a: "toggle"; overlay: Overlay }
   | { a: "palette-return"; v: State["paletteReturn"] }
-  | { a: "toggle-left" }
+  | { a: "toggle-changes" }
   /** open the changes panel if it is shut, and ask it for the keyboard either way */
-  | { a: "focus-left" }
+  | { a: "focus-changes" }
   /** open the changes panel on its message box, the suggested commit message in it, to edit */
   | { a: "edit-commit" }
-  | { a: "toggle-right" }
+  | { a: "toggle-chat" }
   /** open the chat panel if it is shut, and ask the composer for the keyboard either way */
-  | { a: "focus-right" }
+  | { a: "focus-chat" }
   /** a worktree walk landed on a row: offer the composer the keyboard, without opening anything */
   | { a: "walked" }
   /** the first greenfield message was sent: the chat goes back to its dock */
-  | { a: "show-right" }
+  | { a: "show-chat" }
   | { a: "toggle-rail" }
   /** pin the worktree panel if it is not, and ask its current row for the keyboard either way */
   | { a: "focus-rail" }
@@ -1045,7 +1045,7 @@ function reduce(s: State, action: Action): State {
       if (!main) return s;
       // the chat is where the draft is written, so it has to be on screen; a palette the chord was
       // pressed over would sit in front of it. The launcher rule in `reducer` makes the draft itself.
-      return revealChat({ ...activate(s, main), overlay: null, paletteReturn: null, focusRight: s.focusRight + 1 });
+      return revealChat({ ...activate(s, main), overlay: null, paletteReturn: null, focusChat: s.focusChat + 1 });
     }
     case "draft-carry":
       return s.draft ? { ...s, draft: { ...s.draft, carry: action.v } } : s;
@@ -1228,20 +1228,20 @@ function reduce(s: State, action: Action): State {
         : reducer(s, { a: "open", overlay: action.overlay });
     case "palette-return":
       return { ...s, paletteReturn: action.v };
-    case "toggle-left":
-      return { ...s, leftOpen: !s.leftOpen, leftAuto: false };
-    case "focus-left":
-      return { ...s, leftOpen: true, leftAuto: false, focusLeft: s.focusLeft + 1 };
+    case "toggle-changes":
+      return { ...s, changesOpen: !s.changesOpen, changesAuto: false };
+    case "focus-changes":
+      return { ...s, changesOpen: true, changesAuto: false, focusChanges: s.focusChanges + 1 };
     case "edit-commit":
-      return { ...s, leftOpen: true, leftAuto: false, editCommit: s.editCommit + 1 };
-    case "toggle-right":
+      return { ...s, changesOpen: true, changesAuto: false, editCommit: s.editCommit + 1 };
+    case "toggle-chat":
       // a chat in the centre has no dock to hide or show
-      return isChatCentred(s) ? s : { ...s, rightOpen: !s.rightOpen };
-    case "focus-right":
-      return { ...revealChat(s), focusRight: s.focusRight + 1 };
+      return isChatCentred(s) ? s : { ...s, chatOpen: !s.chatOpen };
+    case "focus-chat":
+      return { ...revealChat(s), focusChat: s.focusChat + 1 };
     case "walked":
       return { ...s, walked: s.walked + 1 };
-    case "show-right":
+    case "show-chat":
       return revealChat(s);
     case "hold-unread":
       return { ...s, unreadHold: action.id };
@@ -1566,14 +1566,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "git-status": {
       // session opened on a clean main: nothing to show — close the changes panel once
-      let leftOpen = s.leftOpen;
-      let leftAuto = s.leftAuto;
-      if (s.leftAuto && msg.worktreeId === s.activeId) {
+      let changesOpen = s.changesOpen;
+      let changesAuto = s.changesAuto;
+      if (s.changesAuto && msg.worktreeId === s.activeId) {
         const wt = worktreeById(s, msg.worktreeId);
         if (wt && isMain(wt.worktree) && msg.files.length === 0 && (msg.committed?.length ?? 0) === 0) {
-          leftOpen = false;
+          changesOpen = false;
         }
-        leftAuto = false;
+        changesAuto = false;
       }
       // ranges go stale whenever the worktree's git state moves
       const next = withLocal(s, msg.worktreeId, (l) => ({
@@ -1581,7 +1581,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         git: { files: msg.files, committed: msg.committed, ahead: msg.ahead, behind: msg.behind, head: msg.head },
         changedRanges: {},
       }));
-      return { ...next, leftOpen, leftAuto };
+      return { ...next, changesOpen, changesAuto };
     }
     case "changed-ranges": {
       const next = withLocal(s, msg.worktreeId, (l) => ({
@@ -1640,7 +1640,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
           seq: msg.seq,
         },
       });
-      return opened.leftOpen ? opened : reducer(opened, { a: "toggle-left" });
+      return opened.changesOpen ? opened : reducer(opened, { a: "toggle-changes" });
     }
     case "design-index":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, design: msg.index }));

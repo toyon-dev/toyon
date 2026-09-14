@@ -49,8 +49,8 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   // chat is the centre rather than a panel to toggle
   const chatCentred = useChatCentred();
   const zen = useStore((s) => s.zen) && !chatCentred;
-  const leftOpen = useStore((s) => s.leftOpen);
-  const rightOpen = useStore((s) => s.rightOpen);
+  const changesOpen = useStore((s) => s.changesOpen);
+  const chatOpen = useStore((s) => s.chatOpen);
   const firstRun = useFirstRun();
   const designOpen = useStore((s) => s.designOpen);
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
@@ -70,10 +70,10 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
           <IconButton
             icon="branch"
             label="Changes panel"
-            hint={chord("left")}
+            hint={chord("changes")}
             tone="chrome"
-            on={leftOpen}
-            onClick={() => dispatch({ a: "toggle-left" })}
+            on={changesOpen}
+            onClick={() => dispatch({ a: "toggle-changes" })}
           />
         )}
         <ProjectPill />
@@ -120,8 +120,8 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
             label="Chat panel"
             hint={chord("composer")}
             tone="chrome"
-            on={rightOpen}
-            onClick={() => dispatch({ a: "toggle-right" })}
+            on={chatOpen}
+            onClick={() => dispatch({ a: "toggle-chat" })}
           />
         )}
         {/* the one control the installed app's zen strip keeps: the strip is the window's title bar

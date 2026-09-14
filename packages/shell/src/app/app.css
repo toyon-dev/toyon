@@ -11,8 +11,8 @@
     /* zen: full-bleed preview, all chrome hidden (⌘. exits; esc belongs to the page). The panes
        stacked under the preview (editor, design, terminal) are chrome too: hidden, not closed, so
        they are back where they were on the way out. */
-    &.zen .left-dock,
-    &.zen .right-dock,
+    &.zen .changes-dock,
+    &.zen .chat-dock,
     &.zen .rail,
     &.zen .dock-resize,
     &.zen .pane {

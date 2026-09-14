@@ -1,8 +1,8 @@
 /* The changes panel: file rows, the history, the commit box. */
 @layer tokens, base, surfaces;
 @layer surfaces {
-  /* ---- left dock ---- */
-  .left-dock {
+  /* ---- changes dock ---- */
+  .changes-dock {
     width: 220px;
     /* gives when the row is short, down to the row's floor (app.css, .docks) */
     flex: 0 1 auto;
@@ -30,8 +30,8 @@
      around the column as well would be two answers to one question */
     outline: none;
   }
-  .left-dock.collapsed,
-  .right-dock.collapsed {
+  .changes-dock.collapsed,
+  .chat-dock.collapsed {
     display: none;
   }
 

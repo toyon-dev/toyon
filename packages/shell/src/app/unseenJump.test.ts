@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { unseenJump } from "./unseenJump.ts";
 
-/** 1 is a turn nobody has looked at, "w" an agent waiting on an answer */
-const rows = (...flags: (0 | 1 | "w")[]) =>
-  flags.map((f, i) => ({ id: `w${i}`, unseen: f === 1, agent: f === "w" ? "waiting" : "idle" }));
+/** 1 is a turn nobody has looked at, "w" an agent waiting on an answer, "r" one still running */
+const rows = (...flags: (0 | 1 | "w" | "r")[]) =>
+  flags.map((f, i) => ({
+    id: `w${i}`,
+    unseen: f === 1,
+    agent: f === "w" ? "waiting" : f === "r" ? "working" : "idle",
+  }));
 
 describe("unseenJump", () => {
   test("nearest unseen in the direction pressed", () => {
@@ -52,6 +56,23 @@ describe("unseenJump", () => {
   test("once the only waiting row is on screen, unseen ones are next", () => {
     const r = rows(1, "w", 0);
     expect(unseenJump(r, "w1", false, 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w1", false, -1)).toEqual({ activate: "w0" });
+  });
+  test("a finished turn outranks a nearer running one", () => {
+    const r = rows(1, "r", 0, "r");
+    expect(unseenJump(r, "w2", false, 1)).toEqual({ activate: "w0" });
+    expect(unseenJump(r, "w2", false, -1)).toEqual({ activate: "w0" });
+  });
+  test("with nothing waiting or unseen, running rows take turns", () => {
+    const r = rows("r", 0, "r", 0);
+    expect(unseenJump(r, "w1", false, 1)).toEqual({ activate: "w2" });
+    expect(unseenJump(r, "w1", false, -1)).toEqual({ activate: "w0" });
+    // wraps the way the other tiers do
+    expect(unseenJump(r, "w3", false, 1)).toEqual({ activate: "w0" });
+  });
+  test("the running row on screen is not the answer, so the walk's end still is", () => {
+    const r = rows(0, "r", 0);
+    expect(unseenJump(r, "w1", false, 1)).toEqual({ draft: true });
     expect(unseenJump(r, "w1", false, -1)).toEqual({ activate: "w0" });
   });
 });

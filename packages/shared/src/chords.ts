@@ -124,8 +124,9 @@ export const CHORDS: readonly Chord[] = [
   },
   { id: "wt-next", key: "ArrowDown", alt: true, ctrlAlias: { key: "Tab" }, cmdShiftAlias: ["]", "}"] },
   // ⌥⇧↑/↓ is Slack's next-unread: the nearest worktree whose agent is waiting on you, else the
-  // nearest with a turn nobody has looked at, and the walk's end (main, the draft) when there is
-  // neither. Down is on the shortcuts card; up is for the hand that already knows it.
+  // nearest with a turn nobody has looked at, else the nearest still working, and the walk's end
+  // (main, the draft) when the rail is quiet. Down is on the shortcuts card; up is for the hand
+  // that already knows it.
   { id: "wt-unseen-prev", key: "ArrowUp", alt: true, shift: true },
   { id: "wt-unseen-next", key: "ArrowDown", alt: true, shift: true },
   // ⌘⇧U is Mail's mark-as-unread: the ring goes back on the worktree on screen, to come back to.

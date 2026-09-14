@@ -5,6 +5,7 @@ import type { ArchivedWorktree, OwnedWorktree, RepoInfo, WorktreeStatus } from "
 import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
 import {
+  archivedPageOf,
   asksSetup,
   currentTheme,
   draftSpareOf,
@@ -56,6 +57,9 @@ export const useVisibleArchived = (): ArchivedWorktree[] =>
 /** has the archived section been opened in this project (collapsed by default) */
 export const useArchivedOpen = (): boolean =>
   useStore((s) => (s.activeRepoId ? (s.archivedOpen[s.activeRepoId] ?? false) : false));
+
+/** the archived worktree whose page the centre shows (an element of the list, so its identity holds) */
+export const useArchivedPage = (): ArchivedWorktree | null => useStore(archivedPageOf);
 
 /** the project the shell is scoped to (an element of the repos array, so its identity is stable) */
 export const useActiveRepo = (): RepoInfo | null => useStore((s) => repoById(s, s.activeRepoId));

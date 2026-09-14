@@ -51,7 +51,9 @@ export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number })
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
   const id = active?.worktree.id ?? null;
-  const ready = !!active && previewUp(active);
+  // an archived worktree's page covers the preview, so the route cluster has no page to steer
+  const archivedPage = useStore((s) => s.archivedPage !== null);
+  const ready = !!active && previewUp(active) && !archivedPage;
   return (
     <div className="top-bar">
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "Toyon"}</span>}

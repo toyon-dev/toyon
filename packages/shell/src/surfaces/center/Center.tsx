@@ -11,6 +11,7 @@ import {
   useActiveId,
   useActiveRepoNeedingSetup,
   useActiveRow,
+  useArchivedPage,
   useChatCentred,
   useDraftSpare,
   useFirstRun,
@@ -39,6 +40,7 @@ import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, isBusy, previewUrl, relFile, wtDir } from "../util.ts";
+import { Archived } from "./Archived.tsx";
 import { Boot } from "./Boot.tsx";
 import { Discovered } from "./Discovered.tsx";
 import { Greenfield } from "./Greenfield.tsx";
@@ -264,6 +266,10 @@ export function Center() {
   // a worktree toyon did not make: its own pane, and a shell in the terminal below it
   const activeRow = useActiveRow();
   const activeDiscovered = activeRow && !isOwned(activeRow) ? activeRow : null;
+  // a removed worktree's page: over the row underneath, with the panes that are that row's hidden
+  // the way the docks are (App.tsx), since a shell or a file of another worktree under this page
+  // would read as this one's
+  const archivedPage = useArchivedPage();
   // the frame mounts once a server answers; until then the boot pane shows what the procs are
   // doing, because the proxy's placeholder cannot tell compiling from crashed from the wrong port
   const activeReady = !!active && active.procs.some((p) => p.status === "running");
@@ -402,11 +408,13 @@ export function Center() {
                   onClose={forcedSetup ? undefined : () => dispatch({ a: "close" })}
                 />
               )}
-              {activeDiscovered && !setupRepo && !watching && <Discovered row={activeDiscovered} />}
+              {activeDiscovered && !setupRepo && !watching && !archivedPage && <Discovered row={activeDiscovered} />}
+              {archivedPage && !setupRepo && !watching && <Archived key={archivedPage.id} item={archivedPage} />}
               {/* a stale build is the same card wherever it is noticed: here, or a chunk that failed to load */}
               {!activeReady &&
                 !draftSpare &&
                 !activeDiscovered &&
+                !archivedPage &&
                 !setupRepo &&
                 !watching &&
                 !greenfield &&
@@ -424,6 +432,7 @@ export function Center() {
               {!activeReady &&
                 !draftSpare &&
                 !activeDiscovered &&
+                !archivedPage &&
                 !setupRepo &&
                 !watching &&
                 !greenfield &&
@@ -454,7 +463,7 @@ export function Center() {
       {/* the panes remount per worktree, and they are siblings in one children array: a key both
           share is a duplicate key to React, which then paints a second copy of one on an update
           (the design pane, on the first pointer move of its resize) that no close removes */}
-      {designOpen && activeId && (
+      {designOpen && activeId && !archivedPage && (
         <DesignPane
           key={`design:${activeId}`}
           worktreeId={activeId}
@@ -464,7 +473,7 @@ export function Center() {
           onDragStart={startDesignDrag}
         />
       )}
-      {termOpen && activeId && (
+      {termOpen && activeId && !archivedPage && (
         <TerminalPane
           key={`term:${activeId}`}
           worktreeId={activeId}

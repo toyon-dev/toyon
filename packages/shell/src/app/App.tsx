@@ -8,6 +8,7 @@ import {
   useActive,
   useActiveId,
   useActiveRow,
+  useArchivedPage,
   useChatCentred,
   useFirstRun,
   useRows,
@@ -69,8 +70,11 @@ export function App() {
   // centre of an empty project. So is the rail: on the page it lists a project that is not the one
   // being made, and on an empty project its only row is main, already open, with no new worktree to
   // offer, since one off the root commit would take the scaffold to a branch while main stayed blank.
-  const leftOpen = useStore((s) => s.leftOpen) && !firstRun;
-  const rightOpen = useStore((s) => s.rightOpen) && !firstRun && !chatCentred;
+  // The same on an archived worktree's page: the docks would show the changes and the chat of the
+  // row underneath, beside a page about a worktree whose chat is with the daemon until it comes back.
+  const archivedPage = useArchivedPage();
+  const leftOpen = useStore((s) => s.leftOpen) && !firstRun && !archivedPage;
+  const rightOpen = useStore((s) => s.rightOpen) && !firstRun && !chatCentred && !archivedPage;
   const railOpen = useStore((s) => s.railOpen);
   const panels = useStore((s) => s.panels);
   const lastActive = useStore((s) => s.lastActive);
@@ -111,9 +115,10 @@ export function App() {
     subsRef.current = subsRef.current.filter((id) => alive.has(id));
   }, [rows]);
 
+  const pageName = archivedPage?.title ?? activeRow?.name ?? null;
   useEffect(() => {
-    document.title = activeRow ? `${activeRow.name} · Toyon` : "Toyon";
-  }, [activeRow]);
+    document.title = pageName ? `${pageName} · Toyon` : "Toyon";
+  }, [pageName]);
 
   // Looking at a worktree clears the rail's unseen ring: whichever way you got here (a rail click,
   // ⌘1-9, the palette), you are looking at it now. Looking takes a moment, not an instant, so a

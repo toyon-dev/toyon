@@ -204,6 +204,8 @@ export function useChords() {
         // the draft tab: back to the row it was from. What was typed stays in its record, so the
         // next open picks it up rather than starting over.
         else if (s.draft) dispatch({ a: "close-draft" });
+        // an archived worktree's page: back to the row it is over
+        else if (s.archivedPage) dispatch({ a: "close-archived" });
         // an import pane: stop watching it. Escape deliberately does NOT abort the clone, which
         // keeps running and stays in the switcher: it is a key people hit reflexively, and losing
         // a five-minute download to one is not a trade worth making. Stopping it is the button.

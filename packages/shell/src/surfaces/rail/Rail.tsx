@@ -7,7 +7,7 @@ import {
   type WorktreeStatus,
 } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
-import { archivedHint, archivedItems, restoreArchived } from "../../state/actions/archive.ts";
+import { archivedHint, archivedItems } from "../../state/actions/archive.ts";
 import {
   discoveredItems,
   removeWorktrees,
@@ -21,6 +21,7 @@ import { sentAt } from "../../state/railOrder.ts";
 import {
   useActiveId,
   useArchivedOpen,
+  useArchivedPage,
   useDiscoveredOpen,
   useOffline,
   useVisibleArchived,
@@ -69,6 +70,8 @@ export function Rail() {
   const discOpen = useDiscoveredOpen();
   const archived = useVisibleArchived();
   const archOpen = useArchivedOpen();
+  // an archived worktree's page is up: its row is the marked one, over the active row underneath
+  const archivedPage = useArchivedPage();
   const clientId = useStore((s) => s.clientId);
   const activeRepoId = useStore((s) => s.activeRepoId);
   const connected = useStore((s) => s.connected);
@@ -190,8 +193,10 @@ export function Rail() {
   );
 
   /** A removed worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
-   * row and has no dot; the gutter says how long ago it was archived. A click brings it back, which
-   * is the one thing it is for, and its menu (the kebab or a right-click) has the rest. */
+   * row and has no dot; the gutter says how long ago it was archived. A click opens its page in the
+   * centre, the way a found row's does, and the restore button is there: a row that restored on
+   * its own click was too easy to hit on the way past. Its menu (the kebab or a right-click) has
+   * restore too, with the rest. */
   const archivedRow = (a: ArchivedWorktree) => (
     <button
       key={a.id}
@@ -200,13 +205,9 @@ export function Rail() {
         "row row-edge row-quiet rail-disc-item",
         menu?.owner === "rail" && menu.key === a.id && "menu-open",
       )}
-      {...tip(a.restorable ? "Restore" : "Its commits were not kept", undefined, {
-        placement: "left",
-        detail: archivedHint(a),
-      })}
-      onClick={() => {
-        if (a.restorable) restoreArchived(sock, a.id, clientId);
-      }}
+      data-state={rowState({ current: archivedPage?.id === a.id })}
+      {...tip(a.branch, undefined, { placement: "left", detail: archivedHint(a) })}
+      onClick={() => dispatch({ a: "open-archived", id: a.id })}
       {...cm.contextMenu(() => archivedItems(a, clientId, deps), a.id)}
     >
       <span className="rail-gut">
@@ -256,8 +257,9 @@ export function Rail() {
         type="button"
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
         // while a worktree is being drafted the draft's row is the selected one, and the base it
-        // branches from stays the active id underneath without reading as picked
-        data-state={rowState({ current: id === activeId && !draftOpen, checked: sel.includes(id) })}
+        // branches from stays the active id underneath without reading as picked; an archived
+        // worktree's page marks its own row the same way
+        data-state={rowState({ current: id === activeId && !draftOpen && !archivedPage, checked: sel.includes(id) })}
         // one tip per row, on the row: the dot's state in words with the dot restated beside it,
         // since the real one is at the far end of the row from where the tip sits, and where the
         // worktree is on the line under. A tip per element would swap fifty times as the mouse

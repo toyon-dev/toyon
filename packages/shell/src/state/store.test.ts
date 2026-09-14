@@ -1411,6 +1411,65 @@ describe("discovered worktrees", () => {
   });
 });
 
+// An archived worktree has no row to select, so its page is a tab over the active row, like the
+// draft: the rail marks it, the centre shows what was kept and the restore button, and the row
+// underneath keeps its place until something else is chosen.
+describe("an archived worktree's page", () => {
+  const archived = (repoId: string, ...ids: string[]): Action =>
+    server({
+      t: "archived",
+      repoId,
+      items: ids.map((id) => ({
+        id,
+        repoId,
+        title: id,
+        branch: `toyon/${id}`,
+        createdAt: 0,
+        archivedAt: 0,
+        restorable: true,
+      })),
+    });
+  const listed = () => run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }, archived("r", "x", "y")]);
+
+  test("opens over the active row and leaves it in place", () => {
+    const s = run([{ a: "open-archived", id: "x" }], listed());
+    expect(s.archivedPage).toBe("x");
+    expect(s.activeId).toBe("a");
+    // the page covers the preview, so nothing steers or picks from it
+    expect(previewIdOf(s)).toBeNull();
+    expect(routeTarget(s)).toBeNull();
+    // opened over a draft, it takes the draft's place
+    expect(run([{ a: "open-draft" }, { a: "open-archived", id: "x" }], listed()).draft).toBeNull();
+  });
+
+  test("only for an item the project on screen lists", () => {
+    expect(run([{ a: "open-archived", id: "nope" }], listed()).archivedPage).toBeNull();
+  });
+
+  test("choosing a row closes it, and so does escape's close", () => {
+    const s = run([{ a: "open-archived", id: "x" }], listed());
+    expect(run([{ a: "activate", id: "main" }], s).archivedPage).toBeNull();
+    expect(run([{ a: "open-draft" }], s).archivedPage).toBeNull();
+    expect(run([{ a: "close-archived" }], s).archivedPage).toBeNull();
+    expect(previewIdOf(run([{ a: "close-archived" }], s))).toBe("a");
+  });
+
+  test("a frame that keeps the selection keeps the page", () => {
+    const s = run([{ a: "open-archived", id: "x" }], listed());
+    expect(run([worktrees(wt("main", "main"), wt("a"))], s).archivedPage).toBe("x");
+    expect(run([archived("r", "x", "y")], s).archivedPage).toBe("x");
+  });
+
+  test("the item leaving the list ends it: restored or deleted", () => {
+    const s = run([{ a: "open-archived", id: "x" }], listed());
+    expect(run([archived("r", "y")], s).archivedPage).toBeNull();
+    // the restored worktree this tab asked for is the row to look at now
+    const back = run([worktrees(wt("main", "main"), wt("a"), wt("x", "worktree", ME))], s);
+    expect(back.archivedPage).toBeNull();
+    expect(back.activeId).toBe("x");
+  });
+});
+
 // The rail sorts `visible` (railOrder.ts has the rules); `rows` stays as the daemon sent it, since
 // the preview frames are keyed in that order and one moved in the DOM reloads.
 // Marking the row on screen unread would be undone by the moment of looking that clears rings, so

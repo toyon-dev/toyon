@@ -422,6 +422,12 @@ export interface State {
   refs: Record<string, { query: string; refs: RefHit[] }>;
   /** per repo: its archived worktrees, newest first; absent until the rail or the archive picker asks */
   archived: Record<string, ArchivedWorktree[]>;
+  /** the archived worktree whose page the centre shows, by archive id. Like the draft it is a tab
+   * over the active row rather than a selection: an archived worktree has no row to select, and
+   * the row underneath keeps its place. Its page holds the restore button, so a click on the rail
+   * shows what was kept before anything is brought back. Selecting a row closes it, and so does
+   * the item leaving the list, which is what a restore or a delete does. */
+  archivedPage: string | null;
   /** the worktree last selected in each repo: switching back to a project lands where you left it.
    * Persisted (App.tsx), so it survives a reload the same way the panel layout does. */
   lastActive: Record<string, string>;
@@ -583,6 +589,7 @@ export function initialState(opts: InitialOpts): State {
     archivedOpen: opts.storedArchivedOpen ?? {},
     refs: {},
     archived: {},
+    archivedPage: null,
     lastActive: opts.storedLastActive ?? {},
     pendingOpen: false,
     activeId: null,
@@ -745,6 +752,8 @@ export function draftSpareOf(s: State): SpareInfo | null {
  * page context follow this one, not `activeId`. */
 export function previewIdOf(s: State): string | null {
   if (isChatCentred(s)) return null;
+  // an archived worktree's page covers the preview: what is on screen has no page to pick from
+  if (s.archivedPage) return null;
   if (!s.draft) return s.activeId;
   return draftSpareOf(s)?.id ?? s.draft.base;
 }
@@ -757,6 +766,7 @@ export function previewUp(wt: OwnedWorktree): boolean {
 /** where the address bar, ⌘G and ⌘P's `/` send a path: the active worktree's preview, while it is up.
  * A fresh object each call, so a selector reads one field of it and never the whole. */
 export function routeTarget(s: State): { worktreeId: string; repoId: string } | null {
+  if (s.archivedPage) return null;
   const wt = worktreeById(s, s.activeId);
   return wt && previewUp(wt) ? { worktreeId: wt.worktree.id, repoId: wt.repoId } : null;
 }
@@ -815,9 +825,16 @@ function activate(s: State, id: string | null): State {
   const leaving = s.activeId !== id ? s.activeId : null;
   const was = leaving ? s.local[leaving] : undefined;
   const local = leaving && was?.recapFor !== undefined ? { ...s.local, [leaving]: withoutRecap(was) } : s.local;
-  // choosing a row is leaving the draft, the base's own row included: a snapshot that only
-  // re-asserts the selection puts the draft back itself (see the worktrees frame)
-  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, draft: null, local };
+  // choosing a row is leaving the draft, the base's own row included, and leaving an archived
+  // worktree's page: a snapshot that only re-asserts the selection puts both back itself (see
+  // the worktrees frame)
+  return { ...s, activeId: id, activeRepoId, lastActive, editor: null, draft: null, archivedPage: null, local };
+}
+
+/** the archived worktree whose page is up, if its project is the one on screen and it is still listed */
+export function archivedPageOf(s: State): ArchivedWorktree | null {
+  if (!s.archivedPage || !s.activeRepoId) return null;
+  return s.archived[s.activeRepoId]?.find((a) => a.id === s.archivedPage) ?? null;
 }
 
 function withoutRecap({ recapFor: _recapFor, ...l }: WorktreeLocal): WorktreeLocal {
@@ -858,6 +875,9 @@ export type Action =
   | { a: "draft-batch"; v: boolean }
   | { a: "draft-agent"; id: string }
   | { a: "draft-profile"; profile: string }
+  /** show an archived worktree's page in the centre: what was kept, and the restore button */
+  | { a: "open-archived"; id: string }
+  | { a: "close-archived" }
   /** switch the shell to another registered repo */
   | { a: "activate-repo"; id: string }
   /** remove-worktree frames went out for these: hide the rows now, move the selection off them */
@@ -970,6 +990,9 @@ export function reducer(s: State, action: Action): State {
   let next = reduce(s, action);
   // a hold is only for the row it was made on: selecting anything else, however it happened, ends it
   if (next.unreadHold !== null && next.activeId !== next.unreadHold) next = { ...next, unreadHold: null };
+  // the page is for an item in the project on screen: the item restored or deleted, or the project
+  // switched under it, and it is gone. Checked here, so every list refresh and repo move counts.
+  if (next.archivedPage !== null && archivedPageOf(next) === null) next = { ...next, archivedPage: null };
   // every open/close routes through here, so the layout is remembered in one place rather than in
   // the dozen actions (a chord, a rail click, a dropped file) that move it
   if (next.activeRepoId !== s.activeRepoId) next = enterRepo(next);
@@ -1022,6 +1045,14 @@ function reduce(s: State, action: Action): State {
       return s.draft ? { ...s, draft: { ...s.draft, agent: action.id } } : s;
     case "draft-profile":
       return s.draft ? { ...s, draft: { ...s.draft, profile: action.profile } } : s;
+    case "open-archived": {
+      if (!s.activeRepoId || !s.archived[s.activeRepoId]?.some((a) => a.id === action.id)) return s;
+      // a page over the row underneath: the file open there and a draft both belong to what was
+      // on screen, and neither is what the page is about
+      return { ...s, archivedPage: action.id, editor: null, draft: null };
+    }
+    case "close-archived":
+      return s.archivedPage ? { ...s, archivedPage: null } : s;
     case "remove-worktrees": {
       const ids = action.ids.filter((id) => !s.removing.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;
@@ -1458,6 +1489,9 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // selection chose nothing: status reads push one whenever a count moves, and one landing
         // between a file opening and its read closed the pane under the person who opened it
         editor: activeId === s.activeId ? s.editor : null,
+        // the archived page stays up through a frame for the same reason; a worktree this tab just
+        // made is the one it restored, and that row is what to look at now
+        archivedPage: fresh ? null : s.archivedPage,
       });
     }
     case "proc": {

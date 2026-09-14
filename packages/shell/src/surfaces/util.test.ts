@@ -49,6 +49,16 @@ describe("stateLabel", () => {
     expect(stateLabel(status("idle", proc("web", "running")))).toBe("Running");
   });
 
+  test("a failed turn outranks a running server, after the process is gone too", () => {
+    expect(stateLabel(status("error", proc("web", "running")))).toBe("Agent failed");
+    const failed = {
+      ...status("idle", proc("web", "running")),
+      worktree: { kind: "worktree", lastTurn: { at: 1, end: "failed", facts: { turns: 1, edits: 0, toolErrors: 0 } } },
+    } as unknown as WorktreeStatus;
+    expect(stateLabel(failed)).toBe("Agent failed");
+    expect(stateLabel({ ...failed, agent: "working" })).toBe("Agent working");
+  });
+
   test("idle on a repo with no confirmed config says why nothing runs", () => {
     expect(stateLabel(status("idle"))).toBe("Idle");
     expect(stateLabel(status("idle"), true)).toBe("Not set up");

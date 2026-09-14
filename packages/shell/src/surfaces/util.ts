@@ -64,12 +64,16 @@ export function isBusy(w: WorktreeStatus): boolean {
   return w.agent === "working" || w.agent === "waiting";
 }
 
-export type DotState = "waiting" | "working" | "landed" | "crashed" | "running" | "starting" | "idle";
+export type DotState = "waiting" | "working" | "failed" | "landed" | "crashed" | "running" | "starting" | "idle";
 
 export function dotClass(w: WorktreeStatus): DotState {
   // a worktree that needs you outranks one that is merely busy
   if (w.agent === "waiting") return "waiting";
   if (w.agent === "working") return "working";
+  // a turn that stopped on an error needs a person until the next one starts. The record outlives
+  // the process and the daemon, which only the status does not; without it a server still running
+  // underneath paints the row green, the colour of work going fine.
+  if (w.agent === "error" || w.worktree?.lastTurn?.end === "failed") return "failed";
   if (w.worktree?.landed) return "landed";
   // unreachable wears the crashed colour: alive, but nothing to show, and it needs a person
   if (w.procs.some((p) => p.status === "crashed" || p.status === "unreachable")) return "crashed";
@@ -81,6 +85,7 @@ export function dotClass(w: WorktreeStatus): DotState {
 const DOT_LABEL: Record<DotState, string> = {
   waiting: "Waiting for you",
   working: "Agent working",
+  failed: "Agent failed",
   landed: "Landed",
   crashed: "Crashed",
   running: "Running",

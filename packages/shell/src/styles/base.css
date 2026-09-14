@@ -207,6 +207,11 @@
     &.crashed {
       background: var(--red);
     }
+    /* the agent's turn ended on an error: broken and waiting on a person, as a crash is, so it takes
+   the crash's red rather than a colour the rail would have to teach. The tip tells the two apart. */
+    &.failed {
+      background: var(--red);
+    }
     &.idle {
       background: var(--surface2);
     }

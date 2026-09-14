@@ -14,7 +14,7 @@ import {
 } from "../../state/selectors.ts";
 import { previewUp } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
-import { useOnChange, useWindowWidth } from "../../ui/hooks.ts";
+import { useEdges, useEdgesOf, useOnChange, useWindowWidth } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -22,16 +22,21 @@ import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
 import { chord, isInstalledApp } from "../util.ts";
 import "./topbar.css";
 import { Field } from "../../ui/Field.tsx";
+import { navCluster } from "./navCluster.ts";
 import { RoutePicker } from "./RoutePicker.tsx";
 import { pathOf } from "./routePicker.ts";
 
 /** the top bar: dock toggles, the route centered over the preview, tools (proc health badges the
  * composer's terminal button; a dead socket colours the worktree rail) */
-/** `leftPx`/`rightPx`: the dock columns' widths, so the nav cluster can sit over the centre */
-export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number }) {
-  // the nav cluster stays centred over the centre; only this surface re-renders on resize
+/** `center`: the centre column's element, so the nav cluster can sit over it */
+export function TopBar({ center }: { center: HTMLDivElement | null }) {
+  // the nav cluster stays centred over the centre as drawn, clear of the bar's own lead and tools;
+  // only this surface re-renders when any of the three moves
   const winW = useWindowWidth();
-  const navCenter = leftPx + (winW - leftPx - rightPx) / 2;
+  const centre = useEdgesOf(center);
+  const [leadRef, lead] = useEdges<HTMLSpanElement>();
+  const [toolsRef, tools] = useEdges<HTMLSpanElement>();
+  const nav = navCluster({ winW, centre, leadRight: lead.right, toolsLeft: tools.left });
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
@@ -59,28 +64,33 @@ export function TopBar({ leftPx, rightPx }: { leftPx: number; rightPx: number })
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "Toyon"}</span>}
       {/* the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
           disabled button still lights and explains itself on hover as if it might do something */}
-      {!firstRun && (
-        <IconButton
-          icon="branch"
-          label="Changes panel"
-          hint={chord("left")}
-          tone="chrome"
-          on={leftOpen}
-          onClick={() => dispatch({ a: "toggle-left" })}
-        />
-      )}
-      <ProjectPill />
-      {!chatCentred && <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={navCenter} />}
-      {/* an action, not a switch: chrome's seat is for a toggle */}
-      {installEvt && (
-        <Button data-tip="Install Toyon as an app (own window, dock icon)" onClick={() => void installEvt.prompt()}>
-          <Icon name="download" className="icon-inline" /> install app
-        </Button>
+      {/* the lead: what stands at the bar's start in flow, measured so the cluster clears it */}
+      <span className="bar-lead" ref={leadRef}>
+        {!firstRun && (
+          <IconButton
+            icon="branch"
+            label="Changes panel"
+            hint={chord("left")}
+            tone="chrome"
+            on={leftOpen}
+            onClick={() => dispatch({ a: "toggle-left" })}
+          />
+        )}
+        <ProjectPill />
+        {/* an action, not a switch: chrome's seat is for a toggle */}
+        {installEvt && (
+          <Button data-tip="Install Toyon as an app (own window, dock icon)" onClick={() => void installEvt.prompt()}>
+            <Icon name="download" className="icon-inline" /> install app
+          </Button>
+        )}
+      </span>
+      {!chatCentred && (
+        <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
       )}
       <span className="bar-grow" />
       {/* right cluster: settings · chat · zen (zen last — it hides everything, so it sits at the edge).
           the terminal toggle lives in the composer: one shell per worktree, not app chrome. */}
-      <span className="bar-tools">
+      <span className="bar-tools" ref={toolsRef}>
         <IconButton
           icon="settings"
           label="Settings & shortcuts"
@@ -194,11 +204,13 @@ function RouteBar({
   repoId,
   ready,
   left,
+  width,
 }: {
   worktreeId: string | null;
   repoId: string | null;
   ready: boolean;
   left: number;
+  width: number;
 }) {
   const url = useLocalField(id, "page").url;
   const path = pathOf(url);
@@ -225,7 +237,7 @@ function RouteBar({
   // at the end declines it too, for its own reason: it is a mode, lit in the accent like the
   // composer's picker, so the two read as one family whichever is armed
   return (
-    <div className="bar-center" style={{ left }}>
+    <div className="bar-center" style={{ left, width }}>
       <IconButton
         icon="back"
         label="Back"

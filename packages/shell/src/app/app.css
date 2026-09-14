@@ -22,9 +22,17 @@
   /* The top bar in zen is topbar.css's: hidden there, except in the installed app, where it is the
      window's own title bar and keeps a bare title strip. */
 
+  /* The row fits the window it is in, not the one its widths were dragged in: the installed app
+     opens at the size its own window last had. Each dock's width is its basis and it gives from
+     there when the row is short, in proportion, down to its floor; the centre keeps its basis and
+     never gives. The widths themselves are left alone, so a window that grows hands them back. */
   .docks {
     display: flex;
     min-height: 0;
+    /* a grid item's automatic minimum is its content's width, and this row's content is the docks
+       at the widths they were set: without this the column grows to hold them and the give below
+       never happens */
+    min-width: 0;
     /* the docks layer their own children: a grab strip over the seam it sits on, and the rail's
        peek over the dock beside it. Neither reaches past this row. */
     isolation: isolate;

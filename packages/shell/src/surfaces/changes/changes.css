@@ -4,7 +4,9 @@
   /* ---- left dock ---- */
   .left-dock {
     width: 220px;
-    flex-shrink: 0;
+    /* gives when the row is short (app.css, .docks); 170 is clampW's floor, the least a list reads at */
+    flex: 0 1 auto;
+    min-width: 170px;
     background: var(--surface1);
     /* the panel's two lists are alternatives, so they take the shared strip; its open tab is
      painted in this ground so it joins the list under it, and the strip is the recess under it */

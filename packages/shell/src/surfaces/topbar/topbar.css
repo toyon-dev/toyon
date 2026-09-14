@@ -136,20 +136,26 @@
     pointer-events: none;
     color: var(--text2);
   }
-  /* Safari-style: nav+path anchored to the window center — never moves when
-   docks collapse/resize (chrome that shifts underfoot reads as breakage) */
+  /* Safari-style: nav+path anchored over the centre, out of the bar's flow. The bar sets `left`
+   and `width` (navCluster.ts): centred over the preview, and held off the lead and the tools when
+   the centre runs under them. Placed by `left` alone rather than a translateX: a transform makes
+   the cluster a stacking context, so the route list's rung would count only inside it, and the
+   rung the cluster then needs ties with the project panel beside it and paints the address over
+   that panel. Without one, both lists stand on the same ladder. */
   .bar-center {
     position: absolute;
     display: flex;
     align-items: center;
     gap: 4px;
-    width: min(520px, 40vw);
-    /* centred on `left` by half its width in margin rather than translateX(-50%): a transform makes
-     the cluster a stacking context, so the route list's rung would count only inside it, and the
-     rung the cluster then needs ties with the project panel beside it and paints the address over
-     that panel. Without one, both lists stand on the same ladder. */
-    margin-left: calc(min(520px, 40vw) / -2);
     transition: left 0.15s ease;
+  }
+  /* the toggle, the pill and the install offer, in one box so the bar can measure where they end */
+  .bar-lead {
+    display: flex;
+    align-items: center;
+    gap: inherit;
+    /* a name longer than the bar has room for gives way before the cluster does */
+    min-width: 0;
   }
   /* while a dock is being dragged the centre tracks the pointer, and easing there reads as lag */
   body.resizing .bar-center {

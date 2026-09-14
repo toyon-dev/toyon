@@ -1,4 +1,12 @@
-import { type EffectCallback, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type EffectCallback,
+  type RefCallback,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 /** Focus on mount — a chord may arrive while the preview iframe or Monaco holds focus, and
  * autoFocus alone loses that race, so take it explicitly on the next frame too. `select` also
@@ -137,4 +145,36 @@ export function useOnChange(deps: readonly unknown[], fn: EffectCallback) {
   latest.current = fn;
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on `deps` by design, see above
   useEffect(() => latest.current(), deps);
+}
+
+/** An element's left and right edges in the window, live: re-read when the element's size changes
+ * and when the window's does, which between them cover a flex row's own moves. Rounded, and stored
+ * only when they differ, so a resize that leaves them be re-renders nothing. The element comes in
+ * as a value rather than a ref: a ref to a sibling's element is still empty while this component's
+ * own layout effect runs, so it could not be observed from here. */
+export function useEdgesOf(el: HTMLElement | null): { left: number; right: number } {
+  const [edges, setEdges] = useState({ left: 0, right: 0 });
+  useLayoutEffect(() => {
+    if (!el) return;
+    const read = () => {
+      const b = el.getBoundingClientRect();
+      const next = { left: Math.round(b.left), right: Math.round(b.right) };
+      setEdges((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
+    };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    window.addEventListener("resize", read);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", read);
+    };
+  }, [el]);
+  return edges;
+}
+
+/** useEdgesOf for an element this component renders: put the callback on it as its `ref` */
+export function useEdges<T extends HTMLElement>(): [RefCallback<T>, { left: number; right: number }] {
+  const [el, setEl] = useState<T | null>(null);
+  return [setEl, useEdgesOf(el)];
 }

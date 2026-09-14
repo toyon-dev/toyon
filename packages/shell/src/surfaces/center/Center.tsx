@@ -1,5 +1,5 @@
 import { isOwned, parseBridgeMsg } from "@toyon/shared";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { nextSeq } from "../../state/actions/file.ts";
 import { attachPick } from "../../state/attach.ts";
@@ -54,7 +54,16 @@ import { useOnChange } from "../../ui/hooks.ts";
 
 /** the centre: one persistent iframe per visited worktree (switching is a display toggle,
  * so each preview keeps its app state + HMR socket while hidden), the editor pane, and the overlays */
-export function Center() {
+/** `onRoot`: the column's own element, for the App to hand the top bar, which places its cluster over it */
+export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void }) {
+  const centerRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      centerRef.current = el;
+      onRoot(el);
+    },
+    [onRoot],
+  );
   const dispatch = useDispatch();
   const store = useStoreInstance();
   const sock = useSock();
@@ -284,7 +293,6 @@ export function Center() {
     .map((w) => ({ id: w.worktree.id, port: w.worktree.proxyPort, title: w.worktree.title }));
 
   // editor pane: draggable height + full-height toggle, persisted
-  const centerRef = useRef<HTMLDivElement>(null);
   const [editorH, setEditorH] = usePersisted(STORAGE.editorHeight, 0, (raw) => {
     const n = Number(raw);
     return Number.isFinite(n) && n >= 120 ? n : 0; // 0 = default 45%
@@ -352,7 +360,7 @@ export function Center() {
   });
 
   return (
-    <div className="center" ref={centerRef}>
+    <div className="center" ref={rootRef}>
       {/* a full-height pane takes the preview's place; in zen the panes are hidden (app.css), so
           the preview comes back for the window rather than leaving the column blank */}
       <div

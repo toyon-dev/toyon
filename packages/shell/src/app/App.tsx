@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { appItems } from "../state/actions/app.ts";
 import { restoreArchived } from "../state/actions/archive.ts";
 import { removeWorktrees } from "../state/actions/worktree.ts";
@@ -35,10 +35,6 @@ import { SelfNotice } from "./SelfNotice.tsx";
 import "./app.css";
 import { cx } from "../ui/cx.ts";
 
-/** the worktree rail: the strip it keeps when it peeks, and the column it takes when kept open
- *  (both also in rail.css, as the rail's width and --rail-width) */
-const RAIL_PX = 40;
-const RAIL_OPEN_PX = 280;
 const MRU_SUBSCRIPTIONS = 3;
 /** how long a worktree stays on screen, with the window focused, before its unseen ring clears */
 const SEEN_AFTER_MS = 2000;
@@ -290,16 +286,23 @@ export function App() {
     if (from !== pathOf(activeId)) previewBus.post(activeId, { type: "navigate", path: from });
   });
 
-  // resizable docks, widths persisted per browser; the nav cluster stays centered over the preview
+  // resizable docks, widths persisted per browser. A drag measures the dock from its own far edge,
+  // the one the handle is not on, so nothing here knows what else stands in the row or in which
+  // order; the row's fit to the window is the docks' CSS (app.css)
   const [leftW, setLeftW] = usePersisted(STORAGE.leftWidth, 220, (raw) => (raw ? clampW(Number(raw), 220) : undefined));
   const [rightW, setRightW] = usePersisted(STORAGE.rightWidth, 380, (raw) =>
     raw ? clampW(Number(raw), 380) : undefined,
   );
-  const dragLeft = useDragResize((ev) => clampW(ev.clientX, 220), setLeftW);
-  // keeping the rail open takes its width out of the row, so the docks have to know about it: the
-  // chat's drag and the status bar both measure back from the window edge
-  const railPx = firstRun ? 0 : railOpen ? RAIL_OPEN_PX : RAIL_PX;
-  const dragRight = useDragResize((ev) => clampW(window.innerWidth - railPx - ev.clientX, 380), setRightW);
+  const dragLeft = useDragResize((ev, handle) => {
+    const dock = handle.previousElementSibling;
+    return dock ? clampW(ev.clientX - dock.getBoundingClientRect().left, 220) : null;
+  }, setLeftW);
+  const dragRight = useDragResize((ev, handle) => {
+    const dock = handle.nextElementSibling;
+    return dock ? clampW(dock.getBoundingClientRect().right - ev.clientX, 380) : null;
+  }, setRightW);
+  // the centre column's element, for the top bar: its cluster sits over the preview
+  const [centerEl, setCenterEl] = useState<HTMLDivElement | null>(null);
 
   // a right-click nothing else answered: bare chrome opens the app's own menu, so the gesture
   // works everywhere and nobody learns to stop trying it. A row that answered has stopped the
@@ -317,11 +320,11 @@ export function App() {
     >
       <Tooltips />
       <Menus />
-      <TopBar leftPx={leftOpen ? leftW : 0} rightPx={(rightOpen ? rightW : 0) + railPx} />
+      <TopBar center={centerEl} />
       <div className="docks">
         <LeftDock width={leftW} />
         {leftOpen && <div className="dock-resize left" onPointerDown={dragLeft} />}
-        <Center />
+        <Center onRoot={setCenterEl} />
         {rightOpen && <div className="dock-resize right" onPointerDown={dragRight} />}
         {/* the centre shows the chat instead, and one composer at a time is the only kind there is */}
         {!chatCentred && <RightDock width={rightW} />}

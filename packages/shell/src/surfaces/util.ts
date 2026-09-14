@@ -51,6 +51,8 @@ export function relFile(file: string, worktreePath?: string): string {
   return i >= 0 ? file.slice(i + 1) : file;
 }
 
+/** a dock's width as dragged: never under the row's floor (--dock-min in app.css, the same 170),
+ * never over half the window */
 export function clampW(n: number, fallback: number): number {
   if (!Number.isFinite(n) || n <= 0) return fallback;
   return Math.min(Math.max(n, 170), Math.floor(window.innerWidth * 0.5));

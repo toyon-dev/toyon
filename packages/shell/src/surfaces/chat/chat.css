@@ -4,9 +4,9 @@
   /* ---- right dock (chat) ---- */
   .right-dock {
     width: 380px;
-    /* gives when the row is short (app.css, .docks); 170 is clampW's floor, the least a list reads at */
+    /* gives when the row is short, down to the row's floor (app.css, .docks) */
     flex: 0 1 auto;
-    min-width: 170px;
+    min-width: var(--dock-min);
     background: var(--surface1);
     border-left: 1px solid var(--border0);
     display: flex;

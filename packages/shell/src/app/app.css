@@ -29,6 +29,9 @@
   .docks {
     display: flex;
     min-height: 0;
+    /* the least a dock gives to: the least a list reads at, and the floor the drag clamp keeps
+       (clampW) so a saved width is never under it */
+    --dock-min: 170px;
     /* a grid item's automatic minimum is its content's width, and this row's content is the docks
        at the widths they were set: without this the column grows to hold them and the give below
        never happens */

@@ -1697,6 +1697,12 @@ function figuresOf(ev: Extract<AgentEvent, { type: "usage" }>): UsageFigures {
   return { used: ev.used, size: ev.size, ...(ev.cost !== undefined ? { cost: ev.cost } : {}) };
 }
 
+/** the error is that prose again, whole or behind a label of its own ("Internal error: ...") */
+function repeats(message: string, prose: string): boolean {
+  const said = prose.trim();
+  return said !== "" && (message.trim() === said || message.trim().endsWith(`: ${said}`));
+}
+
 function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
   const last = items[items.length - 1];
   switch (event.type) {
@@ -1763,6 +1769,10 @@ function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
       return next;
     }
     case "agent-error":
+      // Claude reports a usage limit as prose and then fails the turn with the same sentence; the
+      // error row takes the prose's place rather than saying it twice
+      if (last?.kind === "assistant" && repeats(event.message, last.text))
+        return [...items.slice(0, -1), { kind: "error", text: event.message }];
       return [...items, { kind: "error", text: event.message }];
     case "agent-blocked":
       return [...items, { kind: "blocked", tool: event.tool, path: event.path, reason: event.reason }];

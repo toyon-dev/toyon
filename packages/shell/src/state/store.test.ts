@@ -284,6 +284,25 @@ describe("chat folding", () => {
       s.local.a?.chat.map((i) => (i.kind === "user" || i.kind === "assistant" ? `${i.kind}:${i.text}` : i.kind)),
     ).toEqual(["user:hi", "assistant:hello", "user:more", "assistant:x"]);
   });
+  test("an error that repeats the prose just streamed takes its place", () => {
+    const limit = "You've hit your monthly spend limit";
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "user-message", text: "hi", ts: 0 }),
+      agent("a", { type: "text-delta", text: limit }),
+      agent("a", { type: "agent-error", message: `Internal error: ${limit}`, ts: 0 }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      { kind: "user", text: "hi" },
+      { kind: "error", text: `Internal error: ${limit}` },
+    ]);
+    const other = run([
+      hello(wt("a")),
+      agent("a", { type: "text-delta", text: "done" }),
+      agent("a", { type: "agent-error", message: "model overloaded", ts: 0 }),
+    ]);
+    expect(other.local.a?.chat.map((i) => i.kind)).toEqual(["assistant", "error"]);
+  });
   test("a graft marker is a divider item; what follows folds as usual", () => {
     const s = run([
       hello(wt("a")),

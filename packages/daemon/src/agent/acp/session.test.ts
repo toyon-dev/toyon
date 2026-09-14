@@ -994,6 +994,17 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("an adapter's internal-error label is not part of the message", async () => {
+    const fake = fakeAgent(async () => {
+      throw new acp.RequestError(-32603, "Internal error: You've hit your monthly spend limit");
+    });
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.events.at(-1)).toMatchObject({ type: "agent-error", message: "You've hit your monthly spend limit" });
+    await w.session.close();
+  });
+
   test("the connection dying mid-turn is an agent-error, not a hang", async () => {
     let conn: acp.ClientConnection | null = null;
     const fake = fakeAgent(

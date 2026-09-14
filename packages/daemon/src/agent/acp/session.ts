@@ -527,7 +527,8 @@ export class AcpSession implements AgentAdapter {
 
   private describe(e: unknown): string {
     if (isAuthRequired(e)) return this.conn?.spec.loginHint ?? this.d.spec().loginHint;
-    const message = e instanceof Error ? e.message : String(e);
+    // JSON-RPC's name for the error code, which the adapter puts in front of the provider's own words
+    const message = (e instanceof Error ? e.message : String(e)).replace(/^Internal error: /, "");
     // the SDK's generic close message; the process's own exit is the useful part
     return /connection closed/i.test(message) ? (this.conn?.link.exitInfo() ?? message) : message;
   }

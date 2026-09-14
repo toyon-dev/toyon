@@ -343,6 +343,13 @@
     &[open] > summary .tool-name {
       color: var(--text1);
     }
+    /* the shine paints through its own gradient and never reads `color`, so the lifted tiers above
+     do nothing for a running row: its dim tier stayed text2 on element1 while the seat lifted under
+     it, and the band was the only legible part. The dim tier rides up with the name instead. */
+    & summary:hover .live-text,
+    &[open] > summary .live-text {
+      --live-dim: var(--text1);
+    }
     /* a summary is one line: a command long enough to wrap would push the row into a paragraph of
    monospace, and a transcript of those is unreadable. The name is only there when the agent sent
    its own word for the tool, and it never shrinks; flex would otherwise clip "Bash" down to "B…"
@@ -616,9 +623,13 @@
    The lit part is a plateau and not a peak: ramping straight from one tier to the other and back
    puts full brightness on a single column, and since the two tiers are a few steps apart only the
    top of that ramp reads as lit at all, which is a band about three characters wide on a path.
-   Holding text0 across the middle tenth is what makes it a band you watch travel. */
+   Holding text0 across the middle tenth is what makes it a band you watch travel.
+
+   The dim tier is a property rather than text2 written in, because the row lifts it: a hovered or
+   open row seats its summary on element1, where text2 is unreadable (the tool-name rule above). */
   .live-text {
-    background: linear-gradient(90deg, var(--text2) 30%, var(--text0) 45%, var(--text0) 55%, var(--text2) 70%);
+    --live-dim: var(--text2);
+    background: linear-gradient(90deg, var(--live-dim) 30%, var(--text0) 45%, var(--text0) 55%, var(--live-dim) 70%);
     background-size: 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;

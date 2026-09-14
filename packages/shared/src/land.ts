@@ -10,16 +10,28 @@ export type LandRoute = "merge" | "push" | "pr";
 /** how the commits arrive on main: a merge commit, one squashed commit, or a fast-forward */
 export type MergeMethod = "merge" | "squash" | "rebase";
 
+/** the routes as the setup pane lists them: named by where the work goes, so the word "merge" is
+ * left to the method row, which is the one it is a choice on */
 export const LAND_ROUTES: ReadonlyArray<{ id: LandRoute; name: string; description: string }> = [
-  { id: "merge", name: "merge here", description: "merge into main in this checkout; nothing is pushed" },
-  { id: "push", name: "merge and push", description: "merge into main here, then push main to origin" },
-  { id: "pr", name: "open a PR", description: "push the branch and open a pull request on GitHub" },
+  { id: "merge", name: "here", description: "onto main in this checkout; nothing is pushed" },
+  { id: "push", name: "here and push", description: "onto main here, then main is pushed to origin" },
+  { id: "pr", name: "pull request", description: "the branch is pushed and a pull request opened on GitHub" },
 ];
 
 export const MERGE_METHODS: ReadonlyArray<{ id: MergeMethod; name: string; description: string }> = [
-  { id: "merge", name: "merge commit", description: "one merge commit records the landing" },
+  { id: "merge", name: "merge commit", description: "the commits stay as they are, under one merge commit" },
   { id: "squash", name: "squash", description: "the work becomes one commit on main" },
   { id: "rebase", name: "rebase", description: "the commits go on main as they are, no merge commit" },
+];
+
+/** on the PR route: who presses merge. Toyon's own word in the chat, or GitHub's auto-merge */
+export const PR_MERGERS: ReadonlyArray<{ id: "you" | "github"; name: string; description: string }> = [
+  { id: "you", name: "you merge it", description: "the chat offers merge once GitHub would take the PR" },
+  {
+    id: "github",
+    name: "GitHub merges it",
+    description: "auto-merge: GitHub merges the PR itself once its rules allow (checks, reviewers, or nothing)",
+  },
 ];
 
 export const DEFAULT_LAND_ROUTE: LandRoute = "merge";
@@ -46,11 +58,15 @@ export function landPolicy(config: Pick<ToyonConfig, "land">): LandPolicy {
 
 /** what the one land verb does here, for its tooltip and its menu row */
 export function describeLand(policy: LandPolicy, defaultBranch = "main"): string {
+  // the local routes name their method, since a rebase never merges anything
+  const how = { merge: "merge into", squash: "squash onto", rebase: "rebase onto" }[
+    policy.merge ?? DEFAULT_MERGE_METHOD
+  ];
   switch (policy.land) {
     case "merge":
-      return `Commit and merge into ${defaultBranch} here`;
+      return `Commit and ${how} ${defaultBranch} here`;
     case "push":
-      return `Commit, merge into ${defaultBranch} and push it`;
+      return `Commit, ${how} ${defaultBranch} and push it`;
     case "pr":
       return policy.automerge
         ? "Commit, push the branch and open a PR that GitHub merges when its rules allow"

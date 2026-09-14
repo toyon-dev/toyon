@@ -1,11 +1,13 @@
 import {
   DEFAULT_LAND_ROUTE,
+  DEFAULT_MERGE_METHOD,
   isOwned,
   LAND_ROUTES,
   type LandRoute,
   landPolicy,
   MERGE_METHODS,
   type MergeMethod,
+  PR_MERGERS,
   type RepoInfo,
 } from "@toyon/shared";
 import { useEffect, useState } from "react";
@@ -59,6 +61,8 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   const [land, setLand] = useState<LandRoute>(() => landPolicy(repo.config).land);
   const [automerge, setAutomerge] = useState(() => landPolicy(repo.config).automerge);
   const [merge, setMerge] = useState<MergeMethod | "default">(() => landPolicy(repo.config).merge ?? "default");
+  // the route row is only drawn with an origin, so without one the PR route is never in force
+  const onPr = !!repo.remote && land === "pr";
   const multi = procs.length > 1;
   const canStart = procs.some((p) => p.name.trim() && p.cmd.trim());
   // the agent's button exists for a repo the detector could not read; it leads while the form is
@@ -78,10 +82,13 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   const edited = (): typeof repo.config => {
     const { check: _check, land: _land, ...rest } = repo.config;
     const route = repo.remote ? land : DEFAULT_LAND_ROUTE;
+    // a merge commit is what a local route does unset, so picking it writes nothing; on the PR
+    // route unset means the repo's allowed methods, so any pick there is written
+    const method = merge === "default" || (route !== "pr" && merge === DEFAULT_MERGE_METHOD) ? undefined : merge;
     const landing = {
       ...(route !== DEFAULT_LAND_ROUTE ? { route } : {}),
       ...(route === "pr" && automerge ? { automerge: true } : {}),
-      ...(merge !== "default" ? { method: merge } : {}),
+      ...(method ? { method } : {}),
     };
     return {
       ...rest,
@@ -155,45 +162,54 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       </FormRow>
 
       {/* one route per repo: the land word everywhere does this. Without an origin there is only
-          merging here, so the row would be a choice of one. */}
+          landing here, so the row would be a choice of one. On the PR route a second chip says who
+          presses merge: a value with two states, so a chip like its neighbours and not a switch. */}
       {repo.remote && (
-        <FormRow label="land" hint="how a worktree's work reaches main; one way per repo">
+        <FormRow label="land" hint="where a worktree's finished work goes; one way per repo">
           <div className="setup-land">
             <ChipPicker<LandRoute>
               value={land}
               options={LAND_ROUTES.map((r) => ({ id: r.id, label: r.name, description: r.description }))}
               onChange={setLand}
-              hint="click to change"
-              placeholder="how work lands"
+              hint="where the work goes"
+              placeholder="where work lands"
             />
-            {land === "pr" && (
-              <Button
-                variant="field"
-                mono
-                on={automerge}
-                {...tip("GitHub merges the PR itself once its rules allow: checks, reviewers, or nothing")}
-                onClick={() => setAutomerge(!automerge)}
-              >
-                auto-merge {automerge ? "on" : "off"}
-              </Button>
+            {onPr && (
+              <ChipPicker<"you" | "github">
+                value={automerge ? "github" : "you"}
+                options={PR_MERGERS.map((m) => ({ id: m.id, label: m.name, description: m.description }))}
+                onChange={(id) => setAutomerge(id === "github")}
+                hint="who merges the pull request"
+                placeholder="who merges it"
+              />
             )}
           </div>
         </FormRow>
       )}
 
+      {/* unset shows as what it does: a merge commit here. On GitHub unset follows the repo's own
+          allowed methods, which is none of the three, so there it is a row of its own. */}
       <FormRow
-        label="merge as"
-        hint="the default is a merge commit here; on GitHub, what the repo allows, squash first"
+        label="merge"
+        hint={onPr ? "how GitHub merges the pull request; only what the repo allows" : "how the commits arrive on main"}
       >
         <ChipPicker<MergeMethod | "default">
-          value={merge}
+          value={merge === "default" && !onPr ? DEFAULT_MERGE_METHOD : merge}
           options={[
-            { id: "default", label: "default", description: "a merge commit here; on GitHub what the repo allows" },
+            ...(onPr
+              ? [
+                  {
+                    id: "default" as const,
+                    label: "what the repo allows",
+                    description: "the repo's allowed methods on GitHub: squash, else a merge commit, else rebase",
+                  },
+                ]
+              : []),
             ...MERGE_METHODS.map((m) => ({ id: m.id, label: m.name, description: m.description })),
           ]}
           onChange={setMerge}
-          hint="click to change"
-          placeholder="how the commits arrive on main"
+          hint="how the commits arrive on main"
+          placeholder="how the commits arrive"
         />
       </FormRow>
 

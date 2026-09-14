@@ -9,7 +9,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
-import { groupTools, openRow, railSlots } from "./group.ts";
+import { groupTools, openRow } from "./group.ts";
 import { isBlank } from "./recall.ts";
 
 /** seconds of silence before the working line starts counting */
@@ -134,10 +134,9 @@ export function ChatLog({ active, lead }: { active: OwnedWorktree | null; lead?:
   const wt = active?.worktree;
   // one array per worktree: a fresh one on every render would defeat the rows' memo
   const roots = useMemo(() => [wt?.path, wt?.linkPath].filter((p): p is string => !!p), [wt?.path, wt?.linkPath]);
-  // calls that did the same thing to the same file, back to back, are one row carrying a count
+  // calls that did the same thing to the same file, back to back, are one row carrying a count,
+  // and a subagent's calls are the run under the row that started it
   const entries = useMemo(() => groupTools(items, roots), [items, roots]);
-  // a colour per subagent, so two of them running at once are two runs and not one indented block
-  const rails = useMemo(() => railSlots(items), [items]);
   // the one row that opens itself while the agent runs; everything else in the turn is a line
   const working = active?.agent === "working";
   const liveRow = useMemo(() => (working ? openRow(entries) : -1), [working, entries]);
@@ -168,14 +167,15 @@ export function ChatLog({ active, lead }: { active: OwnedWorktree | null; lead?:
       <div className="chat-log" ref={logRef} onScroll={onScroll}>
         {lead}
         {entries.map((entry, i) =>
-          "tools" in entry ? (
+          "spawn" in entry ? (
+            <ToolRow key={entry.at} tools={[entry.spawn]} run={entry.run} roots={roots} worktreeId={id} />
+          ) : "tools" in entry ? (
             <ToolRow
               key={entry.at}
               tools={entry.tools}
               live={i === liveRow || i === newestShell}
               roots={roots}
               worktreeId={id}
-              rail={rails.get(entry.tools[0]?.parentToolId ?? "")}
               // a `!` command is never grouped, so the walk's index is the row's own
               marked={entry.at === walkAt}
             />

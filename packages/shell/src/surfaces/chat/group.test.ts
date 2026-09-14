@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
-import { groupTools, openRow, RAILS, railSlots } from "./group.ts";
+import { type ChatEntry, groupTools, openRow, runCalls } from "./group.ts";
 
 let n = 0;
 const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): ChatItem =>
@@ -18,6 +18,10 @@ const tool = (kind: ToolKind, path: string, extra: Partial<ChatItem> = {}): Chat
 
 const text = (t: string): ChatItem => ({ kind: "assistant", text: t });
 
+/** the call that started a subagent, as Claude's adapter sends it: kind "think", flagged */
+const spawn = (id: string, description: string, extra: Partial<ChatItem> = {}): ChatItem =>
+  tool("think", "", { id, name: "Task", title: description, input: { description }, subagent: true, ...extra });
+
 const thought = (t: string): ChatItem => ({ kind: "thinking", text: t }) as ChatItem;
 
 const DIFF = "@@ -1 +1 @@\n-a\n+b";
@@ -25,9 +29,13 @@ const DIFF = "@@ -1 +1 @@\n-a\n+b";
 /** which entry the log opens while the agent works */
 const open = (items: ChatItem[]) => openRow(groupTools(items, ["/wt"]));
 
-/** what each entry stands for: the first item's index, and how many calls are on the row */
-const shape = (items: ChatItem[], roots: string[] = []) =>
-  groupTools(items, roots).map((e) => ({ at: e.at, n: "tools" in e ? e.tools.length : 0 }));
+/** what each entry stands for: the first item's index, and how many calls are on the row. A spawn
+ * counts its own call and lists its run in the same shape. */
+const shape = (items: ChatItem[], roots: string[] = []) => groupTools(items, roots).map(shapeOf);
+const shapeOf = (e: ChatEntry): { at: number; n: number; run?: { at: number; n: number }[] } =>
+  "spawn" in e
+    ? { at: e.at, n: 1, run: e.run.map((r) => ({ at: r.at, n: r.tools.length })) }
+    : { at: e.at, n: "tools" in e ? e.tools.length : 0 };
 
 describe("groupTools", () => {
   test("edits to one file, back to back, are one row", () => {
@@ -125,28 +133,66 @@ describe("groupTools", () => {
     ]);
   });
 
-  test("one subagent gets no rail; from two on, each holds a slot for the whole transcript", () => {
-    const one = [tool("read", "/wt/a.ts", { parentToolId: "t1" }), tool("read", "/wt/b.ts", { parentToolId: "t1" })];
-    expect([...railSlots(one)]).toEqual([]);
-    const many = [
-      tool("read", "/wt/a.ts", { parentToolId: "t1" }),
-      tool("read", "/wt/b.ts", { parentToolId: "t2" }),
-      tool("read", "/wt/c.ts", { parentToolId: "t1" }),
-      tool("read", "/wt/d.ts"),
+  test("a subagent's calls fold under the call that started it, in order, and group among themselves", () => {
+    const items = [
+      spawn("task1", "Find the caller"),
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+      text("Meanwhile:"),
+      tool("read", "/wt/b.ts", { parentToolId: "task1" }),
+      tool("read", "/wt/b.ts", { parentToolId: "task1" }),
+      tool("edit", "/wt/c.ts"),
     ];
-    expect([...railSlots(many)]).toEqual([
-      ["t1", 0],
-      ["t2", 1],
+    expect(shape(items, ["/wt"])).toEqual([
+      {
+        at: 0,
+        n: 1,
+        run: [
+          { at: 1, n: 1 },
+          { at: 3, n: 2 },
+        ],
+      },
+      { at: 2, n: 0 },
+      { at: 5, n: 1 },
+    ]);
+    const first = groupTools(items, ["/wt"])[0]!;
+    expect("spawn" in first && runCalls(first.run)).toBe(3);
+  });
+
+  test("two subagents whose calls interleave each keep their own run", () => {
+    const items = [
+      spawn("task1", "Find the caller"),
+      spawn("task2", "Find the tests"),
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+      tool("read", "/wt/t.ts", { parentToolId: "task2" }),
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+    ];
+    expect(shape(items, ["/wt"])).toEqual([
+      { at: 0, n: 1, run: [{ at: 2, n: 2 }] },
+      { at: 1, n: 1, run: [{ at: 3, n: 1 }] },
     ]);
   });
 
-  test("more subagents than rails wrap round rather than running out", () => {
-    const items = Array.from({ length: RAILS + 2 }, (_, i) => tool("read", "/wt/a.ts", { parentToolId: `t${i}` }));
-    expect([...railSlots(items)].map(([, slot]) => slot)).toEqual([
-      ...Array.from({ length: RAILS }, (_, i) => i),
-      0,
-      1,
+  test("a spawn is known by its flag before it has made a call, and by its children without one", () => {
+    expect(shape([spawn("task1", "Find the caller")])).toEqual([{ at: 0, n: 1, run: [] }]);
+    const unflagged = [
+      tool("think", "", { id: "task1", subagent: undefined, input: { description: "Find the caller" } }),
+      tool("read", "/wt/a.ts", { parentToolId: "task1" }),
+    ];
+    expect(shape(unflagged, ["/wt"])).toEqual([{ at: 0, n: 1, run: [{ at: 1, n: 1 }] }]);
+  });
+
+  test("a child whose spawn is not in the log keeps its place in the flow", () => {
+    const items = [tool("read", "/wt/a.ts"), tool("read", "/wt/b.ts", { parentToolId: "gone" })];
+    expect(shape(items, ["/wt"])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 1 },
     ]);
+  });
+
+  test("the open row: a subagent's row is never it, so the thought above it stays open", () => {
+    const items = [thought("Two places to look."), spawn("task1", "Find the caller", { done: false })];
+    expect(open(items)).toBe(0);
+    expect(open([spawn("task1", "Find the caller", { output: "Found it." })])).toBe(-1);
   });
 
   test("the open row: a thought opens once it has words, and an empty one opens nothing", () => {

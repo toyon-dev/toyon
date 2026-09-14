@@ -36,6 +36,7 @@ export type IconName =
   | "search"
   | "run"
   | "bulb"
+  | "spawn"
   | "globe"
   | "swap"
   | "palette"
@@ -105,6 +106,11 @@ const ICON_PATHS: Record<IconName, string> = {
   // a bulb for a thought: the glass as one arc over two shoulders, the base as one line under
   // it. At 13px a filament or a second base line is a smudge, so there is neither.
   bulb: "M4.8 8.8a4 4 0 1 1 6.4 0L9.5 10.6v1.4H6.5v-1.4z M6.7 13.8h2.6",
+  // a call that starts another agent: one line forking into two, each ending in a ring the way
+  // `more` draws its dots. It is a fork on its side so it never reads as `branch`, which is git's,
+  // and it carries no bulb because ACP files the call under "think" and the row is not a thought.
+  spawn:
+    "M2.5 8h3.3 M5.8 8c2.2 0 2.2-3.6 4.4-3.6h1.5 M5.8 8c2.2 0 2.2 3.6 4.4 3.6h1.5 M12.05 4.4a.45 .45 0 1 0 .9 0a.45 .45 0 1 0-.9 0z M12.05 11.6a.45 .45 0 1 0 .9 0a.45 .45 0 1 0-.9 0z",
   // one equator and one meridian: a second latitude line filled the circle in at 13px
   globe: "M8 2.2a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 1 0 0-11.6z M2.2 8h11.6 M8 2.2c-3 3.4-3 8.2 0 11.6 3-3.4 3-8.2 0-11.6z",
   // the rail's own rows: a status dot and a name, three deep. The panel toggles name what is in

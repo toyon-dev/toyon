@@ -18,7 +18,7 @@ import { rowState } from "../../ui/rowState.ts";
 import { attachmentUrl } from "../../ws.ts";
 import { wtDir } from "../util.ts";
 import { AskCard } from "./AskCard.tsx";
-import { sameTools, type ThinkingItem, type ToolItem } from "./group.ts";
+import { runCalls, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
@@ -358,22 +358,24 @@ export const ThoughtRow = memo(function ThoughtRow({
   );
 });
 
-/** a call in the transcript, or a run of calls that did the same thing to the same file */
+/** a call in the transcript, or a run of calls that did the same thing to the same file, or the
+ * call that started a subagent with that subagent's rows folded under it */
 export const ToolRow = memo(
   function ToolRow({
     tools,
+    run,
     live,
     roots,
     worktreeId,
-    rail,
     marked,
   }: {
     tools: ToolItem[];
+    /** the subagent this call started: its calls, as rows, which this row folds. Empty while it
+     * has made none yet, or for an agent that marks a spawn but never tags a child (acp/map.ts). */
+    run?: ToolEntry[];
     live?: boolean;
     roots?: string[];
     worktreeId?: string | null;
-    /** which subagent's rail this row sits on, while more than one of them is running */
-    rail?: number;
     /** the composer has walked back to the command this row ran */
     marked?: boolean;
   }) {
@@ -383,13 +385,18 @@ export const ToolRow = memo(
     // printing the same neighbourhood again (mergeDiffs.ts). No edit row opens itself any more, so
     // this is only ever read on a row somebody opened, and what they came for is what the run did.
     const net = useMemo(() => netOfCalls(tools.map((t) => toolBlocks(t, t.output ?? ""))), [tools]);
-    // the log decides which row opens itself, and it hands the row two answers: the turn's one
-    // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
-    // open from the start because what it printed is the reason the person ran it
-    const auto = !!live;
-    const { label, name, icon, hint } = toolLabel(head, roots);
     const running = !tools.at(-1)?.done;
+    // The log decides which row opens itself, and it hands the row two answers: the turn's one
+    // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
+    // open from the start because what it printed is the reason the person ran it. A subagent's
+    // row is the third case and decides for itself: open while the subagent works, since its rows
+    // are where the work is, and closed once it is done, when what it did is a line with a count
+    // and the message after it says what came of it.
+    const auto = !!live || (!!run && running);
+    const { label, name, icon, hint } = toolLabel(head, roots);
+    const calls = run ? runCalls(run) : 0;
     const what = [label, hint].filter(Boolean).join(" ");
+    const count = run ? `${calls} ${calls === 1 ? "call" : "calls"}` : tools.length > 1 ? `×${tools.length}` : "";
     const store = useStoreInstance();
     const sock = useSock();
     return (
@@ -399,12 +406,11 @@ export const ToolRow = memo(
           running && "live-row",
           tools.some((t) => t.isError) && "error",
           head.parentToolId && "nested",
-          head.subagent && "spawn",
-          rail !== undefined && `rail-${rail}`,
+          run && "spawn",
         )}
         state={rowState({ cursor: marked })}
         auto={auto}
-        label={tools.length > 1 ? `${what}, ${tools.length} calls` : what}
+        label={run ? `${what}, ${count}` : tools.length > 1 ? `${what}, ${tools.length} calls` : what}
         menu={(fold) => {
           const w = worktreeById(store.getState(), worktreeId);
           const wt = w ? { id: w.worktree.id, dir: wtDir(w.worktree) } : null;
@@ -412,14 +418,25 @@ export const ToolRow = memo(
         }}
         summary={
           <>
-            <Icon name={icon} className="tool-icon" />
+            {/* the kind says "think", which is the nearest word ACP has for a call that starts
+                another agent, and the bulb is a thought's glyph: this row is a fork, not a thought */}
+            <Icon name={run ? "spawn" : icon} className="tool-icon" />
             {name && <span className={cx("tool-name", running && "live-text")}>{name}</span>}
             {hint && <span className={cx("tool-hint", running && "live-text")}>{hint}</span>}
-            {tools.length > 1 && <span className="tool-count">×{tools.length}</span>}
+            {count && <span className="tool-count">{count}</span>}
             {running && <span className="live-dot" />}
           </>
         }
       >
+        {run && run.length > 0 && (
+          <div className="spawn-run">
+            {run.map((e) => (
+              <ToolRow key={e.at} tools={e.tools} roots={roots} worktreeId={worktreeId} />
+            ))}
+          </div>
+        )}
+        {/* a spawn's own output is the subagent's narration and then its report: it comes last,
+            being the last thing the subagent did */}
         {net ? (
           <NetPart text={net} item={head} roots={roots} worktreeId={worktreeId} />
         ) : (
@@ -432,9 +449,9 @@ export const ToolRow = memo(
     a.live === b.live &&
     a.roots === b.roots &&
     a.worktreeId === b.worktreeId &&
-    a.rail === b.rail &&
     a.marked === b.marked &&
-    sameTools(a.tools, b.tools),
+    sameTools(a.tools, b.tools) &&
+    sameRun(a.run, b.run),
 );
 
 /** the agent asked for credentials: one button per login method it offered. A terminal method runs

@@ -378,42 +378,16 @@
     }
     /* the rail sits in the gutter the indent opened, at the depth of the spawn row's own glyph, so
      a run of children reads as one bracket rather than as rows that happen to start further right.
-     It is drawn on the summary: an open row already spends its ::before on the accent marker. It
-     is inset a pixel at each end so the rail is a tick per row rather than one line down the run:
-     rows abut by design (the negative margins above), and an unbroken line through a colour change
-     reads as one rail that changes colour instead of one run ending and another starting. */
+     It is drawn on the summary, since an open row spends its ::before on the accent marker, and
+     the rows abut (the negative margins above), so one segment per row joins into one line. */
     &.nested summary::before {
       content: "";
       position: absolute;
       left: 17px;
-      top: 1px;
-      bottom: 1px;
+      top: 0;
+      bottom: 0;
       width: 1px;
-      background: var(--rail, var(--border0));
-    }
-    /* Two subagents run at once and their calls interleave, so the quiet rail brackets both of them
-     as one block. A colour per spawning call is what pulls them apart, and the chat only spends one
-     once there are two runs to tell apart (group.ts holds the slots). They are mixed most of the way
-     to the border they replace: this is a rail, not a status, and five saturated lines down a
-     transcript would outrank everything they run beside. Red is not among them, since that is the
-     accent an open row marks itself with and the colour an error row already means. The order is by
-     separation rather than by the palette's own: two subagents is the ordinary case and the first
-     two slots are the pair that has to be told apart across a whole screen, so blue and orange take
-     them and the two that sit closest in hue are kept out of adjacent slots. */
-    &.nested.rail-0 {
-      --rail: color-mix(in srgb, var(--blue) 60%, var(--border0));
-    }
-    &.nested.rail-1 {
-      --rail: color-mix(in srgb, var(--orange) 60%, var(--border0));
-    }
-    &.nested.rail-2 {
-      --rail: color-mix(in srgb, var(--green) 60%, var(--border0));
-    }
-    &.nested.rail-3 {
-      --rail: color-mix(in srgb, var(--purple) 60%, var(--border0));
-    }
-    &.nested.rail-4 {
-      --rail: color-mix(in srgb, var(--yellow) 60%, var(--border0));
+      background: var(--border0);
     }
     /* open, the accent marker moves onto the rail's column and the rail gives way to it: at left 0
      it marked the band as belonging to the top-level row above, which is the one thing the panel
@@ -431,9 +405,25 @@
       padding-left: 30px;
     }
     /* the row that started the subagent: the same weight as a name the agent chose to print, since
-     the rows underneath belong to it and a spawn that reads like any other call loses them */
-    &.spawn .tool-name {
+     the rows underneath belong to it and a spawn that reads like any other call loses them. Claude
+     prints the task as the hint, Codex its marker as the name, so both are lifted. */
+    &.spawn .tool-name,
+    &.spawn .tool-hint {
       color: var(--text1);
+    }
+    /* the subagent's rows, inside the row that started them. They are ordinary rows and keep the
+     negative margins above, so the run gives them back the log's own padding and gap: a child then
+     sits in the same column as a top-level row, and its indent is its own summary's. */
+    & .spawn-run {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 5px 12px;
+    }
+    /* the subagent's report follows its rows under a rule, the way a second call's output follows a
+     first's */
+    & .spawn-run + .tool-part {
+      border-top: 1px solid var(--border0);
     }
   }
   .tool-row .tool-hint,

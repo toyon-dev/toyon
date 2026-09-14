@@ -11,9 +11,17 @@ import { toolLabel } from "./toolCall.ts";
 export type ToolItem = Extract<ChatItem, { kind: "tool" }>;
 export type ThinkingItem = Extract<ChatItem, { kind: "thinking" }>;
 
+/** a call, or a run of calls that print as one row */
+export type ToolEntry = { at: number; tools: ToolItem[] };
+
 /** a row of the transcript, and where it starts in the item list: React's key, and what says which
- * row the agent is on */
-export type ChatEntry = { at: number; item: Exclude<ChatItem, { kind: "tool" }> } | { at: number; tools: ToolItem[] };
+ * row the agent is on. A spawn is the call that started a subagent, with that subagent's own calls
+ * folded under it: they arrive in the parent's stream tagged with the spawning call's id, and the
+ * row they belong to is the one that folds them away once the subagent is done. */
+export type ChatEntry =
+  | { at: number; item: Exclude<ChatItem, { kind: "tool" }> }
+  | ToolEntry
+  | { at: number; spawn: ToolItem; run: ToolEntry[] };
 
 /** kinds whose hint is a path, where several calls on one file is the ordinary way to work. A run
  * row's hint is the sentence the agent wrote for it, and two identical sentences are two different
@@ -32,30 +40,25 @@ function groupKey(item: ToolItem, roots: string[]): string {
   return hint ? `${item.parentToolId ?? ""}\n${item.toolKind}\n${item.name}\n${hint}` : "";
 }
 
-/** how many rails the transcript can tell apart before it starts reusing one */
-export const RAILS = 5;
-
-const NO_RAILS: ReadonlyMap<string, number> = new Map();
-
-/** which rail each spawning call draws, or nothing while there is only one of them.
- *
- * Subagents run at the same time and their calls interleave, so one grey rail brackets every one of
- * them at once and says nothing about whose work a row is: the indent tells you a row belongs to
- * some subagent, and with three running that is the part you already knew. A colour per spawning
- * call is what separates them, and it is spent only where there is something to separate. A slot is
- * held for the rest of the transcript once given, since a rail that changes colour partway down
- * reads as a different subagent. */
-export function railSlots(items: ChatItem[]): ReadonlyMap<string, number> {
-  const slots = new Map<string, number>();
+/** the calls that started a subagent: any the adapter flagged as one, and any a later call names
+ * as its parent. The second is for a transcript written before the flag was kept, whose children
+ * would otherwise have no row to fold under. */
+function spawnIds(items: ChatItem[]): ReadonlySet<string> {
+  const ids = new Set<string>();
   for (const item of items) {
-    if (item.kind !== "tool" || !item.parentToolId || slots.has(item.parentToolId)) continue;
-    slots.set(item.parentToolId, slots.size % RAILS);
+    if (item.kind !== "tool") continue;
+    if (item.subagent) ids.add(item.id);
+    if (item.parentToolId) ids.add(item.parentToolId);
   }
-  return slots.size > 1 ? slots : NO_RAILS;
+  return ids;
 }
 
 export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
+  const spawns = spawnIds(items);
   const out: ChatEntry[] = [];
+  // the run each spawn is filling, and the key its newest row groups on: a subagent's calls
+  // interleave with the main agent's and with another subagent's, and each run groups on its own
+  const runs = new Map<string, { run: ToolEntry[]; key: string }>();
   let key = "";
   for (const [at, item] of items.entries()) {
     if (item.kind !== "tool") {
@@ -63,7 +66,24 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
       out.push({ at, item });
       continue;
     }
+    if (spawns.has(item.id)) {
+      key = "";
+      const run: ToolEntry[] = [];
+      runs.set(item.id, { run, key: "" });
+      out.push({ at, spawn: item, run });
+      continue;
+    }
     const next = groupKey(item, roots);
+    // a subagent's call goes under the call that started it. One whose spawn is not in the log
+    // keeps its place in the flow, indented: there is no row for it to fold under.
+    const home = item.parentToolId ? runs.get(item.parentToolId) : undefined;
+    if (home) {
+      const last = home.run.at(-1);
+      if (next && next === home.key && last) last.tools.push(item);
+      else home.run.push({ at, tools: [item] });
+      home.key = next;
+      continue;
+    }
     const last = out.at(-1);
     // an ungroupable call has an empty key, which matches nothing, itself included
     if (next && next === key && last && "tools" in last) {
@@ -76,10 +96,21 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
   return out;
 }
 
+/** how many calls a subagent's run stands for, its grouped rows counted call by call */
+export function runCalls(run: ToolEntry[]): number {
+  return run.reduce((n, e) => n + e.tools.length, 0);
+}
+
 /** the entries hold fresh arrays on every render, so the rows compare their calls one by one:
  * without this a streamed token into the message above re-renders every call in the turn */
 export function sameTools(a: ToolItem[], b: ToolItem[]): boolean {
   return a.length === b.length && a.every((item, i) => item === b[i]);
+}
+
+/** the same, for a subagent's run: row by row, and each row call by call */
+export function sameRun(a: ToolEntry[] | undefined, b: ToolEntry[] | undefined): boolean {
+  if (!a || !b) return a === b;
+  return a.length === b.length && a.every((e, i) => e.at === b[i]?.at && sameTools(e.tools, b[i]!.tools));
 }
 
 /** Which row of the turn opens itself while the agent works, or -1. Reasoning is the only thing that
@@ -91,10 +122,12 @@ export function sameTools(a: ToolItem[], b: ToolItem[]): boolean {
  * It stays open until the agent writes something else worth reading: its next words, or its next
  * thought. A call landing does not close it, since a call no longer puts anything in its place.
  * Any message ends the search, the one that started the turn included, so a thought from the turn
- * before is never reopened. */
+ * before is never reopened. A subagent's row is not a candidate: it opens on its own rule, while
+ * the subagent runs, and its report is not the main agent's words. */
 export function openRow(entries: ChatEntry[]): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i]!;
+    if ("spawn" in entry) continue;
     // an agent that models its reasoning as a call rather than streaming it (never Claude;
     // acp/map.ts) reads the way a thought does
     if ("tools" in entry) {

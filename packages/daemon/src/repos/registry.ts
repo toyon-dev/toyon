@@ -1,17 +1,25 @@
 // Repos: registration, config confirmation, default-branch watchers, and boot (bring every
 // persisted repo and worktree back up).
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { isLocalConfigFile, type PendingRepo, type RepoInfo, type ToyonConfig, type WorktreeInfo } from "@toyon/shared";
+import {
+  type ConfigFileKind,
+  configSibling,
+  isLocalConfigFile,
+  type PendingRepo,
+  type RepoInfo,
+  type ToyonConfig,
+  type WorktreeInfo,
+} from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
-import { excludeFromGit } from "../git/exclude.ts";
+import { excludeFromGit, unexcludeFromGit } from "../git/exclude.ts";
 import { defaultBranch, git, isGitRepo, repoRoot } from "../git/exec.ts";
-import { statusFiles, treeEmpty } from "../git/status.ts";
+import { isTracked, statusFiles, treeEmpty } from "../git/status.ts";
 import { allocateProxyPort, releasePort, reservePort } from "../runtime/ports.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import { shortId } from "../worktrees/naming.ts";
@@ -332,13 +340,28 @@ export class RepoRegistry {
     this.d.hub.emit("worktreesChanged");
   }
 
-  async confirmConfig(repoId: string, config: ToyonConfig) {
+  async confirmConfig(repoId: string, config: ToyonConfig, kind: ConfigFileKind) {
     const repo = this.d.state.requireRepo(repoId);
     const current = readConfigFile(repo.path);
     // settings in two places is the person's to settle; a save that picked one would hide it
     if (current && !current.ok && current.conflict) throw new UserError(current.reason);
-    this.placeConfig(repo);
-    const rel = repo.configFile;
+    // the pane's answer to committed or kept local, in the place the settings already are. A save
+    // that keeps the file a save already goes to changes nothing else: a local file beside a
+    // shared one stays the difference, whoever wrote the shared one. A choice that moves the
+    // settings takes the file it left with it, so "kept local" leaves nothing for git to list and
+    // "committed" leaves no override beside the file everyone gets; the one file never taken is a
+    // shared one the team has committed, which is theirs to keep and ours to differ from.
+    const was = configTarget(repo.path, !!repo.made);
+    const rel = configSibling(was, kind);
+    const moved = rel !== was && existsSync(join(repo.path, was));
+    if (moved && !(kind === "local" && (await isTracked(repo.path, was)))) {
+      try {
+        rmSync(join(repo.path, was));
+      } catch (e) {
+        log.warn(repoId, `could not remove ${was}`, e);
+      }
+      if (isLocalConfigFile(was)) await unexcludeFromGit(repo.path, was);
+    }
     // before the write, so no status pass in between lists one person's file as a change
     if (isLocalConfigFile(rel)) await excludeFromGit(repo.path, rel);
     const file = join(repo.path, rel);
@@ -348,6 +371,7 @@ export class RepoRegistry {
     } catch (e) {
       log.warn(repoId, `could not write ${rel}`, e);
     }
+    this.placeConfig(repo);
     // what the files say now, so the watcher's reload of this same write finds nothing new
     const back = readConfigFile(repo.path);
     repo.config = back?.ok ? back.config : config;

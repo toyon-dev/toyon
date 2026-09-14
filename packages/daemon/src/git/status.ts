@@ -172,6 +172,11 @@ export async function treeEmpty(worktreePath: string): Promise<boolean> {
   return !r.ok || r.out === "";
 }
 
+/** whether git holds `rel` in the index: a file the team has, as opposed to one only on disk */
+export async function isTracked(worktreePath: string, rel: string): Promise<boolean> {
+  return (await git(worktreePath, "ls-files", "--error-unmatch", "--", rel)).ok;
+}
+
 /** how far HEAD trails its upstream as of the last fetch; null when the branch has none */
 export async function behindUpstream(worktreePath: string): Promise<number | null> {
   const r = await git(worktreePath, "rev-list", "--count", "HEAD..@{upstream}");

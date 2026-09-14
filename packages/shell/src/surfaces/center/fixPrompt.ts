@@ -33,12 +33,12 @@ function describe(p: ProcState): string {
 
 /** What "let the agent work it out" sends from the setup pane: the daemon watches the repo's
  * settings files, so the file the agent writes is picked up the moment it lands. It names the one
- * a save would write, which in a repo that was opened is the local file git never sees. */
-export function setupFixPrompt(repo: RepoInfo): string {
+ * the pane's committed-or-local chip settled on, since the daemon follows whichever file appears. */
+export function setupFixPrompt(repo: RepoInfo, file: string): string {
   return [
     `This repo (${repo.name}) has no Toyon settings yet, so Toyon does not know how to install its dependencies or start its dev server.`,
     "",
-    `Work it out from the repo itself (package manager, scripts, framework, a README) and write \`${repo.configFile}\` in this shape:`,
+    `Work it out from the repo itself (package manager, scripts, framework, a README) and write \`${file}\` in this shape:`,
     "```json",
     '{ "setup": ["<install command>"], "run": { "web": "<start command>" } }',
     "```",

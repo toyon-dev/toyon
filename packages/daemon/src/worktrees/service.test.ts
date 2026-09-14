@@ -16,7 +16,7 @@ import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
-import { git } from "../git/exec.ts";
+import { GIT, git } from "../git/exec.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { WorktreeService } from "./service.ts";
@@ -360,7 +360,7 @@ describe("confirmConfig", () => {
     await settle();
     const agent = w.runtime.get(wt.id)!.agent;
     const procsBefore = w.procs.get(wt.id)!;
-    await w.repos.confirmConfig(repoId, { run: { web: "true", api: "true" } });
+    await w.repos.confirmConfig(repoId, { run: { web: "true", api: "true" } }, "local");
     await settle();
     expect(w.runtime.get(wt.id)!.agent).toBe(agent);
     // an opened repo gets one person's file, which git does not list
@@ -376,6 +376,59 @@ describe("confirmConfig", () => {
         .started.map((p) => p.name)
         .sort(),
     ).toEqual(["api", "web"]);
+  });
+
+  const excludes = () => readFileSync(join(w.repo, ".git/info/exclude"), "utf8");
+  const untracked = async () => (await git(w.repo, "status", "--porcelain", "--untracked-files=all")).out;
+
+  test("committed moves a local file into the shared one and lets git see it again", async () => {
+    const repoId = await registered();
+    await w.repos.confirmConfig(repoId, { run: { web: "true" } }, "local");
+    expect(excludes()).toContain(".toyon/settings.local.json");
+    await w.repos.confirmConfig(repoId, { run: { web: "true" }, setup: ["make"] }, "shared");
+    expect(existsSync(join(w.repo, ".toyon/settings.local.json"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(w.repo, ".toyon/settings.json"), "utf8"))).toEqual({
+      run: { web: "true" },
+      setup: ["make"],
+    });
+    expect(w.state.requireRepo(repoId).configFile).toBe(".toyon/settings.json");
+    // the exclude line goes with the file, so a local file written later by hand is excluded afresh
+    expect(excludes()).not.toContain("settings.local.json");
+    expect(await untracked()).toBe("?? .toyon/settings.json");
+  });
+
+  test("kept local moves a shared file nobody committed, and leaves one the team has", async () => {
+    const repoId = await registered();
+    mkdirSync(join(w.repo, ".toyon"));
+    writeFileSync(join(w.repo, ".toyon/settings.json"), JSON.stringify({ run: { web: "true" } }));
+    w.repos.reloadConfig(repoId);
+    await w.repos.confirmConfig(repoId, { run: { web: "true", api: "true" } }, "local");
+    expect(existsSync(join(w.repo, ".toyon/settings.json"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(w.repo, ".toyon/settings.local.json"), "utf8"))).toEqual({
+      run: { web: "true", api: "true" },
+    });
+    expect(await untracked()).toBe("");
+
+    // the same choice over a committed file is an override: the team's file is not ours to take
+    writeFileSync(join(w.repo, ".toyon/settings.json"), JSON.stringify({ run: { web: "true" } }));
+    sh(w.repo, GIT, "add", ".toyon/settings.json");
+    sh(w.repo, GIT, "commit", "-q", "-m", "settings");
+    await w.repos.confirmConfig(repoId, { run: { web: "true", api: "true" } }, "local");
+    expect(JSON.parse(readFileSync(join(w.repo, ".toyon/settings.json"), "utf8"))).toEqual({ run: { web: "true" } });
+    expect(JSON.parse(readFileSync(join(w.repo, ".toyon/settings.local.json"), "utf8"))).toEqual({
+      run: { api: "true" },
+    });
+    expect(await untracked()).toBe("");
+  });
+
+  test("the choice keeps the place the settings already are in", async () => {
+    const repoId = await registered();
+    writeFileSync(join(w.repo, "toyon.local.json"), JSON.stringify({ run: { web: "true" } }));
+    w.repos.reloadConfig(repoId);
+    await w.repos.confirmConfig(repoId, { run: { web: "true" } }, "shared");
+    expect(existsSync(join(w.repo, "toyon.local.json"))).toBe(false);
+    expect(existsSync(join(w.repo, "toyon.json"))).toBe(true);
+    expect(w.state.requireRepo(repoId).configFile).toBe("toyon.json");
   });
 });
 
@@ -505,7 +558,7 @@ describe("config reload", () => {
     expect(w.state.requireRepo(repoId).config.run).toEqual({ web: "true" });
     expect(w.state.requireRepo(repoId).configFile).toBe(".toyon/settings.local.json");
     // a save over the shared file keeps only the difference, so the team's later edits still arrive
-    await w.repos.confirmConfig(repoId, { run: { web: "true", api: "true" }, setup: ["make"] });
+    await w.repos.confirmConfig(repoId, { run: { web: "true", api: "true" }, setup: ["make"] }, "local");
     expect(JSON.parse(readFileSync(join(w.repo, ".toyon/settings.local.json"), "utf8"))).toEqual({ setup: ["make"] });
     // one person's file is out of git, the shared one is not
     expect((await git(w.repo, "status", "--porcelain", "--untracked-files=all")).out).toBe("?? .toyon/settings.json");
@@ -625,7 +678,7 @@ describe("redetect at turn end", () => {
     turnEnd(main.id);
     expect(w.state.requireRepo(repo.id).assumed).toBe("Cargo.toml");
     // saving setup confirms it and ends the assumption
-    await w.repos.confirmConfig(repo.id, { run: {} });
+    await w.repos.confirmConfig(repo.id, { run: {} }, "local");
     expect(w.state.requireRepo(repo.id)).toMatchObject({ needsSetup: false, config: { run: {} } });
     expect(w.state.requireRepo(repo.id).assumed).toBeUndefined();
   });

@@ -443,7 +443,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "confirm-config"(msg, _ctx, s) {
-    await s.repos.confirmConfig(msg.repoId, msg.config);
+    await s.repos.confirmConfig(msg.repoId, msg.config, msg.kind);
   },
 
   async "register-repo"(msg, ctx, s) {

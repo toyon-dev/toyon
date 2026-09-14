@@ -1,4 +1,7 @@
 import {
+  type ConfigFileKind,
+  configFileKind,
+  configSibling,
   DEFAULT_LAND_ROUTE,
   DEFAULT_MERGE_METHOD,
   isOwned,
@@ -27,6 +30,14 @@ type Proc = { id: number; name: string; cmd: string };
 /** rows are added and removed while the form is open, so each carries an identity of its own */
 let nextProcId = 1;
 const proc = (name: string, cmd: string): Proc => ({ id: nextProcId++, name, cmd });
+
+/** committed or kept local: the one setup answer that is about the file rather than the project.
+ * Said as the outcome, since the file names alone (settings.json, settings.local.json) do not say
+ * which of them git will list. */
+const FILE_KINDS: { id: ConfigFileKind; label: string; description: string }[] = [
+  { id: "shared", label: "committed", description: "in the repo; everyone who opens it gets these settings" },
+  { id: "local", label: "kept local", description: "in a file git never sees; for when only you use Toyon here" },
+];
 
 /** shown in place of the preview while a repo's detected config is unconfirmed: nothing is
  * spawned for its worktrees until the person says how the project installs and starts.
@@ -61,6 +72,11 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   const [land, setLand] = useState<LandRoute>(() => landPolicy(repo.config).land);
   const [automerge, setAutomerge] = useState(() => landPolicy(repo.config).automerge);
   const [merge, setMerge] = useState<MergeMethod | "default">(() => landPolicy(repo.config).merge ?? "default");
+  // which file of the pair the save writes. The daemon's default is already in `configFile`:
+  // the file that is there, else committed in a project toyon made and local in one that was
+  // opened, where a team that does not use toyon should never find a file it did not ask for.
+  const [kind, setKind] = useState<ConfigFileKind>(() => configFileKind(repo.configFile));
+  const file = configSibling(repo.configFile, kind);
   // the route row is only drawn with an origin, so without one the PR route is never in force
   const onPr = !!repo.remote && land === "pr";
   const multi = procs.length > 1;
@@ -107,16 +123,17 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
           procs.filter((p) => p.name.trim() && p.cmd.trim()).map((p) => [p.name.trim(), p.cmd.trim()]),
         ),
       },
+      kind,
     });
     onClose?.();
   };
   // a library, a CLI, a backend with no HTTP server: nothing to preview, everything else works.
   // Confirmed with no procs so the pane stops asking and the worktrees get their agents.
   const nothingToRun = () => {
-    sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...edited(), run: {} } });
+    sock?.send({ t: "confirm-config", repoId: repo.id, config: { ...edited(), run: {} }, kind });
     onClose?.();
   };
-  const askAgent = () => main && sock?.send({ t: "chat", worktreeId: main.id, text: setupFixPrompt(repo) });
+  const askAgent = () => main && sock?.send({ t: "chat", worktreeId: main.id, text: setupFixPrompt(repo, file) });
 
   const procRow = (p: Proc, i: number) => (
     <div className="setup-proc" key={p.id}>
@@ -254,8 +271,17 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
 
       <div className="form-knobs">
         {/* the file the button writes, the way the new-project form shows the folder it makes;
-              the repo is named in the lead, so the path is only the file */}
-        <span className="form-sign">{repo.configFile}</span>
+              the repo is named in the lead, so the path is only the file. The chip before it is
+              the one choice about that file, and the name after it is what the choice comes to,
+              so the two read as one phrase: "kept local, .toyon/settings.local.json" */}
+        <ChipPicker<ConfigFileKind>
+          value={kind}
+          options={FILE_KINDS}
+          onChange={setKind}
+          hint="whether the settings file is committed with the repo or kept out of git"
+          placeholder="committed or kept local"
+        />
+        <span className="form-sign">{file}</span>
         {onClose && <Button onClick={onClose}>cancel</Button>}
         {/* the third answer, only where it is one: beside a guessed start command it read as a
               verdict on the repo. A repo the detector could not read gets it, and so does the

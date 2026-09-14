@@ -461,7 +461,14 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("unqueue"), worktreeId: id, index: z.number().int().min(0) }),
   z.object({ t: z.literal("changed-ranges"), worktreeId: id, path: relPath }),
   z.object({ t: z.literal("rename-worktree"), worktreeId: id, title: z.string().min(1).max(200) }),
-  z.object({ t: z.literal("confirm-config"), repoId: id, config: toyonConfigSchema }),
+  /** `kind` is the setup pane's answer to committed or kept local: which of the pair the save
+   * writes, in the place the settings already are; the sibling it displaces is taken away */
+  z.object({
+    t: z.literal("confirm-config"),
+    repoId: id,
+    config: toyonConfigSchema,
+    kind: z.enum(["shared", "local"]),
+  }),
   /** open another repo in this daemon (the project switcher's "open folder"); `~` is expanded */
   z.object({ t: z.literal("register-repo"), path: z.string().min(1).max(4_000) }),
   /** make a project where there was not one and open it: a new folder, a clone of a remote, or an

@@ -45,7 +45,7 @@ describe("parseClientMsg", () => {
       { t: "agent-decide", worktreeId: "a", askId: "k1", choiceId: "allow_once" },
       { t: "agent-logout", agent: "codex" },
       { t: "graft", targetId: "a", sourceIds: ["b"] },
-      { t: "confirm-config", repoId: "r", config: { run: { web: "bun dev" } } },
+      { t: "confirm-config", repoId: "r", config: { run: { web: "bun dev" } }, kind: "local" },
       {
         t: "confirm-config",
         repoId: "r",
@@ -54,6 +54,7 @@ describe("parseClientMsg", () => {
           profiles: { full: { run: ["api", "web"], env: { X: "$API_URL" } }, fe: { run: ["web"], preview: "web" } },
           defaultProfile: "fe",
         },
+        kind: "shared",
       },
       { t: "create-worktree", repoId: "r", prompt: "x", profile: "fe" },
       { t: "create-worktree", repoId: "r", prompt: "x", model: "big", effort: "high" },
@@ -87,9 +88,11 @@ describe("parseClientMsg", () => {
   });
 
   test("names the offending field", () => {
-    const r = parseClientMsg({ t: "confirm-config", repoId: "r", config: {} });
+    const r = parseClientMsg({ t: "confirm-config", repoId: "r", config: {}, kind: "local" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toMatch(/config\.run/);
+    // committed or kept local is the shell's to say, never guessed here
+    expect(parseClientMsg({ t: "confirm-config", repoId: "r", config: { run: {} } }).ok).toBe(false);
     const w = parseClientMsg({ t: "write-file", worktreeId: "a", path: "", content: "", base: null, seq: 0 });
     if (!w.ok) expect(w.reason).toMatch(/^path/);
     const a = parseClientMsg({ t: "agent-answer", worktreeId: "a", askId: "k", answers: [{ selected: "one" }] });
@@ -108,7 +111,7 @@ describe("parseClientMsg", () => {
   });
 
   test("profiles must name real processes, a default, and a preview inside the profile", () => {
-    const cfg = (config: unknown) => parseClientMsg({ t: "confirm-config", repoId: "r", config });
+    const cfg = (config: unknown) => parseClientMsg({ t: "confirm-config", repoId: "r", config, kind: "local" });
     const run = { web: "w", api: "a" };
     const bad = [
       { run, profiles: { a: { run: ["nope"] } }, defaultProfile: "a" },

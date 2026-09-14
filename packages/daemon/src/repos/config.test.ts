@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { configFileKind, configSibling } from "@toyon/shared";
 import { configBody, configTarget, detectConfig, mergePatch, procCommand, readConfigFile } from "./config.ts";
 
 // a test can make several repos, so each one is kept for cleanup, not only the last
@@ -227,6 +228,15 @@ describe("settings files", () => {
     expect(configTarget(repo({ "toyon.json": "{}" }), false)).toBe("toyon.json");
     expect(configTarget(repo({ "toyon.json": "{}", "toyon.local.json": "{}" }), true)).toBe("toyon.local.json");
     expect(configTarget(folder({ run: {} }), false)).toBe(".toyon/settings.json");
+  });
+
+  test("the setup pane's committed-or-local choice swaps within the place, and defaults to the folder", () => {
+    expect(configSibling(".toyon/settings.local.json", "shared")).toBe(".toyon/settings.json");
+    expect(configSibling("toyon.json", "local")).toBe("toyon.local.json");
+    expect(configSibling("toyon.json", "shared")).toBe("toyon.json");
+    expect(configSibling("elsewhere.json", "local")).toBe(".toyon/settings.local.json");
+    expect(configFileKind("toyon.local.json")).toBe("local");
+    expect(configFileKind(".toyon/settings.json")).toBe("shared");
   });
 
   test("a save beside a shared file writes only the difference, a removal as null", () => {

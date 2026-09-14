@@ -49,9 +49,11 @@ describe("setupFixPrompt", () => {
       configFile: ".toyon/settings.local.json",
       needsSetup: true,
     };
-    const text = setupFixPrompt(repo);
+    const text = setupFixPrompt(repo, repo.configFile);
     expect(text).toContain("shop");
     expect(text).toContain("write `.toyon/settings.local.json`");
+    // the pane's chip can send the agent to the other file of the pair
+    expect(setupFixPrompt(repo, ".toyon/settings.json")).toContain("write `.toyon/settings.json`");
     expect(text).toContain('"run": { "web": "<start command>" }');
     expect(text).toContain("Do not start any server yourself");
   });

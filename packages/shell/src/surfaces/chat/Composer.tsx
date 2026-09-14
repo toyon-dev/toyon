@@ -487,8 +487,9 @@ export function Composer({
     return blocks.length > 0 ? blocks.join("\n\n") : undefined;
   };
 
+  // attachments alone are a message: a pasted error or a picked element often says it all
   const send = () => {
-    if (!active || !id || !boxId || !text.trim()) return;
+    if (!active || !id || !boxId || blank) return;
     if (shellCmd !== null) {
       // a command runs where the draft was typed, whatever the target says: attachments are for
       // the agent and stay for the next message

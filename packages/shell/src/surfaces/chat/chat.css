@@ -932,6 +932,10 @@
     flex-direction: column;
     gap: 4px;
     margin-bottom: 6px;
+    /* a message that is attachments alone: nothing follows, so nothing to keep a gap from */
+    &:last-child {
+      margin-bottom: 0;
+    }
     & .pick-chip.in-chat {
       margin: 0;
     }

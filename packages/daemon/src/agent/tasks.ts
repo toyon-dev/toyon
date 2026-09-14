@@ -4,7 +4,7 @@
 // prefer the agent's quick model and fall back to its default: a worktree still wants a name, and a
 // batch still wants splitting, on an agent that offers no small model.
 
-import type { WorktreeInfo } from "@toyon/shared";
+import type { AttachmentInput, WorktreeInfo } from "@toyon/shared";
 import type { StateStore } from "../core/state.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { LAND_SYSTEM, type LandVerdict, parseLanding } from "./landing.ts";
@@ -15,6 +15,20 @@ import type { AgentRegistry } from "./registry.ts";
 export const NAME_SYSTEM = "You are a naming assistant. Reply with only the requested name.";
 export const namePrompt = (task: string) =>
   `Name this coding task in 2 to 4 lowercase kebab-case words (like "sticky-header" or "dark-mode-toggle"). Reply with ONLY the name, nothing else.\n\nTask: ${task.slice(0, 500)}`;
+
+/** What a task is named from: its message's text, or, when the message was attachments alone,
+ * what they carry: a paste's text, an image's name, a picked element's component or tag and its
+ * text. Empty when there is nothing to name from, and then no name is asked for. */
+export function taskText(text: string, attachments: readonly AttachmentInput[] = []): string {
+  if (text.trim()) return text;
+  return attachments.map(attachmentText).join("\n\n");
+}
+
+function attachmentText(a: AttachmentInput): string {
+  if (a.kind === "paste") return a.text;
+  if (a.kind === "image") return a.name ? `image ${a.name}` : "an image";
+  return `element <${a.component ?? a.tag}>${a.text ? ` "${a.text}"` : ""}`;
+}
 
 /** 2–4 kebab words or nothing: an error message or a sentence must not become a title */
 export function parseName(text: string | null): string | null {

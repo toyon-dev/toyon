@@ -65,7 +65,8 @@ const LEADING_COMMAND = /^\/[A-Za-z0-9]/;
 
 /** attachments go first, each behind its caption and in the order they were attached, then the
  * text; context (live-page state) rides after it, except on a message that leads with a slash
- * command, which goes alone. The visible transcript only ever shows the text itself. */
+ * command, which goes alone. A message that is attachments alone has no text block: the paste or
+ * the picked element is the whole message. The visible transcript only ever shows the text itself. */
 export function buildPrompt(
   text: string,
   context?: string,
@@ -79,7 +80,8 @@ export function buildPrompt(
     if (prefix) blocks.push(textBlock(prefix));
   }
   for (const a of attachments) blocks.push(...attachmentBlocks(a));
-  if (!leads) blocks.push(textBlock(prefix ? `${prefix}\n\n${text}` : text));
+  const body = [prefix, text].filter(Boolean).join("\n\n");
+  if (!leads && body) blocks.push(textBlock(body));
   if (context && !leads) blocks.push(textBlock(context));
   return blocks;
 }

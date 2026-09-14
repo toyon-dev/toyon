@@ -2,7 +2,32 @@ import { describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "@toyon/shared";
 import { FakeAgent } from "../../test/helpers/fakes.ts";
 import type { AgentSpec } from "./registry.ts";
-import { makeRecapper, parseName, parsePlan } from "./tasks.ts";
+import { makeRecapper, parseName, parsePlan, taskText } from "./tasks.ts";
+
+describe("taskText", () => {
+  test("the text when there is any, else what the attachments carry", () => {
+    expect(taskText("fix the header", [{ kind: "paste", text: "boom" }])).toBe("fix the header");
+    expect(
+      taskText("  ", [
+        { kind: "paste", text: "TypeError: x is undefined" },
+        { kind: "image", name: "shot.png", mimeType: "image/png", data: "", width: 1, height: 1 },
+        {
+          kind: "pick",
+          component: "Button",
+          file: null,
+          line: null,
+          callFile: null,
+          callLine: null,
+          tag: "button",
+          selector: "button",
+          text: "Save",
+          html: "<button>Save</button>",
+        },
+      ]),
+    ).toBe('TypeError: x is undefined\n\nimage shot.png\n\nelement <Button> "Save"');
+    expect(taskText("")).toBe("");
+  });
+});
 
 describe("parseName", () => {
   test("keeps 2-4 kebab words, cleans quotes and case, takes the last line", () => {

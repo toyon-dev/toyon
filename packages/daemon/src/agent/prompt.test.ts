@@ -69,6 +69,15 @@ describe("buildPrompt", () => {
     ]);
   });
 
+  test("attachments alone send without an empty text block; the prefix still rides", () => {
+    const pasted = { kind: "paste" as const, ref: paste, text: "TypeError: x is undefined" };
+    expect(heads(buildPrompt("", "[ctx]", undefined, [pasted]))).toEqual([
+      "Pasted text 1 (2 lines, 17 chars), begins: line one",
+      "[ctx]",
+    ]);
+    expect(buildPrompt("", undefined, SYSTEM_APPEND, [pasted]).at(-1)).toEqual({ type: "text", text: SYSTEM_APPEND });
+  });
+
   test("attachments of every kind keep the order they were attached in", () => {
     const blocks = buildPrompt("do it", "[ctx]", undefined, [
       { kind: "pick", ref: pick },

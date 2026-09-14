@@ -31,7 +31,7 @@ import type { OptionField } from "../agent/acp/options.ts";
 import { attachmentsDirFor } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
-import { makeNamer } from "../agent/tasks.ts";
+import { makeNamer, taskText } from "../agent/tasks.ts";
 import { cutPoint, transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
@@ -213,8 +213,10 @@ export class WorktreeService {
     // validated up front: an unknown or uninstalled agent is a toast now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
     const profile = this.checkProfile(repo, opts.profile);
+    // a message that is attachments alone is named from what they carry
+    const task = taskText(prompt, attachments);
     // variants share a name base so they read as siblings in the list
-    let slug = variant ? `${slugify(prompt, false)}-v${variant.index}` : slugify(prompt);
+    let slug = variant ? `${slugify(task, false)}-v${variant.index}` : slugify(task);
     if (variant && (await git(repo.path, "show-ref", "--verify", `refs/heads/toyon/${slug}`)).ok) {
       slug = `${slug}-${shortId().slice(0, 3)}`;
     }
@@ -225,7 +227,8 @@ export class WorktreeService {
     const fromMain = !base || base.kind === "main";
 
     // perspective-diverse variants: same goal, different emphasis per attempt
-    const agentPrompt = variant && variant.of >= 2 ? `${prompt}\n\n${variantLens(variant.index)}` : prompt;
+    const agentPrompt =
+      variant && variant.of >= 2 ? [prompt, variantLens(variant.index)].filter(Boolean).join("\n\n") : prompt;
 
     // fast path: claim the pre-warmed spare (main-based tasks only). Its runtime — agent
     // included — already exists, so the task's first message goes to the spare's agent.
@@ -251,7 +254,7 @@ export class WorktreeService {
         this.d.state.save();
         this.d.hub.emit("worktreesChanged");
         this.d.runtime.ensureAgent(claimed).agent.send(agentPrompt, { context, attachments });
-        this.scheduleNaming(claimed, prompt, variant);
+        this.scheduleNaming(claimed, task, variant);
         return claimed;
       }
     }
@@ -282,7 +285,7 @@ export class WorktreeService {
     // setup + procs warm in the background; the agent starts immediately
     this.launch(wt, repo, base?.path ?? repo.path);
     this.d.runtime.ensureAgent(wt).agent.send(agentPrompt, { context, attachments });
-    this.scheduleNaming(wt, prompt, variant);
+    this.scheduleNaming(wt, task, variant);
     return wt;
   }
 
@@ -482,6 +485,8 @@ export class WorktreeService {
   /** Async pretty-naming: solo worktrees rename directly; variant groups rename together
    * (index 1 runs the Haiku call, then every sibling becomes <name>-v<index>). */
   private scheduleNaming(wt: WorktreeInfo, prompt: string, variant?: Variant) {
+    // nothing to name from: the slug stays rather than a name made up from an empty task
+    if (!prompt.trim()) return;
     if (!variant) {
       fireAndForget(
         wt.id,

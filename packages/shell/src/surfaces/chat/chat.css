@@ -8,11 +8,16 @@
     flex: 0 1 auto;
     min-width: var(--dock-min);
     background: var(--surface1);
+    /* the seam faces the centre, whichever edge the dock stands at (the app root's data-chat-side) */
     border-left: 1px solid var(--border0);
     display: flex;
     flex-direction: column;
     /* containing block for the drop wash */
     position: relative;
+  }
+  .app[data-chat-side="left"] .chat-dock {
+    border-left: 0;
+    border-right: 1px solid var(--border0);
   }
 
   /* ---- the chat as the centre's view, for a project with nothing to run ----

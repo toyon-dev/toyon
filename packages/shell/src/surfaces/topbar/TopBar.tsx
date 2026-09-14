@@ -59,22 +59,58 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   // an archived worktree's page covers the preview, so the route cluster has no page to steer
   const archivedPage = useStore((s) => s.archivedPage !== null);
   const ready = !!active && previewUp(active) && !archivedPage;
+  // each panel's toggle sits over its panel, so the two clusters trade toggles with the chat's side:
+  // the changes toggle at the changes dock's edge, the chat toggle and zen at the rail's. The lead
+  // and the tools keep their places, so the cluster between them measures the same either way.
+  const chatLeft = useStore((s) => s.chatSide) === "left";
+  // the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
+  // disabled button still lights and explains itself on hover as if it might do something
+  const changesToggle = !firstRun && (
+    <IconButton
+      icon="branch"
+      label="Changes panel"
+      hint={chord("changes")}
+      tone="chrome"
+      on={changesOpen}
+      onClick={() => dispatch({ a: "toggle-changes" })}
+    />
+  );
+  const chatToggle = !firstRun && !chatCentred && (
+    <IconButton
+      icon="chat"
+      label="Chat panel"
+      hint={chord("composer")}
+      tone="chrome"
+      on={chatOpen}
+      onClick={() => dispatch({ a: "toggle-chat" })}
+    />
+  );
+  // the one control the installed app's zen strip keeps: the strip is the window's title bar and
+  // stays anyway, and with no browser chrome around it, a lit toggle at the edge is the standing
+  // sign that this is a mode with a way out. It hides everything, so it sits at the very edge.
+  const zenToggle = !chatCentred && (
+    <IconButton
+      icon="zen"
+      className="bar-zen"
+      label="Full-bleed preview"
+      hint={chord("zen")}
+      tone="chrome"
+      on={zen}
+      onClick={() => dispatch({ a: "toggle-zen" })}
+    />
+  );
   return (
     <div className="top-bar">
       {zen && <span className="bar-zen-title">{active?.worktree.title ?? "Toyon"}</span>}
-      {/* the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
-          disabled button still lights and explains itself on hover as if it might do something */}
       {/* the lead: what stands at the bar's start in flow, measured so the cluster clears it */}
       <span className="bar-lead" ref={leadRef}>
-        {!firstRun && (
-          <IconButton
-            icon="branch"
-            label="Changes panel"
-            hint={chord("changes")}
-            tone="chrome"
-            on={changesOpen}
-            onClick={() => dispatch({ a: "toggle-changes" })}
-          />
+        {chatLeft ? (
+          <span className="bar-toggles">
+            {zenToggle}
+            {chatToggle}
+          </span>
+        ) : (
+          changesToggle
         )}
         <ProjectPill />
         {/* an action, not a switch: chrome's seat is for a toggle */}
@@ -88,8 +124,8 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
         <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
       )}
       <span className="bar-grow" />
-      {/* right cluster: settings · chat · zen (zen last — it hides everything, so it sits at the edge).
-          the terminal toggle lives in the composer: one shell per worktree, not app chrome. */}
+      {/* the tools: settings, design, then the panel toggles this edge holds. The terminal toggle
+          lives in the composer: one shell per worktree, not app chrome. */}
       <span className="bar-tools" ref={toolsRef}>
         <IconButton
           icon="settings"
@@ -114,36 +150,20 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
             onClick={() => dispatch({ a: "toggle-design" })}
           />
         )}
-        {!firstRun && !chatCentred && (
-          <IconButton
-            icon="chat"
-            label="Chat panel"
-            hint={chord("composer")}
-            tone="chrome"
-            on={chatOpen}
-            onClick={() => dispatch({ a: "toggle-chat" })}
-          />
-        )}
-        {/* the one control the installed app's zen strip keeps: the strip is the window's title bar
-            and stays anyway, and with no browser chrome around it, a lit toggle at the edge is the
-            standing sign that this is a mode with a way out */}
-        {!chatCentred && (
-          <IconButton
-            icon="zen"
-            className="bar-zen"
-            label="Full-bleed preview"
-            hint={chord("zen")}
-            tone="chrome"
-            on={zen}
-            onClick={() => dispatch({ a: "toggle-zen" })}
-          />
+        {chatLeft ? (
+          changesToggle
+        ) : (
+          <>
+            {chatToggle}
+            {zenToggle}
+          </>
         )}
       </span>
     </div>
   );
 }
 
-/** Zed-style, next to the changes toggle: the project the shell is scoped to; opens the switcher
+/** Zed-style, beside the panel toggle at the bar's start: the project the shell is scoped to; opens the switcher
  * as a dropdown right under itself, so the list appears where the click already was. It carries no
  * mark for activity in other projects: beside the name, a mark reads as being about this project,
  * and the switcher's rows already say which project is working. */

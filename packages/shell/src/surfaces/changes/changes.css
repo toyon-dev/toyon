@@ -15,6 +15,7 @@
     /* the strip heads the whole panel under the bar, so it takes the full row rather than the
      pane head's dense one */
     --tabs-height: var(--row-height);
+    /* the seam faces the centre, whichever edge the dock stands at (the app root's data-chat-side) */
     border-right: 1px solid var(--border0);
     display: flex;
     flex-direction: column;
@@ -33,6 +34,10 @@
   .changes-dock.collapsed,
   .chat-dock.collapsed {
     display: none;
+  }
+  .app[data-chat-side="left"] .changes-dock {
+    border-right: 0;
+    border-left: 1px solid var(--border0);
   }
 
   /* one commit: the subject takes the row, the age ends it where a file row ends with its counts.

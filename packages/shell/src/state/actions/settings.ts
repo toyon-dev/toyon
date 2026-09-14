@@ -24,7 +24,7 @@ export function pickThemeFile(onText: (name: string, source: string) => void) {
 
 export type SettingsState = Pick<
   State,
-  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent"
+  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent" | "chatSide"
 >;
 
 /** What the settings card holds, as a list: the gear's right-click and the palette's settings
@@ -58,6 +58,15 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
         detail: s.agents.find((a) => a.id === s.defaultAgent)?.name ?? s.defaultAgent,
         sub: true,
         onClick: () => dispatch({ a: "open", overlay: { kind: "agent" } }),
+      },
+    ],
+    [
+      // two values, so the line is the switch: a press flips it and nothing opens
+      {
+        id: "chat-side",
+        label: "chat side",
+        detail: s.chatSide,
+        onClick: () => dispatch({ a: "toggle-chat-side" }),
       },
     ],
     [

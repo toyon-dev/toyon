@@ -29,6 +29,8 @@ export const STORAGE = {
   termHeight: "toyon-th",
   /** the worktree panel is kept open instead of peeking on hover */
   rail: "toyon-rail",
+  /** which side of the window the chat dock stands on, the rail outside it: "left" | "right" */
+  chatSide: "toyon-chat-side",
   /** every project's panel layout, keyed by repo id: {"<repo>":{changes,chat,term,design}} */
   panels: "toyon-panels",
   /** this tab's id (sessionStorage): worktrees created here steal focus, others don't */

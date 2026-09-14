@@ -110,14 +110,18 @@
      and the window undraggable. The worktree name centred, and the zen toggle alone at its usual
      edge, lit: the strip stands anyway, so the button costs the preview nothing, and with no
      browser chrome around the window it is the one standing sign of a way out. The other
-     toggles are what zen removes, and each is a chord away once out. */
+     toggles are what zen removes, and each is a chord away once out. The toggle stays in
+     whichever cluster holds it (the rail's side), and the grow between the clusters puts it at
+     that cluster's edge. */
     .app.zen {
       grid-template-rows: auto 1fr;
     }
     .app.zen .top-bar {
       display: flex;
     }
-    .app.zen .top-bar > :not(.bar-zen-title, .bar-grow, .bar-tools),
+    .app.zen .top-bar > :not(.bar-zen-title, .bar-grow, .bar-lead, .bar-tools),
+    .app.zen .bar-lead > :not(.bar-toggles),
+    .app.zen .bar-toggles > :not(.bar-zen),
     .app.zen .bar-tools > :not(.bar-zen) {
       display: none;
     }
@@ -149,13 +153,22 @@
     gap: 4px;
     transition: left 0.15s ease;
   }
-  /* the toggle, the pill and the install offer, in one box so the bar can measure where they end */
+  /* the panel toggle this edge holds, the pill and the install offer, in one box so the bar can
+   measure where they end */
   .bar-lead {
     display: flex;
     align-items: center;
     gap: inherit;
     /* a name longer than the bar has room for gives way before the cluster does */
     min-width: 0;
+  }
+  /* the rail's toggles when they lead: the same columns the tools keep (below), so zen centres over
+   the strip and the chat toggle over the chat dock's first control. In the installed app the
+   traffic lights push the lead in past the strip, and the columns cannot hold on that side. */
+  .bar-toggles {
+    display: flex;
+    align-items: center;
+    gap: 20px;
   }
   /* while a dock is being dragged the centre tracks the pointer, and easing there reads as lag */
   body.resizing .bar-center {
@@ -198,8 +211,10 @@
     & .bar-grow {
       flex: 1;
     }
-    /* columns: zen centers over the 40px rail (bar pad 10 + 20px box → center 20px); with the
-   20px gap the chat toggle's center lands at 60px = rail 40 + dock pad 10 + picker half 10 */
+    /* columns, counted in from the edge the rail stands at: zen centres over the 40px strip (bar
+   pad 10 + 20px box, centre 20px); with the 20px gap the chat toggle's centre lands at 60px =
+   strip 40 + dock pad 10 + picker half 10. The same gap serves the changes toggle when it ends
+   the tools instead. */
     & .bar-tools {
       display: flex;
       align-items: center;

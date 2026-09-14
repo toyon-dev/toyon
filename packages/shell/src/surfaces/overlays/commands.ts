@@ -114,6 +114,7 @@ export type CommandState = Pick<
   | "picking"
   | "changesOpen"
   | "chatOpen"
+  | "chatSide"
   | "railOpen"
   | "termOpen"
   | "designOpen"
@@ -139,6 +140,7 @@ export function useCommands(): Command[] {
   const picking = useStore((s) => s.picking);
   const changesOpen = useStore((s) => s.changesOpen);
   const chatOpen = useStore((s) => s.chatOpen);
+  const chatSide = useStore((s) => s.chatSide);
   const railOpen = useStore((s) => s.railOpen);
   const termOpen = useStore((s) => s.termOpen);
   const designOpen = useStore((s) => s.designOpen);
@@ -161,6 +163,7 @@ export function useCommands(): Command[] {
       picking,
       changesOpen,
       chatOpen,
+      chatSide,
       railOpen,
       termOpen,
       designOpen,
@@ -184,6 +187,7 @@ export function useCommands(): Command[] {
     picking,
     changesOpen,
     chatOpen,
+    chatSide,
     railOpen,
     termOpen,
     designOpen,

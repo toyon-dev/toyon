@@ -300,6 +300,11 @@ export const newProjectState = (v: Pick<NewProjectState, "mode" | "name" | "pare
 /** with no project anywhere, the view is what there is, and a first project goes in ~/Projects */
 const firstProject = () => newProjectState({ mode: "create", name: "", parent: `~/${PROJECTS_FOLDER}` });
 
+/** which side of the window the chat dock stands on; the rail stands outside it and the changes
+ * dock takes the other edge. Per browser like the rail's pin (it is about this screen, not the
+ * project), so it is not part of a project's Panels. */
+export type ChatSide = "left" | "right";
+
 /** which docks and panes a project is left with. The layout is remembered per project, so a reload
  * comes back to it and switching projects carries each one's own back (zen is deliberately not in
  * here: it is a mode you leave, not a layout). */
@@ -476,6 +481,7 @@ export interface State {
   walked: number;
   /** the worktree panel is kept open, instead of peeking on hover and collapsing to the strip */
   railOpen: boolean;
+  chatSide: ChatSide;
   /** bumped to put the keyboard on the rail's current row */
   focusRail: number;
   /** the collapsed rail is peeked open by the worktree walk (⌥↑/↓, ⌃Tab), the way an alt-tab
@@ -574,6 +580,8 @@ export interface InitialOpts {
   storedRepo?: string | null;
   /** the worktree panel was left open, so it starts open rather than peeking */
   storedRailOpen?: boolean;
+  /** the side the chat dock was left on */
+  storedChatSide?: ChatSide;
   /** every project's remembered panel layout; the stored project's is painted before hello */
   storedPanels?: Record<string, Panels>;
   /** the worktree each project was left on, so switching projects after a reload lands where you
@@ -630,6 +638,7 @@ export function initialState(opts: InitialOpts): State {
     focusChat: 0,
     walked: 0,
     railOpen: opts.storedRailOpen ?? false,
+    chatSide: opts.storedChatSide ?? "right",
     focusRail: 0,
     railPeek: false,
     unreadHold: null,
@@ -937,6 +946,8 @@ export type Action =
   /** the first greenfield message was sent: the chat goes back to its dock */
   | { a: "show-chat" }
   | { a: "toggle-rail" }
+  /** the chat dock, and the rail with it, to the other side of the window */
+  | { a: "toggle-chat-side" }
   /** pin the worktree panel if it is not, and ask its current row for the keyboard either way */
   | { a: "focus-rail" }
   /** hold the collapsed rail's peek open while the worktree walk runs, or let it fall closed */
@@ -1251,6 +1262,8 @@ function reduce(s: State, action: Action): State {
       return { ...s, unreadHold: action.id };
     case "toggle-rail":
       return { ...s, railOpen: !s.railOpen };
+    case "toggle-chat-side":
+      return { ...s, chatSide: s.chatSide === "left" ? "right" : "left" };
     case "focus-rail":
       return { ...s, railOpen: true, focusRail: s.focusRail + 1 };
     case "rail-peek":

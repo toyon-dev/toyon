@@ -1263,6 +1263,22 @@ describe("new-project view", () => {
   });
 });
 
+describe("chat side", () => {
+  test("the chat stands on the right until told otherwise", () => {
+    expect(initial.chatSide).toBe("right");
+  });
+  test("a reload paints the stored side before hello, and hello keeps it", () => {
+    const from = initialState({ clientId: ME, storedChatSide: "left" });
+    expect(from.chatSide).toBe("left");
+    expect(run([hello(wt("m1", "main"))], from).chatSide).toBe("left");
+  });
+  test("the toggle flips it and flips it back", () => {
+    const once = reducer(initial, { a: "toggle-chat-side" });
+    expect(once.chatSide).toBe("left");
+    expect(reducer(once, { a: "toggle-chat-side" }).chatSide).toBe("right");
+  });
+});
+
 describe("panel layout", () => {
   const two = () =>
     helloIn([repo("r1"), repo("r2")], wt("m1", "main", undefined, "r1"), wt("m2", "main", undefined, "r2"));

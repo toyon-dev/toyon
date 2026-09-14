@@ -29,6 +29,7 @@ import { useDragResize, useOnChange, usePersisted } from "../ui/hooks.ts";
 import { Menus } from "../ui/Menu.tsx";
 import { useContextMenu } from "../ui/menu.ts";
 import { Tooltips } from "../ui/Tooltip.tsx";
+import { type DockSide, dockWidthAt } from "./dockWidth.ts";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
 import { SelfNotice } from "./SelfNotice.tsx";
@@ -73,6 +74,7 @@ export function App() {
   const changesOpen = useStore((s) => s.changesOpen) && !firstRun && !archivedPage;
   const chatOpen = useStore((s) => s.chatOpen) && !firstRun && !chatCentred && !archivedPage;
   const railOpen = useStore((s) => s.railOpen);
+  const chatSide = useStore((s) => s.chatSide);
   const panels = useStore((s) => s.panels);
   const lastActive = useStore((s) => s.lastActive);
   const discoveredOpen = useStore((s) => s.discoveredOpen);
@@ -228,6 +230,11 @@ export function App() {
       localStorage.setItem(STORAGE.rail, railOpen ? "1" : "0");
     } catch {}
   }, [railOpen]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.chatSide, chatSide);
+    } catch {}
+  }, [chatSide]);
   // the panel layout is per project: a reload comes back to the one this project was left in
   useEffect(() => {
     try {
@@ -296,21 +303,21 @@ export function App() {
     if (from !== pathOf(activeId)) previewBus.post(activeId, { type: "navigate", path: from });
   });
 
-  // resizable docks, widths persisted per browser. A drag measures the dock from its own far edge,
-  // the one the handle is not on, so nothing here knows what else stands in the row or in which
-  // order; the row's fit to the window is the docks' CSS (app.css)
+  // resizable docks, widths persisted per browser. A handle's class says which side of it its dock
+  // stands, for the grab strip (app.css) and this measure alike, and the width set is the pointer's
+  // distance from the dock's far edge, so either hand of the row measures the same way; the row's
+  // fit to the window is the docks' CSS (app.css)
   const [changesW, setChangesW] = usePersisted(STORAGE.changesWidth, 220, (raw) =>
     raw ? clampW(Number(raw), 220) : undefined,
   );
   const [chatW, setChatW] = usePersisted(STORAGE.chatWidth, 380, (raw) => (raw ? clampW(Number(raw), 380) : undefined));
-  const dragChanges = useDragResize((ev, handle) => {
-    const dock = handle.previousElementSibling;
-    return dock ? clampW(ev.clientX - dock.getBoundingClientRect().left, 220) : null;
-  }, setChangesW);
-  const dragChat = useDragResize((ev, handle) => {
-    const dock = handle.nextElementSibling;
-    return dock ? clampW(dock.getBoundingClientRect().right - ev.clientX, 380) : null;
-  }, setChatW);
+  const measure = (ev: PointerEvent, handle: HTMLElement, fallback: number) => {
+    const side: DockSide = handle.classList.contains("left") ? "left" : "right";
+    const dock = side === "left" ? handle.previousElementSibling : handle.nextElementSibling;
+    return dock ? clampW(dockWidthAt(dock.getBoundingClientRect(), side, ev.clientX), fallback) : null;
+  };
+  const dragChanges = useDragResize((ev, handle) => measure(ev, handle, 220), setChangesW);
+  const dragChat = useDragResize((ev, handle) => measure(ev, handle, 380), setChatW);
   // the centre column's element, for the top bar: its cluster sits over the preview
   const [centerEl, setCenterEl] = useState<HTMLDivElement | null>(null);
 
@@ -320,9 +327,27 @@ export function App() {
   const cm = useContextMenu("app");
   const appMenu = cm.contextMenu(() => appItems(store.getState(), { sock, dispatch }));
 
+  // the row in either hand. DOM order is the visual order: the drag measure walks siblings and the
+  // rail's peek covers the dock beside it, so nothing here may reorder by CSS. The first handle's
+  // dock is before it and the second's after it, whichever dock that is.
+  const changes = <ChangesDock width={changesW} />;
+  // the centre shows the chat instead, and one composer at a time is the only kind there is; an
+  // archived chat in the centre is the one chat panel too: a second composer, hidden, would answer
+  // the focus chord and take a dropped file's bounds
+  const chat = !chatCentred && !archivedPage && <ChatDock width={chatW} />;
+  const rail = !firstRun && <Rail />;
+  const chatLeft = chatSide === "left";
+  const first = chatLeft
+    ? { dock: chat, open: chatOpen, drag: dragChat }
+    : { dock: changes, open: changesOpen, drag: dragChanges };
+  const last = chatLeft
+    ? { dock: changes, open: changesOpen, drag: dragChanges }
+    : { dock: chat, open: chatOpen, drag: dragChat };
+
   return (
     <div
       className={cx("app", zen && "zen")}
+      data-chat-side={chatSide}
       onContextMenu={(e) => {
         if (e.defaultPrevented || (e.target instanceof Element && e.target.closest(NATIVE_MENU))) return;
         appMenu.onContextMenu(e);
@@ -332,15 +357,13 @@ export function App() {
       <Menus />
       <TopBar center={centerEl} />
       <div className="docks">
-        <ChangesDock width={changesW} />
-        {changesOpen && <div className="dock-resize left" onPointerDown={dragChanges} />}
+        {chatLeft && rail}
+        {first.dock}
+        {first.open && <div className="dock-resize left" onPointerDown={first.drag} />}
         <Center onRoot={setCenterEl} />
-        {chatOpen && <div className="dock-resize right" onPointerDown={dragChat} />}
-        {/* the centre shows the chat instead, and one composer at a time is the only kind there is */}
-        {/* an archived chat in the centre is the one chat panel: a second composer, hidden, would
-            answer the focus chord and take a dropped file's bounds */}
-        {!chatCentred && !archivedPage && <ChatDock width={chatW} />}
-        {!firstRun && <Rail />}
+        {last.open && <div className="dock-resize right" onPointerDown={last.drag} />}
+        {last.dock}
+        {!chatLeft && rail}
       </div>
       <SelfNotice />
       {toast && (

@@ -133,6 +133,7 @@ const store = createStore(
     storedActive: read(localStorage, STORAGE.active),
     storedRepo: read(localStorage, STORAGE.repo),
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",
+    storedChatSide: read(localStorage, STORAGE.chatSide) === "left" ? "left" : "right",
     storedPanels: storedPanels(),
     storedLastActive: storedLastActive(),
     storedDiscoveredOpen: storedSectionOpen(STORAGE.discoveredOpen),

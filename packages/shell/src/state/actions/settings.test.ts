@@ -15,6 +15,7 @@ describe("the settings menu", () => {
         daylight: null,
         agents: [{ id: "claude", name: "Claude" } as AgentInfo],
         defaultAgent: "claude",
+        chatSide: "right",
       },
       { sock: null, dispatch: () => {} },
     );
@@ -26,6 +27,8 @@ describe("the settings menu", () => {
       "theme: light or dark… [follow system]",
       "|",
       "default agent… [Claude]",
+      "|",
+      "chat side [right]",
       "|",
       "theme: import a VS Code theme…",
       "theme: rescan editor themes",

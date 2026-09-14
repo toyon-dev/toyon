@@ -27,6 +27,7 @@ export function KeysHelp() {
   const cm = useContextMenu("keys");
   const prefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
+  const chatSide = useStore((s) => s.chatSide);
   const dark = useDarkNow();
   const agents = useStore((s) => s.agents);
   const repo = useActiveRepo();
@@ -83,6 +84,13 @@ export function KeysHelp() {
             <span className="keys-d">theme</span>
             <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
               {resolveTheme(prefs, themes, dark).name}
+            </Button>
+          </div>
+          {/* two values, so the row is the switch: a press flips it and nothing opens */}
+          <div className="keys-setting">
+            <span className="keys-d">chat side</span>
+            <Button variant="field" mono onClick={() => dispatch({ a: "toggle-chat-side" })}>
+              {chatSide}
             </Button>
           </div>
         </div>

@@ -1,4 +1,6 @@
-node_modules/
+# no trailing slash: a worktree that links node_modules to a sibling checkout has a symlink by
+# that name, and a directory-only rule lets `git add -A` sweep the link in
+node_modules
 dist/
 *.tgz
 *.log

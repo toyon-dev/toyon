@@ -11,7 +11,7 @@ import { cssRules, declsOf, shellCss } from "./cssRules.ts";
  * Not direction: rtl, which would reorder the bidi-neutral characters in a branch name or a
  * count: the rows reverse as flex items, and the four things a pair cannot carry are restated
  * in the mirrored block: the rows' order, the marker's side, the seam with its clip and shadow,
- * and the digits' edge.
+ * and the digits' edge. The bar is not mirrored: only the two panel toggles trade ends (TopBar.tsx).
  */
 
 const MIRROR = '.app[data-chat-side="left"]';
@@ -68,12 +68,5 @@ describe("the rail's side is one switch", () => {
       expect(m.get(own)).toBe("0");
       expect(m.get(other)).toMatch(/^1px solid /);
     }
-  });
-  test("the installed app's zen strip keeps the zen toggle in either cluster", async () => {
-    const rules = cssRules(await shellCss());
-    const hidden = rules.filter((r) => r.decls.get("display") === "none").flatMap((r) => r.selectors);
-    expect(hidden).toContain(".app.zen .bar-toggles > :not(.bar-zen)");
-    expect(hidden).toContain(".app.zen .bar-tools > :not(.bar-zen)");
-    expect(hidden).toContain(".app.zen .bar-lead > :not(.bar-toggles)");
   });
 });

@@ -466,6 +466,9 @@ export interface State {
   rightOpen: boolean;
   /** bumped to put the keyboard in the composer, the same way */
   focusRight: number;
+  /** bumped when a keyboard walk lands on a row: the composer takes the caret only if nothing
+   * better (an editor, a terminal, an ask card) holds it */
+  walked: number;
   /** the worktree panel is kept open, instead of peeking on hover and collapsing to the strip */
   railOpen: boolean;
   /** bumped to put the keyboard on the rail's current row */
@@ -618,6 +621,7 @@ export function initialState(opts: InitialOpts): State {
     editCommit: 0,
     rightOpen: true,
     focusRight: 0,
+    walked: 0,
     railOpen: opts.storedRailOpen ?? false,
     focusRail: 0,
     railPeek: false,
@@ -942,6 +946,8 @@ export type Action =
   | { a: "toggle-right" }
   /** open the chat panel if it is shut, and ask the composer for the keyboard either way */
   | { a: "focus-right" }
+  /** a worktree walk landed on a row: offer the composer the keyboard, without opening anything */
+  | { a: "walked" }
   /** the first greenfield message was sent: the chat goes back to its dock */
   | { a: "show-right" }
   | { a: "toggle-rail" }
@@ -1232,6 +1238,8 @@ function reduce(s: State, action: Action): State {
       return isChatCentred(s) ? s : { ...s, rightOpen: !s.rightOpen };
     case "focus-right":
       return { ...revealChat(s), focusRight: s.focusRight + 1 };
+    case "walked":
+      return { ...s, walked: s.walked + 1 };
     case "show-right":
       return revealChat(s);
     case "hold-unread":

@@ -321,6 +321,21 @@ export function Composer({
     const f = requestAnimationFrame(() => composerRef.current?.focus());
     return () => cancelAnimationFrame(f);
   });
+  // A worktree walk (⌥↑/↓, ⌃Tab) landed here to read and reply, so the box takes the caret when
+  // only the body or the rail's row holds it. A hand in the editor or a terminal keeps its place,
+  // and an ask card that took the keyboard on mount keeps it: the row was jumped to for the ask.
+  const walked = useStore((s) => s.walked);
+  const walkedSeen = useRef(walked);
+  useOnChange([walked], () => {
+    if (walked === walkedSeen.current) return;
+    walkedSeen.current = walked;
+    if (centred !== !!greenfield) return;
+    const f = requestAnimationFrame(() => {
+      const held = document.activeElement;
+      if (!held || held === document.body || held.closest(".rail")) composerRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(f);
+  });
 
   const nav = useListNav<Row>({
     results: rows,

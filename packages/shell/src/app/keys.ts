@@ -48,6 +48,15 @@ export function useChords() {
     const onKey = (e: KeyboardEvent) => {
       const s = store.getState();
       const { dispatch } = store;
+      // a walk that lands on a row is there to read and reply, so the composer is offered the
+      // caret. Who held it is read now: a carried terminal or editor remounts on the switch, and a
+      // frame later the body holds a caret that was theirs.
+      const land = (id: string) => {
+        const held = document.activeElement;
+        const offer = !held || held === document.body || !!held.closest(".rail, .chat-input");
+        dispatch({ a: "activate", id });
+        if (offer) dispatch({ a: "walked" });
+      };
       // a key xterm let through for the program in it can still bubble here, so a focused terminal
       // is matched as the guest keyboard it is and keeps its ⌃R
       const chord = matchChord(e, { guest: !!document.activeElement?.closest(".xterm") });
@@ -79,7 +88,7 @@ export function useChords() {
           case "wt-next": {
             const to = railWalk(s.visible, s.visibleDiscovered, s.activeId, !!s.draft, chord.id === "wt-next" ? 1 : -1);
             if (to && "draft" in to) dispatch({ a: "open-draft" });
-            else if (to) dispatch({ a: "activate", id: to.activate });
+            else if (to) land(to.activate);
             // the peek shows the row landed on, and a walk with nowhere to go shows why
             peek(e);
             break;
@@ -88,7 +97,7 @@ export function useChords() {
           case "wt-unseen-next": {
             const to = unseenJump(s.visible, s.activeId, !!s.draft, chord.id === "wt-unseen-next" ? 1 : -1);
             if (to && "draft" in to) dispatch({ a: "open-draft" });
-            else if (to) dispatch({ a: "activate", id: to.activate });
+            else if (to) land(to.activate);
             break;
           }
           case "mark-unread":

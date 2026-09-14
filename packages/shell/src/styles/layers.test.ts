@@ -23,7 +23,6 @@ const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
   ".rail-panel": { root: ".docks", why: "the peek covers the chat dock and its grab strip" },
   ".pane-resize": { root: ".pane", why: "the drag strip over the pane's own head" },
   ".overlay": { root: ".center", why: "the palette's scrim over the panes of the centre" },
-  ".image-chip.in-chat:hover .image-thumb": { root: ".chat-log", why: "the transcript's own image, larger" },
 };
 
 const cssFiles = () => [...new Glob("**/*.css").scanSync({ cwd: SRC })].sort();

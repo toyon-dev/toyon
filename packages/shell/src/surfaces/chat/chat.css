@@ -53,9 +53,6 @@
   .chat-log {
     flex: 1;
     overflow-y: auto;
-    /* the transcript layers its own children: a hovered image grows over the chips beside it, and
-       stops at the log's edge rather than climbing over the composer */
-    isolation: isolate;
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -926,18 +923,38 @@
       display: flex;
       padding: 3px 6px;
     }
-    &.in-chat:hover .image-thumb {
-      /* a larger look without a popover: the thumb grows in place */
-      transform: scale(2.4);
-      transform-origin: left center;
-      z-index: 1;
-      box-shadow: var(--elevation-float);
+  }
+  /* the hovered chip's image at a readable size, floated off the transcript's edge onto the preview
+     (ImageChip.tsx places it). The menu's box, as every float is; the image fills it to the frame. It
+     takes no pointer: clamped over the chat when there is no room beside it, it must not sit between
+     the pointer and the chip that opened it. */
+  .image-peek {
+    pointer-events: none;
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-float);
+    overflow: hidden;
+    animation: tooltip-in-left 90ms ease-out;
+    &[data-side="right"] {
+      animation-name: tooltip-in-right;
+    }
+    & img {
+      display: block;
+      width: auto;
+      height: auto;
+      max-width: min(640px, 45vw);
+      max-height: 70vh;
+      background: var(--surface2);
     }
   }
   .msg-attachments {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    /* the bubble's padding is even, but text under it carries its own leading and a bordered chip
+       carries none, so the chips sat visibly closer to the top than the text does to the bottom */
+    padding-top: 2px;
     margin-bottom: 6px;
     /* a message that is attachments alone: nothing follows, so nothing to keep a gap from */
     &:last-child {

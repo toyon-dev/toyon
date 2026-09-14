@@ -96,6 +96,8 @@ export function useChords() {
           case "wt-unseen-next": {
             const to = unseenJump(s.visible, s.activeId, chord.id === "wt-unseen-next" ? 1 : -1);
             if (to) land(to.activate);
+            // same hold as the walk: the peek shows which row was worth the look
+            peek(e);
             break;
           }
           case "mark-unread":

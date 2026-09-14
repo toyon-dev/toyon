@@ -72,6 +72,12 @@
     & > .tool-row[open]:first-child {
       margin-top: auto;
     }
+    /* the log scrolls; a row never gives up height to make the transcript fit. Flex would take it
+       from any row that clips its own overflow (the ask card does, to keep its corners), and a card
+       squeezed to one row hides its question and its buttons behind the first option. */
+    & > * {
+      flex-shrink: 0;
+    }
   }
 
   .jump-down {

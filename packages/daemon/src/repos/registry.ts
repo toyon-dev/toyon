@@ -535,11 +535,17 @@ export class RepoRegistry {
       this.d.worktrees.invalidateCounts();
       this.d.hub.emit("repoTick", repo.id);
       fireAndForget(repo.id, this.d.worktrees.spare.refresh(repo.id), "spare refresh");
-      // work arrived on the branch: catch the main checkout up to it, and say whether the daemon
-      // serving this very page is one of the things now out of date. Both read the repo as it is
+      // work arrived on the branch: say whether the daemon serving this very page is one of the
+      // things now out of date, then catch the main checkout up to it. Both read the repo as it is
       // now, so this covers a pull and a land from another window as well as a land from here.
-      this.d.afterLand.run(repo.id);
-      fireAndForget(repo.id, this.checkSelf(repo), "self check");
+      // The check goes first because the build reports itself onto the self state, and a build
+      // that starts before the state exists reports into nothing: the shell would offer a rebuild
+      // through the whole of a rebuild already running.
+      fireAndForget(
+        repo.id,
+        this.checkSelf(repo).then(() => this.d.afterLand.run(repo.id)),
+        "self check",
+      );
     });
     const stopCfg = watchConfigFile(repo.path, () => this.reloadConfig(repo.id));
     // someone added or removed a worktree outside toyon: what git knows and what we last read

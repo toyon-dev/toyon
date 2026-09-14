@@ -36,7 +36,7 @@ const labels = (items: MenuEntry[]) => items.map((i) => (isItem(i) ? i.label : "
 
 describe("a worktree's actions", () => {
   test("read the same in the menu and the palette: one list, grouped, gated by state", () => {
-    const quiet = worktreeItems(owned(), null, { leftOpen: true, termOpen: true, shipping: {} }, deps);
+    const quiet = worktreeItems(owned(), null, { leftOpen: true, shipping: {} }, deps);
     expect(labels(quiet)).toEqual([
       "open terminal",
       "reveal in Finder",
@@ -54,7 +54,7 @@ describe("a worktree's actions", () => {
     const busy = worktreeItems(
       owned({ agent: "working", dirty: 2, behind: 3 }),
       null,
-      { leftOpen: false, termOpen: false, shipping: {} },
+      { leftOpen: false, shipping: {} },
       deps,
       { graft: () => {} },
     );
@@ -79,21 +79,16 @@ describe("a worktree's actions", () => {
   });
 
   test("a landing op in flight keeps the other landing ops on the list, off, until it answers", () => {
-    const items = worktreeItems(
-      owned({ behind: 3 }),
-      null,
-      { leftOpen: true, termOpen: true, shipping: { w1: "land" } },
-      deps,
-    );
+    const items = worktreeItems(owned({ behind: 3 }), null, { leftOpen: true, shipping: { w1: "land" } }, deps);
     const off = items.filter(isItem).filter((i) => i.disabled !== undefined);
     expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "land"]);
     expect(off[0]?.disabled).toBe("waiting on the one in progress");
   });
 
   test("mark as unread stays on the list but off for a row that already has its ring", () => {
-    const ringed = worktreeItems(owned({ unseen: true }), null, { leftOpen: true, termOpen: true, shipping: {} }, deps);
+    const ringed = worktreeItems(owned({ unseen: true }), null, { leftOpen: true, shipping: {} }, deps);
     expect(ringed.filter(isItem).find((i) => i.id === "unread")?.disabled).toBe("already unread");
-    const quiet = worktreeItems(owned(), null, { leftOpen: true, termOpen: true, shipping: {} }, deps);
+    const quiet = worktreeItems(owned(), null, { leftOpen: true, shipping: {} }, deps);
     expect(quiet.filter(isItem).find((i) => i.id === "unread")?.disabled).toBeUndefined();
   });
 
@@ -111,7 +106,7 @@ describe("a worktree's actions", () => {
       configFile: ".toyon/settings.json",
       needsSetup: false,
     };
-    const items = worktreeItems(owned(), repo, { leftOpen: true, termOpen: true, shipping: {} }, deps);
+    const items = worktreeItems(owned(), repo, { leftOpen: true, shipping: {} }, deps);
     const run = items.filter(isItem).filter((i) => i.id.startsWith("profile:"));
     expect(run.map((i) => `${i.label}${i.checked ? " *" : ""}`)).toEqual(["run with fe *", "run with full"]);
   });
@@ -126,7 +121,7 @@ describe("a worktree's actions", () => {
       agent: "idle",
       behind: 1,
     } as WorktreeStatus;
-    const items = discoveredItems(found, { termOpen: true, clientId: "c" }, deps);
+    const items = discoveredItems(found, { clientId: "c" }, deps);
     expect(labels(items)).toEqual([
       "take over",
       "|",
@@ -136,11 +131,7 @@ describe("a worktree's actions", () => {
       "|",
       "copy path",
     ]);
-    const held = discoveredItems(
-      { ...found, locked: true, lockReason: "zed", behind: 0 },
-      { termOpen: true, clientId: "c" },
-      deps,
-    );
+    const held = discoveredItems({ ...found, locked: true, lockReason: "zed", behind: 0 }, { clientId: "c" }, deps);
     expect(labels(held)).toEqual(["take over", "|", "open a shell here", "reveal in Finder", "|", "copy path"]);
     expect(held.filter(isItem).find((i) => i.id === "adopt")?.disabled).toBe("held by zed");
   });

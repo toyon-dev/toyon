@@ -88,7 +88,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
   };
 }
 
-export type WorktreeItemState = Pick<State, "leftOpen" | "termOpen" | "shipping">;
+export type WorktreeItemState = Pick<State, "leftOpen" | "shipping">;
 
 /** Everything a worktree of ours can do, in the order the rail's menu shows it; the palette reads
  * the same list with the title appended. `graft` is the rail's own multi-select, so only the rail
@@ -128,9 +128,10 @@ export function worktreeItems(
     look.push({
       id: "terminal",
       label: "open terminal",
+      // asked for, so the terminal takes the keyboard even when the pane was already open elsewhere
       onClick: () => {
         dispatch({ a: "activate", id });
-        if (!s.termOpen) dispatch({ a: "toggle-terminal" });
+        dispatch({ a: "focus-terminal" });
       },
     });
   }
@@ -200,11 +201,7 @@ export function worktreeItems(
  * No "remove": the person made this directory outside toyon, and deleting it is the one thing
  * here that cannot be undone. Nothing in the daemon can delete a discovered worktree at all,
  * which is what keeps that true. `git worktree remove` is where it belongs. */
-export function discoveredItems(
-  d: WorktreeStatus,
-  s: Pick<State, "termOpen" | "clientId">,
-  { sock, dispatch }: Deps,
-): MenuEntry[] {
+export function discoveredItems(d: WorktreeStatus, s: Pick<State, "clientId">, { sock, dispatch }: Deps): MenuEntry[] {
   const items: MenuItem[] = [];
   // held by another tool: the line stays, off, saying who has it
   const adopt: MenuItem[] = [
@@ -228,7 +225,7 @@ export function discoveredItems(
     label: "open a shell here",
     onClick: () => {
       dispatch({ a: "activate", id: d.id });
-      if (!s.termOpen) dispatch({ a: "toggle-terminal" });
+      dispatch({ a: "focus-terminal" });
     },
   });
   items.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: d.id }) });

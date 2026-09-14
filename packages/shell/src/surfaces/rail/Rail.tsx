@@ -95,7 +95,6 @@ export function Rail() {
     );
     return () => cancelAnimationFrame(f);
   });
-  const termOpen = useStore((s) => s.termOpen);
   const repos = useStore((s) => s.repos);
   const shipping = useStore((s) => s.shipping);
   const repoOf = (w: OwnedWorktree) => repos.find((r) => r.id === w.repoId) ?? null;
@@ -147,8 +146,8 @@ export function Rail() {
   /** what a row can do: the long list for ours, the short one for a found worktree */
   const rowItems = (w: WorktreeStatus) =>
     isOwned(w)
-      ? worktreeItems(w, repoOf(w), { leftOpen, termOpen, shipping }, deps, { graft: graftWith })
-      : discoveredItems(w, { termOpen, clientId }, deps);
+      ? worktreeItems(w, repoOf(w), { leftOpen, shipping }, deps, { graft: graftWith })
+      : discoveredItems(w, { clientId }, deps);
 
   /* Under main and above the tasks: a new worktree is the newest task, so it appears right below the
    * row that made it. */

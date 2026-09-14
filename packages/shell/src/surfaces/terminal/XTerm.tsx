@@ -62,6 +62,7 @@ export default function XTerm({
   theme,
   sock,
   connected,
+  focusOnMount,
   focusReq,
   onAlive,
   onEscape,
@@ -72,6 +73,9 @@ export default function XTerm({
   theme: Theme;
   sock: DaemonSocket | null;
   connected: boolean;
+  /** take the keyboard on mount: this terminal was asked for, rather than carried along open by a
+   * switch to its worktree (read once, as the terminal opens) */
+  focusOnMount: boolean;
   /** the store's focusTerm: a bump asks for the keyboard */
   focusReq: number;
   /** the shell's state as the daemon reports it: alive after a snapshot, dead (with its code) on exit */
@@ -88,6 +92,7 @@ export default function XTerm({
   onAliveRef.current = onAlive;
   const onEscapeRef = useRef(onEscape);
   onEscapeRef.current = onEscape;
+  const takeFocus = useRef(focusOnMount);
 
   useEffect(() => {
     const el = box.current;
@@ -158,7 +163,7 @@ export default function XTerm({
     });
     const ro = new ResizeObserver(() => fit.fit());
     ro.observe(el);
-    term.focus();
+    if (takeFocus.current) term.focus();
     return () => {
       ro.disconnect();
       off();
@@ -183,7 +188,8 @@ export default function XTerm({
   }, [theme]);
 
   // ⌘J from outside an open pane asks for the keyboard by bumping a counter. Only a bump seen after
-  // mount counts: the press that opened the pane is already answered by the focus on mount.
+  // mount counts: a press that opened the pane, or remounted it on another worktree, is already
+  // answered by the focus on mount (Center reads the bump into focusOnMount).
   const answered = useRef(focusReq);
   useOnChange([focusReq], () => {
     if (focusReq === answered.current) return;

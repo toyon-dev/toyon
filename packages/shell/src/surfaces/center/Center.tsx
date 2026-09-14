@@ -88,6 +88,18 @@ export function Center() {
   const newProject = useNewProject();
   const firstRun = useFirstRun();
   const termOpen = useStore((s) => s.termOpen) && !firstRun;
+  // The terminal pane is keyed by worktree, so choosing another row remounts it. Its terminal takes
+  // the keyboard only when the pane is asked for (opened, or ⌘J and "open terminal" on one already
+  // open), never when a switch carries an open pane along: the caret stays where the switch left
+  // it, in the composer after a draft's first send. Both are read against the last commit.
+  const focusTerm = useStore((s) => s.focusTerm);
+  const termShown = useRef(false);
+  const termAsked = useRef(focusTerm);
+  const termOpened = !termShown.current || focusTerm !== termAsked.current;
+  useEffect(() => {
+    termShown.current = termOpen && !!activeId;
+    termAsked.current = focusTerm;
+  });
   // set up on purpose with nothing to run: no page will come, so the chat is what the centre shows
   const chatCentred = useChatCentred();
   // the design pane outlines what it lists in the page, and a project with nothing to run has none
@@ -453,7 +465,13 @@ export function Center() {
         />
       )}
       {termOpen && activeId && (
-        <TerminalPane key={`term:${activeId}`} worktreeId={activeId} height={termH} onDragStart={startTermDrag} />
+        <TerminalPane
+          key={`term:${activeId}`}
+          worktreeId={activeId}
+          opened={termOpened}
+          height={termH}
+          onDragStart={startTermDrag}
+        />
       )}
       <Overlays />
     </div>

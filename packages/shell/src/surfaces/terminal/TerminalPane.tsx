@@ -16,10 +16,13 @@ const XTerm = lazy(() => import("./XTerm.tsx"));
  * the new, which replays that stream's own scrollback. Center mounts the pane keyed by worktree. */
 export function TerminalPane({
   worktreeId,
+  opened,
   height,
   onDragStart,
 }: {
   worktreeId: string;
+  /** the pane was asked for, rather than carried along open by a switch to this worktree */
+  opened: boolean;
   height: number;
   onDragStart: (e: React.PointerEvent) => void;
 }) {
@@ -71,6 +74,13 @@ export function TerminalPane({
     setExit({ code });
   };
   const tabs = useTermTabs({ worktreeId, procs, login, current: stream, onRestart: restart });
+  // Read as the pane mounts: its first terminal takes the keyboard only if the pane was asked for.
+  // Any later one, a tab picked or a restart, was asked for itself.
+  const carried = useRef(!opened);
+  const focusOnMount = !carried.current;
+  useEffect(() => {
+    carried.current = false;
+  }, []);
   return (
     <Pane
       className="term-pane"
@@ -89,6 +99,7 @@ export function TerminalPane({
               theme={theme}
               sock={sock}
               connected={connected}
+              focusOnMount={focusOnMount}
               focusReq={focusReq}
               onAlive={onAlive}
               onEscape={() => dispatch({ a: "toggle-terminal" })}

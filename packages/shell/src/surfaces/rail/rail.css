@@ -189,6 +189,8 @@
     /* the dot's inset from the counts: its centre lands 20px from the near edge */
     --rail-dot-ml: 12px;
     --rail-dot-mr: 0;
+    /* the peek's shadow falls toward the far edge */
+    --rail-shadow-x: -10px;
     width: 40px;
     flex-shrink: 0;
     position: relative;
@@ -230,7 +232,7 @@
       width: var(--rail-width);
       /* a step above the page, not a floating dialog: the negative spread keeps the dark out of the
      seam itself, so what shows is the tail of the blur */
-      box-shadow: -10px 0 20px -10px var(--shadow);
+      box-shadow: var(--rail-shadow-x) 0 20px -10px var(--shadow);
       /* hover intent: brief pause before expanding */
       transition:
         width 0.12s ease 50ms,
@@ -495,6 +497,9 @@
     --rail-pad-r: var(--rail-gut);
     --rail-dot-ml: 0;
     --rail-dot-mr: 12px;
+    /* a pair rather than a restated box-shadow: a box-shadow under this selector would outrank
+       .pinned's box-shadow: none, and a hovered kept-open rail would lift off the page */
+    --rail-shadow-x: 10px;
     /* Only the dot crosses the row: it keeps the near edge, the strip, and the rest of the row
        reads as it does on the other hand, the name from the dot's side, then the badges and the
        counts up against the control column. Reversing the whole row put the counts between the dot
@@ -522,10 +527,6 @@
       border-left: 0;
       border-right: 1px solid var(--border0);
       clip-path: inset(0 -32px 0 0);
-    }
-    &:hover .rail-panel,
-    &.hold .rail-panel {
-      box-shadow: 10px 0 20px -10px var(--shadow);
     }
   }
 }

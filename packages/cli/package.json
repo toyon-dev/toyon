@@ -1,6 +1,6 @@
 {
   "name": "toyon",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Checking an agent's work means running it. Toyon gives every chat its own copy of your web app, with a live preview.",
   "license": "MIT",
   "type": "module",

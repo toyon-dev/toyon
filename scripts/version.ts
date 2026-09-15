@@ -12,7 +12,7 @@ if (!version || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
   process.exit(2);
 }
 const root = resolve(import.meta.dir, "..");
-for (const pkg of ["bridge", "cli", "cloud", "daemon", "shared", "shell"]) {
+for (const pkg of ["bridge", "cli", "daemon", "shared", "shell"]) {
   const file = join(root, "packages", pkg, "package.json");
   const json = JSON.parse(readFileSync(file, "utf8"));
   json.version = version;

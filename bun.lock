@@ -13,14 +13,14 @@
     },
     "packages/bridge": {
       "name": "@toyon/bridge",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@toyon/shared": "workspace:*",
       },
     },
     "packages/cli": {
       "name": "toyon",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "bin": {
         "toyon": "bin/toyon.js",
       },

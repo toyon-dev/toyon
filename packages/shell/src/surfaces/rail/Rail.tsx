@@ -36,7 +36,7 @@ import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
 import { dollars, tokens } from "../chat/usage.ts";
 import { recapLine } from "../recap.ts";
-import { ago, chord, dotClass, procTrouble, rowLabel, stateLabel } from "../util.ts";
+import { ago, chord, dotClass, procTrouble, rowLabel, stateLabel, wtDir } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -109,8 +109,15 @@ export function Rail() {
   const menu = useMenu();
   // the daemon sends absolute paths; ~ is how the person wrote it and how the picker shows it back
   const home = useStore((s) => s.home);
-  const wtDirLabel = (d: WorktreeStatus) =>
-    home && d.path.startsWith(`${home}/`) ? `~${d.path.slice(home.length)}` : d.path;
+  // the title-named link rather than a claimed spare's wt-xxxx, so the path says which worktree it is
+  const wtDirLabel = (d: WorktreeStatus) => {
+    const p = d.worktree ? wtDir(d.worktree) : d.path;
+    return home && p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p;
+  };
+  // a long name truncates in the row; the path's last segment usually spells it out whole, and
+  // only when it does not (no link, a link named for a suffixed branch, a found worktree in a
+  // directory of its own naming) does the tip name the row again
+  const unspelled = (d: WorktreeStatus) => (wtDirLabel(d).split("/").pop() === d.name ? null : d.name);
   // the tip's lead: the project's name on main, whose row goes by its branch, then what its agent has
   // cost and filled so far. Kept off the path's line so the path reads whole and the figures are
   // found in one place.
@@ -244,16 +251,23 @@ export function Rail() {
                   ? `${recapLine(owned.worktree.lastTurn)}\n${wtDirLabel(w)}`
                   : wtDirLabel(w),
               dot: offline ? undefined : dotClass(w),
-              lead: leadOf(w, isMain(owned.worktree) ? (repoOf(owned)?.name ?? null) : null),
+              lead: leadOf(w, isMain(owned.worktree) ? (repoOf(owned)?.name ?? null) : unspelled(w)),
             })
           : offline
-            ? tip(OFFLINE_TIP, undefined, { placement: tipSide, detail: wtDirLabel(w) })
+            ? tip(OFFLINE_TIP, undefined, {
+                placement: tipSide,
+                detail: wtDirLabel(w),
+                lead: unspelled(w) ?? undefined,
+              })
             : w.locked
               ? tip(`Held by ${w.lockReason ?? "another tool"}`, undefined, {
                   placement: tipSide,
                   detail: wtDirLabel(w),
+                  lead: unspelled(w) ?? undefined,
                 })
-              : tip(wtDirLabel(w), undefined, { placement: tipSide }))}
+              : unspelled(w)
+                ? tip(w.name, undefined, { placement: tipSide, detail: wtDirLabel(w) })
+                : tip(wtDirLabel(w), undefined, { placement: tipSide }))}
         data-wt={id}
         // ↑↓ walk the rows while one has focus, the way the changes panel's files do: the next row
         // is picked and takes the focus, so the next press keeps walking. The ends stop the way a

@@ -18,22 +18,21 @@ In Toyon you point at a button in the page and ask for it to be bigger, watch it
 
 ## How it works
 
-- **Every idea gets its own copy of your project, with the app running.**
-  - Toyon makes a branch and a git worktree, clones the dependencies and your `.env` files, starts your dev servers and opens the agent in it.
-  - One spare per project is kept warm, so the next chat's app is usually already running. A second chat right after waits for its own setup.
-- **You judge the work by using the app first, then read the change.**
-  - Point at anything on the page to talk about it, or open the line that draws it.
-  - Hover a change to see it outlined in the page.
-  - The design pane maps the page back to your tokens and components.
-- **When you're not sure, try more than one version.** Send one prompt to several copies and switch between their results like tabs.
-- **Watch and steer while it works, or leave and come back.**
-  - One Toyon holds every project you open, and agents keep working in the ones you are not looking at.
-  - The list of chats shows which one needs you.
-- **Fix the small thing yourself.** The diff is editable, and every chat has a terminal, quick-open and search.
-- **Nothing is kept until you say so.**
-  - When a turn is done and your check (your tests, say) passes, the composer offers to land it: merged into main on your machine (the default), pushed, or opened as a pull request.
-  - Nothing is committed or pushed until you press it.
-- **Your editor stays yours.** Any file opens in Zed, VS Code or Cursor from its menu.
+- Every idea gets its own copy of your project, with the app running.
+- You judge the work by using the app first, then read the change.
+- When you're not sure, try more than one version.
+- Watch and steer while it works, or leave and come back to your app already running.
+- Fix the small thing yourself. A one-line change does not need another prompt.
+- Nothing is kept until you say so.
+- Your editor stays yours.
+
+Each copy is a branch and a git worktree with your dependencies and `.env` files; one spare per project is kept warm.
+
+Point at anything on the page to talk about it or open the line that draws it, and the design pane maps it to your tokens and components.
+
+One Toyon holds every project you open, and the list of chats shows which one needs you.
+
+When your check passes, land merges into main on your machine by default, or pushes, or opens a pull request.
 
 Built for web apps. A project without a page still works; the chat takes the middle instead of the preview.
 

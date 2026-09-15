@@ -22,5 +22,6 @@ export * from "./protocol/ws.ts";
 export * from "./routes.ts";
 export * from "./sandbox.ts";
 export * from "./themes.ts";
+export * from "./update.ts";
 export * from "./vscode-theme.ts";
 export * from "./worktree-caps.ts";

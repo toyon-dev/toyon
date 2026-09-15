@@ -24,6 +24,7 @@ describe("parseArgs", () => {
   test("verbs", () => {
     expect(parseArgs(["stop"])).toEqual({ kind: "stop" });
     expect(parseArgs(["restart"])).toEqual({ kind: "restart" });
+    expect(parseArgs(["update"])).toEqual({ kind: "update" });
     expect(parseArgs(["doctor"])).toEqual({ kind: "doctor" });
     expect(parseArgs(["version"])).toEqual({ kind: "version" });
     expect(parseArgs(["help"])).toEqual({ kind: "help" });

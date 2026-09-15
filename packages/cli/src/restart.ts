@@ -1,7 +1,8 @@
-// `toyon restart`: stop the daemon and start a fresh one. For someone who has just rebuilt Toyon
-// itself and wants the process to be the code they built. Everything the daemon holds goes with
-// it - agent sessions resume, dev servers are started again by the worktrees that own them - so
-// this is `toyon stop` followed by `toyon`, said in one word and without opening a browser.
+// `toyon restart`: stop the daemon and start a fresh one from what is installed now, after an
+// install or a rebuild left the running process on older code. Everything the daemon holds goes
+// with it - agent sessions resume, dev servers are started again by the worktrees that own them -
+// so this is `toyon stop` followed by `toyon`, said in one word and without opening a browser.
+// `toyon update` asks the daemon instead, which waits out a chat mid-reply.
 
 import { health, logFile, startDaemon } from "./daemon.ts";
 import { stop } from "./stop.ts";

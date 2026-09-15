@@ -115,7 +115,7 @@ export async function doctor(): Promise<number> {
         line(
           false,
           "version",
-          `cli is ${pkg.version} and the daemon is ${version}; \`toyon stop\` then \`toyon\` restarts it`,
+          `cli is ${pkg.version} and the daemon is ${version}; \`toyon restart\` brings them level`,
         ),
       );
     }

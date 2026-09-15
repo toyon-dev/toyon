@@ -7,13 +7,12 @@
 // there to watch their terminals and dev servers go. Either way the install runs right before the
 // restart, since it replaces the page files that open tabs load their code from.
 
-import type { InstallMethod, UpdateState } from "@toyon/shared";
+import { type InstallMethod, newer, type UpdateState } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Restarter } from "../core/restarter.ts";
 import type { StateStore } from "../core/state.ts";
-import { newer } from "./version.ts";
 
 const REFRESH_EVERY_MS = 60_000;
 const CHECK_EVERY_MS = 6 * 60 * 60_000;

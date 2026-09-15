@@ -7,6 +7,7 @@ export type Command =
   | { kind: "open"; path: string | null; app: boolean; installApp: boolean }
   | { kind: "stop" }
   | { kind: "restart" }
+  | { kind: "update" }
   | { kind: "doctor" }
   | { kind: "logs"; follow: boolean; lines: number }
   | { kind: "version" }
@@ -26,7 +27,18 @@ export type Command =
   | { kind: "help" }
   | { kind: "error"; message: string };
 
-const VERBS = new Set(["stop", "restart", "doctor", "logs", "version", "uninstall", "remote", "deploy", "help"]);
+const VERBS = new Set([
+  "stop",
+  "restart",
+  "update",
+  "doctor",
+  "logs",
+  "version",
+  "uninstall",
+  "remote",
+  "deploy",
+  "help",
+]);
 const DEFAULT_LOG_LINES = 100;
 
 export function parseArgs(argv: string[]): Command {
@@ -38,6 +50,7 @@ export function parseArgs(argv: string[]): Command {
     switch (first) {
       case "stop":
       case "restart":
+      case "update":
       case "doctor":
       case "version":
       case "help":
@@ -151,8 +164,10 @@ usage
   toyon [path]            start the daemon if it is not running, register the repo at path
                           (default: the current directory) and open the shell
   toyon stop              stop the daemon and every dev server and agent it runs
-  toyon restart           stop the daemon and start it again, for a Toyon you have just rebuilt;
-                          every shell reconnects on its own
+  toyon restart           stop the daemon and start it again from what is installed now; every
+                          shell reconnects on its own
+  toyon update            install the newest Toyon the way this one was installed, then restart
+                          the daemon onto it once no chat is mid-reply
   toyon doctor            check the daemon, the token, the shell build and the tools Toyon needs
   toyon logs [-f] [-n N]  print the daemon log; -f keeps following it, -n sets how many lines
   toyon version           print the CLI version, and the daemon's if one is running

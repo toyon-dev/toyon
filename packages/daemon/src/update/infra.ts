@@ -1,29 +1,8 @@
-// How this Toyon was installed, and the commands that find and install a newer one. The daemon
-// cannot import the CLI's code, so `toyon update` keeps its own copy of the same detection.
+// The commands that find and install a newer Toyon. Where the install sits and what a version
+// string says are read in shared, so the CLI's `toyon update` reads them the same way.
 
 import { homedir } from "node:os";
-import type { InstallMethod } from "@toyon/shared";
 import { run, runLive } from "../git/exec.ts";
-
-/** Read from where the installed package.json sits. npm keeps global packages under a
- * node_modules in its prefix, bun under .bun/install/global, and npx runs a copy out of its own
- * cache, which a newer version never replaces. */
-export function installMethod(packageJson: string | null): InstallMethod {
-  if (!packageJson) return "none";
-  const p = packageJson.replaceAll("\\", "/");
-  if (p.includes("/_npx/")) return "npx";
-  if (p.includes("/.bun/install/global/")) return "bun";
-  if (p.includes("/node_modules/toyon/")) return "npm";
-  return "none";
-}
-
-/** The command that installs `version`, which is also what a person runs when the install from
- * here fails. Null where nothing installs: npx runs whatever version it is asked for. */
-export function installCommand(method: InstallMethod, version: string): string[] | null {
-  if (method === "npm") return ["npm", "install", "-g", `toyon@${version}`];
-  if (method === "bun") return ["bun", "add", "-g", `toyon@${version}`];
-  return null;
-}
 
 /** The newest version the registry has, asked through npm so the registry this machine is set up
  * for is the one asked. Null when npm is missing or the registry does not answer. */

@@ -4,7 +4,15 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addressedByPort, CHECK_TOOL, DAEMON_DEFAULT_PORT, PREVIEW_PORTS, SHELL_DEV_PORT } from "@toyon/shared";
+import {
+  addressedByPort,
+  CHECK_TOOL,
+  DAEMON_DEFAULT_PORT,
+  installCommand,
+  installMethod,
+  PREVIEW_PORTS,
+  SHELL_DEV_PORT,
+} from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { AgentAccounts } from "./agent/accounts.ts";
 import { spawnAcp } from "./agent/acp/transport.ts";
@@ -40,7 +48,7 @@ import { pinProxyPorts } from "./runtime/ports.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
-import { installCommand, installMethod, latestVersion, runInstall } from "./update/infra.ts";
+import { latestVersion, runInstall } from "./update/infra.ts";
 import { readVersion } from "./update/installed.ts";
 import { UpdateService } from "./update/service.ts";
 import { ChatSearch } from "./worktrees/chats.ts";

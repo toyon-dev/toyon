@@ -31,6 +31,8 @@ npx toyon
 
 Needs git and Node 18 or newer; bun comes with the package. On Linux the agents' sandbox also needs bubblewrap and socat (`sudo apt install bubblewrap socat`), and `toyon doctor` checks both and prints the AppArmor profile Ubuntu 24.04 and later ask for. `npm i -g toyon` puts `toyon` on your PATH for good, after which `toyon`, `toyon .` and `toyon ~/projects/app` all open a project, and anywhere else opens Toyon without one, ready to start a new one. `toyon --help` lists the rest.
 
+A global install keeps itself current. The top bar offers a newer version when one is out, and unless settings say otherwise Toyon installs it and restarts on its own while no tab is open and nothing is running. `toyon update` does the same from a terminal.
+
 Each agent signs in with its own login, from the chat, and MCP servers run as each agent runs them, outside Toyon's sandbox.
 
 - **Claude Code** is installed on first start. It loads your user, project and local settings, so permission rules, hooks, slash commands, plugins and MCP servers work as they do in the terminal.

@@ -5,6 +5,7 @@
 
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { newer } from "@toyon/shared";
 import pkg from "../package.json" with { type: "json" };
 import { installApp, openAppWindow } from "./app.ts";
 import { type Command, HELP, parseArgs } from "./args.ts";
@@ -24,6 +25,13 @@ import {
 } from "./sandboxDeps.ts";
 import { stop } from "./stop.ts";
 import { uninstall } from "./uninstall.ts";
+import { update } from "./update.ts";
+
+/** A running daemon older than this CLI: an install landed and nothing restarted it. One too old to
+ * report its version is older too. A newer daemon is not one a restart from here should replace. */
+function behind(daemonVersion: string | undefined): boolean {
+  return daemonVersion === undefined || newer(pkg.version, daemonVersion);
+}
 
 async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
   // an explicit path is registered whatever it is (the daemon says if it is not a repo); a bare
@@ -42,12 +50,16 @@ async function open(cmd: Extract<Command, { kind: "open" }>): Promise<number> {
     else if (blocked) console.log(bwrapBlockedAdvice(blocked, userNamespacesRestricted()));
   }
 
-  if (!(await health())) {
+  const running = await health();
+  if (!running) {
     console.log("starting Toyon daemon…");
     if (!(await startDaemon())) {
       console.error(`daemon failed to start; \`toyon logs\` shows why (${logFile})`);
       return 1;
     }
+  } else if (behind(running.version)) {
+    // the page this opens is served by the running daemon, so say it is not the one installed
+    console.log(`toyon: the running daemon is ${running.version ?? "older"}; \`toyon restart\` starts ${pkg.version}`);
   }
 
   const token = readToken();
@@ -103,8 +115,7 @@ async function run(cmd: Command): Promise<number> {
     case "version": {
       const h = await health();
       if (!h) console.log(`toyon ${pkg.version}`);
-      else if (h.version === pkg.version) console.log(`toyon ${pkg.version} (daemon ${h.version} running)`);
-      // a daemon too old to report its version is still one a restart replaces
+      else if (!behind(h.version)) console.log(`toyon ${pkg.version} (daemon ${h.version} running)`);
       else console.log(`toyon ${pkg.version} (daemon ${h.version ?? "?"} running; \`toyon restart\` to update)`);
       return 0;
     }
@@ -112,6 +123,8 @@ async function run(cmd: Command): Promise<number> {
       return stop();
     case "restart":
       return restart();
+    case "update":
+      return update();
     case "doctor":
       return doctor();
     case "logs":

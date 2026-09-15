@@ -47,8 +47,12 @@ describe("the rail's side is one switch", () => {
     const rules = cssRules(await shellCss());
     expect(declsOf(rules, ".rail-panel").get("clip-path")).toBe("inset(0 0 0 -32px)");
     expect(declsOf(rules, `${MIRROR} .rail .rail-panel`).get("clip-path")).toBe("inset(0 -32px 0 0)");
-    expect(declsOf(rules, ".rail:hover .rail-panel").get("box-shadow")).toMatch(/^-10px /);
-    expect(declsOf(rules, `${MIRROR} .rail:hover .rail-panel`).get("box-shadow")).toMatch(/^10px /);
+    // the shadow's offset is a pair: a box-shadow restated under the mirror would outrank the
+    // kept-open rail's box-shadow: none
+    expect(declsOf(rules, ".rail:hover .rail-panel").get("box-shadow")).toMatch(/^var\(--rail-shadow-x\) /);
+    expect(declsOf(rules, ".rail").get("--rail-shadow-x")).toBe("-10px");
+    expect(declsOf(rules, `${MIRROR} .rail`).get("--rail-shadow-x")).toBe("10px");
+    expect(rules.some((r) => r.selectors.includes(`${MIRROR} .rail:hover .rail-panel`))).toBe(false);
     const marker = declsOf(rules, `${MIRROR} .rail .rail-item::before`);
     expect(marker.get("left")).toBe("auto");
     expect(marker.get("right")).toBe("var(--row-edge-x, 0)");

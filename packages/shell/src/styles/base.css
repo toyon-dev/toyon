@@ -325,6 +325,32 @@
       min-height: 20px;
     }
   }
+  /* under the knobs, behind a rule: the state of where the message lands, a sentence per line with
+     its button at the end. The same rule the intro draws under its choices, so both screens read
+     one device: above it what you pick, below it what is. No ground, since the box's ground means
+     a place to type. The commit box says how far its worktree trails main here too, so the knobs
+     row keeps to where you are and a count never squeezes into it. */
+  .composer-notes {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border0);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    & .hint {
+      margin: 0;
+    }
+  }
+  .composer-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    /* the count ticks with the status; `font` on the hint resets the variant */
+    font-variant-numeric: tabular-nums;
+    & > .btn {
+      margin-left: auto;
+    }
+  }
 
   /* ---- the status letter ----
      git's own letter for a file (M, A, D, R, ?) on a changed-file row and a ⌘P row alike: yellow
@@ -342,15 +368,12 @@
   }
 
   /* ---- badges ----
-     A badge is a coloured word or count beside a name, and is never pressed: ahead and behind on
-     a worktree row and under the commit box, the profile and variant marks on the rail. One colour
-     per meaning, wherever the word sits, so the aqua that says "landed" in the rail is the aqua
-     that says it in the changes panel. A chip is the other thing: a bounded token you act on. */
+     A badge is a coloured word or count beside a name, and is never pressed: ahead on a worktree
+     row and under the commit box, the profile and variant marks on the rail. One colour per
+     meaning, wherever the word sits, so the aqua that says "landed" in the rail is the aqua that
+     says it in the changes panel. A chip is the other thing: a bounded token you act on. */
   .badge-ahead {
     color: var(--aqua);
-  }
-  .badge-behind {
-    color: var(--yellow);
   }
   .badge-landed {
     color: var(--aqua);

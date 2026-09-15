@@ -1009,9 +1009,9 @@ export function Composer({
           the agent stale code. What the message will be (batch, variants, main's files coming
           along) is the intro's, above the box. */}
       {((origin && mainRow) || (behind && active && id)) && (
-        <div className="spawn-notes">
+        <div className="composer-notes">
           {origin && mainRow && (
-            <div className="hint spawn-note">
+            <div className="hint composer-note">
               <span>{origin}</span>
               <Button
                 variant="outline"
@@ -1029,7 +1029,7 @@ export function Composer({
             </div>
           )}
           {behind && active && id && (
-            <div className="hint spawn-note">
+            <div className="hint composer-note">
               <span>{behind}</span>
               <Button
                 variant="outline"

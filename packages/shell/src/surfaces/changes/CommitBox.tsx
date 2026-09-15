@@ -9,6 +9,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
+import { behindNote } from "../chips/baseNote.ts";
 import { prCanMerge } from "../recap.ts";
 
 /** The foot of the changes panel, built like the chat composer: a message box over a row that says
@@ -80,9 +81,10 @@ export function CommitBox({
   const pr = owned?.pr;
   const prOpen = pr?.state === "open";
   const canLand = !!owned && landable(owned) && (dirty || ahead > 0) && !checkFailed && !prOpen;
-  const syncable = canSync(active) && !dirty && behind > 0;
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
   const landTip = describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch);
+  const base = repo?.defaultBranch ?? "main";
+  const behindLine = canSync(active) ? behindNote(base, behind) : null;
 
   return (
     <div className="composer commit-box">
@@ -113,11 +115,6 @@ export function CommitBox({
         <span className="commit-where">
           <Icon name="branch" className="icon-inline" />
           <span className="branch-name">{active.branch ?? "detached"}</span>
-          {behind > 0 && (
-            <span className="badge-behind" data-tip={`${behind} commit(s) behind main`}>
-              {behind} behind
-            </span>
-          )}
           {ahead > 0 && (
             <span className="badge-ahead" data-tip={`${ahead} commit(s) ahead of main`}>
               {ahead} ahead
@@ -130,18 +127,6 @@ export function CommitBox({
           )}
         </span>
         <span className="commit-acts">
-          {syncable && (
-            <Button
-              variant="outline"
-              tone="primary"
-              busy={op === "sync-main"}
-              disabled={!!op}
-              data-tip={`Pull ${behind} commit(s) from main into this worktree`}
-              onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
-            >
-              sync <Icon name="pull" className="icon-inline" />
-            </Button>
-          )}
           {owned && dirty && (
             <Button
               busy={op === "commit"}
@@ -183,6 +168,24 @@ export function CommitBox({
           )}
         </span>
       </div>
+      {/* how far this trails main and the sync, said the way the composer says it: land stays the
+          one lit verb in the row above, and a count has a line to itself however narrow the dock */}
+      {behindLine && (
+        <div className="composer-notes">
+          <div className="hint composer-note">
+            <span>{behindLine}</span>
+            <Button
+              variant="outline"
+              busy={op === "sync-main"}
+              disabled={!!op || dirty}
+              data-tip={dirty ? "commit or discard the changes here first" : `Merge ${base} into this worktree`}
+              onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
+            >
+              sync
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

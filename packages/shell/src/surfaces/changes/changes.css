@@ -165,6 +165,12 @@
     align-items: center;
     gap: 6px;
     min-width: 0;
+    /* a count and its word are one mark: squeezed, the branch name gives way and a badge never
+       breaks onto a second line */
+    & > :not(.branch-name) {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
   }
   .branch-name {
     color: var(--text1);

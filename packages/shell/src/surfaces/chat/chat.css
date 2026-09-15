@@ -823,31 +823,6 @@
       margin-left: 6px;
     }
   }
-  /* under the knobs, behind a rule: the state of where the message lands, a sentence per line with
-   its button at the end. The same rule the intro draws under its choices, so both screens read
-   one device: above it what you pick, below it what is. No ground, since the box's ground means
-   a place to type. */
-  .spawn-notes {
-    margin-top: 4px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border0);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    & .hint {
-      margin: 0;
-    }
-  }
-  .spawn-note {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    /* the count ticks with the status; `font` on the hint resets the variant */
-    font-variant-numeric: tabular-nums;
-    & > .btn {
-      margin-left: auto;
-    }
-  }
   /* the first chip's padding hangs into the gutter, so its words start where the text in the box
    does (the same pull as .new-project-open). Named on the button, where --btn-pad-x is set. */
   .spawn-left > .chip-picker:first-child > .btn {

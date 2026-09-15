@@ -155,7 +155,9 @@ export function Rail() {
       : discoveredItems(w, { clientId }, deps);
 
   /** A removed worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
-   * row and has no dot; the gutter says how long ago it was archived. A click opens its page in the
+   * row and its dot's seat is blank: a seat rather than nothing, so its name starts where every
+   * other name does when the dot leads the row. The gutter says how long ago it was archived. A
+   * click opens its page in the
    * centre, the way a found row's does, and the restore button is there: a row that restored on
    * its own click was too easy to hit on the way past. Its menu (the kebab or a right-click) has
    * restore too, with the rest. */
@@ -187,6 +189,7 @@ export function Rail() {
         </span>
       </span>
       <span className="branch">{a.title}</span>
+      <span className="dot" />
     </button>
   );
 
@@ -318,7 +321,17 @@ export function Rail() {
             )
           )}
         </span>
-        <span className="branch">{rowLabel(w, owned ? repoOf(owned) : null)}</span>
+        {onMain ? (
+          // under the pointer the row says what its click does, with the plus back in the dot's
+          // seat (rail.css): main is never worked in from here, so its name is the one label on the
+          // list that is not the answer to "what happens if I press this"
+          <span className="branch">
+            <span className="rail-main-name">{rowLabel(w, repoOf(owned))}</span>
+            <span className="rail-main-verb">new worktree</span>
+          </span>
+        ) : (
+          <span className="branch">{rowLabel(w, owned ? repoOf(owned) : null)}</span>
+        )}
         {owned?.worktree.mode && owned.worktree.mode !== "auto" && (
           // auto is the default and says nothing; ask and plan change what happens when you look away
           <span className="rail-badge badge-mode" data-tip={`${owned.worktree.mode} mode: the agent waits for you`}>

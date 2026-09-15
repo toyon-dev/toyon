@@ -13,11 +13,14 @@ const pkgs = join(root, "packages");
 const out = join(pkgs, "cli", "dist");
 
 $.cwd(root);
-await $`bun run --cwd packages/shell build`;
-await $`bun run --cwd packages/bridge build`;
-
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
+
+// The shell's own dist keeps every build's chunks, because the daemon serves it off disk while tabs
+// are open. The package wants one build, so it is written straight into the package and emptied
+// first; the dev dist is left alone.
+await $`bun --bun vite build --outDir ${join(out, "shell")} --emptyOutDir`.cwd(join(pkgs, "shell"));
+await $`bun run --cwd packages/bridge build`;
 
 async function bundle(entry: string, name: string, external: string[] = []) {
   const r = await Bun.build({
@@ -37,7 +40,6 @@ async function bundle(entry: string, name: string, external: string[] = []) {
 // bun-pty finds its native library beside its own source, so it stays a real dependency
 await bundle(join(pkgs, "daemon", "src", "index.ts"), "daemon.js", ["bun-pty"]);
 await bundle(join(pkgs, "cli", "src", "cli.ts"), "cli.js");
-cpSync(join(pkgs, "shell", "dist"), join(out, "shell"), { recursive: true });
 cpSync(join(pkgs, "bridge", "dist", "bridge.js"), join(out, "bridge.js"));
 // npm reads the package page from a README beside package.json, and a LICENSE there too; the
 // real ones live at the repo root, so the pack carries copies in (gitignored, refreshed every run)

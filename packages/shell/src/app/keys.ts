@@ -76,6 +76,9 @@ export function useChords() {
       // wherever the hand is.
       const monaco = !!document.activeElement?.closest(".monaco-editor");
       if (monaco && chord && (e.altKey || MONACO_OWNS.has(chord.id))) return;
+      // with no page up (setup, a stopped app, an update waiting on a reload, a chat) ⌘R is the
+      // browser's again: the shell is the only thing on screen that a reload could mean
+      if (chord?.id === "reload" && !(previewIdOf(s) && routeTarget(s))) return;
       if (chord) {
         e.preventDefault();
         if (s.newProject && !VIEW_CHORDS.has(chord.id)) return;
@@ -130,8 +133,7 @@ export function useChords() {
             else if (routeTarget(s)) dispatch({ a: "open", overlay: { kind: "routes" } });
             break;
           case "reload": {
-            // the frame on screen only; with none up there is nothing to reload, and the shell is
-            // not it (that is the browser's own ⌘⇧R)
+            // the frame on screen only, which is up by now (a press with none went to the browser)
             const id = previewIdOf(s);
             if (id) previewBus.post(id, { type: "reload" });
             break;

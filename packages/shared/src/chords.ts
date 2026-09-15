@@ -157,7 +157,8 @@ export const CHORDS: readonly Chord[] = [
   { id: "routes", key: "u" },
   // ⌘R reloads the preview, the frame the hand is looking at, not the shell around it. ⌘⇧R is left
   // to the browser: its hard reload takes the shell and every preview with it, which is what the
-  // bigger reload should mean. An installed app always hands ⌘R over; a tab may keep it.
+  // bigger reload should mean. With no preview up there is no frame to mean, so the shell lets ⌘R
+  // through to the browser (app/keys.ts). An installed app always hands ⌘R over; a tab may keep it.
   { id: "reload", key: "r" },
 ];
 

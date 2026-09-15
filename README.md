@@ -70,7 +70,7 @@ Each agent signs in from the chat. Claude Code and Codex install on first start;
 
 ## Under the hood
 
-The contract for anything Toyon runs: *stay in the foreground, listen on `$PORT`, reload yourself however you like.* A `.toyon/settings.json` in the project names the setup commands, the commands to `run`, an optional `check` and how work lands. The first open guesses one from `package.json` and asks you to confirm it; other stacks start from an empty guess the agent can fill in. If a server comes up on some other port anyway, the preview follows it there and says which flag to add.
+The contract for anything Toyon runs: *stay in the foreground, listen on `$PORT`, reload yourself however you like.* A `.toyon/settings.json` in the project names the setup commands, the commands to `run`, an optional `check` and how work lands. The first open guesses one from `package.json`, asks you to confirm it, and writes it into the project; other stacks start from an empty guess the agent can fill in. If a server comes up on some other port anyway, the preview follows it there and says which flag to add.
 
 A project with a page and an API behind it:
 

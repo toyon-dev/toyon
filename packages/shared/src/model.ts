@@ -102,6 +102,16 @@ export type InstallMethod = "npm" | "bun" | "npx" | "none";
 /** what Toyon does on its own when a newer version is out */
 export type UpdateMode = "automatic" | "ask" | "off";
 
+/** The update setting, and what is holding it back. Updates only ever go through the registry npm
+ * is set up for on the machine, so a company registry without toyon is said, never gone around. */
+export interface UpdateSettings {
+  mode: UpdateMode;
+  /** TOYON_UPDATES=off where the daemon runs: turned off for the machine, whatever the setting says */
+  managed: boolean;
+  /** the registry the last check could not get toyon from, when it could not */
+  unreachable: string | null;
+}
+
 /** Toyon's own version against what is installed and what is out, and an update under way. An
  * install replaces the package's files under a daemon that keeps running the code it started with,
  * so running and installed can differ until it restarts. */

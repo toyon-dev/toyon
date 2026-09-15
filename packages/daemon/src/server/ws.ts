@@ -272,7 +272,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
   s.hub.on("selfChanged", () => broadcast({ t: "self", self: s.self.get() }));
-  s.hub.on("updateChanged", () => broadcast({ t: "update", update: s.update.get() }));
+  s.hub.on("updateChanged", () => {
+    broadcast({ t: "update", update: s.update.get() });
+    broadcast({ t: "update-settings", settings: s.update.settings() });
+  });
   s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
   s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));
 
@@ -302,7 +305,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       visits: s.routes.historyAll(),
       self: s.self.get(),
       update: s.update.get(),
-      updateMode: s.state.updateMode,
+      updates: s.update.settings(),
     } satisfies ServerMsg;
   };
 

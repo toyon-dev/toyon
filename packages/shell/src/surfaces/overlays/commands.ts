@@ -132,7 +132,7 @@ export type CommandState = Pick<
   | "shipping"
   | "remote"
   | "self"
-  | "updateMode"
+  | "updates"
 >;
 
 export function useCommands(): Command[] {
@@ -159,7 +159,7 @@ export function useCommands(): Command[] {
   const shipping = useStore((s) => s.shipping);
   const remote = useStore((s) => s.remote);
   const self = useStore((s) => s.self);
-  const updateMode = useStore((s) => s.updateMode);
+  const updates = useStore((s) => s.updates);
   return useMemo(() => {
     const st: CommandState = {
       picking,
@@ -183,7 +183,7 @@ export function useCommands(): Command[] {
       shipping,
       remote,
       self,
-      updateMode,
+      updates,
     };
     return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repoById(st as State, activeRepoId));
   }, [
@@ -208,7 +208,7 @@ export function useCommands(): Command[] {
     shipping,
     remote,
     self,
-    updateMode,
+    updates,
     dispatch,
     sock,
   ]);

@@ -27,7 +27,7 @@ import type {
   Theme,
   ThemePrefs,
   ToyonConfig,
-  UpdateMode,
+  UpdateSettings,
   UpdateState,
   WorktreeInfo,
   WorktreeStatus,
@@ -80,16 +80,16 @@ export type ServerMsg =
       self: SelfState | null;
       /** the installed Toyon is not the one running, or a restart is waiting; null the rest of the time */
       update: UpdateState | null;
-      /** what Toyon does on its own when a newer version is out */
-      updateMode: UpdateMode;
+      /** what Toyon does on its own when a newer version is out, and what holds that back */
+      updates: UpdateSettings;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   /** the daemon fell behind the checkout it runs from, caught up, or started catching up */
   | { t: "self"; self: SelfState | null }
   /** an install landed under the running daemon, or a requested restart moved on */
   | { t: "update"; update: UpdateState | null }
-  /** the update setting changed, in this tab or another */
-  | { t: "update-mode"; mode: UpdateMode }
+  /** the update setting, or what holds it back, changed */
+  | { t: "update-settings"; settings: UpdateSettings }
   /** the answer to a `zone`: whether the sun is down where that browser is, and when that changes.
    * Only the appearance mode that follows daylight reads it, and the shell asks again at `until`. */
   | { t: "daylight"; dark: boolean; until: number }

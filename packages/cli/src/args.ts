@@ -196,4 +196,5 @@ options for toyon [path]
 environment
   TOYON_HOME              where state lives (default ~/.toyon)
   TOYON_PORT              the daemon's port (default 4141)
+  TOYON_UPDATES           off stops Toyon checking for and installing updates on this machine
 `;

@@ -5,16 +5,20 @@ import { homedir } from "node:os";
 import { run, runLive } from "../git/exec.ts";
 
 /** The newest version the registry has, asked through npm so the registry this machine is set up
- * for is the one asked. Null when npm is missing or the registry does not answer. */
-export async function latestVersion(): Promise<string | null> {
+ * for is the one asked, and never another: a company registry without toyon is said, not gone
+ * around. `version` is null when that registry has no toyon, npm is missing, or nothing answers;
+ * `registry` names the one asked, for saying so. */
+export async function latestVersion(): Promise<{ version: string | null; registry: string }> {
+  const config = await run("npm", ["config", "get", "registry"], homedir());
+  const registry = config.ok && config.out !== "" ? config.out : "the npm registry";
   const r = await run("npm", ["view", "toyon", "version", "--json"], homedir());
-  if (!r.ok) return null;
+  if (!r.ok) return { version: null, registry };
   try {
     const v = JSON.parse(r.out) as unknown;
-    return typeof v === "string" ? v : null;
+    return { version: typeof v === "string" ? v : null, registry };
   } catch {
     // npm printed something other than the JSON asked for; the next check asks again
-    return null;
+    return { version: null, registry };
   }
 }
 

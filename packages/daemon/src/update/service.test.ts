@@ -8,6 +8,7 @@ import { readVersion } from "./installed.ts";
 import { UpdateService } from "./service.ts";
 
 const MIN = 60_000;
+const REGISTRY = "https://artifacts.example/api/npm/npm-packages/";
 
 function make(
   start: {
@@ -15,6 +16,7 @@ function make(
     latest?: string | null;
     mode?: UpdateMode;
     method?: InstallMethod;
+    managed?: boolean;
     installFails?: boolean;
   } = {},
 ) {
@@ -26,6 +28,7 @@ function make(
   let busy = false;
   let asked = false;
   let requests = 0;
+  let registryAsks = 0;
   const working: string[] = [];
   const installs: string[][] = [];
   const state = {
@@ -40,8 +43,12 @@ function make(
     state,
     running: "0.2.0",
     method,
+    managed: start.managed ?? false,
     installed: async () => installed,
-    latest: async () => latest,
+    latest: async () => {
+      registryAsks++;
+      return { version: latest, registry: REGISTRY };
+    },
     command: (v) => (method === "npm" ? ["npm", "install", "-g", `toyon@${v}`] : null),
     install: async (command) => {
       installs.push(command);
@@ -85,14 +92,18 @@ function make(
       asked = true;
     },
     requests: () => requests,
+    registryAsks: () => registryAsks,
   };
 }
 
 describe("UpdateService: what is installed", () => {
   test("nothing to say while the installed version is the one running", async () => {
-    const { update } = make({ installed: "0.2.0" });
+    const { update, hub } = make({ installed: "0.2.0" });
+    let changes = 0;
+    hub.on("updateChanged", () => changes++);
     await update.tick();
     expect(update.get()).toBeNull();
+    expect(changes).toBe(0);
   });
 
   test("an install under the running daemon is announced once", async () => {
@@ -143,9 +154,21 @@ describe("UpdateService: what is out", () => {
     const off = make({ latest: "0.3.0", mode: "off" });
     await off.update.check();
     expect(off.update.get()).toBeNull();
+    expect(off.registryAsks()).toBe(0);
     const none = make({ latest: "0.3.0", method: "none" });
     await none.update.check();
-    expect(none.update.get()).toBeNull();
+    expect(none.registryAsks()).toBe(0);
+  });
+
+  test("a registry without toyon is named, nothing is offered, and an answer later clears it", async () => {
+    const { update, publish } = make({ mode: "ask" });
+    await update.check();
+    expect(update.get()).toBeNull();
+    expect(update.settings()).toEqual({ mode: "ask", managed: false, unreachable: REGISTRY });
+    publish("0.3.0");
+    await update.check();
+    expect(update.settings().unreachable).toBeNull();
+    expect(update.get()?.latest).toBe("0.3.0");
   });
 
   test("turning updates off forgets what the registry said", async () => {
@@ -154,11 +177,25 @@ describe("UpdateService: what is out", () => {
     state.updateMode = "off";
     await update.modeChanged();
     expect(update.get()).toBeNull();
+    expect(update.settings().mode).toBe("off");
   });
 
   test("with nothing to go to, a press says Toyon is up to date", async () => {
     const { update } = make();
     await expect(update.updateNow()).rejects.toThrow("Toyon is up to date");
+  });
+});
+
+describe("UpdateService: TOYON_UPDATES=off", () => {
+  test("the registry is never asked, nothing installs on its own, and a press is refused", async () => {
+    const { update, advance, installs, registryAsks } = make({ latest: "0.3.0", managed: true });
+    await update.check();
+    advance(30 * MIN);
+    await update.tick();
+    expect(registryAsks()).toBe(0);
+    expect(installs).toEqual([]);
+    expect(update.settings()).toMatchObject({ managed: true });
+    await expect(update.updateNow()).rejects.toThrow("turned off for this machine");
   });
 });
 

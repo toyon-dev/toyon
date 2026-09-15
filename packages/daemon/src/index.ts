@@ -215,6 +215,8 @@ const update = new UpdateService({
   command: (version) => installCommand(method, version),
   install: runInstall,
   busy: () => runtime.anyBusy(),
+  // for whoever runs the machine: a company that vets what installs can turn this off for everyone
+  managed: process.env.TOYON_UPDATES === "off",
 });
 
 const { branded, stop: stopServer } = startServer({

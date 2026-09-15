@@ -404,9 +404,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     return s.update.updateNow();
   },
 
-  "set-update-mode"(msg, ctx, s) {
+  "set-update-mode"(msg, _ctx, s) {
     s.state.setUpdateMode(msg.mode);
-    ctx.broadcast({ t: "update-mode", mode: msg.mode });
     fireAndForget("update", s.update.modeChanged(), "update mode");
   },
 

@@ -114,7 +114,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     visits: {},
     self: null,
     update: null,
-    updateMode: "automatic",
+    updates: { mode: "automatic", managed: false, unreachable: null },
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, spares: [] });
@@ -1046,8 +1046,9 @@ describe("streams and notices", () => {
     expect(run([server({ t: "update", update: null })], s).update).toBeNull();
   });
   test("the update setting follows the daemon, whichever tab changed it", () => {
-    expect(run([hello()]).updateMode).toBe("automatic");
-    expect(run([hello(), server({ t: "update-mode", mode: "off" })]).updateMode).toBe("off");
+    expect(run([hello()]).updates.mode).toBe("automatic");
+    const settings = { mode: "ask", managed: false, unreachable: "https://artifacts.example/npm/" } as const;
+    expect(run([hello(), server({ t: "update-settings", settings })]).updates).toEqual(settings);
   });
   test("zen toggles, and says nothing: the toggle's own tip carries the key", () => {
     const on = run([{ a: "toggle-zen" }]);

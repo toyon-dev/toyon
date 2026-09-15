@@ -13,6 +13,11 @@ import { here, packaged } from "./layout.ts";
 const WAIT_MS = 15_000;
 
 export async function update(): Promise<number> {
+  // the switch whoever runs the machine sets holds for the terminal too, not only the app
+  if (process.env.TOYON_UPDATES === "off") {
+    console.error("updates are turned off for this machine (TOYON_UPDATES=off)");
+    return 1;
+  }
   const method = installMethod(packaged ? join(here, "..", "package.json") : null);
   if (method === "none") {
     console.error(

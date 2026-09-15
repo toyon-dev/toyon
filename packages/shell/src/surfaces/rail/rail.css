@@ -176,7 +176,9 @@
     --rail-pad-r: 16px;
     /* the dot's inset from the counts: its centre lands 20px from the near edge */
     --rail-dot-ml: 12px;
-    --rail-dot-mr: 0;
+    /* lengths, never a bare 0: the lock and the clock take 2.5px off these inside calc(), where a
+       unitless 0 is invalid and the margin silently falls back to 0 */
+    --rail-dot-mr: 0px;
     /* the peek's shadow falls toward the far edge */
     --rail-shadow-x: -10px;
     width: 40px;
@@ -395,18 +397,9 @@
       background: var(--element1);
     }
   }
-  /* the lock, and the clock on a worktree that archived itself, stand in for the dot, so they are
-   centred on the dot's x: the 13px glyph overhangs the 8px dot by 2.5px on each side, taken off
-   the dot's own margins so the row's near edge holds */
   .rail-lock,
   .rail-auto {
     display: flex;
-  }
-  .rail .rail-item .rail-lock,
-  .rail .rail-disc-item .rail-lock,
-  .rail .rail-disc-item .rail-auto {
-    margin-left: calc(var(--rail-dot-ml) - 2.5px);
-    margin-right: calc(var(--rail-dot-mr) - 2.5px);
   }
   /* the socket is down: every row is stale and nothing you click will answer. The dots say so, in
    the fault colour: what they were reporting is exactly what we have stopped hearing, and the dot
@@ -442,6 +435,14 @@
     & .rail-glyph {
       margin-left: var(--rail-dot-ml);
       margin-right: var(--rail-dot-mr);
+    }
+    /* the lock, and the clock on a worktree that archived itself, stand in for the dot, so they are
+     centred on its x: the 13px glyph overhangs the 8px dot by 2.5px each side, taken off the dot's
+     margins so the name starts where every other row's does */
+    & .rail-lock,
+    & .rail-auto {
+      margin-left: calc(var(--rail-dot-ml) - 2.5px);
+      margin-right: calc(var(--rail-dot-mr) - 2.5px);
     }
   }
   /* the crashed dot is the one dot you can press, so it needs a target bigger than its eight pixels;
@@ -482,7 +483,7 @@
     --rail-far-l: auto;
     --rail-pad-l: 16px;
     --rail-pad-r: var(--rail-gut);
-    --rail-dot-ml: 0;
+    --rail-dot-ml: 0px;
     --rail-dot-mr: 12px;
     /* a pair rather than a restated box-shadow: a box-shadow under this selector would outrank
        .pinned's box-shadow: none, and a hovered kept-open rail would lift off the page */

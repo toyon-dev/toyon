@@ -1,5 +1,6 @@
 import type { ArchivedWorktree } from "@toyon/shared";
-import { useDispatch, useStore } from "../../state/context.tsx";
+import { useMemo } from "react";
+import { useDispatch, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useActive, useActiveRepo, useDraft } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -7,7 +8,7 @@ import { ArchivedNote } from "./ArchivedNote.tsx";
 import { ChatLog } from "./ChatLog.tsx";
 import { Composer } from "./Composer.tsx";
 import { DraftIntro } from "./DraftIntro.tsx";
-import { chatPanel } from "./useIntake.ts";
+import { chatPanel, pathDropHandlers } from "./useIntake.ts";
 import "./chat.css";
 
 /** The chat: transcript above, composer below. On main, which has no chat, the transcript's place
@@ -38,10 +39,14 @@ export function ChatPanel({
   // dropped files attach here, but the drop is taken on the window (see useFileDrop): this only
   // lends it the panel's bounds and shows the highlight while the pointer is inside them
   const over = useStore((s) => s.dragFiles);
+  // a row dragged from the files tab is this window's own drag, so the panel takes it itself
+  const store = useStoreInstance();
+  const pathDrop = useMemo(() => pathDropHandlers(store), [store]);
   return (
     <div
       className={cx(placement === "dock" ? "chat-dock" : "chat-centre", className, over && "drop-over")}
       style={width === undefined ? undefined : { width }}
+      {...pathDrop}
       ref={(el) => {
         // the placement leaving must not clear the one arriving in the same commit
         if (el) chatPanel.el = el;

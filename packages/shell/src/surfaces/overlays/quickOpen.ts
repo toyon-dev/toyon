@@ -14,8 +14,8 @@ export interface QuickOpenList {
 
 /**
  * Attach uncommitted status to the worktree's file list. A file inside an untracked
- * directory (`?? src/pages/`) counts as added with no line counts; deleted files are
- * gone from `git ls-files` so they come from the status list alone.
+ * directory (`?? src/pages/`) counts as added with no line counts; a deleted file is not
+ * in the list, which is what is on disk, so it comes from the status list alone.
  */
 export function withStatus(paths: string[], status: GitFileStatus[]): QuickOpenRow[] {
   const exact = new Map(status.map((s) => [s.path, s]));
@@ -44,17 +44,58 @@ export function rankFiles(paths: string[], status: GitFileStatus[], query: strin
     const rest = rows.filter((r) => !r.status).sort((a, b) => a.path.localeCompare(b.path));
     return { rows: [...changed, ...rest].slice(0, limit), changed: Math.min(changed.length, limit) };
   }
-  const scored: Array<{ row: QuickOpenRow; score: number }> = [];
-  for (const row of rows) {
-    const lower = row.path.toLowerCase();
-    let score = fuzzyScore(lower, needle);
-    if (score <= 0) continue;
-    if (fuzzyScore(lower.slice(lower.lastIndexOf("/") + 1), needle) > 0) score += 10;
-    if (row.status) score += 4;
-    scored.push({ row, score });
-  }
+  const scored = scoreFiles(rows, needle);
   scored.sort((a, b) => b.score - a.score || a.row.path.localeCompare(b.row.path));
   return { rows: scored.slice(0, limit).map((x) => x.row), changed: 0 };
+}
+
+/** fuzzy over the whole path, with a bump when the last segment alone matches; 0 for no match */
+function scorePath(path: string, needle: string): number {
+  const lower = path.toLowerCase();
+  const score = fuzzyScore(lower, needle);
+  if (score <= 0) return 0;
+  return fuzzyScore(lower.slice(lower.lastIndexOf("/") + 1), needle) > 0 ? score + 10 : score;
+}
+
+function scoreFiles(rows: QuickOpenRow[], needle: string): Array<{ row: QuickOpenRow; score: number }> {
+  const scored: Array<{ row: QuickOpenRow; score: number }> = [];
+  for (const row of rows) {
+    const score = scorePath(row.path, needle);
+    if (score > 0) scored.push({ row, score: row.status ? score + 4 : score });
+  }
+  return scored;
+}
+
+/** one row of the composer's @ menu: a file, or a folder the files imply */
+export type MentionRow = { kind: "file"; path: string; status?: GitFileStatus } | { kind: "folder"; path: string };
+
+/**
+ * The @ menu's rows. Files rank as ⌘P ranks them; with a query, the folders that match rank beside
+ * them, a folder below a file that matches as well, or `@src` would fill up with folders. An empty
+ * query lists files only, since every folder matches it.
+ */
+export function rankMentions(
+  paths: string[],
+  folders: string[],
+  status: GitFileStatus[],
+  query: string,
+  limit: number,
+): MentionRow[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle)
+    return rankFiles(paths, status, query, limit).rows.map((r) => ({ kind: "file", path: r.path, status: r.status }));
+  const scored: Array<{ row: MentionRow; score: number }> = scoreFiles(withStatus(paths, status), needle).map(
+    ({ row, score }) => ({ row: { kind: "file", path: row.path, status: row.status }, score }),
+  );
+  for (const path of folders) {
+    const score = scorePath(path, needle);
+    if (score > 0) scored.push({ row: { kind: "folder", path }, score });
+  }
+  const folderLast = (r: MentionRow) => (r.kind === "folder" ? 1 : 0);
+  scored.sort(
+    (a, b) => b.score - a.score || folderLast(a.row) - folderLast(b.row) || a.row.path.localeCompare(b.row.path),
+  );
+  return scored.slice(0, limit).map((x) => x.row);
 }
 
 /** positions the greedy subsequence walk in fuzzyScore lands on, for highlighting; null when no match */

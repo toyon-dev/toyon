@@ -1,0 +1,52 @@
+/* The files tab: every file in the worktree, as a tree under the changes panel's strip. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  .tree {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    /* the tree holds focus for the panel, and the cursor row is what says so, as in the changes list */
+    outline: none;
+  }
+  /* depth is indent, a caret's width a level, so a child's name starts under its folder's */
+  .tree-row {
+    gap: 2px;
+    padding-left: calc(var(--row-inset) + var(--tree-depth, 0) * 14px);
+    cursor: default;
+    /* the file open in the editor: the band and the edge, the pair every picked row carries */
+    &[data-state~="current"] {
+      background: var(--element1);
+      color: var(--text0);
+    }
+    &[data-state~="current"],
+    &[data-state~="cursor"] {
+      --row-edge-color: var(--accent);
+    }
+    /* the status letter ends the row, where a name of any length leaves it in one column */
+    & .xy {
+      margin-left: auto;
+      padding-left: 8px;
+      flex-shrink: 0;
+    }
+  }
+  .tree-caret {
+    width: 14px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tree-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* a folder with a change somewhere inside: quieter than a letter, since the letter is on the file */
+  .tree-changed {
+    width: 6px;
+    height: 6px;
+    margin-left: auto;
+    background: var(--text2);
+  }
+}

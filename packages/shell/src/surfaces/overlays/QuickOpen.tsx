@@ -126,14 +126,18 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
 }
 
 /** one file row: status letter, highlighted basename, dimmed directory, line counts. Exported so
- * the composer's `@` menu draws the same row as ⌘P rather than a lookalike. */
-export function fileRow(path: string, status: GitFileStatus | undefined, q: string) {
+ * the composer's `@` menu draws the same row as ⌘P rather than a lookalike; a folder there takes
+ * the same row with its trailing slash, the way it is inserted. */
+export function fileRow(path: string, status: GitFileStatus | undefined, q: string, folder = false) {
   const [name, dir] = splitPath(path);
   const hits = q.trim() ? matchPositions(path, q.trim()) : null;
   return (
     <>
       <span className={`xy ${status ? xyClass(status.xy) : ""}`}>{status ? xyLetter(status.xy) : ""}</span>
-      <span className="name">{markHits(name, hits, dir.length)}</span>
+      <span className="name">
+        {markHits(name, hits, dir.length)}
+        {folder && "/"}
+      </span>
       <span className="dir row-dim">
         {dir && (
           <>

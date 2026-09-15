@@ -440,7 +440,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "list-files"(msg, ctx, s) {
-    ctx.reply({ t: "files", worktreeId: msg.worktreeId, paths: await s.files.list(msg.worktreeId) });
+    ctx.reply({ t: "files", worktreeId: msg.worktreeId, ...(await s.files.list(msg.worktreeId)) });
   },
 
   async search(msg, ctx, s) {

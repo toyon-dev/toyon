@@ -12,13 +12,16 @@ import {
   useFirstRun,
   useLocalField,
 } from "../../state/selectors.ts";
-import { repoById } from "../../state/store.ts";
+import { type ChangesTab, repoById } from "../../state/store.ts";
+import { Icon } from "../../ui/Icon.tsx";
 import { step } from "../../ui/listNav.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { Tabs } from "../../ui/Tabs.tsx";
-import { ago, shiftRanges, wtDir } from "../util.ts";
+import { tip } from "../../ui/Tooltip.tsx";
+import { ago, chord, shiftRanges, wtDir } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
+import { FileTree } from "./FileTree.tsx";
 import { GitFileRow } from "./GitFileRow.tsx";
 import "./changes.css";
 import { cx } from "../../ui/cx.ts";
@@ -33,9 +36,6 @@ function landedWhen(at: number): string {
   const when = ago(at);
   return when === "now" ? "landed just now" : `landed ${when} ago`;
 }
-
-/** which list the panel is showing: the working tree, or the branch's commits */
-type Tab = "changes" | "history";
 
 /** a history row is a commit, or one file inside the commit expanded under it */
 type HistRow = { commit: CommitEntry; file?: GitFileStatus };
@@ -62,7 +62,14 @@ export function ChangesDock({ width }: { width: number }) {
   const committed = gitInfo?.committed ?? NO_FILES;
   const clean = files.length === 0;
 
-  const [tab, setTab] = useState<Tab>("changes");
+  const storedTab = useStore((s) => s.changesTab);
+  // an archived page has no checkout to list, so it shows its changes and leaves the kept tab be:
+  // leaving the page brings the files tab back
+  const tab: ChangesTab = archived && storedTab === "files" ? "changes" : storedTab;
+  const setTab = useCallback((v: ChangesTab) => dispatch({ a: "changes-tab", v }), [dispatch]);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const treeRef = useRef<HTMLDivElement>(null);
   // names the second half of the history: the commits this branch inherited rather than made. Any
   // row has one: a found worktree's history reads the same way, it just has no commit box under it.
   const activeRow = useActiveRow();
@@ -189,8 +196,10 @@ export function ChangesDock({ width }: { width: number }) {
   atOpen.current = rows.findIndex((f) => f.path === openPath);
   useEffect(() => {
     if (!focusReq) return;
-    if (atOpen.current >= 0) setSel(atOpen.current);
-    const f = requestAnimationFrame(() => listRef.current?.focus());
+    // on the files tab the tree takes it, and picks up at the open file itself
+    const files = tabRef.current === "files";
+    if (!files && atOpen.current >= 0) setSel(atOpen.current);
+    const f = requestAnimationFrame(() => (files ? treeRef : listRef).current?.focus());
     return () => cancelAnimationFrame(f);
   }, [focusReq]);
 
@@ -341,7 +350,7 @@ export function ChangesDock({ width }: { width: number }) {
   return (
     <div className={cx("changes-dock", (!changesOpen || firstRun) && "collapsed")} style={{ width }}>
       {/* the count is the working tree's: the committed section under it keeps its own title */}
-      <Tabs<Tab>
+      <Tabs<ChangesTab>
         fill
         owner="changes-tabs"
         label="changes panel"
@@ -358,107 +367,132 @@ export function ChangesDock({ width }: { width: number }) {
               ),
           },
           { id: "history", label: "history" },
+          // every file, behind an icon sized to itself: the tree is there to look things up, and the
+          // two lists of work keep the strip
+          ...(archived
+            ? []
+            : [
+                {
+                  id: "files" as const,
+                  label: <Icon name="folder" className="icon-inline" />,
+                  fit: true,
+                  ariaLabel: "files",
+                  tip: tip("files", chord("files")),
+                },
+              ]),
         ]}
         current={tab}
         onPick={setTab}
       />
-      <div
-        className={cx("changes-list", tab === "history" && "history")}
-        role="listbox"
-        aria-label={tab === "history" ? "commits" : "changed files"}
-        tabIndex={0}
-        ref={listRef}
-        onKeyDown={onKeyDown}
-        onFocus={() => setFocused(true)}
-        // a click lands the keyboard on the list, never on the row it hit: a row is a button, and a
-        // focused button that a later key unmounts (closing its commit, walking ← out to the other
-        // tab) takes the focus down with it, and the panel is deaf until it is clicked again
-        // The mark moves on the press, not the release: taking the keyboard hands the mark to the
-        // cursor, and a cursor left on some other row would light for the length of the press.
-        // The options are rendered in row order, so their index is the row's.
-        onMouseDown={(e) => {
-          if (e.button !== 0) return;
-          e.preventDefault();
-          const hit = (e.target as HTMLElement).closest('[role="option"]');
-          const i = hit ? Array.from(e.currentTarget.querySelectorAll('[role="option"]')).indexOf(hit) : -1;
-          if (i >= 0) setSel(i);
-          listRef.current?.focus();
-        }}
-        // clicking one row and then another passes through here; only focus actually leaving the
-        // list should put the selection band away
-        onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocused(false)}
-        {...cm.contextMenu((from) => (from === "keyboard" ? selectedMenu() : []))}
-      >
-        {tab === "changes" && files.length > 0 && (
-          <>
-            {/* the tab already says changes and how many; the title is only needed to tell this
+      {tab === "files" && shownId ? (
+        <FileTree
+          worktreeId={shownId}
+          dir={active ? wtDir(active.worktree) : (activeRow?.path ?? "")}
+          openPath={openPath}
+          openRef={openRef}
+          rootRef={treeRef}
+        />
+      ) : (
+        <div
+          className={cx("changes-list", tab === "history" && "history")}
+          role="listbox"
+          aria-label={tab === "history" ? "commits" : "changed files"}
+          tabIndex={0}
+          ref={listRef}
+          onKeyDown={onKeyDown}
+          onFocus={() => setFocused(true)}
+          // a click lands the keyboard on the list, never on the row it hit: a row is a button, and a
+          // focused button that a later key unmounts (closing its commit, walking ← out to the other
+          // tab) takes the focus down with it, and the panel is deaf until it is clicked again
+          // The mark moves on the press, not the release: taking the keyboard hands the mark to the
+          // cursor, and a cursor left on some other row would light for the length of the press.
+          // The options are rendered in row order, so their index is the row's.
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            const hit = (e.target as HTMLElement).closest('[role="option"]');
+            const i = hit ? Array.from(e.currentTarget.querySelectorAll('[role="option"]')).indexOf(hit) : -1;
+            if (i >= 0) setSel(i);
+            listRef.current?.focus();
+          }}
+          // clicking one row and then another passes through here; only focus actually leaving the
+          // list should put the selection band away
+          onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocused(false)}
+          {...cm.contextMenu((from) => (from === "keyboard" ? selectedMenu() : []))}
+        >
+          {tab === "changes" && files.length > 0 && (
+            <>
+              {/* the tab already says changes and how many; the title is only needed to tell this
                 section from the committed one under it */}
-            {committed.length > 0 && <div className="section-title">uncommitted · {files.length}</div>}
-            {files.map((f, i) => (
-              <GitFileRow
-                key={f.path}
-                f={f}
-                active={marked(i, !openRef && f.path === openPath)}
-                selected={focused && sel === i}
-                onOpen={clickRow}
-                menu={menuUncommitted}
-                onHover={hoverFile}
-              />
-            ))}
-          </>
-        )}
-        {tab === "changes" && committed.length > 0 && (
-          <>
-            <div
-              className="section-title"
-              data-tip="Committed on this branch, not yet on main"
-              data-tip-placement="follow"
-            >
-              committed · {committed.length}
-            </div>
-            {committed.map((f, i) => (
-              <GitFileRow
-                key={`c-${f.path}`}
-                f={f}
-                active={marked(files.length + i, !openRef && f.path === openPath)}
-                selected={focused && sel === files.length + i}
-                onOpen={clickRow}
-                menu={menuCommitted}
-                onHover={hoverFile}
-              />
-            ))}
-          </>
-        )}
-        {tab === "changes" && clean && committed.length === 0 && (
-          <div className="empty">
-            {archived ? (archived.landed ? "all of it landed" : "nothing that is not on main") : "clean"}
-          </div>
-        )}
-        {tab === "history" &&
-          histRows.map((r, i) => (
-            <Fragment key={r.file ? `${r.commit.sha}:${r.file.path}` : r.commit.sha}>
-              {archived && keptTitles.has(i) && <div className="section-title">{keptTitles.get(i)}</div>}
-              {!archived && aheadCount > 0 && i === 0 && (
-                <div className="section-title">on this branch · {aheadCount}</div>
-              )}
-              {!archived && aheadCount > 0 && i === firstLanded && <div className="section-title">{defaultBranch}</div>}
-              {r.file ? (
+              {committed.length > 0 && <div className="section-title">uncommitted · {files.length}</div>}
+              {files.map((f, i) => (
                 <GitFileRow
-                  f={r.file}
-                  active={marked(i, openRef === r.commit.sha && r.file.path === openPath)}
+                  key={f.path}
+                  f={f}
+                  active={marked(i, !openRef && f.path === openPath)}
                   selected={focused && sel === i}
-                  onOpen={clickHistFile}
-                  menu={menuAtCommit}
-                  onHover={noHover}
+                  onOpen={clickRow}
+                  menu={menuUncommitted}
+                  onHover={hoverFile}
                 />
-              ) : (
-                <CommitRow c={r.commit} selected={focused && sel === i} onToggle={clickCommit} />
-              )}
-            </Fragment>
-          ))}
-        {tab === "history" && commits === undefined && <div className="empty">reading history…</div>}
-        {tab === "history" && commits?.length === 0 && <div className="empty">no commits yet</div>}
-      </div>
+              ))}
+            </>
+          )}
+          {tab === "changes" && committed.length > 0 && (
+            <>
+              <div
+                className="section-title"
+                data-tip="Committed on this branch, not yet on main"
+                data-tip-placement="follow"
+              >
+                committed · {committed.length}
+              </div>
+              {committed.map((f, i) => (
+                <GitFileRow
+                  key={`c-${f.path}`}
+                  f={f}
+                  active={marked(files.length + i, !openRef && f.path === openPath)}
+                  selected={focused && sel === files.length + i}
+                  onOpen={clickRow}
+                  menu={menuCommitted}
+                  onHover={hoverFile}
+                />
+              ))}
+            </>
+          )}
+          {tab === "changes" && clean && committed.length === 0 && (
+            <div className="empty">
+              {archived ? (archived.landed ? "all of it landed" : "nothing that is not on main") : "clean"}
+            </div>
+          )}
+          {tab === "history" &&
+            histRows.map((r, i) => (
+              <Fragment key={r.file ? `${r.commit.sha}:${r.file.path}` : r.commit.sha}>
+                {archived && keptTitles.has(i) && <div className="section-title">{keptTitles.get(i)}</div>}
+                {!archived && aheadCount > 0 && i === 0 && (
+                  <div className="section-title">on this branch · {aheadCount}</div>
+                )}
+                {!archived && aheadCount > 0 && i === firstLanded && (
+                  <div className="section-title">{defaultBranch}</div>
+                )}
+                {r.file ? (
+                  <GitFileRow
+                    f={r.file}
+                    active={marked(i, openRef === r.commit.sha && r.file.path === openPath)}
+                    selected={focused && sel === i}
+                    onOpen={clickHistFile}
+                    menu={menuAtCommit}
+                    onHover={noHover}
+                  />
+                ) : (
+                  <CommitRow c={r.commit} selected={focused && sel === i} onToggle={clickCommit} />
+                )}
+              </Fragment>
+            ))}
+          {tab === "history" && commits === undefined && <div className="empty">reading history…</div>}
+          {tab === "history" && commits?.length === 0 && <div className="empty">no commits yet</div>}
+        </div>
+      )}
       {activeRow && !archived && (
         <CommitBox active={activeRow} ahead={gitInfo?.ahead ?? 0} behind={gitInfo?.behind ?? 0} dirty={!clean} />
       )}

@@ -139,13 +139,18 @@ export interface ComposerWalk {
  * the other. */
 export type ChatMark = ({ by: "walk" } & ComposerWalk) | { by: "reveal"; seq: number; n: number };
 
+/** the changes panel's lists: the working tree, the branch's commits, every file */
+export type ChangesTab = "changes" | "history" | "files";
+
 /** everything the shell tracks for one worktree; dropped when the worktree disappears */
 export interface WorktreeLocal {
   chat: ChatItem[];
   log: LogLine[];
   git?: GitInfo;
-  /** quick-open listing (requested on ⌘P) */
+  /** the files on disk: quick open, the @ menu and the files tab ask for it */
   files?: string[];
+  /** the submodules, listed with the files: entries the tree shows but cannot open */
+  submodules?: string[];
   queue: string[];
   /** a message sent from an archived page, shown as sent while the worktree comes back: gone when
    * its own message reaches the chat, and back in the box if the restore is refused */
@@ -500,6 +505,8 @@ export interface State {
   /** the daemon speaks another protocol version than this build: stop, ask for a reload */
   incompatible: boolean;
   changesOpen: boolean;
+  /** the changes panel's open tab, kept across worktrees the way the panel's being open is */
+  changesTab: ChangesTab;
   /** bumped to put the keyboard in the changes list; focus is the DOM's, so this only asks */
   focusChanges: number;
   /** bumped to put the suggested commit message in the changes panel's box and the caret after it */
@@ -662,6 +669,7 @@ export function initialState(opts: InitialOpts): State {
     paletteReturn: null,
     incompatible: false,
     changesOpen: defaultPanels.changes,
+    changesTab: "changes",
     focusChanges: 0,
     editCommit: 0,
     chatOpen: defaultPanels.chat,
@@ -983,8 +991,9 @@ export type Action =
   | { a: "toggle"; overlay: Overlay }
   | { a: "palette-return"; v: State["paletteReturn"] }
   | { a: "toggle-changes" }
-  /** open the changes panel if it is shut, and ask it for the keyboard either way */
-  | { a: "focus-changes" }
+  /** open the changes panel if it is shut, and ask it for the keyboard either way; on `tab` if given */
+  | { a: "focus-changes"; tab?: ChangesTab }
+  | { a: "changes-tab"; v: ChangesTab }
   /** open the changes panel on its message box, the suggested commit message in it, to edit */
   | { a: "edit-commit" }
   | { a: "toggle-chat" }
@@ -1363,7 +1372,15 @@ function reduce(s: State, action: Action): State {
     case "toggle-changes":
       return { ...s, changesOpen: !s.changesOpen, changesAuto: false };
     case "focus-changes":
-      return { ...s, changesOpen: true, changesAuto: false, focusChanges: s.focusChanges + 1 };
+      return {
+        ...s,
+        changesOpen: true,
+        changesAuto: false,
+        focusChanges: s.focusChanges + 1,
+        changesTab: action.tab ?? s.changesTab,
+      };
+    case "changes-tab":
+      return s.changesTab === action.v ? s : { ...s, changesTab: action.v };
     case "edit-commit":
       return { ...s, changesOpen: true, changesAuto: false, editCommit: s.editCommit + 1 };
     case "toggle-chat":
@@ -1800,7 +1817,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return next;
     }
     case "files":
-      return withLocal(s, msg.worktreeId, (l) => ({ ...l, files: msg.paths }));
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, files: msg.paths, submodules: msg.submodules }));
     case "search-results":
       return withLocal(s, msg.worktreeId, (l) => ({
         ...l,

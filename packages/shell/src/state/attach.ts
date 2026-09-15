@@ -99,6 +99,39 @@ export function addToChat(store: Store, taken: Taken | null) {
   store.dispatch({ a: "focus-chat" });
 }
 
+/** The box the files tab's words go into: the composer on screen, for the worktree the tab shows.
+ * Null for a worktree toyon only found, which has no composer to take them. */
+export function treeBox(s: State, worktreeId: string): string | null {
+  if (worktreeId !== s.activeId) return null;
+  return composerBoxOf(worktreeById(s, worktreeId), !!s.draft);
+}
+
+/** a file or folder named in a message, the way the @ menu names one */
+export const mentionOf = (path: string, folder: boolean) => `@${path}${folder ? "/" : ""}`;
+
+/** Words from the files tab, after what the box already holds. A space apart, because an `@` only
+ * reads as a mention at the start of a word. Through set-draft like a keystroke, so the draft is
+ * kept like one, and the keyboard goes to the box to finish the sentence. */
+function appendToBox(store: Store, worktreeId: string, words: string) {
+  const s = store.getState();
+  const boxId = treeBox(s, worktreeId);
+  if (!boxId) return;
+  const draft = s.local[boxId]?.draft ?? "";
+  const gap = draft === "" || /\s$/.test(draft) ? "" : " ";
+  store.dispatch({ a: "set-draft", id: boxId, text: `${draft}${gap}${words}` });
+  store.dispatch({ a: "focus-chat" });
+}
+
+/** "add to chat" on a files-tab row, or the row dropped on the chat: the path, as a mention */
+export function mentionInChat(store: Store, worktreeId: string, path: string, folder: boolean) {
+  appendToBox(store, worktreeId, `${mentionOf(path, folder)} `);
+}
+
+/** a sentence asking the agent to change the project's shape, left in the box and never sent */
+export function askAgent(store: Store, worktreeId: string, sentence: string) {
+  appendToBox(store, worktreeId, sentence);
+}
+
 /** the box a pick from frame `frameId` belongs in: main's frame while main drafts goes to the
  * repo's draft; otherwise the frame is a worktree's preview, and the box is that worktree's */
 function pickBox(s: State, frameId: string): string | null {

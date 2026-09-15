@@ -165,7 +165,16 @@ export function useChords() {
           // current worktree row); from inside that spot they close it. A press that shut a panel
           // already on screen took it from a hand that had come to type in it.
           case "changes":
-            dispatch(s.changesOpen && inside(".changes-list") ? { a: "toggle-changes" } : { a: "focus-changes" });
+            dispatch(
+              s.changesOpen && inside(".changes-list, .tree") ? { a: "toggle-changes" } : { a: "focus-changes" },
+            );
+            break;
+          case "files":
+            dispatch(
+              s.changesOpen && s.changesTab === "files" && inside(".tree")
+                ? { a: "toggle-changes" }
+                : { a: "focus-changes", tab: "files" },
+            );
             break;
           case "composer":
             // a chat in the centre, a project's or an archived worktree's, is not a panel: there is

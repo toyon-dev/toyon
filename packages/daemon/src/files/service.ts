@@ -17,6 +17,7 @@ import { resolveInside } from "../worktrees/paths.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
 import { decodeText, encodeText, hasBom, looksBinary, versionOf } from "./content.ts";
 import { type ElementSources, needlesOf, rankElementSources } from "./elementSource.ts";
+import { type Listing, parseListing } from "./listing.ts";
 import { viteLineOffset } from "./vite-offset.ts";
 
 const SEARCH_MAX = 300;
@@ -181,10 +182,15 @@ export class FileService {
     });
   }
 
-  /** tracked + untracked (respecting .gitignore) */
-  async list(worktreeId: string): Promise<string[]> {
-    const r = await git(this.require(worktreeId).path, "ls-files", "-co", "--exclude-standard");
-    return r.out.split("\n").filter(Boolean);
+  /** the files on disk, tracked and untracked (respecting .gitignore), with the submodules apart */
+  async list(worktreeId: string): Promise<Listing> {
+    const cwd = this.require(worktreeId).path;
+    const [staged, untracked, deleted] = await Promise.all([
+      git(cwd, "ls-files", "-z", "-s"),
+      git(cwd, "ls-files", "-z", "-o", "--exclude-standard"),
+      git(cwd, "ls-files", "-z", "-d"),
+    ]);
+    return parseListing(staged.out, untracked.out, deleted.out);
   }
 
   /** fixed-string, case-insensitive git grep over tracked + untracked (not ignored) files */

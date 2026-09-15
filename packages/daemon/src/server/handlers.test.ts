@@ -235,6 +235,27 @@ function lastOf<T extends ServerMsg["t"]>(replies: ServerMsg[], t: T) {
   return replies.findLast((m): m is Extract<ServerMsg, { t: T }> => m.t === t);
 }
 
+describe("list-files", () => {
+  test("lists what is on disk: a deleted file leaves, a moved one shows once, ignored files never", async () => {
+    const { services, ctx, replies, repo } = make();
+    const main = await mainOf(services, repo);
+    mkdirSync(join(repo, "docs"));
+    writeFileSync(join(repo, "docs/c.md"), "c\n");
+    writeFileSync(join(repo, "gone.ts"), "x\n");
+    writeFileSync(join(repo, ".gitignore"), ".env\n");
+    sh(repo, "git", "add", "-A");
+    sh(repo, "git", "commit", "-qm", "files");
+    rmSync(join(repo, "gone.ts"));
+    sh(repo, "mv", "docs/c.md", "docs/renamed.md");
+    writeFileSync(join(repo, ".env"), "SECRET=1\n");
+
+    await dispatch({ t: "list-files", worktreeId: main.id }, ctx, services);
+    const files = lastOf(replies, "files");
+    expect(files?.paths.sort()).toEqual([".gitignore", "README.md", "docs/renamed.md"]);
+    expect(files?.submodules).toEqual([]);
+  });
+});
+
 describe("handlers", () => {
   test("every ClientMsg kind in the schema has a handler and nothing extra", () => {
     const kinds = clientMsgSchema.options.map((o) => o.shape.t.value).sort();

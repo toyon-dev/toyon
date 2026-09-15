@@ -1,7 +1,7 @@
 import { isLongPaste, limitMessage } from "@toyon/shared";
 import { useEffect, useRef } from "react";
 import { readCopiedSource } from "../../app/copiedSource.ts";
-import { attachText, noticeIn, roomIn } from "../../state/attach.ts";
+import { attachText, mentionInChat, noticeIn, roomIn, treeBox } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
 import { useStoreInstance } from "../../state/context.tsx";
 import { composerBoxOf, worktreeById } from "../../state/store.ts";
@@ -57,6 +57,46 @@ function refuseFileDrag(store: Store) {
   if (!drag) return;
   drag.refused = true;
   store.dispatch({ a: "drag-files", v: false });
+}
+
+/** the type a files-tab row drags under, beside text/plain for anywhere outside toyon */
+export const PATH_MIME = "application/x-toyon-path";
+
+/** A files-tab row on its way somewhere. A drag's data is only readable at the drop, and the panel
+ * has to decide at dragover whether it takes this one, so the row says here what it carries. */
+let pathDrag: { worktreeId: string; path: string; folder: boolean } | null = null;
+
+export function startPathDrag(carried: { worktreeId: string; path: string; folder: boolean }) {
+  pathDrag = carried;
+}
+
+export function endPathDrag(store: Store) {
+  pathDrag = null;
+  if (drag) endFileDrag(store);
+}
+
+const carriesPath = (e: React.DragEvent) => pathDrag !== null && Array.from(e.dataTransfer.types).includes(PATH_MIME);
+
+/** The chat panel's half of a row's drag. A worktree with a composer lights the panel and takes
+ * the path as a mention; one without refuses it. Either way the drop is taken here, or the textarea
+ * under the pointer would paste the raw path as well. */
+export function pathDropHandlers(store: Store) {
+  return {
+    onDragOver: (e: React.DragEvent) => {
+      if (!carriesPath(e) || !pathDrag) return;
+      e.preventDefault();
+      const takes = treeBox(store.getState(), pathDrag.worktreeId) !== null;
+      e.dataTransfer.dropEffect = takes ? "copy" : "none";
+      if (takes) noteFileDrag(store, true);
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (!carriesPath(e) || !pathDrag) return;
+      e.preventDefault();
+      const { worktreeId, path, folder } = pathDrag;
+      endPathDrag(store);
+      mentionInChat(store, worktreeId, path, folder);
+    },
+  };
 }
 
 /** files on their way to the composer, from a paste or a drop on the chat panel. Reads the pending

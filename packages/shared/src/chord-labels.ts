@@ -32,6 +32,7 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   search: { label: "search in files", section: "Find" },
   chats: { label: "search in chats", section: "Find" },
   changes: { label: "changes panel", section: "Panels" },
+  files: { label: "files panel", section: "Panels" },
   composer: { label: "chat panel, with the editor's selection", section: "Panels" },
   rail: { label: "worktree panel", section: "Panels" },
   keys: { label: "settings & shortcuts", section: "Panels" },

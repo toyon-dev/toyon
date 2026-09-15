@@ -577,7 +577,7 @@ export function Rail() {
                 onClick={() => dispatch({ a: "toggle-discovered" })}
               >
                 <span className="rail-gut">
-                  <Icon name="caret" className={cx("icon-inline rail-disc-caret", !discOpen && "shut")} />
+                  <Icon name="caret" className={cx("icon-inline disc-caret", !discOpen && "shut")} />
                 </span>
                 <span className="rail-label">discovered · {discovered.length}</span>
               </button>
@@ -599,7 +599,7 @@ export function Rail() {
                 onClick={() => dispatch({ a: "toggle-archived" })}
               >
                 <span className="rail-gut">
-                  <Icon name="caret" className={cx("icon-inline rail-disc-caret", !archOpen && "shut")} />
+                  <Icon name="caret" className={cx("icon-inline disc-caret", !archOpen && "shut")} />
                 </span>
                 <span className="rail-label">archived · {archived.length}</span>
               </button>

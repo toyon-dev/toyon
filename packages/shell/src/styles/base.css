@@ -263,6 +263,14 @@
   .row-current {
     --row-edge-color: var(--accent);
   }
+  /* a disclosure's caret, on the rail's sections and the files tab's folders: down when open and
+   right when shut, the way every disclosure does */
+  .disc-caret {
+    transition: transform 0.12s ease;
+    &.shut {
+      transform: rotate(-90deg);
+    }
+  }
 
   /* ---- text roles ----
      Three names for the three kinds of quiet text a surface writes, so a heading in the changes

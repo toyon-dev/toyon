@@ -366,13 +366,6 @@
       color: var(--text1);
     }
   }
-  /* the caret points down when open and right when shut, the way every disclosure does */
-  .rail-disc-caret {
-    transition: transform 0.12s ease;
-    &.shut {
-      transform: rotate(-90deg);
-    }
-  }
   .rail {
     &:hover .rail-disc-item,
     &.hold .rail-disc-item,

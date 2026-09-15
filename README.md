@@ -92,7 +92,7 @@ Copies start when you open them, and stop their servers when nobody has looked a
 
 ## What it does not do
 
-- It is not an editor. There is no file tree, no multi-file editing, no debugger, no extensions, no inline completion.
+- It is not an editor. There is no multi-file editing, no debugger, no extensions, no inline completion.
 - Only land pushes, when you press it. The agent is told not to push or delete branches.
 - It works on git repositories, and the product uses git's words for what it does. A new project starts one for you.
 - It does not keep copies apart from services they share. Each copy runs your setup and your commands on its own, so a database or a compose stack they all point at is shared, migrations included. `TOYON_WORKTREE` in every command's environment lets a project give each copy its own (`app_$TOYON_WORKTREE` as the database name); [docs/settings.md](https://github.com/toyon-dev/toyon/blob/main/docs/settings.md#keeping-copies-apart) has the recipes.

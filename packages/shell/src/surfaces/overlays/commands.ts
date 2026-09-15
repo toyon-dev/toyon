@@ -113,6 +113,7 @@ export type CommandState = Pick<
   State,
   | "picking"
   | "changesOpen"
+  | "changesTab"
   | "chatOpen"
   | "chatSide"
   | "railOpen"
@@ -139,6 +140,7 @@ export function useCommands(): Command[] {
   const sock = useSock();
   const picking = useStore((s) => s.picking);
   const changesOpen = useStore((s) => s.changesOpen);
+  const changesTab = useStore((s) => s.changesTab);
   const chatOpen = useStore((s) => s.chatOpen);
   const chatSide = useStore((s) => s.chatSide);
   const railOpen = useStore((s) => s.railOpen);
@@ -162,6 +164,7 @@ export function useCommands(): Command[] {
     const st: CommandState = {
       picking,
       changesOpen,
+      changesTab,
       chatOpen,
       chatSide,
       railOpen,
@@ -186,6 +189,7 @@ export function useCommands(): Command[] {
   }, [
     picking,
     changesOpen,
+    changesTab,
     chatOpen,
     chatSide,
     railOpen,

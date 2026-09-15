@@ -35,6 +35,7 @@ import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
+import { folderList } from "../changes/fileTree.ts";
 import { behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
@@ -43,7 +44,7 @@ import { useNewWorktreeProfile } from "../chips/ProfileChip.tsx";
 import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
 import { fileRow } from "../overlays/QuickOpen.tsx";
-import { rankFiles } from "../overlays/quickOpen.ts";
+import { rankMentions } from "../overlays/quickOpen.ts";
 import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, recapShown, verbLine } from "../recap.ts";
 import { chord, commandSource, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { ImageChip } from "./ImageChip.tsx";
@@ -77,6 +78,7 @@ type Verb = {
 /** what the inline `@` / `/` menu can offer */
 type Row =
   | { kind: "file"; path: string; status?: GitFileStatus }
+  | { kind: "folder"; path: string }
   | { kind: "changes"; n: number }
   | { kind: "cmd"; c: AgentCommand };
 
@@ -103,6 +105,7 @@ function emptyMenu(
  * reads it with its own tools, at the range it wants and with line numbers attached. */
 function insertionFor(r: Row): string {
   if (r.kind === "cmd") return `/${r.c.name} `; // verbatim: the adapter re-expands mcp: names
+  if (r.kind === "folder") return `@${r.path}/ `;
   return r.kind === "changes" ? "@changes " : `@${r.path} `;
 }
 
@@ -206,6 +209,8 @@ export function Composer({
   // the @ / slash menu: local state, not an overlay. s.overlay is modal and exclusive, and the
   // global esc handler would close this from anywhere in the app.
   const files = useLocalField(id, "files");
+  // the folders the files tab shows, so `@src/app/` names one the tree has
+  const folders = useMemo(() => folderList(files ?? []), [files]);
   const git = useLocalField(id, "git");
   // this worktree's uncommitted files (main's, while drafting) and how far it trails main: the live
   // status when the row is subscribed, else the rail's ten-second count
@@ -285,10 +290,9 @@ export function Composer({
     // "review @changes" is the common ask and should not need one chip per file
     const changed = git?.files.length ?? 0;
     if (changed > 0 && "changes".startsWith(triggerQuery.toLowerCase())) out.push({ kind: "changes", n: changed });
-    for (const r of rankFiles(files ?? [], git?.files ?? [], triggerQuery, 8).rows)
-      out.push({ kind: "file", path: r.path, status: r.status });
+    out.push(...rankMentions(files ?? [], folders, git?.files ?? [], triggerQuery, 8));
     return out;
-  }, [triggerKind, triggerQuery, files, git, commands, ownRows]);
+  }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows]);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const refocus = () => composerRef.current?.focus();
@@ -737,15 +741,28 @@ export function Composer({
       {menuOpen && trigger && (
         <InlinePicker
           results={rows}
-          keyOf={(r) => (r.kind === "cmd" ? `c:${r.c.name}` : r.kind === "changes" ? "changes" : `f:${r.path}`)}
+          keyOf={(r) =>
+            r.kind === "cmd"
+              ? `c:${r.c.name}`
+              : r.kind === "changes"
+                ? "changes"
+                : r.kind === "folder"
+                  ? `d:${r.path}`
+                  : `f:${r.path}`
+          }
           rowClass={(r) =>
-            r.kind === "file" ? "qo-file" : r.kind === "changes" ? "picker-row" : "picker-row picker-cmd"
+            r.kind === "file" || r.kind === "folder"
+              ? "qo-file"
+              : r.kind === "changes"
+                ? "picker-row"
+                : "picker-row picker-cmd"
           }
           nav={nav}
           listRef={listRef}
           empty={emptyMenu(trigger.kind, files, commands.length, source !== null)}
           row={(r) => {
             if (r.kind === "file") return fileRow(r.path, r.status, trigger.query);
+            if (r.kind === "folder") return fileRow(r.path, undefined, trigger.query, true);
             if (r.kind === "changes")
               return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
             return <CommandRow c={r.c} query={trigger.query} />;

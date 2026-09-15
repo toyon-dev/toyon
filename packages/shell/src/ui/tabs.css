@@ -57,6 +57,9 @@
     flex: 1;
     min-width: 0;
   }
+  .tabs-fill .tab.tab-fit {
+    flex: 0 0 auto;
+  }
   .tabs-mono .tab {
     font: var(--type-mono-sm);
   }

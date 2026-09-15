@@ -974,6 +974,13 @@ describe("git status", () => {
     // take focus the first time
     expect(reducer(once, { a: "focus-changes" }).focusChanges).toBe(once.focusChanges + 1);
   });
+  test("focus-changes with a tab opens the panel on it, and without one keeps the tab it had", () => {
+    const s = run([hello(wt("main", "main"))]);
+    const files = reducer(s, { a: "focus-changes", tab: "files" });
+    expect([files.changesOpen, files.changesTab]).toEqual([true, "files"]);
+    expect(reducer(files, { a: "focus-changes" }).changesTab).toBe("files");
+    expect(reducer(files, { a: "changes-tab", v: "history" }).changesTab).toBe("history");
+  });
   test("focus-chat and focus-rail open their panels and ask for the keyboard every time", () => {
     const s = run([hello(wt("main", "main"))]);
     const shut = reducer(reducer(s, { a: "toggle-chat" }), { a: "toggle-rail" });

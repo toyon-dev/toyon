@@ -7,6 +7,7 @@ import type { Deps } from "./deps.ts";
 export type AppState = Pick<
   State,
   | "changesOpen"
+  | "changesTab"
   | "chatOpen"
   | "railOpen"
   | "termOpen"
@@ -79,6 +80,15 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       label: `${show(s.changesOpen)} changes panel`,
       key: chord("changes"),
       onClick: () => dispatch({ a: "toggle-changes" }),
+    },
+    {
+      id: "files",
+      label: `${show(s.changesOpen && s.changesTab === "files")} files`,
+      key: chord("files"),
+      onClick: () =>
+        dispatch(
+          s.changesOpen && s.changesTab === "files" ? { a: "toggle-changes" } : { a: "focus-changes", tab: "files" },
+        ),
     },
     {
       id: "chat",

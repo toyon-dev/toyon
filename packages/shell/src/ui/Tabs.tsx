@@ -20,6 +20,11 @@ export type TabItem<Id extends string> = {
   tip?: ReturnType<typeof tip>;
   /** what a right-click on the tab offers */
   menu?: () => MenuEntry[];
+  /** in a `fill` strip, the tab takes its label's width instead of an even share: an icon tab
+   * beside two words would otherwise be as wide as either */
+  fit?: boolean;
+  /** the tab's name for a reader, where the label is an icon */
+  ariaLabel?: string;
 };
 
 export type TabsProps<Id extends string> = {
@@ -72,7 +77,7 @@ export function Tabs<Id extends string>({ items, current, onPick, fill, font, en
           return (
             <div
               key={it.id}
-              className={cx("tab", open && !!it.trail && "tab-trailed")}
+              className={cx("tab", open && !!it.trail && "tab-trailed", it.fit && "tab-fit")}
               data-state={rowState({ current: open })}
               {...(it.menu ? cm.contextMenu(it.menu) : {})}
             >
@@ -84,6 +89,7 @@ export function Tabs<Id extends string>({ items, current, onPick, fill, font, en
                 tabIndex={open ? 0 : -1}
                 onClick={() => onPick(it.id)}
                 {...it.tip}
+                {...(it.ariaLabel ? { "aria-label": it.ariaLabel } : {})}
               >
                 {it.lead}
                 {it.label}

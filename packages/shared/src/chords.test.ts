@@ -32,8 +32,9 @@ describe("matchChord", () => {
     expect(matchChord(ev("b", { shift: true }))).toBeNull();
     expect(matchChord(ev("e"))).toEqual({ id: "pick" });
     expect(matchChord(ev("i"))).toEqual({ id: "inspect" });
-    // ⌘⇧E is the file tree in VS Code, Cursor and Zed, and is kept for one
-    expect(matchChord(ev("e", { shift: true }))).toBeNull();
+    // ⌘⇧E is the file tree in VS Code, Cursor and Zed
+    expect(matchChord(ev("e", { shift: true }))).toEqual({ id: "files" });
+    expect(matchChord(ev("E", { shift: true }))).toEqual({ id: "files" });
   });
   test("F1 is the palette as in VS Code, for the Firefox hand that has no ⌘⇧P; a guest keeps it", () => {
     expect(matchChord(ev("F1", { meta: false }))).toEqual({ id: "commands" });

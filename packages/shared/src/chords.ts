@@ -10,6 +10,7 @@ export type ChordId =
   | "search"
   | "chats"
   | "changes"
+  | "files"
   | "composer"
   | "rail"
   | "keys"
@@ -73,8 +74,6 @@ export interface Chord {
 
 export const CHORDS: readonly Chord[] = [
   { id: "quick-open", key: "p" },
-  // ⌘⇧E is deliberately not an alias: it is the file tree in VS Code, Cursor and Zed, and is kept
-  // for one here
   {
     id: "commands",
     key: "p",
@@ -89,6 +88,9 @@ export const CHORDS: readonly Chord[] = [
   // ⌘B is the panel with your files in VS Code, Cursor and Zed, whichever side it stands on here.
   // ⌃⇧G is the git panel in VS Code and Zed and stays a hidden alias for the hand that knows it.
   { id: "changes", key: "b", ctrlAlias: { key: "g", shift: true } },
+  // ⌘⇧E is the file tree's key in VS Code, Cursor and Zed, and here it opens the same panel on its
+  // files tab
+  { id: "files", key: "e", shift: true },
   // ⌘L is Cursor's key for the chat, so it is the one a hand already reaches for, and the chat's only
   // chord: from elsewhere it puts the caret in the box, opening the panel if it must, and from the
   // box it closes the panel (app/keys.ts). From the editor it brings the selection along as Cursor's

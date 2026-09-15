@@ -264,6 +264,21 @@ export class RuntimeRegistry {
     return this.holds.get(id)?.size ?? 0;
   }
 
+  /** Work someone is waiting on: an agent that is not idle, a prompt queued behind it, or a turn or
+   * command holding the worktree. What idle sleep and an automatic update both leave alone. */
+  busy(id: string): boolean {
+    const agent = this.agentFor(id);
+    if (agent && (agent.status !== "idle" || agent.queueItems.length > 0)) return true;
+    return this.holdCount(id) > 0;
+  }
+
+  /** whether any worktree is busy */
+  anyBusy(): boolean {
+    for (const id of this.runtimes.keys()) if (this.busy(id)) return true;
+    for (const id of this.holds.keys()) if (this.busy(id)) return true;
+    return false;
+  }
+
   markSetup(id: string, on: boolean): void {
     if (on) this.settingUp.add(id);
     else this.settingUp.delete(id);

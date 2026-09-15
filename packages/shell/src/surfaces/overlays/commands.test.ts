@@ -39,6 +39,7 @@ describe("buildCommands", () => {
     changesOpen: true,
     chatOpen: true,
     chatSide: "left",
+    updateMode: "automatic",
     railOpen: true,
     termOpen: false,
     designOpen: false,

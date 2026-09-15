@@ -94,14 +94,29 @@ export interface SelfState {
   buildFailed?: string;
 }
 
-/** Toyon's own version against what is installed on the machine, and a restart someone asked for.
- * An install replaces the package's files under a daemon that keeps running the code it started
- * with, so the two can differ until it restarts. */
+/** How this Toyon was installed, which decides whether it can install its own update: a global npm
+ * or bun install can, an npx copy can only say how, and a source tree or a deployed image never
+ * looks. */
+export type InstallMethod = "npm" | "bun" | "npx" | "none";
+
+/** what Toyon does on its own when a newer version is out */
+export type UpdateMode = "automatic" | "ask" | "off";
+
+/** Toyon's own version against what is installed and what is out, and an update under way. An
+ * install replaces the package's files under a daemon that keeps running the code it started with,
+ * so running and installed can differ until it restarts. */
 export interface UpdateState {
   /** the version this daemon started as */
   running: string;
+  /** the newest version the registry has, when it is newer than the one running */
+  latest: string | null;
   /** the version on disk, when it is not the one running */
   installed: string | null;
+  method: InstallMethod;
+  /** an install is running */
+  installing: boolean;
+  /** the last install stopped: the version, the last line it printed, and the command to run by hand */
+  failed: { version: string; line: string; command: string } | null;
   /** a restart was asked for and waits on these chats to finish replying; empty once it is under
    * way, null when nobody asked */
   restarting: string[] | null;

@@ -114,6 +114,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     visits: {},
     self: null,
     update: null,
+    updateMode: "automatic",
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, spares: [] });
@@ -1031,12 +1032,22 @@ describe("streams and notices", () => {
     expect(s.connected).toBe(false);
   });
   test("the update frame replaces what hello said about Toyon's own version", () => {
-    const s = run([
-      hello(),
-      server({ t: "update", update: { running: "0.2.0", installed: "0.3.0", restarting: null } }),
-    ]);
+    const update = {
+      running: "0.2.0",
+      latest: null,
+      installed: "0.3.0",
+      method: "npm",
+      installing: false,
+      failed: null,
+      restarting: null,
+    } as const;
+    const s = run([hello(), server({ t: "update", update })]);
     expect(s.update?.installed).toBe("0.3.0");
     expect(run([server({ t: "update", update: null })], s).update).toBeNull();
+  });
+  test("the update setting follows the daemon, whichever tab changed it", () => {
+    expect(run([hello()]).updateMode).toBe("automatic");
+    expect(run([hello(), server({ t: "update-mode", mode: "off" })]).updateMode).toBe("off");
   });
   test("zen toggles, and says nothing: the toggle's own tip carries the key", () => {
     const on = run([{ a: "toggle-zen" }]);

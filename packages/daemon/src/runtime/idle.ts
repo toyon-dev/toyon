@@ -12,7 +12,7 @@ import { type MemorySignal, memoryTight, sampleCosts } from "./memory.ts";
 import type { RuntimeRegistry } from "./registry.ts";
 
 export interface IdleDeps {
-  runtime: Pick<RuntimeRegistry, "get" | "agentFor" | "holdCount" | "sleep" | "awake" | "awaitPreview">;
+  runtime: Pick<RuntimeRegistry, "get" | "busy" | "sleep" | "awake" | "awaitPreview">;
   state: StateStore;
   hub: Hub;
   /** bring a worktree up: cold or asleep it comes back, up already nothing happens, unknown
@@ -267,9 +267,7 @@ export class IdlePolicy {
   }
 
   private busy(id: string): boolean {
-    const agent = this.d.runtime.agentFor(id);
-    if (agent && (agent.status !== "idle" || agent.queueItems.length > 0)) return true;
-    return this.d.runtime.holdCount(id) > 0;
+    return this.d.runtime.busy(id);
   }
 
   private reconsider(id: string): void {

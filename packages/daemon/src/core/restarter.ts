@@ -47,7 +47,8 @@ export class Restarter {
     return this.gone ? [] : this.working();
   }
 
-  private working(): string[] {
+  /** the chats replying right now, by title */
+  working(): string[] {
     return this.d.state.worktrees
       .filter((w) => this.d.runtime.agentFor(w.id)?.status === "working")
       .map((w) => w.title);

@@ -1,4 +1,4 @@
-import { resolveTheme, type ThemePrefs } from "@toyon/shared";
+import { resolveTheme, type ThemePrefs, type UpdateMode } from "@toyon/shared";
 import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { darkNow, type State } from "../store.ts";
 import type { Deps } from "./deps.ts";
@@ -9,6 +9,17 @@ export const appearanceLabel: Record<ThemePrefs["mode"], string> = {
   system: "follow system",
   daylight: "follow daylight",
 };
+
+export const updateModeLabel: Record<UpdateMode, string> = {
+  automatic: "automatic",
+  ask: "ask first",
+  off: "off",
+};
+
+/** the setting a press steps to: three values in a fixed order, so the row is the switch */
+export function nextUpdateMode(mode: UpdateMode): UpdateMode {
+  return mode === "automatic" ? "ask" : mode === "ask" ? "off" : "automatic";
+}
 
 /** browser file dialog to raw theme text (the daemon parses JSONC and converts) */
 export function pickThemeFile(onText: (name: string, source: string) => void) {
@@ -24,7 +35,7 @@ export function pickThemeFile(onText: (name: string, source: string) => void) {
 
 export type SettingsState = Pick<
   State,
-  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent" | "chatSide"
+  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent" | "chatSide" | "updateMode"
 >;
 
 /** What the settings card holds, as a list: the gear's right-click and the palette's settings
@@ -67,6 +78,14 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
         label: "chat side",
         detail: s.chatSide,
         onClick: () => dispatch({ a: "toggle-chat-side" }),
+      },
+    ],
+    [
+      {
+        id: "updates",
+        label: "updates",
+        detail: updateModeLabel[s.updateMode],
+        onClick: () => sock?.send({ t: "set-update-mode", mode: nextUpdateMode(s.updateMode) }),
       },
     ],
     [

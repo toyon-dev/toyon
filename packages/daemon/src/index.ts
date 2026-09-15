@@ -40,6 +40,7 @@ import { pinProxyPorts } from "./runtime/ports.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
+import { installCommand, installMethod, latestVersion, runInstall } from "./update/infra.ts";
 import { readVersion } from "./update/installed.ts";
 import { UpdateService } from "./update/service.ts";
 import { ChatSearch } from "./worktrees/chats.ts";
@@ -191,13 +192,21 @@ const restarter = new Restarter({
     setTimeout(() => fireAndForget("daemon", shutdown("restart", { respawn: true }), "restart"), 100);
   },
 });
-// the cloud image is replaced by a redeploy and never installed over, so it has nothing to compare
-const installedPackage = cloud.enabled ? null : PACKAGE_JSON;
+// the cloud image is replaced by a redeploy and never installed over, and a daemon run as one of
+// toyon's own procs restarts from its tab, so neither has an install to compare or update
+const installedPackage = cloud.enabled || process.env.TOYON_WORKTREE !== undefined ? null : PACKAGE_JSON;
+const method = installMethod(installedPackage);
 const update = new UpdateService({
   hub,
+  state,
   running: pkg.version,
+  method,
   restarter,
   installed: async () => (installedPackage ? readVersion(installedPackage) : null),
+  latest: latestVersion,
+  command: (version) => installCommand(method, version),
+  install: runInstall,
+  busy: () => runtime.anyBusy(),
 });
 
 const { branded, stop: stopServer } = startServer({

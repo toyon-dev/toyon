@@ -51,6 +51,11 @@ class FakeRuntime {
   holdCount(id: string) {
     return this.holds.get(id) ?? 0;
   }
+  busy(id: string) {
+    const agent = this.agents.get(id);
+    if (agent && (agent.status !== "idle" || agent.queueItems.length > 0)) return true;
+    return this.holdCount(id) > 0;
+  }
   async sleep(id: string) {
     const p = this.procs.get(id);
     if (!p) return;

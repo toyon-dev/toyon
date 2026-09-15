@@ -16,6 +16,7 @@ describe("the settings menu", () => {
         agents: [{ id: "claude", name: "Claude" } as AgentInfo],
         defaultAgent: "claude",
         chatSide: "left",
+        updateMode: "automatic",
       },
       { sock: null, dispatch: () => {} },
     );
@@ -29,6 +30,8 @@ describe("the settings menu", () => {
       "default agent… [Claude]",
       "|",
       "chat side [left]",
+      "|",
+      "updates [automatic]",
       "|",
       "theme: import a VS Code theme…",
       "theme: rescan editor themes",

@@ -302,6 +302,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       visits: s.routes.historyAll(),
       self: s.self.get(),
       update: s.update.get(),
+      updateMode: s.state.updateMode,
     } satisfies ServerMsg;
   };
 
@@ -340,6 +341,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           return;
         }
         sockets.add(ws);
+        s.update.shellsConnected(sockets.size);
         send(ws, await helloFrame());
       },
       close(ws: ServerWebSocket<WsData>) {
@@ -348,6 +350,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         // idle timeout and pings give it up, and whatever it was showing is released with it
         else s.idle.drop(ws.data);
         sockets.delete(ws);
+        s.update.shellsConnected(sockets.size);
       },
       async message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
         if (ws.data.preview) {

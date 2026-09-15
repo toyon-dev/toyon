@@ -136,10 +136,17 @@ function make() {
   // nothing installed to compare: an update state only when a test asks for a restart
   const update = new UpdateService({
     hub,
+    state,
     running: "0.0.0",
+    method: "none",
     installed: async () => null,
+    latest: async () => null,
+    command: () => null,
+    install: async () => ({ ok: true, line: "" }),
     restarter,
+    busy: () => false,
     setInterval: () => {},
+    setTimeout: () => {},
   });
   const planArgs: Array<[prompt: string, cwd: string, agent: string]> = [];
   // no clock and no intervals: what a view starts is the question here, never what sleeps

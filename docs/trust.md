@@ -22,7 +22,7 @@ One limit worth knowing: a worktree's commits write into the main repository's s
 
 ## Telemetry
 
-None. Toyon makes no network calls of its own. The only traffic is to the agents you sign into, to npm on first start to fetch the Claude Code and Codex adapters and again when you first pick OpenCode, to Fly when you deploy there, and to whatever your own dev servers and `git push` talk to.
+None: nothing about you or your work is sent anywhere. Toyon's one call of its own is an update check every six hours against the registry npm is set up for, and `TOYON_UPDATES=off` stops it. The rest of the traffic is to the agents you sign into, to npm on first start to fetch the Claude Code and Codex adapters and again when you first pick OpenCode, to Fly when you deploy there, and to whatever your own dev servers and `git push` talk to.
 
 ## Reporting
 

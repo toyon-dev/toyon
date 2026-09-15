@@ -9,6 +9,8 @@ import { DAEMON_FILES } from "@toyon/shared";
 export interface Paths {
   home: string;
   stateFile: string;
+  /** the unsent text in every composer box (drafts/store.ts) */
+  draftsFile: string;
   tokenFile: string;
   /** the running daemon's pid, for `toyon stop`; absent or stale when it is not running */
   pidFile: string;
@@ -41,6 +43,7 @@ export function makePaths(home = process.env.TOYON_HOME ?? join(homedir(), ".toy
   return {
     home,
     stateFile: join(home, DAEMON_FILES.state),
+    draftsFile: join(home, DAEMON_FILES.drafts),
     tokenFile: join(home, DAEMON_FILES.token),
     pidFile: join(home, DAEMON_FILES.pid),
     logFile: join(home, DAEMON_FILES.log),

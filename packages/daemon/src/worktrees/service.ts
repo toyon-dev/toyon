@@ -38,6 +38,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
+import type { DraftStore } from "../drafts/store.ts";
 import {
   archiveRef,
   checkOutKept,
@@ -189,6 +190,8 @@ export interface WorktreeServiceDeps {
   runtime: RuntimeRegistry;
   paths: Paths;
   agents: AgentRegistry;
+  /** the unsent text in composer boxes: a worktree discarded or deleted from the archive takes its own */
+  drafts?: Pick<DraftStore, "drop">;
   /** task → short kebab-case name (the worktree's own agent by default; tests inject a stub) */
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
 }
@@ -199,6 +202,8 @@ const FETCH_EVERY_MS = 5 * 60_000;
 export class WorktreeService {
   readonly spare: SparePool;
   private archive: WorktreeArchive;
+  /** archives under way, by worktree id: a click during a sweep joins the one already running */
+  private archiving = new Map<string, Promise<ArchivedWorktree | null>>();
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
   /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
   private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
@@ -217,7 +222,7 @@ export class WorktreeService {
       paths: d.paths,
       setupAndStart: (wt, repo) => this.setupAndStart(wt, repo),
       remove: async (id) => {
-        await this.remove(id, { spare: true });
+        await this.discardWorktree(id);
       },
     });
     // worktrees claimed before links existed get theirs at boot
@@ -608,20 +613,38 @@ export class WorktreeService {
     );
   }
 
-  /** Remove a worktree: its runtime, its directory, its branch when the branch is toyon's, and its
-   * record. The chat is archived rather than deleted, with the commits and uncommitted work kept
-   * under a ref, so a remove can be undone and a landed branch's conversation brought back. A spare
-   * holds nobody's work and a grafted source's history already lives in its target, so those two
-   * go outright. Returns what was archived, if anything. */
-  async remove(
-    worktreeId: string,
-    opts: { spare?: boolean; archive?: boolean } = {},
-  ): Promise<ArchivedWorktree | null> {
+  /** Archive a worktree: its runtime, its directory, its branch when the branch is toyon's, and its
+   * record go, and its chat moves to the archive with the commits and uncommitted work kept under a
+   * ref, so an archive can be undone and a landed branch's conversation brought back. Its draft
+   * stays, under the same id. One archive per worktree at a time: a second caller waits on the
+   * first and gets its answer. Returns what was archived, if anything. */
+  archiveWorktree(worktreeId: string): Promise<ArchivedWorktree | null> {
+    const running = this.archiving.get(worktreeId);
+    if (running) return running;
     const wt = this.d.state.worktree(worktreeId);
-    // a spare is the pool's to remove, never a person's
-    if (!wt || !(canRemove(wt) || (opts.spare && wt.kind === "spare"))) return null;
+    if (!wt || !canRemove(wt)) return Promise.resolve(null);
+    const done = this.takeDown(wt, true).finally(() => this.archiving.delete(worktreeId));
+    this.archiving.set(worktreeId, done);
+    return done;
+  }
+
+  /** the archive a worktree is on its way into, while one is under way */
+  archivingNow(worktreeId: string): Promise<ArchivedWorktree | null> | undefined {
+    return this.archiving.get(worktreeId);
+  }
+
+  /** Remove a worktree and keep nothing: a spare holds nobody's work, and a grafted source's
+   * history already lives in its target. */
+  async discardWorktree(worktreeId: string): Promise<void> {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt || !(canRemove(wt) || wt.kind === "spare")) return;
+    await this.takeDown(wt, false);
+    this.d.drafts?.drop(worktreeId);
+  }
+
+  private async takeDown(wt: WorktreeInfo, archive: boolean): Promise<ArchivedWorktree | null> {
+    const worktreeId = wt.id;
     const repo = this.d.state.requireRepo(wt.repoId);
-    const archive = wt.kind !== "spare" && opts.archive !== false;
     // the agent first (inside runtime.stop): it may be mid-turn in the directory about to be
     // deleted, and its session-info callback would re-add the session entry removed below
     await this.d.runtime.stop(worktreeId);
@@ -734,6 +757,11 @@ export class WorktreeService {
       return { head };
     });
     this.archiveChat(wt, repo, kept, sessionId);
+  }
+
+  /** whether the archive holds this id */
+  hasArchived(archiveId: string): boolean {
+    return !!this.archive.get(archiveId);
   }
 
   /** a project's archived worktrees, newest first */
@@ -884,6 +912,7 @@ export class WorktreeService {
     }
     if (rec.worktree.lands?.length && existsSync(repoPath)) await dropLandRefs(repoPath, archiveId);
     this.archive.delete(archiveId);
+    this.d.drafts?.drop(archiveId);
     if (repo) this.d.hub.emit("archiveChanged", repo.id);
   }
 
@@ -958,7 +987,7 @@ export class WorktreeService {
     const group = wt.variant.group;
     const siblings = this.d.state.worktrees.filter((w) => w.variant?.group === group && w.id !== worktreeId);
     for (const sibling of siblings) {
-      await this.remove(sibling.id).catch((e) => log.warn(sibling.id, "could not remove variant sibling", e));
+      await this.archiveWorktree(sibling.id).catch((e) => log.warn(sibling.id, "could not archive variant sibling", e));
     }
     delete wt.variant;
     this.d.state.save();
@@ -1012,7 +1041,7 @@ export class WorktreeService {
       agent.note({ type: "grafted", title: w.title, branch: w.branch, ts: Date.now() });
       for (const { event } of coalesce(entries)) agent.note(withoutAttachments(event));
     }
-    for (const w of sources) await this.remove(w.id, { archive: false });
+    for (const w of sources) await this.discardWorktree(w.id);
     this.setLanded(target.id, false);
     this.countsCache.delete(target.id);
     this.d.hub.emit("worktreesChanged");

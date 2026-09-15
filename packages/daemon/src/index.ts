@@ -8,6 +8,7 @@ import {
   addressedByPort,
   CHECK_TOOL,
   DAEMON_DEFAULT_PORT,
+  draftRepoOf,
   installCommand,
   installMethod,
   PREVIEW_PORTS,
@@ -36,6 +37,7 @@ import { Restarter } from "./core/restarter.ts";
 import { SelfWatch } from "./core/self.ts";
 import { loadOrCreateToken, StateStore } from "./core/state.ts";
 import { DesignService } from "./design/service.ts";
+import { DraftStore } from "./drafts/store.ts";
 import { ExecService } from "./exec/service.ts";
 import { FileService } from "./files/service.ts";
 import { viewPr } from "./git/gh.ts";
@@ -139,7 +141,8 @@ const runtime = new RuntimeRegistry({
   remote,
   grant: previewGrant(token),
 });
-const worktrees = new WorktreeService({ state, hub, runtime, paths, agents });
+const drafts = new DraftStore({ file: paths.draftsFile, hub });
+const worktrees = new WorktreeService({ state, hub, runtime, paths, agents, drafts });
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({
   state,
@@ -240,6 +243,7 @@ const { branded, stop: stopServer } = startServer({
     exec,
     refs,
     chats,
+    drafts,
     prs,
     themes,
     agents,
@@ -277,6 +281,12 @@ writeFileSync(paths.pidFile, `${process.pid}\n`);
 const stopLagSampler = startLagSampler();
 
 await repos.boot();
+// after boot, which archives what went while the daemon was down: a box is kept while its worktree,
+// its archive or its repo is
+drafts.prune((id) => {
+  const repoId = draftRepoOf(id);
+  return repoId ? !!state.repo(repoId) : !!state.worktree(id) || worktrees.hasArchived(id);
+});
 // what was being looked at before the restart comes back on its own
 idle.boot();
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default
@@ -336,6 +346,7 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   stopServer();
   // the visits still waiting on their coalesced write; a clean stop should not lose them
   routes.flush();
+  drafts.flush();
   const deadline = new Promise<void>((resolve) => setTimeout(resolve, 5000));
   await Promise.race([runtime.shutdown(), deadline]);
   // a crash leaves the file behind on purpose: `toyon stop` checks the pid is alive before trusting it

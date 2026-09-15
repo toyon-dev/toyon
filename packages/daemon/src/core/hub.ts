@@ -43,6 +43,8 @@ export interface HubEvents {
   pagesChanged: (worktreeId: string) => void;
   /** a worktree of this repo was archived, restored, or deleted from the archive */
   archiveChanged: (repoId: string) => void;
+  /** a composer box's unsent text changed; `clientId` is the tab that wrote it, when one did */
+  draftChanged: (boxId: string, text: string, clientId?: string) => void;
   /** the editor saved or discarded a file: every tab's changes list, and any editor open on it, re-reads */
   filesChanged: (worktreeId: string) => void;
 }

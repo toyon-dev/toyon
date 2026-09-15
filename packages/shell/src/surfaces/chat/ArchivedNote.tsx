@@ -30,7 +30,7 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
   return (
     <div className="hint chat-archived">
       <p>
-        This worktree was removed {since(item.archivedAt)}
+        This worktree was archived {since(item.archivedAt)}
         {item.landed ? ", after it was merged into main" : ""}: its directory and branch are gone, and nothing runs.
         Toyon kept {kept}.{item.cost !== undefined ? ` The agent's session cost ${dollars(item.cost)}.` : ""}
       </p>

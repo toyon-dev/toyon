@@ -5,7 +5,7 @@ import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } 
 import { copyText } from "../../state/actions/deps.ts";
 import { openFile } from "../../state/actions/file.ts";
 import { blockedItems, messageItems } from "../../state/actions/message.ts";
-import { removeWorktrees } from "../../state/actions/worktree.ts";
+import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { type ChatItem, worktreeById } from "../../state/store.ts";
@@ -683,8 +683,8 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
       <span className="landed-tag">landed</span>
       <span className="landed-text">{item.text}</span>
       {left > 0 && (
-        <Button variant="inline" tone="strong" onClick={() => removeWorktrees(sock, dispatch, item.removeIds)}>
-          {left > 1 ? `clean up ${left} worktrees` : "remove the other worktree"}
+        <Button variant="inline" tone="strong" onClick={() => archiveWorktrees(sock, dispatch, item.removeIds)}>
+          {left > 1 ? `archive ${left} worktrees` : "archive the other worktree"}
         </Button>
       )}
     </div>

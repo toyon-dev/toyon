@@ -9,8 +9,8 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { archivedHint, archivedItems } from "../../state/actions/archive.ts";
 import {
+  archiveWorktrees,
   discoveredItems,
-  removeWorktrees,
   shipOp,
   worktreeActions,
   worktreeItems,
@@ -367,7 +367,7 @@ export function Rail() {
           // biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu and the palette carry the same actions for the keyboard until the row is restructured
           <span
             className="rail-badge badge-variant clickable"
-            data-tip="Keep this variant, remove the others"
+            data-tip="Keep this variant, archive the others"
             onClick={(e) => {
               e.stopPropagation();
               acts.pickVariant(owned);
@@ -533,19 +533,19 @@ export function Rail() {
                 size="md"
                 tone="danger"
                 disabled={sel.length === 0}
-                data-tip="Remove all selected worktrees (their chats and work are archived)"
+                data-tip="Archive all selected worktrees; their chats and work are kept"
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Remove ${sel.length} worktree(s)?\n\nTheir directories and branches go. The chats, commits and any uncommitted changes are archived, and each can be restored.`,
+                      `Archive ${sel.length} worktree(s)?\n\nTheir directories and branches go. The chats, commits and any uncommitted changes are kept, and each can be restored.`,
                     )
                   ) {
-                    removeWorktrees(sock, dispatch, sel);
+                    archiveWorktrees(sock, dispatch, sel);
                     cancelGraft();
                   }
                 }}
               >
-                remove…
+                archive…
               </Button>
               <IconButton icon="close" label="Cancel" hint="esc" onClick={cancelGraft} />
             </div>
@@ -582,7 +582,7 @@ export function Rail() {
                 className="rail-disc-head"
                 aria-expanded={archOpen}
                 {...tip(
-                  `${archived.length} removed worktree${archived.length === 1 ? "" : "s"}, kept with ${archived.length === 1 ? "its chat" : "their chats"}`,
+                  `${archived.length} archived worktree${archived.length === 1 ? "" : "s"}, kept with ${archived.length === 1 ? "its chat" : "their chats"}`,
                   undefined,
                   { placement: tipSide },
                 )}

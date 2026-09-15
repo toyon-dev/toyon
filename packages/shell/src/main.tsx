@@ -79,39 +79,51 @@ function storedSectionOpen(key: string): Record<string, boolean> {
   return out;
 }
 
-/** the unsent text in every composer box, by box id; anything that is not a non-empty string is
- * dropped, since the cost of a bad value is an empty box, which is the default anyway */
-function storedDrafts(): Record<string, string> {
-  const out: Record<string, string> = {};
-  try {
-    const raw: unknown = JSON.parse(read(localStorage, STORAGE.drafts) ?? "{}");
-    if (!raw || typeof raw !== "object") return out;
-    for (const [id, text] of Object.entries(raw as Record<string, unknown>)) {
-      if (typeof text === "string" && text) out[id] = text;
-    }
-  } catch {}
-  return out;
-}
+/** how often a box being typed in sends its text; an emptied box sends at once, so a message just
+ * sent does not come back in another tab's box */
+const DRAFT_SEND_MS = 400;
 
-/** the unsent text, by box id, as the store holds it now: only the boxes with something in them */
-function draftsOf(local: Record<string, { draft: string }>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [id, l] of Object.entries(local)) if (l.draft) out[id] = l.draft;
-  return out;
-}
-
-/** write the drafts as they change. A store subscription rather than an App effect: the `local`
- * record changes on every chat frame, and this compares the drafts alone before touching storage. */
-function keepDrafts() {
-  let last = JSON.stringify(draftsOf(store.getState().local));
+/** Each composer box's text to the daemon as it changes, so another tab or device and an archive
+ * keep it. A store subscription rather than an App effect: the `local` record changes on every chat
+ * frame, and this compares the drafts alone. What the daemon last said a box holds counts as sent,
+ * so its own frames are never echoed back. A walk is a sent message on show, not a draft. */
+function syncDrafts() {
+  const sent = new Map<string, string>();
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const flush = (id: string) => {
+    clearTimeout(timers.get(id));
+    timers.delete(id);
+    const l = store.getState().local[id];
+    if (!l || l.mark?.by === "walk") return;
+    if ((sent.get(id) ?? "") === l.draft) return;
+    sent.set(id, l.draft);
+    sock.send({ t: "set-draft", boxId: id, text: l.draft, clientId: store.getState().clientId });
+  };
   store.subscribe(() => {
-    const next = JSON.stringify(draftsOf(store.getState().local));
-    if (next === last) return;
-    last = next;
-    try {
-      localStorage.setItem(STORAGE.drafts, next);
-    } catch {}
+    for (const [id, l] of Object.entries(store.getState().local)) {
+      if (l.mark?.by === "walk" || (sent.get(id) ?? "") === l.draft) continue;
+      if (!l.draft) flush(id);
+      else if (!timers.has(id)) timers.set(id, setTimeout(flush, DRAFT_SEND_MS, id));
+    }
   });
+  // a reload or a closed tab takes the last few keystrokes with it otherwise
+  window.addEventListener("pagehide", () => {
+    for (const id of [...timers.keys()]) flush(id);
+  });
+  return {
+    /** what the daemon holds, before the store applies it: a hello is the whole set */
+    hello(drafts: Record<string, string>) {
+      sent.clear();
+      for (const [id, text] of Object.entries(drafts)) sent.set(id, text);
+    },
+    /** another tab's text for a box; false when this tab has keystrokes on their way for it, which
+     * would otherwise be written over by what they replace */
+    heard(boxId: string, text: string): boolean {
+      if (timers.has(boxId)) return false;
+      sent.set(boxId, text);
+      return true;
+    },
+  };
 }
 
 /** per-tab id: a worktree created from this tab steals focus here and nowhere else */
@@ -138,7 +150,6 @@ const store = createStore(
     storedLastActive: storedLastActive(),
     storedDiscoveredOpen: storedSectionOpen(STORAGE.discoveredOpen),
     storedArchivedOpen: storedSectionOpen(STORAGE.archivedOpen),
-    storedDrafts: storedDrafts(),
     clientId: clientId(),
   }),
 );
@@ -164,7 +175,9 @@ const sock = new DaemonSocket(
         return;
       }
       heardVersion = msg.version;
+      drafts.hello(msg.drafts);
     }
+    if (msg.t === "draft" && msg.clientId !== store.getState().clientId && !drafts.heard(msg.boxId, msg.text)) return;
     if (isTermMsg(msg)) {
       terminalBus.deliver(msg);
       return;
@@ -194,9 +207,9 @@ files.start();
 window.addEventListener("vite:preloadError", markStaleBuild);
 
 // No leave dialog: the daemon keeps every agent and process, the shell reopens where it was, the
-// drafts are written to storage as they are typed and the editor flushes on pagehide, so a reload
-// or a ⌘W has nothing to ask about.
-keepDrafts();
+// drafts reach the daemon as they are typed and the editor flushes on pagehide, so a reload or a ⌘W
+// has nothing to ask about.
+const drafts = syncDrafts();
 
 // The hello the inline script in index.html asked for before this bundle loaded. Applied through
 // the same reducer as the socket's, so the first paint is the real project; a daemon that is down

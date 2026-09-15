@@ -33,15 +33,15 @@ export function shipOp(sock: DaemonSocket | null, dispatch: Dispatch, msg: Extra
 }
 
 /** uncommitted files or commits ahead of main, or counts not in yet, which could be either: the
- * worktrees whose remove still asks first */
+ * worktrees whose archive still asks first */
 const hasWork = (w: WorktreeStatus) => w.dirty === undefined || w.ahead === undefined || w.dirty > 0 || w.ahead > 0;
 
-/** send the removes and take the rows off screen in the same breath: the daemon confirms by
+/** send the archives and take the rows off screen in the same breath: the daemon confirms by
  * dropping them from its next snapshot, or an error frame puts them back, the reason on the row's chat */
-export function removeWorktrees(sock: DaemonSocket | null, dispatch: Dispatch, ids: string[]) {
+export function archiveWorktrees(sock: DaemonSocket | null, dispatch: Dispatch, ids: string[]) {
   if (ids.length === 0) return;
-  dispatch({ a: "remove-worktrees", ids });
-  for (const id of ids) sock?.send({ t: "remove-worktree", worktreeId: id });
+  dispatch({ a: "archive-worktrees", ids });
+  for (const id of ids) sock?.send({ t: "archive-worktree", worktreeId: id });
 }
 
 /** put the unseen ring back on a worktree to come back to. On the row you are on the store holds
@@ -66,7 +66,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
       const others = v.of - 1;
       if (
         window.confirm(
-          `Keep "${w.worktree.title}" and remove ${others} sibling variant(s)? Their directories and branches go; their chats and changes are archived.`,
+          `Keep "${w.worktree.title}" and archive ${others} sibling variant(s)? Their directories and branches go; their chats and changes are kept.`,
         )
       ) {
         sock?.send({ t: "pick-variant", worktreeId: w.worktree.id });
@@ -76,14 +76,14 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
     setProfile(w: OwnedWorktree, profile: string) {
       sock?.send({ t: "set-worktree-profile", worktreeId: w.worktree.id, profile });
     },
-    remove(w: OwnedWorktree) {
+    archive(w: OwnedWorktree) {
       if (!canRemove(w.worktree)) return;
-      // nothing written: the chat is archived and the rail's archived section brings it back, so there is nothing to ask
-      if (!hasWork(w)) return removeWorktrees(sock, dispatch, [w.worktree.id]);
+      // nothing written: the rail's archived section brings the chat back, so there is nothing to ask
+      if (!hasWork(w)) return archiveWorktrees(sock, dispatch, [w.worktree.id]);
       const ok = window.confirm(
-        `Remove worktree "${w.worktree.title}"?\n\nIts directory and branch (${w.worktree.branch}) go. The chat, the commits and any uncommitted changes are archived, and the project menu can restore it.`,
+        `Archive worktree "${w.worktree.title}"?\n\nIts directory and branch (${w.worktree.branch}) go. The chat, the commits and any uncommitted changes are kept, and the project menu can restore it.`,
       );
-      if (ok) removeWorktrees(sock, dispatch, [w.worktree.id]);
+      if (ok) archiveWorktrees(sock, dispatch, [w.worktree.id]);
     },
   };
 }
@@ -183,9 +183,14 @@ export function worktreeItems(
       onClick: () => shipOp(sock, dispatch, { t: "land", worktreeId: id }),
     });
   }
-  // the ellipsis is the promise of a question, so a remove that asks nothing drops it
+  // the ellipsis is the promise of a question, so an archive that asks nothing drops it
   if (canRemove(w.worktree)) {
-    gone.push({ id: "remove", label: hasWork(w) ? "remove…" : "remove", danger: true, onClick: () => acts.remove(w) });
+    gone.push({
+      id: "archive",
+      label: hasWork(w) ? "archive…" : "archive",
+      danger: true,
+      onClick: () => acts.archive(w),
+    });
   }
   return grouped([stop, look, run, change, land, gone]);
 }

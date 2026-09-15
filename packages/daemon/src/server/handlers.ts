@@ -17,6 +17,7 @@ import type { Restarter } from "../core/restarter.ts";
 import type { SelfWatch } from "../core/self.ts";
 import type { StateStore } from "../core/state.ts";
 import type { DesignService } from "../design/service.ts";
+import type { DraftStore } from "../drafts/store.ts";
 import type { ExecService } from "../exec/service.ts";
 import { type FileService, keptRead } from "../files/service.ts";
 import type { AfterLand } from "../repos/afterLand.ts";
@@ -55,6 +56,8 @@ export interface Services {
   refs: RefSearch;
   /** the chats palette: what a project's chats say, live worktrees and archived ones */
   chats: ChatSearch;
+  /** the unsent text in every composer box */
+  drafts: DraftStore;
   /** what GitHub says about the PRs toyon opened */
   prs: PrService;
   themes: ThemeStore;
@@ -199,6 +202,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.turns.markUnread(msg.worktreeId);
   },
 
+  "set-draft"(msg, _ctx, s) {
+    s.drafts.set(msg.boxId, msg.text, msg.clientId);
+  },
+
   "refresh-git"(msg, _ctx, s) {
     // the recount's repoTick also asks GitHub about the repo's open PRs (PrService)
     s.worktrees.recount(msg.repoId);
@@ -216,7 +223,14 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.routes.forget(msg.repoId, msg.path);
   },
 
-  chat(msg, _ctx, s) {
+  async chat(msg, _ctx, s) {
+    // a box whose worktree was archived under it, a moment ago or mid-send: the message brings it
+    // back, the way one typed on its archived page does
+    await s.worktrees.archivingNow(msg.worktreeId);
+    if (!s.state.worktree(msg.worktreeId) && s.worktrees.hasArchived(msg.worktreeId)) {
+      await s.worktrees.restore(msg.worktreeId, undefined, { text: msg.text, attachments: msg.attachments });
+      return;
+    }
     requireRun(s, msg.worktreeId);
     const agent = s.runtime.agentFor(msg.worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
@@ -282,10 +296,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     );
   },
 
-  async "remove-worktree"(msg, _ctx, s) {
-    // no word back: the row leaving is the answer, and the rail's archived section is where a
-    // remove says it can be undone
-    await s.worktrees.remove(msg.worktreeId);
+  async "archive-worktree"(msg, _ctx, s) {
+    // no word back: the row leaving is the answer, and the rail's archived section is where an
+    // archive says it can be undone
+    await s.worktrees.archiveWorktree(msg.worktreeId);
   },
 
   "list-archived"(msg, ctx, s) {

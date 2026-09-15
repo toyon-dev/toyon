@@ -8,6 +8,8 @@ export const DAEMON_FILES = {
   pid: "daemon.pid",
   /** the persisted repos and worktrees; `toyon uninstall` reads it to clean up through git */
   state: "state.json",
+  /** the unsent text in every composer box, by box id */
+  drafts: "drafts.json",
   /** where the CLI points the detached daemon's stdout and stderr */
   log: "daemon.log",
   /** `{ "host": "<name>", "previews": "<origin pattern>" }`: written by `toyon remote`, read at boot */

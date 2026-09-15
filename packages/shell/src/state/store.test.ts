@@ -114,6 +114,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     visits: {},
     self: null,
     update: null,
+    drafts: {},
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, spares: [] });
@@ -797,6 +798,36 @@ describe("drafts", () => {
     ]);
     expect(s.local.a?.draft).toBe("half a thought");
     expect(localOf(s, "b").draft).toBe("");
+  });
+  const helloWith = (drafts: Record<string, string>, ...w: WorktreeStatus[]): Action => {
+    const h = hello(...w);
+    if (h.a !== "server" || h.msg.t !== "hello") throw new Error("hello is a server frame");
+    return server({ ...h.msg, drafts });
+  };
+  test("hello lays the daemon's drafts into the boxes, but not over what this tab wrote meanwhile", () => {
+    const s = run([
+      { a: "set-draft", id: "b", text: "typed offline" },
+      helloWith({ a: "from the phone", b: "older", "draft:r1": "a new worktree" }, wt("a"), wt("b")),
+    ]);
+    expect(s.local.a?.draft).toBe("from the phone");
+    expect(s.local.b?.draft).toBe("typed offline");
+    expect(s.local["draft:r1"]?.draft).toBe("a new worktree");
+  });
+  test("another tab's draft fills the box; this tab's own frame and a walk in progress are left alone", () => {
+    let s = run([hello(wt("a")), server({ t: "draft", boxId: "a", text: "from elsewhere", clientId: "other" })]);
+    expect(s.local.a?.draft).toBe("from elsewhere");
+    const before = run([{ a: "set-draft", id: "a", text: "mine, newer" }], s);
+    expect(reducer(before, server({ t: "draft", boxId: "a", text: "mine", clientId: ME }))).toBe(before);
+    s = run([{ a: "walk", id: "a", walk: { at: 1, from: "" }, text: "a sent message" }], s);
+    s = run([server({ t: "draft", boxId: "a", text: "late", clientId: "other" })], s);
+    expect(s.local.a?.draft).toBe("a sent message");
+  });
+  test("a box with words in it outlives its row, which an archive keeps under the same id", () => {
+    let s = run([hello(wt("a"), wt("b")), { a: "set-draft", id: "a", text: "unsent" }]);
+    s = run([worktrees(wt("b"))], s);
+    expect(s.local.a?.draft).toBe("unsent");
+    s = run([server({ t: "draft", boxId: "a", text: "", clientId: "daemon" }), worktrees(wt("b"))], s);
+    expect(s.local.a).toBeUndefined();
   });
   test("a walk writes the draft and its place together, and any other write to the draft ends it", () => {
     let s = run([hello(wt("a")), { a: "walk", id: "a", walk: { at: 3, from: "" }, text: "fix the header" }]);
@@ -1778,19 +1809,19 @@ describe("removing a worktree", () => {
   const ids = (s: State) => s.visible.map((w) => w.worktree.id);
 
   test("the row is hidden at once and the daemon's list is left alone", () => {
-    const s = run([three(), { a: "remove-worktrees", ids: ["a"] }]);
+    const s = run([three(), { a: "archive-worktrees", ids: ["a"] }]);
     expect(ids(s)).toEqual(["main", "b"]);
     expect(s.rows.map((w) => w.id)).toEqual(["main", "a", "b"]);
   });
 
   test("removing the active worktree lands the selection somewhere still shown", () => {
-    const s = run([three(), { a: "activate", id: "a" }, { a: "remove-worktrees", ids: ["a"] }]);
+    const s = run([three(), { a: "activate", id: "a" }, { a: "archive-worktrees", ids: ["a"] }]);
     expect(s.activeId).toBe("main");
     expect(s.lastActive.r).toBe("main");
   });
 
   test("a snapshot that still lists the row keeps it hidden; one without it retires the pending remove", () => {
-    let s = run([three(), { a: "remove-worktrees", ids: ["a"] }]);
+    let s = run([three(), { a: "archive-worktrees", ids: ["a"] }]);
     // another worktree's proc event pushes the whole list, the removed row included
     s = reducer(s, worktrees(wt("main", "main"), wt("a"), wt("b")));
     expect(ids(s)).toEqual(["main", "b"]);
@@ -1801,7 +1832,7 @@ describe("removing a worktree", () => {
   });
 
   test("an error frame brings the row it names back, with the reason on its chat", () => {
-    const both = run([three(), { a: "remove-worktrees", ids: ["a", "b"] }]);
+    const both = run([three(), { a: "archive-worktrees", ids: ["a", "b"] }]);
     const s = run([server({ t: "error", message: "held by git", worktreeId: "a" })], both);
     expect(ids(s)).toEqual(["main", "a"]);
     expect(localOf(s, "a").chat).toEqual([{ kind: "error", text: "held by git" }]);
@@ -1810,7 +1841,7 @@ describe("removing a worktree", () => {
   });
 
   test("a reconnect starts clean, since the daemon may still have the row", () => {
-    const s = run([three(), { a: "remove-worktrees", ids: ["a"] }, three()]);
+    const s = run([three(), { a: "archive-worktrees", ids: ["a"] }, three()]);
     expect(ids(s)).toEqual(["main", "a", "b"]);
   });
 
@@ -1825,15 +1856,15 @@ describe("removing a worktree", () => {
       ),
       { a: "activate", id: "b" },
       { a: "activate-repo", id: "r1" },
-      { a: "remove-worktrees", ids: ["b"] },
+      { a: "archive-worktrees", ids: ["b"] },
       { a: "activate-repo", id: "r2" },
     ]);
     expect(s.activeId).toBe("m2");
   });
 
   test("unknown or already pending ids are ignored", () => {
-    const s = run([three(), { a: "remove-worktrees", ids: ["a"] }]);
-    expect(reducer(s, { a: "remove-worktrees", ids: ["a", "nope"] })).toBe(s);
+    const s = run([three(), { a: "archive-worktrees", ids: ["a"] }]);
+    expect(reducer(s, { a: "archive-worktrees", ids: ["a", "nope"] })).toBe(s);
   });
 });
 

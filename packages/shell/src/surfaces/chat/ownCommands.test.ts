@@ -7,14 +7,14 @@ const planLine = PERMISSION_MODES.find((m) => m.id === "plan")?.description;
 
 describe("ownCommands", () => {
   test("one row per mode with the chip's line, then the seat's verbs", () => {
-    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "land", "close"]);
+    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "land", "archive"]);
     for (const m of PERMISSION_MODES) expect(own.find((c) => c.name === m.id)?.description).toBe(m.description);
     expect(own.find((c) => c.name === "land")?.description).toBe("Commit and merge into main here");
   });
 
   test("a mode takes a description, so the inserted ghost has something to say", () => {
     expect(own.find((c) => c.name === "plan")?.hint).toBe("[<description>]");
-    expect(own.find((c) => c.name === "close")?.hint).toBeUndefined();
+    expect(own.find((c) => c.name === "archive")?.hint).toBeUndefined();
   });
 });
 

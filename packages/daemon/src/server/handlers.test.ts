@@ -21,6 +21,7 @@ import { Restarter } from "../core/restarter.ts";
 import { SelfWatch } from "../core/self.ts";
 import { StateStore } from "../core/state.ts";
 import { DesignService } from "../design/service.ts";
+import { DraftStore } from "../drafts/store.ts";
 import { ExecService } from "../exec/service.ts";
 import { FileService } from "../files/service.ts";
 import { GIT } from "../git/exec.ts";
@@ -94,7 +95,16 @@ function make() {
     bridgeScript: () => "",
     ...f.factories,
   });
-  const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
+  const drafts = new DraftStore({ file: t.paths.draftsFile, hub, saveDelayMs: 0 });
+  const worktrees = new WorktreeService({
+    state,
+    hub,
+    runtime,
+    paths: t.paths,
+    agents,
+    drafts,
+    namer: async () => null,
+  });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   // no tree behind this daemon, so nothing lands on it and afterLand has nothing to run
   const self = new SelfWatch(null);
@@ -174,6 +184,7 @@ function make() {
     exec,
     refs,
     chats,
+    drafts,
     prs,
     themes,
     agents,
@@ -485,7 +496,7 @@ describe("handlers", () => {
     sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "done");
     const said = { type: "user-message" as const, text: "tidy the footer", ts: 1 };
     writeFileSync(transcriptPathFor(paths.transcriptsDir, wt.id), `${JSON.stringify({ seq: 0, event: said })}\n`);
-    await dispatch({ t: "remove-worktree", worktreeId: wt.id }, ctx, services);
+    await dispatch({ t: "archive-worktree", worktreeId: wt.id }, ctx, services);
     expect(services.state.worktree(wt.id)).toBeUndefined();
     replies.length = 0;
     await dispatch({ t: "subscribe", worktreeId: wt.id }, ctx, services);
@@ -500,6 +511,56 @@ describe("handlers", () => {
     await dispatch({ t: "restore-worktree", archiveId: wt.id, message: { text: "and the header" } }, ctx, services);
     expect(services.state.worktree(wt.id)).toBeDefined();
     expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "and the header" });
+  });
+
+  test("a chat for a worktree archived under the box restores it and hands the message on", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    writeFileSync(join(wt.path, "done.txt"), "x\n");
+    sh(wt.path, "git", "add", "done.txt");
+    sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "done");
+    // the send lands while the archive is still under way: it waits for it, then brings it back
+    const archiving = dispatch({ t: "archive-worktree", worktreeId: wt.id }, ctx, services);
+    await dispatch({ t: "chat", worktreeId: wt.id, text: "one more thing" }, ctx, services);
+    await archiving;
+    expect(services.state.worktree(wt.id)).toBeDefined();
+    expect(services.worktrees.hasArchived(wt.id)).toBe(false);
+    expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "one more thing" });
+  });
+
+  test("two archives of one worktree share a run", async () => {
+    const { services, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    const [a, b] = await Promise.all([
+      services.worktrees.archiveWorktree(wt.id),
+      services.worktrees.archiveWorktree(wt.id),
+    ]);
+    expect(a).not.toBeNull();
+    expect(b).toBe(a);
+    expect(services.worktrees.archived(r.id).map((x) => x.id)).toEqual([wt.id]);
+  });
+
+  test("set-draft is kept and told with its writer, an archive keeps it, and deleting the archive drops it", async () => {
+    const { services, ctx, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    const told: Array<[string, string, string | undefined]> = [];
+    let rows = 0;
+    services.hub.on("draftChanged", (boxId, text, clientId) => told.push([boxId, text, clientId]));
+    services.hub.on("worktreesChanged", () => rows++);
+    await dispatch({ t: "set-draft", boxId: wt.id, text: "half a thought", clientId: "tab1" }, ctx, services);
+    expect(told).toEqual([[wt.id, "half a thought", "tab1"]]);
+    expect(rows).toBe(0);
+    await dispatch({ t: "archive-worktree", worktreeId: wt.id }, ctx, services);
+    expect(services.drafts.all()).toEqual({ [wt.id]: "half a thought" });
+    await dispatch({ t: "delete-archived", archiveId: wt.id }, ctx, services);
+    expect(services.drafts.all()).toEqual({});
+    expect(told.at(-1)).toEqual([wt.id, "", undefined]);
   });
 
   test("a discovered worktree scans its design system, and its agent actions say to take it over", async () => {
@@ -555,7 +616,7 @@ describe("handlers", () => {
     sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "done");
     const said = { type: "user-message" as const, text: "Tidy the footer links", ts: 1 };
     writeFileSync(transcriptPathFor(paths.transcriptsDir, wt.id), `${JSON.stringify({ seq: 0, event: said })}\n`);
-    await dispatch({ t: "remove-worktree", worktreeId: wt.id }, ctx, services);
+    await dispatch({ t: "archive-worktree", worktreeId: wt.id }, ctx, services);
     await dispatch({ t: "search-chats", repoId: r.id, query: "footer" }, ctx, services);
     const reply = replies.at(-1);
     if (reply?.t !== "chat-hits") throw new Error("expected a chat-hits reply");
@@ -937,7 +998,7 @@ describe("handlers", () => {
     await expect(dispatch({ t: "forget-repo", repoId: r.id }, ctx, services)).rejects.toBeInstanceOf(UserError);
     expect(services.state.repos.length).toBe(1);
 
-    await dispatch({ t: "remove-worktree", worktreeId: task.id }, ctx, services);
+    await dispatch({ t: "archive-worktree", worktreeId: task.id }, ctx, services);
     await dispatch({ t: "forget-repo", repoId: r.id }, ctx, services);
     expect(services.state.repos).toEqual([]);
     expect(services.state.worktrees).toEqual([]);

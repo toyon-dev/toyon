@@ -134,7 +134,7 @@ describe("create / remove", () => {
     sh(wt.path, "git", "add", "new.txt");
     sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "unmerged");
     writeFileSync(transcriptPathFor(w.paths.transcriptsDir, wt.id), "{}\n");
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     expect(w.agents.get(wt.id)?.closes).toBe(1);
     expect(w.procs.get(wt.id)?.stopped).toBe(true);
     expect(existsSync(wt.path)).toBe(false);
@@ -150,7 +150,7 @@ describe("create / remove", () => {
     await settle();
     const wt = await adoptDir(foreignWorktree("theirs", "their-branch"));
     await settle();
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     expect(existsSync(wt.path)).toBe(false);
     expect(sh(w.repo, "git", "branch", "--list", "their-branch")).toBe("their-branch");
   });
@@ -158,7 +158,7 @@ describe("create / remove", () => {
   test("main cannot be removed", async () => {
     await registered();
     const main = w.state.worktrees.find((x) => x.kind === "main")!;
-    await w.worktrees.remove(main.id);
+    await w.worktrees.archiveWorktree(main.id);
     expect(w.state.worktree(main.id)).toBeDefined();
   });
 });
@@ -187,7 +187,7 @@ describe("archive", () => {
     const { wt, head } = await workedOn(repoId);
     // the spend rides along: what the stream last said, so the archived row can still show it
     w.hub.emit("agent", wt.id, 1, { type: "usage", used: 1000, size: 4000, cost: 1.4, ts: 0 });
-    const archived = await w.worktrees.remove(wt.id);
+    const archived = await w.worktrees.archiveWorktree(wt.id);
     expect(archived).toMatchObject({
       id: wt.id,
       title: wt.title,
@@ -208,7 +208,7 @@ describe("archive", () => {
   test("restore puts back the branch, the commits, the uncommitted work, the chat and the session", async () => {
     const repoId = await registered();
     const { wt, head } = await workedOn(repoId);
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     const back = await w.worktrees.restore(wt.id, "tab-1");
     await settle();
     expect(back).toMatchObject({ id: wt.id, path: wt.path, branch: wt.branch, createdBy: "tab-1" });
@@ -227,7 +227,7 @@ describe("archive", () => {
   test("the archived chat is readable in place, and a message on restore goes to the agent", async () => {
     const repoId = await registered();
     const { wt } = await workedOn(repoId);
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     expect(w.worktrees.archived(repoId)[0]).toMatchObject({ path: wt.path });
     expect(w.worktrees.archivedTranscript(wt.id)).toEqual([
       { seq: 0, event: { type: "user-message", text: "tidy the footer", ts: 1 } },
@@ -246,7 +246,7 @@ describe("archive", () => {
   test("a restore whose branch name was taken since comes back on a new branch", async () => {
     const repoId = await registered();
     const { wt, head } = await workedOn(repoId);
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     sh(w.repo, "git", "branch", wt.branch, "main");
     const back = await w.worktrees.restore(wt.id);
     expect(back.branch).not.toBe(wt.branch);
@@ -257,7 +257,7 @@ describe("archive", () => {
   test("delete forgets an archived worktree for good", async () => {
     const repoId = await registered();
     const { wt } = await workedOn(repoId);
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     await w.worktrees.deleteArchived(wt.id);
     expect(existsSync(join(w.paths.archiveDir, wt.id))).toBe(false);
     expect(await refExists(wt.id)).toBe(false);
@@ -282,7 +282,7 @@ describe("archive", () => {
     await w.worktrees.spare.ensure(repoId);
     const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
     writeFileSync(transcriptPathFor(w.paths.transcriptsDir, spare.id), userLine("warming"));
-    await w.worktrees.remove(spare.id, { spare: true });
+    await w.worktrees.discardWorktree(spare.id);
     expect(w.state.worktree(spare.id)).toBeUndefined();
     expect(existsSync(transcriptPathFor(w.paths.transcriptsDir, spare.id))).toBe(false);
     expect(w.worktrees.archived(repoId)).toEqual([]);
@@ -360,7 +360,7 @@ describe("spare pool", () => {
     expect(wt.linkPath).toBe(join(dirname(wt.path), "better-name"));
     expect(readlinkSync(wt.linkPath!)).toBe(wt.path);
     const link = wt.linkPath!;
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     expect(lstatSync(link, { throwIfNoEntry: false })).toBeUndefined();
   });
 
@@ -771,7 +771,7 @@ describe("an archived worktree's changes and history", () => {
       expect(lands).toMatchObject([{ tip }]);
       // the branch restarted from main, so the ref is what keeps the four alive
       expect(sh(w.repo, "git", "rev-parse", `refs/toyon/lands/${wt.id}/0`)).toBe(tip);
-      await w.worktrees.remove(wt.id);
+      await w.worktrees.archiveWorktree(wt.id);
       const log = await w.worktrees.gitLog(wt.id);
       expect(subjects(log)).toEqual(["add f4.txt", "add f3.txt", "add f2.txt", "add f1.txt"]);
       expect(log.map((c) => c.landedAt)).toEqual(Array(4).fill(lands[0]?.at));
@@ -791,7 +791,7 @@ describe("an archived worktree's changes and history", () => {
     commitFile(wt.path, "d.txt");
     writeFileSync(join(wt.path, "wip.txt"), "wip\n");
     const [first, second] = w.state.worktree(wt.id)?.lands ?? [];
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     const log = await w.worktrees.gitLog(wt.id);
     expect(subjects(log)).toEqual(["add d.txt", "add c.txt", "add b.txt", "add a.txt"]);
     expect(log.map((c) => c.landedAt)).toEqual([undefined, second?.at, second?.at, first?.at]);
@@ -810,7 +810,7 @@ describe("an archived worktree's changes and history", () => {
     const wt = await w.worktrees.create(repoId, "feature");
     commitFile(wt.path, "a.txt");
     sh(w.repo, "git", "commit", "--allow-empty", "-qm", "main moves on");
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     expect(subjects(await w.worktrees.gitLog(wt.id))).toEqual(["add a.txt"]);
     expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], committed: [{ path: "a.txt" }] });
   });
@@ -820,7 +820,7 @@ describe("an archived worktree's changes and history", () => {
     const wt = await w.worktrees.create(repoId, "feature");
     commitFile(wt.path, "a.txt");
     expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
-    await w.worktrees.remove(wt.id);
+    await w.worktrees.archiveWorktree(wt.id);
     expect(await landRefs(wt.id)).not.toBe("");
     await w.worktrees.deleteArchived(wt.id);
     expect(await landRefs(wt.id)).toBe("");

@@ -315,11 +315,11 @@ export class RepoRegistry {
     const tasks = mine.filter((w) => w.kind !== "main" && w.kind !== "spare");
     if (tasks.length > 0) {
       throw new UserError(
-        `${repo.name} still has ${tasks.length} worktree${tasks.length === 1 ? "" : "s"}; remove them first`,
+        `${repo.name} still has ${tasks.length} worktree${tasks.length === 1 ? "" : "s"}; archive them first`,
       );
     }
     this.stopWatcher(repoId);
-    for (const wt of mine.filter((w) => w.kind === "spare")) await this.d.worktrees.remove(wt.id, { spare: true });
+    for (const wt of mine.filter((w) => w.kind === "spare")) await this.d.worktrees.discardWorktree(wt.id);
     for (const wt of mine.filter((w) => w.kind === "main")) {
       await this.d.runtime.stop(wt.id);
       this.d.state.removeWorktree(wt.id);

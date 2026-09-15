@@ -42,13 +42,7 @@ export function ArchivePicker({ repoId }: { repoId: string }) {
       rowMenu={(a) => archivedItems(a, clientId, { sock, dispatch })}
       placeholder="find an archived worktree…"
       keys={(active) => ({ nav: "moves", pick: active ? "opens it" : undefined, back: "closes" })}
-      empty={(q) =>
-        !items
-          ? "looking…"
-          : q.trim()
-            ? "no archived worktree matches"
-            : "nothing archived: removed worktrees land here"
-      }
+      empty={(q) => (!items ? "looking…" : q.trim() ? "no archived worktree matches" : "nothing archived yet")}
       row={(a) => <PaletteRow label={a.title} hint={archivedHint(a)} />}
     />
   );

@@ -51,6 +51,8 @@ import type {
 import {
   builtinThemes,
   defaultThemePrefs,
+  draftKey,
+  draftRepoOf,
   isEditTool,
   isMain,
   isOwned,
@@ -223,8 +225,7 @@ export interface Draft {
 export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry && !d.batch && d.variants === 1;
 
 /** the `local` record a repo's draft is written under; never a row id, and never pruned by one */
-const DRAFT_PREFIX = "draft:";
-export const draftKey = (repoId: string) => DRAFT_PREFIX + repoId;
+export { draftKey };
 
 /** the composer box the words are written in: while drafting it is the repo's draft, so it survives
  * the tab closing and reopening and is never a row's; otherwise it is the active worktree's */
@@ -621,9 +622,6 @@ export interface InitialOpts {
   storedDiscoveredOpen?: Record<string, boolean>;
   /** which projects had the archived section open, for the same reason */
   storedArchivedOpen?: Record<string, boolean>;
-  /** the unsent text in every composer box, by box id, so a reload gives back what was being
-   * written; a box whose worktree is gone is pruned on hello like any other local record */
-  storedDrafts?: Record<string, string>;
 }
 
 export function initialState(opts: InitialOpts): State {
@@ -651,9 +649,7 @@ export function initialState(opts: InitialOpts): State {
     storedActive: opts.storedActive ?? null,
     storedRepo: opts.storedRepo ?? null,
     heard: false,
-    local: Object.fromEntries(
-      Object.entries(opts.storedDrafts ?? {}).map(([id, draft]) => [id, { ...EMPTY_LOCAL, draft }]),
-    ),
+    local: {},
     editor: null,
     openUrl: null,
     reloadReq: null,
@@ -926,8 +922,8 @@ export type Action =
   | { a: "close-archived" }
   /** switch the shell to another registered repo */
   | { a: "activate-repo"; id: string }
-  /** remove-worktree frames went out for these: hide the rows now, move the selection off them */
-  | { a: "remove-worktrees"; ids: string[] }
+  /** archive-worktree frames went out for these: hide the rows now, move the selection off them */
+  | { a: "archive-worktrees"; ids: string[] }
   /** a landing op went out for this worktree: show it working until the shipped frame */
   | { a: "shipping"; id: string; op: ShipOp }
   /** an "open project" request went to the daemon: adopt the repo it adds */
@@ -1164,7 +1160,7 @@ function reduce(s: State, action: Action): State {
     }
     case "close-archived":
       return s.archivedPage ? closeArchivedPage(s) : s;
-    case "remove-worktrees": {
+    case "archive-worktrees": {
       const ids = action.ids.filter((id) => !s.removing.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;
       const hidden = { ...s, removing: [...s.removing, ...ids] };
@@ -1431,8 +1427,9 @@ function reduce(s: State, action: Action): State {
 
 /** drop per-worktree records for rows the daemon no longer lists, found rows included: theirs
  * hold git status and history too, and a push arrives on every proc event. A spare's record (the
- * page state its preview reports) lives as long as it is listed; a draft's is never a row's and
- * stays until the draft is sent. */
+ * page state its preview reports) lives as long as it is listed; a repo's draft box is never a
+ * row's, and any box with words in it stays, since an archived worktree keeps its draft under the
+ * same id and the daemon says when one is gone for good. */
 function pruneLocal(
   local: State["local"],
   rows: WorktreeStatus[],
@@ -1442,9 +1439,23 @@ function pruneLocal(
   const keep = new Set([...rows.map((w) => w.id), ...spares.map((sp) => sp.id)]);
   // the archived page's chat is under an id no row has, for as long as the page is up
   if (archivedPage) keep.add(archivedPage);
-  const kept = (id: string) => keep.has(id) || id.startsWith(DRAFT_PREFIX);
-  if (Object.keys(local).every(kept)) return local;
-  return Object.fromEntries(Object.entries(local).filter(([id]) => kept(id)));
+  const kept = ([id, l]: [string, WorktreeLocal]) => keep.has(id) || draftRepoOf(id) !== null || !!l.draft;
+  const entries = Object.entries(local);
+  if (entries.every(kept)) return local;
+  return Object.fromEntries(entries.filter(kept));
+}
+
+/** the daemon's drafts laid into the boxes, where this tab has not written something of its own:
+ * that is what it typed while the socket was down, and it goes to the daemon next */
+function withDrafts(local: State["local"], drafts: Record<string, string>): State["local"] {
+  let out = local;
+  for (const [id, draft] of Object.entries(drafts)) {
+    const l = out[id];
+    if (l?.draft) continue;
+    if (out === local) out = { ...local };
+    out[id] = { ...(l ?? EMPTY_LOCAL), draft };
+  }
+  return out;
 }
 
 /** drop the per-project landing spots whose worktree is gone; the fallback is that project's main
@@ -1507,7 +1518,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         spares: msg.spares,
         removing: s.removing.length ? [] : s.removing,
         shipping: retireShipping(s.shipping, () => true),
-        local: pruneLocal(s.local, msg.rows, msg.spares, s.archivedPage),
+        local: pruneLocal(withDrafts(s.local, msg.drafts), msg.rows, msg.spares, s.archivedPage),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
@@ -1584,6 +1595,13 @@ function onServer(s: State, msg: StoreServerMsg): State {
       };
     case "archived":
       return { ...s, archived: { ...s.archived, [msg.repoId]: msg.items } };
+    case "draft":
+      // this tab wrote it and already has it, maybe with keystrokes since; a walk is showing a sent
+      // message in the box, which a draft written elsewhere must not replace
+      if (msg.clientId === s.clientId) return s;
+      return withLocal(s, msg.boxId, (l) =>
+        l.draft === msg.text || l.mark?.by === "walk" ? l : { ...l, draft: msg.text },
+      );
     case "repos": {
       const known = new Set(s.repos.map((r) => r.id));
       const added = msg.repos.find((r) => !known.has(r.id));

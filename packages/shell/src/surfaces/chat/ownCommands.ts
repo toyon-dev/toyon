@@ -7,7 +7,7 @@
 import { type AgentCommand, PERMISSION_MODES, type PermissionMode } from "@toyon/shared";
 
 /** the names toyon answers itself: a mode, or the seat's verb */
-export type OwnName = PermissionMode | "land" | "close";
+export type OwnName = PermissionMode | "land" | "archive";
 
 /** a draft that leads with one of toyon's own commands: the name, and whatever followed it */
 export type OwnInvocation = { name: OwnName; args: string };
@@ -20,7 +20,7 @@ export function ownCommands(landLine: string): AgentCommand[] {
   return [
     ...PERMISSION_MODES.map((m) => ({ name: m.id, description: m.description, hint: "[<description>]" })),
     { name: "land", description: landLine },
-    { name: "close", description: "close this worktree once its work has landed" },
+    { name: "archive", description: "archive this worktree once its work has landed" },
   ];
 }
 

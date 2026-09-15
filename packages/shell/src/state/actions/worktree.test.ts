@@ -48,7 +48,7 @@ describe("a worktree's actions", () => {
       "land",
       "|",
       // nothing written, so the remove asks nothing and loses its ellipsis
-      "remove",
+      "archive",
     ]);
     const busy = worktreeItems(
       owned({ agent: "working", dirty: 2, behind: 3 }),
@@ -72,7 +72,7 @@ describe("a worktree's actions", () => {
       "sync from main (3 behind)",
       "land",
       "|",
-      "remove…",
+      "archive…",
     ]);
   });
 

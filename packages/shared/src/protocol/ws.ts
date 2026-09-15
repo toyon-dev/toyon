@@ -79,6 +79,8 @@ export type ServerMsg =
       self: SelfState | null;
       /** the installed Toyon is not the one running, or a restart is waiting; null the rest of the time */
       update: UpdateState | null;
+      /** the unsent text in every composer box that has some, by box id */
+      drafts: Record<string, string>;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   /** the daemon fell behind the checkout it runs from, caught up, or started catching up */
@@ -176,6 +178,8 @@ export type ServerMsg =
   /** a project's archived worktrees, newest first: the reply to list-archived, and pushed to every
    * tab when one is archived, restored or deleted */
   | { t: "archived"; repoId: string; items: ArchivedWorktree[] }
+  /** a composer box's unsent text as a tab wrote it; `clientId` names that tab, which already has it */
+  | { t: "draft"; boxId: string; text: string; clientId?: string }
   | { t: "design-index"; worktreeId: string; index: DesignIndex }
   | { t: "queue"; worktreeId: string; items: string[] }
   /** the slash commands this worktree's agent session advertises. Ephemeral, never a transcript
@@ -400,8 +404,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("set-worktree-effort"), worktreeId: id, effort: z.string().max(100) }),
   /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
-  /** remove a worktree; its chat and work are archived, and the rail's archived section offers to restore it */
-  z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
+  /** archive a worktree: its directory and branch go, its chat and work are kept, and the rail's
+   * archived section offers to restore it */
+  z.object({ t: z.literal("archive-worktree"), worktreeId: id }),
   /** the project's archived worktrees; replies `archived` */
   z.object({ t: z.literal("list-archived"), repoId: id }),
   /** bring an archived worktree back: its directory, branch, uncommitted work and chat */
@@ -478,6 +483,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("seen"), worktreeId: id }),
   /** put the ring back on a worktree to come back to; the next `seen` clears it */
   z.object({ t: z.literal("mark-unread"), worktreeId: id }),
+  /** a composer box's unsent text as it stands, so another tab or device, and an archive, keep it;
+   * `boxId` is a worktree's id or a repo's new-worktree draft */
+  z.object({ t: z.literal("set-draft"), boxId: id, text: prose, clientId: z.string().max(64).optional() }),
   /** the window came back from another app, where files may have changed: recount the project's
    * rows and re-read its open changes lists */
   z.object({ t: z.literal("refresh-git"), repoId: id }),

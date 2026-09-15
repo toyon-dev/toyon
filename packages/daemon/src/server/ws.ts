@@ -277,6 +277,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
   s.hub.on("updateChanged", () => broadcast({ t: "update", update: s.update.get() }));
   s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
   s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));
+  // every tab, the writer included: it knows its own frame by the client id and leaves its box alone
+  s.hub.on("draftChanged", (boxId, text, clientId) =>
+    broadcast({ t: "draft", boxId, text, ...(clientId ? { clientId } : {}) }),
+  );
 
   // What a page learns first, over the socket or over the bootstrap fetch that precedes it. Quick
   // rows: the frame goes out from what is known and the counts follow, rather than every page
@@ -304,6 +308,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       visits: s.routes.historyAll(),
       self: s.self.get(),
       update: s.update.get(),
+      drafts: s.drafts.all(),
     } satisfies ServerMsg;
   };
 

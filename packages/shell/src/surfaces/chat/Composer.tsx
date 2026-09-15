@@ -19,7 +19,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
-import { removeWorktrees, shipOp } from "../../state/actions/worktree.ts";
+import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
@@ -390,10 +390,10 @@ export function Composer({
     ? null
     : landed
       ? {
-          word: "close",
+          word: "archive",
           line: `landed on ${repo?.defaultBranch ?? "main"}.`,
-          tip: "Close this worktree when you are done here; its chat goes to the archive, and the rail's archived section brings it back.",
-          run: () => removeWorktrees(sock, dispatch, [id]),
+          tip: "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.",
+          run: () => archiveWorktrees(sock, dispatch, [id]),
         }
       : pr?.state === "open"
         ? prCanMerge(pr)
@@ -509,11 +509,11 @@ export function Composer({
   const refuse = (text: string) => boxId && dispatch({ a: "notice", id: boxId, text });
   // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
   // under it rather than the seat, and says why when there is nothing for the word to do.
-  const runSeat = (name: "land" | "close") => {
+  const runSeat = (name: "land" | "archive") => {
     if (!active || !id) return;
-    if (name === "close") {
-      if (hasLanded) removeWorktrees(sock, dispatch, [id]);
-      else refuse("close is for a landed worktree; this one has not landed");
+    if (name === "archive") {
+      if (hasLanded) archiveWorktrees(sock, dispatch, [id]);
+      else refuse("archive is for a landed worktree; this one has not landed");
       return;
     }
     const stuck = verdict ? landingLine(verdict) : null;
@@ -563,7 +563,7 @@ export function Composer({
     const typed = ownCommandOf(text, ownRows);
     const mode = typed && isMode(typed.name) ? typed.name : undefined;
     if (typed && !mode) {
-      runSeat(typed.name as "land" | "close");
+      runSeat(typed.name as "land" | "archive");
       setText("");
       return;
     }

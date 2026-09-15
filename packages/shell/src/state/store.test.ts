@@ -9,6 +9,7 @@ import {
   type Draft,
   draftKey,
   type EditorDisk,
+  type EditorView,
   EMPTY_LOCAL,
   initialState,
   isChatCentred,
@@ -987,11 +988,14 @@ describe("the editor's open file", () => {
   });
 
   test("with no view asked for, a changed file opens on its diff and an unchanged one as the file", () => {
-    const viewOf = (before: string, after: string, view?: "file") =>
+    const viewOf = (before: string, after: string, view?: EditorView) =>
       run([hello(wt("a")), opening({ path: "x.ts", seq: 1, view }), readInto("x.ts", { before, after })]).editor?.view;
     expect(viewOf("a", "b")).toBe("diff");
     expect(viewOf("a", "a")).toBe("file");
     expect(viewOf("a", "b", "file")).toBe("file");
+    // a file new to the branch is all additions: the file is its diff, even when the diff was asked for
+    expect(viewOf("", "b")).toBe("file");
+    expect(viewOf("", "b", "diff")).toBe("file");
   });
 
   test("opening the open file again keeps its text on screen while the fresh read is out", () => {

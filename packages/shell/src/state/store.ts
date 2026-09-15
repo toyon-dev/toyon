@@ -1208,8 +1208,12 @@ function reduce(s: State, action: Action): State {
         const said = noteError(s, e.worktreeId, action.error ?? `could not read ${e.path}`);
         return e.disk ? said : { ...said, editor: null };
       }
-      // with no view asked for, a changed file opens on its diff and an unchanged one has none to show
-      return { ...s, editor: { ...e, view: e.view ?? (disk.before === disk.after ? "file" : "diff"), disk } };
+      // With no view asked for, a changed file opens on its diff and an unchanged one has none to
+      // show. A file with nothing on the other side (new to the branch) is shown as the file whatever
+      // was asked: its diff would be every line added, which the changes row already says, over a
+      // phantom removed line that Monaco draws for the empty side.
+      const view = disk.before === "" ? "file" : (e.view ?? (disk.before === disk.after ? "file" : "diff"));
+      return { ...s, editor: { ...e, view, disk } };
     }
     case "editor-conflict": {
       const e = s.editor;

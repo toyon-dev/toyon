@@ -22,15 +22,20 @@ export function openFile({ dispatch }: Deps, { focus = true, ...target }: OpenRe
 /** a file in the changes panel: show it in the editor pane as its diff or as the file, open it
  * somewhere else, copy where it is, and for an uncommitted one, throw it away. `showing` is the view the pane already
  * has this file in, which the menu swaps rather than reads again; `ref` is the commit a history row
- * stands for. */
+ * stands for; `added` says the file has nothing on the other side, so no diff to offer. */
 export function fileItems(
   wt: { id: string; dir: string },
   path: string,
-  { discard = false, ref, showing }: { discard?: boolean; ref?: string; showing?: EditorView },
+  {
+    discard = false,
+    ref,
+    showing,
+    added = false,
+  }: { discard?: boolean; ref?: string; showing?: EditorView; added?: boolean },
   deps: Deps,
 ): MenuEntry[] {
   const { sock, dispatch } = deps;
-  const views: MenuItem[] = VIEWS.filter((v) => v !== showing).map((v) => ({
+  const views: MenuItem[] = VIEWS.filter((v) => v !== showing && !(added && v === "diff")).map((v) => ({
     id: `view:${v}`,
     label: `view ${v}`,
     onClick: () =>

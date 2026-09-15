@@ -64,6 +64,8 @@ export function EditorPane({
   // until the first read decides, the toggle offers the file, as it does from a diff
   const view = editor.view ?? "diff";
   const other = view === "file" ? "diff" : "file";
+  // a file with nothing on the other side has no diff to switch to
+  const added = disk?.before === "";
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   return (
@@ -81,7 +83,7 @@ export function EditorPane({
           ? fileItems(
               { id: worktreeId, dir: wtPath },
               path,
-              { discard: !history, ref, showing: editor.view ?? undefined },
+              { discard: !history, ref, showing: editor.view ?? undefined, added },
               { sock, dispatch },
             )
           : []
@@ -92,16 +94,18 @@ export function EditorPane({
       actions={
         <>
           {/* names the view it switches to, as the full toggle beside it does */}
-          <Button
-            variant="outline"
-            tone="quiet"
-            mono
-            className="deep-link"
-            onClick={() => dispatch({ a: "editor-view", v: other })}
-            data-tip={view === "file" ? "Diff view: show what changed" : "File view: hide the diff"}
-          >
-            <Icon name={other === "diff" ? "diff" : "text"} className="icon-inline" /> {other}
-          </Button>
+          {!added && (
+            <Button
+              variant="outline"
+              tone="quiet"
+              mono
+              className="deep-link"
+              onClick={() => dispatch({ a: "editor-view", v: other })}
+              data-tip={view === "file" ? "Diff view: show what changed" : "File view: hide the diff"}
+            >
+              <Icon name={other === "diff" ? "diff" : "text"} className="icon-inline" /> {other}
+            </Button>
+          )}
           <OpenInMenu absPath={absPath} onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />
         </>
       }

@@ -42,9 +42,10 @@
     margin-left: 12px;
     color: var(--text1);
   }
-  /* a line with a lead spans the box, lead at the start and text at the end: the text stays against
-   the row it describes, and the lead sits clear of it rather than reading as the start of a phrase.
-   The gap is the key's, the least the two ever get when the line is the widest one. */
+  /* a line with a lead spans the box, text at the row's edge and lead at the far one: the text
+   stays against the row it describes, and the lead sits clear of it rather than reading as the
+   start of a phrase. Which edge is which follows the placement, so the markup orders the two. The
+   gap is the key's, the least the two ever get when the line is the widest one. */
   .tooltip-line {
     display: flex;
     justify-content: space-between;
@@ -73,6 +74,10 @@
   .tooltip-lead {
     color: var(--text1);
     text-align: left;
+    /* at the far edge of a right-standing tip, a wrapped lead rags toward the text */
+    &:last-child {
+      text-align: right;
+    }
   }
   /* the line under the text, a tier under it: the key's tier, since both are the aside */
   .tooltip-detail {

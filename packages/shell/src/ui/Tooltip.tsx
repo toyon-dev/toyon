@@ -34,8 +34,9 @@ export type TipOptions = {
    * itself is at the other end of the row. */
   dot?: string;
   /** the aside on the text's line, in the quiet tier and held against the box's far edge from the
-   * text: which thing this is and what it has cost, apart from what it is doing. A worktree row
-   * puts `main` and its agent's spend here, with its path on the line under. */
+   * text, whichever edge that is for the tip's placement: which thing this is and what it has
+   * cost, apart from what it is doing. A worktree row puts `main` and its agent's spend here, with
+   * its path on the line under. */
   lead?: string;
   /** the other verb of the same gesture, on a key of its own, as a row under the text in the quiet
    * tier: the inspector's button says ⌘E adds the element to chat under its own ⌘I. The two keys
@@ -280,9 +281,20 @@ export function Tooltips() {
           <Kbd k={anchor.also.key} className="tooltip-key" />
         </div>
       ) : anchor.lead ? (
+        // the text stays against the row it describes: a tip standing to the row's right leads
+        // with the text and holds the aside at the far edge
         <div className="tooltip-line">
-          <span className="tooltip-lead">{anchor.lead}</span>
-          <span>{head}</span>
+          {anchor.placement === "right" ? (
+            <>
+              <span>{head}</span>
+              <span className="tooltip-lead">{anchor.lead}</span>
+            </>
+          ) : (
+            <>
+              <span className="tooltip-lead">{anchor.lead}</span>
+              <span>{head}</span>
+            </>
+          )}
         </div>
       ) : (
         head

@@ -1,8 +1,8 @@
 # Toyon
 
-Checking an agent's work means running it. Toyon gives every chat its own copy of your web app, with a live preview.
+Toyon is where you build web apps with coding agents. Every chat gets its own running copy of your app with a live preview.
 
-Each copy runs on your own machine, and the next one is pre-warmed. Works with Claude Code, Codex and OpenCode.
+Each copy runs on your own machine, and the next one is pre-warmed. Works with Claude Code, Codex and OpenCode over the Agent Client Protocol (ACP).
 
 **Status: pre-alpha, built in the open.** Runs on macOS and Linux. Windows through WSL2 is next. Expect rough edges, and say so in an issue.
 

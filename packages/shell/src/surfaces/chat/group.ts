@@ -148,3 +148,15 @@ export function openRow(entries: ChatEntry[]): number {
 function says(item: Exclude<ChatItem, { kind: "tool" | "thinking" }>): boolean {
   return item.kind === "assistant" ? !!item.text.trim() : true;
 }
+
+/** The row a transcript seq names: the last one stamped with a seq at or before it. A row carries
+ * the seq of the event that started it, and prose the daemon reads as two runs (an event between
+ * the deltas that draws nothing) is one row here, so the nearest row before is the one the text is
+ * in. -1 when no row is, as in a chat still on its way. */
+export function indexOfSeq(items: ChatItem[], seq: number): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]!;
+    if ("seq" in item && item.seq !== undefined && item.seq <= seq) return i;
+  }
+  return -1;
+}

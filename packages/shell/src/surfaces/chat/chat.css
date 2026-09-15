@@ -147,6 +147,16 @@
     color: var(--text0);
     max-width: 100%;
     overflow-wrap: break-word;
+    /* a search hit's prose, marked the way a walked-back message is: the edge and a lifted seat.
+     The seat reaches into the log's gutter, its margin paying for its padding, so marking the row
+     moves no text; its corners are square, so the edge stands on a straight side. */
+    &[data-state~="cursor"] {
+      --row-edge-color: var(--accent);
+      background: var(--element1);
+      margin: -4px -6px;
+      padding: 4px 6px;
+      max-width: calc(100% + 12px);
+    }
 
     /* markdown chat rendering */
     &.md {

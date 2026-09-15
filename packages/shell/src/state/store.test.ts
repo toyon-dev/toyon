@@ -286,7 +286,7 @@ describe("chat folding", () => {
       agent("a", { type: "agent-error", message: `Internal error: ${limit}`, ts: 0 }),
     ]);
     expect(s.local.a?.chat).toEqual([
-      { kind: "user", text: "hi" },
+      { kind: "user", text: "hi", seq: 0 },
       { kind: "error", text: `Internal error: ${limit}` },
     ]);
     const other = run([
@@ -304,7 +304,7 @@ describe("chat folding", () => {
     ]);
     expect(s.local.a?.chat).toEqual([
       { kind: "grafted", title: "beta", branch: "toyon/beta" },
-      { kind: "user", text: "in beta" },
+      { kind: "user", text: "in beta", seq: 0 },
     ]);
   });
   test("tool-end completes the matching tool-start", () => {
@@ -771,7 +771,7 @@ describe("attachments", () => {
       },
     ];
     const s = run([hello(wt("a")), agent("a", { type: "user-message", text: "see", ts: 0, attachments: refs })]);
-    expect(s.local.a?.chat[0]).toEqual({ kind: "user", text: "see", attachments: refs });
+    expect(s.local.a?.chat[0]).toEqual({ kind: "user", text: "see", attachments: refs, seq: 0 });
   });
 });
 
@@ -800,10 +800,87 @@ describe("drafts", () => {
   test("a walk writes the draft and its place together, and any other write to the draft ends it", () => {
     let s = run([hello(wt("a")), { a: "walk", id: "a", walk: { at: 3, from: "" }, text: "fix the header" }]);
     expect(s.local.a?.draft).toBe("fix the header");
-    expect(s.local.a?.walk).toEqual({ at: 3, from: "" });
+    expect(s.local.a?.mark).toEqual({ by: "walk", at: 3, from: "" });
     s = run([{ a: "set-draft", id: "a", text: "fix the header again" }], s);
     expect(s.local.a?.draft).toBe("fix the header again");
-    expect(s.local.a?.walk).toBeUndefined();
+    expect(s.local.a?.mark).toBeUndefined();
+  });
+  test("a search hit marks its row; a walk takes the mark, and a message or leaving the worktree ends it", () => {
+    let s = run([hello(wt("a"), wt("b")), { a: "activate", id: "a" }, { a: "reveal", id: "a", seq: 4 }]);
+    expect(s.local.a?.mark).toEqual({ by: "reveal", seq: 4, n: 1 });
+    // the same hit picked again scrolls to it again
+    s = run([{ a: "reveal", id: "a", seq: 4 }], s);
+    expect(s.local.a?.mark).toEqual({ by: "reveal", seq: 4, n: 2 });
+    // writing a reply leaves it; walking back through what was sent takes it
+    s = run([{ a: "set-draft", id: "a", text: "and" }], s);
+    expect(s.local.a?.mark?.by).toBe("reveal");
+    s = run([{ a: "walk", id: "a", walk: { at: 1, from: "" }, text: "fix" }], s);
+    expect(s.local.a?.mark).toEqual({ by: "walk", at: 1, from: "" });
+    s = run([{ a: "reveal", id: "a", seq: 4 }], s);
+    expect(s.local.a?.mark).toEqual({ by: "reveal", seq: 4, n: 1 });
+    s = run([{ a: "walk", id: "a", walk: null, text: "" }], s);
+    expect(s.local.a?.mark?.by).toBe("reveal");
+    s = run([agent("a", { type: "user-message", text: "next", ts: 0 })], s);
+    expect(s.local.a?.mark).toBeUndefined();
+    s = run(
+      [
+        { a: "reveal", id: "a", seq: 4 },
+        { a: "activate", id: "b" },
+      ],
+      s,
+    );
+    expect(s.local.a?.mark).toBeUndefined();
+  });
+  test("a row carries the seq a search names it by, live or backfilled: a message its own, prose its first delta's", () => {
+    const said = { type: "user-message" as const, text: "q", ts: 0 };
+    const live = run([
+      hello(wt("a")),
+      server({ t: "agent", worktreeId: "a", seq: 3, event: said }),
+      server({ t: "agent", worktreeId: "a", seq: 4, event: { type: "text-delta", text: "an" } }),
+      server({ t: "agent", worktreeId: "a", seq: 5, event: { type: "text-delta", text: "swer" } }),
+    ]);
+    expect(live.local.a?.chat).toEqual([
+      { kind: "user", text: "q", seq: 3 },
+      { kind: "assistant", text: "answer", seq: 4 },
+    ]);
+    const events = [
+      { seq: 3, event: said },
+      { seq: 4, event: { type: "text-delta" as const, text: "answer" } },
+    ];
+    const back = run([hello(wt("a")), server({ t: "backfill", worktreeId: "a", events })]);
+    expect(back.local.a?.chat).toEqual(live.local.a?.chat);
+  });
+  test("a hit in an archived chat opens its page with the hit marked", () => {
+    const gone = {
+      id: "z",
+      repoId: "r",
+      title: "side",
+      branch: "toyon/side",
+      path: "/w/z",
+      createdAt: 0,
+      archivedAt: 1,
+      restorable: true,
+    };
+    const said = { type: "user-message" as const, text: "q", ts: 0 };
+    const s = run([
+      hello(wt("a")),
+      server({ t: "archived", repoId: "r", items: [gone] }),
+      { a: "open", overlay: { kind: "chats" } },
+      { a: "open-archived", id: "z" },
+      { a: "reveal", id: "z", seq: 0 },
+      { a: "close" },
+      server({ t: "backfill", worktreeId: "z", events: [{ seq: 0, event: said }] }),
+      worktrees(wt("a")),
+    ]);
+    expect(s.archivedPage).toBe("z");
+    expect(s.local.z?.mark).toEqual({ by: "reveal", seq: 0, n: 1 });
+  });
+  test("the chats palette's answer is kept for its project and goes with the project", () => {
+    const answer = { query: "footer", hits: [], truncated: false };
+    let s = run([helloIn([repo("r")], wt("a")), server({ t: "chat-hits", repoId: "r", ...answer })]);
+    expect(s.chats.r).toEqual(answer);
+    s = run([hello(wt("a"))], s);
+    expect(s.chats.r).toBeUndefined();
   });
   test("a sync-conflict suggestion lands in that worktree's draft and focuses it", () => {
     const s = run([
@@ -1787,7 +1864,7 @@ describe("usage", () => {
     });
     let s = run([hello(wt("a")), agent("a", usage(0.1)), agent("a", { type: "text-delta", text: "hi" })]);
     expect(s.local.a?.usage).toEqual({ used: 1000, size: 4000, cost: 0.1 });
-    expect(s.local.a?.chat).toEqual([{ kind: "assistant", text: "hi" }]);
+    expect(s.local.a?.chat).toEqual([{ kind: "assistant", text: "hi", seq: 0 }]);
     s = run([agent("a", usage(undefined, 2100))], s);
     expect(s.local.a?.usage).toEqual({ used: 2100, size: 4000 });
     s = run(
@@ -1806,7 +1883,7 @@ describe("usage", () => {
       s,
     );
     expect(s.local.a?.usage).toEqual({ used: 3000, size: 4000, cost: 0.5 });
-    expect(s.local.a?.chat).toEqual([{ kind: "assistant", text: "later" }]);
+    expect(s.local.a?.chat).toEqual([{ kind: "assistant", text: "later", seq: 1 }]);
   });
 });
 

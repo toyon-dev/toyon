@@ -25,6 +25,7 @@ import type { RouteService } from "../routes/service.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { daylightNow } from "../themes/daylight.ts";
 import type { ThemeStore } from "../themes/store.ts";
+import type { ChatSearch } from "../worktrees/chats.ts";
 import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
@@ -47,6 +48,8 @@ export interface Services {
   exec: ExecService;
   /** the ref palette: branches and PRs a worktree could be opened on */
   refs: RefSearch;
+  /** the chats palette: what a project's chats say, live worktrees and archived ones */
+  chats: ChatSearch;
   /** what GitHub says about the PRs toyon opened */
   prs: PrService;
   themes: ThemeStore;
@@ -655,6 +658,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async "search-refs"(msg, ctx, s) {
     const refs = await s.refs.search(msg.repoId, msg.query);
     ctx.reply({ t: "refs", repoId: msg.repoId, query: msg.query, refs });
+  },
+
+  async "search-chats"(msg, ctx, s) {
+    const { hits, truncated } = await s.chats.search(msg.repoId, msg.query);
+    ctx.reply({ t: "chat-hits", repoId: msg.repoId, query: msg.query, hits, truncated });
   },
 
   async "open-ref"(msg, _ctx, s) {

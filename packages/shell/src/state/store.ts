@@ -14,6 +14,7 @@ import type {
   AskQuestion,
   AttachmentRef,
   AuthMethodInfo,
+  ChatHit,
   ChosenFolder,
   CommitEntry,
   ConnectFailure,
@@ -63,8 +64,9 @@ import { railOrder } from "./railOrder.ts";
 export type UsageFigures = { used: number; size: number; cost?: number };
 
 export type ChatItem =
-  | { kind: "user"; text: string; attachments?: AttachmentRef[] }
-  | { kind: "assistant"; text: string }
+  /** `seq` on the rows a chat search can land on: the transcript entry the row starts at */
+  | { kind: "user"; text: string; attachments?: AttachmentRef[]; seq?: number }
+  | { kind: "assistant"; text: string; seq?: number }
   | { kind: "thinking"; text: string }
   | {
       kind: "tool";
@@ -128,6 +130,12 @@ export interface ComposerWalk {
   from: string;
 }
 
+/** The one transcript row the log marks and brings to the top: where the composer's walk back
+ * through what was sent is, or a hit picked in the chats palette, found by its seq once the chat has
+ * it. `n` counts the picks, so the same hit picked again is scrolled to again. Writing one replaces
+ * the other. */
+export type ChatMark = ({ by: "walk" } & ComposerWalk) | { by: "reveal"; seq: number; n: number };
+
 /** everything the shell tracks for one worktree; dropped when the worktree disappears */
 export interface WorktreeLocal {
   chat: ChatItem[];
@@ -158,9 +166,10 @@ export interface WorktreeLocal {
   /** the composer's unsent text; survives switching worktrees, and is where the daemon's
    * conflict-resolution suggestion lands */
   draft: string;
-  /** set while up and down are walking the composer back through what was sent, with `draft`
-   * holding the entry walked to. Any other write to the draft ends it: a keystroke, a suggestion. */
-  walk?: ComposerWalk;
+  /** The row the log marks. A walk is set while up and down are walking the composer back through
+   * what was sent, with `draft` holding the entry walked to, and any other write to the draft ends
+   * it: a keystroke, a suggestion. A reveal lasts until a message is sent or the worktree is left. */
+  mark?: ChatMark;
   /** what is attached to the message being written, in the order it was attached; `key` is local,
    * and the daemon numbers each kind on send */
   attachments: PendingAttachment[];
@@ -251,6 +260,8 @@ export type Overlay =
   | { kind: "search" }
   /** the ref palette: a branch or PR to open as a worktree */
   | { kind: "refs" }
+  /** the chats palette: what the project's chats say, live worktrees and archived ones */
+  | { kind: "chats" }
   /** a project's removed worktrees: restore one, or delete it for good */
   | { kind: "archived"; repoId: string }
   | { kind: "keys" }
@@ -443,6 +454,8 @@ export interface State {
   /** per repo: the ref palette's last reply, with the query it answered so a stale one is told
    * from the one the person is waiting on. Repo-scoped, since a ref is not a worktree's. */
   refs: Record<string, { query: string; refs: RefHit[] }>;
+  /** the chats palette's last answer for each project; `query` tells a stale one from a fresh one */
+  chats: Record<string, { query: string; hits: ChatHit[]; truncated: boolean }>;
   /** per repo: its archived worktrees, newest first; absent until the rail or the archive picker asks */
   archived: Record<string, ArchivedWorktree[]>;
   /** the archived worktree whose page the centre shows, by archive id. Like the draft it is a tab
@@ -624,6 +637,7 @@ export function initialState(opts: InitialOpts): State {
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
     archivedOpen: opts.storedArchivedOpen ?? {},
     refs: {},
+    chats: {},
     archived: {},
     archivedPage: null,
     lastActive: opts.storedLastActive ?? {},
@@ -847,10 +861,12 @@ function activate(s: State, id: string | null): State {
   // project and should be somewhere that still exists next time.
   const activeRepoId = row?.repoId ?? s.activeRepoId;
   const lastActive = row && isOwned(row) ? { ...s.lastActive, [row.repoId]: row.id } : s.lastActive;
-  // leaving a worktree ends the recap this tab arrived to there
+  // leaving a worktree ends the recap this tab arrived to there, and the hit a search landed on
   const leaving = s.activeId !== id ? s.activeId : null;
   const was = leaving ? s.local[leaving] : undefined;
-  const local = leaving && was?.recapFor !== undefined ? { ...s.local, [leaving]: withoutRecap(was) } : s.local;
+  const settled =
+    was && (was.recapFor !== undefined || was.mark?.by === "reveal") ? withoutMark(withoutRecap(was), "reveal") : null;
+  const local = leaving && settled ? { ...s.local, [leaving]: settled } : s.local;
   // choosing a row is leaving an archived worktree's page: a snapshot that only re-asserts the
   // selection puts it back itself (see the worktrees frame). The draft follows main (withLauncher).
   return { ...s, activeId: id, activeRepoId, lastActive, editor: null, archivedPage: null, local };
@@ -864,6 +880,13 @@ export function archivedPageOf(s: State): ArchivedWorktree | null {
 
 function withoutRecap({ recapFor: _recapFor, ...l }: WorktreeLocal): WorktreeLocal {
   return l;
+}
+
+/** the local without its mark, when the mark is of that kind */
+function withoutMark(l: WorktreeLocal, by: ChatMark["by"]): WorktreeLocal {
+  if (l.mark?.by !== by) return l;
+  const { mark: _mark, ...rest } = l;
+  return rest;
 }
 
 export const isSubPicker = (o: Overlay) =>
@@ -934,6 +957,8 @@ export type Action =
   | { a: "arrive"; id: string }
   /** the composer's up and down: the draft and where the walk is, in one write */
   | { a: "walk"; id: string; walk: ComposerWalk | null; text: string }
+  /** a hit picked in the chats palette: mark its row, and bring it up once the chat has it */
+  | { a: "reveal"; id: string; seq: number }
   /** attachments joining a composer box, after whatever is already waiting there */
   | { a: "attach"; id: string; items: PendingAttachment[] }
   | { a: "detach"; id: string; key: string }
@@ -1236,12 +1261,15 @@ function reduce(s: State, action: Action): State {
       // writing in the box is answering the recap, and emptying the box again does not bring it
       // back. A keystroke answers the notice too; the box emptying does not, since a refused
       // command empties it on its way to saying why.
-      return withLocal(s, action.id, ({ walk: _walk, recapFor, notice, ...l }) => ({
-        ...l,
-        draft: action.text,
-        ...(recapFor !== undefined && !action.text.trim() ? { recapFor } : {}),
-        ...(notice !== undefined && action.text === "" ? { notice } : {}),
-      }));
+      return withLocal(s, action.id, (was) => {
+        const { recapFor, notice, ...l } = withoutMark(was, "walk");
+        return {
+          ...l,
+          draft: action.text,
+          ...(recapFor !== undefined && !action.text.trim() ? { recapFor } : {}),
+          ...(notice !== undefined && action.text === "" ? { notice } : {}),
+        };
+      });
     case "arrive": {
       const turn = rowById(s, action.id)?.worktree?.lastTurn;
       const unseen = rowById(s, action.id)?.unseen;
@@ -1250,10 +1278,16 @@ function reduce(s: State, action: Action): State {
       return withLocal(s, action.id, (l) => (l.recapFor === turn.at ? l : { ...l, recapFor: turn.at }));
     }
     case "walk":
-      return withLocal(s, action.id, ({ walk: _walk, ...l }) => ({
-        ...l,
+      // a walk takes the mark from a reveal, and a walk ending leaves a reveal where it is
+      return withLocal(s, action.id, (l) => ({
+        ...withoutMark(l, "walk"),
         draft: action.text,
-        ...(action.walk ? { walk: action.walk } : {}),
+        ...(action.walk ? { mark: { by: "walk" as const, at: action.walk.at, from: action.walk.from } } : {}),
+      }));
+    case "reveal":
+      return withLocal(revealChat(s), action.id, (l) => ({
+        ...l,
+        mark: { by: "reveal", seq: action.seq, n: l.mark?.by === "reveal" ? l.mark.n + 1 : 1 },
       }));
     case "attach":
       // the chips are the only sign an attachment landed, so one arriving on a collapsed chat opens it
@@ -1465,6 +1499,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
         refs: pruneByRepo(s.refs, msg.repos),
+        chats: pruneByRepo(s.chats, msg.repos),
         archived: pruneByRepo(s.archived, msg.repos),
         themes: msg.themes ?? s.themes,
         themePrefs: msg.themePrefs ?? s.themePrefs,
@@ -1526,6 +1561,11 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...s, chosenFolder: { seq: (s.chosenFolder?.seq ?? 0) + 1, folder: msg.folder } };
     case "refs":
       return { ...s, refs: { ...s.refs, [msg.repoId]: { query: msg.query, refs: msg.refs } } };
+    case "chat-hits":
+      return {
+        ...s,
+        chats: { ...s.chats, [msg.repoId]: { query: msg.query, hits: msg.hits, truncated: msg.truncated } },
+      };
     case "archived":
       return { ...s, archived: { ...s.archived, [msg.repoId]: msg.items } };
     case "repos": {
@@ -1617,7 +1657,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const ev = msg.event;
       const id = msg.worktreeId;
       let next = withLocal(s, id, (l) => {
-        const chat = applyEvent(l.chat, ev);
+        const chat = applyEvent(l.chat, ev, msg.seq);
         let turn = l.turn;
         if (ev.type === "turn-start") turn = { edits: false, hmr: false };
         else if (ev.type === "tool-start" && isEditTool(ev)) turn = { ...turn, edits: true };
@@ -1628,7 +1668,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
         // a message sent or a turn begun: the recap was about the stop before it
         const moved = ev.type === "turn-start" || ev.type === "user-message";
         return {
-          ...(moved ? withoutRecap(l) : l),
+          // and a message sent moves the conversation on from the hit a search landed on
+          ...(moved ? withoutRecap(ev.type === "user-message" ? withoutMark(l, "reveal") : l) : l),
           chat,
           turn,
           ...(model !== l.model ? { model } : {}),
@@ -1647,8 +1688,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
     case "backfill": {
       let chat: ChatItem[] = [];
       let usage: UsageFigures | undefined;
-      for (const { event } of msg.events) {
-        chat = applyEvent(chat, event);
+      for (const { seq, event } of msg.events) {
+        chat = applyEvent(chat, event, seq);
         if (event.type === "usage") usage = figuresOf(event);
       }
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, chat, log: msg.log ?? l.log, ...(usage ? { usage } : {}) }));
@@ -1820,8 +1861,13 @@ function repeats(message: string, prose: string): boolean {
   return said !== "" && (message.trim() === said || message.trim().endsWith(`: ${said}`));
 }
 
-function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
+/** An event folded into the chat. `seq` is its transcript entry's, stamped on the rows a chat search
+ * can land on as they start: a message, and prose, which keeps its first delta's seq while the rest
+ * stream in. A coalesced backfill names a run by its first seq too, so a row has one name whether it
+ * arrived live or on a subscribe. */
+function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatItem[] {
   const last = items[items.length - 1];
+  const stamp = seq === undefined ? {} : { seq };
   switch (event.type) {
     case "user-message":
       return [
@@ -1830,11 +1876,12 @@ function applyEvent(items: ChatItem[], event: AgentEvent): ChatItem[] {
           kind: "user",
           text: event.text,
           ...(event.attachments?.length ? { attachments: event.attachments } : {}),
+          ...stamp,
         },
       ];
     case "text-delta":
       if (last?.kind === "assistant") return [...items.slice(0, -1), { ...last, text: last.text + event.text }];
-      return [...items, { kind: "assistant", text: event.text }];
+      return [...items, { kind: "assistant", text: event.text, ...stamp }];
     case "thinking-delta":
       if (last?.kind === "thinking") return [...items.slice(0, -1), { ...last, text: last.text + event.text }];
       return [...items, { kind: "thinking", text: event.text }];

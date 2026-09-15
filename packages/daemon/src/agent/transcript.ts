@@ -14,20 +14,40 @@ export function transcriptPathFor(transcriptsDir: string, worktreeId: string): s
 }
 
 /** the entries with each run of adjacent text or thinking deltas folded into one, keeping the run's
- * last seq. A streamed reply is a delta per token, so a whole long session sent raw is a frame of
+ * first seq. A streamed reply is a delta per token, so a whole long session sent raw is a frame of
  * tens of thousands of entries and a fold in the shell that copies the chat once per token; the
- * shell joins adjacent deltas into one row anyway, so what it renders is the same. */
+ * shell joins adjacent deltas into one row anyway, so what it renders is the same. The first seq is
+ * the row's name: the shell stamps it when the run's first delta lands, a chat search names the row
+ * by it, and it stays put while the run is still streaming. */
 export function coalesce(entries: TranscriptEntry[]): TranscriptEntry[] {
   const out: TranscriptEntry[] = [];
   for (const entry of entries) {
     const last = out.at(-1);
     const { event } = entry;
     if ((event.type === "text-delta" || event.type === "thinking-delta") && last?.event.type === event.type) {
-      out[out.length - 1] = { seq: entry.seq, event: { type: event.type, text: last.event.text + event.text } };
+      out[out.length - 1] = { seq: last.seq, event: { type: event.type, text: last.event.text + event.text } };
     } else {
       out.push(entry);
     }
   }
+  return out;
+}
+
+/** a transcript file's text as entries. A crash mid-append leaves a partial last line, and one bad
+ * line must not make the whole worktree unbootable, so a line that does not parse is counted and
+ * skipped. */
+export function parseTranscript(text: string, tag: string): TranscriptEntry[] {
+  const out: TranscriptEntry[] = [];
+  let torn = 0;
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    try {
+      out.push(JSON.parse(line));
+    } catch {
+      torn++;
+    }
+  }
+  if (torn) log.warn(tag, `transcript: skipped ${torn} unparsable line(s)`);
   return out;
 }
 
@@ -49,21 +69,7 @@ export class Transcript {
   }
 
   private read(): TranscriptEntry[] {
-    if (!existsSync(this.path)) return [];
-    const out: TranscriptEntry[] = [];
-    let torn = 0;
-    for (const line of readFileSync(this.path, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        out.push(JSON.parse(line));
-      } catch {
-        // a crash mid-append leaves a partial last line; one bad line must not make the whole
-        // worktree unbootable
-        torn++;
-      }
-    }
-    if (torn) log.warn(this.tag, `transcript: skipped ${torn} unparsable line(s)`);
-    return out;
+    return existsSync(this.path) ? parseTranscript(readFileSync(this.path, "utf8"), this.tag) : [];
   }
 
   /** record the event and hand back its entry (the seq is what the hub broadcasts) */

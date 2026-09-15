@@ -73,12 +73,13 @@ function useThrottledMarkdown(text: string): string {
   return html;
 }
 
-function Markdown({ text, menu }: { text: string; menu: () => MenuEntry[] }) {
+function Markdown({ text, menu, marked }: { text: string; menu: () => MenuEntry[]; marked?: boolean }) {
   const html = useThrottledMarkdown(text);
   const cm = useContextMenu("chat");
   return (
     <div
-      className="msg-assistant md"
+      className="msg-assistant md row-edge"
+      data-state={rowState({ cursor: marked })}
       {...cm.contextMenu(menu)}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
       dangerouslySetInnerHTML={{ __html: html }}
@@ -570,7 +571,7 @@ export const ChatItemView = memo(function ChatItemView({
   item: Exclude<ChatItem, ToolItem | ThinkingItem>;
   worktreeId?: string | null;
   onPickHover?: (p: PickMeta, entering: boolean) => void;
-  /** the composer has walked back to this message */
+  /** the row the log marks: the message the composer has walked back to, or a search hit's */
   marked?: boolean;
 }) {
   const store = useStoreInstance();
@@ -625,7 +626,7 @@ export const ChatItemView = memo(function ChatItemView({
         </div>
       );
     case "assistant":
-      return <Markdown text={item.text} menu={() => messageItems(item, worktreeId ?? null, deps)} />;
+      return <Markdown text={item.text} menu={() => messageItems(item, worktreeId ?? null, deps)} marked={marked} />;
     case "error":
       return (
         <div

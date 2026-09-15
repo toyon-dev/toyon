@@ -12,7 +12,7 @@ import { unseenJump } from "./unseenJump.ts";
 const inside = (selector: string) => !!document.activeElement?.closest(selector);
 
 /** the ⌘ chords a focused Monaco keeps for itself; it keeps every ⌥ one too (see useChords) */
-const MONACO_OWNS = new Set<ChordId>(["design", "new", "routes"]);
+const MONACO_OWNS = new Set<ChordId>(["design", "new", "routes", "chats"]);
 
 /** the chords that answer on the new-project view: the rest act on a worktree, and the page is about
  * a project that has none yet, over one that is not on screen */
@@ -147,6 +147,9 @@ export function useChords() {
             break;
           case "refs":
             if (s.activeRepoId) dispatch({ a: "toggle", overlay: { kind: "refs" } });
+            break;
+          case "chats":
+            if (s.activeRepoId) dispatch({ a: "toggle", overlay: { kind: "chats" } });
             break;
           case "commands":
             dispatch({ a: "toggle", overlay: { kind: "commands" } });

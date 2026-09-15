@@ -9,7 +9,7 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
-import { groupTools, openRow } from "./group.ts";
+import { groupTools, indexOfSeq, openRow } from "./group.ts";
 import { isBlank } from "./recall.ts";
 
 /** seconds of silence before the working line starts counting */
@@ -110,8 +110,18 @@ export function ChatLog({
   // the top of the log, so what came after it is what fills the pane. A walk that ends in a blank box
   // (esc, a send, down past the newest) puts the log back where it began, pinned to the bottom if it
   // was; one that ends in an edit leaves the log on the message being edited.
-  const walkAt = useLocalField(id, "walk")?.at;
+  const mark = useLocalField(id, "mark");
+  const walkAt = mark?.by === "walk" ? mark.at : undefined;
   const walkStart = useRef<{ bottom: boolean; top: number } | null>(null);
+  // the marked row to the top of the log, a walk's or a search hit's
+  const scrollToMarked = () => {
+    const el = logRef.current;
+    const row = el?.querySelector<HTMLElement>(':scope > [data-state~="cursor"]');
+    if (!el || !row) return;
+    const pad = parseFloat(getComputedStyle(el).paddingTop) || 0;
+    el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - pad;
+    onScroll();
+  };
   useOnChange([walkAt], () => {
     const el = logRef.current;
     if (!el) return;
@@ -125,11 +135,16 @@ export function ChatLog({
       return;
     }
     walkStart.current ??= { bottom: atBottomRef.current, top: el.scrollTop };
-    const row = el.querySelector<HTMLElement>(':scope > [data-state~="cursor"]');
-    if (!row) return;
-    const pad = parseFloat(getComputedStyle(el).paddingTop) || 0;
-    el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - pad;
-    onScroll();
+    scrollToMarked();
+  });
+  // A hit picked in the chats palette marks its row the same way. The chat may still be on its way
+  // (a worktree this tab had not opened, an archived page), so the row arriving scrolls to it as
+  // well as the pick does; `n` scrolls again when the same hit is picked twice.
+  const reveal = mark?.by === "reveal" ? mark : undefined;
+  const revealAt = useMemo(() => (reveal ? indexOfSeq(items, reveal.seq) : -1), [items, reveal]);
+  const markAt = walkAt ?? (revealAt >= 0 ? revealAt : undefined);
+  useOnChange([reveal?.n, revealAt], () => {
+    if (revealAt >= 0) scrollToMarked();
   });
 
   // stable across renders so memoized rows don't re-render on every delta
@@ -191,7 +206,7 @@ export function ChatLog({
               roots={roots}
               worktreeId={id}
               // a `!` command is never grouped, so the walk's index is the row's own
-              marked={entry.at === walkAt}
+              marked={entry.at === markAt}
             />
           ) : entry.item.kind === "thinking" ? (
             <ThoughtRow key={entry.at} item={entry.item} open={i === liveRow} streaming={i === streaming} />
@@ -201,7 +216,7 @@ export function ChatLog({
               item={entry.item}
               worktreeId={id}
               onPickHover={onPickHover}
-              marked={entry.at === walkAt}
+              marked={entry.at === markAt}
             />
           ),
         )}

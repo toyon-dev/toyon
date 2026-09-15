@@ -11,6 +11,7 @@ import type {
   AgentConfigInfo,
   AgentInfo,
   ArchivedWorktree,
+  ChatHit,
   ChosenFolder,
   CommitEntry,
   DesignIndex,
@@ -164,6 +165,9 @@ export type ServerMsg =
   | { t: "element-sources"; worktreeId: string; seq: number; hits: SearchHit[]; sure: boolean }
   /** the ref palette's rows for a query; `query` is echoed so a stale reply is told from a fresh one */
   | { t: "refs"; repoId: string; query: string; refs: RefHit[] }
+  /** the chats palette's hits for a query, grouped by worktree with the newest first; `query` is
+   * echoed so a stale reply is told from a fresh one */
+  | { t: "chat-hits"; repoId: string; query: string; hits: ChatHit[]; truncated: boolean }
   /** a project's archived worktrees, newest first: the reply to list-archived, and pushed to every
    * tab when one is archived, restored or deleted */
   | { t: "archived"; repoId: string; items: ArchivedWorktree[] }
@@ -582,6 +586,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** the ref palette: local branches, remote branches and open PRs matching the query; replies
    * `refs`. An empty query lists the work that is open. */
   z.object({ t: z.literal("search-refs"), repoId: id, query: z.string().max(200) }),
+  /** what the project's chats say, live worktrees and archived ones: the person's messages and the
+   * model's prose, never tool output; replies `chat-hits` */
+  z.object({ t: z.literal("search-chats"), repoId: id, query: z.string().max(200) }),
   /** open a ref as a worktree toyon owns. `ref` is what the `refs` reply carried; a PR's title and
    * url ride along for the record, since only the hit knew them. */
   z.object({

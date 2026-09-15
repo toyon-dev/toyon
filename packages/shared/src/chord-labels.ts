@@ -30,6 +30,7 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   "quick-open": { label: "jump to file", section: "Find" },
   commands: { label: "command palette", section: "Find", advertise: { key: "F1", when: "firefox" } },
   search: { label: "search in files", section: "Find" },
+  chats: { label: "search in chats", section: "Find" },
   changes: { label: "changes panel", section: "Panels" },
   composer: { label: "chat panel, with the editor's selection", section: "Panels" },
   rail: { label: "worktree panel", section: "Panels" },

@@ -526,6 +526,24 @@ export type RefKind = "branch" | "remote" | "pr";
 /** Something the ref palette can open as a worktree: a local branch nobody has checked out, a
  * remote branch as of the last fetch, or an open pull request. Never a rail row: the rail lists
  * directories, and a ref becomes one only when someone opens it. */
+/** One place a project's chats say what was searched for: something the person sent or the model
+ * wrote back, never a tool's output. A chat is found by its worktree, live or archived, and the row
+ * inside it by `seq`, which is the transcript entry the row starts at. */
+export interface ChatHit {
+  worktreeId: string;
+  /** the worktree was removed: its page reads the chat where it was kept */
+  archived: boolean;
+  /** a message's own seq, or the first seq of the run of prose it sits in */
+  seq: number;
+  role: "user" | "assistant";
+  /** the text around the first match, whitespace collapsed, with an ellipsis where it was cut */
+  text: string;
+  /** where the match sits in `text`: its start and its length */
+  match: [number, number];
+  /** when it was said: the message's stamp, or the start of the turn the prose is in; 0 unknown */
+  ts: number;
+}
+
 export interface RefHit {
   kind: RefKind;
   /** what open-ref takes back: the branch name, the remote branch without its remote, or the PR

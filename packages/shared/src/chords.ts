@@ -8,6 +8,7 @@ export type ChordId =
   | "quick-open"
   | "commands"
   | "search"
+  | "chats"
   | "changes"
   | "composer"
   | "rail"
@@ -81,10 +82,12 @@ export const CHORDS: readonly Chord[] = [
     bareAlias: "F1",
   },
   { id: "search", key: "f", shift: true },
+  // ⌘G searches every chat in the project, Slack's pair: ⌘F finds in the conversation on screen,
+  // and stays the browser's for that, and ⌘G looks through all of them. A focused Monaco keeps ⌘G
+  // as find-next (app/keys.ts), and a browser's open find bar keeps it while it has the keyboard.
+  { id: "chats", key: "g" },
   // ⌘B is the panel with your files in VS Code, Cursor and Zed, whichever side it stands on here.
-  // ⌘G was weighed for it (G for git) and left alone: it is find-next in the browser, in Monaco
-  // and in the previewed app, and ⌘F is the page's own, so the pair stays whole. ⌃⇧G is the git
-  // panel in VS Code and Zed and stays a hidden alias for the hand that knows it.
+  // ⌃⇧G is the git panel in VS Code and Zed and stays a hidden alias for the hand that knows it.
   { id: "changes", key: "b", ctrlAlias: { key: "g", shift: true } },
   // ⌘L is Cursor's key for the chat, so it is the one a hand already reaches for, and the chat's only
   // chord: from elsewhere it puts the caret in the box, opening the panel if it must, and from the
@@ -149,7 +152,7 @@ export const CHORDS: readonly Chord[] = [
   // while its find bar is open, which a page may preempt; every other ⌘⇧ letter that reads as
   // "git" or "branch" is taken before the page sees it
   { id: "refs", key: "g", shift: true },
-  // U for URL: the address bar's list, since ⌘L is the chat's and ⌘G is find-next. Only Firefox has
+  // U for URL: the address bar's list, since ⌘L is the chat's and ⌘G searches the chats. Only Firefox has
   // a use for ⌘U (view source); a focused Monaco keeps it as cursor-undo (app/keys.ts).
   { id: "routes", key: "u" },
   // ⌘R reloads the preview, the frame the hand is looking at, not the shell around it. ⌘⇧R is left

@@ -2,7 +2,7 @@
 // transport layer (server/handlers.ts) calls in here and shapes replies; git/, runtime/ and the
 // spare pool do the work.
 
-import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
+import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import {
   type AgentEvent,
@@ -725,6 +725,16 @@ export class WorktreeService {
   archived(repoId: string): ArchivedWorktree[] {
     const repo = this.d.state.repo(repoId);
     return repo ? this.archive.list(repo) : [];
+  }
+
+  /** where each of a project's archived chats is kept, so a search reads them where they lie */
+  archivedChats(repoId: string): Array<{ id: string; transcript: string }> {
+    const repo = this.d.state.repo(repoId);
+    if (!repo) return [];
+    return this.archive.list(repo).flatMap((a) => {
+      const files = this.archive.chatFiles(a.id);
+      return files ? [{ id: a.id, transcript: files.transcript }] : [];
+    });
   }
 
   /** an archived worktree's chat, read where it lies: its page shows the chat as it was, and only

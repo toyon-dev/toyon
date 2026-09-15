@@ -28,6 +28,7 @@ import { RepoRegistry } from "../repos/registry.ts";
 import { type RouteFs, RouteService } from "../routes/service.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
+import { ChatSearch } from "../worktrees/chats.ts";
 import { PrService } from "../worktrees/prs.ts";
 import { RefSearch } from "../worktrees/refs.ts";
 import { WorktreeService } from "../worktrees/service.ts";
@@ -107,6 +108,12 @@ function make() {
       throw new Error("no gh here");
     },
   });
+  const chats = new ChatSearch({
+    state,
+    live: (id) => runtime.agentFor(id)?.transcript(),
+    transcriptPath: (id) => transcriptPathFor(t.paths.transcriptsDir, id),
+    archivedChats: (repoId) => worktrees.archivedChats(repoId),
+  });
   const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, t.paths.themesDir);
   const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
   // GitHub is not asked in a test: a PR is whatever the test says it is
@@ -127,6 +134,7 @@ function make() {
     runtime,
     exec,
     refs,
+    chats,
     prs,
     themes,
     agents,
@@ -466,6 +474,27 @@ describe("handlers", () => {
     await dispatch({ t: "open-ref", repoId: r.id, kind: "branch", ref: "parked", clientId: "tab" }, ctx, services);
     const wt = services.state.worktrees.find((x) => x.branch === "parked");
     expect(wt).toMatchObject({ kind: "worktree", createdBy: "tab", from: { kind: "branch", ref: "parked" } });
+  });
+
+  test("search-chats finds what a chat said, and still finds it once the worktree is archived", async () => {
+    const { services, ctx, replies, repo, paths } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    // a commit of its own, so the remove keeps the worktree in the archive
+    writeFileSync(join(wt.path, "done.txt"), "x\n");
+    sh(wt.path, "git", "add", "done.txt");
+    sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "done");
+    const said = { type: "user-message" as const, text: "Tidy the footer links", ts: 1 };
+    writeFileSync(transcriptPathFor(paths.transcriptsDir, wt.id), `${JSON.stringify({ seq: 0, event: said })}\n`);
+    await dispatch({ t: "remove-worktree", worktreeId: wt.id }, ctx, services);
+    await dispatch({ t: "search-chats", repoId: r.id, query: "footer" }, ctx, services);
+    const reply = replies.at(-1);
+    if (reply?.t !== "chat-hits") throw new Error("expected a chat-hits reply");
+    expect(reply).toMatchObject({ query: "footer", truncated: false });
+    expect(reply.hits).toEqual([
+      { worktreeId: wt.id, archived: true, seq: 0, role: "user", text: "Tidy the footer links", match: [9, 6], ts: 1 },
+    ]);
   });
 
   test("settings written in a new project's first worktree are its config, and only that worktree runs them", async () => {

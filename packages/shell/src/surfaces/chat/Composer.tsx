@@ -143,7 +143,8 @@ export function Composer({
   const notice = useLocalField(boxId, "notice");
   // up and down in a blank box walk back through what was sent from it (recall.ts): this is where
   // they have got to, and the draft holds that entry until it is touched
-  const walk = useLocalField(boxId, "walk");
+  const mark = useLocalField(boxId, "mark");
+  const walk = mark?.by === "walk" ? mark : undefined;
   const chat = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
   // the frame on screen: while drafting the base's preview (or its warm spare's), which is what

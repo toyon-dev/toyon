@@ -116,13 +116,13 @@ describe("matchChord", () => {
     // an alias that is not hostOnly still reaches a guest: ⌃Tab walks from inside the terminal
     expect(matchChord(ev("Tab", { meta: false, ctrl: true }), { guest: true })).toEqual({ id: "wt-next" });
   });
-  test("⌘B is the changes dock as it is the files panel in every editor; ⌘G stays find-next", () => {
+  test("⌘B is the changes dock as it is the files panel in every editor; ⌘G searches the chats", () => {
     expect(matchChord(ev("b"))).toEqual({ id: "changes" });
     expect(matchChord(ev("b"), { guest: true })).toEqual({ id: "changes" });
     // ⌃⇧G is the git panel in VS Code and Zed: a hidden alias, never on the card
     expect(matchChord(ev("G", { meta: false, ctrl: true, shift: true }))).toEqual({ id: "changes" });
     expect(matchChord(ev("g", { meta: false, ctrl: true }))).toBeNull(); // Monaco's go to line
-    expect(matchChord(ev("g"))).toBeNull(); // ⌘F then ⌘G is the page's own find
+    expect(matchChord(ev("g"))).toEqual({ id: "chats" }); // ⌘F finds on screen, ⌘G in every chat
     expect(matchChord(ev("G", { shift: true }))).toEqual({ id: "refs" });
     expect(matchChord(ev("l"))).toEqual({ id: "composer" });
   });
@@ -189,6 +189,7 @@ describe("labels", () => {
     expect(chordLabel("routes")).toBe("⌘U");
     expect(chordLabel("changes")).toBe("⌘B"); // the ⌃⇧G alias is not advertised
     expect(chordLabel("refs")).toBe("⌘⇧G");
+    expect(chordLabel("chats")).toBe("⌘G");
     expect(chordLabel("reload")).toBe("⌘R");
     // an installed app window has no tabs, so it lets ⌃Tab through; the ⇧ belongs to the alias
     expect(chordLabel("wt-next", { pwa: true })).toBe("⌃Tab");

@@ -23,7 +23,7 @@ function turns(n: number, perTurn: number): string {
 }
 
 describe("coalesce", () => {
-  test("adjacent deltas of one kind fold into one entry with the run's last seq; anything between breaks the run", () => {
+  test("adjacent deltas of one kind fold into one entry with the run's first seq; anything between breaks the run", () => {
     const entries = [
       { seq: 0, event: { type: "user-message", text: "go", ts: 1 } },
       { seq: 1, event: { type: "thinking-delta", text: "a" } },
@@ -35,8 +35,8 @@ describe("coalesce", () => {
     ] as const;
     expect(coalesce([...entries])).toEqual([
       entries[0],
-      { seq: 2, event: { type: "thinking-delta", text: "ab" } },
-      { seq: 4, event: { type: "text-delta", text: "hello" } },
+      { seq: 1, event: { type: "thinking-delta", text: "ab" } },
+      { seq: 3, event: { type: "text-delta", text: "hello" } },
       entries[5],
       entries[6],
     ]);

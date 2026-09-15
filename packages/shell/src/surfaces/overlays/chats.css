@@ -1,0 +1,38 @@
+/* The chats palette's hits: where it was said, over what was said with the match lit. */
+@layer tokens, base, surfaces;
+@layer surfaces {
+  .chats-hit {
+    white-space: normal;
+    padding: 5px var(--picker-inset, 10px);
+  }
+  .chats-where {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    min-width: 0;
+    color: var(--text1);
+  }
+  .chats-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chats-said {
+    flex: none;
+    margin-inline-start: auto;
+  }
+  .chats-text {
+    display: block;
+    color: var(--text1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* the row you are on lifts both lines to the reading tier, as a files hit does */
+  .chats-hit[data-state~="cursor"] {
+    & .chats-name,
+    & .chats-text {
+      color: var(--text0);
+    }
+  }
+}

@@ -14,6 +14,7 @@ import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
 import { makeLander, makePlanner, makeRecapper } from "./agent/tasks.ts";
+import { transcriptPathFor } from "./agent/transcript.ts";
 import { locateAssets, pruneAssets } from "./core/assets.ts";
 import { folderDialog } from "./core/dialog.ts";
 import { Hub } from "./core/hub.ts";
@@ -36,6 +37,7 @@ import { pinProxyPorts } from "./runtime/ports.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
+import { ChatSearch } from "./worktrees/chats.ts";
 import { LandingService } from "./worktrees/landing.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
@@ -140,6 +142,12 @@ new LandingService({
   judge: makeLander(runtime, agents, state),
 });
 const refs = new RefSearch({ state });
+const chats = new ChatSearch({
+  state,
+  live: (id) => runtime.agentFor(id)?.transcript(),
+  transcriptPath: (id) => transcriptPathFor(paths.transcriptsDir, id),
+  archivedChats: (repoId) => worktrees.archivedChats(repoId),
+});
 const prs = new PrService({ state, hub, worktrees, view: viewPr });
 // toyon opened on its own checkout: what landing there leaves behind for the process serving it
 const self = new SelfWatch(SOURCE_ROOT);
@@ -168,6 +176,7 @@ const { branded, stop: stopServer } = startServer({
     runtime,
     exec,
     refs,
+    chats,
     prs,
     themes,
     agents,

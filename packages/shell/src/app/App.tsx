@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { appItems } from "../state/actions/app.ts";
-import { restoreArchived } from "../state/actions/archive.ts";
-import { removeWorktrees } from "../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
 import {
@@ -22,8 +20,6 @@ import { Rail } from "../surfaces/rail/Rail.tsx";
 import { TopBar } from "../surfaces/topbar/TopBar.tsx";
 import { clampW } from "../surfaces/util.ts";
 import { applyTheme, bridgeThemeMsg, onPrefersDarkChange, rememberDaylight } from "../theme.ts";
-import { Button, IconButton } from "../ui/Button.tsx";
-import { Float } from "../ui/Float.tsx";
 import { floats } from "../ui/floats.ts";
 import { useDragResize, useOnChange, usePersisted } from "../ui/hooks.ts";
 import { Menus } from "../ui/Menu.tsx";
@@ -80,8 +76,7 @@ export function App() {
   const archivedOpen = useStore((s) => s.archivedOpen);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
-  const toast = useStore((s) => s.toast);
-  const clientId = useStore((s) => s.clientId);
+  const openUrl = useStore((s) => s.openUrl);
   const rows = useRows();
 
   // the stack every float registers in: it decides which float a press or a key belongs to, and
@@ -266,17 +261,14 @@ export function App() {
   // browser's own answer to a stray file drop is to navigate the tab to it, session and all
   useFileDrop();
 
-  // ship results: open PR/compare URLs, auto-dismiss toasts
+  // the page a land opened (its PR), once: the ref keeps a re-run of the effect from opening it twice
   const openedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!toast) return;
-    if (toast.ok && toast.url && openedRef.current !== toast.url) {
-      openedRef.current = toast.url;
-      window.open(toast.url, "_blank");
-    }
-    const timer = setTimeout(() => dispatch({ a: "dismiss-toast" }), toast.ok ? 5000 : 12000);
-    return () => clearTimeout(timer);
-  }, [toast, dispatch]);
+    if (!openUrl || openedRef.current === openUrl) return;
+    openedRef.current = openUrl;
+    window.open(openUrl, "_blank");
+    dispatch({ a: "opened-url" });
+  }, [openUrl, dispatch]);
 
   // route follows you across variant siblings: comparing the same screen is the whole point of
   // variants, so switching carries the current path over
@@ -364,45 +356,6 @@ export function App() {
         {last.dock}
         {!chatLeft && rail}
       </div>
-      {toast && (
-        // shown again for each new message, which puts it over whatever has opened since
-        <Float className={cx("toast", !toast.ok && "err")} role="status" raiseKey={toast}>
-          <span className="toast-text">{toast.message}</span>
-          {/* the one thing the toast offers, said as a word on the line the way a picker's key strip
-              says its verbs, not as a pill of its own under the text */}
-          {toast.removeIds && toast.removeIds.length > 0 && (
-            <Button
-              tone="primary"
-              className="toast-action"
-              onClick={() => {
-                removeWorktrees(sock, dispatch, toast.removeIds ?? []);
-                dispatch({ a: "dismiss-toast" });
-              }}
-            >
-              {toast.removeIds.length > 1 ? `clean up ${toast.removeIds.length} worktrees` : "remove worktree"}
-            </Button>
-          )}
-          {toast.restoreId && (
-            <Button
-              tone="primary"
-              className="toast-action"
-              onClick={() => {
-                if (toast.restoreId) restoreArchived(sock, toast.restoreId, clientId);
-                dispatch({ a: "dismiss-toast" });
-              }}
-            >
-              restore
-            </Button>
-          )}
-          <IconButton
-            icon="close"
-            label="Dismiss"
-            tone="quiet"
-            className="toast-dismiss"
-            onClick={() => dispatch({ a: "dismiss-toast" })}
-          />
-        </Float>
-      )}
     </div>
   );
 }

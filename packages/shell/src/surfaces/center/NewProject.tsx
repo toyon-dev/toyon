@@ -296,6 +296,12 @@ export function NewProject({ project }: { project: NewProjectState }) {
           </Button>
         )}
       </div>
+      {/* the daemon's refusal of the last create, under the button that asked; the next edit answers it */}
+      {project.error && (
+        <p className="hint" role="status">
+          {project.error}
+        </p>
+      )}
 
       {/* under the action rather than over the title: this is asked once ever, and it is about git
           rather than about the project being written here */}

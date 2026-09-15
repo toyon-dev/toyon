@@ -45,8 +45,8 @@ async function until(done: () => boolean, ms = 15_000): Promise<void> {
   }
 }
 
-/** the text of the last toast reply (toasts ride the `shipped` frame) */
-function lastToast(replies: ServerMsg[]): string | undefined {
+/** the text of the last `shipped` reply, the daemon's word on a landing op */
+function lastShipped(replies: ServerMsg[]): string | undefined {
   const m = replies.at(-1);
   return m?.t === "shipped" ? m.message : undefined;
 }
@@ -492,7 +492,7 @@ describe("handlers", () => {
     const t = replies.find((m) => m.t === "shipped");
     expect(t).toMatchObject({ t: "shipped", ok: false });
     expect(t && "suggestion" in t ? t.suggestion : undefined).toBeUndefined();
-    expect(lastToast(replies) ?? (t?.t === "shipped" ? t.message : "")).toContain("uncommitted");
+    expect(lastShipped(replies) ?? (t?.t === "shipped" ? t.message : "")).toContain("uncommitted");
   });
 
   test("chat hands the text, context and attachments to the agent", async () => {
@@ -691,12 +691,15 @@ describe("handlers", () => {
       ctx,
       services,
     );
-    for (let i = 0; i < 100 && replies.length < 2; i++) await Bun.sleep(10);
+    for (let i = 0; i < 100 && services.state.worktrees.filter((x) => x.kind === "worktree").length < 2; i++) {
+      await Bun.sleep(10);
+    }
     const made = services.state.worktrees.filter((x) => x.kind === "worktree");
     expect(made.map((x) => x.agent)).toEqual(["codex", "codex"]);
     // the model the picker chose rides with every planned worktree, as it does on create-worktree
     expect(made.map((x) => x.model)).toEqual(["gpt-b", "gpt-b"]);
-    expect(replies.at(-1)).toMatchObject({ t: "shipped", ok: true, message: "batch: 2 worktree(s) started" });
+    // the rows appearing are the word on a batch that started; only a task that could not is said
+    expect(replies.some((m) => m.t === "shipped")).toBe(false);
     // the request is split by the agent that will run the tasks, not by the default one
     expect(planArgs.map((a) => a[2])).toEqual(["codex"]);
   });
@@ -815,13 +818,14 @@ describe("handlers", () => {
     expect(end.output).toMatch(/^```\nstarted\n```\n(killed \(SIGTERM\)|exit 143)$/);
   });
 
-  test("register-repo opens a repo and toasts; forget-repo refuses while task worktrees remain", async () => {
+  test("register-repo opens a repo without a word back; forget-repo refuses while task worktrees remain", async () => {
     const { services, ctx, replies, repo } = make();
     const hubEvents: string[] = [];
     services.hub.on("reposChanged", () => hubEvents.push("repos"));
     await dispatch({ t: "register-repo", path: repo }, ctx, services);
     const r = services.state.repos[0]!;
-    expect(lastToast(replies)).toBe(`opened ${r.name}`);
+    // the repos frame the hub pushes is the answer; nothing is said to the caller alone
+    expect(replies.some((m) => m.t === "shipped")).toBe(false);
     expect(hubEvents).toEqual(["repos"]);
     // a second register of the same path is the same repo, not a duplicate
     await dispatch({ t: "register-repo", path: repo }, ctx, services);
@@ -840,7 +844,7 @@ describe("handlers", () => {
     await dispatch({ t: "forget-repo", repoId: r.id }, ctx, services);
     expect(services.state.repos).toEqual([]);
     expect(services.state.worktrees).toEqual([]);
-    expect(lastToast(replies)).toBe(`forgot ${r.name}`);
+    expect(replies.some((m) => m.t === "shipped")).toBe(false);
     // the checkout itself is untouched
     expect(existsSync(join(repo, "README.md"))).toBe(true);
   });
@@ -852,7 +856,7 @@ describe("handlers", () => {
       await dispatch({ t: "create-repo", mode: "create", parent, name: "fresh" }, ctx, services);
       const r = services.state.repos.find((x) => x.name === "fresh");
       expect(r).toBeDefined();
-      expect(lastToast(replies)).toBe("created fresh");
+      expect(replies.some((m) => m.t === "shipped")).toBe(false);
       // registration gives it a main pseudo-worktree, exactly as opening an existing repo does
       expect(services.state.worktrees.some((w) => w.repoId === r?.id && w.kind === "main")).toBe(true);
     });
@@ -918,7 +922,7 @@ describe("handlers", () => {
       await dispatch({ t: "create-repo", mode: "init", parent, name: "My App" }, ctx, services);
       const made = services.state.repos.find((r) => r.path.endsWith("/My App"));
       expect(made).toBeDefined();
-      expect(lastToast(replies)).toBe("created My App");
+      expect(replies.some((m) => m.t === "shipped")).toBe(false);
       // Finder's litter must not cost it the first-run screen, which waits for main to read as empty
       expect(services.state.worktrees.find((w) => w.repoId === made?.id && w.kind === "main")?.empty).toBe(true);
       // an empty folder inside a project toyon manages is still inside it
@@ -1165,7 +1169,7 @@ describe("handlers", () => {
     });
   });
 
-  test("a discard answers with its toast and tells every tab the files changed", async () => {
+  test("a discard says nothing back and tells every tab the files changed", async () => {
     const { services, ctx, replies, repo } = make();
     const main = await mainOf(services, repo);
     const changed: string[] = [];
@@ -1176,7 +1180,7 @@ describe("handlers", () => {
     replies.length = 0;
     await dispatch({ t: "discard-file", worktreeId: main.id, path: "README.md" }, ctx, services);
     expect(await Bun.file(join(repo, "README.md")).text()).toBe("hello\n");
-    expect(replies.map((m) => m.t)).toEqual(["shipped"]);
+    expect(replies).toEqual([]);
 
     await dispatch({ t: "discard-file", worktreeId: main.id, path: "new.txt" }, ctx, services);
     expect(existsSync(join(repo, "new.txt"))).toBe(false);

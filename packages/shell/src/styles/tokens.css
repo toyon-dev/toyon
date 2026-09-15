@@ -150,7 +150,7 @@
    * far off the page it looks:
    *
    *   float     it appears over chrome you can still see and use, so it has to separate itself:
-   *             the context menu, the tooltip, an anchored picker, a toast
+   *             the context menu, the tooltip, an anchored picker
    *   overlay   it has taken the screen and the app is dimmed behind a scrim
    *
    * These are complete box-shadow values, which is why they are not --shadow-*: --shadow is

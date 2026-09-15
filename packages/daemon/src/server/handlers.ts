@@ -86,12 +86,13 @@ type Handler<K extends ClientMsg["t"]> = (
   s: Services,
 ) => Promise<void> | void;
 
-const toast = (
-  worktreeId: string,
-  ok: boolean,
-  message: string,
-  extra: Partial<Extract<ServerMsg, { t: "shipped" }>> = {},
-) => ({ t: "shipped", worktreeId, ok, message, ...extra }) satisfies ServerMsg;
+type Shipped = Extract<ServerMsg, { t: "shipped" }>;
+
+/** the word on a landing op. The shell reads a failure on the worktree's chat and a merge as a row
+ * there; a success with nothing to offer it says nothing about, since the panel and the row show
+ * it. So only ops whose outcome is worth a line send one. */
+const shipped = (worktreeId: string, ok: boolean, message: string, extra: Partial<Shipped> = {}) =>
+  ({ t: "shipped", worktreeId, ok, message, ...extra }) satisfies ServerMsg;
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -108,9 +109,12 @@ const gitAndPages = async (s: Services, ctx: HandlerCtx, worktreeId: string) => 
   ctx.reply({ t: "routes", worktreeId, ...(await s.routes.pages(worktreeId, info ?? { files: [] })) });
 };
 
-/** the landing-op tail: tell the caller what happened, then refresh its changes panel */
-const notify = async (s: Services, ctx: HandlerCtx, worktreeId: string, msg: ServerMsg) => {
+/** the landing-op tail: tell the caller what happened, then refresh its changes panel. A failure
+ * also rings the worktree's row: the reason waits on its chat, and the person may have moved on
+ * while the op ran. */
+const notify = async (s: Services, ctx: HandlerCtx, worktreeId: string, msg: Shipped) => {
   ctx.reply(msg);
+  if (!msg.ok) s.turns.markUnread(worktreeId);
   await gitStatus(s, ctx, worktreeId);
 };
 
@@ -237,9 +241,9 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "batch-worktrees"(msg, ctx, s) {
     const repo = s.state.requireRepo(msg.repoId);
-    ctx.reply(toast("", true, "batch: planning tasks…"));
-    // plan + spawn in the background so the socket stays responsive. The final reply may land on
-    // a socket that has since closed; reply() tolerates that.
+    // plan + spawn in the background so the socket stays responsive: the rows appearing are the
+    // word on it, and a task that could not start is the one thing worth a line. That reply may
+    // land on a socket that has since closed; reply() tolerates that.
     fireAndForget(
       msg.repoId,
       (async () => {
@@ -255,30 +259,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
           }
         }
         const started = tasks.length - failed;
-        ctx.reply(
-          toast(
-            "",
-            failed === 0,
-            failed
-              ? `batch: ${started} started, ${failed} failed (see daemon log)`
-              : `batch: ${started} worktree(s) started`,
-          ),
-        );
+        if (failed) ctx.reply(shipped("", false, `batch: ${started} started, ${failed} failed (see daemon log)`));
       })(),
       "batch",
     );
   },
 
-  async "remove-worktree"(msg, ctx, s) {
-    const archived = await s.worktrees.remove(msg.worktreeId);
-    // the toast is where a remove says it can be undone
-    if (archived) {
-      ctx.reply(
-        toast(msg.worktreeId, true, `removed ${archived.title}: archived`, {
-          ...(archived.restorable ? { restoreId: archived.id } : {}),
-        }),
-      );
-    }
+  async "remove-worktree"(msg, _ctx, s) {
+    // no word back: the row leaving is the answer, and the rail's archived section is where a
+    // remove says it can be undone
+    await s.worktrees.remove(msg.worktreeId);
   },
 
   "list-archived"(msg, ctx, s) {
@@ -338,10 +328,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       s,
       ctx,
       msg.worktreeId,
-      toast(msg.worktreeId, result.ok, result.message, {
+      shipped(msg.worktreeId, result.ok, result.message, {
         merged: result.ok,
         url: result.url,
-        // the worktree stays, with close offered in its box; what the toast offers up is its
+        // the worktree stays, with close offered in its box; what the chat's row offers up is its
         // variant siblings, if any
         removeIds: removeIds ?? [],
         ...(suggestion ? { suggestion } : {}),
@@ -359,16 +349,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       ctx,
       msg.worktreeId,
       prompt
-        ? toast(msg.worktreeId, false, `sync conflicts with ${defaultBranch}: prompt prefilled in chat`, {
+        ? shipped(msg.worktreeId, false, `sync conflicts with ${defaultBranch}: prompt prefilled in chat`, {
             suggestion: `Merge ${defaultBranch} into this branch and resolve the conflicts, then verify the app still works.`,
           })
-        : toast(msg.worktreeId, result.ok, result.message),
+        : shipped(msg.worktreeId, result.ok, result.message),
     );
   },
 
   async "pull-main"(msg, ctx, s) {
     const result = await s.worktrees.pull(msg.worktreeId);
-    await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message));
+    await notify(s, ctx, msg.worktreeId, shipped(msg.worktreeId, result.ok, result.message));
   },
 
   "run-after-land"(msg, ctx, s) {
@@ -397,17 +387,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   async commit(msg, ctx, s) {
     const result = await s.worktrees.commit(msg.worktreeId, msg.message);
-    await notify(s, ctx, msg.worktreeId, toast(msg.worktreeId, result.ok, result.message));
+    await notify(s, ctx, msg.worktreeId, shipped(msg.worktreeId, result.ok, result.message));
   },
 
   async graft(msg, ctx, s) {
-    const { target, grafted } = await s.worktrees.graft(msg.targetId, msg.sourceIds);
-    await notify(
-      s,
-      ctx,
-      target.id,
-      toast(target.id, true, `grafted ${grafted.join(", ")} into ${target.title}; merged locally, nothing pushed`),
-    );
+    const { target } = await s.worktrees.graft(msg.targetId, msg.sourceIds);
+    // the graft row on the target's chat is the word on it; the changes panel still needs telling
+    await gitStatus(s, ctx, target.id);
   },
 
   async "rename-worktree"(msg, _ctx, s) {
@@ -464,11 +450,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.files.reveal(msg.worktreeId, msg.path);
   },
 
-  async "discard-file"(msg, ctx, s) {
+  async "discard-file"(msg, _ctx, s) {
     await s.files.discard(msg.worktreeId, msg.path);
-    ctx.reply(toast(msg.worktreeId, true, `discarded ${msg.path}`));
     // every tab's changes list re-reads from the git-status this pushes, and an editor open on the
-    // file re-reads the file from that
+    // file re-reads the file from that; the file leaving the list is the word on it
     s.hub.emit("filesChanged", msg.worktreeId);
   },
 
@@ -477,7 +462,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     try {
       const written = await s.files.write(msg.worktreeId, msg.path, msg.content, msg.base);
       ctx.reply({ ...head, ...written });
-      // no toast: autosave fires constantly; the changes list is the feedback, on every tab
+      // nothing said beyond the frame: autosave fires constantly; the changes list is the feedback, on every tab
       if (written.ok) s.hub.emit("filesChanged", msg.worktreeId);
     } catch (e) {
       // answered either way, as a read is: an unanswered write would hold the file's next save forever
@@ -490,12 +475,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     await s.repos.confirmConfig(msg.repoId, msg.config, msg.kind);
   },
 
-  async "register-repo"(msg, ctx, s) {
-    const repo = await s.repos.register(msg.path);
-    ctx.reply(toast("", true, `opened ${repo.name}`));
+  async "register-repo"(msg, _ctx, s) {
+    // the project's name in the pill and its rows in the rail are the answer
+    await s.repos.register(msg.path);
   },
 
-  async "create-repo"(msg, ctx, s) {
+  async "create-repo"(msg, _ctx, s) {
     // A clone runs long enough that it becomes a thing the daemon holds and the shell watches,
     // rather than a promise this socket waits on: startImport validates and returns at once, and
     // the import pane is the feedback from there. A create is fast, so it stays a plain await.
@@ -503,12 +488,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       s.repos.startImport({ parent: msg.parent, name: msg.name, url: msg.url ?? "" });
       return;
     }
-    const repo = await s.repos.create(msg);
-    ctx.reply(toast("", true, `created ${repo.name}`));
+    await s.repos.create(msg);
   },
 
   async "unmake-repo"(msg, _ctx, s) {
-    // no toast: the page it was asked from is the answer, with the project's name back in its field
+    // nothing said: the page it was asked from is the answer, with the project's name back in its field
     await s.repos.unmake(msg.repoId);
   },
 
@@ -525,7 +509,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     try {
       path = await s.folderDialog.choose(msg.start, msg.purpose);
     } catch (e) {
-      // the form is waiting on an answer to stop looking busy; the throw still reaches it as a toast
+      // the form is waiting on an answer to stop looking busy; the throw still reaches it as an error frame
       ctx.reply({ t: "folder-chosen", folder: null });
       throw e;
     }
@@ -537,10 +521,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.folderDialog.cancel();
   },
 
-  async "forget-repo"(msg, ctx, s) {
-    const name = s.state.requireRepo(msg.repoId).name;
+  async "forget-repo"(msg, _ctx, s) {
     await s.repos.forget(msg.repoId);
-    ctx.reply(toast("", true, `forgot ${name}`));
   },
 
   "set-theme"(msg, _ctx, s) {
@@ -579,7 +561,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   // No UserError when the ask has already closed: two shells can watch one worktree, and the
-  // loser of that race would get a toast about a card that is about to disappear anyway.
+  // loser of that race would read a refusal about a card that is about to disappear anyway.
   "agent-answer"(msg, _ctx, s) {
     requireRun(s, msg.worktreeId);
     s.runtime.agentFor(msg.worktreeId)?.answer(msg.askId, { kind: "answers", answers: msg.answers });

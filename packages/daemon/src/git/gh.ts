@@ -1,6 +1,6 @@
 // GitHub through `gh`: the one host toyon talks to. Every call is bounded (a hung gh would hang a
 // landing) and never prompts (a prompt nobody can see is a hang too). Absence of gh, or of a login,
-// comes back as a failed result, never a throw: the caller decides whether that is a toast or
+// comes back as a failed result, never a throw: the caller decides whether that is a refusal or
 // "a repo without PRs".
 
 import type { MergeMethod, PrState } from "@toyon/shared";

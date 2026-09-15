@@ -329,8 +329,8 @@ function Offer({
 
 /** Toyon behind the checkout it runs from, and the one catch-up that is next. A chip here rather
  * than a notice in the corner: landing a change is meant to be the end of the job, and a build
- * that runs for minutes has no business holding the composer, or the corner the next toast lands
- * in, while it does. The word is the verb; what the state means is the chip's tip, with the last
+ * that runs for minutes has no business holding the composer, or a corner of the window, while it
+ * does. The word is the verb; what the state means is the chip's tip, with the last
  * line a failed build printed under it. There is no dismiss: the checkout does not move back, so
  * the chip stays until it is acted on. */
 function SelfOffer() {

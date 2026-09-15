@@ -355,7 +355,7 @@ describe("the open file and the disk", () => {
       version: null,
       message: "take it over to edit files here",
     });
-    expect(h.store.getState().toast?.message).toBe("take it over to edit files here");
+    expect(h.store.getState().editor?.refused).toBe("take it over to edit files here");
     h.edit("x.ts", b, "abc");
     h.timers.pass();
     expect(h.count("write-file")).toBe(1);
@@ -383,7 +383,7 @@ describe("the open file and the disk", () => {
     expect(h.last("write-file")).toMatchObject({ content: "mine", base: "v1" });
     h.written({ ok: false, reason: "changed", version: "v9" });
     h.read({ after: "agent", version: "v9" });
-    expect(h.store.getState().toast?.message).toContain("open it again");
+    // nothing is said while no pane is open on it: the conflict waits on the file
 
     h.open("x.ts");
     h.read({ after: "agent", version: "v9" });

@@ -156,7 +156,7 @@ interface Carried {
   moved: boolean;
   /** main's uncommitted files before anything moved */
   count: number;
-  /** a move was asked for and did not happen: the reason, for the toast */
+  /** a move was asked for and did not happen: the reason, for the person */
   unmoved?: string;
 }
 
@@ -239,7 +239,7 @@ export class WorktreeService {
   async create(repoId: string, prompt: string, opts: CreateOpts = {}): Promise<WorktreeInfo> {
     const { variant, context, attachments } = opts;
     const repo = this.d.state.requireRepo(repoId);
-    // validated up front: an unknown or uninstalled agent is a toast now, not a dead worktree later
+    // validated up front: an unknown or uninstalled agent is a refusal now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
     const profile = this.checkProfile(repo, opts.profile);
     // a message that is attachments alone is named from what they carry
@@ -330,7 +330,7 @@ export class WorktreeService {
    * saved on main in the meantime is either in it or still on main, never lost between a read and a
    * clean; the stash is applied in the new worktree and dropped. A stash that will not apply goes
    * back onto main, which it came off cleanly, and the worktree starts without it, with `unmoved`
-   * saying why for the toast. Not asked to move, the files are only counted, so the agent can be
+   * saying why for the person. Not asked to move, the files are only counted, so the agent can be
    * told they were left behind on purpose. */
   private async carryMain(repo: RepoInfo, wt: WorktreeInfo, move: boolean): Promise<Carried> {
     const main = repo.defaultBranch;
@@ -444,7 +444,7 @@ export class WorktreeService {
     return wt;
   }
 
-  /** The discovered row at this path as it stands right now, or a toast.
+  /** The discovered row at this path as it stands right now, or a refusal.
    *
    * Re-derived rather than read from the cache because the frame the person clicked can be
    * seconds old, and a lock is the only thing standing between us and another agent's working
@@ -504,7 +504,7 @@ export class WorktreeService {
     return wt;
   }
 
-  /** a profile name the repo actually has, or undefined for "the default"; a typo is a toast */
+  /** a profile name the repo actually has, or undefined for "the default"; a typo is a refusal */
   private checkProfile(repo: RepoInfo, name: string | undefined): string | undefined {
     if (name === undefined) return undefined;
     if (!repo.config.profiles?.[name]) throw new UserError(`no profile "${name}" in ${repo.configFile}`);

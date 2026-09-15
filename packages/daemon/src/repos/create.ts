@@ -198,7 +198,7 @@ export async function cloneInto(
 }
 
 /** git writes progress to stderr too, so a failed clone starts with "Cloning into 'x'..." and the
- * reason is further down. A toast shows one line, and it should be the reason. */
+ * reason is further down. The person reads one line, and it should be the reason. */
 function cloneError(stderr: string): string {
   const lines = stderr
     .split("\n")

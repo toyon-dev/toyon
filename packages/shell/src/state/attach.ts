@@ -18,12 +18,13 @@ import {
 import type { Store } from "./context.tsx";
 import { composerBoxOf, draftKey, type PendingAttachment, type State, worktreeById } from "./store.ts";
 
-const toast = (store: Store, message: string) => store.dispatch({ a: "toast", toast: { ok: false, message } });
+/** what could not be attached, said under the box it was for */
+export const noticeIn = (store: Store, boxId: string, text: string) => store.dispatch({ a: "notice", id: boxId, text });
 
 /** how many more of `kind` box `boxId` takes; says so when that is none */
 export function roomIn(store: Store, boxId: string, kind: AttachmentKind): number {
   const room = roomFor(store.getState().local[boxId]?.attachments ?? [], kind);
-  if (room === 0) toast(store, limitMessage(kind));
+  if (room === 0) noticeIn(store, boxId, limitMessage(kind));
   return room;
 }
 
@@ -60,7 +61,7 @@ export function attachText(
   if (roomIn(store, boxId, "paste") === 0) return;
   if (text.length > PASTE_MAX_CHARS)
     // neither truncated nor dropped in silence: say what to do with something this big
-    return toast(store, "that paste is too large; save it in the worktree and reference it with @path");
+    return noticeIn(store, boxId, "that paste is too large; save it in the worktree and reference it with @path");
   store.dispatch({
     a: "attach",
     id: boxId,

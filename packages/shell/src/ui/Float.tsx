@@ -14,7 +14,7 @@ import { useOnChange } from "./hooks.ts";
 import { type Placement, place, type Rect, widthFor } from "./place.ts";
 
 /**
- * A box that covers what it does not own: a menu, a tooltip, a picker's panel, the toast.
+ * A box that covers what it does not own: a menu, a tooltip, a picker's panel.
  *
  * It renders in the browser's top layer (`popover`), which is above every stacking context and
  * outside every scroll box, so a float has no z-index and nothing an ancestor does can trap or clip
@@ -36,7 +36,7 @@ export type FloatHandle = { update: () => void };
 type Props = Omit<HTMLAttributes<HTMLDivElement>, "style"> & {
   className: string;
   /** what it is placed against: the wrapper it sits in, or a rect it reads itself (a pointer, a
-   * row's box). Absent when its own stylesheet places it against the window, as the toast does. */
+   * row's box). Absent when its own stylesheet places it against the window. */
   anchor?: FloatAnchor;
   placement?: Placement;
   /** a selector for the part of the box that lands on the anchor in a cover placement: the panel's

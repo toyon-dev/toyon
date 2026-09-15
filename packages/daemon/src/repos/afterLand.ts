@@ -3,7 +3,7 @@
 // worktree that landed, because the worktree's copy is not the one anybody looks at afterwards.
 //
 // Nothing waits on these. Landing is meant to feel finished the moment it is, and a build that
-// takes minutes would otherwise hold the toast, the rail and the composer behind it. What a person
+// takes minutes would otherwise hold the rail and the composer behind it. What a person
 // gets instead is a line in the main row's log while it runs and a notice if it fails.
 
 import type { RepoInfo } from "@toyon/shared";

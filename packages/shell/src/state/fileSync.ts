@@ -307,22 +307,18 @@ export class FileSync {
       t.reread = true;
       return;
     }
-    // refused outright: the same save would be refused again
+    // refused outright: the same save would be refused again, and the pane says so over the text
     t.writable = false;
     t.pending = null;
-    this.d.store.dispatch({ a: "toast", toast: { ok: false, message: msg.message ?? `not saved: ${t.file.path}` } });
+    this.d.store.dispatch({ a: "editor-refused", file: t.file, message: msg.message ?? `not saved: ${t.file.path}` });
   }
 
   private setConflict(t: Tracked, theirs: Theirs | null) {
     if (t.conflict === theirs || (t.conflict && theirs && t.conflict.version === theirs.version)) return;
     t.conflict = theirs;
+    // a pane not open on the file has nothing to say; the conflict waits on the file, and the
+    // pane shows it the next time the file is opened
     if (t.open) this.d.store.dispatch({ a: "editor-conflict", file: t.file, theirs });
-    else if (theirs) {
-      this.d.store.dispatch({
-        a: "toast",
-        toast: { ok: false, message: `not saved: ${t.file.path} changed on disk; open it again to keep your edits` },
-      });
-    }
   }
 
   private attach(key: string, buffer: SyncBuffer | null) {

@@ -28,7 +28,7 @@ export type Entry = {
   trigger: Element | null;
   /** the float this one opened from */
   parent: Entry | null;
-  /** absent for a float nothing dismisses: the tooltip, the toast, the composer's menu */
+  /** absent for a float nothing dismisses: the tooltip, the composer's menu */
   dismiss?: (why: DismissReason) => void;
   /** the keyboard while this is the topmost float */
   onKey?: (e: KeyboardEvent) => void;

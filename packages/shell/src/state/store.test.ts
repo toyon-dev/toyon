@@ -811,7 +811,8 @@ describe("drafts", () => {
     ]);
     expect(s.activeId).toBe("a");
     expect(s.local.a?.draft).toBe("Merge main and fix");
-    expect(s.toast?.ok).toBe(false);
+    // the failure is read on that worktree's chat, above the box the suggestion filled
+    expect(localOf(s, "a").chat.at(-1)).toEqual({ kind: "error", text: "conflicts" });
   });
 });
 
@@ -889,17 +890,55 @@ describe("streams and notices", () => {
     expect(localOf(s, "a").log[0]).toEqual({ proc: "dev", line: "l49" });
     expect(localOf(s, "a").log.at(-1)).toEqual({ proc: "dev", line: "l449" });
   });
-  test("an error frame is a failure toast", () => {
-    const s = run([server({ t: "error", message: "nope" })]);
-    expect(s.toast).toEqual({ ok: false, message: "nope" });
+  test("an error frame naming a worktree is read on its chat, which opens for it", () => {
+    const shut = run([hello(wt("a")), { a: "toggle-chat" }]);
+    expect(shut.chatOpen).toBe(false);
+    const s = run([server({ t: "error", message: "nope", worktreeId: "a" })], shut);
+    expect(localOf(s, "a").chat).toEqual([{ kind: "error", text: "nope" }]);
+    expect(s.chatOpen).toBe(true);
   });
-  test("a merged ship offers the cleanup ids; a plain ship does not", () => {
+  test("an error frame naming no worktree is read under the composer on screen", () => {
+    const s = run([hello(wt("a")), server({ t: "error", message: "nope" })]);
+    expect(localOf(s, "a").notice).toBe("nope");
+    expect(localOf(s, "a").chat).toEqual([]);
+    // with no box on screen there is nowhere to say it, and nothing to say it about
+    expect(run([server({ t: "error", message: "nope" })]).local).toEqual({});
+  });
+  test("a refused create is read on the new-project view, until the next edit", () => {
+    const page = { ...newProjectState({ mode: "create", name: "x", parent: "~/p" }), phase: "creating" as const };
+    const s = run([{ a: "new-project", v: page }, server({ t: "error", message: "x already exists" })]);
+    expect(s.newProject).toMatchObject({ phase: "editing", error: "x already exists" });
+    expect(run([{ a: "new-project-set", v: { phase: "editing" } }], s).newProject?.error).toBe("x already exists");
+    expect(run([{ a: "new-project-set", v: { name: "y" } }], s).newProject?.error).toBeUndefined();
+  });
+  test("a merged land is a row on the chat with the siblings to clean up; a PR only opens its page", () => {
     const base = [hello(wt("a"), wt("b"))];
-    const merged = run([...base, server({ t: "shipped", worktreeId: "a", ok: true, message: "m", merged: true })]);
-    expect(merged.toast?.removeIds).toEqual(["a"]);
+    const merged = run([
+      ...base,
+      server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main", merged: true, removeIds: ["b"] }),
+    ]);
+    expect(localOf(merged, "a").chat).toEqual([{ kind: "landed", text: "a is on main", removeIds: ["b"] }]);
+    expect(merged.openUrl).toBeNull();
     const pr = run([...base, server({ t: "shipped", worktreeId: "a", ok: true, message: "m", url: "u" })]);
-    expect(pr.toast?.removeIds).toBeUndefined();
-    expect(pr.toast?.url).toBe("u");
+    expect(localOf(pr, "a").chat).toEqual([]);
+    expect(pr.openUrl).toBe("u");
+    expect(run([{ a: "opened-url" }], pr).openUrl).toBeNull();
+  });
+  test("a failed op is read on the worktree's chat, or under the composer when it had none", () => {
+    const base = [hello(wt("a"))];
+    const failed = run([...base, server({ t: "shipped", worktreeId: "a", ok: false, message: "nothing to commit" })]);
+    expect(localOf(failed, "a").chat).toEqual([{ kind: "error", text: "nothing to commit" }]);
+    const batch = run([...base, server({ t: "shipped", worktreeId: "", ok: false, message: "batch: 1 failed" })]);
+    expect(localOf(batch, "a").notice).toBe("batch: 1 failed");
+  });
+  test("a notice stays under the box until something is written or attached", () => {
+    const said = run([hello(wt("a")), { a: "notice", id: "a", text: "too many" }]);
+    expect(localOf(said, "a").notice).toBe("too many");
+    // a refused command empties the box on its way to saying why, so emptying keeps it
+    expect(localOf(run([{ a: "set-draft", id: "a", text: "" }], said), "a").notice).toBe("too many");
+    expect(localOf(run([{ a: "set-draft", id: "a", text: "h" }], said), "a").notice).toBeUndefined();
+    const item = { kind: "paste" as const, key: "k", text: "t", chars: 1, lines: 1, preview: "t" };
+    expect(localOf(run([{ a: "attach", id: "a", items: [item] }], said), "a").notice).toBeUndefined();
   });
   test("a named connect failure survives a later bare close and clears once the socket is back", () => {
     const down = run([{ a: "connected", v: false, failure: "down" }]);
@@ -912,13 +951,11 @@ describe("streams and notices", () => {
     expect(s.incompatible).toBe(true);
     expect(s.connected).toBe(false);
   });
-  test("entering zen tells you how to leave; leaving keeps whatever toast was up", () => {
+  test("zen toggles, and says nothing: the toggle's own tip carries the key", () => {
     const on = run([{ a: "toggle-zen" }]);
     expect(on.zen).toBe(true);
-    expect(on.toast?.message).toMatch(/⌘\./);
-    const off = run([{ a: "dismiss-toast" }, { a: "toggle-zen" }], on);
+    const off = run([{ a: "toggle-zen" }], on);
     expect(off.zen).toBe(false);
-    expect(off.toast).toBeNull();
   });
   test("the terminal pane starts hidden and toggles", () => {
     expect(initial.termOpen).toBe(false);
@@ -1006,7 +1043,8 @@ describe("the editor's open file", () => {
       readInto("../x", {}, { error: "path escapes worktree" }),
     ]);
     expect(empty.editor).toBeNull();
-    expect(empty.toast).toMatchObject({ ok: false, message: "path escapes worktree" });
+    // why is read on the worktree's chat, since the pane is what went
+    expect(localOf(empty, "a").chat.at(-1)).toEqual({ kind: "error", text: "path escapes worktree" });
     const shown = run([
       hello(wt("a")),
       opening({ path: "x.ts", seq: 1 }),
@@ -1014,7 +1052,19 @@ describe("the editor's open file", () => {
       readInto("x.ts", {}, { error: "not a file" }),
     ]);
     expect(shown.editor?.disk?.after).toBe("a");
-    expect(shown.toast?.message).toBe("not a file");
+    expect(localOf(shown, "a").chat.at(-1)).toEqual({ kind: "error", text: "not a file" });
+  });
+  test("a save refused for good is said on the pane, over the text", () => {
+    const x = { worktreeId: "a", path: "x.ts" };
+    const s = run([
+      hello(wt("a")),
+      opening({ path: "x.ts", seq: 1 }),
+      { a: "editor-refused", file: x, message: "not text" },
+    ]);
+    expect(s.editor?.refused).toBe("not text");
+    // another file's refusal is not this pane's
+    const other = run([{ a: "editor-refused", file: { worktreeId: "a", path: "y.ts" }, message: "no" }], s);
+    expect(other.editor?.refused).toBe("not text");
   });
 
   test("a conflict lands on its own file, survives opening it again, and clears", () => {
@@ -1051,7 +1101,8 @@ describe("the editor's open file", () => {
       kind: "element-sources",
       hits: [{ path: "src/a.ts" }, { path: "src/b.ts" }],
     });
-    expect(reducer(closed, sources(5, [], false)).toast).toMatchObject({ ok: false });
+    // nothing found is said under the box the pick was for
+    expect(localOf(reducer(closed, sources(5, [], false)), "a").notice).toMatch(/nothing in the source/);
     // a file opened after the pick was made is the one the person chose
     const later = run([opening({ path: "x.ts", seq: 9 })], closed);
     expect(reducer(later, sources(5, [hit("src/render.ts", 33)], true))).toBe(later);
@@ -1626,10 +1677,13 @@ describe("removing a worktree", () => {
     expect(s.removing).toEqual([]);
   });
 
-  test("an error frame brings the row back beside its toast", () => {
-    const s = run([three(), { a: "remove-worktrees", ids: ["a"] }, server({ t: "error", message: "held by git" })]);
-    expect(ids(s)).toEqual(["main", "a", "b"]);
-    expect(s.toast?.message).toBe("held by git");
+  test("an error frame brings the row it names back, with the reason on its chat", () => {
+    const both = run([three(), { a: "remove-worktrees", ids: ["a", "b"] }]);
+    const s = run([server({ t: "error", message: "held by git", worktreeId: "a" })], both);
+    expect(ids(s)).toEqual(["main", "a"]);
+    expect(localOf(s, "a").chat).toEqual([{ kind: "error", text: "held by git" }]);
+    // a frame naming no row brings every pending one back: the snapshot re-hides the ones that went
+    expect(ids(run([server({ t: "error", message: "held by git" })], both))).toEqual(["main", "a", "b"]);
   });
 
   test("a reconnect starts clean, since the daemon may still have the row", () => {
@@ -1700,7 +1754,7 @@ describe("a landing op in flight", () => {
     expect(s.shipping).toEqual({});
   });
 
-  test("a land's toast offers nothing to remove: the worktree stays, with close in its box", () => {
+  test("a land's row offers nothing to remove: the worktree stays, with close in its box", () => {
     const s = run([
       three(),
       { a: "shipping", id: "a", op: "land" },
@@ -1714,8 +1768,7 @@ describe("a landing op in flight", () => {
       }),
     ]);
     expect(s.shipping).toEqual({});
-    expect(s.toast).toMatchObject({ ok: true, message: "a is on main", removeIds: [] });
-    expect(s.toast?.restoreId).toBeUndefined();
+    expect(localOf(s, "a").chat).toEqual([{ kind: "landed", text: "a is on main", removeIds: [] }]);
   });
 });
 

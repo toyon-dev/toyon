@@ -116,7 +116,7 @@ export class RouteService {
   constructor(private d: RouteDeps) {}
 
   /** A preview settled on a page. An id nobody knows is dropped rather than refused: the frame may
-   * belong to a worktree removed a moment ago, and a toast on every navigation would be noise. */
+   * belong to a worktree removed a moment ago, and a refusal on every navigation would be noise. */
   async visit(worktreeId: string, path: string, title?: string): Promise<void> {
     const repoId = this.repoOf(worktreeId);
     if (!repoId) {

@@ -35,7 +35,7 @@ const PR_LIMIT = 50;
 export interface RefSearchDeps {
   state: StateStore;
   /** the open PRs of a repo; the default asks gh. A test hands in a stub, and a stub that throws
-   * proves the failure is swallowed, since a missing gh is a repo without PRs, never a toast. */
+   * proves the failure is swallowed, since a missing gh is a repo without PRs, never a refusal. */
   prs?: (repo: RepoInfo) => Promise<PrHit[]>;
 }
 

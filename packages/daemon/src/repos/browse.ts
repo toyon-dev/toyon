@@ -78,7 +78,7 @@ export async function browsePath(raw: string): Promise<{ entries: PathEntry[]; t
     const found = await readdir(dir, { withFileTypes: true });
     names = found.filter((e) => e.isDirectory() || e.isSymbolicLink()).map((e) => e.name);
   } catch {
-    // missing, unreadable or not a directory: nothing to offer, and no error worth a toast. The
+    // missing, unreadable or not a directory: nothing to offer, and no error worth a word. The
     // target still says which of those it was, which is the whole reason it is reported separately
     return { entries: [], target };
   }

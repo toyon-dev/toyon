@@ -1,4 +1,4 @@
-/* The workbench frame: the grid, zen, the dock resize handles, the toast. */
+/* The workbench frame: the grid, zen, the dock resize handles. */
 
 @layer tokens, base, surfaces;
 
@@ -76,44 +76,5 @@
   }
   body.resizing iframe {
     pointer-events: none;
-  }
-
-  /* placed against the window rather than any control, so it keeps its own coordinates; being a
-     Float is what puts it over whatever is open when it arrives */
-  /* One line: the text, the verb it offers, the close. The same box the menu and the tooltip are,
-     with the 2px kind edge the ask card and the blocked row wear, so it reads as one of the app's
-     boxes and not a card of its own. The side padding is the row's inset on the text side and the
-     icon button's own seat on the other, so the close sits where a menu's would. */
-  .toast {
-    bottom: 38px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    max-width: 480px;
-    padding: 8px 8px 8px 12px;
-    background: var(--surface1);
-    border: 1px solid var(--border1);
-    border-left: 2px solid var(--aqua);
-    border-radius: var(--radius-md);
-    box-shadow: var(--elevation-float);
-    &.err {
-      border-left-color: var(--red);
-    }
-  }
-  .toast-text {
-    flex: 1;
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  /* the verb keeps its width and stands clear of the text; the close is the one control a toast
-     always has, so the keyboard can close it */
-  .toast-action,
-  .toast-dismiss {
-    flex: none;
-  }
-  .toast-action {
-    margin-left: 4px;
   }
 }

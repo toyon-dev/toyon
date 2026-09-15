@@ -1,7 +1,7 @@
 import { isLongPaste, limitMessage } from "@toyon/shared";
 import { useEffect, useRef } from "react";
 import { readCopiedSource } from "../../app/copiedSource.ts";
-import { attachText, roomIn } from "../../state/attach.ts";
+import { attachText, noticeIn, roomIn } from "../../state/attach.ts";
 import type { Store } from "../../state/context.tsx";
 import { useStoreInstance } from "../../state/context.tsx";
 import { composerBoxOf, worktreeById } from "../../state/store.ts";
@@ -69,8 +69,8 @@ async function attachImages(store: Store, boxId: string | null, files: File[]) {
   const images = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
   const failed = results.find((r) => r.status === "rejected");
   if (images.length) store.dispatch({ a: "attach", id: boxId, items: images });
-  if (failed) toast(store, String((failed as PromiseRejectedResult).reason?.message ?? failed.reason));
-  else if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${limitMessage("image")}`);
+  if (failed) noticeIn(store, boxId, String((failed as PromiseRejectedResult).reason?.message ?? failed.reason));
+  else if (files.length > room) noticeIn(store, boxId, `kept ${room} of ${files.length}: ${limitMessage("image")}`);
 }
 
 /** a file that is not an image: attached as text under its own name, or refused by name */
@@ -80,10 +80,10 @@ async function attachTextFiles(store: Store, boxId: string | null, files: File[]
   if (room === 0) return;
   for (const f of files.slice(0, room)) {
     const text = await readText(f);
-    if (text === null) toast(store, `${f.name}: not a text file`);
+    if (text === null) noticeIn(store, boxId, `${f.name}: not a text file`);
     else attachText(store, boxId, text, { name: f.name });
   }
-  if (files.length > room) toast(store, `kept ${room} of ${files.length}: ${limitMessage("paste")}`);
+  if (files.length > room) noticeIn(store, boxId, `kept ${room} of ${files.length}: ${limitMessage("paste")}`);
 }
 
 /** the box a drop lands in: the one the composer on screen writes in, which while drafting is the
@@ -111,10 +111,9 @@ function dropFiles(store: Store, files: File[]) {
 export function missedFileDrop(store: Store) {
   const refused = drag?.refused ?? false;
   endFileDrag(store);
-  if (!refused) toast(store, "drop images on the chat to attach them");
+  const boxId = dropBox(store);
+  if (!refused && boxId) noticeIn(store, boxId, "drop images on the chat to attach them");
 }
-
-const toast = (store: Store, message: string) => store.dispatch({ a: "toast", toast: { ok: false, message } });
 
 const hasFiles = (dt: DataTransfer | null) => !!dt && Array.from(dt.types).includes("Files");
 const onPanel = (e: DragEvent) => e.target instanceof Node && !!chatPanel.el?.contains(e.target);

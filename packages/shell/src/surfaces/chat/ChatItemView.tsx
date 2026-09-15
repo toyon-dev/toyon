@@ -5,6 +5,7 @@ import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } 
 import { copyText } from "../../state/actions/deps.ts";
 import { openFile } from "../../state/actions/file.ts";
 import { blockedItems, messageItems } from "../../state/actions/message.ts";
+import { removeWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { type ChatItem, worktreeById } from "../../state/store.ts";
@@ -664,5 +665,27 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="tool-hint">{item.branch}</span>
         </div>
       );
+    case "landed":
+      return <LandedRow item={item} />;
   }
 });
+
+/** the daemon's word on a land that merged, kept on the chat the way the graft divider is. The
+ * variant siblings it leaves behind are offered here, where the land is read, for as long as they
+ * are still rows. */
+function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
+  const sock = useSock();
+  const dispatch = useDispatch();
+  const left = useStore((s) => item.removeIds.filter((id) => worktreeById(s, id) !== null).length);
+  return (
+    <div className="landed-row">
+      <span className="landed-tag">landed</span>
+      <span className="landed-text">{item.text}</span>
+      {left > 0 && (
+        <Button variant="inline" tone="strong" onClick={() => removeWorktrees(sock, dispatch, item.removeIds)}>
+          {left > 1 ? `clean up ${left} worktrees` : "remove the other worktree"}
+        </Button>
+      )}
+    </div>
+  );
+}

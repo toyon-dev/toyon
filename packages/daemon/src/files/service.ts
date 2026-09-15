@@ -96,7 +96,7 @@ export class FileService {
     private readable: (id: string) => ReadableWorktree | null,
   ) {}
 
-  /** the reads all want the same two things; a spare or an unknown id is a toast, not a crash */
+  /** the reads all want the same two things; a spare or an unknown id is a refusal the person reads, not a crash */
   private require(worktreeId: string): ReadableWorktree {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("unknown worktree");

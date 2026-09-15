@@ -209,6 +209,14 @@ function EditorNote({ editor, disk, files }: { editor: EditorFile; disk: EditorD
       </div>
     );
   }
+  // a save the daemon refused, in its words; opening the file again reads it fresh and tries again
+  if (editor.refused) {
+    return (
+      <div className="editor-note">
+        <span className="hint">{editor.refused}</span>
+      </div>
+    );
+  }
   // a commit's copy says which commit in the title, and a binary or oversized file says so in the body
   if (ref === undefined && !disk.writable && !disk.binary && !disk.tooLarge) {
     return (

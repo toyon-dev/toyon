@@ -140,6 +140,7 @@ export function Composer({
   const boxId = archived ? archived.id : composerBoxOf(active, drafting);
   const text = useLocalField(boxId, "draft");
   const attachments = useLocalField(boxId, "attachments");
+  const notice = useLocalField(boxId, "notice");
   // up and down in a blank box walk back through what was sent from it (recall.ts): this is where
   // they have got to, and the draft holds that entry until it is touched
   const walk = useLocalField(boxId, "walk");
@@ -390,7 +391,7 @@ export function Composer({
       ? {
           word: "close",
           line: `landed on ${repo?.defaultBranch ?? "main"}.`,
-          tip: "Close this worktree when you are done here; its chat goes to the archive, and the toast offers restore.",
+          tip: "Close this worktree when you are done here; its chat goes to the archive, and the rail's archived section brings it back.",
           run: () => removeWorktrees(sock, dispatch, [id]),
         }
       : pr?.state === "open"
@@ -502,10 +503,12 @@ export function Composer({
     if (spawning) setNewMode(mode);
     else if (id && mode !== activeMode) sock?.send({ t: "set-worktree-mode", worktreeId: id, mode });
   };
+  // what could not be done, said under the box it was done to: the hands are there, and the next
+  // keystroke answers it
+  const refuse = (text: string) => boxId && dispatch({ a: "notice", id: boxId, text });
   // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
   // under it rather than the seat, and says why when there is nothing for the word to do.
   const runSeat = (name: "land" | "close") => {
-    const refuse = (message: string) => dispatch({ a: "toast", toast: { ok: false, message } });
     if (!active || !id) return;
     if (name === "close") {
       if (hasLanded) removeWorktrees(sock, dispatch, [id]);
@@ -528,7 +531,7 @@ export function Composer({
     if (archived) {
       if (!archived.restorable) return;
       if (shellCmd !== null) {
-        dispatch({ a: "toast", toast: { ok: false, message: "nothing runs here until it is restored" } });
+        refuse("nothing runs here until it is restored");
         return;
       }
       const sent = attachments.length ? attachments.map(toInput) : undefined;
@@ -571,15 +574,12 @@ export function Composer({
     // a batch splits the prompt into tasks and takes no attachments: refused rather than sent without
     // them, since the draft closing would carry them out of sight
     if (draft?.batch && attachments.length) {
-      dispatch({
-        a: "toast",
-        toast: { ok: false, message: "a batch takes no attachments; remove them or turn batch off" },
-      });
+      refuse("a batch takes no attachments; remove them or turn batch off");
       return;
     }
     // the empty project's page asks which agent above this box; its first message waits on that
     if (greenfield && !agentChosen) {
-      dispatch({ a: "toast", toast: { ok: false, message: "choose an agent first" } });
+      refuse("choose an agent above first");
       return;
     }
     const prompt = typed ? typed.args : text.trim();
@@ -852,8 +852,9 @@ export function Composer({
           </div>
         )}
         {/* present only while the box is empty, so typing and landing are never offered at once;
-              close takes the row at once and brings it back with a toast if the daemon refuses, the
-              way any remove does. Not aria-hidden while it holds the word, which is a control. */}
+              close takes the row at once and brings it back, the reason on its chat, if the daemon
+              refuses, the way any remove does. Not aria-hidden while it holds the word, which is a
+              control. */}
         {(subline || verb) && (
           <div className="composer-ghost" aria-hidden={verb ? undefined : "true"}>
             <span className="composer-placeholder">
@@ -885,6 +886,13 @@ export function Composer({
           </div>
         )}
       </div>
+      {/* the answer to the last thing done to this box that could not be done, under the field
+          where the hands are, until the next keystroke or attachment answers it */}
+      {notice && (
+        <div className="hint composer-notice" role="status">
+          {notice}
+        </div>
+      )}
       {/* the row reads left to right as where this goes, then what runs there: each chip after the
           target is about the target. A chip's panel takes focus while it is up, so the caret goes
           back when it closes. */}

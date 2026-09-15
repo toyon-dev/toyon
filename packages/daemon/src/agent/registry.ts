@@ -191,7 +191,7 @@ export class AgentRegistry {
     return this.specs.get(id);
   }
 
-  /** the spec, or a toast-worthy error: unknown id, or its command is not on this machine */
+  /** the spec, or an error worth reading: unknown id, or its command is not on this machine */
   require(id: string): AgentSpec {
     const spec = this.specs.get(id);
     if (!spec) throw new UserError(`unknown agent "${id}"`);

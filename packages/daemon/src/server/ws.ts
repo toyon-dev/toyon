@@ -379,7 +379,13 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         } catch (e) {
           // theme import errors are the user's file, not our bug
           if (!(e instanceof UserError || e instanceof ThemeImportError)) log.error("ws", `${parsed.msg.t} failed`, e);
-          send(ws, { t: "error", message: e instanceof Error ? e.message : String(e) });
+          // the worktree the message named, so the shell can answer on its chat
+          const worktreeId = "worktreeId" in parsed.msg ? parsed.msg.worktreeId : undefined;
+          send(ws, {
+            t: "error",
+            message: e instanceof Error ? e.message : String(e),
+            ...(worktreeId ? { worktreeId } : {}),
+          });
         }
       },
     },

@@ -260,7 +260,7 @@ export class RepoRegistry {
       await this.register(plan.dir);
     } catch (e) {
       if (signal.aborted) return;
-      // the record stays, carrying the reason: a toast would be gone before someone who walked away
+      // the record stays, carrying the reason: a passing line would be gone before someone who walked away
       // from a long clone came back to it. `cancel-import` is how they dismiss it.
       pending.error = e instanceof Error ? e.message : String(e);
       tick(true);

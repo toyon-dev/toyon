@@ -136,7 +136,7 @@ export interface PendingRepo {
   startedAt: number;
   /** git's own progress output, most recent last and capped: enough to see it moving */
   lines: string[];
-  /** set when it failed. The record stays so the reason is still there to read, since a toast
+  /** set when it failed. The record stays so the reason is still there to read, since a passing line
    * would be gone before someone who walked away from a long clone came back to it. */
   error?: string;
 }

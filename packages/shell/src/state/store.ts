@@ -85,6 +85,9 @@ export type ChatItem =
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
+  /** the daemon's word on a land that merged, kept for the record; `removeIds` are the variant
+   * siblings the landed one leaves behind, offered here where the land is read */
+  | { kind: "landed"; text: string; removeIds: string[] }
   /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
    * credential and the provider refused it, so the error above this card says what went wrong */
   | {
@@ -161,6 +164,10 @@ export interface WorktreeLocal {
   /** what is attached to the message being written, in the order it was attached; `key` is local,
    * and the daemon numbers each kind on send */
   attachments: PendingAttachment[];
+  /** the composer's answer to the last thing done to this box that could not be done: a command
+   * with nothing to do, an attachment over the limit, a refusal from the daemon with no worktree to
+   * answer on. Read under the field until the next keystroke or attachment answers it. */
+  notice?: string;
   /** the stop whose recap this tab arrived to, by its `lastTurn.at`. The line shows for that stop
    * until the box is written in, a turn starts, or the worktree is left; coming back is a new
    * arrival, which only a stop still unseen answers. */
@@ -287,6 +294,8 @@ export interface NewProjectState {
   repoId: string | null;
   /** what was typed in the first-run box before coming back here, for the next project's box */
   prompt: string;
+  /** why the daemon refused the last create, read on the view until the next edit */
+  error?: string;
 }
 
 /** the view with what a picker row or a way back already knew filled in */
@@ -381,6 +390,9 @@ export interface EditorFile extends Omit<OpenFile, "view"> {
   disk: EditorDisk | null;
   /** the file changed on disk under unsaved edits: what is there now, until reload or keep mine settles it */
   conflict: { after: string; version: string | null } | null;
+  /** a save refused outright, in the daemon's words: nothing typed here is saved until the file
+   * is opened again, which reads it fresh */
+  refused?: string;
 }
 
 /** a line the page reported, mapped back to the file once the offset for its path is known */
@@ -456,7 +468,8 @@ export interface State {
   local: Record<string, WorktreeLocal>;
   /** the file the editor pane has open; null when the pane is closed */
   editor: EditorFile | null;
-  toast: { ok: boolean; message: string; url?: string; removeIds?: string[]; restoreId?: string } | null;
+  /** a page the daemon's last answer opened, the PR a land made: the tab opens it once (App.tsx) */
+  openUrl: string | null;
   /** bumped to request a preview reload for a worktree (the edit/HMR decision lives in this reducer) */
   reloadReq: { id: string; n: number } | null;
   /** a file is being dragged over the chat panel, which is the one place a drop attaches */
@@ -624,7 +637,7 @@ export function initialState(opts: InitialOpts): State {
       Object.entries(opts.storedDrafts ?? {}).map(([id, draft]) => [id, { ...EMPTY_LOCAL, draft }]),
     ),
     editor: null,
-    toast: null,
+    openUrl: null,
     reloadReq: null,
     dragFiles: false,
     picking: false,
@@ -910,7 +923,12 @@ export type Action =
   | { a: "editor-conflict"; file: FileRef; theirs: EditorFile["conflict"] }
   /** switch the open file between its diff and the file */
   | { a: "editor-view"; v: EditorView }
-  | { a: "dismiss-toast" }
+  /** fileSync: a save was refused for good, and why; the pane says so above the text */
+  | { a: "editor-refused"; file: FileRef; message: string }
+  /** the composer's answer to something that could not be done to this box, read until the next keystroke */
+  | { a: "notice"; id: string; text: string }
+  /** the tab opened `openUrl` */
+  | { a: "opened-url" }
   | { a: "set-draft"; id: string; text: string }
   /** someone is looking at this worktree: latch the recap of a stop they have not seen */
   | { a: "arrive"; id: string }
@@ -970,11 +988,37 @@ export type Action =
   | { a: "term-ran" }
   | { a: "preview-theme"; theme: Theme | null }
   | { a: "system-dark"; v: boolean }
-  | { a: "toast"; toast: NonNullable<State["toast"]> }
   | { a: "incompatible" };
 
 function withLocal(s: State, id: string, fn: (l: WorktreeLocal) => WorktreeLocal): State {
   return { ...s, local: { ...s.local, [id]: fn(s.local[id] ?? EMPTY_LOCAL) } };
+}
+
+/** a line of toyon's own on a worktree's chat: what the daemon answered about it, kept where the
+ * work is read rather than shown for a moment somewhere else */
+function noteChat(s: State, id: string, item: ChatItem): State {
+  return withLocal(s, id, (l) => ({ ...l, chat: [...l.chat, item] }));
+}
+
+/** a failure answers on the worktree's chat, and opens the chat if it was shut: the answer is the
+ * whole point of the press that got it */
+function noteError(s: State, id: string, text: string): State {
+  return noteChat(revealChat(s), id, { kind: "error", text });
+}
+
+/** a failure with no worktree to answer on (a batch, a project, a found row's sync) goes under the
+ * composer on screen, the box the person is at */
+function noticeOnScreen(s: State, text: string): State {
+  const box = composerBoxOf(worktreeById(s, s.activeId), !!s.draft);
+  return box ? withLocal(revealChat(s), box, (l) => ({ ...l, notice: text })) : s;
+}
+
+/** where a worktree's failure is read: its chat, unless it is main's, whose panel shows the draft
+ * and not its log (a greenfield main aside), so main's goes under the box on screen */
+function answerFor(s: State, id: string, text: string): State {
+  const row = worktreeById(s, id);
+  if (!row || (isMain(row.worktree) && !isGreenfield(s))) return noticeOnScreen(s, text);
+  return noteError(s, id, text);
 }
 
 /** a sub-picker closed with `back`: reopen the palette it came from (its query rides along in paletteReturn) */
@@ -1117,8 +1161,13 @@ function reduce(s: State, action: Action): State {
         previewTheme: null,
         editor: null,
       };
-    case "new-project-set":
-      return s.newProject ? { ...s, newProject: { ...s.newProject, ...action.v } } : s;
+    case "new-project-set": {
+      if (!s.newProject) return s;
+      // an edit answers the last refusal; the view moving phase on its own does not
+      const edited = "name" in action.v || "parent" in action.v || "url" in action.v || "mode" in action.v;
+      const { error: _error, ...page } = s.newProject;
+      return { ...s, newProject: { ...(edited ? page : s.newProject), ...action.v } };
+    }
     case "close-new-project":
       // with no project behind it, the view is the only thing there is to show
       return s.newProject && s.repos.length > 0 ? { ...s, newProject: null, choosingFolder: false } : s;
@@ -1154,9 +1203,10 @@ function reduce(s: State, action: Action): State {
       if (!e || !sameFile(e, action.file)) return s;
       const disk = action.disk;
       if (!disk) {
-        const toast = { ok: false, message: action.error ?? `could not read ${e.path}` };
-        // a pane with nothing in it yet has nothing to show; one with text keeps it and says why
-        return e.disk ? { ...s, toast } : { ...s, editor: null, toast };
+        // a pane with nothing in it yet has nothing to show, so it closes; one with text keeps it.
+        // Why goes on the worktree's chat either way, since the pane may be the thing that is gone.
+        const said = noteError(s, e.worktreeId, action.error ?? `could not read ${e.path}`);
+        return e.disk ? said : { ...said, editor: null };
       }
       // with no view asked for, a changed file opens on its diff and an unchanged one has none to show
       return { ...s, editor: { ...e, view: e.view ?? (disk.before === disk.after ? "file" : "diff"), disk } };
@@ -1169,14 +1219,24 @@ function reduce(s: State, action: Action): State {
       // the line was a one-time jump; past a switch the editor carries its own place, and a line
       // kept for the diff view would land inside a collapsed region the next time the file is read
       return s.editor ? { ...s, editor: { ...s.editor, view: action.v, line: undefined } } : s;
-    case "dismiss-toast":
-      return { ...s, toast: null };
+    case "editor-refused": {
+      const e = s.editor;
+      return e && sameFile(e, action.file) ? { ...s, editor: { ...e, refused: action.message } } : s;
+    }
+    case "notice":
+      // the answer is under the box, so the box has to be on screen
+      return withLocal(revealChat(s), action.id, (l) => ({ ...l, notice: action.text }));
+    case "opened-url":
+      return s.openUrl ? { ...s, openUrl: null } : s;
     case "set-draft":
-      // writing in the box is answering the recap, and emptying the box again does not bring it back
-      return withLocal(s, action.id, ({ walk: _walk, recapFor, ...l }) => ({
+      // writing in the box is answering the recap, and emptying the box again does not bring it
+      // back. A keystroke answers the notice too; the box emptying does not, since a refused
+      // command empties it on its way to saying why.
+      return withLocal(s, action.id, ({ walk: _walk, recapFor, notice, ...l }) => ({
         ...l,
         draft: action.text,
         ...(recapFor !== undefined && !action.text.trim() ? { recapFor } : {}),
+        ...(notice !== undefined && action.text === "" ? { notice } : {}),
       }));
     case "arrive": {
       const turn = rowById(s, action.id)?.worktree?.lastTurn;
@@ -1193,18 +1253,21 @@ function reduce(s: State, action: Action): State {
       }));
     case "attach":
       // the chips are the only sign an attachment landed, so one arriving on a collapsed chat opens it
-      return withLocal(revealChat(s), action.id, (l) => ({
-        // attaching is writing the message, which answers the recap the way typing does
+      return withLocal(revealChat(s), action.id, ({ notice: _notice, ...l }) => ({
+        // attaching is writing the message, which answers the recap and the notice the way typing does
         ...withoutRecap(l),
         attachments: [...l.attachments, ...action.items],
       }));
     case "detach":
-      return withLocal(s, action.id, (l) => ({
+      // taking one off answers a notice about what was attached
+      return withLocal(s, action.id, ({ notice: _notice, ...l }) => ({
         ...l,
         attachments: l.attachments.filter((a) => a.key !== action.key),
       }));
     case "clear-attachments":
-      return withLocal(s, action.id, (l) => (l.attachments.length ? { ...l, attachments: [] } : l));
+      return withLocal(s, action.id, ({ notice: _notice, ...l }) =>
+        l.attachments.length ? { ...l, attachments: [] } : l,
+      );
     case "hmr":
       return withLocal(s, action.id, (l) => ({ ...l, turn: { ...l.turn, hmr: true } }));
     case "page":
@@ -1281,7 +1344,7 @@ function reduce(s: State, action: Action): State {
     case "toggle-zen":
       // zen gives the window to the page, and a project with nothing to run has no page to give it to
       if (isChatCentred(s)) return s;
-      return { ...s, zen: !s.zen, toast: !s.zen ? { ok: true, message: "⌘. to exit" } : s.toast };
+      return { ...s, zen: !s.zen };
     case "toggle-terminal":
       return { ...s, termOpen: !s.termOpen };
     case "focus-terminal":
@@ -1308,8 +1371,6 @@ function reduce(s: State, action: Action): State {
       return { ...s, previewTheme: action.theme };
     case "system-dark":
       return { ...s, systemDark: action.v };
-    case "toast":
-      return { ...s, toast: action.toast };
     case "incompatible":
       return { ...s, incompatible: true, connected: false };
     case "server":
@@ -1619,21 +1680,20 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return { ...next, editor: { ...e, line: placeLine(next, e.worktreeId, e.path, e.line) } };
     }
     case "shipped": {
+      const id = msg.worktreeId;
       // a suggestion lands in that worktree's composer and focuses it
-      const next = msg.suggestion
-        ? withLocal(activate(s, msg.worktreeId), msg.worktreeId, (l) => ({ ...l, draft: msg.suggestion! }))
-        : s;
-      return {
-        ...next,
-        shipping: retireShipping(next.shipping, (id) => id === msg.worktreeId),
-        toast: {
-          ok: msg.ok,
-          message: msg.message,
-          url: msg.url,
-          removeIds: msg.merged && msg.ok ? (msg.removeIds ?? [msg.worktreeId]) : undefined,
-          restoreId: msg.restoreId,
-        },
+      const settled = msg.suggestion ? withLocal(activate(s, id), id, (l) => ({ ...l, draft: msg.suggestion! })) : s;
+      const next = {
+        ...settled,
+        shipping: retireShipping(settled.shipping, (w) => w === id),
+        openUrl: msg.ok && msg.url ? msg.url : settled.openUrl,
       };
+      // What happened is read where the work is: a failure as a line on the worktree's chat, or
+      // under the composer for an op with no worktree (a batch); a land that merged as a row for
+      // the record. A success with nothing to offer says nothing: the panel and the row show it.
+      if (!msg.ok) return id ? answerFor(next, id, msg.message) : noticeOnScreen(next, msg.message);
+      if (msg.merged) return noteChat(next, id, { kind: "landed", text: msg.message, removeIds: msg.removeIds ?? [] });
+      return next;
     }
     case "files":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, files: msg.paths }));
@@ -1646,7 +1706,16 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // a file opened since the pick was made is an answer the person already chose
       if (s.editor && s.editor.seq > msg.seq) return s;
       const [first] = msg.hits;
-      if (!first) return { ...s, toast: { ok: false, message: "nothing in the source matches this element" } };
+      if (!first) {
+        // the pick came from the frame under the composer: main's frame while main drafts fills
+        // the draft's box, and the answer goes under the same one
+        const row = worktreeById(s, msg.worktreeId);
+        const box = row ? composerBoxOf(row, !!s.draft && msg.worktreeId === s.activeId) : msg.worktreeId;
+        return withLocal(s, box ?? msg.worktreeId, (l) => ({
+          ...l,
+          notice: "nothing in the source matches this element",
+        }));
+      }
       if (!msg.sure) {
         return reducer(s, {
           a: "open",
@@ -1685,23 +1754,38 @@ function onServer(s: State, msg: StoreServerMsg): State {
         commitFiles: { ...l.commitFiles, [msg.sha]: msg.files },
       }));
     case "error": {
-      // The frame carries no worktree id, so every pending remove comes back (the daemon's next
-      // snapshot re-hides any that did in fact go through) and every landing op comes to rest. So
-      // does the new-project view: a create not yet answered by its repo is the one refused, and a
-      // project it was taking back stays, so the view gives way to its first-run screen again.
+      // The worktree the frame names is the one whose pending remove comes back and whose landing
+      // op comes to rest; a frame that names none brings every remove back (the daemon's next
+      // snapshot re-hides any that did in fact go through) and rests every op. So does the
+      // new-project view: a create not yet answered by its repo is the one refused, and a project
+      // it was taking back stays, so the view gives way to its first-run screen again.
+      const id = msg.worktreeId;
       const page = s.newProject;
       const refused = page?.phase === "creating" && !page.repoId;
       // a sent draft is waiting on a worktree that may be what was refused: it opens for editing again
       const { sent, ...draft } = s.draft ?? {};
-      return {
+      const next = {
         ...s,
-        toast: { ok: false, message: msg.message },
-        removing: s.removing.length ? [] : s.removing,
-        shipping: retireShipping(s.shipping, () => true),
-        newProject: refused ? { ...page, phase: "editing" } : page?.phase === "unmaking" ? null : page,
+        removing: id
+          ? s.removing.includes(id)
+            ? s.removing.filter((w) => w !== id)
+            : s.removing
+          : s.removing.length
+            ? []
+            : s.removing,
+        shipping: retireShipping(s.shipping, (w) => !id || w === id),
+        newProject: refused
+          ? { ...page, phase: "editing" as const, error: msg.message }
+          : page?.phase === "unmaking"
+            ? null
+            : page,
         pendingOpen: refused ? false : s.pendingOpen,
         draft: sent ? (draft as Draft) : s.draft,
       };
+      // the reason is read where the press was: a refused create on its view, a worktree's on its
+      // chat, and anything else under the composer on screen
+      if (refused) return next;
+      return id ? answerFor(next, id, msg.message) : noticeOnScreen(next, msg.message);
     }
     default: {
       // exhaustive at compile time, but a daemon one version ahead can still send a `t` this

@@ -1,5 +1,5 @@
 // Landing operations: commit, take main in, land locally by a method, push main, open or merge a
-// PR. Each returns a ShipResult the UI shows as a toast. Toyon-owned branches are rebased onto main
+// PR. Each returns a ShipResult the shell reads out where the work is. Toyon-owned branches are rebased onto main
 // rather than merged with it, so a branch reads as if it started from today's main and every
 // method after that is one command; a branch someone adopted keeps its history and is merged with.
 

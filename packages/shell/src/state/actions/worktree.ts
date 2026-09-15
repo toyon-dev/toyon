@@ -37,7 +37,7 @@ export function shipOp(sock: DaemonSocket | null, dispatch: Dispatch, msg: Extra
 const hasWork = (w: WorktreeStatus) => w.dirty === undefined || w.ahead === undefined || w.dirty > 0 || w.ahead > 0;
 
 /** send the removes and take the rows off screen in the same breath: the daemon confirms by
- * dropping them from its next snapshot, or an error frame puts them back with a toast */
+ * dropping them from its next snapshot, or an error frame puts them back, the reason on the row's chat */
 export function removeWorktrees(sock: DaemonSocket | null, dispatch: Dispatch, ids: string[]) {
   if (ids.length === 0) return;
   dispatch({ a: "remove-worktrees", ids });
@@ -78,7 +78,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
     },
     remove(w: OwnedWorktree) {
       if (!canRemove(w.worktree)) return;
-      // nothing written: the chat is archived and the toast brings it back, so there is nothing to ask
+      // nothing written: the chat is archived and the rail's archived section brings it back, so there is nothing to ask
       if (!hasWork(w)) return removeWorktrees(sock, dispatch, [w.worktree.id]);
       const ok = window.confirm(
         `Remove worktree "${w.worktree.title}"?\n\nIts directory and branch (${w.worktree.branch}) go. The chat, the commits and any uncommitted changes are archived, and the project menu can restore it.`,

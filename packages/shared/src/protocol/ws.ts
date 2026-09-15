@@ -155,8 +155,6 @@ export type ServerMsg =
       message: string;
       merged?: boolean;
       removeIds?: string[];
-      /** an archived worktree the toast offers to bring back */
-      restoreId?: string;
       suggestion?: string;
     }
   | { t: "files"; worktreeId: string; paths: string[] }
@@ -181,7 +179,9 @@ export type ServerMsg =
   /** reply to term-open: the recent output to replay into a reset terminal */
   | { t: "term-snapshot"; worktreeId: string; stream: string; data: string; alive: boolean }
   | { t: "term-exit"; worktreeId: string; stream: string; exitCode: number }
-  | { t: "error"; message: string };
+  /** a client message refused, in words for the person; `worktreeId` is the one the message
+   * named, so the reason lands on that worktree's chat rather than somewhere it must be looked for */
+  | { t: "error"; message: string; worktreeId?: string };
 
 /** the terminal stream: bytes for xterm, which the shell routes around its store */
 export type TermServerMsg = Extract<ServerMsg, { t: "term-data" | "term-snapshot" | "term-exit" }>;
@@ -310,7 +310,7 @@ export const toyonConfigSchema = z
     if (c.land?.automerge !== undefined && c.land.route !== "pr")
       ctx.addIssue({ code: "custom", path: ["land", "automerge"], message: 'automerge needs "route": "pr"' });
     // a profile may only name processes that exist, and the default must be a profile: caught here
-    // so a typo is a toast at confirm/reload time, not a worktree that silently runs nothing
+    // so a typo is a refusal at confirm/reload time, not a worktree that silently runs nothing
     if (!c.profiles) {
       if (c.defaultProfile !== undefined)
         ctx.addIssue({ code: "custom", path: ["defaultProfile"], message: "defaultProfile without profiles" });
@@ -388,7 +388,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("set-worktree-effort"), worktreeId: id, effort: z.string().max(100) }),
   /** run this worktree under another of the repo's profiles: its procs restart, the agent stays */
   z.object({ t: z.literal("set-worktree-profile"), worktreeId: id, profile: z.string().max(100) }),
-  /** remove a worktree; its chat and work are archived, and the reply toast offers to restore it */
+  /** remove a worktree; its chat and work are archived, and the rail's archived section offers to restore it */
   z.object({ t: z.literal("remove-worktree"), worktreeId: id }),
   /** the project's archived worktrees; replies `archived` */
   z.object({ t: z.literal("list-archived"), repoId: id }),
@@ -598,7 +598,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
 export type ClientMsg = z.infer<typeof clientMsgSchema>;
 
 /** a failed parse as one line: where, then why. Zod wraps the issue a record key or an array element
- * raised in a generic one ("Invalid key in record"), which is all a toast would say about a proc
+ * raised in a generic one ("Invalid key in record"), which is all the person would read about a proc
  * named "shell", so the reason is read from the innermost issue and the paths are joined on the way. */
 export function issueReason(error: z.ZodError, fallback: string): string {
   let issue = error.issues[0];

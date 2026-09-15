@@ -660,17 +660,19 @@
       animation: none;
     }
   }
-  /* the graft divider is the blocked row's box with the accent's edge: both are the daemon writing
-   into the transcript itself, and only the second is good news */
+  /* the graft divider and the landed row are the blocked row's box with the accent's edge: all
+   three are the daemon writing into the transcript itself, and only the last two are good news */
   .blocked-row,
-  .graft-row {
+  .graft-row,
+  .landed-row {
     padding: 4px 8px;
     font: var(--type-mono);
     color: var(--text1);
     background: var(--surface0);
     border-left: 2px solid var(--red);
     & .blocked-tag,
-    & .graft-tag {
+    & .graft-tag,
+    & .landed-tag {
       color: var(--red);
       font: var(--type-ui-sm);
     }
@@ -679,10 +681,28 @@
     }
   }
   .graft-row,
+  .landed-row,
   .blocked-row .blocked-head {
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+  /* the daemon's sentence wraps rather than pushing the offer off the row */
+  .landed-row .landed-text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .landed-row {
+    border-left-color: var(--accent);
+    & .landed-tag {
+      color: var(--accent);
+    }
+  }
+  /* the composer's answer under the field: the knobs row's tier, and it wraps, since it is the
+   whole reason the line is there */
+  .composer-notice {
+    overflow-wrap: anywhere;
   }
   /* Toyon's rule, under the call it refused. The agent is told only that its request was refused,
    so it reports one as the person declining; this line is where the person reads otherwise, and it

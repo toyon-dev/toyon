@@ -40,7 +40,7 @@ Each agent signs in with its own login, from the chat, and MCP servers run as ea
 ## What you get
 
 - **A copy of your project per chat.** Type what you want; Toyon makes a branch and a git worktree, clones the dependencies, starts your dev servers and opens the agent in it. One spare per project is kept warm, so the next chat's app is usually already running. A second chat right after, or several at once, waits for its own setup.
-- **Your app at the centre.** Each copy runs its own servers behind its own preview address. Switch between chats like tabs; each keeps its page state while hidden.
+- **Your app at the centre.** Each copy runs its own servers behind its own preview address. Switch between chats like tabs; a chat you come back to soon keeps its page state.
 - **Connected to its code.** Point at anything on the page to talk about it or open the line that draws it. Hover a change and it is outlined in the page. A design pane maps the page back to your tokens and components.
 - **More than one version.** Send one prompt to several copies and compare the results in the app.
 - **Keep it your way.** When a turn is done and your check passes, the composer offers to land it: merged into main on your machine, pushed, or opened as a pull request, whichever your project's settings name. Nothing is committed or pushed until you press it.
@@ -65,7 +65,7 @@ browser (shell UI) ──HTTP/WS──> daemon (one per machine)
 
 The contract for anything Toyon runs: *stay in the foreground, listen on `$PORT`, reload yourself however you like.* A `.toyon/settings.json` in the project names the setup commands, the commands to `run`, an optional `check` and how work lands. The first open guesses one from `package.json` and asks you to confirm it; other stacks start from an empty guess the agent can fill in. A tool that takes its port from a flag, Vite among them, gets the flag added by the guess. If a server still comes up on some other port, Toyon follows it there and says which flag to add, and if it never listens at all the preview says so instead of waiting.
 
-Copies start when you open them, not when the daemon boots. `toyon stop` stops the daemon and everything it runs. `toyon doctor` says what is running and why a page cannot connect.
+Copies start when you open them, not when the daemon boots. A copy nobody has looked at for two hours stops running its servers (five minutes on a deployed machine) and starts again when you open it or visit its preview; the chat and the agent keep going. `TOYON_PROC_SLEEP_MS` changes the delay, and `off` turns it off. `toyon stop` stops the daemon and everything it runs. `toyon doctor` says what is running and why a page cannot connect.
 
 ## What it does not do
 
@@ -106,7 +106,7 @@ The first command lists what it will remove and asks before doing it: the daemon
 
 ## Telemetry
 
-None. Toyon makes no network calls of its own. The only traffic is to the agents you sign into, to npm on first start to fetch the Claude Code and Codex adapters and again when you first pick OpenCode, to Fly when you deploy there, and to whatever your own dev servers and `git push` talk to.
+None. Toyon makes no network calls of its own. The only traffic is to the agents you sign into, to npm on first start to fetch the Claude Code and Codex adapters and again when you first pick OpenCode, to Fly when you deploy there, and to whatever your own dev servers, `git fetch` and `git push` talk to.
 
 ## Help build it
 

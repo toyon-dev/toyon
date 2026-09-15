@@ -62,6 +62,7 @@ The Dockerfile that machine is built from ships in the package under `cloud/`, a
 | `TOYON_TOKEN` | A long random string; the link is `https://<host>/#token=<it>`. |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | For the agents. |
 | `GITHUB_TOKEN`, `TOYON_REPO_URL` | Optional: a repository to clone on first start, and access to it. |
+| `TOYON_PROC_SLEEP_MS` | Optional: how long a copy nobody looks at keeps its servers running, in milliseconds. Five minutes by default on a deployed machine; `off` keeps them running. |
 | `/data` | A disk that survives restarts. |
 | Ports | 4141 for Toyon, over https with the host's TLS in front, and 10001-10008 when previews use ports. |
 

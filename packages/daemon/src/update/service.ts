@@ -58,7 +58,9 @@ export class UpdateService {
   private wanted = false;
   private shells = 0;
   private unwatchedSince: number;
-  private announced: string | null = null;
+  /** what tabs were last told; they start from hello's own null, so a first read that finds
+   * nothing tells nobody anything */
+  private announced = "null";
   private readonly now: () => number;
 
   constructor(private d: UpdateDeps) {

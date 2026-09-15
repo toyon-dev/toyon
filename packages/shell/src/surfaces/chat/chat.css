@@ -793,16 +793,13 @@
       margin-left: 6px;
     }
   }
-  /* a sentence about main or the branch, under the knobs row, with its button at the end */
+  /* a sentence about how far the branch trails main, under the knobs row, with its button at the end */
   .spawn-note {
     display: flex;
     align-items: center;
     gap: 8px;
     /* the count ticks with the status; `font` on the hint resets the variant */
     font-variant-numeric: tabular-nums;
-  }
-  .spawn-move {
-    margin-left: auto;
   }
   /* .btn-icon is a grid box, so an inline wrapper would stack the two tools; keep them on one line */
   .spawn-tools {
@@ -837,6 +834,27 @@
     & b {
       color: var(--text1);
       font: var(--type-mono);
+    }
+  }
+  /* what main brings, under the choices: a rule and no ground, since the composer's ground means
+   a place to type, and two boxes of it stacked read as one box with a seam. Each line is a
+   sentence with its button at the end. */
+  .draft-notes {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border0);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .draft-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    /* the count ticks with the status; `font` on the hint resets the variant */
+    font-variant-numeric: tabular-nums;
+    & > .btn {
+      margin-left: auto;
     }
   }
   /* the birth-time choices on one line: batch, then the three numbers with their word, then what

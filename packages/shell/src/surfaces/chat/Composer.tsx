@@ -11,7 +11,6 @@ import {
   canSync,
   DEFAULT_PERMISSION_MODE,
   describeLand,
-  isMain,
   landPolicy,
   nextNumbers,
   numbered,
@@ -35,7 +34,7 @@ import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
-import { behindNote, originNote } from "../chips/baseNote.ts";
+import { behindNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
@@ -112,8 +111,8 @@ function insertionFor(r: Row): string {
  *
  * Three ways to send from here. A message to the worktree's own agent. Main's message, where
  * `draft` is set, which starts a worktree from main: main has no agent of its own. The intro's
- * variants and batch apply, main's uncommitted files move with it when the row under the knobs says
- * so, and the draft gives way as the worktree it was for arrives. And a message into an `archived`
+ * variants and batch apply, main's uncommitted files move with it when the intro's note says so,
+ * and the draft gives way as the worktree it was for arrives. And a message into an `archived`
  * worktree's chat, which restores it and then goes to its agent: the box is that worktree's under
  * the id it comes back with, and nothing here that needs a running worktree is offered. */
 export function Composer({
@@ -205,22 +204,12 @@ export function Composer({
   // global esc handler would close this from anywhere in the app.
   const files = useLocalField(id, "files");
   const git = useLocalField(id, "git");
-  // main's uncommitted files while drafting, and how far a worktree trails main: the live status
-  // when the row is subscribed, else the rail's ten-second count
+  // how far a worktree trails main: the live status when the row is subscribed, else the rail's
+  // ten-second count
   const dirty = git?.files.length ?? active?.dirty ?? 0;
   const op = useStore((s) => (id ? s.shipping[id] : undefined));
-  // one set of changes can only go into one worktree, so variants and batch put the toggle off
-  const carryable = !!draft && !draft.batch && draft.variants === 1;
   const behind =
     !active || !repo || spawning || !canSync(active) ? null : behindNote(repo.defaultBranch, active.behind);
-  // main against origin: a new worktree starts from main as it is, so a main nobody has pulled
-  // today hands the agent stale code. Said whenever main is the base or the subject.
-  const mainRow = useStore(
-    (s) => s.rows.find((r) => r.repoId === repoId && r.worktree !== undefined && isMain(r.worktree)) ?? null,
-  );
-  const mainOp = useStore((s) => (mainRow ? s.shipping[mainRow.id] : undefined));
-  const origin = mainRow && spawning ? originNote(mainRow.behind) : null;
-  const mainDirty = (mainRow?.dirty ?? 0) > 0;
   // a draft has no session of its own to ask for commands: a worktree of this repo that runs the
   // same agent stands in, main first (commandSource says why that is sound)
   const source = useStore((s) => (drafting ? commandSource(s.rows, repoId, spawnAgent, defaultAgent) : id));
@@ -997,59 +986,9 @@ export function Composer({
           )}
         </span>
       </div>
-      {/* What main's uncommitted files do when the box starts a worktree. Default: stay, since main
-          is dirty for reasons that often have nothing to do with the message (a local config tweak,
-          last week's debug line), and files leaving main unasked is the one surprise this row exists
-          to rule out. The count wears the rail's dirty colour, and the row stays while you type, so
-          the choice is still in view at Enter. */}
-      {drafting && repo && dirty > 0 && (
-        <div className="hint spawn-note">
-          <span>
-            <span className="badge-dirty">~{dirty}</span> on {repo.defaultBranch}{" "}
-            {canCarry(draft) ? "come along" : "stay behind"}
-          </span>
-          <Button
-            variant="ghost"
-            tone="chrome"
-            className="spawn-move"
-            on={canCarry(draft)}
-            disabled={!carryable}
-            data-tip={
-              carryable
-                ? canCarry(draft)
-                  ? `Leave the ${dirty === 1 ? "file" : "files"} on ${repo.defaultBranch}`
-                  : `Move the ${dirty} uncommitted ${dirty === 1 ? "file" : "files"} into the new worktree, leaving ${repo.defaultBranch} clean`
-                : "One set of changes can only go into one worktree"
-            }
-            onClick={() => {
-              dispatch({ a: "draft-carry", v: !draft?.carry });
-              refocus();
-            }}
-          >
-            move
-          </Button>
-        </div>
-      )}
-      {/* main against origin, and how far a branch trails main, each with its button: their own
-          lines, so the row above keeps its shape */}
-      {origin && mainRow && (
-        <div className="hint spawn-note">
-          <span>{origin}</span>
-          <Button
-            variant="outline"
-            busy={mainOp === "pull-main"}
-            disabled={!!mainOp || mainDirty}
-            data-tip={
-              mainDirty
-                ? `commit or discard the changes on ${repo?.defaultBranch} first`
-                : "Fast-forward main to origin"
-            }
-            onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: mainRow.id })}
-          >
-            pull
-          </Button>
-        </div>
-      )}
+      {/* how far a branch trails main, with its button: its own line, so the row above keeps its
+          shape. Main's own notes (its dirty files, its distance from origin) stand in the intro
+          above the box, with the other choices fixed when the worktree starts. */}
       {behind && active && id && (
         <div className="hint spawn-note">
           <span>{behind}</span>

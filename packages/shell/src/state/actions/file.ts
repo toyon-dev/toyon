@@ -53,5 +53,5 @@ export function fileItems(
         },
       ]
     : [];
-  return grouped([views, open, copy, discardItems]);
+  return grouped([views, copy, open, discardItems]);
 }

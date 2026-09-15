@@ -8,20 +8,18 @@ import { log } from "../core/log.ts";
 import { run } from "../git/exec.ts";
 
 export interface MemorySignal {
-  /** the OS itself says memory is short: the kernel's pressure level on macOS, the available
-   * share on Linux, which has no level. What a worktree is put to sleep on. */
+  /** memory is short: available memory under the floor, the same on every platform, or the macOS
+   * kernel at critical. What a worktree is put to sleep on. */
   tight: boolean;
-  /** the softer reading on macOS: available memory under the floor while the level still says
-   * normal. Reported, never acted on, until a day of readings says where the floor belongs. */
-  backstop: boolean;
   /** the reading in words, for the log line a sleep leaves behind */
   why: string;
 }
 
-/** macOS: 1 is normal; 2 (warn) and 4 (critical) are the kernel already compressing and paging */
-const MAC_PRESSURE_NORMAL = 1;
-/** available memory under this share of the total: on Linux the only signal there is; on macOS a
- * backstop, since the kernel compresses well before it raises the level */
+/** macOS levels are 1 normal, 2 warn, 4 critical. Warn is raised as soon as the kernel compresses
+ * and holds for hours on a laptop with a third of its memory free, so it is no signal on its own;
+ * critical is. */
+const MAC_PRESSURE_CRITICAL = 4;
+/** available memory under this share of the total is short, on macOS and Linux alike */
 const AVAILABLE_FLOOR = 0.15;
 
 let unsupportedLogged = false;
@@ -41,11 +39,15 @@ async function darwin(): Promise<MemorySignal | null> {
   if (!r.ok) return null;
   const [level, available] = r.out.split(/\s+/).map(Number);
   if (level === undefined || available === undefined || Number.isNaN(level) || Number.isNaN(available)) return null;
+  return darwinSignal(level, available);
+}
+
+/** `kern.memorystatus_vm_pressure_level` and `kern.memorystatus_level` (percent available) */
+export function darwinSignal(level: number, available: number): MemorySignal {
   const pressure =
-    level === MAC_PRESSURE_NORMAL ? "normal" : level === 2 ? "warn" : level === 4 ? "critical" : `level ${level}`;
+    level === 1 ? "normal" : level === 2 ? "warn" : level === MAC_PRESSURE_CRITICAL ? "critical" : `level ${level}`;
   return {
-    tight: level !== MAC_PRESSURE_NORMAL,
-    backstop: level === MAC_PRESSURE_NORMAL && available < AVAILABLE_FLOOR * 100,
+    tight: level === MAC_PRESSURE_CRITICAL || available < AVAILABLE_FLOOR * 100,
     why: `memory pressure ${pressure} with ${available}% available`,
   };
 }
@@ -65,7 +67,7 @@ async function linux(): Promise<MemorySignal | null> {
   const available = field("MemAvailable");
   if (!total || available === null) return null;
   const percent = Math.round((available / total) * 100);
-  return { tight: available / total < AVAILABLE_FLOOR, backstop: false, why: `${percent}% of memory available` };
+  return { tight: available / total < AVAILABLE_FLOOR, why: `${percent}% of memory available` };
 }
 
 /** Resident memory per process group, in KB, for the groups asked about: one `ps` for every

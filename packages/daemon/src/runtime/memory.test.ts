@@ -1,15 +1,29 @@
 import { describe, expect, test } from "bun:test";
-import { memoryTight, sampleCosts } from "./memory.ts";
+import { darwinSignal, memoryTight, sampleCosts } from "./memory.ts";
 
 describe("memoryTight", () => {
   test("gives a reading with a reason on this platform", async () => {
     const signal = await memoryTight();
     expect(signal).not.toBeNull();
     expect(typeof signal?.tight).toBe("boolean");
-    expect(typeof signal?.backstop).toBe("boolean");
-    // the two never say it together: the backstop is the reading the level has not caught up to
-    expect(signal?.tight && signal?.backstop).toBeFalsy();
     expect(signal?.why).toMatch(/available/);
+  });
+});
+
+describe("darwinSignal", () => {
+  test("warn with memory to spare is not short", () => {
+    expect(darwinSignal(2, 42).tight).toBe(false);
+    expect(darwinSignal(1, 49).tight).toBe(false);
+  });
+
+  test("under the floor is short at any level, and critical is short at any share", () => {
+    expect(darwinSignal(1, 12).tight).toBe(true);
+    expect(darwinSignal(2, 9).tight).toBe(true);
+    expect(darwinSignal(4, 40).tight).toBe(true);
+  });
+
+  test("names the level and the share", () => {
+    expect(darwinSignal(2, 42).why).toBe("memory pressure warn with 42% available");
   });
 });
 

@@ -199,19 +199,16 @@ export class IdlePolicy {
     return out;
   }
 
-  /** When the OS says memory is short, the idle worktree unused for longest sleeps, one per
-   * check: the next check sees the memory it freed before deciding whether another follows. The
-   * softer backstop reading only names the worktree it would have picked. */
+  /** When memory is short, the idle worktree unused for longest sleeps, one per check: the next
+   * check sees the memory it freed before deciding whether another follows. */
   async checkPressure(): Promise<void> {
     const signal = await (this.d.memory ?? memoryTight)();
-    if (!signal || (!signal.tight && !signal.backstop)) return;
+    if (!signal?.tight) return;
     const pick = this.d.state.worktrees
       .filter((w) => this.candidate(w.id))
       .sort((a, b) => this.entry(a.id).activeAt - this.entry(b.id).activeAt)[0];
     if (!pick) return;
-    const why = `${signal.why}; least recently used`;
-    if (signal.tight) this.sleep(pick.id, why);
-    else log.info(pick.id, `would sleep on the backstop: ${why}`);
+    this.sleep(pick.id, `${signal.why}; least recently used`);
   }
 
   /** what each awake worktree holds, for /health; never a reason to sleep one. The same minute

@@ -27,14 +27,22 @@ export interface ArchiveFacts {
 
 /** why the worktree may archive itself now, as the rail will say it; null keeps it */
 export function archiveReason(wt: WorktreeInfo, f: ArchiveFacts): string | null {
-  // a variant group is compared as one, so it goes as one
   const group = wt.variant ? f.rows.filter((w) => w.variant?.group === wt.variant?.group) : [wt];
-  if (!group.every((w) => nothingToKeep(w, f))) return null;
+  // once one attempt has landed the group is decided, and each of the others is an attempt it beat
+  const decided = group.some((w) => !!w.lands?.length);
+  const lost = decided && !wt.lands?.length;
+  if (decided) {
+    if (!nothingToKeep(wt, f, lost)) return null;
+    // a group still being compared is compared as one, so it goes as one
+  } else if (!group.every((w) => nothingToKeep(w, f, false))) return null;
   if (unitsAhead(wt, f.rows) < ARCHIVE_KEEP_RECENT) return null;
-  return `${wt.landed ? "landed" : "no changes"}, not opened in ${duration(f.afterMs)}`;
+  const what = lost ? "a sibling landed" : wt.landed ? "landed" : "no changes";
+  return `${what}, not opened in ${duration(f.afterMs)}`;
 }
 
-function nothingToKeep(w: WorktreeInfo, f: ArchiveFacts): boolean {
+/** `lost`: the commits are an attempt a sibling beat, which the archive keeps for a later cherry-pick,
+ * so only work left uncommitted since holds the row */
+function nothingToKeep(w: WorktreeInfo, f: ArchiveFacts, lost: boolean): boolean {
   // toyon's own task on toyon's own branch: an adopted directory is the person's, and archiving
   // deletes it
   if (w.kind !== "worktree" || !hasOwnBranch(w)) return false;
@@ -45,16 +53,18 @@ function nothingToKeep(w: WorktreeInfo, f: ArchiveFacts): boolean {
   if (f.viewed(w.id) || f.pending(w.id) || f.drafted(w.id)) return false;
   if (f.now - (w.viewedAt ?? w.createdAt) < f.afterMs) return false;
   const c = f.counts(w.id);
-  return c.dirty === 0 && c.ahead === 0;
+  return c.dirty === 0 && (lost ? c.ahead !== undefined : c.ahead === 0);
 }
 
-/** how many rail units (a row, or a variant group) sit above this one, main aside */
+/** how many rail units sit above this one, main aside: a row, or a variant group on one tier, since
+ * the rail files a landed attempt with landed work and the ones it beat where they were */
 function unitsAhead(wt: WorktreeInfo, rows: readonly WorktreeInfo[]): number {
+  const unitOf = (w: WorktreeInfo) => (w.variant ? `${w.landed ? "landed" : "open"}:${w.variant.group}` : w.id);
   const tasks = railOrder(rows.filter((w) => w.kind === "worktree").map((worktree) => ({ worktree })));
   const seen = new Set<string>();
   for (const { worktree: w } of tasks) {
-    const unit = w.variant?.group ?? w.id;
-    if (unit === (wt.variant?.group ?? wt.id)) return seen.size;
+    const unit = unitOf(w);
+    if (unit === unitOf(wt)) return seen.size;
     seen.add(unit);
   }
   return seen.size;

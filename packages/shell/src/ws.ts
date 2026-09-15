@@ -35,7 +35,9 @@ export async function restartDaemon(): Promise<string | null> {
     if (r.ok) return null;
     return (await r.text()) || "Toyon did not restart";
   } catch {
-    return "Could not reach Toyon";
+    // the connection dropping is what a restart looks like from here; the caller watches for the
+    // new daemon, and a daemon that was already gone shows as the socket's own failure
+    return null;
   }
 }
 

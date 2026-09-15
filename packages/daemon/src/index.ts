@@ -185,7 +185,11 @@ const restarter = new Restarter({
     const can = restartable();
     return can.ok ? null : can.reason;
   },
-  go: () => fireAndForget("daemon", shutdown("restart", { respawn: true }), "restart"),
+  // a beat later: shutdown closes the server before its first await, and the answer to whoever
+  // asked (the 202 to a page, the broadcast that a restart is under way) has to leave first
+  go: () => {
+    setTimeout(() => fireAndForget("daemon", shutdown("restart", { respawn: true }), "restart"), 100);
+  },
 });
 // the cloud image is replaced by a redeploy and never installed over, so it has nothing to compare
 const installedPackage = cloud.enabled ? null : PACKAGE_JSON;

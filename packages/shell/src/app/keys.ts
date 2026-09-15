@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { markUnread } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
 import { isChatCentred, isSubPicker, localOf, previewIdOf, routeTarget } from "../state/store.ts";
+import type { PaneKind } from "../ui/Pane.tsx";
 import { previewBus, togglePick } from "./previewBus.ts";
 import { PEEK_FALLBACK_MS, type WalkModifier, walkModifier } from "./railPeek.ts";
 import { railWalk } from "./railWalk.ts";
@@ -226,11 +227,18 @@ export function useChords() {
         // keeps running and stays in the switcher: it is a key people hit reflexively, and losing
         // a five-minute download to one is not a trade worth making. Stopping it is the button.
         else if (s.activeImportId) dispatch({ a: "watch-import", id: null });
-        // bottom panes, terminal first (a full-screen program in it keeps Escape for itself).
+        // bottom panes: the one holding the keyboard, since a click into a pane says which is meant.
+        // With none holding it, terminal first (a full-screen program in it keeps Escape for itself).
         // Zen is not on this ladder: it only leaves on ⌘., so Escape stays the page's own key
-        else if (s.termOpen) dispatch({ a: "toggle-terminal" });
-        else if (s.editor) dispatch({ a: "close-editor" });
-        else if (s.designOpen) dispatch({ a: "toggle-design" });
+        else {
+          const held = document.activeElement?.closest<HTMLElement>("[data-pane]")?.dataset.pane as
+            | PaneKind
+            | undefined;
+          const pane = held ?? (s.termOpen ? "terminal" : s.editor ? "editor" : s.designOpen ? "design" : null);
+          if (pane === "terminal") dispatch({ a: "toggle-terminal" });
+          else if (pane === "editor") dispatch({ a: "close-editor" });
+          else if (pane === "design") dispatch({ a: "toggle-design" });
+        }
       }
     };
     window.addEventListener("keydown", onKey);

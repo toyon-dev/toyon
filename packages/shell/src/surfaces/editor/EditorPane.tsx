@@ -71,6 +71,7 @@ export function EditorPane({
   return (
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%
     <Pane
+      kind="editor"
       className={cx("editor-pane", full && "full")}
       height={full ? undefined : height}
       resizable={!full}

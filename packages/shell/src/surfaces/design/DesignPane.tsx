@@ -69,6 +69,7 @@ export function DesignPane({
 
   return (
     <Pane
+      kind="design"
       className={cx("design-pane", full && "full")}
       height={full ? undefined : height}
       resizable={!full}

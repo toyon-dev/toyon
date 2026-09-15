@@ -17,7 +17,10 @@ import { Tabs, type TabsProps } from "./Tabs.tsx";
  * years seven of those views were named `*Pane` and rendered none of this, which is the drift this
  * paragraph exists to stop.
  */
+export type PaneKind = "editor" | "design" | "terminal";
+
 export function Pane({
+  kind,
   className,
   height,
   resizable = true,
@@ -32,6 +35,8 @@ export function Pane({
   closeHint = "esc",
   children,
 }: {
+  /** which pane this is, so Escape closes the one holding the keyboard rather than the first open */
+  kind: PaneKind;
   className: string;
   /** omitted: the pane takes the room the flex column gives it */
   height?: number | string;
@@ -67,7 +72,14 @@ export function Pane({
   );
   const close = <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />;
   return (
-    <div className={`pane ${className}`} style={height === undefined ? undefined : { height }}>
+    // Focusable but out of the tab order: a click on the pane's own ground (the design pane is
+    // mostly that) otherwise drops focus on the body, and Escape could not tell which pane was meant
+    <div
+      className={`pane ${className}`}
+      data-pane={kind}
+      tabIndex={-1}
+      style={height === undefined ? undefined : { height }}
+    >
       {resizable && <div className="pane-resize" onPointerDown={onDragStart} />}
       <div className={cx("pane-head", tabs && "pane-head-tabs")} {...cm.contextMenu(() => menu?.() ?? [])}>
         {tabs ? (

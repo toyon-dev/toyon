@@ -85,6 +85,7 @@ export function TerminalPane({
   }, []);
   return (
     <Pane
+      kind="terminal"
       className="term-pane"
       height={height}
       onDragStart={onDragStart}

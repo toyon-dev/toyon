@@ -1,6 +1,6 @@
 # Toyon
 
-Toyon is where you build web apps with coding agents. Every chat gets its own running copy of your app with a live preview.
+Toyon is where you ask for changes to your web app and try them as they happen. Every chat gets its own running copy with a live preview.
 
 Each copy runs on your own machine, and the next one is pre-warmed. Works with Claude Code, Codex and OpenCode over the Agent Client Protocol (ACP).
 

@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Toyon",
   "short_name": "Toyon",
-  "description": "Toyon is where you build web apps with coding agents. Every chat gets its own running copy of your app with a live preview.",
+  "description": "Toyon is where you ask for changes to your web app and try them as they happen. Every chat gets its own running copy with a live preview.",
   "start_url": "/",
   "display": "standalone",
   "display_override": [

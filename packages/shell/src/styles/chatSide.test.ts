@@ -9,9 +9,10 @@ import { cssRules, declsOf, shellCss } from "./cssRules.ts";
  * mirror was never written, fails quietly: the rail still draws, on the wrong side of itself.
  *
  * Not direction: rtl, which would reorder the bidi-neutral characters in a branch name or a
- * count: the rows reverse as flex items, and the four things a pair cannot carry are restated
- * in the mirrored block: the rows' order, the marker's side, the seam with its clip and shadow,
- * and the digits' edge. The bar is not mirrored: only the two panel toggles trade ends (TopBar.tsx).
+ * count: the dot alone crosses the row by flex order, so the row still reads name, badges, counts
+ * toward the control column, and the three things a pair cannot carry are restated in the mirrored
+ * block: the dot's seat, the marker's side, and the seam with its clip and shadow. The bar is not
+ * mirrored: only the two panel toggles trade ends (TopBar.tsx).
  */
 
 const MIRROR = '.app[data-chat-side="left"]';
@@ -51,9 +52,14 @@ describe("the rail's side is one switch", () => {
     const marker = declsOf(rules, `${MIRROR} .rail .rail-item::before`);
     expect(marker.get("left")).toBe("auto");
     expect(marker.get("right")).toBe("var(--row-edge-x, 0)");
-    expect(declsOf(rules, `${MIRROR} .rail .rail-item`).get("flex-direction")).toBe("row-reverse");
+    // the dot crosses, the row does not: the counts keep their order and their edge on both hands
+    expect(declsOf(rules, `${MIRROR} .rail .rail-item .dot`).get("order")).toBe("-1");
+    expect(declsOf(rules, `${MIRROR} .rail .rail-glyph`).get("order")).toBe("-1");
+    const mirrored = (sel: string) => rules.some((r) => r.selectors.includes(`${MIRROR} .rail ${sel}`));
+    expect(mirrored(".rail-item")).toBe(false);
+    expect(mirrored(".rail-counts")).toBe(false);
+    expect(mirrored(".rail-count")).toBe(false);
     expect(declsOf(rules, ".rail-count").get("text-align")).toBe("right");
-    expect(declsOf(rules, `${MIRROR} .rail .rail-count`).get("text-align")).toBe("left");
   });
   test("every seam has its mirror, each in its owner's stylesheet", async () => {
     const rules = cssRules(await shellCss());

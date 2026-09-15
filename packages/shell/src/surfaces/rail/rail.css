@@ -464,8 +464,8 @@
   }
 
   /* ---- the mirror: the chat on the window's left, and the rail outside it. The pairs swap, and
-   the four things a pair cannot carry are restated: the rows' order, the marker's side, the seam
-   with its clip and shadow, and the digits' edge. ---- */
+   the three things a pair cannot carry are restated: the dot's seat, the marker's side, and the
+   seam with its clip and shadow. ---- */
   .app[data-chat-side="left"] .rail {
     --rail-near-r: auto;
     --rail-near-l: 0;
@@ -475,14 +475,20 @@
     --rail-pad-r: var(--rail-gut);
     --rail-dot-ml: 0;
     --rail-dot-mr: 12px;
-    /* the rows read from the near edge, dot first, as flex items reversed rather than under
-       direction: rtl, which would reorder the bidi-neutral characters in a name, a +3 or a v2/5.
-       The names keep their left alignment and their ellipsis at the right: a short name floats off
-       the gutter here, which is the one asymmetry left as it is. */
-    & .rail-item,
-    & .rail-disc-item,
-    & .rail-disc-head,
-    & .rail-counts,
+    /* Only the dot crosses the row: it keeps the near edge, the strip, and the rest of the row
+       reads as it does on the other hand, the name from the dot's side, then the badges and the
+       counts up against the control column. Reversing the whole row put the counts between the dot
+       and a name that started mid-row, so a list of names did not line up and each row had to be
+       read from its middle. The dot moves by flex order rather than direction: rtl, which would
+       reorder the bidi-neutral characters in a name, a +3 or a v2/5. */
+    & .rail-item .dot,
+    & .rail-disc-item .dot,
+    & .rail-item .spinner,
+    & .rail-disc-item .spinner,
+    & .rail-glyph {
+      order: -1;
+    }
+    /* the pin keeps the dots' end */
     & .rail-foot {
       flex-direction: row-reverse;
     }
@@ -500,10 +506,6 @@
     &:hover .rail-panel,
     &.hold .rail-panel {
       box-shadow: 10px 0 20px -10px var(--shadow);
-    }
-    /* the digits' straight edge stays on the dot's side */
-    & .rail-count {
-      text-align: left;
     }
   }
 }

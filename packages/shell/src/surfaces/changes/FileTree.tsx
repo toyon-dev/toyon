@@ -32,6 +32,8 @@ import "./tree.css";
 const NO_PATHS: string[] = [];
 const NO_STATUS: GitFileStatus[] = [];
 const NO_FOLDERS: ReadonlySet<string> = new Set();
+/** what the tree points `aria-activedescendant` at; the rows are not focusable */
+const treeRowId = (i: number) => `tree-row-${i}`;
 /** worktrees whose opened folders are remembered; the oldest are forgotten past this */
 const KEPT_WORKTREES = 50;
 
@@ -270,6 +272,9 @@ export function FileTree({
       className="tree"
       role="tree"
       aria-label="files"
+      // the tree holds the keyboard and no row can take focus, so a reader is told where the cursor
+      // is by the tree pointing at that row rather than by focus moving to it
+      aria-activedescendant={focused && sel >= 0 ? treeRowId(sel) : undefined}
       tabIndex={0}
       ref={rootRef}
       onKeyDown={onKeyDown}
@@ -300,6 +305,7 @@ export function FileTree({
           <TreeItem
             key={row.path}
             row={row}
+            id={treeRowId(i)}
             status={marked.files.get(row.path)}
             changedInside={row.kind !== "file" && marked.folders.has(row.path)}
             current={focused ? i === sel : !openRef && row.path === openPath}
@@ -318,6 +324,7 @@ export function FileTree({
 
 const TreeItem = memo(function TreeItem({
   row,
+  id,
   status,
   changedInside,
   current,
@@ -329,6 +336,7 @@ const TreeItem = memo(function TreeItem({
   onDragEnd,
 }: {
   row: TreeRow;
+  id: string;
   status: GitFileStatus | undefined;
   changedInside: boolean;
   /** the row the tree marks: the cursor while the tree has the keyboard, the open file otherwise */
@@ -347,6 +355,7 @@ const TreeItem = memo(function TreeItem({
     // biome-ignore lint/a11y/useFocusableInteractive: the tree holds focus and moves its cursor over the rows
     <div
       role="treeitem"
+      id={id}
       aria-level={row.depth + 1}
       aria-expanded={row.kind === "folder" ? row.open : undefined}
       aria-selected={cursor}

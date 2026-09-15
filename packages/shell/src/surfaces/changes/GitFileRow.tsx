@@ -17,6 +17,7 @@ export function LineCounts({ f }: { f: GitFileStatus }) {
 /** one row of the changes list: status letter, file name, its directory, +/- counts */
 export const GitFileRow = memo(function GitFileRow({
   f,
+  id,
   active,
   selected,
   onOpen,
@@ -24,6 +25,8 @@ export const GitFileRow = memo(function GitFileRow({
   onHover,
 }: {
   f: GitFileStatus;
+  /** what the list points `aria-activedescendant` at when the cursor is on this row */
+  id: string;
   /** the row the list marks, band and edge: where the cursor is while the list has the keyboard,
    * and the file open in the editor while it does not */
   active: boolean;
@@ -39,6 +42,7 @@ export const GitFileRow = memo(function GitFileRow({
   return (
     <button
       className="row row-sm git-file row-edge"
+      id={id}
       data-state={rowState({ current: active, cursor: selected })}
       role="option"
       aria-selected={selected}

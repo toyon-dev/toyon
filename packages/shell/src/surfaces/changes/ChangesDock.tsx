@@ -159,6 +159,10 @@ export function ChangesDock({ width }: { width: number }) {
   // the file open in the editor while it does not. The cursor drawing an edge and the open file a
   // band split one mark across two rows the moment the arrows left the open file, onto a commit.
   const marked = (i: number, open: boolean) => (focused ? sel === i : open);
+  // The list holds the keyboard and none of its rows can take focus, so a reader is told where the
+  // cursor is by the list pointing at that row rather than by focus moving to it. One scheme for
+  // both lists: only one of them is rendered at a time.
+  const rowId = (i: number) => `changes-row-${i}`;
   useOnChange([shownId, tab], () => setSel(0));
 
   // the log is pulled, not pushed: reading it costs a git process, so a worktree nobody is
@@ -397,6 +401,9 @@ export function ChangesDock({ width }: { width: number }) {
           className={cx("changes-list", tab === "history" && "history")}
           role="listbox"
           aria-label={tab === "history" ? "commits" : "changed files"}
+          aria-activedescendant={
+            focused && sel >= 0 && sel < (tab === "history" ? histRows.length : rows.length) ? rowId(sel) : undefined
+          }
           tabIndex={0}
           ref={listRef}
           onKeyDown={onKeyDown}
@@ -429,6 +436,7 @@ export function ChangesDock({ width }: { width: number }) {
                 <GitFileRow
                   key={f.path}
                   f={f}
+                  id={rowId(i)}
                   active={marked(i, !openRef && f.path === openPath)}
                   selected={focused && sel === i}
                   onOpen={clickRow}
@@ -451,6 +459,7 @@ export function ChangesDock({ width }: { width: number }) {
                 <GitFileRow
                   key={`c-${f.path}`}
                   f={f}
+                  id={rowId(files.length + i)}
                   active={marked(files.length + i, !openRef && f.path === openPath)}
                   selected={focused && sel === files.length + i}
                   onOpen={clickRow}
@@ -478,6 +487,7 @@ export function ChangesDock({ width }: { width: number }) {
                 {r.file ? (
                   <GitFileRow
                     f={r.file}
+                    id={rowId(i)}
                     active={marked(i, openRef === r.commit.sha && r.file.path === openPath)}
                     selected={focused && sel === i}
                     onOpen={clickHistFile}
@@ -485,7 +495,7 @@ export function ChangesDock({ width }: { width: number }) {
                     onHover={noHover}
                   />
                 ) : (
-                  <CommitRow c={r.commit} selected={focused && sel === i} onToggle={clickCommit} />
+                  <CommitRow c={r.commit} id={rowId(i)} selected={focused && sel === i} onToggle={clickCommit} />
                 )}
               </Fragment>
             ))}

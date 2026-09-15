@@ -4,6 +4,7 @@ import {
   isMain,
   isOwned,
   type OwnedWorktree,
+  sentAt,
   type WorktreeStatus,
 } from "@toyon/shared";
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +18,6 @@ import {
 } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { profileOf } from "../../state/profiles.ts";
-import { sentAt } from "../../state/railOrder.ts";
 import {
   useActiveId,
   useArchivedOpen,
@@ -161,9 +161,10 @@ export function Rail() {
       ? worktreeItems(w, repoOf(w), { changesOpen, shipping }, deps, { graft: graftWith })
       : discoveredItems(w, { clientId }, deps);
 
-  /** A removed worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
+  /** An archived worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
    * row and its dot's seat is blank: a seat rather than nothing, so its name starts where every
-   * other name does when the dot leads the row. The gutter says how long ago it was archived. A
+   * other name does when the dot leads the row. One that archived itself has a clock there, whose
+   * hover says why. The gutter says how long ago it was archived. A
    * click opens its page in the
    * centre, the way a found row's does, and the restore button is there: a row that restored on
    * its own click was too easy to hit on the way past. Its menu (the kebab or a right-click) has
@@ -196,7 +197,16 @@ export function Rail() {
         </span>
       </span>
       <span className="branch">{a.title}</span>
-      <span className="dot" />
+      {a.auto ? (
+        <span
+          className="rail-glyph rail-auto row-dim"
+          {...tip(`Archived automatically: ${a.auto}`, undefined, { placement: tipSide })}
+        >
+          <Icon name="clock" className="icon-inline" />
+        </span>
+      ) : (
+        <span className="dot" />
+      )}
     </button>
   );
 

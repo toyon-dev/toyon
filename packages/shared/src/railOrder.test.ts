@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { OwnedWorktree, WorktreeInfo } from "@toyon/shared";
+import type { OwnedWorktree, WorktreeInfo } from "./model.ts";
 import { railOrder } from "./railOrder.ts";
 
 const row = (id: string, w: Partial<WorktreeInfo> = {}): OwnedWorktree => ({

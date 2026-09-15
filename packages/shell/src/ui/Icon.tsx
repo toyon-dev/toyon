@@ -43,6 +43,7 @@ export type IconName =
   | "worktrees"
   | "lock"
   | "pr"
+  | "clock"
   | "dot";
 
 const ICON_PATHS: Record<IconName, string> = {
@@ -130,6 +131,9 @@ const ICON_PATHS: Record<IconName, string> = {
   // a pull request: the branch glyph's left rail, and a second rail arriving from the right with
   // an arrowhead, which is the one thing that separates it from `branch` at 16px
   pr: "M4.5 5.1v5.8 M4.5 1.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M4.5 10.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M11.5 10.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M11.5 10.9V6.6a2 2 0 0 0-2-2H8 M9.6 2.9 7.9 4.6l1.7 1.7",
+  // a clock face with two hands: something toyon did on its own after a while, the rail's mark on a
+  // worktree that archived itself
+  clock: "M8 2.2a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 1 0 0-11.6z M8 4.8V8l2.2 1.4",
   // a step that happened under a name we cannot read: a marker, deliberately without a meaning
   dot: "M8 4.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 1 0 0-6.8z",
 };

@@ -42,6 +42,8 @@ export interface AgentAdapter {
   readonly queueLength: number;
   /** the waiting messages the shell draws as queued: those not yet shown in the transcript */
   readonly queueItems: string[];
+  /** something is still owed a person: a message queued, steered or refused, or a card open */
+  readonly unsettled: boolean;
   /** notified whenever the pending queue changes (send/consume/unqueue/stop) */
   onQueueChange: (() => void) | null;
   /** the slash commands this worktree's session advertises; empty until the agent has run once */

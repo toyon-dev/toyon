@@ -395,13 +395,16 @@
       background: var(--element1);
     }
   }
-  /* the lock stands in for the dot, so it is centred on the dot's x: the 13px glyph overhangs the
-   8px dot by 2.5px on each side, taken off the dot's own margins so the row's near edge holds */
-  .rail-lock {
+  /* the lock, and the clock on a worktree that archived itself, stand in for the dot, so they are
+   centred on the dot's x: the 13px glyph overhangs the 8px dot by 2.5px on each side, taken off
+   the dot's own margins so the row's near edge holds */
+  .rail-lock,
+  .rail-auto {
     display: flex;
   }
   .rail .rail-item .rail-lock,
-  .rail .rail-disc-item .rail-lock {
+  .rail .rail-disc-item .rail-lock,
+  .rail .rail-disc-item .rail-auto {
     margin-left: calc(var(--rail-dot-ml) - 2.5px);
     margin-right: calc(var(--rail-dot-mr) - 2.5px);
   }

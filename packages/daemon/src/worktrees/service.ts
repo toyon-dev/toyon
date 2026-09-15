@@ -617,13 +617,14 @@ export class WorktreeService {
    * record go, and its chat moves to the archive with the commits and uncommitted work kept under a
    * ref, so an archive can be undone and a landed branch's conversation brought back. Its draft
    * stays, under the same id. One archive per worktree at a time: a second caller waits on the
-   * first and gets its answer. Returns what was archived, if anything. */
-  archiveWorktree(worktreeId: string): Promise<ArchivedWorktree | null> {
+   * first and gets its answer. `reason` is why it archived itself, when nobody asked. Returns what
+   * was archived, if anything. */
+  archiveWorktree(worktreeId: string, reason?: string): Promise<ArchivedWorktree | null> {
     const running = this.archiving.get(worktreeId);
     if (running) return running;
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || !canRemove(wt)) return Promise.resolve(null);
-    const done = this.takeDown(wt, true).finally(() => this.archiving.delete(worktreeId));
+    const done = this.takeDown(wt, true, reason).finally(() => this.archiving.delete(worktreeId));
     this.archiving.set(worktreeId, done);
     return done;
   }
@@ -642,7 +643,7 @@ export class WorktreeService {
     this.d.drafts?.drop(worktreeId);
   }
 
-  private async takeDown(wt: WorktreeInfo, archive: boolean): Promise<ArchivedWorktree | null> {
+  private async takeDown(wt: WorktreeInfo, archive: boolean, reason?: string): Promise<ArchivedWorktree | null> {
     const worktreeId = wt.id;
     const repo = this.d.state.requireRepo(wt.repoId);
     // the agent first (inside runtime.stop): it may be mid-turn in the directory about to be
@@ -667,7 +668,7 @@ export class WorktreeService {
     this.d.state.removeWorktree(worktreeId);
     releasePort(wt.proxyPort);
     let archived: ArchivedWorktree | null = null;
-    if (archive) archived = this.archiveChat(wt, repo, kept, sessionId);
+    if (archive) archived = this.archiveChat(wt, repo, kept, sessionId, reason);
     else {
       this.deleteChat(worktreeId);
       // nothing will list what it landed, so nothing needs those commits kept
@@ -693,6 +694,7 @@ export class WorktreeService {
     repo: RepoInfo,
     kept: KeptState | null,
     sessionId: string | undefined,
+    reason?: string,
   ): ArchivedWorktree | null {
     const files = this.chatFiles(wt.id);
     const prompt = firstPrompt(files.transcript);
@@ -707,6 +709,7 @@ export class WorktreeService {
       ...(prompt ? { prompt } : {}),
       ...(cost !== undefined ? { cost } : {}),
       ...(kept ? { kept } : {}),
+      ...(reason ? { auto: reason } : {}),
     };
     try {
       this.archive.put(rec, files);
@@ -840,6 +843,9 @@ export class WorktreeService {
     if (!repo) throw new UserError(`${old.title} belongs to a project that is not open`);
     const kept = rec.kept;
     if (!kept) throw new UserError(`${old.title} was archived without its commits, so there is nothing to restore`);
+    // how often a worktree that archived itself is wanted back is what says whether the rule needs a
+    // way to keep a row
+    if (rec.auto) log.info(old.id, `restoring a worktree that archived itself (${rec.auto})`);
     const path = existsSync(old.path)
       ? join(dirname(old.path), `${basename(old.path)}-${shortId().slice(0, 4)}`)
       : old.path;
@@ -1489,6 +1495,16 @@ export class WorktreeService {
     } catch {
       return cached ?? {};
     }
+  }
+
+  /** a worktree's dirty files and commits ahead of main, from git now rather than the rail's cached
+   * counts: what an archive of its own accord is decided on. Empty when git cannot say. */
+  async freshCounts(worktreeId: string): Promise<{ ahead?: number; dirty?: number }> {
+    const wt = this.d.state.worktree(worktreeId);
+    const repo = wt && this.d.state.repo(wt.repoId);
+    if (!wt || !repo) return {};
+    this.countsCache.delete(worktreeId);
+    return this.counts(wt.id, wt.path, repo.defaultBranch, true);
   }
 
   /** Resolve an id for reading: a worktree toyon runs, or one it merely knows about. Null for a

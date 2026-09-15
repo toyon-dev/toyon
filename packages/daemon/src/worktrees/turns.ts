@@ -192,8 +192,4 @@ function stopOf(prev: AgentStatus, next: AgentStatus): TurnEnd | null {
   return null;
 }
 
-/** it stopped since anyone last looked, or someone marked it to come back to. A worktree with no
- * record reads as seen. */
-export function isUnseen(wt: WorktreeInfo): boolean {
-  return wt.unread === true || (wt.lastTurn != null && (wt.seenAt == null || wt.seenAt < wt.lastTurn.at));
-}
+export { isUnseen } from "@toyon/shared";

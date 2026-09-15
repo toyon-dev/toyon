@@ -160,6 +160,12 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
       d.state.save();
       d.hub.emit("worktreesChanged");
     },
+    onPlan: () => {
+      const w = d.state.worktree(wt.id);
+      if (!w || w.planned) return;
+      w.planned = true;
+      d.state.save();
+    },
     option: (category) => d.state.requireWorktree(wt.id)[OPTION_FIELDS[category]],
     // kept per agent, not per worktree: the picker on a worktree whose session has not opened
     // yet shows what this agent offered last time

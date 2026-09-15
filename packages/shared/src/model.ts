@@ -252,6 +252,9 @@ export interface WorktreeInfo {
   viewedAt?: number;
   /** the person marked it unread to come back to; rings the row until it is next seen */
   unread?: boolean;
+  /** its agent showed a plan here, approved or not: a plan is worth keeping, so the row never
+   * archives itself. Stamped when the card is shown, since a transcript cannot tell one apart. */
+  planned?: boolean;
   /** main only: nothing tracked and nothing untracked, which is what a project made from the
    * picker looks like until something is scaffolded into it. Kept current by every git status
    * read, and stored so the first frame of a page load can say so without asking git. */
@@ -337,6 +340,12 @@ export interface Landing {
  * a branch the person made, in a directory they chose, and neither is toyon's to touch. */
 export function hasOwnBranch(wt: Pick<WorktreeInfo, "branch">): boolean {
   return wt.branch.startsWith("toyon/");
+}
+
+/** it stopped since anyone last looked, or someone marked it to come back to. A worktree with no
+ * record reads as seen. */
+export function isUnseen(wt: WorktreeInfo): boolean {
+  return wt.unread === true || (wt.lastTurn != null && (wt.seenAt == null || wt.seenAt < wt.lastTurn.at));
 }
 
 /** `unreachable`: alive, but nothing answered on its port before the deadline and it bound no
@@ -509,6 +518,8 @@ export interface ArchivedWorktree {
   /** what its agent's session cost, as the agent last reported it; only an agent that prices
    * itself reports one, so a chat run by one that does not has no figure */
   cost?: number;
+  /** why it archived itself, as the rail says it; absent when someone archived it */
+  auto?: string;
 }
 
 /** One row of the rail: a worktree toyon runs, or one git knows about that toyon did not create

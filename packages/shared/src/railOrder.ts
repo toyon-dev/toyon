@@ -1,4 +1,5 @@
-import { isMain, type OwnedWorktree, type WorktreeInfo } from "@toyon/shared";
+import type { WorktreeInfo } from "./model.ts";
+import { isMain } from "./worktree-caps.ts";
 
 /** when someone last put work into a row: what they sent, else its agent's last turn for a row from
  * before sends were stamped, else when it was made */
@@ -9,8 +10,8 @@ export const sentAt = (w: WorktreeInfo) => w.promptedAt ?? w.lastTurn?.at ?? w.c
  * while agents run; what needs you is the dot's and the jump chord's to say. A variant group moves
  * as one, at its newest sibling's time and in index order, so a follow-up to one attempt does not
  * pull it away from the attempts it is being compared with. Rows that tie keep the daemon's order. */
-export function railOrder(rows: readonly OwnedWorktree[]): OwnedWorktree[] {
-  const units: { tier: number; at: number; rows: OwnedWorktree[] }[] = [];
+export function railOrder<T extends { worktree: WorktreeInfo }>(rows: readonly T[]): T[] {
+  const units: { tier: number; at: number; rows: T[] }[] = [];
   const groups = new Map<string, (typeof units)[number]>();
   for (const row of rows) {
     const w = row.worktree;

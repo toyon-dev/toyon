@@ -73,6 +73,8 @@ export interface AcpSessionDeps {
   mode?: () => PermissionMode;
   /** a plan approval decided the mode for the work that follows */
   setMode?: (mode: PermissionMode) => void;
+  /** a plan card was shown, whatever becomes of it */
+  onPlan?: () => void;
   /** the value the worktree asks for in this category (its model, its effort level); undefined
    * leaves the agent on its own default */
   option?: (category: OptionCategory) => string | undefined;
@@ -234,6 +236,10 @@ export class AcpSession implements AgentAdapter {
 
   get queueLength() {
     return this.queue.length;
+  }
+
+  get unsettled(): boolean {
+    return this.queue.length > 0 || this.steered.length > 0 || this.refused !== null || this.asks.size > 0;
   }
 
   get queueItems(): string[] {
@@ -876,6 +882,7 @@ export class AcpSession implements AgentAdapter {
    * hold its request open until one is clicked */
   private askPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
     const plan = params.toolCall.kind === "switch_mode";
+    if (plan) this.d.onPlan?.();
     // a plan's options are all one-time answers. An edit's or a command's include the agent's
     // "always allow", which would write a rule into its settings and take every later request of
     // that shape away from this policy; the card offers only what keeps the mode meaning something

@@ -2,6 +2,7 @@
 // let the bridge bundle import one table without pulling zod or the theme data in.
 
 export * from "./agent-tools.ts";
+export * from "./archiveRule.ts";
 export * from "./attachment.ts";
 export * from "./chord-labels.ts";
 export * from "./chords.ts";
@@ -20,6 +21,7 @@ export * from "./protocol/events.ts";
 export * from "./protocol/limits.ts";
 export * from "./protocol/pick.ts";
 export * from "./protocol/ws.ts";
+export * from "./railOrder.ts";
 export * from "./routes.ts";
 export * from "./sandbox.ts";
 export * from "./themes.ts";

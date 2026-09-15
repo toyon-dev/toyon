@@ -24,6 +24,8 @@ export interface ArchiveRecord {
   cost?: number;
   /** absent when git had nothing to keep or the ref could not be written */
   kept?: KeptState;
+  /** why it archived itself; absent when someone archived it */
+  auto?: string;
 }
 
 /** where a worktree's chat lives on disk */
@@ -123,6 +125,7 @@ export function summarize(r: ArchiveRecord, repoId: string): ArchivedWorktree {
     ...(r.kept?.snapshot ? { uncommitted: true } : {}),
     ...(r.worktree.landed ? { landed: true } : {}),
     ...(r.cost !== undefined ? { cost: r.cost } : {}),
+    ...(r.auto ? { auto: r.auto } : {}),
   };
 }
 

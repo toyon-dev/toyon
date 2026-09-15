@@ -25,6 +25,7 @@ export class FakeAgent implements AgentAdapter {
   get queueItems(): string[] {
     return [];
   }
+  unsettled = false;
   send(text: string, opts: SendOpts = {}) {
     this.sent.push({ text, ...opts });
   }

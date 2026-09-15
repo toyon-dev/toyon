@@ -58,6 +58,7 @@ import { LandingService } from "./worktrees/landing.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
+import { ArchiveSweep, archiveAfterFrom } from "./worktrees/sweep.ts";
 import { TurnService } from "./worktrees/turns.ts";
 
 // Bun exits the process on an unhandled rejection or exception. For a daemon that owns every
@@ -186,6 +187,15 @@ const idle = new IdlePolicy({
   hub,
   wake: (id) => repos.touch(id),
   warmSpare: (repoId) => repos.warm(repoId),
+});
+// worktrees that finished with nothing to keep go into the archive on their own, after a while
+const sweep = new ArchiveSweep({
+  state,
+  viewed: (id) => idle.isViewed(id),
+  pending: (id) => runtime.busy(id) || !!runtime.agentFor(id)?.unsettled,
+  drafts,
+  worktrees,
+  afterMs: archiveAfterFrom(process.env.TOYON_ARCHIVE_AFTER_MS),
 });
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);
 themes.load();
@@ -342,6 +352,7 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   idle.shutdown();
   repos.stopWatchers();
   prs.stop();
+  sweep.stop();
   stopLagSampler();
   stopServer();
   // the visits still waiting on their coalesced write; a clean stop should not lose them

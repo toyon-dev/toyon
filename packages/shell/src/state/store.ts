@@ -57,12 +57,12 @@ import {
   isMain,
   isOwned,
   PROJECTS_FOLDER,
+  railOrder,
   resolveTheme,
   SHELL_STREAM,
   toyonDark,
 } from "@toyon/shared";
 import { mergeLinks } from "./links.ts";
-import { railOrder } from "./railOrder.ts";
 
 export type UsageFigures = { used: number; size: number; cost?: number };
 

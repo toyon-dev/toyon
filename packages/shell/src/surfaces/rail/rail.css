@@ -3,22 +3,13 @@
 @layer tokens, base, surfaces;
 
 @layer surfaces {
-  .rail-item {
+  .rail-item,
+  .rail-disc-item {
     /* the active/graft marker rides the panel's far edge rather than the row's, because the row's
-     own far edge is off screen while the rail is collapsed */
-    --row-edge-x: var(--rail-edge, 0px);
-    /* it travels on the same curve and the same delay as the panel width, so the two move as one.
-     inset, not left: the mirror pins the marker by right (the block at the foot), and a shorthand
-     transitions whichever of its longhands moves */
-    &::before {
-      transition: inset 0.12s ease 120ms;
-    }
-  }
-
-  .rail {
-    &:hover .rail-item::before {
-      transition: inset 0.12s ease 50ms;
-    }
+     own far edge is off screen while the rail is collapsed. The row is the list's width and the
+     panel is the size container, so this is wherever the panel's edge is on every frame: it moves
+     with the peek, and snaps with the panel when the rail is kept open or let go. */
+    --row-edge-x: calc(var(--rail-inner) - 100cqw);
   }
   /* --dot-gap follows the row's own background so the unseen ring keeps a clean gap instead of a
    grey band once the row is hovered or selected */
@@ -172,9 +163,6 @@
     --rail-width: 280px;
     /* the list sits inside the panel's 1px inner border, so both states line up on the same pixel */
     --rail-inner: calc(var(--rail-width) - 1px);
-    /* the panel's far edge within a row, measured from the row's far side: the strip's edge
-     collapsed, the row's own edge open */
-    --rail-edge: calc(var(--rail-width) - 40px);
     /* The rail stands at one window edge, its near edge, and peeks from there toward the centre,
        its far edge. Which physical side is which follows the chat (the app root's data-chat-side):
        every pin, pad and margin in this file reads one of these pairs, and the mirrored block at
@@ -195,11 +183,6 @@
     flex-shrink: 0;
     position: relative;
     overflow: visible;
-    &:hover,
-    &.hold,
-    &.pinned {
-      --rail-edge: 0px;
-    }
   }
   .rail-panel {
     position: absolute;
@@ -215,6 +198,8 @@
     /* the seam faces the chat dock; the mirror turns it */
     border-left: 1px solid var(--border0);
     overflow: hidden;
+    /* the rows' edge marker measures this box's width */
+    container-type: size;
     /* the peek grows toward the centre over the chat dock and its grab strip, which are its
        neighbours inside .docks and the only things it covers */
     z-index: 2;
@@ -391,12 +376,11 @@
     &.hold .rail-disc-item,
     &.pinned .rail-disc-item {
       display: flex;
-      /* the same padding and edge-marker anchoring as .rail-item: these rows sit in the same column and
+      /* the same padding as .rail-item: these rows sit in the same column and
      their dots have to land on the same centre line. A rung down in height as well as colour,
      because these are not main's peers and nine of them should not outweigh one of yours. */
       padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
       min-height: var(--row-height-sm);
-      --row-edge-x: var(--rail-edge, 0px);
     }
   }
   /* selected the same way a worktree row is: it is the same selection, and the pane beside it is

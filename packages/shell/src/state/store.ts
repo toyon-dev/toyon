@@ -316,7 +316,7 @@ export interface Panels {
 }
 
 /** what a project that has never been laid out gets: the docks open, the panes shut */
-export const defaultPanels: Panels = Object.freeze({ changes: true, chat: true, term: false, design: false });
+export const defaultPanels: Panels = Object.freeze({ changes: false, chat: true, term: false, design: false });
 
 function panelsOf(s: State): Panels {
   return { changes: s.changesOpen, chat: s.chatOpen, term: s.termOpen, design: s.designOpen };
@@ -327,7 +327,7 @@ function samePanels(a: Panels, b: Panels): boolean {
 }
 
 function applyPanels(s: State, p: Panels): State {
-  // a remembered layout is a decision, so the clean-main auto-close must not second-guess it
+  // a remembered layout is a decision, so the first-diff auto-open must not second-guess it
   return { ...s, changesOpen: p.changes, chatOpen: p.chat, termOpen: p.term, designOpen: p.design, changesAuto: false };
 }
 
@@ -492,8 +492,8 @@ export interface State {
   unreadHold: string | null;
   /** the layout each project was last left in; the active one's is what the flags above hold */
   panels: Record<string, Panels>;
-  /** one-shot: auto-close the changes panel if the session starts on a clean main, unless the
-   * project already has a remembered layout */
+  /** one-shot: the changes panel starts closed and opens itself the first time the active
+   * worktree has something to show, unless a remembered layout or a hand has already decided it */
   changesAuto: boolean;
   /** full-bleed preview: all chrome hidden */
   zen: boolean;
@@ -631,14 +631,14 @@ export function initialState(opts: InitialOpts): State {
     overlay: null,
     paletteReturn: null,
     incompatible: false,
-    changesOpen: true,
+    changesOpen: defaultPanels.changes,
     focusChanges: 0,
     editCommit: 0,
-    chatOpen: true,
+    chatOpen: defaultPanels.chat,
     focusChat: 0,
     walked: 0,
     railOpen: opts.storedRailOpen ?? false,
-    chatSide: opts.storedChatSide ?? "right",
+    chatSide: opts.storedChatSide ?? "left",
     focusRail: 0,
     railPeek: false,
     unreadHold: null,
@@ -993,8 +993,8 @@ function enterRepo(s: State): State {
   return p ? applyPanels(s, p) : { ...s, panels: { ...s.panels, [id]: panelsOf(s) } };
 }
 
-/** the clean-main auto-close is the one thing that shuts a panel without anyone asking, so it is
- * the one thing the layout must not learn from: it would outlive the clean main that prompted it */
+/** the first-diff auto-open is the one thing that opens a panel without anyone asking, so it is
+ * the one thing the layout must not learn from: it would outlive the diff that prompted it */
 function guessed(action: Action): boolean {
   return action.a === "server" && action.msg.t === "git-status";
 }
@@ -1589,15 +1589,16 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, chat, log: msg.log ?? l.log, ...(usage ? { usage } : {}) }));
     }
     case "git-status": {
-      // session opened on a clean main: nothing to show — close the changes panel once
+      // the panel is a place you go, not a fixture: it starts closed and opens itself once, the
+      // first time the worktree on screen has something to show. An empty status does not spend
+      // the one shot; the moment is the first diff, not the first answer.
       let changesOpen = s.changesOpen;
       let changesAuto = s.changesAuto;
-      if (s.changesAuto && msg.worktreeId === s.activeId) {
-        const wt = worktreeById(s, msg.worktreeId);
-        if (wt && isMain(wt.worktree) && msg.files.length === 0 && (msg.committed?.length ?? 0) === 0) {
-          changesOpen = false;
+      if (s.changesAuto && msg.worktreeId === s.activeId && !s.changesOpen) {
+        if (msg.files.length > 0 || (msg.committed?.length ?? 0) > 0) {
+          changesOpen = true;
+          changesAuto = false;
         }
-        changesAuto = false;
       }
       // ranges go stale whenever the worktree's git state moves
       const next = withLocal(s, msg.worktreeId, (l) => ({

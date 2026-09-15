@@ -816,19 +816,23 @@ describe("drafts", () => {
 });
 
 describe("git status", () => {
-  test("a clean main on first load auto-closes the changes panel, once", () => {
-    const s = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
-    expect(s.changesOpen).toBe(false);
-    expect(s.changesAuto).toBe(false);
-    const reopened = reducer(s, { a: "toggle-changes" });
-    expect(reducer(reopened, server({ t: "git-status", worktreeId: "main", files: [] })).changesOpen).toBe(true);
+  test("the changes panel starts closed and opens itself once, at the first diff", () => {
+    const clean = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
+    // an empty status does not spend the one shot
+    expect([clean.changesOpen, clean.changesAuto]).toEqual([false, true]);
+    const dirty = server({ t: "git-status", worktreeId: "main", files: [{ xy: " M", path: "a" }] });
+    const opened = reducer(clean, dirty);
+    expect([opened.changesOpen, opened.changesAuto]).toEqual([true, false]);
+    // closed by hand, it stays closed however dirty the worktree gets
+    const shut = reducer(opened, { a: "toggle-changes" });
+    expect(reducer(shut, dirty).changesOpen).toBe(false);
   });
-  test("a dirty worktree keeps the panel open", () => {
+  test("a status for another worktree does not open the panel", () => {
     const s = run([
-      hello(wt("main", "main")),
-      server({ t: "git-status", worktreeId: "main", files: [{ xy: " M", path: "a" }] }),
+      hello(wt("main", "main"), wt("w1", "worktree")),
+      server({ t: "git-status", worktreeId: "w1", files: [{ xy: " M", path: "a" }] }),
     ]);
-    expect(s.changesOpen).toBe(true);
+    expect(s.changesOpen).toBe(false);
   });
   test("focus-changes opens a shut panel and asks for the keyboard every time", () => {
     const shut = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
@@ -1265,17 +1269,17 @@ describe("new-project view", () => {
 
 describe("chat side", () => {
   test("the chat stands on the right until told otherwise", () => {
-    expect(initial.chatSide).toBe("right");
+    expect(initial.chatSide).toBe("left");
   });
   test("a reload paints the stored side before hello, and hello keeps it", () => {
-    const from = initialState({ clientId: ME, storedChatSide: "left" });
-    expect(from.chatSide).toBe("left");
-    expect(run([hello(wt("m1", "main"))], from).chatSide).toBe("left");
+    const from = initialState({ clientId: ME, storedChatSide: "right" });
+    expect(from.chatSide).toBe("right");
+    expect(run([hello(wt("m1", "main"))], from).chatSide).toBe("right");
   });
   test("the toggle flips it and flips it back", () => {
     const once = reducer(initial, { a: "toggle-chat-side" });
-    expect(once.chatSide).toBe("left");
-    expect(reducer(once, { a: "toggle-chat-side" }).chatSide).toBe("right");
+    expect(once.chatSide).toBe("right");
+    expect(reducer(once, { a: "toggle-chat-side" }).chatSide).toBe("left");
   });
 });
 
@@ -1285,7 +1289,7 @@ describe("panel layout", () => {
 
   test("opening a panel remembers it under the active project", () => {
     const s = run([two(), { a: "toggle-design" }, { a: "toggle-changes" }]);
-    expect(s.panels.r1).toEqual({ changes: false, chat: true, term: false, design: true });
+    expect(s.panels.r1).toEqual({ changes: true, chat: true, term: false, design: true });
   });
 
   test("switching projects paints that project's layout, and switching back restores this one", () => {
@@ -1323,21 +1327,21 @@ describe("panel layout", () => {
     expect(s.designOpen).toBe(true);
   });
 
-  test("the clean-main auto-close is not learned as the project's layout", () => {
-    const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [] })]);
-    expect(s.changesOpen).toBe(false);
-    // it closed for this session only: a reload with changes waiting opens the panel again
-    expect(s.panels.r1?.changes).toBe(true);
+  test("the first-diff auto-open is not learned as the project's layout", () => {
+    const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [{ xy: " M", path: "a" }] })]);
+    expect(s.changesOpen).toBe(true);
+    // it opened for this session only: a reload on a clean worktree starts closed again
+    expect(s.panels.r1?.changes).toBe(false);
   });
 
-  test("a remembered layout outranks the clean-main auto-close", () => {
+  test("a remembered layout outranks the first-diff auto-open", () => {
     const from = initialState({
       clientId: ME,
       storedRepo: "r1",
-      storedPanels: { r1: { changes: true, chat: true, term: false, design: false } },
+      storedPanels: { r1: { changes: false, chat: true, term: false, design: false } },
     });
-    const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [] })], from);
-    expect(s.changesOpen).toBe(true);
+    const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [{ xy: " M", path: "a" }] })], from);
+    expect(s.changesOpen).toBe(false);
   });
 });
 

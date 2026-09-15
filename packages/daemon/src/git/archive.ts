@@ -87,3 +87,30 @@ export async function commitOf(repoPath: string, ref: string): Promise<string | 
   const r = await git(repoPath, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`);
   return r.ok ? r.out : null;
 }
+
+/** the commits a landing carries: from where the branch sits on the default branch to its tip */
+export interface LandingRange {
+  base: string;
+  tip: string;
+}
+
+/** One landing's tip, kept past the branch restarting from main, and past a squash that never puts
+ * these commits on main at all. */
+export const landRef = (worktreeId: string, n: number) => `refs/toyon/lands/${worktreeId}/${n}`;
+
+/** The branch about to land, read before anything moves: null when it holds nothing main lacks. */
+export async function landingMark(worktreePath: string, defaultBr: string): Promise<LandingRange | null> {
+  const [tip, base] = await Promise.all([
+    git(worktreePath, "rev-parse", "HEAD"),
+    git(worktreePath, "merge-base", "HEAD", defaultBr),
+  ]);
+  if (!tip.ok || !base.ok || !tip.out || tip.out === base.out) return null;
+  return { base: base.out, tip: tip.out };
+}
+
+/** Drop every landing ref a worktree holds. Best effort: a ref left behind only keeps commits alive. */
+export async function dropLandRefs(repoPath: string, worktreeId: string): Promise<void> {
+  const r = await git(repoPath, "for-each-ref", "--format=%(refname)", `refs/toyon/lands/${worktreeId}/`);
+  if (!r.ok || !r.out) return;
+  for (const ref of r.out.split("\n").filter(Boolean)) await git(repoPath, "update-ref", "-d", ref);
+}

@@ -22,7 +22,8 @@ export function openFile({ dispatch }: Deps, { focus = true, ...target }: OpenRe
 /** a file in the changes panel: show it in the editor pane as its diff or as the file, open it
  * somewhere else, copy where it is, and for an uncommitted one, throw it away. `showing` is the view the pane already
  * has this file in, which the menu swaps rather than reads again; `ref` is the commit a history row
- * stands for; `added` says the file has nothing on the other side, so no diff to offer. */
+ * stands for; `added` says the file has nothing on the other side, so no diff to offer; `kept` says
+ * only git holds it, so there is nothing on disk to open elsewhere or reveal. */
 export function fileItems(
   wt: { id: string; dir: string },
   path: string,
@@ -31,7 +32,8 @@ export function fileItems(
     ref,
     showing,
     added = false,
-  }: { discard?: boolean; ref?: string; showing?: EditorView; added?: boolean },
+    kept = false,
+  }: { discard?: boolean; ref?: string; showing?: EditorView; added?: boolean; kept?: boolean },
   deps: Deps,
 ): MenuEntry[] {
   const { sock, dispatch } = deps;
@@ -42,7 +44,7 @@ export function fileItems(
       showing ? dispatch({ a: "editor-view", v }) : openFile(deps, { worktreeId: wt.id, path, view: v, ref }),
   }));
   const abs = `${wt.dir}/${path}`;
-  const open = editorItems(abs, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));
+  const open = kept ? [] : editorItems(abs, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));
   const copy: MenuItem[] = [{ id: "copy-path", label: "copy path", onClick: () => copyText(abs) }];
   const discardItems = discard
     ? [

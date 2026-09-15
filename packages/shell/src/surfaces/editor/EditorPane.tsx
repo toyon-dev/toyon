@@ -6,7 +6,7 @@ import { addToChat } from "../../state/attach.ts";
 import { useDispatch, useFileSync, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import type { EditorSync, FileSync } from "../../state/fileSync.ts";
 import { useTheme } from "../../state/selectors.ts";
-import { type EditorDisk, type EditorFile, localOf, worktreeById } from "../../state/store.ts";
+import { archivedPageOf, type EditorDisk, type EditorFile, localOf, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
@@ -41,9 +41,11 @@ export function EditorPane({
   const files = useFileSync();
   const theme = useTheme();
   const { worktreeId, path, ref } = editor;
+  // a file on an archived worktree's page is only in git: its directory is gone
+  const kept = useStore((s) => archivedPageOf(s)?.id === worktreeId);
   const wtPath = useStore((s) => {
     const w = worktreeById(s, worktreeId)?.worktree;
-    return w && wtDir(w);
+    return w ? wtDir(w) : archivedPageOf(s)?.path;
   });
   const absPath = wtPath ? `${wtPath}/${path}` : path;
   // a commit's copy: read-only, and none of the working-tree wiring below applies to it
@@ -57,8 +59,8 @@ export function EditorPane({
   // cache, so `cached` is a dependency and the request re-fires. Ranges are measured against the
   // working tree, so for a commit they would light up lines the page never rendered.
   useEffect(() => {
-    if (!cached && !history) sock?.send({ t: "changed-ranges", worktreeId, path });
-  }, [worktreeId, path, cached, history, sock]);
+    if (!cached && !history && !kept) sock?.send({ t: "changed-ranges", worktreeId, path });
+  }, [worktreeId, path, cached, history, kept, sock]);
   const lineOff = cached?.offset ?? 0;
   const disk = editor.disk;
   // until the first read decides, the toggle offers the file, as it does from a diff
@@ -84,7 +86,7 @@ export function EditorPane({
           ? fileItems(
               { id: worktreeId, dir: wtPath },
               path,
-              { discard: !history, ref, showing: editor.view ?? undefined, added },
+              { discard: !history && !kept, kept, ref, showing: editor.view ?? undefined, added },
               { sock, dispatch },
             )
           : []
@@ -107,7 +109,7 @@ export function EditorPane({
               <Icon name={other === "diff" ? "diff" : "text"} className="icon-inline" /> {other}
             </Button>
           )}
-          <OpenInMenu absPath={absPath} onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />
+          {!kept && <OpenInMenu absPath={absPath} onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />}
         </>
       }
     >

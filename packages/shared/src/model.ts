@@ -158,6 +158,14 @@ export const PERMISSION_MODES: ReadonlyArray<{ id: PermissionMode; name: string;
 ];
 export const DEFAULT_PERMISSION_MODE: PermissionMode = "auto";
 
+/** One landing: the commits `base..tip`, where `tip` is the branch as it landed and `base` is where
+ * it sat on the default branch. */
+export interface LandMark {
+  base: string;
+  tip: string;
+  at: number;
+}
+
 export interface WorktreeInfo {
   id: string;
   repoId: string;
@@ -174,6 +182,9 @@ export interface WorktreeInfo {
   createdAt: number;
   /** merged into main and no new work since */
   landed?: boolean;
+  /** every landing, oldest first, each tip kept under a ref: the branch restarts from main after
+   * one, so these are what still names the commits it carried */
+  lands?: LandMark[];
   /** set when spawned as one of N parallel attempts at the same prompt */
   variant?: { group: string; index: number; of: number };
   /** the pull request this worktree opened, and what GitHub last said about it; absent until the
@@ -589,6 +600,9 @@ export interface CommitEntry {
   at: number;
   /** ahead of the default branch: this worktree's own work, not history it inherited */
   ahead: boolean;
+  /** when the landing that carried it happened; only an archived worktree's history says, since
+   * there the commits are all its own and the landings are what divide them */
+  landedAt?: number;
 }
 
 // ---- Themes ----

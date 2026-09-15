@@ -464,9 +464,14 @@ describe("handlers", () => {
     expect(services.state.worktree(wt.id)).toBeUndefined();
     replies.length = 0;
     await dispatch({ t: "subscribe", worktreeId: wt.id }, ctx, services);
-    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands"]);
+    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands", "git-status"]);
     expect(replies[0]).toMatchObject({ t: "backfill", events: [{ seq: 0, event: said }], log: [] });
+    // what it left in git, for the changes panel on its page, and a file of it read from there
+    expect(replies[3]).toMatchObject({ t: "git-status", files: [], committed: [{ path: "done.txt" }] });
     expect([...subs]).toEqual([wt.id]);
+    replies.length = 0;
+    await dispatch({ t: "read-file", worktreeId: wt.id, path: "done.txt", seq: 1 }, ctx, services);
+    expect(replies[0]).toMatchObject({ t: "file-read", before: "", after: "x\n", version: null, writable: false });
     await dispatch({ t: "restore-worktree", archiveId: wt.id, message: { text: "and the header" } }, ctx, services);
     expect(services.state.worktree(wt.id)).toBeDefined();
     expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "and the header" });

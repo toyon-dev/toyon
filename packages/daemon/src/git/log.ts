@@ -20,9 +20,19 @@ export async function logCommits(worktreePath: string, defaultBr: string, limit 
     aheadShas(worktreePath, defaultBr),
   ]);
   // an unborn branch has no HEAD to log: an empty history, not an error the person should read
-  if (!r.ok || !r.out) return [];
+  return r.ok && r.out ? parseLog(r.out, (sha) => ahead.has(sha)) : [];
+}
+
+/** The commits in `from..to`, newest first, every one flagged as the worktree's own: an archived
+ * worktree's history is read from the refs that kept it, with no branch left to count against. */
+export async function logRange(cwd: string, from: string, to: string, limit = LOG_LIMIT): Promise<CommitEntry[]> {
+  const r = await git(cwd, "log", `-n${limit}`, FORMAT, `${from}..${to}`);
+  return r.ok && r.out ? parseLog(r.out, () => true) : [];
+}
+
+function parseLog(out: string, ahead: (sha: string) => boolean): CommitEntry[] {
   const commits: CommitEntry[] = [];
-  for (const rec of r.out.split("\x1e")) {
+  for (const rec of out.split("\x1e")) {
     const [sha, short, author, at, subject] = rec.trim().split("\0");
     if (!sha || !short || subject === undefined) continue;
     commits.push({
@@ -31,7 +41,7 @@ export async function logCommits(worktreePath: string, defaultBr: string, limit 
       subject,
       author: author ?? "",
       at: Number(at) * 1000 || 0,
-      ahead: ahead.has(sha),
+      ahead: ahead(sha),
     });
   }
   return commits;

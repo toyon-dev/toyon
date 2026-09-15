@@ -738,6 +738,96 @@ describe("redetect at turn end", () => {
   });
 });
 
+// An archived worktree's page shows the changes panel from what git kept: every commit the worktree
+// made, grouped by the landing that carried it, whatever the merge method did to them on main.
+describe("an archived worktree's changes and history", () => {
+  const commitFile = (dir: string, name: string) => {
+    writeFileSync(join(dir, name), `${name}\n`);
+    sh(dir, "git", "add", "-A");
+    sh(dir, "git", "commit", "-qm", `add ${name}`);
+  };
+  const subjects = (list: Array<{ subject: string }>) => list.map((c) => c.subject);
+  const landRefs = async (id: string) =>
+    (await git(w.repo, "for-each-ref", "--format=%(refname)", `refs/toyon/lands/${id}/`)).out;
+
+  for (const method of ["merge", "rebase", "squash"] as const) {
+    test(`a ${method} landing of four commits lists all four once the branch is gone`, async () => {
+      const repoId = await registered();
+      w.state.requireRepo(repoId).config.land = { method };
+      const wt = await w.worktrees.create(repoId, "feature");
+      for (const n of [1, 2, 3, 4]) commitFile(wt.path, `f${n}.txt`);
+      const tip = sh(wt.path, "git", "rev-parse", "HEAD");
+      // a squash commits under the verdict's message, as a real landing has one
+      w.worktrees.setLanding(wt.id, {
+        at: 1,
+        check: "none",
+        ready: true,
+        subject: "add the feature",
+        body: "Four steps.",
+        fingerprint: "f",
+      });
+      expect((await w.worktrees.land(wt.id)).result).toMatchObject({ ok: true });
+      const lands = w.state.worktree(wt.id)?.lands ?? [];
+      expect(lands).toMatchObject([{ tip }]);
+      // the branch restarted from main, so the ref is what keeps the four alive
+      expect(sh(w.repo, "git", "rev-parse", `refs/toyon/lands/${wt.id}/0`)).toBe(tip);
+      await w.worktrees.remove(wt.id);
+      const log = await w.worktrees.gitLog(wt.id);
+      expect(subjects(log)).toEqual(["add f4.txt", "add f3.txt", "add f2.txt", "add f1.txt"]);
+      expect(log.map((c) => c.landedAt)).toEqual(Array(4).fill(lands[0]?.at));
+      expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], committed: [] });
+      expect(await w.worktrees.commitFiles(wt.id, log[0]!.sha)).toMatchObject([{ path: "f4.txt" }]);
+    });
+  }
+
+  test("each landing is its own run, and work after the last one is listed apart with its changes", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    commitFile(wt.path, "a.txt");
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    commitFile(wt.path, "b.txt");
+    commitFile(wt.path, "c.txt");
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    commitFile(wt.path, "d.txt");
+    writeFileSync(join(wt.path, "wip.txt"), "wip\n");
+    const [first, second] = w.state.worktree(wt.id)?.lands ?? [];
+    await w.worktrees.remove(wt.id);
+    const log = await w.worktrees.gitLog(wt.id);
+    expect(subjects(log)).toEqual(["add d.txt", "add c.txt", "add b.txt", "add a.txt"]);
+    expect(log.map((c) => c.landedAt)).toEqual([undefined, second?.at, second?.at, first?.at]);
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({
+      files: [{ path: "wip.txt" }],
+      committed: [{ path: "d.txt" }],
+    });
+    // the changes list's diff: what never landed against where it forked, uncommitted work included
+    expect(await w.worktrees.archivedFile(wt.id, "wip.txt")).toEqual({ before: "", after: "wip\n" });
+    expect(await w.worktrees.archivedFile(wt.id, "c.txt", log[1]!.sha)).toEqual({ before: "", after: "c.txt\n" });
+    expect(await w.worktrees.archivedFile("nope", "c.txt")).toBeNull();
+  });
+
+  test("a worktree that never landed lists its own commits and nothing of main's", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    commitFile(wt.path, "a.txt");
+    sh(w.repo, "git", "commit", "--allow-empty", "-qm", "main moves on");
+    await w.worktrees.remove(wt.id);
+    expect(subjects(await w.worktrees.gitLog(wt.id))).toEqual(["add a.txt"]);
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], committed: [{ path: "a.txt" }] });
+  });
+
+  test("deleting it for good lets go of what it landed", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    commitFile(wt.path, "a.txt");
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    await w.worktrees.remove(wt.id);
+    expect(await landRefs(wt.id)).not.toBe("");
+    await w.worktrees.deleteArchived(wt.id);
+    expect(await landRefs(wt.id)).toBe("");
+    expect(await w.worktrees.gitLog(wt.id)).toEqual([]);
+  });
+});
+
 describe("landing", () => {
   /** the subjects on main, newest first */
   const subjects = async () => (await git(w.repo, "log", "--format=%s", "-n", "6")).out.split("\n");

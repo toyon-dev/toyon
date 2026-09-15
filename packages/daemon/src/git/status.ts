@@ -128,9 +128,14 @@ export async function statusFilesWithCounts(worktreePath: string): Promise<GitFi
 export async function committedFiles(worktreePath: string, defaultBr: string): Promise<GitFileStatus[]> {
   const base = await git(worktreePath, "merge-base", "HEAD", defaultBr);
   if (!base.ok || !base.out) return [];
-  const r = await git(worktreePath, "diff", "--name-status", base.out, "HEAD");
+  return filesBetween(worktreePath, base.out, "HEAD");
+}
+
+/** Files changed from one commit to another, with +/- counts. */
+export async function filesBetween(cwd: string, from: string, to: string): Promise<GitFileStatus[]> {
+  const r = await git(cwd, "diff", "--name-status", from, to);
   if (!r.ok || !r.out) return [];
-  const counts = await numstat(worktreePath, base.out, "HEAD");
+  const counts = await numstat(cwd, from, to);
   return r.out
     .split("\n")
     .filter(Boolean)

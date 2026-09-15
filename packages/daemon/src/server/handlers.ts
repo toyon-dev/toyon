@@ -17,7 +17,7 @@ import type { SelfWatch } from "../core/self.ts";
 import type { StateStore } from "../core/state.ts";
 import type { DesignService } from "../design/service.ts";
 import type { ExecService } from "../exec/service.ts";
-import type { FileService } from "../files/service.ts";
+import { type FileService, keptRead } from "../files/service.ts";
 import type { AfterLand } from "../repos/afterLand.ts";
 import { browsePath, describeFolder } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
@@ -148,6 +148,8 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       ctx.reply({ t: "backfill", worktreeId: msg.worktreeId, events: coalesce(kept), log: [] });
       ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: [] });
       ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: [] });
+      // and what it left in git, which the changes panel on its page reads
+      await gitStatus(s, ctx, msg.worktreeId);
       return;
     }
     // the shell re-asserts its whole subscription set on every switch; only a NEW subscription
@@ -305,7 +307,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async "read-file"(msg, ctx, s) {
     const head = { t: "file-read", worktreeId: msg.worktreeId, path: msg.path, ref: msg.ref, seq: msg.seq } as const;
     try {
-      ctx.reply({ ...head, ...(await s.files.read(msg.worktreeId, msg.path, msg.ref)) });
+      // an archived worktree's files are only in git, and its page reads them from there
+      const kept = s.worktrees.readable(msg.worktreeId)
+        ? null
+        : await s.worktrees.archivedFile(msg.worktreeId, msg.path, msg.ref);
+      const read = kept ? keptRead(kept.before, kept.after) : await s.files.read(msg.worktreeId, msg.path, msg.ref);
+      ctx.reply({ ...head, ...read });
     } catch (e) {
       // answered either way: the shell holds one request per open file until this comes back
       if (!(e instanceof UserError)) log.error(msg.worktreeId, "read-file failed", e);

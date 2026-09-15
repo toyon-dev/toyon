@@ -1086,6 +1086,14 @@ function withLauncher(s: State): State {
   return s.draft ? { ...s, draft: null } : s;
 }
 
+/** The archived page goes, and a file of its worktree open in the editor goes with it: that file is
+ * only in git, read through the page. A restore lists the id as a row again, and the file stays. */
+function closeArchivedPage(s: State): State {
+  const id = s.archivedPage;
+  const orphaned = id !== null && s.editor?.worktreeId === id && worktreeById(s, id) === null;
+  return { ...s, archivedPage: null, ...(orphaned ? { editor: null } : {}) };
+}
+
 export function reducer(s: State, action: Action): State {
   let next = withLauncher(reduce(s, action));
   // a hold is only for the row it was made on: selecting anything else, however it happened, ends it
@@ -1095,7 +1103,7 @@ export function reducer(s: State, action: Action): State {
   // A restore lists the row before the archive list catches up, and the page ends on the row: its
   // chat carries on as the row's, under the same id.
   if (next.archivedPage !== null && (archivedPageOf(next) === null || worktreeById(next, next.archivedPage) !== null)) {
-    next = { ...next, archivedPage: null };
+    next = closeArchivedPage(next);
   }
   // every open/close routes through here, so the layout is remembered in one place rather than in
   // the dozen actions (a chord, a rail click, a dropped file) that move it
@@ -1150,7 +1158,7 @@ function reduce(s: State, action: Action): State {
       return { ...s, archivedPage: action.id, editor: null };
     }
     case "close-archived":
-      return s.archivedPage ? { ...s, archivedPage: null } : s;
+      return s.archivedPage ? closeArchivedPage(s) : s;
     case "remove-worktrees": {
       const ids = action.ids.filter((id) => !s.removing.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;
@@ -1706,6 +1714,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
           changesAuto = false;
         }
       }
+      // an archived worktree's page opens it when that worktree left work, or landed some: that
+      // work is what the page is about
+      const page = msg.worktreeId === s.archivedPage ? archivedPageOf(s) : null;
+      if (page && (msg.files.length > 0 || (msg.committed?.length ?? 0) > 0 || page.landed)) changesOpen = true;
       // ranges go stale whenever the worktree's git state moves
       const next = withLocal(s, msg.worktreeId, (l) => ({
         ...l,

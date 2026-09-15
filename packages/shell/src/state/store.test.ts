@@ -1661,6 +1661,33 @@ describe("an archived worktree's page", () => {
     expect(run([archived("r", "x", "y")], s).archivedPage).toBe("x");
   });
 
+  test("what it left opens the changes panel, on its own record", () => {
+    const committed = [{ path: "a.ts", xy: "M " }];
+    const s = run(
+      [{ a: "open-archived", id: "x" }, server({ t: "git-status", worktreeId: "x", files: [], committed })],
+      listed(),
+    );
+    expect(s.changesOpen).toBe(true);
+    expect(localOf(s, "x").git?.committed).toEqual(committed);
+    // nothing kept and nothing landed: the panel is left as it was
+    const empty = run(
+      [{ a: "open-archived", id: "x" }, server({ t: "git-status", worktreeId: "x", files: [] })],
+      listed(),
+    );
+    expect(empty.changesOpen).toBe(false);
+  });
+
+  test("a file of its worktree open in the editor closes with the page; the row's own file stays", () => {
+    const onPage = run([{ a: "open-archived", id: "x" }, opening({ worktreeId: "x", path: "a.ts", seq: 1 })], listed());
+    expect(onPage.editor?.worktreeId).toBe("x");
+    expect(run([{ a: "close-archived" }], onPage).editor).toBeNull();
+    expect(run([archived("r", "y")], onPage).editor).toBeNull();
+    const rowFile = run([opening({ path: "b.ts", seq: 1 }), { a: "open-archived", id: "x" }], listed());
+    // opening the page put the row's file away already; one opened on the row after the page closes stays
+    const reopened = run([{ a: "close-archived" }, opening({ path: "b.ts", seq: 2 })], rowFile);
+    expect(reopened.editor?.worktreeId).toBe("a");
+  });
+
   test("the item leaving the list ends it: restored or deleted", () => {
     const s = run([{ a: "open-archived", id: "x" }], listed());
     expect(run([archived("r", "y")], s).archivedPage).toBeNull();

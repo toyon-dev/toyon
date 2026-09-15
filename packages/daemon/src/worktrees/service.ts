@@ -38,7 +38,17 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
-import { archiveRef, checkOutKept, commitOf, type KeptState, keepState } from "../git/archive.ts";
+import {
+  archiveRef,
+  checkOutKept,
+  commitOf,
+  dropLandRefs,
+  type KeptState,
+  keepState,
+  type LandingRange,
+  landingMark,
+  landRef,
+} from "../git/archive.ts";
 import { GIT, git, gitOrThrow, NO_PROMPT, run } from "../git/exec.ts";
 import {
   commitWorktree,
@@ -70,6 +80,7 @@ import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
 import { type ArchiveRecord, type ChatFiles, firstPrompt, lastUsage, summarize, WorktreeArchive } from "./archive.ts";
+import { ArchivedGit } from "./archivedGit.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import { cleanTitle, shortId, slugify, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
@@ -634,7 +645,11 @@ export class WorktreeService {
     releasePort(wt.proxyPort);
     let archived: ArchivedWorktree | null = null;
     if (archive) archived = this.archiveChat(wt, repo, kept, sessionId);
-    else this.deleteChat(worktreeId);
+    else {
+      this.deleteChat(worktreeId);
+      // nothing will list what it landed, so nothing needs those commits kept
+      if (wt.lands?.length) await dropLandRefs(repo.path, worktreeId);
+    }
     this.d.hub.emit("worktreesChanged");
     return archived;
   }
@@ -751,6 +766,35 @@ export class WorktreeService {
     return files && isAttachmentFile(file) ? join(files.attachments, file) : null;
   }
 
+  /** An archived worktree's git, read from the refs that kept it. Null unless the id names an
+   * archive whose commits were kept, in a project that is open. */
+  private archivedGit(archiveId: string): ArchivedGit | null {
+    const rec = this.archive.get(archiveId);
+    const repo = rec && this.repoOf(rec);
+    if (!rec?.kept || !repo) return null;
+    return new ArchivedGit(repo.path, rec.kept, rec.worktree.lands ?? [], repo.defaultBranch);
+  }
+
+  /** what an archived worktree left, for the changes panel on its page; nothing is on disk, so
+   * nothing is counted */
+  private async archivedStatus(archiveId: string): Promise<GitInfo | null> {
+    const kept = this.archivedGit(archiveId);
+    if (!kept) return null;
+    try {
+      return await kept.status();
+    } catch (e) {
+      log.warn(archiveId, "reading its kept changes failed", e);
+      return null;
+    }
+  }
+
+  /** a file on an archived worktree's page: a commit's copy with `ref`, else what never landed
+   * against where it forked. Null when no archive with kept commits has the id. */
+  async archivedFile(archiveId: string, path: string, ref?: string): Promise<{ before: string; after: string } | null> {
+    const kept = this.archivedGit(archiveId);
+    return kept ? kept.file(path, ref) : null;
+  }
+
   /** the project a record belongs to now: by id, or by checkout when it was forgotten and reopened */
   private repoOf(rec: ArchiveRecord): RepoInfo | undefined {
     return this.d.state.repo(rec.worktree.repoId) ?? this.d.state.repos.find((r) => r.path === rec.repoPath);
@@ -838,6 +882,7 @@ export class WorktreeService {
       const r = await git(repoPath, "update-ref", "-d", archiveRef(archiveId));
       if (!r.ok) log.warn(archiveId, `could not drop its archive ref: ${r.err}`);
     }
+    if (rec.worktree.lands?.length && existsSync(repoPath)) await dropLandRefs(repoPath, archiveId);
     this.archive.delete(archiveId);
     if (repo) this.d.hub.emit("archiveChanged", repo.id);
   }
@@ -1157,11 +1202,14 @@ export class WorktreeService {
       }
       const taken = await takeMainIn(wt.path, repo.defaultBranch, own);
       if (!taken.ok) return taken;
+      // read before the landing moves main and the branch restarts from it
+      const mark = await landingMark(wt.path, repo.defaultBranch);
       const method = policy.merge ?? DEFAULT_MERGE_METHOD;
       const squash = method === "squash" ? await squashMessage(wt.path, repo.defaultBranch, suggested) : "";
       const landed = await landLocally(wt.path, wt.branch, repo.path, repo.defaultBranch, method, squash);
       if (!landed.ok) return landed;
       mergedHere = true;
+      await this.noteLand(repo, wt, mark);
       await this.restartFromMain(wt, repo.defaultBranch);
       if (policy.land === "push") {
         const pushed = await pushMain(repo.path, repo.defaultBranch);
@@ -1186,6 +1234,21 @@ export class WorktreeService {
     return { result: { ...result, message: `${wt.title} is on ${where}` }, removeIds };
   }
 
+  /** A landing onto the record, oldest first, with its tip kept under a ref: the branch restarts from
+   * main after it, and a squash never puts these commits on main, yet an archived worktree's page
+   * still lists them. */
+  private async noteLand(repo: RepoInfo, wt: WorktreeInfo, mark: LandingRange | null) {
+    if (!mark) return;
+    const n = wt.lands?.length ?? 0;
+    const pinned = await git(repo.path, "update-ref", landRef(wt.id, n), mark.tip);
+    if (!pinned.ok) {
+      log.warn(wt.id, `could not keep the commits it landed: ${pinned.err}`);
+      return;
+    }
+    wt.lands = [...(wt.lands ?? []), { ...mark, at: Date.now() }];
+    this.d.state.save();
+  }
+
   /** A branch toyon owns restarts from main once its work is there: the next message here builds
    * on main as it is, and the counts read zero rather than the commits a squash or a rebase on
    * GitHub left with different hashes. An adopted branch keeps its history. */
@@ -1202,8 +1265,10 @@ export class WorktreeService {
   async prMerged(worktreeId: string): Promise<ShipResult> {
     const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
     const result = await withRepoLock(repo.path, async () => {
+      const mark = await landingMark(wt.path, repo.defaultBranch);
       const pulled = await fastForwardMain(repo.path, repo.defaultBranch);
       if (!pulled.ok) return pulled;
+      await this.noteLand(repo, wt, mark);
       await this.restartFromMain(wt, repo.defaultBranch);
       return pulled;
     });
@@ -1424,7 +1489,7 @@ export class WorktreeService {
    * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
   async gitStatus(worktreeId: string): Promise<GitInfo | null> {
     const r = this.readable(worktreeId);
-    if (!r) return null;
+    if (!r) return this.archivedStatus(worktreeId);
     try {
       // only main is its own baseline; every other worktree, discovered ones included, has a
       // branch worth counting against the default one
@@ -1478,13 +1543,15 @@ export class WorktreeService {
    * never pays for it. */
   async gitLog(worktreeId: string): Promise<CommitEntry[]> {
     const r = this.readable(worktreeId);
-    return r ? logCommits(r.path, r.defaultBranch) : [];
+    if (r) return logCommits(r.path, r.defaultBranch);
+    return (await this.archivedGit(worktreeId)?.log()) ?? [];
   }
 
   /** the files one commit touched, on expanding it in the history tab */
   async commitFiles(worktreeId: string, sha: string): Promise<GitFileStatus[]> {
     const r = this.readable(worktreeId);
-    return r ? readCommitFiles(r.path, sha) : [];
+    if (r) return readCommitFiles(r.path, sha);
+    return (await this.archivedGit(worktreeId)?.commitFiles(sha)) ?? [];
   }
 
   /** someone sent something here, a chat message or a `!` command: the rail sorts on it */

@@ -16,7 +16,7 @@ import { repoById } from "../../state/store.ts";
 import { step } from "../../ui/listNav.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { Tabs } from "../../ui/Tabs.tsx";
-import { shiftRanges, wtDir } from "../util.ts";
+import { ago, shiftRanges, wtDir } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
 import { GitFileRow } from "./GitFileRow.tsx";
@@ -28,6 +28,12 @@ import { useOnChange } from "../../ui/hooks.ts";
  * identity on every render and re-render every row with it */
 const NO_FILES: GitFileStatus[] = [];
 
+/** a landing's age, as a section title reads it */
+function landedWhen(at: number): string {
+  const when = ago(at);
+  return when === "now" ? "landed just now" : `landed ${when} ago`;
+}
+
 /** which list the panel is showing: the working tree, or the branch's commits */
 type Tab = "changes" | "history";
 
@@ -38,19 +44,20 @@ type HistRow = { commit: CommitEntry; file?: GitFileStatus };
 export function ChangesDock({ width }: { width: number }) {
   const sock = useSock();
   const dispatch = useDispatch();
-  const activeId = useActiveId();
+  const liveId = useActiveId();
+  // an archived worktree's page shows that worktree's work, read from what git kept of it
+  const archived = useArchivedPage();
+  const shownId = archived?.id ?? liveId;
   const active = useActive();
   const changesOpen = useStore((s) => s.changesOpen);
   // hidden, not closed, on a first-run screen: the layout remembers nothing of it and the panel is
-  // back, as it was, with the first message. The same on an archived worktree's page, whose files
-  // are gone: the changes here are the row's underneath
+  // back, as it was, with the first message
   const firstRun = useFirstRun();
-  const archivedPage = useArchivedPage() !== null;
   const focusReq = useStore((s) => s.focusChanges);
-  const gitInfo = useLocalField(activeId, "git");
+  const gitInfo = useLocalField(shownId, "git");
   // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
-  const openPath = useStore((s) => (s.editor && s.editor.worktreeId === activeId ? s.editor.path : null));
-  const openRef = useStore((s) => (s.editor && s.editor.worktreeId === activeId ? (s.editor.ref ?? null) : null));
+  const openPath = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? s.editor.path : null));
+  const openRef = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? (s.editor.ref ?? null) : null));
   const files = gitInfo?.files ?? NO_FILES;
   const committed = gitInfo?.committed ?? NO_FILES;
   const clean = files.length === 0;
@@ -60,8 +67,8 @@ export function ChangesDock({ width }: { width: number }) {
   // row has one: a found worktree's history reads the same way, it just has no commit box under it.
   const activeRow = useActiveRow();
   const defaultBranch = useStore((s) => repoById(s, activeRow?.repoId)?.defaultBranch ?? "main");
-  const commits = useLocalField(activeId, "commits");
-  const filesBySha = useLocalField(activeId, "commitFiles");
+  const commits = useLocalField(shownId, "commits");
+  const filesBySha = useLocalField(shownId, "commitFiles");
   // only one commit is expanded at a time, which is also what lets a file row below it be opened
   // without carrying its sha: the sha is whichever commit is open
   const [openSha, setOpenSha] = useState<string | null>(null);
@@ -70,35 +77,36 @@ export function ChangesDock({ width }: { width: number }) {
 
   // hovering a changed file highlights only its changed lines' elements
   const hoverPathRef = useRef<string | null>(null);
-  const ranges = useLocalField(activeId, "changedRanges");
+  const ranges = useLocalField(shownId, "changedRanges");
   const hoverFile = useCallback(
     (path: string, entering: boolean) => {
-      if (!activeId) return;
+      // the preview is the row underneath, and an archived worktree's lines are nowhere on it
+      if (!shownId || archived) return;
       if (!entering) {
         hoverPathRef.current = null;
-        previewBus.post(activeId, { type: "highlight-clear" });
+        previewBus.post(shownId, { type: "highlight-clear" });
         return;
       }
       hoverPathRef.current = path;
       const cached = ranges[path];
-      if (cached) previewBus.post(activeId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
-      else sock?.send({ t: "changed-ranges", worktreeId: activeId, path });
+      if (cached) previewBus.post(shownId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
+      else sock?.send({ t: "changed-ranges", worktreeId: shownId, path });
     },
-    [activeId, ranges, sock],
+    [shownId, archived, ranges, sock],
   );
   // the ranges arrive after the hover started: light up then
   useEffect(() => {
     const path = hoverPathRef.current;
-    if (!path || !activeId) return;
+    if (!path || !shownId) return;
     const cached = ranges[path];
-    if (cached) previewBus.post(activeId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
-  }, [ranges, activeId]);
+    if (cached) previewBus.post(shownId, { type: "highlight-file", path, ranges: shiftRanges(cached) });
+  }, [ranges, shownId]);
 
   // walking the list opens each file as it arrives, and the keyboard stays here for the next arrow;
   // Enter is the one that takes it into the file
   const open = useCallback(
-    (path: string, focus = false) => activeId && openFile({ sock, dispatch }, { worktreeId: activeId, path, focus }),
-    [activeId, sock, dispatch],
+    (path: string, focus = false) => shownId && openFile({ sock, dispatch }, { worktreeId: shownId, path, focus }),
+    [shownId, sock, dispatch],
   );
 
   // one flat order across both sections, so ↑↓ crosses the section titles the way the eye does
@@ -118,6 +126,25 @@ export function ChangesDock({ width }: { width: number }) {
   // whose branch is the default one, where every commit is inherited history.
   const aheadCount = useMemo(() => histRows.filter((r) => !r.file && r.commit.ahead).length, [histRows]);
   const firstLanded = useMemo(() => histRows.findIndex((r) => !r.file && !r.commit.ahead), [histRows]);
+  // an archived worktree's history is only its own commits, so the titles say instead which landing
+  // carried each run of them, and which never landed
+  const keptTitles = useMemo(() => {
+    const titles = new Map<number, string>();
+    if (!archived) return titles;
+    const counts = new Map<number, number>();
+    for (const r of histRows) {
+      const at = r.commit.landedAt ?? 0;
+      if (!r.file) counts.set(at, (counts.get(at) ?? 0) + 1);
+    }
+    let last: number | undefined;
+    histRows.forEach((r, i) => {
+      const at = r.commit.landedAt ?? 0;
+      if (at === last) return;
+      last = at;
+      titles.set(i, `${at ? landedWhen(at) : "not landed"} · ${counts.get(at) ?? 0}`);
+    });
+    return titles;
+  }, [archived, histRows]);
   const listRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState(0);
   const [focused, setFocused] = useState(false);
@@ -125,26 +152,26 @@ export function ChangesDock({ width }: { width: number }) {
   // the file open in the editor while it does not. The cursor drawing an edge and the open file a
   // band split one mark across two rows the moment the arrows left the open file, onto a commit.
   const marked = (i: number, open: boolean) => (focused ? sel === i : open);
-  useOnChange([activeId, tab], () => setSel(0));
+  useOnChange([shownId, tab], () => setSel(0));
 
   // the log is pulled, not pushed: reading it costs a git process, so a worktree nobody is
   // reviewing never pays for one. HEAD moving under an open tab (the agent committed) re-reads it.
   const head = gitInfo?.head;
   const lastLog = useRef("");
   useEffect(() => {
-    if (tab !== "history" || !activeId) return;
-    const key = `${activeId}:${head ?? ""}`;
+    if (tab !== "history" || !shownId) return;
+    const key = `${shownId}:${head ?? ""}`;
     if (lastLog.current === key) return;
     lastLog.current = key;
-    sock?.send({ t: "git-log", worktreeId: activeId });
-  }, [tab, activeId, head, sock]);
+    sock?.send({ t: "git-log", worktreeId: shownId });
+  }, [tab, shownId, head, sock]);
   // a commit's files are fetched once and kept: the same shas are still there after a re-read
   const toggleCommit = useCallback(
     (sha: string) => {
       setOpenSha((prev) => (prev === sha ? null : sha));
-      if (activeId && !filesBySha[sha]) sock?.send({ t: "git-commit", worktreeId: activeId, sha });
+      if (shownId && !filesBySha[sha]) sock?.send({ t: "git-commit", worktreeId: shownId, sha });
     },
-    [activeId, filesBySha, sock],
+    [shownId, filesBySha, sock],
   );
   // a moved selection has to come into view, and it is the row that scrolls, not the list
   useOnChange([sel, focused], () => {
@@ -182,9 +209,9 @@ export function ChangesDock({ width }: { width: number }) {
   const openAt = useCallback(
     (path: string, focus = false) => {
       const ref = openShaRef.current;
-      if (activeId && ref) openFile({ sock, dispatch }, { worktreeId: activeId, path, ref, focus });
+      if (shownId && ref) openFile({ sock, dispatch }, { worktreeId: shownId, path, ref, focus });
     },
-    [activeId, sock, dispatch],
+    [shownId, sock, dispatch],
   );
   // arrows only move over a commit: expanding every row they crossed would push the list around
   // under the person walking it. A file row opens on arrival, the way the changes list does.
@@ -255,22 +282,26 @@ export function ChangesDock({ width }: { width: number }) {
   };
 
   // the rows are memoized on their props, so what they are handed to build a menu from is stable
-  const wtId = active?.worktree.id;
-  const dir = active ? wtDir(active.worktree) : "";
+  const wtId = archived ? archived.id : active?.worktree.id;
+  const dir = archived ? archived.path : active ? wtDir(active.worktree) : "";
+  // an archived worktree's files are only in git: nothing to open elsewhere, reveal or discard
+  const kept = archived !== null;
   const menuUncommitted = useCallback(
     (path: string): MenuEntry[] =>
-      wtId ? fileItems({ id: wtId, dir }, path, { discard: true }, { sock, dispatch }) : [],
-    [wtId, dir, sock, dispatch],
+      wtId ? fileItems({ id: wtId, dir }, path, { discard: !kept, kept }, { sock, dispatch }) : [],
+    [wtId, dir, kept, sock, dispatch],
   );
   const menuCommitted = useCallback(
-    (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, {}, { sock, dispatch }) : []),
-    [wtId, dir, sock, dispatch],
+    (path: string): MenuEntry[] => (wtId ? fileItems({ id: wtId, dir }, path, { kept }, { sock, dispatch }) : []),
+    [wtId, dir, kept, sock, dispatch],
   );
   // a history row's file views open it as that commit left it, the way clicking the row does
   const menuAtCommit = useCallback(
     (path: string): MenuEntry[] =>
-      wtId ? fileItems({ id: wtId, dir }, path, { ref: openShaRef.current ?? undefined }, { sock, dispatch }) : [],
-    [wtId, dir, sock, dispatch],
+      wtId
+        ? fileItems({ id: wtId, dir }, path, { ref: openShaRef.current ?? undefined, kept }, { sock, dispatch })
+        : [],
+    [wtId, dir, kept, sock, dispatch],
   );
   // the list has the keyboard, so shift+F10 lands here rather than on the highlighted row: answer
   // for that row. A right-click reaches a row first and never gets here with a pointer.
@@ -308,7 +339,7 @@ export function ChangesDock({ width }: { width: number }) {
   const noHover = useCallback(() => {}, []);
 
   return (
-    <div className={cx("changes-dock", (!changesOpen || firstRun || archivedPage) && "collapsed")} style={{ width }}>
+    <div className={cx("changes-dock", (!changesOpen || firstRun) && "collapsed")} style={{ width }}>
       {/* the count is the working tree's: the committed section under it keeps its own title */}
       <Tabs<Tab>
         fill
@@ -398,12 +429,19 @@ export function ChangesDock({ width }: { width: number }) {
             ))}
           </>
         )}
-        {tab === "changes" && clean && committed.length === 0 && <div className="empty">clean</div>}
+        {tab === "changes" && clean && committed.length === 0 && (
+          <div className="empty">
+            {archived ? (archived.landed ? "all of it landed" : "nothing that is not on main") : "clean"}
+          </div>
+        )}
         {tab === "history" &&
           histRows.map((r, i) => (
             <Fragment key={r.file ? `${r.commit.sha}:${r.file.path}` : r.commit.sha}>
-              {aheadCount > 0 && i === 0 && <div className="section-title">on this branch · {aheadCount}</div>}
-              {aheadCount > 0 && i === firstLanded && <div className="section-title">{defaultBranch}</div>}
+              {archived && keptTitles.has(i) && <div className="section-title">{keptTitles.get(i)}</div>}
+              {!archived && aheadCount > 0 && i === 0 && (
+                <div className="section-title">on this branch · {aheadCount}</div>
+              )}
+              {!archived && aheadCount > 0 && i === firstLanded && <div className="section-title">{defaultBranch}</div>}
               {r.file ? (
                 <GitFileRow
                   f={r.file}
@@ -421,7 +459,7 @@ export function ChangesDock({ width }: { width: number }) {
         {tab === "history" && commits === undefined && <div className="empty">reading history…</div>}
         {tab === "history" && commits?.length === 0 && <div className="empty">no commits yet</div>}
       </div>
-      {activeRow && (
+      {activeRow && !archived && (
         <CommitBox active={activeRow} ahead={gitInfo?.ahead ?? 0} behind={gitInfo?.behind ?? 0} dirty={!clean} />
       )}
     </div>

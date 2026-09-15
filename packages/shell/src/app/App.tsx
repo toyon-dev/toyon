@@ -67,10 +67,10 @@ export function App() {
   // centre of an empty project. So is the rail: on the page it lists a project that is not the one
   // being made, and on an empty project its only row is main, already open, with no new worktree to
   // offer, since one off the root commit would take the scaffold to a branch while main stayed blank.
-  // The same on an archived worktree's page: the docks would show the changes and the chat of the
-  // row underneath, beside a page about a worktree whose chat is with the daemon until it comes back.
+  // The chat dock is hidden on an archived worktree's page too, whose chat is the page itself; the
+  // changes dock stays, showing that worktree's work rather than the row's underneath.
   const archivedPage = useArchivedPage();
-  const changesOpen = useStore((s) => s.changesOpen) && !firstRun && !archivedPage;
+  const changesOpen = useStore((s) => s.changesOpen) && !firstRun;
   const chatOpen = useStore((s) => s.chatOpen) && !firstRun && !chatCentred && !archivedPage;
   const railOpen = useStore((s) => s.railOpen);
   const chatSide = useStore((s) => s.chatSide);

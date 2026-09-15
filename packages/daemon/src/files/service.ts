@@ -87,6 +87,11 @@ function sides(before: string, after: string) {
   return { before, after, binary: false, tooLarge: false };
 }
 
+/** a file as git kept it, for a worktree whose directory is gone: never on disk, never written */
+export function keptRead(before: string, after: string): FileRead {
+  return { ...sides(before, after), version: null, writable: false };
+}
+
 export class FileService {
   constructor(
     private state: StateStore,

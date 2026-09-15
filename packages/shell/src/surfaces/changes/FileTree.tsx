@@ -25,8 +25,8 @@ import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { endPathDrag, PATH_MIME, startPathDrag } from "../chat/useIntake.ts";
-import { xyClass, xyLetter } from "../util.ts";
-import { ancestors, buildTree, listingKey, marks, type TreeRow, visibleRows } from "./fileTree.ts";
+import { ancestors, xyClass, xyLetter } from "../util.ts";
+import { buildTree, listingKey, marks, type TreeRow, visibleRows } from "./fileTree.ts";
 import "./tree.css";
 
 const NO_PATHS: string[] = [];

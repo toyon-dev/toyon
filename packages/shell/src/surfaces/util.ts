@@ -146,6 +146,25 @@ export function splitPath(path: string): { name: string; dir: string } {
   return i < 0 ? { name: path, dir: "" } : { name: path.slice(i + 1), dir: path.slice(0, i) };
 }
 
+/** file2 before file10, and case no reason to separate two names: how a list of paths is ordered
+ * wherever one is shown */
+export const naturalCompare = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare;
+
+/** the folders a path sits in, outermost first: "a/b/c.ts" is in "a" and "a/b" */
+export function ancestors(path: string): string[] {
+  const out: string[] = [];
+  for (let i = path.indexOf("/"); i !== -1; i = path.indexOf("/", i + 1)) out.push(path.slice(0, i));
+  return out;
+}
+
+/** every folder a list of paths implies, sorted. The files tab and the composer's `@` menu read it
+ * from the same file list, so they agree on which folders exist. */
+export function folderList(paths: readonly string[]): string[] {
+  const set = new Set<string>();
+  for (const p of paths) for (const a of ancestors(p)) set.add(a);
+  return [...set].sort(naturalCompare);
+}
+
 export function xyClass(xy: string): string {
   if (xy.includes("A") || xy === "??") return "added";
   if (xy.includes("D")) return "deleted";

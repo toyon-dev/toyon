@@ -2,6 +2,7 @@
 // shell has no React harness.
 
 import type { GitFileStatus } from "@toyon/shared";
+import { ancestors, naturalCompare } from "../util.ts";
 
 export type TreeKind = "file" | "folder" | "submodule";
 
@@ -19,23 +20,6 @@ export interface TreeRow {
   depth: number;
   kind: TreeKind;
   open: boolean;
-}
-
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-
-/** the folders a path sits in, outermost first: "a/b/c.ts" is in "a" and "a/b" */
-export function ancestors(path: string): string[] {
-  const out: string[] = [];
-  for (let i = path.indexOf("/"); i !== -1; i = path.indexOf("/", i + 1)) out.push(path.slice(0, i));
-  return out;
-}
-
-/** every folder the paths imply, sorted. The tree and the @ menu read the same list, so they agree
- * on which folders exist. */
-export function folderList(paths: readonly string[]): string[] {
-  const set = new Set<string>();
-  for (const p of paths) for (const a of ancestors(p)) set.add(a);
-  return [...set].sort(collator.compare);
 }
 
 /** the tree's top level: folders first, then files, each in natural order (file2 before file10) */
@@ -61,7 +45,7 @@ export function buildTree(paths: readonly string[], submodules: readonly string[
   const sort = (node: TreeNode) => {
     // a submodule reads as a folder, so it sorts with them
     const rank = (n: TreeNode) => (n.kind === "file" ? 1 : 0);
-    node.children.sort((a, b) => rank(a) - rank(b) || collator.compare(a.name, b.name));
+    node.children.sort((a, b) => rank(a) - rank(b) || naturalCompare(a.name, b.name));
     for (const c of node.children) if (c.kind === "folder") sort(c);
   };
   sort(root);

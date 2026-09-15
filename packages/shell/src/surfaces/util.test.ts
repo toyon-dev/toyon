@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { ProcState, RepoInfo, WorktreeStatus } from "@toyon/shared";
-import { commandSource, procTrouble, rowLabel, splitPath, stateLabel } from "./util.ts";
+import { ancestors, commandSource, folderList, procTrouble, rowLabel, splitPath, stateLabel } from "./util.ts";
+
+describe("folders", () => {
+  test("ancestors run outermost first, and a top-level file has none", () => {
+    expect(ancestors("a/b/c.ts")).toEqual(["a", "a/b"]);
+    expect(ancestors("c.ts")).toEqual([]);
+  });
+
+  test("folderList is every folder the paths imply, once", () => {
+    expect(folderList(["src/app/keys.ts", "src/main.ts", "README.md"])).toEqual(["src", "src/app"]);
+  });
+});
 
 const proc = (name: string, status: ProcState["status"], port = 3000): ProcState => ({
   name,

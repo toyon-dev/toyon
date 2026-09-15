@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ancestors, buildTree, folderList, listingKey, marks, visibleRows } from "./fileTree.ts";
+import { buildTree, listingKey, marks, visibleRows } from "./fileTree.ts";
 
 describe("buildTree", () => {
   test("folders come before files, each in natural order", () => {
@@ -37,17 +37,6 @@ describe("visibleRows", () => {
   test("an open folder inside a closed one stays hidden", () => {
     const rows = visibleRows(tree, (p) => p === "src/app");
     expect(rows.map((r) => r.path)).toEqual(["src", "README.md"]);
-  });
-});
-
-describe("folders", () => {
-  test("ancestors run outermost first, and a top-level file has none", () => {
-    expect(ancestors("a/b/c.ts")).toEqual(["a", "a/b"]);
-    expect(ancestors("c.ts")).toEqual([]);
-  });
-
-  test("folderList is every folder the paths imply, once", () => {
-    expect(folderList(["src/app/keys.ts", "src/main.ts", "README.md"])).toEqual(["src", "src/app"]);
   });
 });
 

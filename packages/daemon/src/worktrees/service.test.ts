@@ -185,6 +185,8 @@ describe("archive", () => {
   test("remove keeps the commits and uncommitted work under a ref beside the archived chat", async () => {
     const repoId = await registered();
     const { wt, head } = await workedOn(repoId);
+    // the spend rides along: what the stream last said, so the archived row can still show it
+    w.hub.emit("agent", wt.id, 1, { type: "usage", used: 1000, size: 4000, cost: 1.4, ts: 0 });
     const archived = await w.worktrees.remove(wt.id);
     expect(archived).toMatchObject({
       id: wt.id,
@@ -193,6 +195,7 @@ describe("archive", () => {
       prompt: "tidy the footer",
       restorable: true,
       uncommitted: true,
+      cost: 1.4,
     });
     expect(existsSync(wt.path)).toBe(false);
     expect(sh(w.repo, "git", "branch", "--list", wt.branch)).toBe("");

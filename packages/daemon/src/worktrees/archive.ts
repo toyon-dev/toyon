@@ -4,7 +4,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentEvent, ArchivedWorktree, WorktreeInfo } from "@toyon/shared";
+import type { AgentEvent, ArchivedWorktree, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
 import { log } from "../core/log.ts";
 import type { KeptState } from "../git/archive.ts";
 
@@ -19,6 +19,9 @@ export interface ArchiveRecord {
   sessionId?: string;
   /** the first message, so a row can say what the work was */
   prompt?: string;
+  /** the session's spend as the agent last reported it, read once here: the transcript keeps the
+   * figure, but listing the archive should not mean reading every transcript in it */
+  cost?: number;
   /** absent when git had nothing to keep or the ref could not be written */
   kept?: KeptState;
 }
@@ -119,7 +122,26 @@ export function summarize(r: ArchiveRecord, repoId: string): ArchivedWorktree {
     restorable: !!r.kept,
     ...(r.kept?.snapshot ? { uncommitted: true } : {}),
     ...(r.worktree.landed ? { landed: true } : {}),
+    ...(r.cost !== undefined ? { cost: r.cost } : {}),
   };
+}
+
+/** The figures the transcript ends with: the agent reports them cumulatively, so the last usage
+ * line is the session's whole spend and its context as of the last reply. Null when the file has
+ * none, which is what a chat whose agent never priced itself looks like. */
+export function lastUsage(transcript: string): WorktreeStatus["usage"] | null {
+  if (!existsSync(transcript)) return null;
+  const lines = readFileSync(transcript, "utf8").split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i]?.includes('"usage"')) continue;
+    try {
+      const e = (JSON.parse(lines[i]!) as { event?: AgentEvent }).event;
+      if (e?.type === "usage") return { used: e.used, size: e.size, ...(e.cost !== undefined ? { cost: e.cost } : {}) };
+    } catch {
+      // a torn line at the end of a transcript is the loader's problem, not this read's
+    }
+  }
+  return null;
 }
 
 /** the first message in a transcript file, cut to what a row can show */

@@ -3,6 +3,7 @@ import { restoreArchived } from "../../state/actions/archive.ts";
 import { useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { ago } from "../util.ts";
+import { dollars } from "./usage.ts";
 
 /** how long ago, in a sentence: the gutter's "3m" and "2d" read as units here rather than as a time */
 function since(at: number): string {
@@ -31,7 +32,7 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
       <p>
         This worktree was removed {since(item.archivedAt)}
         {item.landed ? ", after it was merged into main" : ""}: its directory and branch are gone, and nothing runs.
-        Toyon kept {kept}.
+        Toyon kept {kept}.{item.cost !== undefined ? ` The agent's session cost ${dollars(item.cost)}.` : ""}
       </p>
       {item.restorable ? (
         <>

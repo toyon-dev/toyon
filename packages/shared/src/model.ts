@@ -464,6 +464,9 @@ export interface ArchivedWorktree {
   uncommitted?: boolean;
   /** it had been merged into main */
   landed?: boolean;
+  /** what its agent's session cost, as the agent last reported it; only an agent that prices
+   * itself reports one, so a chat run by one that does not has no figure */
+  cost?: number;
 }
 
 /** One row of the rail: a worktree toyon runs, or one git knows about that toyon did not create

@@ -69,7 +69,7 @@ import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
-import { type ArchiveRecord, type ChatFiles, firstPrompt, summarize, WorktreeArchive } from "./archive.ts";
+import { type ArchiveRecord, type ChatFiles, firstPrompt, lastUsage, summarize, WorktreeArchive } from "./archive.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import { cleanTitle, shortId, slugify, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
@@ -658,12 +658,16 @@ export class WorktreeService {
   ): ArchivedWorktree | null {
     const files = this.chatFiles(wt.id);
     const prompt = firstPrompt(files.transcript);
+    // the spend goes on the record now, while the figure is one read away: the live map when the
+    // stream reported this session, else the transcript about to move
+    const cost = (this.usage.get(wt.id) ?? lastUsage(files.transcript))?.cost;
     const rec: ArchiveRecord = {
       worktree: wt,
       repoPath: repo.path,
       archivedAt: Date.now(),
       ...(sessionId ? { sessionId } : {}),
       ...(prompt ? { prompt } : {}),
+      ...(cost !== undefined ? { cost } : {}),
       ...(kept ? { kept } : {}),
     };
     try {
@@ -1263,21 +1267,7 @@ export class WorktreeService {
   private usageFor(worktreeId: string): WorktreeStatus["usage"] | undefined {
     const known = this.usage.get(worktreeId);
     if (known !== undefined) return known ?? undefined;
-    let found: WorktreeStatus["usage"] | null = null;
-    const file = transcriptPathFor(this.d.paths.transcriptsDir, worktreeId);
-    if (existsSync(file)) {
-      const lines = readFileSync(file, "utf8").split("\n");
-      for (let i = lines.length - 1; i >= 0 && !found; i--) {
-        if (!lines[i]?.includes('"usage"')) continue;
-        try {
-          const e = JSON.parse(lines[i]!).event;
-          if (e?.type === "usage")
-            found = { used: e.used, size: e.size, ...(e.cost !== undefined ? { cost: e.cost } : {}) };
-        } catch {
-          // a torn line at the end of a transcript is the loader's problem, not this read's
-        }
-      }
-    }
+    const found = lastUsage(transcriptPathFor(this.d.paths.transcriptsDir, worktreeId));
     this.usage.set(worktreeId, found);
     return found ?? undefined;
   }

@@ -1,14 +1,17 @@
 import type { ArchivedWorktree } from "@toyon/shared";
+import { dollars } from "../../surfaces/chat/usage.ts";
 import { ago } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import { copyText, type Deps } from "./deps.ts";
 
 /** what an archived worktree's row says beside its title, in the picker and on the rail: how it
- * ended, what came with it, and how long ago */
+ * ended, what came with it, what its agent cost, and how long ago. The spend alone, no context
+ * figure: the context it filled is gone with the session, the money is not. */
 export function archivedHint(a: ArchivedWorktree): string {
   const parts = [a.landed ? "merged" : a.uncommitted ? "uncommitted changes" : null];
   if (!a.restorable) parts.push("commits not kept");
+  if (a.cost !== undefined) parts.push(dollars(a.cost));
   parts.push(ago(a.archivedAt));
   return parts.filter(Boolean).join(" · ");
 }

@@ -5,6 +5,7 @@ import { useActive, useLocalField, useTheme } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
 import { CrashCard, ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { Pane } from "../../ui/Pane.tsx";
+import { chord } from "../util.ts";
 import { useTermTabs } from "./termTabs.tsx";
 import "./terminal.css";
 
@@ -91,6 +92,7 @@ export function TerminalPane({
       onDragStart={onDragStart}
       tabs={{ items: tabs, current: stream, onPick: pick, font: "mono", owner: "terminal", label: "terminal streams" }}
       onClose={() => dispatch({ a: "toggle-terminal" })}
+      closeHint={chord("terminal")}
     >
       <div className="term-body">
         <ErrorBoundary pane>

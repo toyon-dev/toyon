@@ -99,7 +99,6 @@ function make(opts: Partial<IdleDeps> & { worktrees?: WorktreeInfo[] } = {}) {
     },
     warmSpare: (repoId) => warmed.push(repoId),
     sleepMs: S,
-    pressure: "act",
     now: () => clock,
     setTimer: (fn, ms) => {
       const id = nextTimer++;
@@ -283,7 +282,7 @@ describe("IdlePolicy and the spare", () => {
 });
 
 describe("IdlePolicy under memory pressure", () => {
-  const tight: MemorySignal = { tight: true, why: "memory pressure warn with 9% available" };
+  const tight: MemorySignal = { tight: true, backstop: false, why: "memory pressure warn with 9% available" };
 
   test("the least recently used idle worktree sleeps, one per check; viewed and held ones never", async () => {
     const { policy, runtime, hub, advance } = make({
@@ -307,7 +306,7 @@ describe("IdlePolicy under memory pressure", () => {
 
   test("a machine that is fine sleeps nothing", async () => {
     const { policy, runtime } = make({
-      memory: async () => ({ tight: false, why: "memory pressure normal with 49% available" }),
+      memory: async () => ({ tight: false, backstop: false, why: "memory pressure normal with 49% available" }),
     });
     await policy.checkPressure();
     expect(runtime.slept).toEqual([]);
@@ -319,8 +318,10 @@ describe("IdlePolicy under memory pressure", () => {
     expect(runtime.slept).toEqual([]);
   });
 
-  test("observing, a tight machine names what it would sleep and sleeps nothing", async () => {
-    const { policy, runtime } = make({ memory: async () => tight, pressure: "observe" });
+  test("the backstop reading names what it would sleep and sleeps nothing", async () => {
+    const { policy, runtime } = make({
+      memory: async () => ({ tight: false, backstop: true, why: "memory pressure normal with 12% available" }),
+    });
     await policy.checkPressure();
     expect(runtime.slept).toEqual([]);
   });

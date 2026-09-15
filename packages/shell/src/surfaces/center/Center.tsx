@@ -30,6 +30,11 @@ import { hasToken } from "../../ws.ts";
 
 /** read once at load (the token arrives in the URL fragment); calling it during render would write storage */
 const HAS_TOKEN = hasToken();
+/** How long a preview frame stays mounted after its worktree stops being the one shown. Kept a
+ * while so switching back is instant; not for good, because a hidden page that polls its API is
+ * still knocking on the proxy, and a knock is what keeps a worktree from sleeping. Remounting
+ * costs a flash, not a boot: the server is up. */
+const HIDDEN_FRAME_MS = 2 * 60_000;
 
 import { View } from "../../ui/View.tsx";
 import { ChatPanel } from "../chat/ChatPanel.tsx";
@@ -296,6 +301,16 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
     const asleep = new Set(asleepKey.split(" ").filter(Boolean));
     if (mounted.some((id) => asleep.has(id))) setMounted((m) => m.filter((id) => !asleep.has(id)));
   }, [asleepKey, mounted]);
+  // a frame that has been hidden a while comes down; the timers start over on every switch, so
+  // "a while" counts from the last time the set of hidden frames changed
+  useEffect(() => {
+    const timers = mounted
+      .filter((id) => id !== previewId)
+      .map((id) => setTimeout(() => setMounted((m) => m.filter((x) => x !== id)), HIDDEN_FRAME_MS));
+    return () => {
+      for (const t of timers) clearTimeout(t);
+    };
+  }, [mounted, previewId]);
   const frames = rows
     .filter(isOwned)
     .filter((w) => mounted.includes(w.id))

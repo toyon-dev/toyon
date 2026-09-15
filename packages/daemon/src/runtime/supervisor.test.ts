@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProcState } from "@toyon/shared";
 import { reachableHost } from "./listeners.ts";
-import { WorktreeProcs } from "./supervisor.ts";
+import { execForm, WorktreeProcs } from "./supervisor.ts";
 
 function alive(pid: number): boolean {
   try {
@@ -241,4 +241,26 @@ describe("WorktreeProcs sleep and wake", () => {
     expect(Date.now() - answered).toBeLessThan(350);
     await procs.stopAll();
   }, 15_000);
+});
+
+describe("a proc is one process", () => {
+  const nameOf = async (pid: number) => (await Bun.$`ps -o comm= -p ${pid}`.text()).trim();
+
+  test("a simple command replaces its shell; one the shell has to stay for keeps it", async () => {
+    const procs = new WorktreeProcs(process.cwd(), noop, noop);
+    const plain = await procs.start("a", "sleep 30");
+    const list = await procs.start("b", "sleep 30; true");
+    await Bun.sleep(300);
+    expect(await nameOf(plain.pid!)).toBe("sleep");
+    expect(await nameOf(list.pid!)).toMatch(/(^|\/)sh$/);
+    await procs.stopAll();
+  });
+
+  test("what execForm leaves alone", () => {
+    expect(execForm("bun run dev")).toBe("exec bun run dev");
+    expect(execForm("  vite --port $PORT ")).toBe("exec vite --port $PORT");
+    for (const c of ["a && b", "a | b", "a; b", "a &", "$(x) y", "`x` y", "(a)", "FOO=1 bun dev", "a > log", "a\nb"]) {
+      expect(execForm(c)).toBe(c);
+    }
+  });
 });

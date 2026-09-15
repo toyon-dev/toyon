@@ -6,6 +6,9 @@ describe("memoryTight", () => {
     const signal = await memoryTight();
     expect(signal).not.toBeNull();
     expect(typeof signal?.tight).toBe("boolean");
+    expect(typeof signal?.backstop).toBe("boolean");
+    // the two never say it together: the backstop is the reading the level has not caught up to
+    expect(signal?.tight && signal?.backstop).toBeFalsy();
     expect(signal?.why).toMatch(/available/);
   });
 });

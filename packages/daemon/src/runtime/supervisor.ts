@@ -105,7 +105,7 @@ export class WorktreeProcs {
           cols: mp.pty?.cols ?? PROC_COLS,
           rows: mp.pty?.rows ?? PROC_ROWS,
           file: "sh",
-          args: ["-c", command],
+          args: ["-c", execForm(command)],
           ring: PROC_RING,
         },
         (data) => {
@@ -316,6 +316,16 @@ export class WorktreeProcs {
     if (this.lines.length > LOG_RING_SIZE) this.lines.shift();
     this.onLog(proc, line);
   }
+}
+
+/** A simple command replaces the shell that runs it, so a worktree's proc is one process rather
+ * than a `sh` holding a child. Anything the shell has to stay for (a list, a pipe, a background
+ * job, a substitution, a leading assignment, which `exec` would read as the command) runs as
+ * written. Exported for the test. */
+export function execForm(command: string): string {
+  const trimmed = command.trim();
+  if (/[;&|<>()`\n]|\$\(/.test(trimmed) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(trimmed)) return command;
+  return `exec ${trimmed}`;
 }
 
 /** bun-pty replaces the environment rather than merging, so a proc's env starts as the daemon's */

@@ -157,16 +157,14 @@ const self = new SelfWatch(SOURCE_ROOT);
 await self.start();
 const afterLand = new AfterLand({ state, hub, self });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self });
-// which worktrees run: the ones being looked at, plus what a turn or a command holds. The memory
-// check only reports for now; it starts sleeping worktrees once a day of readings says the
-// thresholds are right.
+// which worktrees run: the ones being looked at, plus what a turn or a command holds; the rest
+// sleep on the clock, or sooner when the OS says memory is short
 const idle = new IdlePolicy({
   runtime,
   state,
   hub,
   wake: (id) => repos.touch(id),
   warmSpare: (repoId) => repos.warm(repoId),
-  pressure: "observe",
 });
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);
 themes.load();

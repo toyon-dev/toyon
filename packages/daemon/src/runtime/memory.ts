@@ -8,15 +8,20 @@ import { log } from "../core/log.ts";
 import { run } from "../git/exec.ts";
 
 export interface MemorySignal {
+  /** the OS itself says memory is short: the kernel's pressure level on macOS, the available
+   * share on Linux, which has no level. What a worktree is put to sleep on. */
   tight: boolean;
+  /** the softer reading on macOS: available memory under the floor while the level still says
+   * normal. Reported, never acted on, until a day of readings says where the floor belongs. */
+  backstop: boolean;
   /** the reading in words, for the log line a sleep leaves behind */
   why: string;
 }
 
 /** macOS: 1 is normal; 2 (warn) and 4 (critical) are the kernel already compressing and paging */
 const MAC_PRESSURE_NORMAL = 1;
-/** available memory under this share of the total is tight even when the pressure level has not
- * moved yet: macOS compresses well before it raises the level, and Linux has no level at all */
+/** available memory under this share of the total: on Linux the only signal there is; on macOS a
+ * backstop, since the kernel compresses well before it raises the level */
 const AVAILABLE_FLOOR = 0.15;
 
 let unsupportedLogged = false;
@@ -39,7 +44,8 @@ async function darwin(): Promise<MemorySignal | null> {
   const pressure =
     level === MAC_PRESSURE_NORMAL ? "normal" : level === 2 ? "warn" : level === 4 ? "critical" : `level ${level}`;
   return {
-    tight: level !== MAC_PRESSURE_NORMAL || available < AVAILABLE_FLOOR * 100,
+    tight: level !== MAC_PRESSURE_NORMAL,
+    backstop: level === MAC_PRESSURE_NORMAL && available < AVAILABLE_FLOOR * 100,
     why: `memory pressure ${pressure} with ${available}% available`,
   };
 }
@@ -59,7 +65,7 @@ async function linux(): Promise<MemorySignal | null> {
   const available = field("MemAvailable");
   if (!total || available === null) return null;
   const percent = Math.round((available / total) * 100);
-  return { tight: available / total < AVAILABLE_FLOOR, why: `${percent}% of memory available` };
+  return { tight: available / total < AVAILABLE_FLOOR, backstop: false, why: `${percent}% of memory available` };
 }
 
 /** Resident memory per process group, in KB, for the groups asked about: one `ps` for every

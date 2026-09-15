@@ -22,8 +22,6 @@ export interface IdleDeps {
   warmSpare: (repoId: string) => void;
   /** how long an unviewed worktree runs before it sleeps; null never sleeps on the clock */
   sleepMs?: number | null;
-  /** whether a tight machine sleeps a worktree, or only says which one it would */
-  pressure?: "observe" | "act";
   memory?: () => Promise<MemorySignal | null>;
   costs?: (pgids: number[]) => Promise<Map<number, number>>;
   /** the clock, for tests */
@@ -201,18 +199,19 @@ export class IdlePolicy {
     return out;
   }
 
-  /** When the machine is short of memory, the idle worktree unused for longest sleeps, one per
-   * check: the next check sees the memory it freed before deciding whether another follows. */
+  /** When the OS says memory is short, the idle worktree unused for longest sleeps, one per
+   * check: the next check sees the memory it freed before deciding whether another follows. The
+   * softer backstop reading only names the worktree it would have picked. */
   async checkPressure(): Promise<void> {
     const signal = await (this.d.memory ?? memoryTight)();
-    if (!signal?.tight) return;
+    if (!signal || (!signal.tight && !signal.backstop)) return;
     const pick = this.d.state.worktrees
       .filter((w) => this.candidate(w.id))
       .sort((a, b) => this.entry(a.id).activeAt - this.entry(b.id).activeAt)[0];
     if (!pick) return;
     const why = `${signal.why}; least recently used`;
-    if ((this.d.pressure ?? "observe") === "act") this.sleep(pick.id, why);
-    else log.info(pick.id, `would sleep: ${why}`);
+    if (signal.tight) this.sleep(pick.id, why);
+    else log.info(pick.id, `would sleep on the backstop: ${why}`);
   }
 
   /** what each awake worktree holds, for /health; never a reason to sleep one. The same minute

@@ -65,7 +65,7 @@ Each agent signs in from the chat. Claude Code and Codex install on first start;
 ## How is this different from what you use now?
 
 - **Claude Code or Codex in a terminal.** Toyon runs that same agent under your own login and config; for Claude Code that includes your permission rules, hooks, slash commands and MCP servers. What changes is around it: each chat gets its own copy of the project with the app running, and nothing lands until you press.
-- **Cursor, Zed or VS Code.** Toyon sits beside your editor, not in place of it. The agent works in its own copy while your checkout stays yours, and any file opens back in your editor from its menu.
+- **Cursor, Zed or VS Code.** Toyon sits beside your editor, not in place of it. Their agent panels and worktrees live in the editor, with a browser you open when you want it; in Toyon the running app is the centre of every chat, wired to its source. Your checkout stays yours, and any file opens back in your editor from its menu.
 - **Conductor or Superset.** They are good tools for running many agents at once. Toyon is built around the app instead of the agents: every chat opens with your app running at the centre, connected to its code, so you see each change before you keep it. It is MIT licensed, needs no account, sends no telemetry, runs in your browser on macOS or Linux, and lands work as a pull request on GitHub or on your own machine without it.
 
 ## Under the hood

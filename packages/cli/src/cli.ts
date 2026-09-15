@@ -102,7 +102,10 @@ async function run(cmd: Command): Promise<number> {
       return 2;
     case "version": {
       const h = await health();
-      console.log(h ? `toyon ${pkg.version} (daemon ${h.version ?? "?"} running)` : `toyon ${pkg.version}`);
+      if (!h) console.log(`toyon ${pkg.version}`);
+      else if (h.version === pkg.version) console.log(`toyon ${pkg.version} (daemon ${h.version} running)`);
+      // a daemon too old to report its version is still one a restart replaces
+      else console.log(`toyon ${pkg.version} (daemon ${h.version ?? "?"} running; \`toyon restart\` to update)`);
       return 0;
     }
     case "stop":

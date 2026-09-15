@@ -34,7 +34,7 @@ export function CrashCard({
   );
 }
 
-/** what a stale build says, wherever it is noticed: here, and the preview's protocol check */
+/** what a stale build says: a chunk this tab booted with is gone from disk */
 export const STALE_BUILD = {
   title: "Toyon was updated",
   body: "This page is still running the old build. Reload to pick up the new one.",

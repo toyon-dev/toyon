@@ -23,8 +23,6 @@ import {
 } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
 import { bridgeThemeMsg } from "../../theme.ts";
-import { Button } from "../../ui/Button.tsx";
-import { CrashCard, STALE_BUILD } from "../../ui/ErrorBoundary.tsx";
 import { useDragResize, usePersisted } from "../../ui/hooks.ts";
 import { hasToken } from "../../ws.ts";
 
@@ -50,6 +48,7 @@ import { Greenfield } from "./Greenfield.tsx";
 import { Import } from "./Import.tsx";
 import { NewProject } from "./NewProject.tsx";
 import { Setup } from "./Setup.tsx";
+import { UpdatedCard } from "./UpdatedCard.tsx";
 import { waitingText } from "./waiting.ts";
 import "./center.css";
 import { wantsLinks } from "../../state/links.ts";
@@ -441,17 +440,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
                 !setupRepo &&
                 !watching &&
                 !greenfield &&
-                incompatible && (
-                  <CrashCard
-                    title={STALE_BUILD.title}
-                    body={STALE_BUILD.body}
-                    action={
-                      <Button variant="outline" onClick={() => window.location.reload()}>
-                        reload
-                      </Button>
-                    }
-                  />
-                )}
+                incompatible && <UpdatedCard />}
               {!activeReady &&
                 !activeDiscovered &&
                 !archivedPage &&

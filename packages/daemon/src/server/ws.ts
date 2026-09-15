@@ -272,14 +272,17 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
   s.hub.on("selfChanged", () => broadcast({ t: "self", self: s.self.get() }));
+  s.hub.on("updateChanged", () => broadcast({ t: "update", update: s.update.get() }));
   s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
   s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));
 
   // What a page learns first, over the socket or over the bootstrap fetch that precedes it. Quick
   // rows: the frame goes out from what is known and the counts follow, rather than every page
   // load waiting on a git pass across every worktree.
-  const helloFrame = async () =>
-    ({
+  const helloFrame = async () => {
+    // a page load is when an install done in a terminal first matters to anyone
+    await s.update.refresh();
+    return {
       t: "hello",
       version,
       protocol: PROTOCOL_VERSION,
@@ -298,7 +301,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       pending: s.repos.pending,
       visits: s.routes.historyAll(),
       self: s.self.get(),
-    }) satisfies ServerMsg;
+      update: s.update.get(),
+    } satisfies ServerMsg;
+  };
 
   let branded = false;
   const serverConfig = {
@@ -316,6 +321,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       remote: opts.remote,
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
+      restart: () => s.restarter.request(),
     }),
     websocket: {
       // a chat frame can carry ATTACHMENT_LIMITS.image images of IMAGE_MAX_BYTES each, base64; Bun's

@@ -20,6 +20,8 @@ describe("locateAssets", () => {
       expect(a.bridgeJs).toBe(join(here, "bridge.js"));
       // the package ships its bundles; there is no checkout behind it to fall behind
       expect(a.sourceRoot).toBeNull();
+      // what an install replaces, so the daemon can tell it is no longer what is installed
+      expect(a.packageJson).toBe(join(here, "..", "package.json"));
     } finally {
       rmSync(here, { recursive: true, force: true });
     }
@@ -29,11 +31,17 @@ describe("locateAssets", () => {
     expect(a.shellDist).toBe("/src/packages/shell/dist");
     expect(a.bridgeJs).toBe("/src/packages/bridge/dist/bridge.js");
     expect(a.sourceRoot).toBe("/src");
+    expect(a.packageJson).toBeNull();
   });
   test("the environment wins over both", () => {
     const a = locateAssets("/x", { TOYON_SHELL_DIST: "/elsewhere/shell", TOYON_BRIDGE_JS: "/elsewhere/b.js" });
     // the overrides move the bundles, not the tree: a nested daemon is still running from one
-    expect(a).toEqual({ shellDist: "/elsewhere/shell", bridgeJs: "/elsewhere/b.js", sourceRoot: "/" });
+    expect(a).toEqual({
+      shellDist: "/elsewhere/shell",
+      bridgeJs: "/elsewhere/b.js",
+      sourceRoot: "/",
+      packageJson: null,
+    });
   });
 });
 

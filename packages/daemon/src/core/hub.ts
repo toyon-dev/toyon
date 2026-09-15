@@ -30,6 +30,8 @@ export interface HubEvents {
   reposChanged: () => void;
   /** toyon's own checkout moved under the running daemon, or its `afterLand` started or stopped */
   selfChanged: () => void;
+  /** the installed version moved against the running one, or a requested restart's wait changed */
+  updateChanged: () => void;
   /** a clone started, moved, finished or failed */
   pendingChanged: () => void;
   themesChanged: () => void;

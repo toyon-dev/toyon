@@ -27,6 +27,7 @@ import type {
   Theme,
   ThemePrefs,
   ToyonConfig,
+  UpdateState,
   WorktreeInfo,
   WorktreeStatus,
 } from "../model.ts";
@@ -76,10 +77,14 @@ export type ServerMsg =
       visits: Record<string, PageEntry[]>;
       /** toyon is running from a checkout that has moved on without it; null the rest of the time */
       self: SelfState | null;
+      /** the installed Toyon is not the one running, or a restart is waiting; null the rest of the time */
+      update: UpdateState | null;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   /** the daemon fell behind the checkout it runs from, caught up, or started catching up */
   | { t: "self"; self: SelfState | null }
+  /** an install landed under the running daemon, or a requested restart moved on */
+  | { t: "update"; update: UpdateState | null }
   /** the answer to a `zone`: whether the sun is down where that browser is, and when that changes.
    * Only the appearance mode that follows daylight reads it, and the shell asks again at `until`. */
   | { t: "daylight"; dark: boolean; until: number }
@@ -438,8 +443,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** run the repo's `afterLand` now: the manual half of the notice that toyon's own bundles are
    * behind the checkout it runs from */
   z.object({ t: z.literal("run-after-land"), repoId: id }),
-  /** stop the daemon and start it again from the same entry, once nothing is mid-turn. Every
-   * shell reconnects on its own, so this is the only frame that answers by going away. */
+  /** stop the daemon and start it again from the same entry. A chat mid-reply is waited out, and
+   * the wait is announced in `update`. Every shell reconnects on its own, so this is the only frame
+   * that answers by going away. */
   z.object({ t: z.literal("restart-daemon") }),
   /** fast-forward the main checkout (`worktreeId` is main's row) to its upstream */
   z.object({ t: z.literal("pull-main"), worktreeId: id }),

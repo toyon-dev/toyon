@@ -16,6 +16,7 @@ import { prepareLaunch } from "./agent/sandbox.ts";
 import { makeLander, makePlanner, makeRecapper } from "./agent/tasks.ts";
 import { transcriptPathFor } from "./agent/transcript.ts";
 import { locateAssets, pruneAssets } from "./core/assets.ts";
+import { cloud } from "./core/cloud.ts";
 import { folderDialog } from "./core/dialog.ts";
 import { Hub } from "./core/hub.ts";
 import { fireAndForget, log } from "./core/log.ts";
@@ -23,6 +24,7 @@ import { startLagSampler } from "./core/metrics.ts";
 import { ensureDirs, makePaths } from "./core/paths.ts";
 import { loadRemote, previewGrant } from "./core/remote.ts";
 import { respawn, restartable } from "./core/restart.ts";
+import { Restarter } from "./core/restarter.ts";
 import { SelfWatch } from "./core/self.ts";
 import { loadOrCreateToken, StateStore } from "./core/state.ts";
 import { DesignService } from "./design/service.ts";
@@ -38,6 +40,8 @@ import { pinProxyPorts } from "./runtime/ports.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
 import { ThemeStore } from "./themes/store.ts";
+import { readVersion } from "./update/installed.ts";
+import { UpdateService } from "./update/service.ts";
 import { ChatSearch } from "./worktrees/chats.ts";
 import { LandingService } from "./worktrees/landing.ts";
 import { PrService } from "./worktrees/prs.ts";
@@ -51,7 +55,12 @@ process.on("unhandledRejection", (e) => log.error("daemon", "unhandled rejection
 process.on("uncaughtException", (e) => log.error("daemon", "uncaught exception", e));
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { shellDist: SHELL_DIST, bridgeJs: BRIDGE_JS, sourceRoot: SOURCE_ROOT } = locateAssets(here);
+const {
+  shellDist: SHELL_DIST,
+  bridgeJs: BRIDGE_JS,
+  sourceRoot: SOURCE_ROOT,
+  packageJson: PACKAGE_JSON,
+} = locateAssets(here);
 // the shell keeps every build's chunks so a tab open across a rebuild can still load its own; the
 // ones no tab can still be holding go here, once, where no build is part-way through writing
 const pruned = pruneAssets(SHELL_DIST);
@@ -168,6 +177,24 @@ const idle = new IdlePolicy({
 });
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);
 themes.load();
+const restarter = new Restarter({
+  hub,
+  state,
+  runtime,
+  refusal: () => {
+    const can = restartable();
+    return can.ok ? null : can.reason;
+  },
+  go: () => fireAndForget("daemon", shutdown("restart", { respawn: true }), "restart"),
+});
+// the cloud image is replaced by a redeploy and never installed over, so it has nothing to compare
+const installedPackage = cloud.enabled ? null : PACKAGE_JSON;
+const update = new UpdateService({
+  hub,
+  running: pkg.version,
+  restarter,
+  installed: async () => (installedPackage ? readVersion(installedPackage) : null),
+});
 
 const { branded, stop: stopServer } = startServer({
   port,
@@ -197,12 +224,8 @@ const { branded, stop: stopServer } = startServer({
     attachments,
     self,
     afterLand,
-    restart: () => {
-      const can = restartable();
-      if (!can.ok) return can.reason;
-      fireAndForget("daemon", shutdown("restart", { respawn: true }), "restart");
-      return null;
-    },
+    restarter,
+    update,
     planTasks: makePlanner(agents),
     folderDialog: folderDialog(),
   },

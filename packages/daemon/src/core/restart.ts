@@ -8,6 +8,7 @@
 
 import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
+import { log } from "./log.ts";
 
 /** Whether this daemon is allowed to replace itself, and what to say when it is not.
  *
@@ -35,5 +36,8 @@ export function respawn(logFile: string): void {
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env },
   });
+  // a spawn that fails emits error and never exit; unhandled, that throws in the old process on its
+  // way out, with nothing in the log to say the replacement never started
+  child.on("error", (e) => log.warn("daemon", `the replacement did not start: ${e.message}`));
   child.unref();
 }

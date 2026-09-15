@@ -13,6 +13,7 @@ import type { FolderDialog } from "../core/dialog.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
+import type { Restarter } from "../core/restarter.ts";
 import type { SelfWatch } from "../core/self.ts";
 import type { StateStore } from "../core/state.ts";
 import type { DesignService } from "../design/service.ts";
@@ -26,6 +27,7 @@ import type { IdlePolicy } from "../runtime/idle.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { daylightNow } from "../themes/daylight.ts";
 import type { ThemeStore } from "../themes/store.ts";
+import type { UpdateService } from "../update/service.ts";
 import type { ChatSearch } from "../worktrees/chats.ts";
 import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
@@ -65,8 +67,10 @@ export interface Services {
   self: SelfWatch;
   /** the repo's catch-up commands, so the notice above can offer to run them */
   afterLand: AfterLand;
-  /** stop and start again; answers a refusal, or null having begun to go away */
-  restart: () => string | null;
+  /** a restart someone asked for, held until no chat is mid-reply */
+  restarter: Restarter;
+  /** whether the Toyon installed is the one running */
+  update: UpdateService;
   /** request → 1–5 independent tasks, asked of the agent that will run them (tests inject a stub) */
   planTasks: (prompt: string, cwd: string, agentId: string) => Promise<string[] | null>;
   /** the OS folder dialog behind the new-project form's folder button (tests inject a stub) */
@@ -392,14 +396,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   "restart-daemon"(_msg, _ctx, s) {
-    // a turn in flight is work someone is waiting on, and the daemon holds the session: stopping
-    // now would lose the part that has not reached the transcript
-    const busy = s.state.worktrees.filter((w) => s.runtime.agentFor(w.id)?.status === "working");
-    if (busy.length > 0) {
-      const names = busy.map((w) => w.title).join(", ");
-      throw new UserError(`still working on ${names}; restart once that settles`);
-    }
-    const refused = s.restart();
+    const refused = s.restarter.request();
     if (refused) throw new UserError(refused);
   },
 

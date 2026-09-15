@@ -30,6 +30,8 @@ export default defineConfig({
       "/ws": { ...target, ws: true },
       "/health": target,
       "/bootstrap": target,
+      // the restart a page asks for when its socket stopped at a protocol mismatch
+      "/restart": target,
       // chat image thumbnails; the daemon serves them, so dev has to forward them like /ws
       "/attachments": target,
     },

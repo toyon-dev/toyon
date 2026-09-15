@@ -26,6 +26,9 @@ const repos = {
 const attachmentsDir = mkdtempSync(join(tmpdir(), "toyon-http-"));
 afterAll(() => rmSync(attachmentsDir, { recursive: true, force: true }));
 const learnedOrigins: (string | null)[] = [];
+/** what the daemon answers a restart with: a refusal, or null having taken it */
+let restartRefusal: string | null = null;
+let restartsAsked = 0;
 const opts: HttpOpts = {
   token: "secret",
   shellDist: "/nonexistent",
@@ -39,6 +42,10 @@ const opts: HttpOpts = {
   remote: null,
   preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
+  restart: () => {
+    restartsAsked++;
+    return restartRefusal;
+  },
 };
 const fetch = createFetch(opts);
 const req = (path: string, init: RequestInit & { host?: string } = {}) =>
@@ -332,6 +339,34 @@ describe("/attachments", () => {
   });
 });
 
+describe("/restart", () => {
+  // the page asking is one whose socket stopped at a protocol mismatch, so this is plain HTTP
+  const post = (path: string) => fetch(req(path, { method: "POST" }), srv());
+
+  test("no token is 401, and nothing is asked of the daemon", async () => {
+    const before = restartsAsked;
+    expect((await post("/restart"))?.status).toBe(401);
+    expect((await post("/restart?token=wrong"))?.status).toBe(401);
+    expect(restartsAsked).toBe(before);
+  });
+
+  test("a taken request is 202, and a refusal is 409 with the reason to read", async () => {
+    restartRefusal = null;
+    expect((await post("/restart?token=secret"))?.status).toBe(202);
+    restartRefusal = "restart it from its terminal tab";
+    const refused = await post("/restart?token=secret");
+    expect(refused?.status).toBe(409);
+    expect(await refused?.text()).toBe("restart it from its terminal tab");
+    restartRefusal = null;
+  });
+
+  test("a GET is not a restart", async () => {
+    const before = restartsAsked;
+    await fetch(req("/restart?token=secret"), srv());
+    expect(restartsAsked).toBe(before);
+  });
+});
+
 describe("static shell", () => {
   const dist = mkdtempSync(join(tmpdir(), "toyon-dist-"));
   afterAll(() => rmSync(dist, { recursive: true, force: true }));
@@ -352,6 +387,7 @@ describe("static shell", () => {
     preview: () => null,
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
+    restart: () => null,
   });
 
   test("a route falls back to index.html so the SPA can handle it", async () => {

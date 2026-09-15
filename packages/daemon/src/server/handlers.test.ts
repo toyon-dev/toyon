@@ -17,6 +17,7 @@ import { AttachmentStore } from "../agent/attachments.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
+import { Restarter } from "../core/restarter.ts";
 import { SelfWatch } from "../core/self.ts";
 import { StateStore } from "../core/state.ts";
 import { DesignService } from "../design/service.ts";
@@ -29,6 +30,7 @@ import { type RouteFs, RouteService } from "../routes/service.ts";
 import { IdlePolicy } from "../runtime/idle.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
+import { UpdateService } from "../update/service.ts";
 import { ChatSearch } from "../worktrees/chats.ts";
 import { PrService } from "../worktrees/prs.ts";
 import { RefSearch } from "../worktrees/refs.ts";
@@ -122,6 +124,23 @@ function make() {
   const planned: string[][] = [];
   const chosen: Array<string | null> = [];
   const restarts: number[] = [];
+  const restarter = new Restarter({
+    hub,
+    state,
+    runtime,
+    refusal: () => null,
+    go: () => {
+      restarts.push(Date.now());
+    },
+  });
+  // nothing installed to compare: an update state only when a test asks for a restart
+  const update = new UpdateService({
+    hub,
+    running: "0.0.0",
+    installed: async () => null,
+    restarter,
+    setInterval: () => {},
+  });
   const planArgs: Array<[prompt: string, cwd: string, agent: string]> = [];
   // no clock and no intervals: what a view starts is the question here, never what sleeps
   const idle = new IdlePolicy({
@@ -154,10 +173,8 @@ function make() {
     attachments,
     self,
     afterLand,
-    restart: () => {
-      restarts.push(Date.now());
-      return null;
-    },
+    restarter,
+    update,
     planTasks: async (prompt, cwd, agent) => {
       planArgs.push([prompt, cwd, agent]);
       return planned.shift() ?? null;
@@ -1284,11 +1301,13 @@ describe("handlers", () => {
     const agent = agents.get(main.id);
     if (!agent) throw new Error("no agent for main");
     agent.status = "working";
-    await expect(dispatch({ t: "restart-daemon" }, ctx, services)).rejects.toThrow(/still working on/);
+    await dispatch({ t: "restart-daemon" }, ctx, services);
     expect(restarts).toHaveLength(0);
+    // the wait is said where the chip reads it, naming who it waits on
+    expect(services.update.get()?.restarting).toEqual([main.title]);
 
     agent.status = "idle";
-    await dispatch({ t: "restart-daemon" }, ctx, services);
+    services.hub.emit("agentStatus", main.id, "idle");
     expect(restarts).toHaveLength(1);
   });
 });

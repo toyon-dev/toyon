@@ -49,6 +49,8 @@ export interface HttpOpts {
   preview: (worktreeId: string) => PreviewHandler | null;
   /** the hello frame, for a page that asks before its socket exists */
   bootstrap: () => Promise<unknown>;
+  /** ask for a restart; answers a refusal, or null having restarted or queued behind a reply */
+  restart: () => string | null;
 }
 
 /** a year, and never revalidate: for a name that cannot mean different bytes later */
@@ -146,6 +148,15 @@ export function createFetch(opts: HttpOpts) {
       // before first paint, so the preview iframes that paint make their first request with it
       if (remote && remoteShell) headers["set-cookie"] = grantCookie(grant, remote.host);
       return Response.json(await opts.bootstrap(), { headers });
+    }
+
+    // A page served from files newer than the daemon speaks another protocol and has stopped its
+    // socket, so the restart that brings the two level comes over plain HTTP, token in the query
+    // like /bootstrap.
+    if (url.pathname === "/restart" && req.method === "POST") {
+      if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
+      const refused = opts.restart();
+      return refused ? new Response(refused, { status: 409 }) : new Response(null, { status: 202 });
     }
 
     if (url.pathname === "/register" && req.method === "POST") {

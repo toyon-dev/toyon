@@ -12,6 +12,9 @@ export interface Assets {
   /** the checkout the daemon is running from, or null for the npm package, which has no tree
    * behind it and so can never be behind one (core/self.ts) */
   sourceRoot: string | null;
+  /** the installed package's package.json, one directory above the entry, which an install
+   * replaces under the running daemon; null in the source tree */
+  packageJson: string | null;
 }
 
 /** `here` is the directory of the running entry: packages/daemon/src in the tree, dist/ in the package */
@@ -21,6 +24,7 @@ export function locateAssets(here: string, env: NodeJS.ProcessEnv = process.env)
     shellDist: env.TOYON_SHELL_DIST ?? (packaged ? join(here, "shell") : join(here, "../../shell/dist")),
     bridgeJs: env.TOYON_BRIDGE_JS ?? (packaged ? join(here, "bridge.js") : join(here, "../../bridge/dist/bridge.js")),
     sourceRoot: packaged ? null : resolve(here, "../../.."),
+    packageJson: packaged ? join(here, "..", "package.json") : null,
   };
 }
 

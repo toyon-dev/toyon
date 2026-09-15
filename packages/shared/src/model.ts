@@ -94,6 +94,19 @@ export interface SelfState {
   buildFailed?: string;
 }
 
+/** Toyon's own version against what is installed on the machine, and a restart someone asked for.
+ * An install replaces the package's files under a daemon that keeps running the code it started
+ * with, so the two can differ until it restarts. */
+export interface UpdateState {
+  /** the version this daemon started as */
+  running: string;
+  /** the version on disk, when it is not the one running */
+  installed: string | null;
+  /** a restart was asked for and waits on these chats to finish replying; empty once it is under
+   * way, null when nobody asked */
+  restarting: string[] | null;
+}
+
 /** one directory offered by the project picker's path completion */
 export interface PathEntry {
   /** absolute path, tilde-collapsed for display and for typing back in */

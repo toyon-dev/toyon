@@ -27,6 +27,30 @@ export function attachmentUrl(worktreeId: string, file: string): string {
   return `/attachments/${worktreeId}/${file}?token=${getToken()}`;
 }
 
+/** Ask the daemon to restart over plain HTTP, for a page whose socket stopped at a protocol mismatch.
+ * Answers the daemon's refusal, or null once it has taken the request. */
+export async function restartDaemon(): Promise<string | null> {
+  try {
+    const r = await fetch(`/restart?token=${getToken()}`, { method: "POST" });
+    if (r.ok) return null;
+    return (await r.text()) || "Toyon did not restart";
+  } catch {
+    return "Could not reach Toyon";
+  }
+}
+
+/** the pid of the daemon answering, or null while none does: a new pid is a restart finished */
+export async function daemonPid(): Promise<number | null> {
+  try {
+    const r = await fetch("/health", { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return null;
+    return ((await r.json()) as { pid?: number }).pid ?? null;
+  } catch {
+    // down between the old daemon and the new one; the caller asks again
+    return null;
+  }
+}
+
 /** reconnect delay: 1s doubling to 30s, with jitter so many tabs don't stampede a restarting daemon */
 const BACKOFF_MIN = 1000;
 const BACKOFF_MAX = 30_000;

@@ -1,6 +1,7 @@
 import { type ComponentProps, type ReactNode, useEffect, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
 import { selfNotice } from "../../app/selfNotice.ts";
+import { updateNotice } from "../../app/updateNotice.ts";
 import { previewItems } from "../../state/actions/preview.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { settingsItems } from "../../state/actions/settings.ts";
@@ -105,6 +106,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
           </Offer>
         )}
         <SelfOffer />
+        <UpdateOffer />
       </span>
       {!chatCentred && (
         <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
@@ -338,8 +340,10 @@ function SelfOffer() {
   const self = useStore((s) => s.self);
   const repos = useStore((s) => s.repos);
   const sock = useSock();
+  // once a restart is asked for, the update chip says how it is going; two chips would both offer it
+  const asked = useStore((s) => s.update?.restarting != null);
   const notice = selfNotice(self, repos);
-  if (!notice || !self) return null;
+  if (!notice || !self || asked) return null;
   const word = notice.busy
     ? "rebuilding"
     : notice.build === "rebuild"
@@ -349,6 +353,20 @@ function SelfOffer() {
   return (
     <Offer icon="reload" busy={notice.busy} onClick={act} {...tip(notice.text, undefined, { detail: notice.detail })}>
       {word}
+    </Offer>
+  );
+}
+
+/** An install landed under the running Toyon, or a restart is waiting on a reply. The press is the
+ * consent to restart, so the daemon holds it until no chat is mid-reply rather than asking again. */
+function UpdateOffer() {
+  const update = useStore((s) => s.update);
+  const sock = useSock();
+  const notice = updateNotice(update);
+  if (!notice) return null;
+  return (
+    <Offer icon="reload" busy={notice.busy} onClick={() => sock?.send({ t: "restart-daemon" })} {...tip(notice.text)}>
+      {notice.word}
     </Offer>
   );
 }

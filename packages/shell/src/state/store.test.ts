@@ -113,6 +113,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     pending: [],
     visits: {},
     self: null,
+    update: null,
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
 const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, spares: [] });
@@ -1028,6 +1029,14 @@ describe("streams and notices", () => {
     const s = run([{ a: "connected", v: true }, { a: "incompatible" }]);
     expect(s.incompatible).toBe(true);
     expect(s.connected).toBe(false);
+  });
+  test("the update frame replaces what hello said about Toyon's own version", () => {
+    const s = run([
+      hello(),
+      server({ t: "update", update: { running: "0.2.0", installed: "0.3.0", restarting: null } }),
+    ]);
+    expect(s.update?.installed).toBe("0.3.0");
+    expect(run([server({ t: "update", update: null })], s).update).toBeNull();
   });
   test("zen toggles, and says nothing: the toggle's own tip carries the key", () => {
     const on = run([{ a: "toggle-zen" }]);

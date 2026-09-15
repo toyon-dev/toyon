@@ -106,6 +106,7 @@ function harness() {
     pending: [],
     visits: {},
     self: null,
+    update: null,
   });
   store.dispatch({ a: "connected", v: true });
   const last = <T extends ClientMsg["t"]>(t: T) => sent.findLast((m): m is Extract<ClientMsg, { t: T }> => m.t === t);

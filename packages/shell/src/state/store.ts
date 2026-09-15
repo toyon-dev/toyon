@@ -44,6 +44,7 @@ import type {
   Theme,
   ThemePrefs,
   ToolKind,
+  UpdateState,
   WorktreePages,
   WorktreeStatus,
 } from "@toyon/shared";
@@ -560,6 +561,9 @@ export interface State {
    * running daemon, or the bundle it is serving this page from, does not have. Null the rest of
    * the time, which is every install that is not someone working on toyon itself. */
   self: SelfState | null;
+  /** the Toyon installed on this machine is not the one running, or a restart someone asked for is
+   * waiting on a chat to finish. Null the rest of the time. */
+  update: UpdateState | null;
   /** the Finder dialog is up, and which of the new-project view's controls asked for it: where the
    * project goes, or a folder to open. Escape is the dialog's while it is up. */
   choosingFolder: false | "location" | "open";
@@ -689,6 +693,7 @@ export function initialState(opts: InitialOpts): State {
     // the page never shows before hello, which is what says otherwise
     gitIdentity: true,
     self: null,
+    update: null,
     choosingFolder: false,
     newProject: null,
     autoSend: null,
@@ -1524,12 +1529,15 @@ function onServer(s: State, msg: StoreServerMsg): State {
         pending: msg.pending,
         visits: msg.visits,
         self: msg.self,
+        update: msg.update,
         // an import this tab was watching may have finished while it was away
         activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
       };
     }
     case "self":
       return { ...s, self: msg.self };
+    case "update":
+      return { ...s, update: msg.update };
     case "visits":
       return { ...s, visits: { ...s.visits, [msg.repoId]: msg.pages } };
     case "themes":

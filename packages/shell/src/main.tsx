@@ -143,14 +143,27 @@ const store = createStore(
   }),
 );
 
+// The daemon's version as this page first heard it. A later hello naming another version, or
+// another protocol, is a daemon that restarted onto an install: this page's code is from before it
+// and the files on disk are the new ones, so a reload is the whole fix and needs no asking.
+let heardVersion: string | null = null;
+
 const sock = new DaemonSocket(
   (msg) => {
-    // a daemon upgraded under a stale tab: the shell's protocol knowledge is baked at build, so stop
-    // talking (and reconnecting) and ask for a reload rather than misread frames
-    if (msg.t === "hello" && msg.protocol !== PROTOCOL_VERSION) {
-      store.dispatch({ a: "incompatible" });
-      sock.dispose();
-      return;
+    if (msg.t === "hello") {
+      if (heardVersion !== null && (msg.version !== heardVersion || msg.protocol !== PROTOCOL_VERSION)) {
+        sock.dispose();
+        window.location.reload();
+        return;
+      }
+      // a first hello that disagrees: this page was served from files newer than the daemon
+      // running, and the card offers the restart that brings them level
+      if (msg.protocol !== PROTOCOL_VERSION) {
+        store.dispatch({ a: "incompatible" });
+        sock.dispose();
+        return;
+      }
+      heardVersion = msg.version;
     }
     if (isTermMsg(msg)) {
       terminalBus.deliver(msg);
@@ -198,6 +211,7 @@ declare global {
 const booted = (window.toyonBoot ?? Promise.resolve(null)).then((boot) => {
   const msg = boot as ServerMsg | null;
   if (msg && typeof msg === "object" && msg.t === "hello" && msg.protocol === PROTOCOL_VERSION) {
+    heardVersion ??= msg.version;
     store.dispatch({ a: "server", msg });
   }
 });

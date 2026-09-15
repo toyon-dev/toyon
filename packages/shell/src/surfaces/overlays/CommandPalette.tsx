@@ -16,7 +16,7 @@ export function commandRow(c: Command, q: string) {
   );
 }
 
-/** ⌘⇧P (⌘⇧E on Firefox) */
+/** ⌘⇧P (F1 on Firefox) */
 export function CommandPalette() {
   const dispatch = useDispatch();
   const commands = useCommands();

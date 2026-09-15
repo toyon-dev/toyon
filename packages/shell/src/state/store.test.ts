@@ -651,7 +651,7 @@ describe("drafting a worktree", () => {
   });
 });
 
-// the address bar, ⌘G and ⌘P's `/` all send a path here, and all of them wait for an app to take it
+// the address bar, ⌘U and ⌘P's `/` all send a path here, and all of them wait for an app to take it
 describe("where a typed path goes", () => {
   const app = (w: WorktreeStatus, status: string): WorktreeStatus => ({
     ...w,

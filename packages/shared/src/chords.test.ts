@@ -18,7 +18,7 @@ describe("matchChord", () => {
     expect(matchChord(ev("."))).toEqual({ id: "zen" });
     expect(matchChord(ev(","))).toEqual({ id: "keys" }); // macOS preferences key
     expect(matchChord(ev("l"))).toEqual({ id: "composer" });
-    expect(matchChord(ev("L", { shift: true }))).toEqual({ id: "rail" }); // shift keeps the rail's Firefox alias apart
+    expect(matchChord(ev("L", { shift: true }))).toBeNull(); // Cursor's add-to-chat, not the rail
     expect(matchChord(ev("o"))).toEqual({ id: "project" }); // VS Code's open key
     expect(matchChord(ev("/"))).toBeNull(); // left to Monaco's toggle-comment
   });
@@ -26,13 +26,22 @@ describe("matchChord", () => {
     expect(matchChord(ev("F", { shift: true }))).toEqual({ id: "search" });
     expect(matchChord(ev("f", { shift: true }))).toEqual({ id: "search" });
     expect(matchChord(ev("P", { shift: true }))).toEqual({ id: "commands" });
-    expect(matchChord(ev("E", { shift: true }))).toEqual({ id: "commands" });
+    expect(matchChord(ev("p", { shift: true }))).toEqual({ id: "commands" });
   });
-  test("shift must match the table: ⌘⇧B is not ⌘B, ⌘E is not ⌘⇧E", () => {
+  test("shift must match the table: ⌘⇧B is not ⌘B, ⌘⇧E is not ⌘E", () => {
     expect(matchChord(ev("b", { shift: true }))).toBeNull();
     expect(matchChord(ev("e"))).toEqual({ id: "pick" });
     expect(matchChord(ev("i"))).toEqual({ id: "inspect" });
-    expect(matchChord(ev("e", { shift: true }))).toEqual({ id: "commands" });
+    // ⌘⇧E is the file tree in VS Code, Cursor and Zed, and is kept for one
+    expect(matchChord(ev("e", { shift: true }))).toBeNull();
+  });
+  test("F1 is the palette as in VS Code, for the Firefox hand that has no ⌘⇧P; a guest keeps it", () => {
+    expect(matchChord(ev("F1", { meta: false }))).toEqual({ id: "commands" });
+    expect(matchChord(ev("F1", { meta: false, shift: true }))).toBeNull();
+    expect(matchChord(ev("F1"))).toBeNull();
+    expect(matchChord(ev("F1", { meta: false }), { guest: true })).toBeNull(); // help in vim and htop
+    expect(matchChord(ev("p", { meta: false }))).toBeNull(); // a bare letter is typing
+    expect(matchChord(ev("F2", { meta: false }))).toBeNull();
   });
   test("digits switch worktrees; shifted digits do not", () => {
     expect(matchChord(ev("3"))).toEqual({ id: "worktree", digit: 3 });
@@ -103,21 +112,32 @@ describe("matchChord", () => {
     expect(matchChord(ev("O", { shift: true }))).toEqual({ id: "project" });
     expect(matchChord(ev("o", { shift: true }))).toEqual({ id: "project" });
     expect(matchChord(ev("O", { meta: false, ctrl: true, shift: true }))).toBeNull();
-    expect(matchChord(ev("r"))).toBeNull(); // ⌘R reloads
     expect(matchChord(ev("R", { meta: false, ctrl: true, shift: true }))).toBeNull();
     // an alias that is not hostOnly still reaches a guest: ⌃Tab walks from inside the terminal
     expect(matchChord(ev("Tab", { meta: false, ctrl: true }), { guest: true })).toEqual({ id: "wt-next" });
   });
-  test("⌘G goes to a page, from inside the preview too; ⌘⇧G stays the refs", () => {
-    expect(matchChord(ev("g"))).toEqual({ id: "routes" });
-    expect(matchChord(ev("g"), { guest: true })).toEqual({ id: "routes" });
-    expect(matchChord(ev("G", { shift: true }))).toEqual({ id: "refs" });
+  test("⌘B is the changes dock as it is the files panel in every editor; ⌘G stays find-next", () => {
+    expect(matchChord(ev("b"))).toEqual({ id: "changes" });
+    expect(matchChord(ev("b"), { guest: true })).toEqual({ id: "changes" });
+    // ⌃⇧G is the git panel in VS Code and Zed: a hidden alias, never on the card
+    expect(matchChord(ev("G", { meta: false, ctrl: true, shift: true }))).toEqual({ id: "changes" });
     expect(matchChord(ev("g", { meta: false, ctrl: true }))).toBeNull(); // Monaco's go to line
+    expect(matchChord(ev("g"))).toBeNull(); // ⌘F then ⌘G is the page's own find
+    expect(matchChord(ev("G", { shift: true }))).toEqual({ id: "refs" });
+    expect(matchChord(ev("l"))).toEqual({ id: "composer" });
   });
-  test("⌘⇧U marks the worktree unread, as it does a message in Mail; ⌘U stays the editor's", () => {
+  test("⌘U goes to a page, U for URL, from inside the preview too", () => {
+    expect(matchChord(ev("u"))).toEqual({ id: "routes" });
+    expect(matchChord(ev("u"), { guest: true })).toEqual({ id: "routes" });
+  });
+  test("⌘R reloads the preview alone; ⌘⇧R is left to the browser, which reloads everything", () => {
+    expect(matchChord(ev("r"))).toEqual({ id: "reload" });
+    expect(matchChord(ev("r"), { guest: true })).toEqual({ id: "reload" });
+    expect(matchChord(ev("R", { shift: true }))).toBeNull();
+  });
+  test("⌘⇧U marks the worktree unread, as it does a message in Mail", () => {
     expect(matchChord(ev("U", { shift: true }))).toEqual({ id: "mark-unread" });
     expect(matchChord(ev("u", { shift: true }))).toEqual({ id: "mark-unread" });
-    expect(matchChord(ev("u"))).toBeNull(); // Monaco's cursor undo
   });
   test("keys the table doesn't own pass through", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find
@@ -127,7 +147,7 @@ describe("matchChord", () => {
     for (const [id, shown] of Object.entries(CHORD_LABELS)) {
       if (!shown.advertise) continue;
       const c = chordOf(id as keyof typeof CHORD_LABELS);
-      expect([...(c.aliases ?? []), c.ctrlAlias?.key]).toContain(shown.advertise.key);
+      expect([...(c.aliases ?? []), c.ctrlAlias?.key, c.bareAlias]).toContain(shown.advertise.key);
     }
   });
   // the table says what exists and the label map says how it reads; neither may drift from the other
@@ -143,6 +163,7 @@ describe("matchChord", () => {
       const a = c.ctrlAlias;
       if (a) expect(matchChord(ev(a.key, { shift: !!a.shift, ctrl: true, meta: false }))).toEqual({ id: c.id });
       for (const k of c.cmdShiftAlias ?? []) expect(matchChord(ev(k, { shift: true }))).toEqual({ id: c.id });
+      if (c.bareAlias) expect(matchChord(ev(c.bareAlias, { meta: false }))).toEqual({ id: c.id });
     }
   });
 });
@@ -150,7 +171,7 @@ describe("matchChord", () => {
 describe("labels", () => {
   test("chordLabel formats ⌘/⇧ and the Firefox alias", () => {
     expect(chordLabel("commands")).toBe("⌘⇧P");
-    expect(chordLabel("commands", { firefox: true })).toBe("⌘⇧E");
+    expect(chordLabel("commands", { firefox: true })).toBe("F1"); // a bare key draws no modifier
     expect(chordLabel("new", { firefox: true })).toBe("⌘K"); // ⌘N is an alias, not the Firefox key
     expect(chordLabel("new", { pwa: true })).toBe("⌘N"); // an installed PWA lets ⌘N through
     expect(chordLabel("commands", { pwa: true })).toBe("⌘⇧P");
@@ -165,7 +186,10 @@ describe("labels", () => {
     expect(chordLabel("wt-unseen-prev")).toBe("⌥⇧↑");
     expect(chordLabel("wt-unseen-next")).toBe("⌥⇧↓");
     expect(chordLabel("mark-unread")).toBe("⌘⇧U");
-    expect(chordLabel("routes")).toBe("⌘G");
+    expect(chordLabel("routes")).toBe("⌘U");
+    expect(chordLabel("changes")).toBe("⌘B"); // the ⌃⇧G alias is not advertised
+    expect(chordLabel("refs")).toBe("⌘⇧G");
+    expect(chordLabel("reload")).toBe("⌘R");
     // an installed app window has no tabs, so it lets ⌃Tab through; the ⇧ belongs to the alias
     expect(chordLabel("wt-next", { pwa: true })).toBe("⌃Tab");
     expect(chordLabel("wt-prev", { pwa: true })).toBe("⌃⇧Tab");

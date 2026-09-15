@@ -789,7 +789,7 @@ export function previewUp(wt: OwnedWorktree): boolean {
   return wt.procs.some((p) => p.status === "running" || p.status === "starting");
 }
 
-/** where the address bar, ⌘G and ⌘P's `/` send a path: the active worktree's preview, while it is up.
+/** where the address bar, ⌘U and ⌘P's `/` send a path: the active worktree's preview, while it is up.
  * A fresh object each call, so a selector reads one field of it and never the whole. */
 export function routeTarget(s: State): { worktreeId: string; repoId: string } | null {
   if (s.archivedPage) return null;

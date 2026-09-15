@@ -28,7 +28,7 @@ export interface ChordLabel {
 
 export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   "quick-open": { label: "jump to file", section: "Find" },
-  commands: { label: "command palette", section: "Find", advertise: { key: "e", when: "firefox" } },
+  commands: { label: "command palette", section: "Find", advertise: { key: "F1", when: "firefox" } },
   search: { label: "search in files", section: "Find" },
   changes: { label: "changes panel", section: "Panels" },
   composer: { label: "chat panel, with the editor's selection", section: "Panels" },
@@ -38,6 +38,7 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   design: { label: "design system", section: "Panels" },
   "term-tab": { label: "next terminal tab", section: "Panels" },
   routes: { label: "go to page", section: "Preview" },
+  reload: { label: "reload the preview", section: "Preview" },
   pick: { label: "element to chat", section: "Preview" },
   inspect: { label: "element to code", section: "Preview" },
   zen: { label: "full-bleed preview", section: "Preview" },
@@ -56,11 +57,13 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
 const KEY_NAMES: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓", Tab: "Tab" };
 
 /** "⌘⇧P" style label, showing the chord's advertised alias when the environment calls for it
- * (⌘⇧E on Firefox, ⌘N and ⌃Tab in an installed PWA). Other aliases stay unadvertised. */
+ * (F1 on Firefox, ⌘N and ⌃Tab in an installed PWA). Other aliases stay unadvertised. */
 export function chordLabel(id: ChordId, env: ChordEnv = {}): string {
   const c = chordOf(id);
   const shown = CHORD_LABELS[id];
   const key = shown.advertise && env[shown.advertise.when] ? shown.advertise.key : c.key;
+  // a bare alias is the whole label: no modifier to draw
+  if (key === c.bareAlias) return key;
   const text = key === "1-9" ? "1-9" : (KEY_NAMES[key] ?? key.toUpperCase());
   // the ⌃ alias brings its own modifiers: ⌃⇧Tab is the previous worktree though ⌥↑ has no ⇧
   const alias = key !== c.key && key === c.ctrlAlias?.key ? c.ctrlAlias : undefined;

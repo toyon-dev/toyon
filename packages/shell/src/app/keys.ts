@@ -65,13 +65,14 @@ export function useChords() {
       // picker holds shell focus, so those keep the full ladder or there is no way back out.
       // A zen left on by another project is not in force on one with nothing to run, which has no page.
       if (s.zen && !isChatCentred(s) && !s.overlay && !s.picking && chord?.id !== "zen") return;
-      // ⌘D, ⌘K and ⌘G are Monaco's (add cursor, chord prefix, find next) while it has the keyboard, and
+      // ⌘D, ⌘K and ⌘U are Monaco's (add cursor, chord prefix, cursor undo) while it has the keyboard, and
       // so is every ⌥ chord: ⌥↑/↓ is move line and ⌥⇧↑/↓ copy line. Taking them from a focused editor
       // made a design scan out of a second cursor, and would make a worktree switch out of a line move;
       // the same walk on ⌃Tab binds nothing in Monaco and stays ours. ⌘L is taken from it anyway:
       // expand-line-selection is the loss, and a hand in the editor that wants to answer the agent
-      // is who the chord is for. ⌘E and ⌘I are taken too, and Editor.tsx unbinds Monaco's own keys
-      // for them so the keydown gets here: the picker is the same chord wherever the hand is.
+      // is who the chord is for. ⌘E, ⌘I and F1 are taken too, and Editor.tsx unbinds Monaco's own
+      // keys for them so the keydown gets here: the picker and the palette are the same chord
+      // wherever the hand is.
       const monaco = !!document.activeElement?.closest(".monaco-editor");
       if (monaco && chord && (e.altKey || MONACO_OWNS.has(chord.id))) return;
       if (chord) {
@@ -127,6 +128,13 @@ export function useChords() {
             if (s.overlay?.kind === "routes") dispatch({ a: "close" });
             else if (routeTarget(s)) dispatch({ a: "open", overlay: { kind: "routes" } });
             break;
+          case "reload": {
+            // the frame on screen only; with none up there is nothing to reload, and the shell is
+            // not it (that is the browser's own ⌘⇧R)
+            const id = previewIdOf(s);
+            if (id) previewBus.post(id, { type: "reload" });
+            break;
+          }
           case "pick":
           case "inspect": {
             // the frame on screen, which while drafting is the base's preview rather than the row's

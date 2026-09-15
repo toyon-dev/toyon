@@ -1,3 +1,4 @@
+import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { copyText } from "./deps.ts";
 
@@ -9,5 +10,5 @@ export function previewItems(url: string | undefined, ui: { reload: () => void }
     page.push({ id: "open-tab", label: "open in a new tab", onClick: () => window.open(url, "_blank") });
     page.push({ id: "copy-url", label: "copy URL", onClick: () => copyText(url) });
   }
-  return grouped([page, [{ id: "reload", label: "reload preview", onClick: ui.reload }]]);
+  return grouped([page, [{ id: "reload", label: "reload preview", key: chord("reload"), onClick: ui.reload }]]);
 }

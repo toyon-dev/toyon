@@ -27,7 +27,8 @@ export type ChordId =
   | "mark-unread"
   | "project"
   | "refs"
-  | "routes";
+  | "routes"
+  | "reload";
 
 /** what the shell knows about the browser it runs in; each flag can swap an advertised key */
 export interface ChordEnv {
@@ -60,36 +61,42 @@ export interface Chord {
    * for its own tabs, so like ⌃Tab they reach the page in an installed app. A letter is listed once:
    * the matcher lower-cases it. Never advertised. */
   cmdShiftAlias?: string[];
-  /** other keys that fire the same chord. ⌘⇧E for the palette because Firefox owns ⌘⇧P; ⌘N for
-   * new-worktree because it is the muscle-memory key, though only an installed PWA lets the page
-   * see it (Chrome tabs, Safari and Firefox all take ⌘N as new window before the page). */
+  /** other ⌘ keys that fire the same chord: ⌘N for new-worktree because it is the muscle-memory
+   * key, though only an installed PWA lets the page see it (Chrome tabs, Safari and Firefox all
+   * take ⌘N as new window before the page). */
   aliases?: string[];
+  /** a key with no modifier at all that fires the same chord: F1 for the palette, as in VS Code and
+   * Cursor, and the key Firefox users are shown because Firefox owns ⌘⇧P. */
+  bareAlias?: string;
 }
 
 export const CHORDS: readonly Chord[] = [
   { id: "quick-open", key: "p" },
+  // ⌘⇧E is deliberately not an alias: it is the file tree in VS Code, Cursor and Zed, and is kept
+  // for one here
   {
     id: "commands",
     key: "p",
     shift: true,
-    aliases: ["e"],
+    bareAlias: "F1",
   },
   { id: "search", key: "f", shift: true },
-  { id: "changes", key: "b" },
+  // ⌘B is the panel with your files in VS Code, Cursor and Zed, whichever side it stands on here.
+  // ⌘G was weighed for it (G for git) and left alone: it is find-next in the browser, in Monaco
+  // and in the previewed app, and ⌘F is the page's own, so the pair stays whole. ⌃⇧G is the git
+  // panel in VS Code and Zed and stays a hidden alias for the hand that knows it.
+  { id: "changes", key: "b", ctrlAlias: { key: "g", shift: true } },
   // ⌘L is Cursor's key for the chat, so it is the one a hand already reaches for, and the chat's only
   // chord: from elsewhere it puts the caret in the box, opening the panel if it must, and from the
   // box it closes the panel (app/keys.ts). From the editor it brings the selection along as Cursor's
   // does (the editor answers it there, since Monaco keeps the key). A tab may lose it to the address
   // bar, an installed app always sees it.
   { id: "composer", key: "l" },
-  // ⌘⇧K next to ⌘K: one makes a worktree, the other shows the panel of them. Firefox takes ⌘⇧K
-  // for the web console before the page sees it, so ⌘⇧L is the alias it advertises there
-  {
-    id: "rail",
-    key: "k",
-    shift: true,
-    aliases: ["l"],
-  },
+  // ⌘⇧K next to ⌘K: one makes a worktree, the other shows the panel of them. No alias: ⌘⇧L was
+  // one, and it is add-to-chat in Cursor and select-all-matches in VS Code and Zed, so it caught
+  // a reflex meant for something else. The rail is walked without opening it (⌥↑/↓, ⌘1-9), and
+  // the palette and the bar button reach the toggle where the key does not.
+  { id: "rail", key: "k", shift: true },
   // ⌘, is the macOS preferences key, and unlike ⌘N/⌘T/⌘W a page may preempt it in a tab as
   // well as in an installed app, so it is ours everywhere. ⌘/ is deliberately not bound: it is
   // toggle-comment in Monaco (and every editor), and the shell listens on window.
@@ -138,19 +145,24 @@ export const CHORDS: readonly Chord[] = [
   // ⌃R is open-recent in VS Code and Zed, and reverse history search in every shell, so a focused
   // terminal keeps it, and so does a previewed page, which may be a terminal of its own.
   { id: "project", key: "o", ctrlAlias: { key: "r", hostOnly: true }, cmdShiftAlias: ["o"] },
-  // ⌘⇧G: a browser only uses it as find-previous while its find bar is open, which a page may
-  // preempt; every other ⌘⇧ letter that reads as "go" or "git" is taken before the page sees it
+  // ⌘⇧G: G for git, the work elsewhere, a branch or a PR. A browser only uses it as find-previous
+  // while its find bar is open, which a page may preempt; every other ⌘⇧ letter that reads as
+  // "git" or "branch" is taken before the page sees it
   { id: "refs", key: "g", shift: true },
-  // ⌘G is the address bar's list, since ⌘L is the chat's: G for go, to a page here and to a branch on
-  // ⌘⇧G. A browser only uses ⌘G as find-next, which a page may preempt (vscode.dev does); a focused
-  // Monaco keeps it for the same (app/keys.ts), and ⌃G stays its go-to-line.
-  { id: "routes", key: "g" },
+  // U for URL: the address bar's list, since ⌘L is the chat's and ⌘G is find-next. Only Firefox has
+  // a use for ⌘U (view source); a focused Monaco keeps it as cursor-undo (app/keys.ts).
+  { id: "routes", key: "u" },
+  // ⌘R reloads the preview, the frame the hand is looking at, not the shell around it. ⌘⇧R is left
+  // to the browser: its hard reload takes the shell and every preview with it, which is what the
+  // bigger reload should mean. An installed app always hands ⌘R over; a tab may keep it.
+  { id: "reload", key: "r" },
 ];
 
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };
 
 /** Normalised chord detection for a keydown: ⌘ (no ⌃/⌥) for most rows, ⌃ alone for the rows that
- * ask for it and for a row's ⌃ alias, ⌘⇧ for a row's ⌘⇧ alias, ⌥ alone for the arrow rows; letters
+ * ask for it and for a row's ⌃ alias, ⌘⇧ for a row's ⌘⇧ alias, ⌥ alone for the arrow rows, no
+ * modifier at all for a row's bare alias; letters
  * case-insensitive so a browser that reports "F" for ⌘⇧F and one that reports "f" agree; shift must
  * match the table exactly (⌘⇧B is not ⌘B). `guest` is a keydown from a keyboard with uses of its own
  * (a terminal, a previewed page), which keeps every `hostOnly` alias. */
@@ -167,6 +179,13 @@ export function matchChord(
   if (e.altKey) {
     if (e.metaKey || e.ctrlKey) return null;
     const c = CHORDS.find((c) => c.alt && c.key === e.key && !!c.shift === e.shiftKey);
+    return c && c.id !== "worktree" ? { id: c.id } : null;
+  }
+  // a bare key is the kind a program in the terminal or a previewed page binds itself (F1 is help
+  // in most of them), so a guest keyboard keeps every bare alias
+  if (!e.metaKey && !e.ctrlKey) {
+    if (e.shiftKey || guest) return null;
+    const c = CHORDS.find((c) => c.bareAlias === e.key);
     return c && c.id !== "worktree" ? { id: c.id } : null;
   }
   if (!!e.ctrlKey === e.metaKey) return null;

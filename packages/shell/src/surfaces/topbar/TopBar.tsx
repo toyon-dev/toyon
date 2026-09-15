@@ -269,6 +269,7 @@ function RouteBar({
       <IconButton
         icon="reload"
         label="Reload preview"
+        hint={chord("reload")}
         disabled={!ready}
         onClick={() => id && previewBus.post(id, { type: "reload" })}
         {...pageMenu}

@@ -64,18 +64,21 @@ function shellType() {
 const THEME = "toyon";
 monaco.editor.defineTheme(THEME, toMonacoTheme(toyonDark));
 
-// ⌘E and ⌘I arm the element picker wherever the keyboard is, so Monaco's own bindings for them come
-// off: find-with-selection on ⌘E, and suggest's second key on ⌘I (⌃Space still suggests). A key
-// Monaco does not bind is not stopped at its input, so the keydown reaches useChords on the window.
+// ⌘E and ⌘I arm the element picker and F1 opens the palette wherever the keyboard is, so Monaco's
+// own bindings for them come off: find-with-selection on ⌘E, suggest's second key on ⌘I (⌃Space
+// still suggests), and Monaco's own palette on F1. A key Monaco does not bind is not stopped at
+// its input, so the keydown reaches useChords on the window.
+const cmd = monaco.KeyMod.CtrlCmd;
 monaco.editor.addKeybindingRules(
   (
     [
-      ["actions.findWithSelection", monaco.KeyCode.KeyE],
-      ["editor.action.triggerSuggest", monaco.KeyCode.KeyI],
-      ["focusSuggestion", monaco.KeyCode.KeyI],
-      ["toggleSuggestionDetails", monaco.KeyCode.KeyI],
+      ["actions.findWithSelection", cmd | monaco.KeyCode.KeyE],
+      ["editor.action.triggerSuggest", cmd | monaco.KeyCode.KeyI],
+      ["focusSuggestion", cmd | monaco.KeyCode.KeyI],
+      ["toggleSuggestionDetails", cmd | monaco.KeyCode.KeyI],
+      ["editor.action.quickCommand", monaco.KeyCode.F1],
     ] as const
-  ).map(([command, key]) => ({ keybinding: monaco.KeyMod.CtrlCmd | key, command: `-${command}` })),
+  ).map(([command, keybinding]) => ({ keybinding, command: `-${command}` })),
 );
 
 function editorOptions(readOnly: boolean) {

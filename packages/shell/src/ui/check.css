@@ -1,0 +1,19 @@
+/* Check: a native checkbox and its sentence as one label. See Check.tsx for when it is the control. */
+@layer tokens, base, surfaces;
+@layer base {
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: default;
+    /* text2, the tier every :disabled rule uses (button.css) */
+    &:has(.check-box:disabled) {
+      color: var(--text2);
+    }
+  }
+  .check-box {
+    accent-color: var(--accent);
+    margin: 0;
+    flex-shrink: 0;
+  }
+}

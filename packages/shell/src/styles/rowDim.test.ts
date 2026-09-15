@@ -48,6 +48,8 @@ const NEVER_LIFTS = [
   ".btn-icon:disabled",
   ".btn-outline:disabled",
   ".btn:disabled",
+  /* a checkbox and its sentence go grey together, and a Check never sits inside a row */
+  ".check:has(.check-box:disabled)",
   /* the spinner over a busy button is disabled's colour; it names it because the button's own
      colour is transparent under it, and a Button never sits inside a row */
   ".btn-busy > .spinner",

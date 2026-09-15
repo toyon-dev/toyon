@@ -11,6 +11,7 @@ import {
   canSync,
   DEFAULT_PERMISSION_MODE,
   describeLand,
+  isMain,
   landPolicy,
   nextNumbers,
   numbered,
@@ -34,7 +35,7 @@ import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
-import { behindNote } from "../chips/baseNote.ts";
+import { behindNote, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
@@ -204,12 +205,18 @@ export function Composer({
   // global esc handler would close this from anywhere in the app.
   const files = useLocalField(id, "files");
   const git = useLocalField(id, "git");
-  // how far a worktree trails main: the live status when the row is subscribed, else the rail's
-  // ten-second count
+  // this worktree's uncommitted files (main's, while drafting) and how far it trails main: the live
+  // status when the row is subscribed, else the rail's ten-second count
   const dirty = git?.files.length ?? active?.dirty ?? 0;
   const op = useStore((s) => (id ? s.shipping[id] : undefined));
   const behind =
     !active || !repo || spawning || !canSync(active) ? null : behindNote(repo.defaultBranch, active.behind);
+  // main against origin, said while main is the base
+  const mainRow = useStore(
+    (s) => s.rows.find((r) => r.repoId === repoId && r.worktree !== undefined && isMain(r.worktree)) ?? null,
+  );
+  const mainOp = useStore((s) => (mainRow ? s.shipping[mainRow.id] : undefined));
+  const origin = mainRow && spawning ? originNote(mainRow.behind) : null;
   // a draft has no session of its own to ask for commands: a worktree of this repo that runs the
   // same agent stands in, main first (commandSource says why that is sound)
   const source = useStore((s) => (drafting ? commandSource(s.rows, repoId, spawnAgent, defaultAgent) : id));
@@ -986,23 +993,50 @@ export function Composer({
           )}
         </span>
       </div>
-      {/* how far a branch trails main, with its button: its own line, so the row above keeps its
-          shape. Main's own notes (its dirty files, its distance from origin) stand in the intro
-          above the box, with the other choices fixed when the worktree starts. */}
-      {behind && active && id && (
-        <div className="hint spawn-note">
-          <span>{behind}</span>
-          <Button
-            variant="outline"
-            busy={op === "sync-main"}
-            disabled={!!op || dirty > 0}
-            data-tip={
-              dirty > 0 ? "commit or discard the changes here first" : `Merge ${repo?.defaultBranch} into this worktree`
-            }
-            onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
-          >
-            sync
-          </Button>
+      {/* under the knobs, behind a rule: the state of where this message lands and the one thing to
+          do about it now, each on its own line so the row above keeps its shape. How far this
+          worktree trails main, with the sync; main against origin while drafting, with the pull,
+          since a new worktree starts from main as it is and a main nobody has pulled today hands
+          the agent stale code. What the message will be (batch, variants, main's files coming
+          along) is the intro's, above the box. */}
+      {((origin && mainRow) || (behind && active && id)) && (
+        <div className="spawn-notes">
+          {origin && mainRow && (
+            <div className="hint spawn-note">
+              <span>{origin}</span>
+              <Button
+                variant="outline"
+                busy={mainOp === "pull-main"}
+                disabled={!!mainOp || dirty > 0}
+                data-tip={
+                  dirty > 0
+                    ? `commit or discard the changes on ${repo?.defaultBranch} first`
+                    : "Fast-forward main to origin"
+                }
+                onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: mainRow.id })}
+              >
+                pull
+              </Button>
+            </div>
+          )}
+          {behind && active && id && (
+            <div className="hint spawn-note">
+              <span>{behind}</span>
+              <Button
+                variant="outline"
+                busy={op === "sync-main"}
+                disabled={!!op || dirty > 0}
+                data-tip={
+                  dirty > 0
+                    ? "commit or discard the changes here first"
+                    : `Merge ${repo?.defaultBranch} into this worktree`
+                }
+                onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
+              >
+                sync
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

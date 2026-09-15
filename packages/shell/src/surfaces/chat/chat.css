@@ -793,13 +793,35 @@
       margin-left: 6px;
     }
   }
-  /* a sentence about how far the branch trails main, under the knobs row, with its button at the end */
+  /* under the knobs, behind a rule: the state of where the message lands, a sentence per line with
+   its button at the end. The same rule the intro draws under its choices, so both screens read
+   one device: above it what you pick, below it what is. No ground, since the box's ground means
+   a place to type. */
+  .spawn-notes {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border0);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    & .hint {
+      margin: 0;
+    }
+  }
   .spawn-note {
     display: flex;
     align-items: center;
     gap: 8px;
     /* the count ticks with the status; `font` on the hint resets the variant */
     font-variant-numeric: tabular-nums;
+    & > .btn {
+      margin-left: auto;
+    }
+  }
+  /* the first chip's padding hangs into the gutter, so its words start where the text in the box
+   does (the same pull as .new-project-open). Named on the button, where --btn-pad-x is set. */
+  .spawn-left > .chip-picker:first-child > .btn {
+    margin-left: calc(-1 * var(--btn-pad-x));
   }
   /* .btn-icon is a grid box, so an inline wrapper would stack the two tools; keep them on one line */
   .spawn-tools {
@@ -817,7 +839,8 @@
     /* never a scroll box: it is one row, and a scroll container would clip the panel a chip in
      that row opens over itself */
     overflow: visible;
-    padding: 12px;
+    /* the box's own side padding, so the intro's text edge is the box's */
+    padding: 12px 10px;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -836,9 +859,8 @@
       font: var(--type-mono);
     }
   }
-  /* what main brings, under the choices: a rule and no ground, since the composer's ground means
-   a place to type, and two boxes of it stacked read as one box with a seam. Each line is a
-   sentence with its button at the end. */
+  /* whether main's files come along, under the choices: a rule and no ground, since the composer's
+   ground means a place to type, and two boxes of it stacked read as one box with a seam */
   .draft-notes {
     margin-top: 4px;
     padding-top: 8px;
@@ -848,22 +870,24 @@
     gap: 6px;
   }
   .draft-note {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     /* the count ticks with the status; `font` on the hint resets the variant */
     font-variant-numeric: tabular-nums;
-    & > .btn {
-      margin-left: auto;
-    }
   }
   /* the birth-time choices on one line: batch, then the three numbers with their word, then what
-   runs it at the right end */
+   runs it at the right end. The chips' padding hangs into the gutters at both ends, so batch starts
+   where the text in the box does and the profile ends where the knobs row's icons do; each pull is
+   named on the button, where --btn-pad-x is set. */
   .draft-row {
     display: flex;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+    & > .btn:first-child {
+      margin-left: calc(-1 * var(--btn-pad-x));
+    }
+  }
+  .draft-runs > .chip-picker > .btn {
+    margin-right: calc(-1 * var(--btn-pad-x));
   }
   .draft-variants {
     display: flex;

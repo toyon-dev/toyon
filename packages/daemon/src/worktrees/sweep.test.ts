@@ -27,11 +27,13 @@ function make(worktrees: WorktreeInfo[], over: Partial<SweepDeps> = {}) {
   const sweep = new ArchiveSweep({
     state: { repos: [{ id: "r" } as RepoInfo], worktrees },
     viewed: () => false,
-    pending: () => false,
+    busy: () => false,
     drafts: { has: () => false },
     worktrees: {
-      archiveWorktree: async (id, reason) => {
-        archived.push([id, reason]);
+      // the service's own order: the re-check runs before anything is taken down
+      archiveWorktree: async (id, opts = {}) => {
+        if (opts.still && !opts.still()) return null;
+        archived.push([id, opts.reason]);
         return null;
       },
       freshCounts: async (id) => {
@@ -65,6 +67,26 @@ describe("ArchiveSweep", () => {
 
   test("a draft in its box keeps it", async () => {
     const { sweep, archived } = make([task("old", 1), ...newer], { drafts: { has: (id) => id === "old" } });
+    await sweep.sweep();
+    expect(archived).toEqual([]);
+  });
+
+  test("a row someone sends to while git is asked is kept: the rule runs again in the archive's slot", async () => {
+    let sent = false;
+    const { sweep, archived } = make([task("old", 1), ...newer], {
+      busy: (id) => id === "old" && sent,
+      worktrees: {
+        archiveWorktree: async (id, opts = {}) => {
+          if (opts.still && !opts.still()) return null;
+          archived.push([id, opts.reason]);
+          return null;
+        },
+        freshCounts: async () => {
+          sent = true;
+          return { dirty: 0, ahead: 0 };
+        },
+      },
+    });
     await sweep.sweep();
     expect(archived).toEqual([]);
   });

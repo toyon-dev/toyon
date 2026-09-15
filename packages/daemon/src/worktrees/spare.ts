@@ -31,8 +31,8 @@ export interface SparePoolDeps {
   paths: Paths;
   /** clone deps, run setup, start the runtime (WorktreeService owns it) */
   setupAndStart: (wt: WorktreeInfo, repo: RepoInfo) => Promise<void>;
-  /** remove a worktree, spares allowed (WorktreeService owns it) */
-  remove: (worktreeId: string) => Promise<void>;
+  /** discard a worktree, spares allowed (WorktreeService owns it) */
+  discard: (worktreeId: string) => Promise<void>;
 }
 
 export class SparePool {
@@ -51,7 +51,7 @@ export class SparePool {
   adopt(repoId: string) {
     const persisted = this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind === "spare");
     // keep at most one; stale extras are removed
-    for (const extra of persisted.slice(1)) fireAndForget(extra.id, this.d.remove(extra.id), "stale spare removal");
+    for (const extra of persisted.slice(1)) fireAndForget(extra.id, this.d.discard(extra.id), "stale spare removal");
     const spare = persisted[0];
     if (!spare) return;
     this.spares.set(repoId, {
@@ -116,7 +116,7 @@ export class SparePool {
       // the state row and git worktree were created before setup could fail: undo them, or the
       // next boot adopts a half-built spare
       if (entry.worktreeId && this.d.state.worktree(entry.worktreeId)) {
-        await this.d.remove(entry.worktreeId).catch((re) => log.warn(repoId, "spare rollback failed", re));
+        await this.d.discard(entry.worktreeId).catch((re) => log.warn(repoId, "spare rollback failed", re));
       }
     }
   }

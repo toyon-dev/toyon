@@ -5,6 +5,13 @@ import { isMain } from "./worktree-caps.ts";
  * before sends were stamped, else when it was made */
 export const sentAt = (w: WorktreeInfo) => w.promptedAt ?? w.lastTurn?.at ?? w.createdAt;
 
+/** where a row sits in the rail's order: main, open work, landed work */
+const tierOf = (w: WorktreeInfo) => (isMain(w) ? 0 : w.landed ? 2 : 1);
+
+/** what a row moves with on the rail: itself, or its variant group on its tier, since a landed
+ * attempt goes with landed work and the ones it beat stay where they were */
+export const railUnitOf = (w: WorktreeInfo): string => (w.variant ? `${tierOf(w)}:${w.variant.group}` : `row:${w.id}`);
+
 /** The rail's order: main, then the rows most recently sent to, then landed ones. Only a send moves
  * a row, never an agent finishing or asking, so a row does not slide out from under the pointer
  * while agents run; what needs you is the dot's and the jump chord's to say. A variant group moves
@@ -15,17 +22,16 @@ export function railOrder<T extends { worktree: WorktreeInfo }>(rows: readonly T
   const groups = new Map<string, (typeof units)[number]>();
   for (const row of rows) {
     const w = row.worktree;
-    const tier = isMain(w) ? 0 : w.landed ? 2 : 1;
-    const key = w.variant ? `${tier}:${w.variant.group}` : null;
-    const unit = key ? groups.get(key) : undefined;
+    const key = railUnitOf(w);
+    const unit = groups.get(key);
     if (unit) {
       unit.rows.push(row);
       unit.at = Math.max(unit.at, sentAt(w));
       continue;
     }
-    const fresh = { tier, at: sentAt(w), rows: [row] };
+    const fresh = { tier: tierOf(w), at: sentAt(w), rows: [row] };
     units.push(fresh);
-    if (key) groups.set(key, fresh);
+    groups.set(key, fresh);
   }
   // stable, so a tie is the daemon's order
   units.sort((a, b) => a.tier - b.tier || b.at - a.at);

@@ -7,6 +7,7 @@ import { basename, dirname, join } from "node:path";
 import {
   type ConfigFileKind,
   configSibling,
+  draftKey,
   isLocalConfigFile,
   type PendingRepo,
   type RepoInfo,
@@ -18,6 +19,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { SelfWatch } from "../core/self.ts";
 import type { StateStore } from "../core/state.ts";
+import type { DraftStore } from "../drafts/store.ts";
 import { excludeFromGit, unexcludeFromGit } from "../git/exclude.ts";
 import { defaultBranch, git, isGitRepo, repoRoot } from "../git/exec.ts";
 import { isTracked, statusFiles, treeEmpty } from "../git/status.ts";
@@ -56,6 +58,8 @@ export interface RepoRegistryDeps {
   afterLand: AfterLand;
   /** whether that branch moving left the running daemon behind (core/self.ts) */
   self: SelfWatch;
+  /** the unsent text in composer boxes: a forgotten project takes its new-worktree draft with it */
+  drafts?: Pick<DraftStore, "drop">;
 }
 
 /** git's progress redraws many times a second; the pane only has to look alive */
@@ -327,6 +331,7 @@ export class RepoRegistry {
       this.d.worktrees.deleteChat(wt.id);
       releasePort(wt.proxyPort);
     }
+    this.d.drafts?.drop(draftKey(repoId));
     this.d.state.removeRepo(repoId);
     this.d.hub.emit("reposChanged");
     this.d.hub.emit("worktreesChanged");

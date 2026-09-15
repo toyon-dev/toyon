@@ -20,7 +20,7 @@ export function isMain(wt: Pick<WorktreeInfo, "kind">): boolean {
 }
 
 /** the directory and branch may go. A spare is removed by the pool, never by a person. */
-export function canRemove(wt: Pick<WorktreeInfo, "kind">): boolean {
+export function canArchive(wt: Pick<WorktreeInfo, "kind">): boolean {
   return wt.kind === "worktree";
 }
 

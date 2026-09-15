@@ -79,9 +79,10 @@ function storedSectionOpen(key: string): Record<string, boolean> {
   return out;
 }
 
-/** how often a box being typed in sends its text; an emptied box sends at once, so a message just
- * sent does not come back in another tab's box */
-const DRAFT_SEND_MS = 400;
+/** a box sends its text once the typing has paused this long, and at least this often while it goes
+ * on; an emptied box sends at once, so a message just sent does not come back in another tab's box */
+const DRAFT_QUIET_MS = 400;
+const DRAFT_MAX_WAIT_MS = 2_000;
 
 /** Each composer box's text to the daemon as it changes, so another tab or device and an archive
  * keep it. A store subscription rather than an App effect: the `local` record changes on every chat
@@ -89,27 +90,41 @@ const DRAFT_SEND_MS = 400;
  * so its own frames are never echoed back. A walk is a sent message on show, not a draft. */
 function syncDrafts() {
   const sent = new Map<string, string>();
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** boxes with text not sent yet: the text the wait was last set for, its timer, and when the
+   * first unsent keystroke came */
+  const waiting = new Map<string, { text: string; timer: ReturnType<typeof setTimeout>; since: number }>();
   const flush = (id: string) => {
-    clearTimeout(timers.get(id));
-    timers.delete(id);
+    clearTimeout(waiting.get(id)?.timer);
+    waiting.delete(id);
     const l = store.getState().local[id];
     if (!l || l.mark?.by === "walk") return;
     if ((sent.get(id) ?? "") === l.draft) return;
     sent.set(id, l.draft);
     sock.send({ t: "set-draft", boxId: id, text: l.draft, clientId: store.getState().clientId });
   };
+  const flushAll = () => {
+    for (const id of [...waiting.keys()]) flush(id);
+  };
   store.subscribe(() => {
     for (const [id, l] of Object.entries(store.getState().local)) {
       if (l.mark?.by === "walk" || (sent.get(id) ?? "") === l.draft) continue;
-      if (!l.draft) flush(id);
-      else if (!timers.has(id)) timers.set(id, setTimeout(flush, DRAFT_SEND_MS, id));
+      if (!l.draft) {
+        flush(id);
+        continue;
+      }
+      // only a keystroke restarts the wait: a chat frame changes the store too, and must not
+      // hold a draft back while a reply streams in
+      const was = waiting.get(id);
+      if (was?.text === l.draft) continue;
+      clearTimeout(was?.timer);
+      const since = was?.since ?? Date.now();
+      const wait = Math.max(0, Math.min(DRAFT_QUIET_MS, since + DRAFT_MAX_WAIT_MS - Date.now()));
+      waiting.set(id, { text: l.draft, timer: setTimeout(flush, wait, id), since });
     }
   });
-  // a reload or a closed tab takes the last few keystrokes with it otherwise
-  window.addEventListener("pagehide", () => {
-    for (const id of [...timers.keys()]) flush(id);
-  });
+  // leaving the box, or the page, is a pause long enough
+  window.addEventListener("focusout", flushAll);
+  window.addEventListener("pagehide", flushAll);
   return {
     /** what the daemon holds, before the store applies it: a hello is the whole set */
     hello(drafts: Record<string, string>) {
@@ -119,7 +134,7 @@ function syncDrafts() {
     /** another tab's text for a box; false when this tab has keystrokes on their way for it, which
      * would otherwise be written over by what they replace */
     heard(boxId: string, text: string): boolean {
-      if (timers.has(boxId)) return false;
+      if (waiting.has(boxId)) return false;
       sent.set(boxId, text);
       return true;
     },

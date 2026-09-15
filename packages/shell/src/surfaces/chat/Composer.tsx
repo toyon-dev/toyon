@@ -543,6 +543,7 @@ export function Composer({
         message: { text: text.trim(), attachments: sent },
       });
       if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
+      dispatch({ a: "restoring", id: boxId, text: text.trim() });
       setText("");
       return;
     }
@@ -629,7 +630,7 @@ export function Composer({
         sock?.send({ t: "set-worktree-model", worktreeId: id, model: newModel });
         sock?.send({ t: "set-worktree-effort", worktreeId: id, effort: newEffort });
       }
-      sock?.send({ t: "chat", worktreeId: id, text: prompt, context, attachments: sent });
+      sock?.send({ t: "chat", worktreeId: id, clientId, text: prompt, context, attachments: sent });
     }
     if (attachments.length) dispatch({ a: "clear-attachments", id: boxId });
     setText("");

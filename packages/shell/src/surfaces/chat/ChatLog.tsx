@@ -57,6 +57,7 @@ export function ChatLog({
   const id = active?.worktree.id ?? archived?.id ?? null;
   const items = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
+  const restoring = useLocalField(id, "restoring");
   const logRef = useRef<HTMLDivElement>(null);
 
   // pin to bottom while streaming; offer a jump-down pill when scrolled up
@@ -287,6 +288,14 @@ export function ChatLog({
             </div>
           ))}
         {tail}
+        {/* sent from an archived page: newer than the archive it asks back from, so it reads under
+            that note, and it stays until the restored agent has the message */}
+        {restoring !== undefined && (
+          <div className="msg-user queued-msg">
+            <span className="queued-tag">restoring</span>
+            <span className="queued-text">{restoring}</span>
+          </div>
+        )}
       </div>
       {showJump && (
         <button className="jump-down" onClick={jumpDown} data-tip="Jump to latest">

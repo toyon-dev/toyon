@@ -839,9 +839,9 @@ describe("landing", () => {
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
-    const { result, removeIds } = await w.worktrees.land(wt.id);
+    const { result, archiveIds } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(true);
-    expect(removeIds).toEqual([]);
+    expect(archiveIds).toEqual([]);
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
     expect(await parents()).toBe(2);
     expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");
@@ -953,10 +953,10 @@ describe("landing", () => {
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     w.worktrees.setLanding(wt.id, { at: 1, check: "pass", ready: true, subject: "old words", fingerprint: "f" });
-    const { result, removeIds } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
+    const { result, archiveIds } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
     expect(result.ok).toBe(true);
     expect(result.message).toBe(`${wt.title} is on main`);
-    expect(removeIds).toEqual([]);
+    expect(archiveIds).toEqual([]);
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
     // main had not moved, so the merge fast-forwards onto the commit itself
     expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");

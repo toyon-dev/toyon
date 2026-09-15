@@ -270,11 +270,12 @@ export class RuntimeRegistry {
     return this.holds.get(id)?.size ?? 0;
   }
 
-  /** Work someone is waiting on: an agent that is not idle, a prompt queued behind it, or a turn or
-   * command holding the worktree. What idle sleep and an automatic update both leave alone. */
+  /** Work someone is waiting on: an agent that is not idle or still owes a person something (a
+   * message queued, steered or refused, a card open), or a turn or command holding the worktree.
+   * What idle sleep, an automatic update and an archive of a worktree's own accord all leave alone. */
   busy(id: string): boolean {
     const agent = this.agentFor(id);
-    if (agent && (agent.status !== "idle" || agent.queueItems.length > 0)) return true;
+    if (agent && (agent.status !== "idle" || agent.unsettled)) return true;
     return this.holdCount(id) > 0;
   }
 

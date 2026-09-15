@@ -677,13 +677,13 @@ export const ChatItemView = memo(function ChatItemView({
 function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   const sock = useSock();
   const dispatch = useDispatch();
-  const left = useStore((s) => item.removeIds.filter((id) => worktreeById(s, id) !== null).length);
+  const left = useStore((s) => item.archiveIds.filter((id) => worktreeById(s, id) !== null).length);
   return (
     <div className="landed-row">
       <span className="landed-tag">landed</span>
       <span className="landed-text">{item.text}</span>
       {left > 0 && (
-        <Button variant="inline" tone="strong" onClick={() => archiveWorktrees(sock, dispatch, item.removeIds)}>
+        <Button variant="inline" tone="strong" onClick={() => archiveWorktrees(sock, dispatch, item.archiveIds)}>
           {left > 1 ? `archive ${left} worktrees` : "archive the other worktree"}
         </Button>
       )}

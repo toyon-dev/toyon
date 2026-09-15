@@ -228,7 +228,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     // back, the way one typed on its archived page does
     await s.worktrees.archivingNow(msg.worktreeId);
     if (!s.state.worktree(msg.worktreeId) && s.worktrees.hasArchived(msg.worktreeId)) {
-      await s.worktrees.restore(msg.worktreeId, undefined, { text: msg.text, attachments: msg.attachments });
+      await s.worktrees.restore(msg.worktreeId, msg.clientId, { text: msg.text, attachments: msg.attachments });
       return;
     }
     requireRun(s, msg.worktreeId);
@@ -350,7 +350,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async land(msg, ctx, s) {
-    const { result, removeIds } = await s.worktrees.land(msg.worktreeId, msg.message);
+    const { result, archiveIds } = await s.worktrees.land(msg.worktreeId, msg.message);
     // the same prefilled prompt sync offers on a conflict: the one failure an agent can be asked to fix
     const suggestion =
       !result.ok && result.conflict
@@ -369,7 +369,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
         url: result.url,
         // the worktree stays, with close offered in its box; what the chat's row offers up is its
         // variant siblings, if any
-        removeIds: removeIds ?? [],
+        archiveIds: archiveIds ?? [],
         ...(suggestion ? { suggestion } : {}),
       }),
     );

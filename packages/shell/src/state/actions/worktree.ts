@@ -1,8 +1,8 @@
 import {
   type ClientMsg,
+  canArchive,
   canGraft,
   canLand,
-  canRemove,
   canRename,
   canSync,
   describeLand,
@@ -77,7 +77,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
       sock?.send({ t: "set-worktree-profile", worktreeId: w.worktree.id, profile });
     },
     archive(w: OwnedWorktree) {
-      if (!canRemove(w.worktree)) return;
+      if (!canArchive(w.worktree)) return;
       // nothing written: the rail's archived section brings the chat back, so there is nothing to ask
       if (!hasWork(w)) return archiveWorktrees(sock, dispatch, [w.worktree.id]);
       const ok = window.confirm(
@@ -184,7 +184,7 @@ export function worktreeItems(
     });
   }
   // the ellipsis is the promise of a question, so an archive that asks nothing drops it
-  if (canRemove(w.worktree)) {
+  if (canArchive(w.worktree)) {
     gone.push({
       id: "archive",
       label: hasWork(w) ? "archive…" : "archive",

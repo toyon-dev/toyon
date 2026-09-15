@@ -153,7 +153,7 @@ describe("active worktree", () => {
   test("the first worktrees list after an empty state does not count as new", () => {
     expect(run([worktrees(wt("main", "main"), wt("a", "worktree", ME))]).activeId).toBe("main");
   });
-  test("removing the active worktree falls back to the first", () => {
+  test("archiving the active worktree falls back to the first", () => {
     const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
     expect(run([worktrees(wt("main", "main"))], s).activeId).toBe("main");
   });
@@ -829,6 +829,25 @@ describe("drafts", () => {
     s = run([server({ t: "draft", boxId: "a", text: "", clientId: "daemon" }), worktrees(wt("b"))], s);
     expect(s.local.a).toBeUndefined();
   });
+  test("a message sent from an archived page shows as sent until the restored agent has it", () => {
+    let s = run([hello(wt("b")), { a: "restoring", id: "a", text: "one more thing" }]);
+    expect(s.local.a?.restoring).toBe("one more thing");
+    s = run([agent("a", { type: "user-message", text: "one more thing", ts: 0 })], s);
+    expect(s.local.a?.restoring).toBeUndefined();
+    expect(s.local.a?.chat.at(-1)).toMatchObject({ kind: "user", text: "one more thing" });
+    // a socket that came back mid-restore hears the message in the backfill instead
+    s = run([{ a: "restoring", id: "a", text: "and another" }], s);
+    const said = { type: "user-message" as const, text: "and another", ts: 1 };
+    s = run([server({ t: "backfill", worktreeId: "a", events: [{ seq: 0, event: said }] })], s);
+    expect(s.local.a?.restoring).toBeUndefined();
+  });
+  test("a refused restore puts the message back in the box, with the reason under it", () => {
+    let s = run([hello(wt("b")), { a: "restoring", id: "a", text: "one more thing" }]);
+    s = run([server({ t: "error", message: "that archived worktree is gone", worktreeId: "a" })], s);
+    expect(s.local.a?.restoring).toBeUndefined();
+    expect(s.local.a?.draft).toBe("one more thing");
+    expect(s.local.a?.notice).toBe("that archived worktree is gone");
+  });
   test("a walk writes the draft and its place together, and any other write to the draft ends it", () => {
     let s = run([hello(wt("a")), { a: "walk", id: "a", walk: { at: 3, from: "" }, text: "fix the header" }]);
     expect(s.local.a?.draft).toBe("fix the header");
@@ -1025,9 +1044,9 @@ describe("streams and notices", () => {
     const base = [hello(wt("a"), wt("b"))];
     const merged = run([
       ...base,
-      server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main", merged: true, removeIds: ["b"] }),
+      server({ t: "shipped", worktreeId: "a", ok: true, message: "a is on main", merged: true, archiveIds: ["b"] }),
     ]);
-    expect(localOf(merged, "a").chat).toEqual([{ kind: "landed", text: "a is on main", removeIds: ["b"] }]);
+    expect(localOf(merged, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: ["b"] }]);
     expect(merged.openUrl).toBeNull();
     const pr = run([...base, server({ t: "shipped", worktreeId: "a", ok: true, message: "m", url: "u" })]);
     expect(localOf(pr, "a").chat).toEqual([]);
@@ -1300,7 +1319,7 @@ describe("projects", () => {
     expect(s.visible.map((w) => w.worktree.id)).toEqual(["m2", "b"]);
   });
 
-  test("removing the active worktree falls back inside the project, not to the daemon's first row", () => {
+  test("archiving the active worktree falls back inside the project, not to the daemon's first row", () => {
     const s = run([two(), { a: "activate", id: "b" }]);
     const next = reducer(
       s,
@@ -1804,7 +1823,7 @@ describe("rail order", () => {
 
 // A remove leaves the screen on the click. The daemon's list is untouched until its snapshot
 // says so; what the person sees is `visible`, and the selection has to move with the row.
-describe("removing a worktree", () => {
+describe("archiving a worktree", () => {
   const three = () => hello(wt("main", "main"), wt("a"), wt("b"));
   const ids = (s: State) => s.visible.map((w) => w.worktree.id);
 
@@ -1814,7 +1833,7 @@ describe("removing a worktree", () => {
     expect(s.rows.map((w) => w.id)).toEqual(["main", "a", "b"]);
   });
 
-  test("removing the active worktree lands the selection somewhere still shown", () => {
+  test("archiving the active worktree lands the selection somewhere still shown", () => {
     const s = run([three(), { a: "activate", id: "a" }, { a: "archive-worktrees", ids: ["a"] }]);
     expect(s.activeId).toBe("main");
     expect(s.lastActive.r).toBe("main");
@@ -1825,10 +1844,10 @@ describe("removing a worktree", () => {
     // another worktree's proc event pushes the whole list, the removed row included
     s = reducer(s, worktrees(wt("main", "main"), wt("a"), wt("b")));
     expect(ids(s)).toEqual(["main", "b"]);
-    expect(s.removing).toEqual(["a"]);
+    expect(s.archiving).toEqual(["a"]);
     s = reducer(s, worktrees(wt("main", "main"), wt("b")));
     expect(ids(s)).toEqual(["main", "b"]);
-    expect(s.removing).toEqual([]);
+    expect(s.archiving).toEqual([]);
   });
 
   test("an error frame brings the row it names back, with the reason on its chat", () => {
@@ -1918,11 +1937,11 @@ describe("a landing op in flight", () => {
         ok: true,
         message: "a is on main",
         merged: true,
-        removeIds: [],
+        archiveIds: [],
       }),
     ]);
     expect(s.shipping).toEqual({});
-    expect(localOf(s, "a").chat).toEqual([{ kind: "landed", text: "a is on main", removeIds: [] }]);
+    expect(localOf(s, "a").chat).toEqual([{ kind: "landed", text: "a is on main", archiveIds: [] }]);
   });
 });
 

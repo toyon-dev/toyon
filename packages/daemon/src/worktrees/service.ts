@@ -9,9 +9,9 @@ import {
   type ArchivedWorktree,
   type AttachmentInput,
   type CommitEntry,
+  canArchive,
   canGraft,
   canLand,
-  canRemove,
   canRename,
   DEFAULT_MERGE_METHOD,
   type GitFileStatus,
@@ -221,7 +221,7 @@ export class WorktreeService {
       runtime: d.runtime,
       paths: d.paths,
       setupAndStart: (wt, repo) => this.setupAndStart(wt, repo),
-      remove: async (id) => {
+      discard: async (id) => {
         await this.discardWorktree(id);
       },
     });
@@ -617,14 +617,19 @@ export class WorktreeService {
    * record go, and its chat moves to the archive with the commits and uncommitted work kept under a
    * ref, so an archive can be undone and a landed branch's conversation brought back. Its draft
    * stays, under the same id. One archive per worktree at a time: a second caller waits on the
-   * first and gets its answer. `reason` is why it archived itself, when nobody asked. Returns what
-   * was archived, if anything. */
-  archiveWorktree(worktreeId: string, reason?: string): Promise<ArchivedWorktree | null> {
+   * first and gets its answer. `reason` is why it archived itself, when nobody asked, and `still` is
+   * that decision asked again once the slot is this call's, since the facts it was made on may have
+   * moved while the caller waited. Returns what was archived, if anything. */
+  archiveWorktree(
+    worktreeId: string,
+    opts: { reason?: string; still?: () => boolean } = {},
+  ): Promise<ArchivedWorktree | null> {
     const running = this.archiving.get(worktreeId);
     if (running) return running;
     const wt = this.d.state.worktree(worktreeId);
-    if (!wt || !canRemove(wt)) return Promise.resolve(null);
-    const done = this.takeDown(wt, true, reason).finally(() => this.archiving.delete(worktreeId));
+    if (!wt || !canArchive(wt)) return Promise.resolve(null);
+    if (opts.still && !opts.still()) return Promise.resolve(null);
+    const done = this.takeDown(wt, true, opts.reason).finally(() => this.archiving.delete(worktreeId));
     this.archiving.set(worktreeId, done);
     return done;
   }
@@ -638,7 +643,7 @@ export class WorktreeService {
    * history already lives in its target. */
   async discardWorktree(worktreeId: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
-    if (!wt || !(canRemove(wt) || wt.kind === "spare")) return;
+    if (!wt || !(canArchive(wt) || wt.kind === "spare")) return;
     await this.takeDown(wt, false);
     this.d.drafts?.drop(worktreeId);
   }
@@ -1188,7 +1193,7 @@ export class WorktreeService {
    * since the work is safer committed. The worktree stays, marked landed once the work is on main
    * here, so the conversation can go on; closing it is its own press. Returns any variant
    * siblings to offer up. */
-  async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; removeIds?: string[] }> {
+  async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; archiveIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "land");
     const policy = landPolicy(repo.config);
     const own = hasOwnBranch(wt);
@@ -1262,11 +1267,11 @@ export class WorktreeService {
       this.setLanded(wt.id, true);
     }
     if (!result.ok) return { result };
-    const removeIds = wt.variant
+    const archiveIds = wt.variant
       ? this.d.state.worktrees.filter((w) => w.variant?.group === wt.variant?.group && w.id !== wt.id).map((w) => w.id)
       : [];
     const where = policy.land === "push" ? `${repo.defaultBranch}, pushed` : repo.defaultBranch;
-    return { result: { ...result, message: `${wt.title} is on ${where}` }, removeIds };
+    return { result: { ...result, message: `${wt.title} is on ${where}` }, archiveIds };
   }
 
   /** A landing onto the record, oldest first, with its tip kept under a ref: the branch restarts from

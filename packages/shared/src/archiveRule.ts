@@ -3,7 +3,7 @@
 // read the same rule, and every condition errs toward keeping the row.
 
 import { hasOwnBranch, isUnseen, type WorktreeInfo } from "./model.ts";
-import { railOrder } from "./railOrder.ts";
+import { railOrder, railUnitOf } from "./railOrder.ts";
 
 /** rows sent to more recently that a worktree needs before it may go: someone with a handful of
  * chats never loses one */
@@ -56,15 +56,14 @@ function nothingToKeep(w: WorktreeInfo, f: ArchiveFacts, lost: boolean): boolean
   return c.dirty === 0 && (lost ? c.ahead !== undefined : c.ahead === 0);
 }
 
-/** how many rail units sit above this one, main aside: a row, or a variant group on one tier, since
- * the rail files a landed attempt with landed work and the ones it beat where they were */
+/** how many rail units sit above this one, main aside */
 function unitsAhead(wt: WorktreeInfo, rows: readonly WorktreeInfo[]): number {
-  const unitOf = (w: WorktreeInfo) => (w.variant ? `${w.landed ? "landed" : "open"}:${w.variant.group}` : w.id);
   const tasks = railOrder(rows.filter((w) => w.kind === "worktree").map((worktree) => ({ worktree })));
+  const mine = railUnitOf(wt);
   const seen = new Set<string>();
   for (const { worktree: w } of tasks) {
-    const unit = unitOf(w);
-    if (unit === unitOf(wt)) return seen.size;
+    const unit = railUnitOf(w);
+    if (unit === mine) return seen.size;
     seen.add(unit);
   }
   return seen.size;

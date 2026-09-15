@@ -36,6 +36,7 @@ import { ChatSearch } from "../worktrees/chats.ts";
 import { PrService } from "../worktrees/prs.ts";
 import { RefSearch } from "../worktrees/refs.ts";
 import { WorktreeService } from "../worktrees/service.ts";
+import { ArchiveSweep } from "../worktrees/sweep.ts";
 import { TurnService } from "../worktrees/turns.ts";
 import { dispatch, type HandlerCtx, handlers, type Services } from "./handlers.ts";
 
@@ -528,6 +529,40 @@ describe("handlers", () => {
     expect(services.state.worktree(wt.id)).toBeDefined();
     expect(services.worktrees.hasArchived(wt.id)).toBe(false);
     expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "one more thing" });
+  });
+
+  test("the sweep archives a finished task git has nothing on, and keeps one with a file written", async () => {
+    const HOUR = 60 * 60_000;
+    const { services, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const quiet = await services.worktrees.create(r.id, "answer a question");
+    const wrote = await services.worktrees.create(r.id, "write a file");
+    writeFileSync(join(wrote.path, "notes.txt"), "x\n");
+    const finished = {
+      lastTurn: { at: 1, end: "done" as const, facts: { turns: 1, edits: 0, toolErrors: 0 } },
+      seenAt: 2,
+      viewedAt: 0,
+      promptedAt: 1,
+    };
+    for (const wt of [quiet, wrote]) Object.assign(services.state.worktree(wt.id)!, finished);
+    // five rows sent to more recently, so the rail position alone keeps neither
+    for (const n of [1, 2, 3, 4, 5]) {
+      services.state.addWorktree({ ...quiet, ...finished, id: `newer${n}`, promptedAt: 100 + n, viewedAt: 9 * HOUR });
+    }
+    const sweep = new ArchiveSweep({
+      state: services.state,
+      viewed: () => false,
+      busy: (id) => services.runtime.busy(id),
+      drafts: services.drafts,
+      worktrees: services.worktrees,
+      now: () => 10 * HOUR,
+      setInterval: () => null,
+    });
+    await sweep.sweep();
+    expect(services.state.worktree(quiet.id)).toBeUndefined();
+    expect(services.worktrees.archived(r.id).find((a) => a.id === quiet.id)?.auto).toBe("no changes, not opened in 2h");
+    expect(services.state.worktree(wrote.id)).toBeDefined();
   });
 
   test("two archives of one worktree share a run", async () => {

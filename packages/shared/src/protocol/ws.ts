@@ -162,7 +162,7 @@ export type ServerMsg =
       url?: string;
       message: string;
       merged?: boolean;
-      removeIds?: string[];
+      archiveIds?: string[];
       suggestion?: string;
     }
   | { t: "files"; worktreeId: string; paths: string[] }
@@ -361,6 +361,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({
     t: z.literal("chat"),
     worktreeId: id,
+    /** the sending tab: a message that brings an archived worktree back focuses it there */
+    clientId: z.string().max(64).optional(),
     text: prose,
     context: prose.optional(),
     attachments,

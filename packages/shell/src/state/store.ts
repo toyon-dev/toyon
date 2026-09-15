@@ -90,9 +90,9 @@ export type ChatItem =
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
-  /** the daemon's word on a land that merged, kept for the record; `removeIds` are the variant
+  /** the daemon's word on a land that merged, kept for the record; `archiveIds` are the variant
    * siblings the landed one leaves behind, offered here where the land is read */
-  | { kind: "landed"; text: string; removeIds: string[] }
+  | { kind: "landed"; text: string; archiveIds: string[] }
   /** the agent wants credentials; `done` once a login went through. `rejected`: it had a
    * credential and the provider refused it, so the error above this card says what went wrong */
   | {
@@ -147,6 +147,9 @@ export interface WorktreeLocal {
   /** quick-open listing (requested on ⌘P) */
   files?: string[];
   queue: string[];
+  /** a message sent from an archived page, shown as sent while the worktree comes back: gone when
+   * its own message reaches the chat, and back in the box if the restore is refused */
+  restoring?: string;
   /** live page state (route, title, recent errors) — ambient chat context */
   page: { url?: string; title?: string; errors: string[] };
   /** did the current agent turn edit anything / did the page HMR */
@@ -426,7 +429,7 @@ export interface State {
   /** the project the shell is scoped to: the rail, ⌘1–9, ⌘K and settings show only its worktrees.
    * The daemon keeps every repo's procs and agents running regardless; this is a view choice. */
   activeRepoId: string | null;
-  /** the rows toyon owns in the active repo, minus `removing` (kept in step by the reducer so
+  /** the rows toyon owns in the active repo, minus `archiving` (kept in step by the reducer so
    * selectors stay stable). Owned only, and in rail order (railOrder.ts): ⌘1-9 indexes this
    * positionally, the palette numbers its "switch to" rows from it, and the project pill counts
    * tasks as `length - 1`. A found row entering it would move all three silently. */
@@ -436,9 +439,9 @@ export interface State {
    * killing the procs and the agent. `worktrees` stays the daemon's list: the snapshot that no
    * longer carries an id retires it here, an error frame brings every pending row back, and a
    * hello starts clean because a daemon that restarted mid-remove may still list it. */
-  removing: string[];
+  archiving: string[];
   /** the landing op (sync, merge, ship, commit) this tab has sent for a worktree and the daemon
-   * has not answered. Not optimistic, unlike `removing`: a remove's outcome is known and its
+   * has not answered. Not optimistic, unlike `archiving`: a remove's outcome is known and its
    * failure rare, while these end in ordinary results (a conflict, a hook rejecting the message,
    * nothing to commit) that are not errors to roll back from. So the row shows it working and
    * the shipped frame says what happened. That frame retires the worktree's entry, an error
@@ -633,7 +636,7 @@ export function initialState(opts: InitialOpts): State {
     rows: [],
     activeRepoId: null,
     visible: [],
-    removing: [],
+    archiving: [],
     shipping: {},
     visibleDiscovered: [],
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
@@ -816,9 +819,9 @@ export function routeTarget(s: State): { worktreeId: string; repoId: string } | 
  * no repos). A row whose remove is in flight is already gone from the person's point of view.
  * Sorted here and never in `rows`: the preview frames are keyed children in `rows` order, and a
  * frame moved in the DOM reloads. */
-function visibleOf(rows: WorktreeStatus[], repoId: string | null, removing: string[]): OwnedWorktree[] {
+function visibleOf(rows: WorktreeStatus[], repoId: string | null, archiving: string[]): OwnedWorktree[] {
   const owned = rows.filter(isOwned);
-  const shown = removing.length ? owned.filter((w) => !removing.includes(w.id)) : owned;
+  const shown = archiving.length ? owned.filter((w) => !archiving.includes(w.id)) : owned;
   return railOrder(repoId ? shown.filter((w) => w.repoId === repoId) : shown);
 }
 
@@ -833,7 +836,7 @@ function visibleDiscoveredOf(rows: WorktreeStatus[], repoId: string | null): Wor
  * landing on it would select nothing. */
 function landingIn(s: State, repoId: string | null, rows = s.rows): string | null {
   const owned = rows.filter(isOwned);
-  const live = s.removing.length ? owned.filter((w) => !s.removing.includes(w.id)) : owned;
+  const live = s.archiving.length ? owned.filter((w) => !s.archiving.includes(w.id)) : owned;
   const last = repoId ? s.lastActive[repoId] : undefined;
   if (last && live.some((w) => w.id === last)) return last;
   const mine = repoId ? live.filter((w) => w.repoId === repoId) : live;
@@ -924,6 +927,8 @@ export type Action =
   | { a: "activate-repo"; id: string }
   /** archive-worktree frames went out for these: hide the rows now, move the selection off them */
   | { a: "archive-worktrees"; ids: string[] }
+  /** a message went from an archived page with the restore it asks for: show it as sent meanwhile */
+  | { a: "restoring"; id: string; text: string }
   /** a landing op went out for this worktree: show it working until the shipped frame */
   | { a: "shipping"; id: string; op: ShipOp }
   /** an "open project" request went to the daemon: adopt the repo it adds */
@@ -1112,12 +1117,12 @@ export function reducer(s: State, action: Action): State {
   else if (next.activeRepoId && !guessed(action) && !samePanels(panelsOf(s), panelsOf(next))) {
     next = { ...next, panels: { ...next.panels, [next.activeRepoId]: panelsOf(next) } };
   }
-  if (next.rows === s.rows && next.activeRepoId === s.activeRepoId && next.removing === s.removing) {
+  if (next.rows === s.rows && next.activeRepoId === s.activeRepoId && next.archiving === s.archiving) {
     return next;
   }
   return {
     ...next,
-    visible: visibleOf(next.rows, next.activeRepoId, next.removing),
+    visible: visibleOf(next.rows, next.activeRepoId, next.archiving),
     visibleDiscovered: visibleDiscoveredOf(next.rows, next.activeRepoId),
   };
 }
@@ -1160,10 +1165,12 @@ function reduce(s: State, action: Action): State {
     }
     case "close-archived":
       return s.archivedPage ? closeArchivedPage(s) : s;
+    case "restoring":
+      return withLocal(s, action.id, (l) => ({ ...l, restoring: action.text }));
     case "archive-worktrees": {
-      const ids = action.ids.filter((id) => !s.removing.includes(id) && worktreeById(s, id));
+      const ids = action.ids.filter((id) => !s.archiving.includes(id) && worktreeById(s, id));
       if (ids.length === 0) return s;
-      const hidden = { ...s, removing: [...s.removing, ...ids] };
+      const hidden = { ...s, archiving: [...s.archiving, ...ids] };
       // the selection leaves with the row, the way the daemon's own snapshot would move it
       return s.activeId && ids.includes(s.activeId) ? activate(hidden, landingIn(hidden, s.activeRepoId)) : hidden;
     }
@@ -1516,7 +1523,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeId,
         activeRepoId: wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
         spares: msg.spares,
-        removing: s.removing.length ? [] : s.removing,
+        archiving: s.archiving.length ? [] : s.archiving,
         shipping: retireShipping(s.shipping, () => true),
         local: pruneLocal(withDrafts(s.local, msg.drafts), msg.rows, msg.spares, s.archivedPage),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
@@ -1656,14 +1663,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
       if (fresh && s.rows.length > 0) activeId = fresh.id;
       // a pending remove is done once the daemon stops listing the row; one it still lists is
       // still in flight (this frame is as likely another worktree's proc event as the reply)
-      const removing = s.removing.filter((id) => msg.rows.some((w) => w.id === id));
+      const archiving = s.archiving.filter((id) => msg.rows.some((w) => w.id === id));
       return settleView({
         ...activate(
           {
             ...s,
             rows: msg.rows,
             spares: msg.spares,
-            removing: removing.length === s.removing.length ? s.removing : removing,
+            archiving: archiving.length === s.archiving.length ? s.archiving : archiving,
             shipping: retireShipping(s.shipping, (id) => !msg.rows.some((w) => w.id === id)),
             local: pruneLocal(s.local, msg.rows, msg.spares, s.archivedPage),
           },
@@ -1701,9 +1708,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const usage = ev.type === "usage" ? figuresOf(ev) : l.usage;
         // a message sent or a turn begun: the recap was about the stop before it
         const moved = ev.type === "turn-start" || ev.type === "user-message";
+        // and a message an archived page sent is in the chat now, as the agent has it
+        const { restoring: _sent, ...heard } = l;
+        const base = ev.type === "user-message" ? heard : l;
         return {
           // and a message sent moves the conversation on from the hit a search landed on
-          ...(moved ? withoutRecap(ev.type === "user-message" ? withoutMark(l, "reveal") : l) : l),
+          ...(moved ? withoutRecap(ev.type === "user-message" ? withoutMark(base, "reveal") : base) : base),
           chat,
           turn,
           ...(model !== l.model ? { model } : {}),
@@ -1726,7 +1736,17 @@ function onServer(s: State, msg: StoreServerMsg): State {
         chat = applyEvent(chat, event, seq);
         if (event.type === "usage") usage = figuresOf(event);
       }
-      return withLocal(s, msg.worktreeId, (l) => ({ ...l, chat, log: msg.log ?? l.log, ...(usage ? { usage } : {}) }));
+      // a message an archived page sent stays shown until the transcript has it: a socket back
+      // mid-restore hears it here rather than live
+      const heard = (text: string) =>
+        msg.events.some(({ event }) => event.type === "user-message" && event.text === text);
+      return withLocal(s, msg.worktreeId, ({ restoring, ...l }) => ({
+        ...l,
+        chat,
+        log: msg.log ?? l.log,
+        ...(usage ? { usage } : {}),
+        ...(restoring !== undefined && !heard(restoring) ? { restoring } : {}),
+      }));
     }
     case "git-status": {
       // the panel is a place you go, not a fixture: it starts closed and opens itself once, the
@@ -1775,7 +1795,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // under the composer for an op with no worktree (a batch); a land that merged as a row for
       // the record. A success with nothing to offer says nothing: the panel and the row show it.
       if (!msg.ok) return id ? answerFor(next, id, msg.message) : noticeOnScreen(next, msg.message);
-      if (msg.merged) return noteChat(next, id, { kind: "landed", text: msg.message, removeIds: msg.removeIds ?? [] });
+      if (msg.merged)
+        return noteChat(next, id, { kind: "landed", text: msg.message, archiveIds: msg.archiveIds ?? [] });
       return next;
     }
     case "files":
@@ -1849,13 +1870,13 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const { sent, ...draft } = s.draft ?? {};
       const next = {
         ...s,
-        removing: id
-          ? s.removing.includes(id)
-            ? s.removing.filter((w) => w !== id)
-            : s.removing
-          : s.removing.length
+        archiving: id
+          ? s.archiving.includes(id)
+            ? s.archiving.filter((w) => w !== id)
+            : s.archiving
+          : s.archiving.length
             ? []
-            : s.removing,
+            : s.archiving,
         shipping: retireShipping(s.shipping, (w) => !id || w === id),
         newProject: refused
           ? { ...page, phase: "editing" as const, error: msg.message }
@@ -1868,6 +1889,16 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // the reason is read where the press was: a refused create on its view, a worktree's on its
       // chat, and anything else under the composer on screen
       if (refused) return next;
+      // a restore asked from an archived page: the message goes back in that page's box with the
+      // reason under it, rather than onto a row it never became
+      const held = id ? next.local[id]?.restoring : undefined;
+      if (id && held !== undefined) {
+        return withLocal(next, id, ({ restoring: _held, ...l }) => ({
+          ...l,
+          draft: l.draft || held,
+          notice: msg.message,
+        }));
+      }
       return id ? answerFor(next, id, msg.message) : noticeOnScreen(next, msg.message);
     }
     default: {

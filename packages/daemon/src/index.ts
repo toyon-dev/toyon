@@ -178,7 +178,7 @@ const prs = new PrService({ state, hub, worktrees, view: viewPr });
 const self = new SelfWatch(SOURCE_ROOT);
 await self.start();
 const afterLand = new AfterLand({ state, hub, self });
-const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self });
+const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self, drafts });
 // which worktrees run: the ones being looked at, plus what a turn or a command holds; the rest
 // sleep on the clock, or sooner when the OS says memory is short
 const idle = new IdlePolicy({
@@ -192,7 +192,7 @@ const idle = new IdlePolicy({
 const sweep = new ArchiveSweep({
   state,
   viewed: (id) => idle.isViewed(id),
-  pending: (id) => runtime.busy(id) || !!runtime.agentFor(id)?.unsettled,
+  busy: (id) => runtime.busy(id),
   drafts,
   worktrees,
   afterMs: archiveAfterFrom(process.env.TOYON_ARCHIVE_AFTER_MS),

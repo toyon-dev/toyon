@@ -1,6 +1,6 @@
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import type { EditorView, OpenFile } from "../store.ts";
-import type { Deps } from "./deps.ts";
+import { copyText, type Deps } from "./deps.ts";
 import { editorItems } from "./editor.ts";
 
 const VIEWS: EditorView[] = ["diff", "file"];
@@ -20,7 +20,7 @@ export function openFile({ dispatch }: Deps, { focus = true, ...target }: OpenRe
 }
 
 /** a file in the changes panel: show it in the editor pane as its diff or as the file, open it
- * somewhere else, and for an uncommitted one, throw it away. `showing` is the view the pane already
+ * somewhere else, copy where it is, and for an uncommitted one, throw it away. `showing` is the view the pane already
  * has this file in, which the menu swaps rather than reads again; `ref` is the commit a history row
  * stands for. */
 export function fileItems(
@@ -36,7 +36,9 @@ export function fileItems(
     onClick: () =>
       showing ? dispatch({ a: "editor-view", v }) : openFile(deps, { worktreeId: wt.id, path, view: v, ref }),
   }));
-  const open = editorItems(`${wt.dir}/${path}`, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));
+  const abs = `${wt.dir}/${path}`;
+  const open = editorItems(abs, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));
+  const copy: MenuItem[] = [{ id: "copy-path", label: "copy path", onClick: () => copyText(abs) }];
   const discardItems = discard
     ? [
         {
@@ -51,5 +53,5 @@ export function fileItems(
         },
       ]
     : [];
-  return grouped([views, open, discardItems]);
+  return grouped([views, open, copy, discardItems]);
 }

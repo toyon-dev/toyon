@@ -4,7 +4,11 @@ Toyon is where you ask for changes to your web app and try them as they happen. 
 
 Each copy runs on your own machine, and the next one is pre-warmed. Works with Claude Code, Codex and OpenCode over the Agent Client Protocol (ACP).
 
+![Toyon with three chats on a plant shop: the open one is adding a dark mode, and the shop beside it has already turned dark while the agent works](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.jpg)
+
 **Status: pre-alpha, built in the open.** Runs on macOS and Linux. Windows through WSL2 is next. Expect rough edges, and say so in an issue.
+
+[Install](#install) · [What you get](#what-you-get) · [Under the hood](#under-the-hood) · [Trust](#trust) · [Uninstall](#uninstall)
 
 ## Why
 
@@ -29,7 +33,17 @@ cd your-project
 npx toyon
 ```
 
-Needs git and Node 18 or newer; bun comes with the package. On Linux the agents' sandbox also needs bubblewrap and socat (`sudo apt install bubblewrap socat`), and `toyon doctor` checks both and prints the AppArmor profile Ubuntu 24.04 and later ask for. `npm i -g toyon` puts `toyon` on your PATH for good, after which `toyon`, `toyon .` and `toyon ~/projects/app` all open a project, and anywhere else opens Toyon without one, ready to start a new one. `toyon --help` lists the rest.
+Run in a project, it opens that project. Run anywhere else, Toyon opens with none: describe a new one in a sentence, or give the project picker a git URL to clone.
+
+You need:
+
+- git and Node 18 or newer. Bun comes with the package.
+- An account for the agent you pick: a Claude plan or an Anthropic API key for Claude Code, a ChatGPT plan or an OpenAI API key for Codex, or any provider OpenCode signs into.
+- On Linux, bubblewrap and socat for the agents' sandbox (`sudo apt install bubblewrap socat`). `toyon doctor` checks both and prints the AppArmor profile Ubuntu 24.04 and later ask for.
+
+If the app starts with `npm run dev` in its folder, Toyon can run it; your `.env` files come along. An app that shares a database between copies or needs a sign-in past its first page has limits, listed under [What it does not do](#what-it-does-not-do).
+
+`npm i -g toyon` puts `toyon` on your PATH for good: `toyon`, `toyon .` and `toyon ~/projects/app` all open a project, and `toyon --help` lists the rest.
 
 A global install keeps itself current, like a site: when a newer version is out, Toyon installs it and restarts once no agent is working, and open tabs reload onto it. `toyon update` does it now from a terminal. Updates only come through the registry npm is set up for, and `TOYON_UPDATES=off` turns them off for a machine.
 
@@ -45,14 +59,15 @@ Each agent signs in with its own login, from the chat, and MCP servers run as ea
 - **Your app at the centre.** Each copy runs its own servers behind its own preview address. Switch between chats like tabs; a chat you come back to soon keeps its page state.
 - **Connected to its code.** Point at anything on the page to talk about it or open the line that draws it. Hover a change and it is outlined in the page. A design pane maps the page back to your tokens and components.
 - **More than one version.** Send one prompt to several copies and compare the results in the app.
-- **Keep it your way.** When a turn is done and your check passes, the composer offers to land it: merged into main on your machine, pushed, or opened as a pull request, whichever your project's settings name. Nothing is committed or pushed until you press it.
+- **Several projects at once.** One Toyon holds every project you open. Agents keep working in the ones you are not looking at, and the list of chats shows which one needs you.
+- **Keep it your way.** When a turn is done and your check passes (a command such as your tests, named in the project's settings), the composer offers to land it: merged into main on your machine, pushed, or opened as a pull request, whichever your project's settings name. Nothing is committed or pushed until you press it.
 - **The rest of the loop.** A terminal per chat, quick-open and search, a diff you can edit, themes including your VS Code ones, and an installable app window.
 
 Built for web apps. A project without a page still works; the chat takes the middle instead of the preview.
 
 ## How is this different from Conductor or Superset?
 
-They are good tools for running many agents at once, built for teams on GitHub. Toyon is built around the app instead of the agents: every chat opens with your app running at the centre, connected to its code, so you see each change before you keep it. It is MIT licensed, needs no account, sends no telemetry, runs in your browser on macOS or Linux, and can land work on your own machine without GitHub.
+They are good tools for running many agents at once. Toyon is built around the app instead of the agents: every chat opens with your app running at the centre, connected to its code, so you see each change before you keep it. It is MIT licensed, needs no account, sends no telemetry, runs in your browser on macOS or Linux, and lands work as a pull request on GitHub or on your own machine without it.
 
 ## Under the hood
 
@@ -67,11 +82,27 @@ browser (shell UI) ──HTTP/WS──> daemon (one per machine)
 
 The contract for anything Toyon runs: *stay in the foreground, listen on `$PORT`, reload yourself however you like.* A `.toyon/settings.json` in the project names the setup commands, the commands to `run`, an optional `check` and how work lands. The first open guesses one from `package.json` and asks you to confirm it; other stacks start from an empty guess the agent can fill in. A tool that takes its port from a flag, Vite among them, gets the flag added by the guess. If a server still comes up on some other port, Toyon follows it there and says which flag to add, and if it never listens at all the preview says so instead of waiting.
 
+A project with a page and an API behind it:
+
+```json
+{
+  "setup": ["npm install"],
+  "run": {
+    "web": "vite --port $PORT",
+    "api": "node --watch server.js"
+  },
+  "check": "npm test",
+  "land": { "route": "pr" }
+}
+```
+
+Each command gets its own `$PORT`, and the addresses of the others as `<NAME>_URL` (`API_URL` here), so the page can proxy to its API. The preview shows `web`.
+
 Copies start when you open them, not when the daemon boots. A copy nobody has looked at for two hours stops running its servers (five minutes on a deployed machine) and starts again when you open it or visit its preview; the chat and the agent keep going. `TOYON_PROC_SLEEP_MS` changes the delay, and `off` turns it off. `toyon stop` stops the daemon and everything it runs. `toyon doctor` says what is running and why a page cannot connect.
 
 ## What it does not do
 
-- It is not an editor. There is no file tree, no multi-file editing, no debugger, no extensions, no inline completion. The diff is editable and there is a one-keystroke jump to the editor you already use.
+- It is not an editor. There is no file tree, no multi-file editing, no debugger, no extensions, no inline completion. The diff is editable, and any file opens in Zed, VS Code or Cursor from its menu.
 - It does not commit, push or open pull requests on its own. The agent is told not to push or delete branches.
 - It works on git repositories, and the product uses git's words for what it does. A new project starts one for you.
 - It does not keep copies apart from services they share. Each copy runs your setup and your commands on its own, so a database or a compose stack they all point at is shared, migrations included. `TOYON_WORKTREE` is in the environment of every command and terminal so a project can keep them apart (`app_$TOYON_WORKTREE` as the database name), and `TOYON_ROOT` is the main checkout, so a setup step can copy over what git leaves behind and Toyon does not already copy (`cp "$TOYON_ROOT/data/dev.db" data/`; `node_modules` and the `.env` files come along on their own).

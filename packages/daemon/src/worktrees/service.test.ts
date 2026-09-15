@@ -1148,17 +1148,19 @@ describe("boot", () => {
     expect(state2.worktree(wt.id)).toBeUndefined();
     expect(state2.worktree("stale-spare")).toBeUndefined();
     expect(state2.worktrees.filter((x) => x.kind === "spare").length).toBe(1);
-    // boot starts nothing; opening main is what starts it
+    // boot starts nothing; opening main is what starts it, and only it
     const main = state2.worktrees.find((x) => x.kind === "main")!;
+    const adopted = state2.worktrees.find((x) => x.kind === "spare")!;
     expect(runtime2.get(main.id)?.procs ?? null).toBeNull();
     repos2.touch(main.id);
     await settle();
     expect(runtime2.get(main.id)?.procs).toBeTruthy();
-    // the adopted spare comes back warm with the repo: procs up, so the draft tab has a preview
-    // and a claim hands over a running worktree
+    expect(runtime2.get(adopted.id)?.procs ?? null).toBeNull();
+    // the adopted spare comes back warm once the repo is in use: procs up, so the draft tab has a
+    // preview and a claim hands over a running worktree
+    repos2.warm(repoId);
     await settle();
     await settle();
-    const adopted = state2.worktrees.find((x) => x.kind === "spare")!;
     expect(runtime2.get(adopted.id)?.procs).toBeTruthy();
     expect(worktrees2.spares()).toEqual([
       { repoId, id: adopted.id, path: adopted.path, proxyPort: adopted.proxyPort, ready: true },
@@ -1167,7 +1169,7 @@ describe("boot", () => {
     repos2.stopWatchers();
   });
 
-  test("touching one repo warms all of its worktrees and none of another's", async () => {
+  test("touching a worktree starts it alone; warming its repo brings up the spare and nothing else", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "a");
     const b = await w.worktrees.create(repoId, "b");
@@ -1210,11 +1212,14 @@ describe("boot", () => {
       repos2.touch(a.id);
       await settle();
       const up = (id: string) => !!runtime2.get(id)?.procs;
-      expect([up(a.id), up(b.id), up(otherMain.id)]).toEqual([true, true, false]);
-      // a second touch of the same repo is not a second warm
-      repos2.touch(b.id);
+      const spareUp = () => state2.worktrees.some((x) => x.repoId === repoId && x.kind === "spare" && up(x.id));
+      expect([up(a.id), up(b.id), spareUp(), up(otherMain.id)]).toEqual([true, false, false, false]);
+      repos2.warm(repoId);
+      await until(spareUp);
+      expect([up(a.id), up(b.id), up(otherMain.id)]).toEqual([true, false, false]);
+      // a touch of an id toyon has no record for is nothing, not an error
+      repos2.touch("nope");
       await settle();
-      expect(up(otherMain.id)).toBe(false);
       await runtime2.shutdown();
       repos2.stopWatchers();
     } finally {

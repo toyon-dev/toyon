@@ -3,6 +3,7 @@ import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProcState } from "@toyon/shared";
+import { reachableHost } from "./listeners.ts";
 import { WorktreeProcs } from "./supervisor.ts";
 
 function alive(pid: number): boolean {
@@ -164,6 +165,80 @@ describe("WorktreeProcs port diagnosis", () => {
     expect(running.boundPort).toBe(other);
     expect(running.port).toBe(st.port);
     expect(running.detail).toContain("--port $PORT");
+    await procs.stopAll();
+  }, 15_000);
+});
+
+/** a server on $PORT, the way a well-behaved dev command is */
+const SERVER =
+  `exec bun -e 'Bun.serve({port:Number(process.env.PORT),hostname:"127.0.0.1",fetch(){return new Response("x")}}); ` +
+  "await new Promise(()=>{})'";
+
+describe("WorktreeProcs sleep and wake", () => {
+  test("sleep says asleep before the exit lands and keeps the port; wake comes back on it", async () => {
+    const events: string[] = [];
+    const states: ProcState[] = [];
+    const procs = new WorktreeProcs(
+      process.cwd(),
+      (p) => {
+        states.push({ ...p });
+        events.push(p.status);
+      },
+      noop,
+      noop,
+      (name) => events.push(`exit:${name}`),
+    );
+    const st = await procs.start("web", SERVER);
+    expect(await until(() => states.some((s) => s.status === "running"), 8000)).toBe(true);
+    const pid = st.pid!;
+    await procs.sleep();
+    expect(procs.asleep).toBe(true);
+    expect(alive(pid)).toBe(false);
+    // the shell hears asleep first, so its iframe is gone before the exit could make it knock
+    expect(events.indexOf("asleep")).toBeGreaterThan(-1);
+    expect(events.indexOf("asleep")).toBeLessThan(events.indexOf("exit:web"));
+    expect(states.at(-1)?.port).toBe(st.port);
+    expect(procs.states()[0]?.status).toBe("asleep");
+    // asleep is not a crash: nothing schedules a restart
+    await Bun.sleep(300);
+    expect(events.filter((e) => e === "starting")).toHaveLength(1);
+    procs.wake();
+    expect(procs.asleep).toBe(false);
+    expect(await until(() => states.filter((s) => s.status === "running").length >= 2, 8000)).toBe(true);
+    const woken = states.at(-1)!;
+    expect(woken.port).toBe(st.port);
+    expect(woken.pid).not.toBe(pid);
+    expect(alive(woken.pid!)).toBe(true);
+    await procs.stopAll();
+  }, 20_000);
+
+  test("restart is a no-op while asleep; wake is what brings a proc back", async () => {
+    const events: string[] = [];
+    const procs = new WorktreeProcs(process.cwd(), (p) => events.push(p.status), noop);
+    await procs.start("web", "sleep 30");
+    await procs.sleep();
+    procs.restart("web");
+    await Bun.sleep(200);
+    expect(events.filter((e) => e === "starting")).toHaveLength(1);
+    procs.wake();
+    expect(events.filter((e) => e === "starting")).toHaveLength(2);
+    await procs.stopAll();
+  }, 10_000);
+
+  test("the port is noticed within a fraction of a second of answering", async () => {
+    const states: ProcState[] = [];
+    const procs = new WorktreeProcs(process.cwd(), (p) => states.push({ ...p }), noop);
+    const st = await procs.start("web", SERVER);
+    // the test's own view of when the port opened, polled tighter than the supervisor does
+    let answered = 0;
+    for (let i = 0; i < 800 && !answered; i++) {
+      if (await reachableHost(st.port)) answered = Date.now();
+      else await Bun.sleep(10);
+    }
+    expect(answered).toBeGreaterThan(0);
+    expect(await until(() => states.some((s) => s.status === "running"), 8000)).toBe(true);
+    // the old 500 ms cadence put this well past half a second
+    expect(Date.now() - answered).toBeLessThan(350);
     await procs.stopAll();
   }, 15_000);
 });

@@ -87,6 +87,18 @@ export class FakeProcs {
     this.stopped = true;
     for (const s of this.states_) s.status = "stopped";
   }
+  asleep = false;
+  async sleep() {
+    this.asleep = true;
+    for (const s of this.states_) s.status = "asleep";
+  }
+  wake() {
+    this.asleep = false;
+    for (const s of this.states_) s.status = "running";
+  }
+  pgids(): number[] {
+    return [];
+  }
   restarts: string[] = [];
   restart(name: string) {
     this.restarts.push(name);

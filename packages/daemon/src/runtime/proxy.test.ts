@@ -173,6 +173,104 @@ describe("preview proxy", () => {
   });
 });
 
+// A request to a sleeping worktree wakes it. The proxy tells the runtime a request came in and,
+// with no target yet, waits for one, so the page that woke the worktree is answered by the app
+// rather than by a placeholder it then has to refresh out of.
+describe("preview proxy waking", () => {
+  const plain = () =>
+    Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: () => new Response("app", { headers: { "content-type": "text/plain" } }),
+    });
+
+  test("a target that arrives while the proxy waits answers the request that asked for it", async () => {
+    const up = plain();
+    let target: { port: number; host: string } | null = null;
+    const requests: number[] = [];
+    const proxy = startProxy({
+      port: freePort(),
+      hostname: "127.0.0.1",
+      remote: null,
+      grant: previewGrant("secret"),
+      bridgeScript: () => "",
+      getTarget: () => target,
+      onRequest: () => requests.push(Date.now()),
+      ready: async () => {
+        await Bun.sleep(100);
+        target = { port: up.port ?? 0, host: "127.0.0.1" };
+        return target;
+      },
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${proxy.port}/`);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("app");
+      expect(requests).toHaveLength(1);
+    } finally {
+      proxy.stop();
+      up.stop(true);
+    }
+  });
+
+  test("a wait that gives up answers the placeholder", async () => {
+    const proxy = startProxy({
+      port: freePort(),
+      hostname: "127.0.0.1",
+      remote: null,
+      grant: previewGrant("secret"),
+      bridgeScript: () => "",
+      getTarget: () => null,
+      ready: async () => null,
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${proxy.port}/`);
+      expect(res.status).toBe(503);
+      expect(await res.text()).toContain("starting dev server");
+    } finally {
+      proxy.stop();
+    }
+  });
+
+  test("a page load counts as a request; a websocket upgrade and Vite's ping do not", async () => {
+    const up = wsUpstream(true);
+    let requests = 0;
+    let readied = 0;
+    const proxy = startProxy({
+      port: freePort(),
+      hostname: "127.0.0.1",
+      remote: null,
+      grant: previewGrant("secret"),
+      bridgeScript: () => "",
+      getTarget: () => ({ port: up.port ?? 0, host: "127.0.0.1" }),
+      onRequest: () => requests++,
+      ready: async () => {
+        readied++;
+        return null;
+      },
+    });
+    try {
+      await fetch(`http://127.0.0.1:${proxy.port}/`);
+      expect(requests).toBe(1);
+      await fetch(`http://127.0.0.1:${proxy.port}/`, { headers: { accept: "text/x-vite-ping" } });
+      expect(requests).toBe(1);
+      const ws = new WebSocket(`ws://127.0.0.1:${proxy.port}/socket`);
+      await new Promise<void>((r) => {
+        ws.onopen = () => r();
+        ws.onerror = () => r();
+        setTimeout(r, 2000);
+      });
+      ws.close();
+      expect(requests).toBe(1);
+      // a target was there every time, so nothing waited
+      expect(readied).toBe(0);
+    } finally {
+      proxy.stop();
+      up.stop(true);
+    }
+  });
+});
+
 // A front that cannot hold a wildcard certificate (tailscale serve, *.fly.dev) forwards each preview
 // port as the public name at that port. The port gets the same rules as the daemon's own listener.
 describe("preview port behind a port-addressed front", () => {

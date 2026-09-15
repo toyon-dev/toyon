@@ -22,6 +22,7 @@ import type { AfterLand } from "../repos/afterLand.ts";
 import { browsePath, describeFolder } from "../repos/browse.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { RouteService } from "../routes/service.ts";
+import type { IdlePolicy } from "../runtime/idle.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { daylightNow } from "../themes/daylight.ts";
 import type { ThemeStore } from "../themes/store.ts";
@@ -44,6 +45,8 @@ export interface Services {
   /** the route bar's list: which preview pages each repo is used on */
   routes: RouteService;
   runtime: RuntimeRegistry;
+  /** which worktrees run: the ones tabs show, and what a turn or a command holds */
+  idle: IdlePolicy;
   /** one-off commands from the composer's `!` mode */
   exec: ExecService;
   /** the ref palette: branches and PRs a worktree could be opened on */
@@ -78,6 +81,8 @@ export interface HandlerCtx {
   /** this socket wants a worktree's stream; false if it already had it */
   subscribe(worktreeId: string): boolean;
   unsubscribe(worktreeId: string): void;
+  /** this socket's tab shows that worktree now, or none: what keeps its dev servers running */
+  view(worktreeId: string | null): void;
   /** this socket has that stream's tab open: it gets its term-data / term-exit */
   watchTerminal(worktreeId: string, stream: string): void;
   unwatchTerminal(worktreeId: string, stream: string): void;
@@ -157,8 +162,6 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
       await gitAndPages(s, ctx, msg.worktreeId);
       return;
     }
-    // opening is what starts a cold worktree; the reply does not wait for it
-    s.repos.touch(msg.worktreeId);
     // the adapter, not the runtime: a cold worktree has its transcript on disk and nothing else.
     // The whole session goes: scrolling up has to reach the first prompt
     const agent = s.runtime.ensureAgent(r.wt).agent;
@@ -175,6 +178,11 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   unsubscribe(msg, ctx) {
     ctx.unsubscribe(msg.worktreeId);
+  },
+
+  // looking is what starts a cold worktree and wakes a sleeping one; the reply does not wait for it
+  view(msg, ctx) {
+    ctx.view(msg.worktreeId);
   },
 
   seen(msg, _ctx, s) {

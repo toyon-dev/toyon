@@ -53,7 +53,17 @@ export interface PreviewOpts {
   bridgeScript: () => string;
   /** returns current upstream for the preview proc, or null if not ready */
   getTarget: () => ProxyTarget | null;
+  /** an http request came in: a page load, a fetch from the app, a curl. Never a websocket
+   * upgrade or Vite's reconnect ping, which a dead page's client sends on its own and which must
+   * not count as someone using the preview. */
+  onRequest?: () => void;
+  /** with no target for a plain request, wait for one before answering with the placeholder: a
+   * worktree waking up answers the page that woke it rather than making it refresh into the app */
+  ready?: () => Promise<ProxyTarget | null>;
 }
+
+/** Vite's client polls the server this way while its HMR socket is down */
+const VITE_PING = "text/x-vite-ping";
 
 export function previewHandler(opts: PreviewOpts): PreviewHandler {
   const hostPart = (t: ProxyTarget) => (t.host.includes(":") ? `[${t.host}]` : t.host);
@@ -61,13 +71,18 @@ export function previewHandler(opts: PreviewOpts): PreviewHandler {
   return {
     async fetch(req, upgrade) {
       const url = new URL(req.url);
-      const target = opts.getTarget();
 
       if (url.pathname === "/__toyon/bridge.js") {
         return new Response(opts.bridgeScript(), {
           headers: { "content-type": "text/javascript", "cache-control": "no-store" },
         });
       }
+
+      const isUpgrade = req.headers.get("upgrade")?.toLowerCase() === "websocket";
+      const machine = isUpgrade || req.headers.get("accept") === VITE_PING;
+      if (!machine) opts.onRequest?.();
+      let target = opts.getTarget();
+      if (target == null && !machine && opts.ready) target = await opts.ready();
 
       if (target == null) {
         return new Response(waitingPage(), {
@@ -82,7 +97,7 @@ export function previewHandler(opts: PreviewOpts): PreviewHandler {
       // as success and resets its backoff, so it retries in a hot loop instead of standing off,
       // and anything it sent in that window is dropped here with nothing to report it. A refusal
       // has to reach the browser as a refusal.
-      if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
+      if (isUpgrade) {
         const proto = req.headers.get("sec-websocket-protocol") ?? undefined;
         const upstreamUrl = `ws://${hostPart(target)}:${target.port}${url.pathname}${url.search}`;
         const pending: (string | Uint8Array)[] = [];

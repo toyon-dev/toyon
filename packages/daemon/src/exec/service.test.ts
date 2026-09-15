@@ -32,15 +32,23 @@ function world() {
   };
   const state = new StateStore(paths, { repos: [], worktrees: [wt], sessions: {} });
   const agent = new FakeAgent("w1");
-  const runtime = { agentFor: () => agent, shellEnv: () => ({ PATH: process.env.PATH ?? "" }) };
+  const holds: string[] = [];
+  const runtime = {
+    agentFor: () => agent,
+    shellEnv: () => ({ PATH: process.env.PATH ?? "" }),
+    hold: (_id: string, tag: string) => holds.push(`+${tag}`),
+    release: (_id: string, tag: string) => holds.push(`-${tag}`),
+  };
   const exec = new ExecService({ state, runtime: runtime as unknown as RuntimeRegistry });
-  return { exec, agent, dir };
+  return { exec, agent, dir, holds };
 }
 
 describe("ExecService.exec", () => {
   test("answers with the exit code and the output, and leaves the rows on the transcript", async () => {
-    const { exec, agent } = world();
+    const { exec, agent, holds } = world();
     const r = await exec.exec("w1", "echo hi; echo err 1>&2; exit 3");
+    // the worktree was held for exactly the life of the command
+    expect(holds.map((h) => h.slice(0, 6))).toEqual(["+exec:", "-exec:"]);
     expect(r.exit).toBe(3);
     expect(r.text).toContain("hi");
     expect(r.text).toContain("err");

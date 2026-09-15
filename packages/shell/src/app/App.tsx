@@ -34,6 +34,10 @@ import { cx } from "../ui/cx.ts";
 const MRU_SUBSCRIPTIONS = 3;
 /** how long a worktree stays on screen, with the window focused, before its unseen ring clears */
 const SEEN_AFTER_MS = 2000;
+/** how long the active worktree stays put before the daemon is told this tab is looking at it:
+ * the same idea as `SEEN_AFTER_MS`, shorter because it only has to skip the rows a keyboard walk
+ * passes through, each of which would otherwise boot a dev server */
+const VIEW_AFTER_MS = 200;
 /** the least time between recounts on coming back to the window */
 const RECOUNT_AFTER_MS = 5000;
 
@@ -102,6 +106,37 @@ export function App() {
     if (!sock || !connected) return;
     for (const id of subsRef.current) sock.send({ t: "subscribe", worktreeId: id });
   }, [connected, sock]);
+  // Looking is what keeps a worktree's dev servers running, and what wakes them: the daemon hears
+  // which worktree this tab shows, and none while the tab is hidden. A subscription is not a look
+  // (the last few rows stay subscribed so their streams are warm), and a look at a new row waits a
+  // moment, so a walk through the rail does not boot a server per row passed. A hidden tab, and a
+  // new socket, say so at once. Hidden worktrees still reload after a turn: the turn's hold keeps
+  // an awake one up, and an asleep one has no frame to reload.
+  const viewedRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!sock || !connected) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tell = () => {
+      const id = document.visibilityState === "visible" ? activeId : null;
+      sock.send({ t: "view", worktreeId: id });
+      viewedRef.current = id;
+    };
+    const settle = () => {
+      clearTimeout(timer);
+      timer = setTimeout(tell, VIEW_AFTER_MS);
+    };
+    if (viewedRef.current === undefined || viewedRef.current === activeId || document.visibilityState !== "visible") {
+      tell();
+    } else {
+      settle();
+    }
+    const onVisibility = () => (document.visibilityState === "visible" ? settle() : tell());
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [activeId, connected, sock]);
   // An archived worktree's page reads its chat over the same stream, under the id the worktree
   // comes back with. The subscription goes with the page: the page closes as the restored row is
   // listed, so the row's own subscribe above is a new one and gets the live backfill. Left in the

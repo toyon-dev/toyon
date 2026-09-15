@@ -22,6 +22,8 @@ describe("parseClientMsg", () => {
   test("accepts every well-formed kind it is given", () => {
     for (const msg of [
       { t: "subscribe", worktreeId: "a" },
+      { t: "view", worktreeId: "a" },
+      { t: "view", worktreeId: null },
       { t: "design-scan", worktreeId: "a" },
       { t: "chat", worktreeId: "a", text: "hi" },
       {

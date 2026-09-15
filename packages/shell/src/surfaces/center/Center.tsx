@@ -286,6 +286,16 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   useEffect(() => {
     if (previewId && previewReady && !mounted.includes(previewId)) setMounted((m) => [...m, previewId]);
   }, [previewId, previewReady, mounted]);
+  // a sleeping worktree's frame comes down: its page would keep asking the proxy for things, and
+  // a request is what wakes a worktree. It mounts again through the ready path when looked at.
+  const asleepKey = rows
+    .filter((w) => isOwned(w) && w.procs.some((p) => p.status === "asleep"))
+    .map((w) => w.id)
+    .join(" ");
+  useEffect(() => {
+    const asleep = new Set(asleepKey.split(" ").filter(Boolean));
+    if (mounted.some((id) => asleep.has(id))) setMounted((m) => m.filter((id) => !asleep.has(id)));
+  }, [asleepKey, mounted]);
   const frames = rows
     .filter(isOwned)
     .filter((w) => mounted.includes(w.id))

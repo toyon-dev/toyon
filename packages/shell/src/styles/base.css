@@ -216,6 +216,12 @@
     &.idle {
       background: var(--surface2);
     }
+    /* stopped by toyon because nobody was looking: the idle colour, dimmed. Not a colour of its own:
+   the palette's dots say what a worktree is doing, and this one is doing nothing until looked at. */
+    &.asleep {
+      background: var(--surface2);
+      opacity: 0.6;
+    }
     &.landed {
       background: var(--aqua);
     }

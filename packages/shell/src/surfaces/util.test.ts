@@ -64,11 +64,20 @@ describe("stateLabel", () => {
     expect(stateLabel(status("idle"), true)).toBe("Not set up");
     expect(stateLabel(status("idle", proc("web", "running")), true)).toBe("Running");
   });
+
+  test("asleep sits below starting and above idle, and a repo not set up still says so", () => {
+    expect(stateLabel(status("idle", proc("web", "asleep")))).toBe("Asleep");
+    expect(stateLabel(status("idle", proc("web", "asleep"), proc("api", "starting")))).toBe("Starting");
+    expect(stateLabel(status("working", proc("web", "asleep")))).toBe("Agent working");
+    expect(stateLabel(status("idle"), true)).toBe("Not set up");
+  });
 });
 
 describe("procTrouble", () => {
   test("nothing to say while the procs are alive or on their way", () => {
     expect(procTrouble([])).toBeNull();
+    // asleep is toyon's doing, not the proc's: nothing for a person to fix
+    expect(procTrouble([proc("web", "asleep")])).toBeNull();
     expect(procTrouble([proc("web", "running"), proc("api", "starting", 4000)])).toBeNull();
   });
 

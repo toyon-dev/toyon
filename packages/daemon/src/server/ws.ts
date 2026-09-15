@@ -133,7 +133,10 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     worktrees: {
       total: s.state.worktrees.filter((w) => w.kind !== "spare").length,
       running: s.runtime.runningCount(),
+      ...s.runtime.tiers(),
     },
+    /** resident memory of each awake worktree's procs at the last sample, KB */
+    costs: s.idle.costs(),
     sockets: [...sockets].map(
       (ws): SocketStats => ({ subs: [...ws.data.subs], sent: ws.data.sent, bytes: ws.data.bytes }),
     ),
@@ -318,6 +321,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       // a chat frame can carry ATTACHMENT_LIMITS.image images of IMAGE_MAX_BYTES each, base64; Bun's
       // default (16 MB) would drop the socket mid-paste
       maxPayloadLength: 64 * 1024 * 1024,
+      // idleTimeout and sendPings stay at Bun's defaults (120 s, on): they are what close a tab that
+      // died without a word, which is what lets go of the worktree it was showing
       async open(ws: ServerWebSocket<WsData>) {
         const preview = ws.data.preview;
         if (preview) {
@@ -333,6 +338,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       },
       close(ws: ServerWebSocket<WsData>) {
         if (ws.data.preview) ws.data.preview.handler.close(ws.data.preview.data);
+        // a tab that went away without a word (a closed lid) closes here once the socket's own
+        // idle timeout and pings give it up, and whatever it was showing is released with it
+        else s.idle.drop(ws.data);
         sockets.delete(ws);
       },
       async message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
@@ -364,6 +372,14 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           },
           unsubscribe: (id: string) => {
             ws.data.subs.delete(id);
+            if (ws.data.view === id) {
+              ws.data.view = null;
+              s.idle.view(ws.data, null);
+            }
+          },
+          view: (id: string | null) => {
+            ws.data.view = id;
+            s.idle.view(ws.data, id);
           },
           watchTerminal: (id: string, stream: string) => {
             ws.data.terms.add(streamKey(id, stream));

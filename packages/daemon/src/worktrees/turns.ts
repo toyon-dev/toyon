@@ -22,7 +22,13 @@ export interface TurnServiceDeps {
   summarize?: (wt: WorktreeInfo, prompt: string) => Promise<string | null>;
   /** how long a stop stays unseen before its recap is due */
   delayMs?: number;
+  /** a turn is outstanding work on its worktree: held from its first `working` until it stops,
+   * whichever way, so nothing puts the dev servers to sleep under the agent */
+  hold?: (worktreeId: string, tag: string) => void;
+  release?: (worktreeId: string, tag: string) => void;
 }
+
+const TURN_HOLD = "turn";
 
 /** Long enough that moving between two busy worktrees never writes one, and short of the five
  * minutes an idle adapter lives, so the sentence is asked of a process that is still up. */
@@ -71,9 +77,14 @@ export class TurnService {
     const prev = this.lastStatus.get(worktreeId) ?? "idle";
     this.lastStatus.set(worktreeId, status);
     // a new turn: whatever was due for the last stop no longer is
-    if (status === "working") this.disarm(worktreeId);
+    if (status === "working") {
+      this.disarm(worktreeId);
+      this.d.hold?.(worktreeId, TURN_HOLD);
+    }
     const edge = stopOf(prev, status);
     if (!edge) return;
+    // released before the record is looked at, so a turn on a row that went away lets go too
+    this.d.release?.(worktreeId, TURN_HOLD);
     const wt = this.d.state.worktree(worktreeId);
     // gone if it was removed mid-turn; a spare's agent is nobody's work yet
     if (!wt || wt.kind === "spare") return;

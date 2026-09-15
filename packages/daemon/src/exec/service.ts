@@ -73,6 +73,8 @@ export class ExecService {
     }
     const timer = setTimeout(() => this.kill(worktreeId, toolId), TIMEOUT_MS);
     this.track(worktreeId, toolId, { proc, timer });
+    // a command is outstanding work: the dev servers it may be talking to stay up until it ends
+    this.deps.runtime.hold(worktreeId, `exec:${toolId}`);
     return this.collect(worktreeId, toolId, proc, agent);
   }
 
@@ -148,6 +150,7 @@ export class ExecService {
     } finally {
       const r = this.untrack(worktreeId, toolId);
       if (r) clearTimeout(r.timer);
+      this.deps.runtime.release(worktreeId, `exec:${toolId}`);
     }
     agent.note({ type: "tool-end", toolId, output: formatOutput(text, exit, truncated), isError: exit !== 0 });
     return { exit, text };

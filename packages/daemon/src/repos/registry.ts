@@ -83,9 +83,8 @@ export class RepoRegistry {
 
   /** Recover the persisted state, reserve every port, and watch every repo. Nothing runs yet: a
    * daemon that starts a dev server for every worktree of every registered repo the moment it
-   * comes up is fifteen vite processes on a laptop whose owner wanted one, so a repo's worktrees
-   * start together the first time something touches the repo (`warm`), and a single worktree
-   * starts on its own when it is opened after that (`touch`). */
+   * comes up is fifteen vite processes on a laptop whose owner wanted one. A worktree starts when
+   * something looks at it (`touch`), and a repo's spare comes up once the first one has (`warm`). */
   async boot(): Promise<void> {
     const { state } = this.d;
     // a worktree whose directory or project went while the daemon was down leaves the way a remove
@@ -108,32 +107,19 @@ export class RepoRegistry {
     if (cold > 0) log.info("daemon", `${cold} worktrees across ${state.repos.length} repos start when opened`);
   }
 
-  /** Start every worktree of a repo, once per daemon run. Sequential and in the background: the
-   * caller is a subscribe or a register that should answer now, and one dev server at a time is
-   * how boot always started them. */
+  /** The repo is in use: its spare is made, or brought back up, once per daemon run. The other
+   * worktrees are left alone; each starts when it is looked at. */
   warm(repoId: string): void {
-    if (this.warmed.has(repoId)) return;
+    if (this.warmed.has(repoId) || !this.d.state.repo(repoId)) return;
     this.warmed.add(repoId);
-    const repo = this.d.state.requireRepo(repoId);
-    const mine = this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind !== "spare");
-    fireAndForget(
-      repoId,
-      (async () => {
-        for (const wt of mine) await this.d.runtime.start(wt, repo);
-      })(),
-      "warm",
-    );
     this.d.worktrees.spare.warm(repoId);
   }
 
-  /** a worktree is being looked at: its repo warms if it has not, and it starts if it is cold */
+  /** a worktree is being looked at, or needed: it comes up if cold or asleep. Silent for an id
+   * with no record (a found worktree, an archived one): there is nothing to run there. */
   touch(worktreeId: string): void {
-    const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
-    if (!this.warmed.has(repo.id)) {
-      this.warm(repo.id);
-      return;
-    }
-    if (!this.d.runtime.get(wt.id)?.procs) fireAndForget(wt.id, this.d.runtime.start(wt, repo), "start on open");
+    if (!this.d.state.worktree(worktreeId)) return;
+    fireAndForget(worktreeId, this.d.runtime.wake(worktreeId), "start on open");
   }
 
   /** Make a project and open it. The containment check lives here rather than in `create.ts`

@@ -88,5 +88,7 @@ function statusText(p: ProcState): string {
       return p.exitCode != null ? `crashed (exit ${p.exitCode})` : "crashed";
     case "stopped":
       return "stopped";
+    case "asleep":
+      return "asleep; opens when you look";
   }
 }

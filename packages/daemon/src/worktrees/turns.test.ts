@@ -26,7 +26,7 @@ const record = (id: string, extra: Partial<WorktreeInfo> = {}): WorktreeInfo => 
   ...extra,
 });
 
-function build(opts: Pick<TurnServiceDeps, "summarize" | "delayMs">, rows: WorktreeInfo[]) {
+function build(opts: Pick<TurnServiceDeps, "summarize" | "delayMs" | "hold" | "release">, rows: WorktreeInfo[]) {
   const paths = makePaths(mkdtempSync(join(home, "w-")));
   ensureDirs(paths);
   const state = new StateStore(paths, { repos: [], worktrees: rows, sessions: {} });
@@ -58,6 +58,26 @@ const start = (ts: number): AgentEvent => ({ type: "turn-start", ts });
 const end = (ts: number, stopReason = "end_turn"): AgentEvent => ({ type: "turn-end", stopReason, ts });
 const edit = (toolId: string): AgentEvent => ({ type: "tool-start", toolId, name: "Edit", input: {}, kind: "edit" });
 const auth: AgentEvent = { type: "agent-auth-required", agent: "claude", agentName: "Claude", methods: [], ts: 12 };
+
+describe("TurnService holds", () => {
+  test("a turn holds its worktree from working until it stops, whichever way, and lets go before the record", () => {
+    const holds: string[] = [];
+    const w = build(
+      {
+        hold: (id, tag) => holds.push(`+${id}:${tag}`),
+        release: (id, tag) => holds.push(`-${id}:${tag}`),
+      },
+      [record("a"), record("s", { kind: "spare" })],
+    );
+    w.status("a", "working", "idle");
+    w.status("a", "working", "waiting");
+    w.status("a", "working", "error");
+    // a spare's turn is nobody's work, but its hold is still let go of
+    w.status("s", "working", "idle");
+    expect(holds).toEqual(["+a:turn", "-a:turn", "+a:turn", "-a:turn", "+a:turn", "-a:turn", "+s:turn", "-s:turn"]);
+    expect(w.settled.map(([id]) => id)).toEqual(["a", "a", "a"]);
+  });
+});
 
 describe("TurnService", () => {
   test("a finished turn is stamped done with what it did, rings until seen, and says so on the hub", () => {

@@ -18,6 +18,10 @@ export interface HubEvents {
   /** raw output from one of the worktree's streams (its shell or a proc), escapes included */
   termData: (worktreeId: string, stream: string, data: string) => void;
   termExit: (worktreeId: string, stream: string, exitCode: number) => void;
+  /** an http request reached the worktree's preview: someone, or something, is using it */
+  previewRequest: (worktreeId: string) => void;
+  /** outstanding work on the worktree (a turn, a command) started or finished; `count` is what is left */
+  holdsChanged: (worktreeId: string, count: number) => void;
   /** the worktree list or any per-worktree status changed */
   worktreesChanged: () => void;
   /** the repo's default branch moved, or a recount was asked for: badges + git-status need refreshing */

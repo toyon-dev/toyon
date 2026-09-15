@@ -177,6 +177,8 @@ export class SparePool {
     wt.title = slug;
     wt.createdAt = Date.now();
     this.d.state.save();
+    // a spare that rested with its repo comes up for the task it now is
+    fireAndForget(wt.id, this.d.runtime.wake(wt.id), "wake on claim");
     fireAndForget(repoId, this.ensure(repoId), "spare warm-up");
     return wt;
   }

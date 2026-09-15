@@ -6,6 +6,7 @@ import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
 import { procUrlEnv, RuntimeRegistry, terminalEnv, worktreeEnv } from "./registry.ts";
+import type { WorktreeProcs } from "./supervisor.ts";
 
 const repo: RepoInfo = {
   id: "r",
@@ -287,5 +288,100 @@ describe("RuntimeRegistry terminals", () => {
     await registry.restartStream(wt.id, SHELL_STREAM);
     expect(() => registry.openTerminal(spare.id, SHELL_STREAM, 80, 24)).toThrow(UserError);
     expect(() => registry.openTerminal("nope", SHELL_STREAM, 80, 24)).toThrow(UserError);
+  });
+});
+
+describe("RuntimeRegistry sleep and wake", () => {
+  test("sleep stops the procs and keeps the proxy, its port, the agent and the shell", async () => {
+    const { registry, agents, procs, proxies, terminals, hub } = make();
+    let changed = 0;
+    hub.on("worktreesChanged", () => changed++);
+    await registry.start(wt, repo);
+    registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
+    const proxy = proxies.get(wt.id)!;
+    await registry.sleep(wt.id);
+    expect(procs.get(wt.id)?.asleep).toBe(true);
+    expect(
+      procs
+        .get(wt.id)
+        ?.states()
+        .map((p) => p.status),
+    ).toEqual(["asleep", "asleep"]);
+    expect(registry.isAsleep(wt.id)).toBe(true);
+    expect(registry.previewTarget(wt.id)).toBeNull();
+    expect(proxy.stopped).toBe(false);
+    expect(registry.get(wt.id)?.proxy).toBe(proxy);
+    expect(agents.get(wt.id)?.closes).toBe(0);
+    expect(terminals.get(wt.id)![0]!.alive).toBe(true);
+    expect(registry.tiers()).toEqual({ awake: 0, asleep: 1 });
+    // a second sleep changes nothing and says nothing
+    const before = changed;
+    await registry.sleep(wt.id);
+    expect(changed).toBe(before);
+    await registry.wake(wt.id);
+    expect(procs.get(wt.id)?.asleep).toBe(false);
+    expect(registry.get(wt.id)?.proxy).toBe(proxy);
+    expect(registry.get(wt.id)?.procs).toBe(procs.get(wt.id) as unknown as WorktreeProcs);
+    expect(registry.tiers()).toEqual({ awake: 1, asleep: 0 });
+    expect(registry.awake().map((a) => a.id)).toEqual([wt.id]);
+  });
+
+  test("wake starts a cold worktree, and is a no-op while its setup runs", async () => {
+    const { registry, procs } = make();
+    registry.markSetup(wt.id, true);
+    await registry.wake(wt.id);
+    expect(registry.get(wt.id)?.procs ?? null).toBeNull();
+    registry.markSetup(wt.id, false);
+    await registry.wake(wt.id);
+    expect(procs.get(wt.id)?.started.length).toBe(2);
+    // up already: nothing more happens
+    await registry.wake(wt.id);
+    expect(procs.size).toBe(1);
+    await registry.wake("nope");
+  });
+
+  test("a restart asked of an asleep proc's tab wakes the whole set", async () => {
+    const { registry, procs } = make();
+    await registry.start(wt, repo);
+    await registry.sleep(wt.id);
+    await registry.restartStream(wt.id, "web");
+    expect(procs.get(wt.id)?.restarts).toEqual([]);
+    expect(procs.get(wt.id)?.asleep).toBe(false);
+    await registry.restartStream(wt.id, "web");
+    expect(procs.get(wt.id)?.restarts).toEqual(["web"]);
+  });
+
+  test("holds count by tag and stop() forgets them", async () => {
+    const { registry, hub } = make();
+    const seen: Array<[string, number]> = [];
+    hub.on("holdsChanged", (id, n) => seen.push([id, n]));
+    registry.hold(wt.id, "turn");
+    registry.hold(wt.id, "exec:1");
+    registry.hold(wt.id, "turn");
+    expect(registry.holdCount(wt.id)).toBe(2);
+    registry.release(wt.id, "turn");
+    registry.release(wt.id, "turn");
+    expect(registry.holdCount(wt.id)).toBe(1);
+    expect(seen).toEqual([
+      [wt.id, 1],
+      [wt.id, 2],
+      [wt.id, 2],
+      [wt.id, 1],
+    ]);
+    await registry.stop(wt.id);
+    expect(registry.holdCount(wt.id)).toBe(0);
+  });
+
+  test("awaitPreview answers once the preview runs, and at once when nothing is coming", async () => {
+    const { registry, procs } = make();
+    expect(await registry.awaitPreview(wt.id, 1000)).toBeNull();
+    await registry.start(wt, repo);
+    const fake = procs.get(wt.id)!;
+    const t = await registry.awaitPreview(wt.id, 1000);
+    expect(t?.port).toBe(fake.states().find((p) => p.name === "web")?.port);
+    await registry.sleep(wt.id);
+    const t0 = Date.now();
+    expect(await registry.awaitPreview(wt.id, 1000)).toBeNull();
+    expect(Date.now() - t0).toBeLessThan(200);
   });
 });

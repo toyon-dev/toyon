@@ -33,6 +33,7 @@ import { AfterLand } from "./repos/afterLand.ts";
 import { RepoRegistry } from "./repos/registry.ts";
 import { RouteService } from "./routes/service.ts";
 import { BridgeScript } from "./runtime/bridge-script.ts";
+import { IdlePolicy } from "./runtime/idle.ts";
 import { pinProxyPorts } from "./runtime/ports.ts";
 import { RuntimeRegistry } from "./runtime/registry.ts";
 import { startServer } from "./server/ws.ts";
@@ -127,6 +128,8 @@ const turns = new TurnService({
   hub,
   transcript: (id) => runtime.agentFor(id)?.transcript() ?? [],
   summarize: makeRecapper(runtime, agents, state),
+  hold: (id, tag) => runtime.hold(id, tag),
+  release: (id, tag) => runtime.release(id, tag),
 });
 const files = new FileService(state, runtime, (id) => worktrees.readable(id));
 const design = new DesignService((id) => worktrees.readable(id));
@@ -154,6 +157,17 @@ const self = new SelfWatch(SOURCE_ROOT);
 await self.start();
 const afterLand = new AfterLand({ state, hub, self });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self });
+// which worktrees run: the ones being looked at, plus what a turn or a command holds. The memory
+// check only reports for now; it starts sleeping worktrees once a day of readings says the
+// thresholds are right.
+const idle = new IdlePolicy({
+  runtime,
+  state,
+  hub,
+  wake: (id) => repos.touch(id),
+  warmSpare: (repoId) => repos.warm(repoId),
+  pressure: "observe",
+});
 const themes = new ThemeStore({ get: () => state.theme, set: (p) => state.setTheme(p) }, paths.themesDir);
 themes.load();
 
@@ -174,6 +188,7 @@ const { branded, stop: stopServer } = startServer({
     design,
     routes,
     runtime,
+    idle,
     exec,
     refs,
     chats,
@@ -218,6 +233,8 @@ writeFileSync(paths.pidFile, `${process.pid}\n`);
 const stopLagSampler = startLagSampler();
 
 await repos.boot();
+// what was being looked at before the restart comes back on its own
+idle.boot();
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default
 // agent first, so the first prompt waits on one download at most. One already on disk installs
 // without a change event, so the probe is asked here as well.
@@ -267,6 +284,8 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info("daemon", `${signal}: stopping dev servers`);
+  // before the sockets close: what the tabs show now is what the next daemon brings back
+  idle.shutdown();
   repos.stopWatchers();
   prs.stop();
   stopLagSampler();

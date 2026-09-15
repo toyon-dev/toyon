@@ -10,6 +10,11 @@ const LOG_RING_SIZE = 500;
 /** how long a proc gets to answer on $PORT before toyon asks the OS what it did instead */
 const POLL_INTERVAL_MS = 500;
 const POLL_ATTEMPTS = 120;
+/** A dev server that answers at all answers within a few seconds, and the poll interval was the
+ * largest single delay between its port opening and the preview showing it. So the first seconds
+ * poll quickly; after that the slower cadence is enough for a server that is still compiling. */
+const FAST_POLL_MS = 100;
+const FAST_POLL_WINDOW_MS = 3_000;
 
 export interface ProcsOpts {
   /** polls of $PORT before the diagnosis; tests shorten the 60s deadline */
@@ -44,6 +49,8 @@ export type ExitListener = (proc: string, exitCode: number) => void;
 export class WorktreeProcs {
   procs = new Map<string, ManagedProc>();
   private stopped = false;
+  /** every proc killed by `sleep()`, each keeping its port for the `wake()` that respawns it */
+  asleep = false;
   private lines: LogLine[] = [];
 
   constructor(
@@ -125,7 +132,7 @@ export class WorktreeProcs {
     mp.state.exitCode = code;
     // a tab watching this proc gets the exit even when the supervisor is about to restart it
     this.onStreamExit(name, code);
-    if (this.stopped || mp.state.status === "stopped") return;
+    if (this.stopped || mp.state.status === "stopped" || mp.state.status === "asleep") return;
     if (mp.handInput) {
       // you typed in its tab, so this exit is yours: no crash, no backoff, no auto-restart
       mp.state.status = "stopped";
@@ -150,8 +157,11 @@ export class WorktreeProcs {
   }
 
   private async pollPort(mp: ManagedProc) {
-    const attempts = this.opts.pollAttempts ?? POLL_ATTEMPTS;
-    for (let i = 0; i < attempts; i++) {
+    // the deadline is in polls of the slow cadence, so a test's `pollAttempts` and the "after 60s"
+    // in the diagnosis keep their meaning while the first seconds poll faster
+    const deadline = Date.now() + (this.opts.pollAttempts ?? POLL_ATTEMPTS) * POLL_INTERVAL_MS;
+    const started = Date.now();
+    while (Date.now() < deadline) {
       if (this.stopped || mp.state.status !== "starting") return;
       const host = await reachableHost(mp.state.port);
       if (host) {
@@ -160,7 +170,7 @@ export class WorktreeProcs {
         this.onProc({ ...mp.state });
         return;
       }
-      await Bun.sleep(POLL_INTERVAL_MS);
+      await Bun.sleep(Date.now() - started < FAST_POLL_WINDOW_MS ? FAST_POLL_MS : POLL_INTERVAL_MS);
     }
     await this.diagnose(mp);
   }
@@ -222,7 +232,9 @@ export class WorktreeProcs {
 
   restart(name: string) {
     const mp = this.procs.get(name);
-    if (!mp) return;
+    // asleep, every proc comes back together through wake(); one on its own would leave the
+    // siblings' URLs in its env pointing at nothing
+    if (!mp || this.asleep) return;
     mp.restarts = 0;
     if (mp.state.status === "crashed") {
       this.spawnProc(mp);
@@ -242,6 +254,40 @@ export class WorktreeProcs {
 
   private async killProc(mp: ManagedProc): Promise<void> {
     await mp.pty?.kill();
+  }
+
+  /** Stop every proc but keep its port and its place: the worktree is not being looked at. The
+   * `asleep` state goes out before the kill so a tab drops the iframe before the exit reaches it;
+   * an iframe left up would keep knocking on the proxy, and a knock is what wakes a worktree. */
+  async sleep(): Promise<void> {
+    if (this.asleep || this.stopped) return;
+    this.asleep = true;
+    const exits: Promise<void>[] = [];
+    for (const mp of this.procs.values()) {
+      mp.state.status = "asleep";
+      mp.state.pid = undefined;
+      this.onProc({ ...mp.state });
+      exits.push(this.killProc(mp));
+    }
+    await Promise.all(exits);
+  }
+
+  /** Respawn every proc on the port it had, in the order they were started (non-preview first,
+   * as `start()` inserted them), so the sibling URLs baked into each proc's env still hold. */
+  wake(): void {
+    if (!this.asleep || this.stopped) return;
+    this.asleep = false;
+    for (const mp of this.procs.values()) {
+      mp.restarts = 0;
+      this.spawnProc(mp);
+    }
+  }
+
+  /** the process group of each live proc (its pid: a pty child leads its own group), for a cost sample */
+  pgids(): number[] {
+    const out: number[] = [];
+    for (const mp of this.procs.values()) if (mp.pty?.alive) out.push(mp.pty.pid);
+    return out;
   }
 
   /** Stop every proc; resolves when they have all exited (bounded by the SIGKILL grace). */

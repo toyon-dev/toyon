@@ -210,6 +210,10 @@ export interface WorktreeInfo {
   /** when someone last looked at this worktree in a shell. Absent until it has been looked at
    * since the feature landed, which reads as "seen" so old rows do not all light up at once. */
   seenAt?: number;
+  /** when a tab last showed this worktree. Different from `seenAt`, which is about the unseen
+   * ring and waits for focus: this one is what decides which dev servers a restarted daemon
+   * brings back, and whether a finished turn is worth booting one for. */
+  viewedAt?: number;
   /** the person marked it unread to come back to; rings the row until it is next seen */
   unread?: boolean;
   /** main only: nothing tracked and nothing untracked, which is what a project made from the
@@ -300,8 +304,10 @@ export function hasOwnBranch(wt: Pick<WorktreeInfo, "branch">): boolean {
 }
 
 /** `unreachable`: alive, but nothing answered on its port before the deadline and it bound no
- * other port either (a server that never listens, or listens somewhere toyon cannot see) */
-export type ProcStatus = "starting" | "running" | "unreachable" | "crashed" | "stopped";
+ * other port either (a server that never listens, or listens somewhere toyon cannot see).
+ * `asleep`: stopped by toyon because nobody had looked at the worktree for a while; it keeps its
+ * port and comes back on the same one the next time something needs it. */
+export type ProcStatus = "starting" | "running" | "unreachable" | "crashed" | "stopped" | "asleep";
 
 export interface ProcState {
   name: string;

@@ -57,6 +57,7 @@ export interface RuntimeDeps {
     previewName: string | undefined,
     procs: WorktreeProcs,
     deps: RuntimeDeps,
+    wake: ProxyWake,
   ) => WorktreeProxy;
   makeTerminal?: (
     /** only the id is used, so a loose shell (no worktree record) can pass its discovered id */
@@ -109,6 +110,18 @@ export function terminalEnv(
 }
 
 export const DEFAULT_AGENT_ID = "claude";
+
+/** what a proxy tells the registry about requests, and how it waits for a sleeping worktree */
+export interface ProxyWake {
+  onRequest: () => void;
+  ready: () => Promise<ProxyTarget | null>;
+}
+
+/** How long a request to a sleeping worktree waits for its dev server before getting the
+ * placeholder: past a Vite boot, short of a Next one, which falls back to the placeholder's own
+ * refresh. */
+const PREVIEW_WAKE_MS = 8_000;
+const PREVIEW_POLL_MS = 100;
 
 function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
   const agent = new AcpSession({
@@ -179,7 +192,13 @@ function defaultTerminal(
   return new PtyStream(opts, onData, onExit);
 }
 
-function defaultProxy(wt: WorktreeInfo, previewName: string | undefined, procs: WorktreeProcs, d: RuntimeDeps) {
+function defaultProxy(
+  wt: WorktreeInfo,
+  previewName: string | undefined,
+  procs: WorktreeProcs,
+  d: RuntimeDeps,
+  wake: ProxyWake,
+) {
   return startProxy({
     port: wt.proxyPort,
     hostname: cloud.bindHost,
@@ -187,18 +206,22 @@ function defaultProxy(wt: WorktreeInfo, previewName: string | undefined, procs: 
     grant: d.grant ?? "",
     bridgeScript: d.bridgeScript,
     getTarget: () => previewTargetOf(procs, previewName),
+    onRequest: wake.onRequest,
+    ready: wake.ready,
   });
 }
 
-/** where the proxy forwards: the preview proc unless it crashed or never came up (a proc that is
- * still starting is a valid target — the proxy serves its "starting…" page until the port answers),
- * at the port it actually bound when that differs from the one it was given */
+/** the proc the preview shows: the one named, or the first for a backend-only repo */
+function previewProcOf(procs: WorktreeProcs, previewName: string | undefined): ProcState | undefined {
+  return procs.states().find((p) => p.name === previewName) ?? procs.states()[0];
+}
+
+/** where the proxy forwards: the preview proc once it answers on its port (at the port it actually
+ * bound when that differs from the one it was given). Null while it is starting or asleep, so the
+ * proxy waits for it rather than forwarding to a port nothing is on yet. */
 function previewTargetOf(procs: WorktreeProcs, previewName: string | undefined): ProxyTarget | null {
-  const st =
-    procs.states().find((p) => p.name === previewName) ??
-    // backend-only repo: point preview at the first proc
-    procs.states()[0];
-  if (!st || st.status === "crashed" || st.status === "unreachable") return null;
+  const st = previewProcOf(procs, previewName);
+  if (st?.status !== "running") return null;
   return { port: st.boundPort ?? st.port, host: st.host ?? "127.0.0.1" };
 }
 
@@ -209,8 +232,110 @@ export class RuntimeRegistry {
    * hang one off. Keyed by the discovered id, which is derived from the path, so the same
    * directory keeps its shell across every re-derivation of the list. */
   private looseShells = new Map<string, PtyHandle>();
+  /** Outstanding work per worktree, by tag: a turn, a command. A held worktree never sleeps,
+   * whether or not anyone is looking at it. */
+  private holds = new Map<string, Set<string>>();
+  /** worktrees whose deps and setup are still being made: a wake meanwhile would start procs on a
+   * half-built tree, and `setupAndStart` starts them itself when it is done */
+  private settingUp = new Set<string>();
+  /** worktrees whose start() is between its first proc spawn and its proxy */
+  private starting = new Set<string>();
 
   constructor(private deps: RuntimeDeps) {}
+
+  hold(id: string, tag: string): void {
+    let tags = this.holds.get(id);
+    if (!tags) {
+      tags = new Set();
+      this.holds.set(id, tags);
+    }
+    tags.add(tag);
+    this.deps.hub.emit("holdsChanged", id, tags.size);
+  }
+
+  release(id: string, tag: string): void {
+    const tags = this.holds.get(id);
+    if (!tags?.delete(tag)) return;
+    if (tags.size === 0) this.holds.delete(id);
+    this.deps.hub.emit("holdsChanged", id, tags.size);
+  }
+
+  holdCount(id: string): number {
+    return this.holds.get(id)?.size ?? 0;
+  }
+
+  markSetup(id: string, on: boolean): void {
+    if (on) this.settingUp.add(id);
+    else this.settingUp.delete(id);
+  }
+
+  /** Bring the worktree's procs up: respawn them if asleep, start them if cold, nothing if they
+   * are up or its setup is still running. Every edge that needs a worktree running comes here. */
+  async wake(id: string): Promise<void> {
+    const wt = this.deps.state.worktree(id);
+    if (!wt) return;
+    const rt = this.runtimes.get(id);
+    if (rt?.procs) {
+      if (!rt.procs.asleep) return;
+      rt.procs.wake();
+      log.info(id, "awake");
+      this.deps.hub.emit("worktreesChanged");
+      return;
+    }
+    if (this.settingUp.has(id)) return;
+    const repo = this.deps.state.repos.find((r) => r.id === wt.repoId);
+    if (repo) await this.start(wt, repo);
+  }
+
+  /** Stop the worktree's procs and nothing else: the proxy, its port, the agent, the shell and
+   * the login all stay, so its URL and its terminal are unchanged when it wakes. */
+  async sleep(id: string): Promise<void> {
+    const rt = this.runtimes.get(id);
+    if (!rt?.procs || rt.procs.asleep) return;
+    await rt.procs.sleep();
+    this.deps.hub.emit("worktreesChanged");
+  }
+
+  /** the preview target once its proc answers, or null when nothing is coming: no procs, a proc
+   * that crashed, stopped or never answered, or the deadline */
+  async awaitPreview(id: string, ms: number): Promise<ProxyTarget | null> {
+    const deadline = Date.now() + ms;
+    for (;;) {
+      const rt = this.runtimes.get(id);
+      if (!rt?.procs) return null;
+      const st = previewProcOf(rt.procs, rt.previewName);
+      if (st?.status === "running") return previewTargetOf(rt.procs, rt.previewName);
+      // no proc yet while start() is still spawning them counts as starting
+      const coming = st ? st.status === "starting" : this.starting.has(id);
+      if (!coming || Date.now() >= deadline) return null;
+      await Bun.sleep(PREVIEW_POLL_MS);
+    }
+  }
+
+  /** how many worktrees have procs up, and how many have them asleep, for /health */
+  tiers(): { awake: number; asleep: number } {
+    let awake = 0;
+    let asleep = 0;
+    for (const rt of this.runtimes.values()) {
+      if (!rt.procs) continue;
+      if (rt.procs.asleep) asleep++;
+      else awake++;
+    }
+    return { awake, asleep };
+  }
+
+  /** the worktrees whose procs are up, with each one's live process groups, for a cost sample */
+  awake(): Array<{ id: string; pgids: number[] }> {
+    const out: Array<{ id: string; pgids: number[] }> = [];
+    for (const [id, rt] of this.runtimes) {
+      if (rt.procs && !rt.procs.asleep) out.push({ id, pgids: rt.procs.pgids() });
+    }
+    return out;
+  }
+
+  isAsleep(id: string): boolean {
+    return this.runtimes.get(id)?.procs?.asleep ?? false;
+  }
 
   /** A shell at a path toyon does not run. Same contract as openTerminal's shell branch: spawned
    * on the first open and after it exits, resized before snapshotting so a TUI's redraw lands as
@@ -324,11 +449,16 @@ export class RuntimeRegistry {
       const urls = { ...procUrlEnv(procs.states(), previewName), ...worktreeEnv(wt, repo) };
       return { ...urls, ...expandEnv(run.env, urls) };
     };
-    for (const [name, cmd] of Object.entries(run.procs)) {
-      if (name !== previewName) await procs.start(name, cmd, envFor());
-    }
-    if (previewName && run.procs[previewName]) {
-      await procs.start(previewName, run.procs[previewName]!, envFor());
+    this.starting.add(wt.id);
+    try {
+      for (const [name, cmd] of Object.entries(run.procs)) {
+        if (name !== previewName) await procs.start(name, cmd, envFor());
+      }
+      if (previewName && run.procs[previewName]) {
+        await procs.start(previewName, run.procs[previewName]!, envFor());
+      }
+    } finally {
+      this.starting.delete(wt.id);
     }
 
     if (!this.deps.state.worktree(wt.id) || this.runtimes.get(wt.id) !== rt) {
@@ -337,7 +467,15 @@ export class RuntimeRegistry {
       await procs.stopAll();
       return;
     }
-    rt.proxy = (this.deps.makeProxy ?? defaultProxy)(live, previewName, procs, this.deps);
+    rt.proxy = (this.deps.makeProxy ?? defaultProxy)(live, previewName, procs, this.deps, {
+      // a request is someone using the preview: the worktree wakes for it, and the policy that
+      // decides when it sleeps hears about it
+      onRequest: () => {
+        this.deps.hub.emit("previewRequest", wt.id);
+        fireAndForget(wt.id, this.wake(wt.id), "wake on request");
+      },
+      ready: () => this.awaitPreview(wt.id, PREVIEW_WAKE_MS),
+    });
     this.deps.hub.emit("worktreesChanged");
   }
 
@@ -365,6 +503,8 @@ export class RuntimeRegistry {
 
   /** stop everything for a worktree and forget it */
   async stop(id: string): Promise<void> {
+    this.holds.delete(id);
+    this.settingUp.delete(id);
     const rt = this.runtimes.get(id);
     if (!rt) return;
     this.runtimes.delete(id);
@@ -508,6 +648,8 @@ export class RuntimeRegistry {
     if (stream === LOGIN_STREAM) {
       if (rt?.login) this.startLogin(id, rt.login.run);
     } else if (stream === SHELL_STREAM) await rt?.shell?.kill();
+    // asleep, the restart someone asked for in a proc's tab is the wake of the whole set
+    else if (rt?.procs?.asleep) await this.wake(id);
     else rt?.procs?.restart(stream);
   }
 
@@ -518,10 +660,7 @@ export class RuntimeRegistry {
   /** the preview proc only once it answers on its port — for fetching served source (vite-offset) */
   previewTarget(id: string): ProxyTarget | null {
     const rt = this.runtimes.get(id);
-    if (!rt?.procs) return null;
-    const t = previewTargetOf(rt.procs, rt.previewName);
-    const st = rt.procs.states().find((p) => p.port === t?.port);
-    return st?.status === "running" ? t : null;
+    return rt?.procs ? previewTargetOf(rt.procs, rt.previewName) : null;
   }
 
   async shutdown(): Promise<void> {

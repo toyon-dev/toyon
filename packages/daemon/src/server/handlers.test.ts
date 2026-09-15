@@ -26,6 +26,7 @@ import { GIT } from "../git/exec.ts";
 import { AfterLand } from "../repos/afterLand.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { type RouteFs, RouteService } from "../routes/service.ts";
+import { IdlePolicy } from "../runtime/idle.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
 import { ThemeStore } from "../themes/store.ts";
 import { ChatSearch } from "../worktrees/chats.ts";
@@ -122,6 +123,16 @@ function make() {
   const chosen: Array<string | null> = [];
   const restarts: number[] = [];
   const planArgs: Array<[prompt: string, cwd: string, agent: string]> = [];
+  // no clock and no intervals: what a view starts is the question here, never what sleeps
+  const idle = new IdlePolicy({
+    runtime,
+    state,
+    hub,
+    wake: (id) => repos.touch(id),
+    warmSpare: (repoId) => repos.warm(repoId),
+    sleepMs: null,
+    setInterval: () => {},
+  });
   const services: Services = {
     state,
     hub,
@@ -132,6 +143,7 @@ function make() {
     design,
     routes,
     runtime,
+    idle,
     exec,
     refs,
     chats,
@@ -156,6 +168,7 @@ function make() {
   const broadcasts: ServerMsg[] = [];
   const subs = new Set<string>();
   const terms = new Set<string>();
+  const views: Array<string | null> = [];
   const ctx: HandlerCtx = {
     reply: (m) => replies.push(m),
     broadcast: (m) => broadcasts.push(m),
@@ -165,10 +178,14 @@ function make() {
       return true;
     },
     unsubscribe: (id) => subs.delete(id),
+    view: (id) => {
+      views.push(id);
+      idle.view(ctx, id);
+    },
     watchTerminal: (id, stream) => terms.add(streamKey(id, stream)),
     unwatchTerminal: (id, stream) => terms.delete(streamKey(id, stream)),
   };
-  return { ...t, services, ctx, replies, broadcasts, subs, terms, planned, chosen, planArgs, restarts, ...f };
+  return { ...t, services, ctx, replies, broadcasts, subs, terms, views, planned, chosen, planArgs, restarts, ...f };
 }
 
 /** the repo registered, and its main row, which the file tests read and write through */
@@ -395,6 +412,27 @@ describe("handlers", () => {
     expect([...subs]).toEqual([main.id]);
     await dispatch({ t: "unsubscribe", worktreeId: main.id }, ctx, services);
     expect(subs.size).toBe(0);
+  });
+
+  test("subscribe alone starts nothing; view is what starts the worktree, and a hidden tab lets go", async () => {
+    const { services, ctx, views, repo } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    // registering opens the project, which starts main; cold again, the way a restart leaves it
+    await services.runtime.stopProcs(main.id);
+    await dispatch({ t: "subscribe", worktreeId: main.id }, ctx, services);
+    await new Promise((res) => setTimeout(res, 50));
+    expect(services.runtime.get(main.id)?.procs ?? null).toBeNull();
+    await dispatch({ t: "view", worktreeId: main.id }, ctx, services);
+    await new Promise((res) => setTimeout(res, 50));
+    expect(services.runtime.get(main.id)?.procs).toBeTruthy();
+    expect(services.idle.isViewed(main.id)).toBe(true);
+    expect(services.state.worktree(main.id)?.viewedAt).toBeGreaterThan(0);
+    await dispatch({ t: "view", worktreeId: null }, ctx, services);
+    expect(views).toEqual([main.id, null]);
+    expect(services.idle.isViewed(main.id)).toBe(false);
+    // a view of something toyon has no record for is fine: nothing to start
+    await dispatch({ t: "view", worktreeId: "nope" }, ctx, services);
   });
 
   test("subscribe to a discovered worktree streams its git status and starts nothing", async () => {

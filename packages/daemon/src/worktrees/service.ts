@@ -986,7 +986,23 @@ export class WorktreeService {
     wt: WorktreeInfo,
     repo: RepoInfo,
     depsSource = repo.path,
-    { setupCommands = true }: { setupCommands?: boolean } = {},
+    opts: { setupCommands?: boolean } = {},
+  ): Promise<void> {
+    // marked for the runtime so a wake meanwhile (a tab landing on the row) does not start procs
+    // on a tree whose deps are still being copied; the start at the end is this method's own
+    this.d.runtime.markSetup(wt.id, true);
+    try {
+      await this.setupThenStart(wt, repo, depsSource, opts);
+    } finally {
+      this.d.runtime.markSetup(wt.id, false);
+    }
+  }
+
+  private async setupThenStart(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    depsSource: string,
+    { setupCommands = true }: { setupCommands?: boolean },
   ): Promise<void> {
     // Copy-on-write where the fs allows it: `cp -c` (APFS clonefile), then GNU `--reflink=auto`
     // (btrfs/XFS), then a plain recursive copy (ext4). The log line records which

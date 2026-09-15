@@ -346,6 +346,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** receive this worktree's stream (agent events, logs, queue, git status); replies with a backfill */
   z.object({ t: z.literal("subscribe"), worktreeId: id }),
   z.object({ t: z.literal("unsubscribe"), worktreeId: id }),
+  /** the worktree this tab is showing, or null while it shows none or is hidden; sent again on
+   * reconnect. Looking is what keeps a worktree's dev servers running and what wakes them. */
+  z.object({ t: z.literal("view"), worktreeId: id.nullable() }),
   z.object({
     t: z.literal("chat"),
     worktreeId: id,

@@ -66,7 +66,16 @@ export function isBusy(w: WorktreeStatus): boolean {
   return w.agent === "working" || w.agent === "waiting";
 }
 
-export type DotState = "waiting" | "working" | "failed" | "landed" | "crashed" | "running" | "starting" | "idle";
+export type DotState =
+  | "waiting"
+  | "working"
+  | "failed"
+  | "landed"
+  | "crashed"
+  | "running"
+  | "starting"
+  | "asleep"
+  | "idle";
 
 export function dotClass(w: WorktreeStatus): DotState {
   // a worktree that needs you outranks one that is merely busy
@@ -81,6 +90,8 @@ export function dotClass(w: WorktreeStatus): DotState {
   if (w.procs.some((p) => p.status === "crashed" || p.status === "unreachable")) return "crashed";
   if (w.procs.some((p) => p.status === "running")) return "running";
   if (w.procs.some((p) => p.status === "starting")) return "starting";
+  // stopped by toyon because nobody was looking; it comes back when someone does
+  if (w.procs.some((p) => p.status === "asleep")) return "asleep";
   return "idle";
 }
 
@@ -92,6 +103,7 @@ const DOT_LABEL: Record<DotState, string> = {
   crashed: "Crashed",
   running: "Running",
   starting: "Starting",
+  asleep: "Asleep",
   idle: "Idle",
 };
 

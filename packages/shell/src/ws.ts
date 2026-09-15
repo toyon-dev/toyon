@@ -106,7 +106,9 @@ export class DaemonSocket {
     // frames are dropped outright: the pane re-opens itself on reconnect, and keystrokes replayed
     // into a fresh shell would be wrong.
     if (msg.t.startsWith("term-")) return;
-    const key = msg.t === "subscribe" || msg.t === "unsubscribe" ? `sub:${msg.worktreeId}` : null;
+    // one view: only where the tab is looking now matters, not where it looked while offline
+    const key =
+      msg.t === "subscribe" || msg.t === "unsubscribe" ? `sub:${msg.worktreeId}` : msg.t === "view" ? "view" : null;
     if (key) this.queue = this.queue.filter((q) => q.key !== key);
     this.queue.push({ key, raw });
     if (this.queue.length > QUEUE_MAX) this.queue.splice(0, this.queue.length - QUEUE_MAX);

@@ -1,7 +1,7 @@
 import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveTheme } from "@toyon/shared";
 import { agentItems } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
-import { appearanceLabel, nextUpdateMode, updatesDetail, updatesWhy } from "../../state/actions/settings.ts";
+import { appearanceLabel } from "../../state/actions/settings.ts";
 import { useDarkNow, useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveRepo } from "../../state/selectors.ts";
 import type { Action } from "../../state/store.ts";
@@ -28,7 +28,6 @@ export function KeysHelp() {
   const prefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
   const chatSide = useStore((s) => s.chatSide);
-  const updates = useStore((s) => s.updates);
   const dark = useDarkNow();
   const agents = useStore((s) => s.agents);
   const repo = useActiveRepo();
@@ -92,21 +91,6 @@ export function KeysHelp() {
             <span className="keys-d">chat side</span>
             <Button variant="field" mono onClick={() => dispatch({ a: "toggle-chat-side" })}>
               {chatSide}
-            </Button>
-          </div>
-          {/* Toyon itself, under its own heading: a row means what its section says, and keeping
-              current is not appearance. Three values in a fixed order, so a press steps to the next. */}
-          <div className="section-title keys-h">Toyon</div>
-          <div className="keys-setting">
-            <span className="keys-d">updates</span>
-            {/* what holds the setting back rides in the tip: the value stays short enough for the column */}
-            <Button
-              variant="field"
-              mono
-              data-tip={updatesWhy(updates) ?? undefined}
-              onClick={() => sock?.send({ t: "set-update-mode", mode: nextUpdateMode(updates.mode) })}
-            >
-              {updatesDetail(updates)}
             </Button>
           </div>
         </div>

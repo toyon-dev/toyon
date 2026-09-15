@@ -1,4 +1,4 @@
-import { resolveTheme, type ThemePrefs, type UpdateMode, type UpdateSettings } from "@toyon/shared";
+import { resolveTheme, type ThemePrefs } from "@toyon/shared";
 import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { darkNow, type State } from "../store.ts";
 import type { Deps } from "./deps.ts";
@@ -9,34 +9,6 @@ export const appearanceLabel: Record<ThemePrefs["mode"], string> = {
   system: "follow system",
   daylight: "follow daylight",
 };
-
-export const updateModeLabel: Record<UpdateMode, string> = {
-  automatic: "automatic",
-  ask: "ask first",
-  off: "off",
-};
-
-/** the setting a press steps to: three values in a fixed order, so the row is the switch */
-export function nextUpdateMode(mode: UpdateMode): UpdateMode {
-  return mode === "automatic" ? "ask" : mode === "ask" ? "off" : "automatic";
-}
-
-/** the updates row's value: the setting, and a word on what holds it back when something does */
-export function updatesDetail(u: UpdateSettings): string {
-  if (u.managed) return "off for this machine";
-  if (u.mode !== "off" && u.unreachable) return `${updateModeLabel[u.mode]}, can't check`;
-  return updateModeLabel[u.mode];
-}
-
-/** why the row reads as it does, for its tip; null when the value says it all. Toyon only asks the
- * registry the machine is set up for, so the way around one without toyon is the person's to take. */
-export function updatesWhy(u: UpdateSettings): string | null {
-  if (u.managed) return "TOYON_UPDATES=off is set where Toyon runs, so it never checks for or installs updates";
-  if (u.mode !== "off" && u.unreachable) {
-    return `npm could not get toyon from ${u.unreachable}. If you may install from the public registry, run npm install -g toyon --registry=https://registry.npmjs.org/`;
-  }
-  return null;
-}
 
 /** browser file dialog to raw theme text (the daemon parses JSONC and converts) */
 export function pickThemeFile(onText: (name: string, source: string) => void) {
@@ -52,7 +24,7 @@ export function pickThemeFile(onText: (name: string, source: string) => void) {
 
 export type SettingsState = Pick<
   State,
-  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent" | "chatSide" | "updates"
+  "themePrefs" | "themes" | "systemDark" | "daylight" | "agents" | "defaultAgent" | "chatSide"
 >;
 
 /** What the settings card holds, as a list: the gear's right-click and the palette's settings
@@ -95,14 +67,6 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
         label: "chat side",
         detail: s.chatSide,
         onClick: () => dispatch({ a: "toggle-chat-side" }),
-      },
-    ],
-    [
-      {
-        id: "updates",
-        label: "updates",
-        detail: updatesDetail(s.updates),
-        onClick: () => sock?.send({ t: "set-update-mode", mode: nextUpdateMode(s.updates.mode) }),
       },
     ],
     [

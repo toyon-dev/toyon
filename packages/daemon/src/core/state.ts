@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import type { AgentCommand, ModelChoice, RepoInfo, ThemePrefs, UpdateMode, WorktreeInfo } from "@toyon/shared";
+import type { AgentCommand, ModelChoice, RepoInfo, ThemePrefs, WorktreeInfo } from "@toyon/shared";
 import { UserError } from "./errors.ts";
 import { log } from "./log.ts";
 import { ensureDirs, type Paths } from "./paths.ts";
@@ -32,8 +32,6 @@ export interface PersistedState {
   /** per worktree, found ones included: the page files last opened there and what they held
    * (routes/seen.ts), so a page the agent changed afterwards can say so */
   seen?: Record<string, SeenRecord>;
-  /** what Toyon does on its own when a newer version is out; automatic when unset */
-  updateMode?: UpdateMode;
   /** the last update whose install failed, so the automatic path does not retry it every minute */
   updateFailed?: { version: string; at: number };
 }
@@ -274,14 +272,6 @@ export class StateStore {
   }
   setTheme(prefs: ThemePrefs) {
     this.state.theme = prefs;
-    this.save();
-  }
-
-  get updateMode(): UpdateMode {
-    return this.state.updateMode ?? "automatic";
-  }
-  setUpdateMode(mode: UpdateMode) {
-    this.state.updateMode = mode;
     this.save();
   }
 

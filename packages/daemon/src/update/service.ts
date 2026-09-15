@@ -1,16 +1,17 @@
-// Toyon keeping itself current. Each question is asked again rather than remembered: what is
-// installed (an install replaces the package's files under a daemon that keeps running the code it
-// started with), what the registry has, and whether now is a moment to act on either.
+// Toyon keeping itself current the way a site does: nobody is asked. Each question is asked again
+// rather than remembered: what is installed (an install replaces the package's files under a
+// daemon that keeps running the code it started with), what the registry has, and whether the
+// machine is idle enough to restart now.
 //
-// A press on the chip is the consent to restart, so it only waits out a chat mid-reply. The
-// automatic path asks more of the moment: no tab open for a while and nothing busy, so nobody is
-// there to watch their terminals and dev servers go. Either way the install runs right before the
-// restart, since it replaces the page files that open tabs load their code from.
+// Idle means no agent working, queued or holding a command, and none for a couple of minutes, so a
+// restart never lands between one message and the next. Open tabs are no reason to wait: they
+// reload onto the new version by themselves. The install runs right before the restart, since it
+// replaces the page files those tabs load their code from.
 //
-// Only the registry npm is set up for is ever asked or installed from. A machine whose registry
-// has no toyon is told so; TOYON_UPDATES=off turns all of it off for the machine.
+// Only the registry npm is set up for is ever asked or installed from. TOYON_UPDATES=off turns all
+// of it off for the machine.
 
-import { type InstallMethod, newer, type UpdateSettings, type UpdateState } from "@toyon/shared";
+import { type InstallMethod, newer, type UpdateState } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -21,19 +22,19 @@ const REFRESH_EVERY_MS = 60_000;
 const CHECK_EVERY_MS = 6 * 60 * 60_000;
 /** the first check waits out a boot, when the machine is busiest bringing worktrees back */
 const FIRST_CHECK_MS = 2 * 60_000;
-/** how long no tab has been open before the automatic path counts the moment as unwatched: long
- * enough that a tab closed and opened again is not a gap */
-const UNWATCHED_MS = 10 * 60_000;
-/** how long the automatic path leaves alone a version whose install failed */
+/** how long nothing has to have been busy before a restart: long enough that the gap between a
+ * reply and the next message is not mistaken for idle */
+const SETTLED_MS = 2 * 60_000;
+/** how long a version whose install failed is left alone */
 const RETRY_AFTER_MS = 24 * 60 * 60_000;
 
 export interface UpdateDeps {
   hub: Hub;
-  state: Pick<StateStore, "updateMode" | "updateFailed" | "setUpdateFailed">;
+  state: Pick<StateStore, "updateFailed" | "setUpdateFailed">;
   /** the version this process started as */
   running: string;
   method: InstallMethod;
-  /** TOYON_UPDATES=off: never check, never install, whatever the setting says */
+  /** TOYON_UPDATES=off: never check, never install */
   managed: boolean;
   /** the version installed on disk; null when it cannot be read, or there is no install to read */
   installed: () => Promise<string | null>;
@@ -52,28 +53,34 @@ export interface UpdateDeps {
   setTimeout?: (fn: () => void, ms: number) => void;
 }
 
+/** what `toyon doctor` reads about updates */
+export interface UpdateStatus {
+  managed: boolean;
+  /** the registry the last check could not get toyon from */
+  unreachable: string | null;
+  latest: string | null;
+}
+
 export class UpdateService {
   /** the version on disk, when it is not the one running */
   private installed: string | null = null;
   /** the registry's newest, when it is newer than the one running */
   private latest: string | null = null;
-  /** the registry the last check could not get toyon from */
   private unreachable: string | null = null;
   private installing = false;
   private failed: UpdateState["failed"] = null;
-  /** an update was pressed, or chosen by the automatic path: it goes once no chat is replying */
+  /** an update is going: it installs and restarts once no chat is replying */
   private wanted = false;
-  private shells = 0;
-  private unwatchedSince: number;
-  /** what tabs were last told; they start from hello, so a first read that finds nothing new tells
-   * nobody anything */
+  /** the last moment anything was busy. Boot counts, so nothing restarts in a daemon's first minutes. */
+  private busyAt: number;
+  /** what tabs were last told; they start from hello */
   private announced: string;
   private readonly now: () => number;
 
   constructor(private d: UpdateDeps) {
     this.now = d.now ?? Date.now;
-    this.unwatchedSince = this.now();
-    this.announced = this.key();
+    this.busyAt = this.now();
+    this.announced = JSON.stringify(this.get());
     const every =
       d.setInterval ??
       ((fn, ms) => {
@@ -88,18 +95,17 @@ export class UpdateService {
     every(() => fireAndForget("update", this.tick(), "update tick"), REFRESH_EVERY_MS);
     every(() => fireAndForget("update", this.check(), "update check"), CHECK_EVERY_MS);
     later(() => fireAndForget("update", this.check(), "update check"), FIRST_CHECK_MS);
+    // a turn starting or ending is activity either way, like a command taken or let go
     d.hub.on("agentStatus", () => {
+      this.busyAt = this.now();
       if (this.wanted) fireAndForget("update", this.proceed(), "update");
+    });
+    d.hub.on("holdsChanged", () => {
+      this.busyAt = this.now();
     });
   }
 
-  /** how many tabs are connected; the automatic path waits for none, for a while */
-  shellsConnected(n: number): void {
-    if (n === 0 && this.shells > 0) this.unwatchedSince = this.now();
-    this.shells = n;
-  }
-
-  /** once a minute: what is installed, and whether the automatic path acts now */
+  /** once a minute: what is installed, and whether now is the moment */
   async tick(): Promise<void> {
     await this.refresh();
     await this.auto();
@@ -113,14 +119,13 @@ export class UpdateService {
     this.announce();
   }
 
-  /** Ask the registry. Nothing is asked when updates are off, for the machine or in settings, or
-   * where this install cannot update. */
+  /** Ask the registry. Nothing is asked when updates are off for the machine, or where this install
+   * cannot update. */
   async check(): Promise<void> {
-    if (this.d.method === "none" || this.d.managed || this.d.state.updateMode === "off") return;
+    if (this.d.method === "none" || this.d.managed) return;
     const answer = await this.d.latest();
     if (answer.version === null) {
       this.unreachable = answer.registry;
-      this.announce();
       return;
     }
     this.unreachable = null;
@@ -129,20 +134,7 @@ export class UpdateService {
     await this.auto();
   }
 
-  /** the setting changed: off forgets what the registry said, anything else asks it now */
-  async modeChanged(): Promise<void> {
-    if (this.d.state.updateMode === "off") {
-      this.latest = null;
-      this.unreachable = null;
-      this.announce();
-      return;
-    }
-    this.announce();
-    await this.check();
-  }
-
-  /** The press on the chip: install the newest version known and restart onto it, or restart onto
-   * what an install elsewhere already put on disk. */
+  /** A press on the failed chip: try again now, without waiting for the machine to settle. */
   async updateNow(): Promise<void> {
     if (this.d.managed) throw new UserError("Updates are turned off for this machine (TOYON_UPDATES=off)");
     const target = this.target();
@@ -178,19 +170,23 @@ export class UpdateService {
     };
   }
 
-  settings(): UpdateSettings {
-    return { mode: this.d.state.updateMode, managed: this.d.managed, unreachable: this.unreachable };
+  status(): UpdateStatus {
+    return { managed: this.d.managed, unreachable: this.unreachable, latest: this.latest };
   }
 
   private async auto(): Promise<void> {
-    if (this.wanted || this.installing || this.d.managed || this.d.state.updateMode !== "automatic") return;
+    if (this.wanted || this.installing || this.d.managed) return;
     const target = this.target();
     if (target === null) return;
     if (this.needsInstall() && this.d.command(target) === null) return;
     const failed = this.d.state.updateFailed;
     if (failed?.version === target && this.now() - failed.at < RETRY_AFTER_MS) return;
-    if (this.shells > 0 || this.now() - this.unwatchedSince < UNWATCHED_MS || this.d.busy()) return;
-    log.info("update", `nobody is watching and nothing is busy: updating to ${target}`);
+    if (this.d.busy()) {
+      this.busyAt = this.now();
+      return;
+    }
+    if (this.now() - this.busyAt < SETTLED_MS) return;
+    log.info("update", `nothing is busy: updating to ${target}`);
     this.wanted = true;
     await this.proceed();
   }
@@ -240,13 +236,9 @@ export class UpdateService {
     this.announce();
   }
 
-  private key(): string {
-    return JSON.stringify([this.get(), this.settings()]);
-  }
-
   /** tell the tabs, when what they would be told has changed */
   private announce(): void {
-    const key = this.key();
+    const key = JSON.stringify(this.get());
     if (key === this.announced) return;
     this.announced = key;
     this.d.hub.emit("updateChanged");

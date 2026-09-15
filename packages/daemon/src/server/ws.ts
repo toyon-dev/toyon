@@ -137,6 +137,8 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     },
     /** resident memory of each awake worktree's procs at the last sample, KB */
     costs: s.idle.costs(),
+    /** whether updates are off for the machine, or the registry has no toyon: doctor says so */
+    updates: s.update.status(),
     sockets: [...sockets].map(
       (ws): SocketStats => ({ subs: [...ws.data.subs], sent: ws.data.sent, bytes: ws.data.bytes }),
     ),
@@ -272,10 +274,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
   s.hub.on("selfChanged", () => broadcast({ t: "self", self: s.self.get() }));
-  s.hub.on("updateChanged", () => {
-    broadcast({ t: "update", update: s.update.get() });
-    broadcast({ t: "update-settings", settings: s.update.settings() });
-  });
+  s.hub.on("updateChanged", () => broadcast({ t: "update", update: s.update.get() }));
   s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
   s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));
 
@@ -305,7 +304,6 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       visits: s.routes.historyAll(),
       self: s.self.get(),
       update: s.update.get(),
-      updates: s.update.settings(),
     } satisfies ServerMsg;
   };
 
@@ -344,7 +342,6 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
           return;
         }
         sockets.add(ws);
-        s.update.shellsConnected(sockets.size);
         send(ws, await helloFrame());
       },
       close(ws: ServerWebSocket<WsData>) {
@@ -353,7 +350,6 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
         // idle timeout and pings give it up, and whatever it was showing is released with it
         else s.idle.drop(ws.data);
         sockets.delete(ws);
-        s.update.shellsConnected(sockets.size);
       },
       async message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
         if (ws.data.preview) {

@@ -119,6 +119,19 @@ export async function doctor(): Promise<number> {
         ),
       );
     }
+    // updates only go through the registry npm is set up for, so a registry without toyon is said
+    // here rather than gone around
+    if (h.updates?.managed) {
+      lines.push(line(true, "updates", "off for this machine (TOYON_UPDATES=off)"));
+    } else if (h.updates?.unreachable) {
+      lines.push(
+        line(
+          false,
+          "updates",
+          `npm could not get toyon from ${h.updates.unreachable}, so Toyon cannot update itself; if you may use the public registry, run npm install -g toyon --registry=https://registry.npmjs.org/`,
+        ),
+      );
+    }
   }
 
   const token = readToken();

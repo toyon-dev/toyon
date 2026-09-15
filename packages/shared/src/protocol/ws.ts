@@ -27,7 +27,6 @@ import type {
   Theme,
   ThemePrefs,
   ToyonConfig,
-  UpdateSettings,
   UpdateState,
   WorktreeInfo,
   WorktreeStatus,
@@ -80,16 +79,12 @@ export type ServerMsg =
       self: SelfState | null;
       /** the installed Toyon is not the one running, or a restart is waiting; null the rest of the time */
       update: UpdateState | null;
-      /** what Toyon does on its own when a newer version is out, and what holds that back */
-      updates: UpdateSettings;
     }
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   /** the daemon fell behind the checkout it runs from, caught up, or started catching up */
   | { t: "self"; self: SelfState | null }
   /** an install landed under the running daemon, or a requested restart moved on */
   | { t: "update"; update: UpdateState | null }
-  /** the update setting, or what holds it back, changed */
-  | { t: "update-settings"; settings: UpdateSettings }
   /** the answer to a `zone`: whether the sun is down where that browser is, and when that changes.
    * Only the appearance mode that follows daylight reads it, and the shell asks again at `until`. */
   | { t: "daylight"; dark: boolean; until: number }
@@ -452,10 +447,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
    * the wait is announced in `update`. Every shell reconnects on its own, so this is the only frame
    * that answers by going away. */
   z.object({ t: z.literal("restart-daemon") }),
-  /** install the newest Toyon and restart onto it, once no chat is mid-reply: the press is the
-   * consent, so nothing asks again */
+  /** try a failed update again: install the newest Toyon and restart onto it once no chat is
+   * mid-reply */
   z.object({ t: z.literal("update-now") }),
-  z.object({ t: z.literal("set-update-mode"), mode: z.enum(["automatic", "ask", "off"]) }),
   /** fast-forward the main checkout (`worktreeId` is main's row) to its upstream */
   z.object({ t: z.literal("pull-main"), worktreeId: id }),
   /** save the editor's text only over `base`, the version it was read or last saved as (null: no

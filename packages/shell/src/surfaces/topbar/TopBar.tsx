@@ -357,26 +357,20 @@ function SelfOffer() {
   );
 }
 
-/** A newer Toyon is out or installed, or an update is under way. The press is the consent to
- * restart, so the daemon holds it until no chat is mid-reply rather than asking again. */
+/** Toyon updates itself without a word; this shows only when that needs a person: an install that
+ * failed, which a press tries again, or a pressed restart waiting on a reply. */
 function UpdateOffer() {
   const update = useStore((s) => s.update);
   const sock = useSock();
   const notice = updateNotice(update);
   if (!notice) return null;
-  const act = () => {
-    if (notice.action === "restart") sock?.send({ t: "restart-daemon" });
-    else if (notice.action === "update") sock?.send({ t: "update-now" });
-    else if (notice.copy) {
-      // a clipboard the browser refuses leaves the tip, which names what to run
-      navigator.clipboard.writeText(notice.copy).catch(() => {});
-    }
-  };
   return (
     <Offer
-      icon={notice.action === "restart" ? "reload" : "download"}
+      icon="reload"
       busy={notice.busy}
-      onClick={act}
+      onClick={() => {
+        if (notice.retry) sock?.send({ t: "update-now" });
+      }}
       {...tip(notice.text)}
     >
       {notice.word}

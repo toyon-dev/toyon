@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { InstallMethod, UpdateMode } from "@toyon/shared";
+import type { InstallMethod } from "@toyon/shared";
 import { Hub } from "../core/hub.ts";
 import { readVersion } from "./installed.ts";
 import { UpdateService } from "./service.ts";
@@ -14,7 +14,6 @@ function make(
   start: {
     installed?: string | null;
     latest?: string | null;
-    mode?: UpdateMode;
     method?: InstallMethod;
     managed?: boolean;
     installFails?: boolean;
@@ -32,7 +31,6 @@ function make(
   const working: string[] = [];
   const installs: string[][] = [];
   const state = {
-    updateMode: (start.mode ?? "automatic") as UpdateMode,
     updateFailed: undefined as { version: string; at: number } | undefined,
     setUpdateFailed(f: { version: string; at: number } | undefined) {
       state.updateFailed = f;
@@ -131,18 +129,18 @@ describe("UpdateService: what is installed", () => {
     expect(update.get()).toMatchObject({ installed: null, restarting: ["fix login"] });
   });
 
-  test("a hand install with nothing newer out restarts without installing", async () => {
-    const { update, installs, requests } = make({ installed: "0.3.0", mode: "ask" });
-    await update.refresh();
-    await update.updateNow();
+  test("a hand install restarts onto itself once the machine settles, with nothing to install", async () => {
+    const { update, advance, installs, requests } = make({ installed: "0.3.0" });
+    advance(3 * MIN);
+    await update.tick();
     expect(installs).toEqual([]);
     expect(requests()).toBe(1);
   });
 });
 
 describe("UpdateService: what is out", () => {
-  test("a newer version in the registry is offered, and an equal one is not", async () => {
-    const { update, publish } = make({ latest: "0.3.0", mode: "ask" });
+  test("a newer version in the registry is known, and an equal one is not", async () => {
+    const { update, publish } = make({ latest: "0.3.0" });
     await update.check();
     expect(update.get()).toMatchObject({ latest: "0.3.0", method: "npm" });
     publish("0.2.0");
@@ -150,67 +148,103 @@ describe("UpdateService: what is out", () => {
     expect(update.get()).toBeNull();
   });
 
-  test("with updates off, or no install to update, the registry is not asked", async () => {
-    const off = make({ latest: "0.3.0", mode: "off" });
-    await off.update.check();
-    expect(off.update.get()).toBeNull();
-    expect(off.registryAsks()).toBe(0);
-    const none = make({ latest: "0.3.0", method: "none" });
-    await none.update.check();
-    expect(none.registryAsks()).toBe(0);
+  test("where this install cannot update, the registry is not asked", async () => {
+    const { update, registryAsks } = make({ latest: "0.3.0", method: "none" });
+    await update.check();
+    expect(registryAsks()).toBe(0);
   });
 
-  test("a registry without toyon is named, nothing is offered, and an answer later clears it", async () => {
-    const { update, publish } = make({ mode: "ask" });
+  test("a registry without toyon is named for doctor, and an answer later clears it", async () => {
+    const { update, publish } = make();
     await update.check();
     expect(update.get()).toBeNull();
-    expect(update.settings()).toEqual({ mode: "ask", managed: false, unreachable: REGISTRY });
+    expect(update.status()).toEqual({ managed: false, unreachable: REGISTRY, latest: null });
     publish("0.3.0");
     await update.check();
-    expect(update.settings().unreachable).toBeNull();
-    expect(update.get()?.latest).toBe("0.3.0");
-  });
-
-  test("turning updates off forgets what the registry said", async () => {
-    const { update, state } = make({ latest: "0.3.0", mode: "ask" });
-    await update.check();
-    state.updateMode = "off";
-    await update.modeChanged();
-    expect(update.get()).toBeNull();
-    expect(update.settings().mode).toBe("off");
-  });
-
-  test("with nothing to go to, a press says Toyon is up to date", async () => {
-    const { update } = make();
-    await expect(update.updateNow()).rejects.toThrow("Toyon is up to date");
+    expect(update.status()).toEqual({ managed: false, unreachable: null, latest: "0.3.0" });
   });
 });
 
-describe("UpdateService: TOYON_UPDATES=off", () => {
-  test("the registry is never asked, nothing installs on its own, and a press is refused", async () => {
-    const { update, advance, installs, registryAsks } = make({ latest: "0.3.0", managed: true });
+describe("UpdateService: on its own", () => {
+  test("installs and restarts once nothing has been busy for a couple of minutes", async () => {
+    const { update, advance, installs, requests } = make({ latest: "0.3.0" });
+    // boot counts as busy: a check in a daemon's first minutes waits
+    await update.check();
+    expect(installs).toEqual([]);
+    advance(3 * MIN);
+    await update.tick();
+    expect(installs).toEqual([["npm", "install", "-g", "toyon@0.3.0"]]);
+    expect(requests()).toBe(1);
+  });
+
+  test("waits while anything is busy, and a little after", async () => {
+    const { update, advance, setBusy, installs } = make({ latest: "0.3.0" });
+    await update.check();
+    advance(3 * MIN);
+    setBusy(true);
+    await update.tick();
+    expect(installs).toEqual([]);
+    setBusy(false);
+    advance(1 * MIN);
+    await update.tick();
+    expect(installs).toEqual([]);
+    advance(2 * MIN);
+    await update.tick();
+    expect(installs).toHaveLength(1);
+  });
+
+  test("a reply settling is activity: the gap before the next message is not idle", async () => {
+    const { update, hub, advance, installs } = make({ latest: "0.3.0" });
+    await update.check();
+    advance(3 * MIN);
+    hub.emit("agentStatus", "w1", "idle");
+    await update.tick();
+    expect(installs).toEqual([]);
+    advance(3 * MIN);
+    await update.tick();
+    expect(installs).toHaveLength(1);
+  });
+
+  test("a failed install says why and what to run by hand, and that version is left alone for a day", async () => {
+    const { update, advance, state, installs, requests } = make({ latest: "0.3.0", installFails: true });
+    await update.check();
+    advance(3 * MIN);
+    await update.tick();
+    expect(update.get()?.failed).toEqual({
+      version: "0.3.0",
+      line: "npm error code EACCES",
+      command: "npm install -g toyon@0.3.0",
+    });
+    expect(state.updateFailed?.version).toBe("0.3.0");
+    expect(requests()).toBe(0);
+    advance(60 * MIN);
+    await update.tick();
+    expect(installs).toHaveLength(1);
+    advance(24 * 60 * MIN);
+    await update.tick();
+    expect(installs).toHaveLength(2);
+  });
+
+  test("an npx copy never installs", async () => {
+    const { update, advance, installs } = make({ latest: "0.3.0", method: "npx" });
     await update.check();
     advance(30 * MIN);
     await update.tick();
-    expect(registryAsks()).toBe(0);
     expect(installs).toEqual([]);
-    expect(update.settings()).toMatchObject({ managed: true });
-    await expect(update.updateNow()).rejects.toThrow("turned off for this machine");
   });
 });
 
-describe("UpdateService: a press", () => {
-  test("installs the newest version, then restarts onto it", async () => {
-    const { update, installs, requests } = make({ latest: "0.3.0", mode: "ask" });
+describe("UpdateService: a press on the failed chip", () => {
+  test("tries again at once, without waiting for the machine to settle", async () => {
+    const { update, installs, requests } = make({ latest: "0.3.0" });
     await update.check();
     await update.updateNow();
-    expect(installs).toEqual([["npm", "install", "-g", "toyon@0.3.0"]]);
+    expect(installs).toHaveLength(1);
     expect(requests()).toBe(1);
-    expect(update.get()?.installed).toBe("0.3.0");
   });
 
   test("waits out a chat mid-reply before installing, and goes when it settles", async () => {
-    const { update, hub, working, installs, requests } = make({ latest: "0.3.0", mode: "ask" });
+    const { update, hub, working, installs, requests } = make({ latest: "0.3.0" });
     await update.check();
     working.push("fix login");
     await update.updateNow();
@@ -223,84 +257,28 @@ describe("UpdateService: a press", () => {
     expect(requests()).toBe(1);
   });
 
-  test("a failed install says why and what to run by hand, and nothing restarts", async () => {
-    const { update, state, requests } = make({ latest: "0.3.0", mode: "ask", installFails: true });
-    await update.check();
-    await update.updateNow();
-    expect(update.get()?.failed).toEqual({
-      version: "0.3.0",
-      line: "npm error code EACCES",
-      command: "npm install -g toyon@0.3.0",
-    });
-    expect(state.updateFailed?.version).toBe("0.3.0");
-    expect(requests()).toBe(0);
+  test("with nothing to go to, says Toyon is up to date", async () => {
+    const { update } = make();
+    await expect(update.updateNow()).rejects.toThrow("Toyon is up to date");
   });
 
-  test("an npx copy is told the command rather than installed", async () => {
-    const { update, installs } = make({ latest: "0.3.0", method: "npx" });
+  test("an npx copy is told the command", async () => {
+    const { update } = make({ latest: "0.3.0", method: "npx" });
     await update.check();
-    expect(update.get()).toMatchObject({ latest: "0.3.0", method: "npx" });
     await expect(update.updateNow()).rejects.toThrow("npx toyon@0.3.0");
-    expect(installs).toEqual([]);
   });
 });
 
-describe("UpdateService: on its own", () => {
-  test("waits for no tab to have been open for a while and nothing to be busy", async () => {
-    const { update, advance, setBusy, installs, requests } = make({ latest: "0.3.0" });
-    update.shellsConnected(1);
+describe("UpdateService: TOYON_UPDATES=off", () => {
+  test("the registry is never asked, nothing installs, a press is refused, and doctor can say so", async () => {
+    const { update, advance, installs, registryAsks } = make({ latest: "0.3.0", managed: true });
     await update.check();
     advance(30 * MIN);
     await update.tick();
+    expect(registryAsks()).toBe(0);
     expect(installs).toEqual([]);
-
-    // the tab closes: its absence has to last before the moment counts as unwatched
-    update.shellsConnected(0);
-    advance(5 * MIN);
-    await update.tick();
-    expect(installs).toEqual([]);
-
-    advance(6 * MIN);
-    setBusy(true);
-    await update.tick();
-    expect(installs).toEqual([]);
-
-    setBusy(false);
-    await update.tick();
-    expect(installs).toHaveLength(1);
-    expect(requests()).toBe(1);
-  });
-
-  test("with updates set to ask, only a press updates", async () => {
-    const { update, advance, installs } = make({ latest: "0.3.0", mode: "ask" });
-    await update.check();
-    advance(30 * MIN);
-    await update.tick();
-    expect(installs).toEqual([]);
-    await update.updateNow();
-    expect(installs).toHaveLength(1);
-  });
-
-  test("a version whose install failed is left alone for a day", async () => {
-    const { update, advance, installs } = make({ latest: "0.3.0", installFails: true });
-    await update.check();
-    advance(11 * MIN);
-    await update.tick();
-    expect(installs).toHaveLength(1);
-    advance(60 * MIN);
-    await update.tick();
-    expect(installs).toHaveLength(1);
-    advance(24 * 60 * MIN);
-    await update.tick();
-    expect(installs).toHaveLength(2);
-  });
-
-  test("an npx copy never installs on its own", async () => {
-    const { update, advance, installs } = make({ latest: "0.3.0", method: "npx" });
-    await update.check();
-    advance(30 * MIN);
-    await update.tick();
-    expect(installs).toEqual([]);
+    expect(update.status().managed).toBe(true);
+    await expect(update.updateNow()).rejects.toThrow("turned off for this machine");
   });
 });
 

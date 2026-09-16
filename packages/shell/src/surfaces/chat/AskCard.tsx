@@ -8,8 +8,6 @@
 // and the click run the same handler, so nothing here is keyboard-only.
 
 import type { AskAnswer, AskQuestion } from "@toyon/shared";
-import DOMPurify from "dompurify";
-import { marked } from "marked";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
@@ -31,6 +29,7 @@ import {
   rowKey,
   setNote,
 } from "./ask.ts";
+import { renderMarkdown } from "./markdown.ts";
 
 type Ask = Extract<ChatItem, { kind: "ask" }>;
 
@@ -245,10 +244,7 @@ function PermissionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { k
   const card = useAskFocus(open);
   const sock = useSock();
   const worktreeId = useStore((s) => s.activeId);
-  const html = useMemo(
-    () => (ask.detail ? DOMPurify.sanitize(marked.parse(ask.detail, { async: false }) as string) : ""),
-    [ask.detail],
-  );
+  const html = useMemo(() => (ask.detail ? renderMarkdown(ask.detail) : ""), [ask.detail]);
   const decide = (choiceId: string) => {
     if (worktreeId && open) sock?.send({ t: "agent-decide", worktreeId, askId: item.id, choiceId });
   };

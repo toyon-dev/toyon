@@ -1,4 +1,4 @@
-import type { GitFileStatus } from "@toyon/shared";
+import { type GitFileStatus, isMarkdown } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { type EditorView, EMPTY_LOCAL, type OpenFile, type State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
@@ -32,7 +32,11 @@ export function listFiles(worktreeId: string, s: Pick<State, "local">, { sock, d
   sock.send({ t: "list-files", worktreeId });
 }
 
-const VIEWS: EditorView[] = ["diff", "file"];
+const VIEWS: EditorView[] = ["diff", "file", "preview"];
+
+/** the views a file has: a markdown file can be read rendered, and a file new to the branch has no diff */
+export const viewsOf = (path: string, added: boolean): EditorView[] =>
+  VIEWS.filter((v) => !(v === "preview" && !isMarkdown(path)) && !(v === "diff" && added));
 
 let lastSeq = 0;
 /** pairs a request with its answer; one counter for the page, so no two opens share a number */
@@ -66,12 +70,14 @@ export function fileItems(
   deps: Deps,
 ): MenuEntry[] {
   const { sock, dispatch } = deps;
-  const views: MenuItem[] = VIEWS.filter((v) => v !== showing && !(added && v === "diff")).map((v) => ({
-    id: `view:${v}`,
-    label: `view ${v}`,
-    onClick: () =>
-      showing ? dispatch({ a: "editor-view", v }) : openFile(deps, { worktreeId: wt.id, path, view: v, ref }),
-  }));
+  const views: MenuItem[] = viewsOf(path, added)
+    .filter((v) => v !== showing)
+    .map((v) => ({
+      id: `view:${v}`,
+      label: `view ${v}`,
+      onClick: () =>
+        showing ? dispatch({ a: "editor-view", v }) : openFile(deps, { worktreeId: wt.id, path, view: v, ref }),
+    }));
   const abs = `${wt.dir}/${path}`;
   const open = kept ? [] : editorItems(abs, () => sock?.send({ t: "reveal", worktreeId: wt.id, path }));
   const copy: MenuItem[] = [{ id: "copy-path", label: "copy path", onClick: () => copyText(abs) }];

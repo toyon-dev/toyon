@@ -1,7 +1,5 @@
 import { LOGIN_STREAM, type PickMeta } from "@toyon/shared";
-import DOMPurify from "dompurify";
-import { marked } from "marked";
-import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { openFile } from "../../state/actions/file.ts";
 import { blockedItems, messageItems } from "../../state/actions/message.ts";
@@ -21,6 +19,7 @@ import { wtDir } from "../util.ts";
 import { AskCard } from "./AskCard.tsx";
 import { runCalls, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
+import { useMarkdown } from "./markdown.ts";
 import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -28,53 +27,8 @@ import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./synt
 import { callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
 
-// a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
-// so it is coloured by the same seven. marked hands the block over before it escapes it, and
-// returning false hands one back in a language we have no grammar for.
-marked.use({
-  renderer: {
-    code({ text, lang }) {
-      const language = languageOf((lang ?? "").trim().toLowerCase().split(/\s+/)[0] ?? "", "");
-      if (!language) return false;
-      const body = paintCode(text, language)
-        .map((line) =>
-          line
-            .map((p) => (p.scope ? `<span class="sy-${p.scope}">${escapeHtml(p.text)}</span>` : escapeHtml(p.text)))
-            .join(""),
-        )
-        .join("\n");
-      return `<pre><code>${body}</code></pre>\n`;
-    },
-  },
-});
-
-const escapeHtml = (s: string) => s.replace(/[&<>]/g, (ch) => (ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : "&gt;"));
-
-const render = (text: string) => DOMPurify.sanitize(marked.parse(text, { async: false }) as string);
-
-/** parsing a long message on every streamed token is O(n²); while it streams, re-render at most
- * every ~100ms and settle immediately once the text stops changing */
-function useThrottledMarkdown(text: string): string {
-  const [html, setHtml] = useState(() => render(text));
-  const lastAt = useRef(0);
-  useEffect(() => {
-    const since = performance.now() - lastAt.current;
-    if (since >= 100) {
-      lastAt.current = performance.now();
-      setHtml(render(text));
-      return;
-    }
-    const t = setTimeout(() => {
-      lastAt.current = performance.now();
-      setHtml(render(text));
-    }, 100 - since);
-    return () => clearTimeout(t);
-  }, [text]);
-  return html;
-}
-
 function Markdown({ text, menu, marked }: { text: string; menu: () => MenuEntry[]; marked?: boolean }) {
-  const html = useThrottledMarkdown(text);
+  const html = useMarkdown(text);
   const cm = useContextMenu("chat");
   return (
     <div
@@ -331,7 +285,7 @@ export const ThoughtRow = memo(function ThoughtRow({
   /** the agent is thinking right now, rather than off doing what it decided */
   streaming?: boolean;
 }) {
-  const html = useThrottledMarkdown(item.text);
+  const html = useMarkdown(item.text);
   const word = streaming ? "Thinking" : "Thought";
   return (
     <Fold

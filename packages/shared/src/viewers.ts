@@ -11,3 +11,8 @@ const VIEWERS: [RegExp, FileViewer][] = [[/\.(png|jpe?g|gif|webp|avif|bmp|ico)$/
 export function viewerOf(path: string): FileViewer | null {
   return VIEWERS.find(([re]) => re.test(path))?.[1] ?? null;
 }
+
+/** a file the editor pane can also show rendered, beside its text and its diff */
+export function isMarkdown(path: string): boolean {
+  return /\.(md|markdown)$/i.test(path);
+}

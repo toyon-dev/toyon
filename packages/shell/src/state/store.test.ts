@@ -1252,6 +1252,18 @@ describe("the editor's open file", () => {
     expect(viewOf("", "b", "diff")).toBe("file");
   });
 
+  test("a markdown file opens to be read rendered, unless its diff or its text was asked for", () => {
+    const viewOf = (before: string, after: string, view?: EditorView) =>
+      run([hello(wt("a")), opening({ path: "docs/x.md", seq: 1, view }), readInto("docs/x.md", { before, after })])
+        .editor?.view;
+    expect(viewOf("a", "a")).toBe("preview");
+    expect(viewOf("a", "b")).toBe("diff");
+    expect(viewOf("a", "b", "file")).toBe("file");
+    expect(viewOf("", "b")).toBe("preview");
+    expect(viewOf("", "b", "diff")).toBe("preview");
+    expect(viewOf("", "b", "file")).toBe("file");
+  });
+
   test("opening the open file again keeps its text on screen while the fresh read is out", () => {
     const s = run([
       hello(wt("a")),

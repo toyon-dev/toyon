@@ -2,12 +2,19 @@ import { viewerOf } from "@toyon/shared";
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
-import { fileItems } from "../../state/actions/file.ts";
+import { fileItems, viewsOf } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
 import { useDispatch, useFileSync, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import type { EditorSync, FileSync } from "../../state/fileSync.ts";
 import { useTheme } from "../../state/selectors.ts";
-import { archivedPageOf, type EditorDisk, type EditorFile, localOf, worktreeById } from "../../state/store.ts";
+import {
+  archivedPageOf,
+  type EditorDisk,
+  type EditorFile,
+  type EditorView,
+  localOf,
+  worktreeById,
+} from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
@@ -16,6 +23,7 @@ import { Pane } from "../../ui/Pane.tsx";
 import { worktreeFileUrl } from "../../ws.ts";
 import { wtDir } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
+import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { OpenInMenu } from "./OpenInMenu.tsx";
 import "./editor.css";
 
@@ -26,6 +34,14 @@ const NO_SYNC: EditorSync = { attach: () => {}, edited: () => {}, saveNow: () =>
 
 /** a drag nobody starts: a pane on a phone's screen is not resized */
 const NO_DRAG = () => {};
+
+const VIEW_ICONS = { diff: "diff", file: "text", preview: "book" } as const;
+
+function viewTip(to: EditorView, from: EditorView): string {
+  if (to === "diff") return "Diff view: show what changed";
+  if (to === "preview") return "Preview: read it rendered";
+  return from === "diff" ? "File view: hide the diff" : "File view: edit the text";
+}
 
 /** the editor pane: the open file as its diff against main or on its own, with autosave, line-hover → preview highlight.
  * On a phone's `screen` it is the whole column, read-only and not resizable: the phone steers the
@@ -75,11 +91,11 @@ export function EditorPane({
   }, [worktreeId, path, cached, history, kept, sock]);
   const lineOff = cached?.offset ?? 0;
   const disk = editor.disk;
-  // until the first read decides, the toggle offers the file, as it does from a diff
+  // until the first read decides, the toggles offer what they would from a diff
   const view = editor.view ?? "diff";
-  const other = view === "file" ? "diff" : "file";
   // a file with nothing on the other side has no diff to switch to
   const added = disk?.before === "";
+  const others = viewsOf(path, added).filter((v) => v !== view);
   // a file the browser draws is drawn from the working tree; one only in git (a commit's copy, an
   // archived page) has no bytes to serve
   const viewer = history || kept ? null : viewerOf(path);
@@ -112,19 +128,21 @@ export function EditorPane({
       onToggleFull={onScreen ? undefined : onToggleFull}
       actions={
         <>
-          {/* names the view it switches to, as the full toggle beside it does */}
-          {!added && !viewer && (
-            <Button
-              variant="outline"
-              tone="quiet"
-              mono
-              className="deep-link"
-              onClick={() => dispatch({ a: "editor-view", v: other })}
-              data-tip={view === "file" ? "Diff view: show what changed" : "File view: hide the diff"}
-            >
-              <Icon name={other === "diff" ? "diff" : "text"} className="icon-inline" /> {other}
-            </Button>
-          )}
+          {/* each names the view it switches to, as the full toggle beside them does */}
+          {!viewer &&
+            others.map((v) => (
+              <Button
+                key={v}
+                variant="outline"
+                tone="quiet"
+                mono
+                className="deep-link"
+                onClick={() => dispatch({ a: "editor-view", v })}
+                data-tip={viewTip(v, view)}
+              >
+                <Icon name={VIEW_ICONS[v]} className="icon-inline" /> {v}
+              </Button>
+            ))}
           {!kept && <OpenInMenu absPath={absPath} onReveal={() => sock?.send({ t: "reveal", worktreeId, path })} />}
         </>
       }
@@ -145,6 +163,16 @@ export function EditorPane({
           <div className="empty">not a text file: open it in another editor</div>
         ) : disk.tooLarge ? (
           <div className="empty">too large to open here: open it in another editor</div>
+        ) : view === "preview" ? (
+          <MarkdownPreview
+            text={disk.after}
+            path={path}
+            worktreeId={worktreeId}
+            // a copy only git holds has no bytes on disk for its images to be served from
+            version={history || kept ? undefined : disk.version}
+            openSeq={editor.seq}
+            focus={editor.focus}
+          />
         ) : (
           <ErrorBoundary pane>
             <Suspense fallback={<div className="empty">loading {view}…</div>}>

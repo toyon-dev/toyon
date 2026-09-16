@@ -238,6 +238,9 @@
     --type-ui-phone: 400 15px / 1.5 var(--face-ui);
     --type-ui-lg: 400 20px / 28px var(--face-ui);
     --type-ui-xl: 400 24px / 32px var(--face-ui);
+    /* a document's title, in a markdown file read rendered. Its own size and not --type-ui-xl, which
+     is held for the one name typed and then read as a title on the first run. */
+    --type-heading: 400 26px / 34px var(--face-ui);
     --type-mono-sm: 400 var(--size-mono-sm) var(--face-mono);
     --type-mono: 400 var(--size-mono) var(--face-mono);
 

@@ -1,6 +1,7 @@
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { askAgent, mentionInChat, mentionOf, treeBox } from "../attach.ts";
 import type { Store } from "../context.tsx";
+import { readingView } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
 import { editorItems } from "./editor.ts";
 import { openFile } from "./file.ts";
@@ -21,7 +22,7 @@ export function treeItems(
   const chat: MenuItem[] = [
     ...(folder
       ? []
-      : [{ id: "open", label: "open", onClick: () => openFile(deps, { worktreeId, path, view: "file" }) }]),
+      : [{ id: "open", label: "open", onClick: () => openFile(deps, { worktreeId, path, view: readingView(path) }) }]),
     {
       id: "add-to-chat",
       label: "add to chat",

@@ -4,7 +4,7 @@ import { previewBus } from "../../app/previewBus.ts";
 import { fileItems, listFiles, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
-import { routeTarget, worktreeById } from "../../state/store.ts";
+import { readingView, routeTarget, worktreeById } from "../../state/store.ts";
 import { markHits } from "../../ui/highlight.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
@@ -84,7 +84,7 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
         } else {
           // a jump is to the file, which may not have changed at all; its diff is a menu item away,
           // and the changes list is where diffs are read
-          openFile({ sock, dispatch }, { worktreeId, path: r.path, view: "file" });
+          openFile({ sock, dispatch }, { worktreeId, path: r.path, view: readingView(r.path) });
           dispatch({ a: "close" });
         }
       }}

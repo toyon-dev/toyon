@@ -49,6 +49,10 @@
     inset: 0;
     outline: none;
   }
+  /* a markdown file read rendered: the document scrolls inside the body, the pane's head stays put */
+  .editor-preview {
+    overflow-y: auto;
+  }
   /* an image file, drawn whole: never larger than the body, never scaled past its own size */
   .editor-image {
     position: absolute;

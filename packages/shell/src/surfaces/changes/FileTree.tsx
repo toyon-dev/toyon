@@ -14,6 +14,7 @@ import { listFiles, openFile } from "../../state/actions/file.ts";
 import { treeItems, treeSpaceItems } from "../../state/actions/fileTree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
+import { readingView } from "../../state/store.ts";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -117,7 +118,8 @@ export function FileTree({
 
   // the file itself, as ⌘P opens it: the tree is not a list of changes, so no diff first
   const openAt = useCallback(
-    (path: string, focus: boolean) => openFile({ sock, dispatch }, { worktreeId, path, view: "file", focus }),
+    (path: string, focus: boolean) =>
+      openFile({ sock, dispatch }, { worktreeId, path, view: readingView(path), focus }),
     [worktreeId, sock, dispatch],
   );
   const press = useCallback(

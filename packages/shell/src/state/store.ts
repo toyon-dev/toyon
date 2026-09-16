@@ -55,6 +55,7 @@ import {
   draftRepoOf,
   isEditTool,
   isMain,
+  isMarkdown,
   isOwned,
   PROJECTS_FOLDER,
   railOrder,
@@ -401,8 +402,12 @@ function applyLayout(s: State, layout: Layout): State {
   return { ...s, layout, changesAuto: false };
 }
 
-/** what the editor pane draws for its file: the diff against main, or the file with none over it */
-export type EditorView = "diff" | "file";
+/** what the editor pane draws for its file: the diff against main, the file with none over it, or a
+ * markdown file rendered, read-only */
+export type EditorView = "diff" | "file" | "preview";
+
+/** the view a file opens in to be read rather than compared: a markdown file rendered, anything else as text */
+export const readingView = (path: string): EditorView => (isMarkdown(path) ? "preview" : "file");
 
 /** the file as the editor last read or saved it */
 export interface EditorDisk {
@@ -1371,10 +1376,16 @@ function reduce(s: State, action: Action): State {
         return e.disk ? said : { ...said, editor: null };
       }
       // With no view asked for, a changed file opens on its diff and an unchanged one has none to
-      // show. A file with nothing on the other side (new to the branch) is shown as the file whatever
-      // was asked: its diff would be every line added, which the changes row already says, over a
-      // phantom removed line that Monaco draws for the empty side.
-      const view = disk.before === "" ? "file" : (e.view ?? (disk.before === disk.after ? "file" : "diff"));
+      // show, so it opens to be read. A file with nothing on the other side (new to the branch) is
+      // never shown as its diff: that would be every line added, which the changes row already says,
+      // over a phantom removed line that Monaco draws for the empty side.
+      const reading = readingView(e.path);
+      const view =
+        disk.before === ""
+          ? e.view && e.view !== "diff"
+            ? e.view
+            : reading
+          : (e.view ?? (disk.before === disk.after ? reading : "diff"));
       return { ...s, editor: { ...e, view, disk } };
     }
     case "editor-conflict": {

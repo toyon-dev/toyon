@@ -78,7 +78,7 @@ A project with a page and an API behind it:
 {
   "setup": ["npm install"],
   "run": {
-    "web": "vite --port $PORT",
+    "web": "vite --port $PORT --strictPort",
     "api": "node --watch server.js"
   },
   "check": "npm test",

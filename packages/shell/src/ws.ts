@@ -1,4 +1,10 @@
-import { type ClientMsg, type ConnectFailure, type ServerMsg, WS_CLOSE_UNAUTHORIZED } from "@toyon/shared";
+import {
+  type ClientMsg,
+  type ConnectFailure,
+  type PairMint,
+  type ServerMsg,
+  WS_CLOSE_UNAUTHORIZED,
+} from "@toyon/shared";
 import { STORAGE } from "./state/keys.ts";
 
 function getToken(): string {
@@ -45,6 +51,18 @@ export async function restartDaemon(): Promise<string | null> {
     // the connection dropping is what a restart looks like from here; the caller watches for the
     // new daemon, and a daemon that was already gone shows as the socket's own failure
     return null;
+  }
+}
+
+/** A one-time code for a phone, or the line to show instead: the daemon's own refusal, or that it
+ * could not be reached. */
+export async function mintPair(): Promise<PairMint | string> {
+  try {
+    const r = await fetch("/pair", { method: "POST", headers: { authorization: `Bearer ${getToken()}` } });
+    if (!r.ok) return (await r.text()) || "Toyon did not make a code";
+    return (await r.json()) as PairMint;
+  } catch {
+    return "Toyon is not answering; try again once it is back.";
   }
 }
 

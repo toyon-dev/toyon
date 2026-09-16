@@ -3,11 +3,12 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Remote } from "@toyon/shared";
+import { type PairMint, type PairRedeem, pairLink, type Remote } from "@toyon/shared";
 import type { Server } from "bun";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
 import { log } from "../core/log.ts";
+import type { PairCodes } from "../core/pair.ts";
 import { door, grantCookie, passPreview, previewGrant, sameSecret } from "../core/remote.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewData, PreviewHandler } from "../runtime/proxy.ts";
@@ -54,6 +55,10 @@ export interface HttpOpts {
   bootstrap: () => Promise<unknown>;
   /** ask for a restart; answers a refusal, or null having restarted or queued behind a reply */
   restart: () => string | null;
+  /** the one-time codes a phone trades for the token */
+  pair: PairCodes;
+  /** a code was just redeemed */
+  onPaired: () => void;
 }
 
 /** a year, and never revalidate: for a name that cannot mean different bytes later */
@@ -160,6 +165,37 @@ export function createFetch(opts: HttpOpts) {
       if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
       const refused = opts.restart();
       return refused ? new Response(refused, { status: 409 }) : new Response(null, { status: 202 });
+    }
+
+    // A pairing code for a phone, asked for by something that already holds the token: the CLI or
+    // a shell. Only with a public name, since the link in the code names it and a phone has no
+    // other way to this machine.
+    if (url.pathname === "/pair" && req.method === "POST") {
+      if (!sameSecret(req.headers.get("authorization"), `Bearer ${opts.token}`)) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      if (!remote) {
+        return new Response("Set up `toyon remote` first; pairing needs a name a phone can reach.", { status: 400 });
+      }
+      const { code, ms } = opts.pair.mint();
+      const body: PairMint = { code, url: pairLink(remote.host, code), ms };
+      return Response.json(body, { headers: { "cache-control": NO_STORE } });
+    }
+
+    // The phone's side: the code for the token, and the preview grant with it as /bootstrap gives
+    // one. Only through the front for the public name, where the link in the code points; a page
+    // on this machine already has the token and has nothing to pair.
+    if (url.pathname === "/pair/redeem" && req.method === "POST") {
+      if (!remote || !remoteShell) return new Response("not found", { status: 404 });
+      const body = (await req.json().catch(() => ({}))) as { code?: unknown };
+      if (typeof body.code !== "string" || !opts.pair.redeem(body.code)) {
+        return new Response("code expired", { status: 401 });
+      }
+      opts.onPaired();
+      const reply: PairRedeem = { token: opts.token };
+      return Response.json(reply, {
+        headers: { "cache-control": NO_STORE, "set-cookie": grantCookie(grant, remote.host) },
+      });
     }
 
     if (url.pathname === "/register" && req.method === "POST") {

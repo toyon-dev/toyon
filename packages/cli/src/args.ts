@@ -15,6 +15,7 @@ export type Command =
   /** `to`: a host name, "off", or null to print the setting; `ports`: previews on ports of the name;
    * `tailscale`: take the name from Tailscale and set up tailscale serve for it */
   | { kind: "remote"; to: string | null; ports: boolean; tailscale: boolean }
+  | { kind: "pair" }
   | {
       kind: "deploy";
       provider: "fly";
@@ -36,6 +37,7 @@ const VERBS = new Set([
   "version",
   "uninstall",
   "remote",
+  "pair",
   "deploy",
   "help",
 ]);
@@ -53,6 +55,7 @@ export function parseArgs(argv: string[]): Command {
       case "update":
       case "doctor":
       case "version":
+      case "pair":
       case "help":
         if (rest.length > 0) return { kind: "error", message: `toyon ${first} takes no arguments` };
         return { kind: first };
@@ -181,6 +184,9 @@ usage
   toyon remote --tailscale
                           open the shell from your tailnet at this machine's Tailscale name:
                           sets up tailscale serve for Toyon and ports 10001-10008
+  toyon pair              print a QR code to scan with your phone's camera: it opens the shell
+                          at the remote name, signed in, and adds it to toyon.cloud; the code
+                          works once and lasts 2 minutes
   toyon deploy fly up <name> [--region code] [--repo url]
                           run Toyon on your own Fly account at https://name.fly.dev with your own
                           keys; --repo clones that repository onto it the first time

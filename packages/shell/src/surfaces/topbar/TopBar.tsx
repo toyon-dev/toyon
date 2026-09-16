@@ -107,6 +107,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
         )}
         <SelfOffer />
         <UpdateOffer />
+        <PairOffer />
       </span>
       {!chatCentred && (
         <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
@@ -377,6 +378,26 @@ function UpdateOffer() {
       {...tip(notice.text)}
     >
       {notice.word}
+    </Offer>
+  );
+}
+
+/** A machine with a public name that no phone has paired with yet: the chip says it can be opened
+ * on one, and opens the code to scan. Once any phone has paired it goes, and the app menu keeps the
+ * same row for the next phone. Never on a phone, which is the thing that would scan it. */
+function PairOffer() {
+  const dispatch = useDispatch();
+  const shown = useStore((s) => s.remote !== null && !s.paired && s.frame === "desk");
+  const open = useStore((s) => s.overlay?.kind === "pair");
+  if (!shown) return null;
+  return (
+    <Offer
+      icon="phone"
+      aria-expanded={open}
+      onClick={() => dispatch({ a: "toggle", overlay: { kind: "pair" } })}
+      {...tip("Scan a code with your phone to open this machine there, signed in")}
+    >
+      open on phone
     </Offer>
   );
 }

@@ -9,6 +9,7 @@ import { CommandPalette } from "./CommandPalette.tsx";
 import { ElementSources } from "./ElementSources.tsx";
 import { FolderPicker } from "./FolderPicker.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
+import { PairCard } from "./PairCard.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import { RefPicker } from "./RefPicker.tsx";
@@ -32,6 +33,7 @@ export function Overlays() {
       {overlay?.kind === "chats" && activeRepoId && <ChatsPicker repoId={activeRepoId} />}
       {overlay?.kind === "archived" && <ArchivePicker repoId={overlay.repoId} />}
       {overlay?.kind === "keys" && <KeysHelp />}
+      {overlay?.kind === "pair" && <PairCard />}
       {overlay?.kind === "theme" && <ThemePicker slot={overlay.slot} />}
       {overlay?.kind === "appearance" && <AppearancePicker />}
       {overlay?.kind === "agent" && <AgentPicker />}

@@ -102,6 +102,7 @@ function harness() {
     home: "/h",
     folderDialog: false,
     remote: null,
+    paired: false,
     gitIdentity: true,
     pending: [],
     visits: {},

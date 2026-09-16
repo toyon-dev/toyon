@@ -44,6 +44,7 @@ export type IconName =
   | "lock"
   | "pr"
   | "clock"
+  | "phone"
   | "dot";
 
 const ICON_PATHS: Record<IconName, string> = {
@@ -128,6 +129,10 @@ const ICON_PATHS: Record<IconName, string> = {
   // another tool holds this worktree. The shackle is drawn closed: a lock that reads as open says
   // the opposite of what the row means.
   lock: "M4.4 7.3h7.2v6.1H4.4z M6.2 7.3V5.5a1.8 1.8 0 0 1 3.6 0v1.8",
+  // a phone: a tall rounded body and a short bar at its foot, which is what keeps it from reading
+  // as a document at 16px
+  phone:
+    "M5.4 2.2h5.2a1.2 1.2 0 0 1 1.2 1.2v9.2a1.2 1.2 0 0 1-1.2 1.2H5.4a1.2 1.2 0 0 1-1.2-1.2V3.4a1.2 1.2 0 0 1 1.2-1.2z M7.1 11.6h1.8",
   // a pull request: the branch glyph's left rail, and a second rail arriving from the right with
   // an arrowhead, which is the one thing that separates it from `branch` at 16px
   pr: "M4.5 5.1v5.8 M4.5 1.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M4.5 10.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M11.5 10.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M11.5 10.9V6.6a2 2 0 0 0-2-2H8 M9.6 2.9 7.9 4.6l1.7 1.7",

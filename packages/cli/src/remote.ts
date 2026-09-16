@@ -14,6 +14,7 @@ import {
 import type { Command } from "./args.ts";
 import { health, home, port, remoteFile } from "./daemon.ts";
 import { openUrl } from "./openUrl.ts";
+import { printPairCode } from "./pair.ts";
 import { serveTailnet, TailscaleError, tailscaleCli, unserveTailnet } from "./tailscale.ts";
 
 function saved(): RemoteView | null {
@@ -94,6 +95,12 @@ export async function remote(cmd: Extract<Command, { kind: "remote" }>): Promise
     console.log(`add it to your list at toyon.cloud: ${add}`);
     openUrl(add);
   }
-  if (h && !same(h.remote, r)) console.log("the daemon reads this at start; `toyon stop` then `toyon` applies it");
+  if (h && !same(h.remote, r)) {
+    console.log("the daemon reads this at start; `toyon stop` then `toyon` applies it");
+    if (r) console.log("after that, `toyon pair` shows a code to scan with your phone");
+  } else if (h && r) {
+    const refused = await printPairCode();
+    if (refused) console.error(`toyon: ${refused}`);
+  }
   return 0;
 }

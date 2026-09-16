@@ -17,6 +17,7 @@ import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { lag, type SocketStats } from "../core/metrics.ts";
+import { PairCodes } from "../core/pair.ts";
 import { setWaitingColors } from "../runtime/proxy.ts";
 import { DEFAULT_AGENT_ID } from "../runtime/registry.ts";
 import { dispatch, type Services } from "./handlers.ts";
@@ -303,6 +304,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       home: homedir(),
       folderDialog: process.platform === "darwin" && !cloud.enabled,
       remote: opts.remote && { host: opts.remote.host, previews: opts.remote.previews },
+      paired: s.state.paired,
       gitIdentity: await s.repos.gitIdentity(),
       pending: s.repos.pending,
       visits: s.routes.historyAll(),
@@ -330,6 +332,11 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
       restart: () => s.restarter.request(),
+      pair: new PairCodes(),
+      onPaired: () => {
+        s.state.notePaired();
+        broadcast({ t: "paired" });
+      },
     }),
     websocket: {
       // a chat frame can carry ATTACHMENT_LIMITS.image images of IMAGE_MAX_BYTES each, base64; Bun's

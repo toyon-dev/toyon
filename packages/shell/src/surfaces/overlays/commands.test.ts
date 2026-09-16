@@ -52,6 +52,7 @@ describe("buildCommands", () => {
     defaultAgent: "claude",
     shipping: {},
     remote: null,
+    frame: "desk",
   } as unknown as CommandState;
 
   // the rows are keyed by id, so an id twice leaves a stale row behind when the list changes
@@ -85,6 +86,19 @@ describe("buildCommands", () => {
     } finally {
       g.window = saved;
     }
+  });
+  test("a desk with a public name offers a code for a phone; a phone and a local machine do not", () => {
+    const remote = { host: "box.tailnet.ts.net", previews: "https://box.tailnet.ts.net:{port}" };
+    const ids = (s: typeof state) => buildCommands(s, () => {}, null, wt, repo).map((c) => c.id);
+    expect(ids(state)).not.toContain("pair");
+    expect(ids({ ...state, remote, frame: "phone" })).not.toContain("pair");
+    const actions: unknown[] = [];
+    const pair = buildCommands({ ...state, remote }, (a) => actions.push(a), null, wt, repo).find(
+      (c) => c.id === "pair",
+    );
+    expect(pair?.label).toBe("open on your phone");
+    pair?.run();
+    expect(actions).toEqual([{ a: "open", overlay: { kind: "pair" } }]);
   });
   // the settings menu shows the theme rows as a group under a rule; the palette has no rules, so
   // the group is a word in front of each, and typing that word lists them all

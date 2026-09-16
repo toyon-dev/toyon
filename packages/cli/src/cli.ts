@@ -14,6 +14,7 @@ import { deploy } from "./deploy/fly.ts";
 import { doctor } from "./doctor.ts";
 import { logs } from "./logs.ts";
 import { openUrl } from "./openUrl.ts";
+import { pair } from "./pair.ts";
 import { remote } from "./remote.ts";
 import { restart } from "./restart.ts";
 import {
@@ -133,6 +134,8 @@ async function run(cmd: Command): Promise<number> {
       return uninstall(cmd);
     case "remote":
       return remote(cmd);
+    case "pair":
+      return pair();
     case "deploy":
       return deploy(cmd);
     case "open":

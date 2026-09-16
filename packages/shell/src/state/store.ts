@@ -280,6 +280,8 @@ export type Overlay =
   /** a project's removed worktrees: restore one, or delete it for good */
   | { kind: "archived"; repoId: string }
   | { kind: "keys" }
+  /** a one-time code for a phone, as a QR */
+  | { kind: "pair" }
   /** theme picker: which pref slot Enter writes */
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
   | { kind: "appearance" }
@@ -620,6 +622,10 @@ export interface State {
   /** hello's `remote`: the public name, and how previews are addressed when the shell was opened
    * through it */
   remote: RemoteView | null;
+  /** hello's `paired`: a phone has redeemed a code on this machine, so the bar stops offering one */
+  paired: boolean;
+  /** codes redeemed since this page loaded, so an open pairing card can tell its code was used */
+  pairings: number;
   /** hello's `gitIdentity`: git can commit without asking, so the new-project view need not */
   gitIdentity: boolean;
   /** toyon is running out of a checkout that has moved on without it: work landed there that the
@@ -759,6 +765,8 @@ export function initialState(opts: InitialOpts): State {
     home: "",
     folderDialog: false,
     remote: null,
+    paired: false,
+    pairings: 0,
     // the page never shows before hello, which is what says otherwise
     gitIdentity: true,
     self: null,
@@ -1716,6 +1724,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         home: msg.home,
         folderDialog: msg.folderDialog,
         remote: msg.remote,
+        paired: msg.paired,
         gitIdentity: msg.gitIdentity,
         newProject:
           s.newProject ??
@@ -1730,6 +1739,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
     }
     case "self":
       return { ...s, self: msg.self };
+    case "paired":
+      return { ...s, paired: true, pairings: s.pairings + 1 };
     case "update":
       return { ...s, update: msg.update };
     case "visits":

@@ -22,13 +22,38 @@
       // knowing the project rather than painting a placeholder and correcting it. The token is
       // where ws.ts will look for it: the fragment on a fresh link, storage on every load after.
       // Nothing here is trusted beyond the first paint; the socket's own hello replaces it.
+      //
+      // A phone that scanned a pairing code arrives with `#pair=` instead. The code is traded for
+      // the token before anything else, and the phone goes on to add this machine to toyon.cloud,
+      // which is where it opens from after that. The fragment leaves the address first, so a
+      // reload never spends the code twice; a spent code falls through to whatever token the
+      // phone already holds, and without one the page says how to get a new code.
       window.toyonBoot = (() => {
-        try {
+        const hello = () => {
           const token = (location.hash.match(/token=([a-f0-9]+)/) || [])[1] || localStorage.getItem("toyon-token");
           if (!token) return Promise.resolve(null);
           return fetch(`/bootstrap?token=${token}`)
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null);
+        };
+        try {
+          const code = (location.hash.match(/pair=([A-Za-z0-9_-]+)/) || [])[1];
+          if (!code) return hello();
+          history.replaceState(null, "", location.pathname + location.search);
+          return fetch("/pair/redeem", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code }),
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+            .then((paired) => {
+              if (!paired || !paired.token) return hello();
+              localStorage.setItem("toyon-token", paired.token);
+              location.replace(`https://toyon.cloud/#add=${encodeURIComponent(location.origin)}`);
+              // nothing paints while the page is leaving
+              return new Promise(() => {});
+            });
         } catch {
           return Promise.resolve(null);
         }

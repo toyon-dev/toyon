@@ -28,6 +28,8 @@ describe("parseArgs", () => {
     expect(parseArgs(["doctor"])).toEqual({ kind: "doctor" });
     expect(parseArgs(["version"])).toEqual({ kind: "version" });
     expect(parseArgs(["help"])).toEqual({ kind: "help" });
+    expect(parseArgs(["pair"])).toEqual({ kind: "pair" });
+    expect(parseArgs(["pair", "phone"]).kind).toBe("error");
     expect(parseArgs(["stop", "now"]).kind).toBe("error");
     expect(parseArgs(["restart", "now"]).kind).toBe("error");
   });

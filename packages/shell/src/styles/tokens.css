@@ -100,6 +100,10 @@
     --sunken-floor: #292725;
     --scrim: #32302db3;
     --shadow: #00000066;
+    /* a QR code is read by a camera, not a person: dark modules on a light ground with the most
+     contrast there is, in every theme, so these never follow the appearance */
+    --qr-ink: #000000;
+    --qr-paper: #ffffff;
     /* code sits on a wash of the text color instead of a background step: surface0 and surface1 are
      the same color in several themes (Rose Pine, Nord), so a chip painted in one of them would disappear
      into the column it sits on. Mixed at use time, so it follows the theme like everything else.

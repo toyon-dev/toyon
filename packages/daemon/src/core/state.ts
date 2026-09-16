@@ -34,6 +34,8 @@ export interface PersistedState {
   seen?: Record<string, SeenRecord>;
   /** the last update whose install failed, so the automatic path does not retry it every minute */
   updateFailed?: { version: string; at: number };
+  /** when a phone first redeemed a pairing code here; the desk stops offering one in the bar */
+  pairedAt?: number;
 }
 
 /** one page's standing in a repo's list: a count that decays, as of `last`, and the title the page
@@ -280,6 +282,16 @@ export class StateStore {
   }
   setUpdateFailed(failed: { version: string; at: number } | undefined) {
     this.state.updateFailed = failed;
+    this.save();
+  }
+
+  get paired(): boolean {
+    return this.state.pairedAt !== undefined;
+  }
+  /** the first redeem is the one worth keeping; later ones change nothing anyone reads */
+  notePaired() {
+    if (this.state.pairedAt !== undefined) return;
+    this.state.pairedAt = Date.now();
     this.save();
   }
 

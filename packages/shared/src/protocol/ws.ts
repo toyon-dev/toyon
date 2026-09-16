@@ -69,6 +69,9 @@ export type ServerMsg =
       /** the public name when there is one, and how a shell served from it reaches each preview:
        * `w<id>.<name>` routed by the daemon's own listener, or `<name>:<proxy port>` */
       remote: RemoteView | null;
+      /** a phone has redeemed a pairing code on this machine, at any time; until one has, the desk
+       * offers the code in the bar */
+      paired: boolean;
       /** git has a name and email to commit with. Making a project commits, and someone who has
        * never used git has neither, so the new-project page asks for them when this is false. */
       gitIdentity: boolean;
@@ -85,6 +88,8 @@ export type ServerMsg =
   | { t: "themes"; themes: Theme[]; prefs: ThemePrefs }
   /** the daemon fell behind the checkout it runs from, caught up, or started catching up */
   | { t: "self"; self: SelfState | null }
+  /** a pairing code was just redeemed, so the card showing it can say so */
+  | { t: "paired" }
   /** an install landed under the running daemon, or a requested restart moved on */
   | { t: "update"; update: UpdateState | null }
   /** the answer to a `zone`: whether the sun is down where that browser is, and when that changes.

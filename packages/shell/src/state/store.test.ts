@@ -110,6 +110,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     home: "/home/t",
     folderDialog: false,
     remote: null,
+    paired: false,
     gitIdentity: true,
     pending: [],
     visits: {},

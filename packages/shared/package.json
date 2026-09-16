@@ -10,10 +10,12 @@
     "./chords": "./src/chords.ts",
     "./ports": "./src/ports.ts",
     "./protocol/bridge": "./src/protocol/bridge.ts",
+    "./qr": "./src/qr.ts",
     "./themes": "./src/themes.ts",
     "./vscode-theme": "./src/vscode-theme.ts"
   },
   "dependencies": {
+    "qrcode-generator": "^2.0.4",
     "zod": "^4.5.4"
   },
   "sideEffects": false

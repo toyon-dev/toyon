@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Server } from "bun";
 import { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
+import { PairCodes } from "../core/pair.ts";
 import { previewGrant } from "../core/remote.ts";
 import type { RepoRegistry } from "../repos/registry.ts";
 import type { PreviewHandler } from "../runtime/proxy.ts";
@@ -48,6 +49,8 @@ const opts: HttpOpts = {
     restartsAsked++;
     return restartRefusal;
   },
+  pair: new PairCodes(),
+  onPaired: () => {},
 };
 const fetch = createFetch(opts);
 const req = (path: string, init: RequestInit & { host?: string } = {}) =>
@@ -66,6 +69,62 @@ describe("bootstrap", () => {
   test("refused without the token", async () => {
     expect((await fetch(req("/bootstrap"), srv()))?.status).toBe(401);
     expect((await fetch(req("/bootstrap?token=wrong"), srv()))?.status).toBe(401);
+  });
+});
+
+describe("pair", () => {
+  const name = "toyon.example.com";
+  let paired = 0;
+  const remote = createFetch({
+    ...opts,
+    remote: { host: name, previews: `https://w{id}.${name}`, front: "local" },
+    pair: new PairCodes(),
+    onPaired: () => paired++,
+  });
+  const https = { "x-forwarded-proto": "https" };
+  const mint = (auth = "Bearer secret") =>
+    remote(req("/pair", { method: "POST", headers: { authorization: auth } }), srv());
+  const redeem = (code: string, headers: Record<string, string> = https, host = name) =>
+    remote(req("/pair/redeem", { method: "POST", host, headers, body: JSON.stringify({ code }) }), srv());
+
+  test("a code needs the token, and a public name for its link", async () => {
+    expect((await mint("Bearer wrong"))?.status).toBe(401);
+    const local = await fetch(req("/pair", { method: "POST", headers: { authorization: "Bearer secret" } }), srv());
+    expect(local?.status).toBe(400);
+    expect(await local?.text()).toContain("toyon remote");
+  });
+
+  test("the phone trades the code for the token and the preview grant, once", async () => {
+    const r = await mint();
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("cache-control")).toContain("no-store");
+    const { code, url, ms } = (await r!.json()) as { code: string; url: string; ms: number };
+    expect(url).toBe(`https://${name}/#pair=${code}`);
+    expect(ms).toBeGreaterThan(0);
+
+    const before = paired;
+    const ok = await redeem(code);
+    expect(ok?.status).toBe(200);
+    expect(await ok?.json()).toEqual({ token: "secret" });
+    expect(ok?.headers.get("set-cookie")).toContain(`toyon_preview=${previewGrant("secret")}`);
+    expect(paired).toBe(before + 1);
+
+    const again = await redeem(code);
+    expect(again?.status).toBe(401);
+    expect(await again?.text()).toBe("code expired");
+    expect(paired).toBe(before + 1);
+  });
+
+  test("a redeem off the https front is refused before the code is spent", async () => {
+    const { code } = (await (await mint())!.json()) as { code: string };
+    expect((await redeem(code, {}))?.status).toBe(403);
+    expect((await redeem(code, https, "localhost"))?.status).toBe(404);
+    expect((await redeem(code))?.status).toBe(200);
+  });
+
+  test("a body without a code is expired, not an error", async () => {
+    const r = await remote(req("/pair/redeem", { method: "POST", host: name, headers: https, body: "nope" }), srv());
+    expect(r?.status).toBe(401);
   });
 });
 
@@ -414,6 +473,8 @@ describe("static shell", () => {
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
     restart: () => null,
+    pair: new PairCodes(),
+    onPaired: () => {},
   });
 
   test("a route falls back to index.html so the SPA can handle it", async () => {

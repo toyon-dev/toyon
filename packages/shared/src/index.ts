@@ -13,6 +13,7 @@ export * from "./drafts.ts";
 export * from "./land.ts";
 export * from "./launcher.ts";
 export * from "./model.ts";
+export * from "./pair.ts";
 export * from "./paste.ts";
 export * from "./ports.ts";
 export * from "./project.ts";

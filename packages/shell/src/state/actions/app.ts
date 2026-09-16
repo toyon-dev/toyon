@@ -15,6 +15,7 @@ export type AppState = Pick<
   | "rows"
   | "visible"
   | "remote"
+  | "frame"
   | "self"
   | "archivedPage"
   | "archived"
@@ -161,6 +162,14 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
   // A machine with a public name is listed at toyon.cloud per browser, so a phone or a second
   // laptop that opened it here adds it from here. The link carries the name, never the token.
   if (s.remote) {
+    // the code is for another device; a phone showing it would be asking itself to scan
+    if (s.frame === "desk") {
+      app.push({
+        id: "pair",
+        label: "open on your phone",
+        onClick: () => dispatch({ a: "open", overlay: { kind: "pair" } }),
+      });
+    }
     const link = launcherAddLink(`https://${s.remote.host}`);
     app.push({ id: "toyon-cloud", label: "add to toyon.cloud", onClick: () => window.open(link, "_blank") });
   }

@@ -617,18 +617,13 @@ export class WorktreeService {
    * record go, and its chat moves to the archive with the commits and uncommitted work kept under a
    * ref, so an archive can be undone and a landed branch's conversation brought back. Its draft
    * stays, under the same id. One archive per worktree at a time: a second caller waits on the
-   * first and gets its answer. `reason` is why it archived itself, when nobody asked, and `still` is
-   * that decision asked again once the slot is this call's, since the facts it was made on may have
-   * moved while the caller waited. Returns what was archived, if anything. */
-  archiveWorktree(
-    worktreeId: string,
-    opts: { reason?: string; still?: () => boolean } = {},
-  ): Promise<ArchivedWorktree | null> {
+   * first and gets its answer. `reason` is why it archived itself, when nobody asked. Returns what
+   * was archived, if anything. */
+  archiveWorktree(worktreeId: string, opts: { reason?: string } = {}): Promise<ArchivedWorktree | null> {
     const running = this.archiving.get(worktreeId);
     if (running) return running;
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || !canArchive(wt)) return Promise.resolve(null);
-    if (opts.still && !opts.still()) return Promise.resolve(null);
     const done = this.takeDown(wt, true, opts.reason).finally(() => this.archiving.delete(worktreeId));
     this.archiving.set(worktreeId, done);
     return done;

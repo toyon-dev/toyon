@@ -2,7 +2,7 @@
 // a message brings one back. The rule is shared (archiveRule.ts); this decides when to ask it, and
 // asks git only about the rows the facts it already has would let go.
 
-import { type ArchiveFacts, archiveReason, type WorktreeInfo } from "@toyon/shared";
+import { type ArchiveFacts, archiveReason } from "@toyon/shared";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { DraftStore } from "../drafts/store.ts";
@@ -98,16 +98,14 @@ export class ArchiveSweep {
       }
       const counts = (id: string) => fresh.get(id) ?? {};
       for (const w of maybe) {
+        // the rule again, on facts as they stand now: the archives before this one took seconds,
+        // and someone may have opened this row, typed in it or sent to it meanwhile. Nothing
+        // awaits between this answer and the archive taking its slot.
         const reason = archiveReason(w, this.facts(repo.id, counts));
         if (!reason) continue;
         log.info(w.id, `archiving on its own: ${reason}`);
         try {
-          // asked again in the archive's own slot: the archives before this one took seconds, and
-          // someone may have opened this row, typed in it or sent to it meanwhile
-          await this.d.worktrees.archiveWorktree(w.id, {
-            reason,
-            still: () => this.stillGoes(repo.id, w.id, counts),
-          });
+          await this.d.worktrees.archiveWorktree(w.id, { reason });
         } catch (e) {
           log.warn(w.id, "could not archive it", e);
         }
@@ -126,11 +124,5 @@ export class ArchiveSweep {
       drafted: (id) => this.d.drafts.has(id),
       counts,
     };
-  }
-
-  private stillGoes(repoId: string, id: string, counts: ArchiveFacts["counts"]): boolean {
-    const f = this.facts(repoId, counts);
-    const wt: WorktreeInfo | undefined = f.rows.find((w) => w.id === id);
-    return !!wt && archiveReason(wt, f) !== null;
   }
 }

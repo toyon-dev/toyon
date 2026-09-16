@@ -30,9 +30,7 @@ function make(worktrees: WorktreeInfo[], over: Partial<SweepDeps> = {}) {
     busy: () => false,
     drafts: { has: () => false },
     worktrees: {
-      // the service's own order: the re-check runs before anything is taken down
       archiveWorktree: async (id, opts = {}) => {
-        if (opts.still && !opts.still()) return null;
         archived.push([id, opts.reason]);
         return null;
       },
@@ -71,13 +69,12 @@ describe("ArchiveSweep", () => {
     expect(archived).toEqual([]);
   });
 
-  test("a row someone sends to while git is asked is kept: the rule runs again in the archive's slot", async () => {
+  test("a row someone sends to while git is asked is kept: the rule runs again once git has answered", async () => {
     let sent = false;
     const { sweep, archived } = make([task("old", 1), ...newer], {
       busy: (id) => id === "old" && sent,
       worktrees: {
         archiveWorktree: async (id, opts = {}) => {
-          if (opts.still && !opts.still()) return null;
           archived.push([id, opts.reason]);
           return null;
         },

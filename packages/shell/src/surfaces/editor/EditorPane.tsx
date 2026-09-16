@@ -18,6 +18,7 @@ import {
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
+import { useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { worktreeFileUrl } from "../../ws.ts";
@@ -28,6 +29,17 @@ import { OpenInMenu } from "./OpenInMenu.tsx";
 import "./editor.css";
 
 const Editor = lazy(() => import("./Editor.tsx"));
+
+/** A local read lands in a few milliseconds, and a line painted for that long is a flicker; it only
+ * says something once the wait is long enough to wonder about. */
+function Loading({ what }: { what: string }) {
+  if (!useSettled(true, 3000)) return null;
+  return (
+    <div className="empty">
+      <span className="live-text">loading {what}</span>
+    </div>
+  );
+}
 
 /** an editor with nothing behind it (no daemon in a test): it holds the text and saves nowhere */
 const NO_SYNC: EditorSync = { attach: () => {}, edited: () => {}, saveNow: () => {} };
@@ -150,7 +162,7 @@ export function EditorPane({
       {disk && <EditorNote editor={editor} disk={disk} files={files} />}
       <div className="editor-body">
         {!disk ? (
-          <div className="empty">loading {path}…</div>
+          <Loading key={path} what={path} />
         ) : viewer ? (
           <FileViewer
             kind={viewer}
@@ -175,7 +187,7 @@ export function EditorPane({
           />
         ) : (
           <ErrorBoundary pane>
-            <Suspense fallback={<div className="empty">loading {view}…</div>}>
+            <Suspense fallback={<Loading what={view} />}>
               <Editor
                 // one mount per file: the models it holds are that file's
                 key={`${worktreeId}\n${ref ?? ""}\n${path}`}

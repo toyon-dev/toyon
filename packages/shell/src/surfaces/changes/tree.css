@@ -22,19 +22,9 @@
     background-position: 18px 0;
     background-repeat: no-repeat;
     background-size: calc(var(--tree-depth, 0) * 14px) 100%;
-    /* the file open in the editor: the band and the edge, the pair every picked row carries. The
-     rails give way to the band, which is lighter than they are: left drawn they cross the one row
-     you picked as dark scratches. A hovered row needs no such rule, because its seat is the colour
-     the rails are drawn in. */
-    &[data-state~="current"] {
-      background-color: var(--element1);
-      background-image: none;
-      color: var(--text0);
-    }
-    &[data-state~="current"],
-    &[data-state~="cursor"] {
-      --row-edge-color: var(--accent);
-    }
+    /* The marked row is the panel's (changes.css). The rails give way to its band, which is lighter
+     than they are: left drawn they cross the one row you picked as dark scratches. A hovered row
+     needs no such rule, because its seat is the colour the rails are drawn in. */
     /* the status letter ends the row, where a name of any length leaves it in one column */
     & .xy {
       margin-left: auto;

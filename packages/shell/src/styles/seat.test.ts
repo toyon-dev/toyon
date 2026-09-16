@@ -40,7 +40,7 @@ const NOT_A_SEAT = [
 
 /** Seats whose element also carries .row, so base.css lifts them and they say nothing themselves.
  * A surface that paints its own seat and is not a .row is not on this list and declares the lift. */
-const IS_A_ROW = [".log-row", ".git-file", ".tree-row", ".rail-item", ".rail-disc-item", ".menu button"];
+const IS_A_ROW = [".changes-dock .row", ".rail-item", ".rail-disc-item", ".menu button"];
 
 const lifts = (decls: Map<string, string>) => LIFT.every(([prop, value]) => decls.get(prop) === value);
 

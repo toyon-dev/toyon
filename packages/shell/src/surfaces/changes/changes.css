@@ -40,10 +40,14 @@
     border-left: 1px solid var(--border0);
   }
 
-  /* one commit: the subject takes the row, the age ends it where a file row ends with its counts.
-   Marked, it takes the same band and edge a file does: the list marks one row, where you are, and
-   a mark is always the pair. Being expanded is no mark at all; the files under it say so. */
-  .log-row {
+  /* The row the panel marks, in any of its three lists: the file open in the editor, the commit
+   whose files are shown, or where the keyboard is. Marked, it takes the band and the edge, the
+   pair every picked row carries (the active worktree, the open tool call). The cursor takes the
+   edge alone: on a file, moving it also opens the file, so the cursor and the open file are the
+   same row nearly always, and a ring stacked on the band hid the band and read as a second,
+   unrelated kind of selection. Being expanded is no mark at all; the files under a commit say
+   so. The tree's rails are a background image, and the band's shorthand is what clears them. */
+  .changes-dock .row {
     &[data-state~="current"] {
       background: var(--element1);
       color: var(--text0);
@@ -52,6 +56,10 @@
     &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
     }
+  }
+
+  /* one commit: the subject takes the row, the age ends it where a file row ends with its counts */
+  .log-row {
     & .subject {
       flex: 1;
       min-width: 0;
@@ -78,21 +86,7 @@
     padding: 10px 12px 4px;
   }
 
-  /* the file open in the editor: picked, so element1 and the accent edge, the same pair the active
-   worktree and the open tool call carry. */
-
   .git-file {
-    &[data-state~="current"] {
-      background: var(--element1);
-      color: var(--text0);
-    }
-    /* where the keyboard is. Moving the cursor also opens the file, so the cursor and the open file
-   are the same row nearly always; it takes the same edge rather than a ring stacked on top of the
-   band, which hid the band and read as a second, unrelated kind of selection. */
-    &[data-state~="current"],
-    &[data-state~="cursor"] {
-      --row-edge-color: var(--accent);
-    }
     & .xy {
       width: 18px;
     }

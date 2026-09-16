@@ -28,7 +28,11 @@ import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { OpenInMenu } from "./OpenInMenu.tsx";
 import "./editor.css";
 
-const Editor = lazy(() => import("./Editor.tsx"));
+// the grammars come in with the editor, and a file is only shown once they can colour it
+const Editor = lazy(async () => {
+  const [editor] = await Promise.all([import("./Editor.tsx"), import("./grammar.ts").then((g) => g.grammarsReady)]);
+  return editor;
+});
 
 /** A local read lands in a few milliseconds, and a line painted for that long is a flicker; it only
  * says something once the wait is long enough to wonder about. */

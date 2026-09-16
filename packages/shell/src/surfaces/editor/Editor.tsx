@@ -17,8 +17,10 @@ import { selectedLines } from "../../app/copiedSource.ts";
 import type { EditorSync, SyncBuffer } from "../../state/fileSync.ts";
 import type { EditorDisk, EditorView, FileRef } from "../../state/store.ts";
 import { useOnChange } from "../../ui/hooks.ts";
+import { registerGrammars } from "./grammar.ts";
 import { minimalEdit } from "./minimalEdit.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
+import { languageFor, registerTsx } from "./tsx.ts";
 
 // monaco 0.56 moved the TS language API off `monaco.languages.typescript` (now a deprecated stub)
 // to a top-level `typescript` export
@@ -60,6 +62,10 @@ function shellType() {
     fontSize: Number.parseFloat(s.getPropertyValue("--size-mono-sm")) || 11,
   };
 }
+
+// the tsx language first: a tokens provider can only be set for a language Monaco already knows
+registerTsx();
+registerGrammars(monaco);
 
 const THEME = "toyon";
 monaco.editor.defineTheme(THEME, toMonacoTheme(toyonDark));
@@ -201,8 +207,16 @@ export default function Editor({
     if (!el) return;
     const s = sync;
     const scope = `/${file.worktreeId}/${file.ref ?? "work"}`;
-    const modified = monaco.editor.createModel(disk.after, undefined, monaco.Uri.file(`${scope}/after/${file.path}`));
-    const original = monaco.editor.createModel(disk.before, undefined, monaco.Uri.file(`${scope}/before/${file.path}`));
+    const modified = monaco.editor.createModel(
+      disk.after,
+      languageFor(file.path),
+      monaco.Uri.file(`${scope}/after/${file.path}`),
+    );
+    const original = monaco.editor.createModel(
+      disk.before,
+      languageFor(file.path),
+      monaco.Uri.file(`${scope}/before/${file.path}`),
+    );
     // a model reads bracket colouring when it is made, and these are made before any editor has
     // pushed its options, so the editor's `bracketPairColorization` never reaches them
     for (const m of [modified, original])

@@ -1,12 +1,21 @@
 import { launcherAddLink } from "@toyon/shared";
 import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
-import { isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
+import { changesTabShown, isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
 import type { Deps } from "./deps.ts";
 
 export type AppState = Pick<
   State,
-  "layout" | "railOpen" | "activeId" | "activeRepoId" | "repos" | "rows" | "remote" | "self"
+  | "layout"
+  | "railOpen"
+  | "activeId"
+  | "activeRepoId"
+  | "repos"
+  | "rows"
+  | "remote"
+  | "self"
+  | "archivedPage"
+  | "archived"
 >;
 
 /** The app's own actions, in three groups: somewhere to go, the panels, and the app itself. What
@@ -70,11 +79,11 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
     },
     {
       id: "files",
-      label: `${show(s.layout.changes && s.layout.changesTab === "files")} files`,
+      label: `${show(s.layout.changes && changesTabShown(s) === "files")} files`,
       key: chord("files"),
       onClick: () =>
         dispatch(
-          s.layout.changes && s.layout.changesTab === "files"
+          s.layout.changes && changesTabShown(s) === "files"
             ? { a: "toggle-changes" }
             : { a: "focus-changes", tab: "files" },
         ),

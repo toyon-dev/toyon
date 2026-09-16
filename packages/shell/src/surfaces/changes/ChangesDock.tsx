@@ -12,7 +12,7 @@ import {
   useFirstRun,
   useLocalField,
 } from "../../state/selectors.ts";
-import { type ChangesTab, repoById } from "../../state/store.ts";
+import { type ChangesTab, changesTabShown, repoById } from "../../state/store.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { step } from "../../ui/listNav.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
@@ -62,10 +62,7 @@ export function ChangesDock({ width }: { width: number }) {
   const committed = gitInfo?.committed ?? NO_FILES;
   const clean = files.length === 0;
 
-  const storedTab = useStore((s) => s.layout.changesTab);
-  // an archived page has no checkout to list, so it shows its changes and leaves the kept tab be:
-  // leaving the page brings the files tab back
-  const tab: ChangesTab = archived && storedTab === "files" ? "changes" : storedTab;
+  const tab = useStore(changesTabShown);
   const setTab = useCallback((v: ChangesTab) => dispatch({ a: "changes-tab", v }), [dispatch]);
   const tabRef = useRef(tab);
   tabRef.current = tab;

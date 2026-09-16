@@ -909,7 +909,13 @@ function activate(s: State, id: string | null): State {
 }
 
 /** the archived worktree whose page is up, if its project is the one on screen and it is still listed */
-export function archivedPageOf(s: State): ArchivedWorktree | null {
+/** the tab the changes panel shows: the kept one, except on an archived page, which has no checkout
+ * to list, so its files tab reads as changes and the kept tab is back when the page closes */
+export function changesTabShown(s: Pick<State, "layout" | "archivedPage" | "activeRepoId" | "archived">): ChangesTab {
+  return archivedPageOf(s) && s.layout.changesTab === "files" ? "changes" : s.layout.changesTab;
+}
+
+export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | "archived">): ArchivedWorktree | null {
   if (!s.archivedPage || !s.activeRepoId) return null;
   return s.archived[s.activeRepoId]?.find((a) => a.id === s.archivedPage) ?? null;
 }

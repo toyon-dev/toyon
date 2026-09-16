@@ -2,7 +2,7 @@ import { type ChordId, LOGIN_STREAM, matchChord, SHELL_STREAM, worktreeIndex } f
 import { useEffect } from "react";
 import { markUnread } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
-import { isChatCentred, isSubPicker, localOf, previewIdOf, routeTarget } from "../state/store.ts";
+import { changesTabShown, isChatCentred, isSubPicker, localOf, previewIdOf, routeTarget } from "../state/store.ts";
 import type { PaneKind } from "../ui/Pane.tsx";
 import { previewBus, togglePick } from "./previewBus.ts";
 import { PEEK_FALLBACK_MS, type WalkModifier, walkModifier } from "./railPeek.ts";
@@ -168,7 +168,7 @@ export function useChords() {
             break;
           case "files":
             dispatch(
-              s.layout.changes && s.layout.changesTab === "files" && inside(".tree")
+              s.layout.changes && changesTabShown(s) === "files" && inside(".tree")
                 ? { a: "toggle-changes" }
                 : { a: "focus-changes", tab: "files" },
             );

@@ -27,6 +27,13 @@ export function attachmentUrl(worktreeId: string, file: string): string {
   return `/attachments/${worktreeId}/${file}?token=${getToken()}`;
 }
 
+/** where the daemon serves a file in a worktree for the editor pane's viewer. `version` names the
+ * bytes the pane last read, so a change on disk is a new address and the browser fetches it again. */
+export function worktreeFileUrl(worktreeId: string, path: string, version: string | null): string {
+  const rel = path.split("/").map(encodeURIComponent).join("/");
+  return `/files/${worktreeId}/${rel}?token=${getToken()}&v=${encodeURIComponent(version ?? "")}`;
+}
+
 /** Ask the daemon to restart over plain HTTP, for a page whose socket stopped at a protocol mismatch.
  * Answers the daemon's refusal, or null once it has taken the request. */
 export async function restartDaemon(): Promise<string | null> {

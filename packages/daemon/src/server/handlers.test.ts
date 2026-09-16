@@ -1366,6 +1366,20 @@ describe("handlers", () => {
     expect(lastOf(replies, "file-written")).toMatchObject({ seq: 4, ok: false, reason: "refused" });
   });
 
+  test("a file a viewer draws is found in the worktree; anything else is not", async () => {
+    const { services, repo } = make();
+    const main = await mainOf(services, repo);
+    await Bun.write(join(repo, "pic.PNG"), new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+    await Bun.write(join(repo, "notes.txt"), "hi");
+    mkdirSync(join(repo, "dir.png"));
+    expect(await services.files.viewableFile(main.id, "pic.PNG")).toEndWith("/pic.PNG");
+    expect(await services.files.viewableFile(main.id, "notes.txt")).toBeNull();
+    expect(await services.files.viewableFile(main.id, "gone.png")).toBeNull();
+    expect(await services.files.viewableFile(main.id, "dir.png")).toBeNull();
+    expect(await services.files.viewableFile(main.id, "../outside.png")).toBeNull();
+    expect(await services.files.viewableFile("nope", "pic.PNG")).toBeNull();
+  });
+
   test("a file over the cap reads as too large, with no text", async () => {
     const { services, ctx, replies, repo } = make();
     const main = await mainOf(services, repo);

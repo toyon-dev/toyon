@@ -37,6 +37,9 @@ export interface HttpOpts {
   /** an image from an archived worktree's chat, which the store no longer holds; null when the
    * id or name is not one of ours */
   archivedAttachment: (worktreeId: string, file: string) => string | null;
+  /** a file in a worktree the browser draws (an image), for the editor pane's viewer; null when
+   * the path is not one */
+  worktreeFile: (worktreeId: string, path: string) => Promise<string | null>;
   /** whether the portless http://toyon.localhost listener came up (known after bind) */
   branded: () => boolean;
   /** event-loop lag + per-socket traffic, for /health */
@@ -190,6 +193,25 @@ export function createFetch(opts: HttpOpts) {
       const path = places.find((p): p is string => !!p && existsSync(p));
       if (!path) return new Response("not found", { status: 404 });
       return new Response(Bun.file(path), { headers: { "cache-control": IMMUTABLE } });
+    }
+
+    // a file in a worktree the browser draws (an image), for the editor pane's viewer. Token in the
+    // query for the same <img> reason. The bytes under a path change as the agent
+    // works, so nothing is kept; nosniff holds the type to the extension the service checked.
+    if (url.pathname.startsWith("/files/")) {
+      if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
+      const [worktreeId, ...rest] = url.pathname.slice("/files/".length).split("/");
+      let rel = "";
+      try {
+        rel = rest.map(decodeURIComponent).join("/");
+      } catch {
+        // a malformed escape names no file: the 404 below
+      }
+      const path = worktreeId && rel ? await opts.worktreeFile(worktreeId, rel) : null;
+      if (!path) return new Response("not found", { status: 404 });
+      return new Response(Bun.file(path), {
+        headers: { "cache-control": NO_STORE, "x-content-type-options": "nosniff" },
+      });
     }
 
     // static shell

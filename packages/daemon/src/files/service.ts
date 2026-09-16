@@ -5,7 +5,7 @@
 import { spawn } from "node:child_process";
 import type { Stats } from "node:fs";
 import { stat, unlink } from "node:fs/promises";
-import { type ElementTraits, FILE_MAX_CHARS, type SearchHit } from "@toyon/shared";
+import { type ElementTraits, FILE_MAX_CHARS, type SearchHit, viewerOf } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { GIT, git, run } from "../git/exec.ts";
@@ -135,6 +135,20 @@ export class FileService {
       version: bytes && versionOf(bytes),
       writable: owned && !text.binary && !text.tooLarge,
     };
+  }
+
+  /** where a file the browser draws (an image) sits in the working tree, for the editor pane's
+   * viewer; null when the path names nothing a viewer takes, is not a file, or leaves the worktree */
+  async viewableFile(worktreeId: string, path: string): Promise<string | null> {
+    const r = this.readable(worktreeId);
+    if (!r || viewerOf(path) === null) return null;
+    try {
+      const target = resolveInside(r.path, path);
+      return (await statFile(target)) ? target : null;
+    } catch {
+      // a path outside the worktree, or a directory, is a 404 the same as one that is not there
+      return null;
+    }
   }
 
   /** the writes, unlike the reads, want a worktree toyon actually runs. Autosave and discard fire

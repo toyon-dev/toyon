@@ -1,3 +1,4 @@
+import { viewerOf } from "@toyon/shared";
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
@@ -12,7 +13,9 @@ import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
+import { worktreeFileUrl } from "../../ws.ts";
 import { wtDir } from "../util.ts";
+import { FileViewer } from "./FileViewer.tsx";
 import { OpenInMenu } from "./OpenInMenu.tsx";
 import "./editor.css";
 
@@ -68,6 +71,9 @@ export function EditorPane({
   const other = view === "file" ? "diff" : "file";
   // a file with nothing on the other side has no diff to switch to
   const added = disk?.before === "";
+  // a file the browser draws is drawn from the working tree; one only in git (a commit's copy, an
+  // archived page) has no bytes to serve
+  const viewer = history || kept ? null : viewerOf(path);
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   return (
@@ -97,7 +103,7 @@ export function EditorPane({
       actions={
         <>
           {/* names the view it switches to, as the full toggle beside it does */}
-          {!added && (
+          {!added && !viewer && (
             <Button
               variant="outline"
               tone="quiet"
@@ -117,6 +123,8 @@ export function EditorPane({
       <div className="editor-body">
         {!disk ? (
           <div className="empty">loading {path}…</div>
+        ) : viewer ? (
+          <FileViewer kind={viewer} src={worktreeFileUrl(worktreeId, path, disk.version)} path={path} />
         ) : disk.binary ? (
           <div className="empty">not a text file: open it in another editor</div>
         ) : disk.tooLarge ? (

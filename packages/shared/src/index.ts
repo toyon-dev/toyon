@@ -26,5 +26,6 @@ export * from "./routes.ts";
 export * from "./sandbox.ts";
 export * from "./themes.ts";
 export * from "./update.ts";
+export * from "./viewers.ts";
 export * from "./vscode-theme.ts";
 export * from "./worktree-caps.ts";

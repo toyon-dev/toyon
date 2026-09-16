@@ -36,6 +36,8 @@ const opts: HttpOpts = {
   repos,
   attachments: new AttachmentStore(attachmentsDir),
   archivedAttachment: () => null,
+  worktreeFile: async (id, path) =>
+    id === "wt1" && path === "public/a b.png" ? join(attachmentsDir, "wt1", "1.png") : null,
   branded: () => false,
   metrics: () => ({ lag: 0 }),
   noteShellOrigin: (o) => learnedOrigins.push(o),
@@ -339,6 +341,29 @@ describe("/attachments", () => {
   });
 });
 
+describe("/files", () => {
+  test("serves a worktree's file by its decoded path, never cached", async () => {
+    await new AttachmentStore(attachmentsDir).put("wt1", 1, {
+      kind: "image",
+      name: "a.png",
+      mimeType: "image/png",
+      data: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64"),
+      width: 2,
+      height: 2,
+    });
+    const r = await fetch(req("/files/wt1/public/a%20b.png?token=secret"), srv());
+    expect(r?.status).toBe(200);
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+    expect(r?.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+  test("no token is 401; anything the service does not name is 404", async () => {
+    expect((await fetch(req("/files/wt1/public/a%20b.png"), srv()))?.status).toBe(401);
+    expect((await fetch(req("/files/wt1/other.png?token=secret"), srv()))?.status).toBe(404);
+    expect((await fetch(req("/files/wt1/%E0%A4%A.png?token=secret"), srv()))?.status).toBe(404);
+    expect((await fetch(req("/files/wt1?token=secret"), srv()))?.status).toBe(404);
+  });
+});
+
 describe("/restart", () => {
   // the page asking is one whose socket stopped at a protocol mismatch, so this is plain HTTP
   const post = (path: string) => fetch(req(path, { method: "POST" }), srv());
@@ -381,6 +406,7 @@ describe("static shell", () => {
     repos,
     attachments: new AttachmentStore(attachmentsDir),
     archivedAttachment: () => null,
+    worktreeFile: async () => null,
     branded: () => false,
     noteShellOrigin: () => {},
     remote: null,

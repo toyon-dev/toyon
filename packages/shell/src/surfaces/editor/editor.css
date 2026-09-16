@@ -42,6 +42,20 @@
     flex: 1;
     min-height: 0;
   }
+  /* an image file, drawn whole: never larger than the body, never scaled past its own size */
+  .editor-image {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    & img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+  }
   /* monaco measures its container (automaticLayout), so the box has to be a definite size rather
    than one its own content would grow */
   .editor-monaco {

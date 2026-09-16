@@ -344,6 +344,9 @@ export function App() {
     raw ? clampW(Number(raw), 220) : undefined,
   );
   const [chatW, setChatW] = usePersisted(STORAGE.chatWidth, 380, (raw) => (raw ? clampW(Number(raw), 380) : undefined));
+  // the rail's, while it is kept open: 280 is where a sixteen-letter branch name fits with its
+  // control column and all three count columns drawn
+  const [railW, setRailW] = usePersisted(STORAGE.railWidth, 280, (raw) => (raw ? clampW(Number(raw), 280) : undefined));
   const measure = (ev: PointerEvent, handle: HTMLElement, fallback: number) => {
     const side: DockSide = handle.classList.contains("left") ? "left" : "right";
     const dock = side === "left" ? handle.previousElementSibling : handle.nextElementSibling;
@@ -351,6 +354,7 @@ export function App() {
   };
   const dragChanges = useDragResize((ev, handle) => measure(ev, handle, 220), setChangesW);
   const dragChat = useDragResize((ev, handle) => measure(ev, handle, 380), setChatW);
+  const dragRail = useDragResize((ev, handle) => measure(ev, handle, 280), setRailW);
   // the centre column's element, for the top bar: its cluster sits over the preview
   const [centerEl, setCenterEl] = useState<HTMLDivElement | null>(null);
 
@@ -368,7 +372,11 @@ export function App() {
   // archived chat in the centre is the one chat panel too: a second composer, hidden, would answer
   // the focus chord and take a dropped file's bounds
   const chat = !chatCentred && !archivedPage && <ChatDock width={chatW} />;
-  const rail = !firstRun && <Rail />;
+  const rail = !firstRun && <Rail width={railW} />;
+  // its handle only while it is a column: the strip peeks over the dock beside it, and a peek is
+  // not resized
+  const railHandle = (side: DockSide) =>
+    !firstRun && railOpen && <div className={`dock-resize ${side}`} onPointerDown={dragRail} />;
   const chatLeft = chatSide === "left";
   const first = chatLeft
     ? { dock: chat, open: chatOpen, drag: dragChat }
@@ -391,11 +399,13 @@ export function App() {
       <TopBar center={centerEl} />
       <div className="docks">
         {chatLeft && rail}
+        {chatLeft && railHandle("left")}
         {first.dock}
         {first.open && <div className="dock-resize left" onPointerDown={first.drag} />}
         <Center onRoot={setCenterEl} />
         {last.open && <div className="dock-resize right" onPointerDown={last.drag} />}
         {last.dock}
+        {!chatLeft && railHandle("right")}
         {!chatLeft && rail}
       </div>
     </div>

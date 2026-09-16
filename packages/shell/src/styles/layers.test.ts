@@ -20,7 +20,7 @@ const SRC = new URL("..", import.meta.url).pathname;
 /** every z-index the shell keeps, and the isolated root it counts inside */
 const LOCAL_LAYERS: Record<string, { root: string; why: string }> = {
   ".dock-resize": { root: ".docks", why: "the grab strip over the seam between two docks" },
-  ".rail-panel": { root: ".docks", why: "the peek covers the chat dock and its grab strip" },
+  ".rail:not(.pinned) .rail-panel": { root: ".docks", why: "the peek covers the chat dock and its grab strip" },
   ".pane-resize": { root: ".pane", why: "the drag strip over the pane's own head" },
   ".overlay": { root: ".center", why: "the palette's scrim over the panes of the centre" },
 };

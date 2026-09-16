@@ -158,9 +158,8 @@
    wide. The walk (⌥↑/↓, ⌃Tab) holds the same peek while its modifier is down, the way an alt-tab
    switcher shows ---- */
   .rail {
-    /* the control column, a name, three count columns and the dot: 280 is where a sixteen-letter
-     branch name fits with all three columns drawn */
-    --rail-width: 280px;
+    /* --rail-width is set on the element from the width the docks row holds (App.tsx), the one
+       number for the peek and the column alike */
     /* the list sits inside the panel's 1px inner border, so both states line up on the same pixel */
     --rail-inner: calc(var(--rail-width) - 1px);
     /* The rail stands at one window edge, its near edge, and peeks from there toward the centre,
@@ -202,9 +201,6 @@
     overflow: hidden;
     /* the rows' edge marker measures this box's width */
     container-type: size;
-    /* the peek grows toward the centre over the chat dock and its grab strip, which are its
-       neighbours inside .docks and the only things it covers */
-    z-index: 2;
     /* the shadow only ever escapes toward the centre, never over the top bar. The clip has to hold
      while the panel collapses too, or the blur pops out on all four sides on the way back in. */
     clip-path: inset(0 0 0 -32px);
@@ -212,6 +208,12 @@
     transition:
       width 0.12s ease 120ms,
       box-shadow 0.12s ease 120ms;
+  }
+  /* the peek grows toward the centre over the chat dock and its grab strip, which are its
+     neighbours inside .docks and the only things it covers. Kept open it covers nothing and takes no
+     rung: its own grab strip, a sibling in the row, has to lie over its seam. */
+  .rail:not(.pinned) .rail-panel {
+    z-index: 2;
   }
   .rail {
     &:hover .rail-panel,
@@ -232,6 +234,9 @@
     }
     &.pinned .rail-panel {
       box-shadow: none;
+      /* the rail's own width, not the peek's: a drag sets that on every move, and under the pointer
+         the peek's width would ease after it instead of following */
+      width: 100%;
     }
   }
   /* the list is always the full width and pinned to the near edge; the peek only widens the window

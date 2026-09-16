@@ -7,7 +7,7 @@ import {
   sentAt,
   type WorktreeStatus,
 } from "@toyon/shared";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { archivedHint, archivedItems } from "../../state/actions/archive.ts";
 import {
   archiveWorktrees,
@@ -50,8 +50,10 @@ const OFFLINE_TIP = "Lost the daemon; retrying";
 
 /** the worktree rail, at the chat's side of the window: 40px dot strip, hover peeks the full panel
  * toward the centre; shift-click / "graft with…" enters a multi-select for grafting, bulk sync and
- * bulk remove */
-export function Rail() {
+ * bulk remove. `width` is the panel's, dragged and held by the docks row like a dock's: the column
+ * it is while kept open, and the width the peek opens to, so the rail has one size however it is
+ * showing. */
+export function Rail({ width }: { width: number }) {
   // a row's tip stands off the rail toward the centre, whichever edge the rail is at
   const tipSide: TipPlacement = useStore((s) => s.chatSide) === "left" ? "right" : "left";
   const dispatch = useDispatch();
@@ -476,6 +478,7 @@ export function Rail() {
         railOpen && "pinned",
         offline && "offline",
       )}
+      style={{ "--rail-width": `${width}px` } as CSSProperties}
     >
       {/* the dots carry the socket's state, and every row's tip names it; the panel's own tip covers
           the ground between and under the rows, where the tooltip walks up to the nearest one */}

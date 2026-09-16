@@ -140,7 +140,7 @@ export interface ComposerWalk {
 export type ChatMark = ({ by: "walk" } & ComposerWalk) | { by: "reveal"; seq: number; n: number };
 
 /** the changes panel's lists: the working tree, the branch's commits, every file */
-export const CHANGES_TABS = ["changes", "history", "files"] as const;
+export const CHANGES_TABS = ["files", "changes", "history"] as const;
 export type ChangesTab = (typeof CHANGES_TABS)[number];
 const isChangesTab = (v: unknown): v is ChangesTab => CHANGES_TABS.includes(v as ChangesTab);
 
@@ -354,7 +354,7 @@ export interface Layout {
 /** what a project that has never been laid out gets: the docks open, the panes shut */
 export const defaultLayout: Layout = Object.freeze({
   changes: false,
-  changesTab: "changes",
+  changesTab: "files",
   chat: true,
   term: false,
   design: false,

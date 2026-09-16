@@ -1572,7 +1572,7 @@ describe("panel layout", () => {
 
   test("opening a panel remembers it under the active project", () => {
     const s = run([two(), { a: "toggle-design" }, { a: "toggle-changes" }]);
-    expect(s.layouts.r1).toEqual({ changes: true, changesTab: "changes", chat: true, term: false, design: true });
+    expect(s.layouts.r1).toEqual({ changes: true, changesTab: "files", chat: true, term: false, design: true });
   });
 
   test("the changes dock's tab is remembered, so a reload with the files tree up comes back to it", () => {

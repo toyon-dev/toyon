@@ -356,18 +356,6 @@ export function ChangesDock({ width }: { width: number }) {
         owner="changes-tabs"
         label="changes panel"
         items={[
-          {
-            id: "changes",
-            label:
-              files.length > 0 ? (
-                <>
-                  changes <span className="tab-count">{files.length}</span>
-                </>
-              ) : (
-                "changes"
-              ),
-          },
-          { id: "history", label: "history" },
           // every file, behind an icon sized to itself: the tree is there to look things up, and the
           // two lists of work keep the strip
           ...(archived
@@ -381,6 +369,18 @@ export function ChangesDock({ width }: { width: number }) {
                   tip: tip("files", chord("files")),
                 },
               ]),
+          {
+            id: "changes",
+            label:
+              files.length > 0 ? (
+                <>
+                  changes <span className="tab-count">{files.length}</span>
+                </>
+              ) : (
+                "changes"
+              ),
+          },
+          { id: "history", label: "history" },
         ]}
         current={tab}
         onPick={setTab}

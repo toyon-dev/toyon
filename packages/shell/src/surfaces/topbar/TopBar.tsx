@@ -107,16 +107,16 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
         )}
         <SelfOffer />
         <UpdateOffer />
-        <PairOffer />
       </span>
       {!chatCentred && (
         <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
       )}
       <span className="bar-grow" />
-      {/* right cluster: settings · design · the panel toggle this edge holds · zen (zen last: it hides
-          everything, so it sits at the edge). The terminal toggle lives in the composer: one shell
-          per worktree, not app chrome. */}
+      {/* right cluster: phone · settings · design · the panel toggle this edge holds · zen (zen last:
+          it hides everything, so it sits at the edge). The terminal toggle lives in the composer: one
+          shell per worktree, not app chrome. */}
       <span className="bar-tools" ref={toolsRef}>
+        <PairButton />
         <IconButton
           icon="settings"
           label="Settings & shortcuts"
@@ -314,7 +314,7 @@ function RouteBar({
   );
 }
 
-/** An offer about Toyon itself, in the bar's lead: an action and not a switch, so it takes no
+/** An offer about Toyon itself, in the bar: an action and not a switch, so it takes no
  * chrome tone, and a word beside its icon rather than a bare icon, since it is not in the bar
  * every day and has to say what it is. While it is being done the word says so and shines, the way
  * a chat call still out does, rather than Button's own `busy`, which hides the word under a
@@ -382,19 +382,34 @@ function UpdateOffer() {
   );
 }
 
-/** A machine with a public name that no phone has paired with yet: the chip says it can be opened
- * on one, and opens the code to scan. Once any phone has paired it goes, and the app menu keeps the
- * same row for the next phone. Never on a phone, which is the thing that would scan it. */
-function PairOffer() {
+/** A machine with a public name opens on a phone from here, at the head of the tools. Until a phone
+ * has paired it says so in words, since nothing else tells anyone the machine can be opened
+ * elsewhere; after that it is the phone icon alone, a tool like the ones beside it. Never on a
+ * phone, which is the thing that would scan it. */
+function PairButton() {
   const dispatch = useDispatch();
-  const shown = useStore((s) => s.remote !== null && !s.paired && s.frame === "desk");
+  const shown = useStore((s) => s.remote !== null && s.frame === "desk");
+  const paired = useStore((s) => s.paired);
   const open = useStore((s) => s.overlay?.kind === "pair");
   if (!shown) return null;
+  const toggle = () => dispatch({ a: "toggle", overlay: { kind: "pair" } });
+  if (paired) {
+    return (
+      <IconButton
+        icon="phone"
+        label="Open on your phone"
+        tone="chrome"
+        on={open}
+        aria-expanded={open}
+        onClick={toggle}
+      />
+    );
+  }
   return (
     <Offer
       icon="phone"
       aria-expanded={open}
-      onClick={() => dispatch({ a: "toggle", overlay: { kind: "pair" } })}
+      onClick={toggle}
       {...tip("Scan a code with your phone to open this machine there, signed in")}
     >
       open on phone

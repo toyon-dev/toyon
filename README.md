@@ -18,13 +18,13 @@ In Toyon you point at a button in the page and ask for it to be bigger, watch it
 
 ## How it works
 
-- Every idea gets its own copy of your project, with the app running.
-- You judge the work by using the app first, then read the change.
-- When you're not sure, try more than one version.
-- Watch and steer while it works, or leave and come back to your app already running.
-- Fix the small thing yourself. A one-line change does not need another prompt.
-- Nothing is kept until you say so.
-- Your editor stays yours.
+- **Every idea gets its own copy of your project, with the app running.** A copy costs seconds and almost no space.
+- **You judge the work by using the app first, then read the change.** The diff is a tab beside the chat.
+- **When you're not sure, try more than one version.** One message can go to three copies at once.
+- **Watch and steer while it works, or leave and come back to your app already running.** Esc stops it mid-turn.
+- **Fix the small thing yourself. A one-line change does not need another prompt.** Edit the diff, or open a terminal in the copy.
+- **Nothing is kept until you say so.** Only land pushes, and only when you press it.
+- **Your editor stays yours.** Any file opens back in it from its menu.
 
 Each copy is a branch and a git worktree with your dependencies and `.env` files; one spare per project is kept warm.
 
@@ -64,9 +64,12 @@ Each agent signs in from the chat. Claude Code and Codex install on first start;
 
 ## How is this different from what you use now?
 
-- **Claude Code or Codex in a terminal.** Toyon runs that same agent under your own login and config; for Claude Code that includes your permission rules, hooks, slash commands and MCP servers. What changes is around it: each chat gets its own copy of the project with the app running, and nothing lands until you press.
-- **Cursor, Zed or VS Code.** Toyon sits beside your editor, not in place of it. Their agent panels and worktrees live in the editor, with a browser you open when you want it; in Toyon the running app is the centre of every chat, wired to its source. Your checkout stays yours, and any file opens back in your editor from its menu.
-- **Conductor or Superset.** They are good tools for running many agents at once. Toyon is built around the app instead of the agents: every chat opens with your app running at the centre, connected to its code, so you see each change before you keep it. It is MIT licensed, needs no account, sends no telemetry, runs in your browser on macOS or Linux, and lands work as a pull request on GitHub or on your own machine without it.
+| Coming from | What stays | What changes |
+|---|---|---|
+| Claude Code or Codex in a terminal | The same agent under your login, with your permission rules, hooks, slash commands and MCP servers | Each chat gets its own copy of the project with the app running, and nothing lands until you press |
+| Cursor, Zed or VS Code | Your editor and your checkout; any file opens back in your editor | The running app is the centre of every chat, wired to its source |
+| Lovable, v0 or Bolt | The loop: a chat and the page it changes | Your own project on your machine, with your database, Docker and private packages; each chat is a branch in your repository |
+| Conductor or Superset | Many agents at once, each on its own copy | Built around the app instead of the agents; MIT, no account, no telemetry, lands on your machine without GitHub |
 
 ## Under the hood
 

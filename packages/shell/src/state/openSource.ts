@@ -7,7 +7,7 @@ import type { Store } from "./context.tsx";
  * search hit does. The line is numbered against the served module rather than the file on disk, so
  * the open file holds it until the changed-ranges offset that maps it back is known. */
 export function openSource(store: Store, sock: DaemonSocket | null, worktreeId: string, path: string, line: number) {
-  const { changesOpen } = store.getState();
+  const { layout } = store.getState();
   openFile({ sock, dispatch: store.dispatch }, { worktreeId, path, view: "file", line: { n: line, fiber: true } });
-  if (!changesOpen) store.dispatch({ a: "toggle-changes" });
+  if (!layout.changes) store.dispatch({ a: "toggle-changes" });
 }

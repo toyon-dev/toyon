@@ -70,11 +70,11 @@ export function App() {
   // The chat dock is hidden on an archived worktree's page too, whose chat is the page itself; the
   // changes dock stays, showing that worktree's work rather than the row's underneath.
   const archivedPage = useArchivedPage();
-  const changesOpen = useStore((s) => s.changesOpen) && !firstRun;
-  const chatOpen = useStore((s) => s.chatOpen) && !firstRun && !chatCentred && !archivedPage;
+  const changesOpen = useStore((s) => s.layout.changes) && !firstRun;
+  const chatOpen = useStore((s) => s.layout.chat) && !firstRun && !chatCentred && !archivedPage;
   const railOpen = useStore((s) => s.railOpen);
   const chatSide = useStore((s) => s.chatSide);
-  const panels = useStore((s) => s.panels);
+  const layouts = useStore((s) => s.layouts);
   const lastActive = useStore((s) => s.lastActive);
   const discoveredOpen = useStore((s) => s.discoveredOpen);
   const archivedOpen = useStore((s) => s.archivedOpen);
@@ -267,9 +267,9 @@ export function App() {
   // the panel layout is per project: a reload comes back to the one this project was left in
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE.panels, JSON.stringify(panels));
+      localStorage.setItem(STORAGE.layouts, JSON.stringify(layouts));
     } catch {}
-  }, [panels]);
+  }, [layouts]);
   // and so is the selected worktree: switching projects after a reload lands where you left that
   // one, not on its main
   useEffect(() => {

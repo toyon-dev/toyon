@@ -6,7 +6,7 @@ import { terminalBus } from "./app/terminalBus.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { FileSync } from "./state/fileSync.ts";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
-import { type ChangesTab, defaultPanels, initialState, type Panels } from "./state/store.ts";
+import { initialState, isLayout, type Layout } from "./state/store.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
@@ -30,26 +30,14 @@ function read(storage: Storage, key: string): string | null {
     return null;
   }
 }
-/** the panel layout each project was left in; a value written by an older build (or by hand) is
- * read field by field, so a bad one costs a default rather than a blank dock */
-function storedPanels(): Record<string, Panels> {
-  const bool = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fallback);
-  const tab = (v: unknown): ChangesTab =>
-    v === "changes" || v === "history" || v === "files" ? v : defaultPanels.changesTab;
-  const out: Record<string, Panels> = {};
+/** the layout each project was left in; an entry that does not fit (an older build's, or a hand's)
+ * is dropped, and that project opens in the default layout */
+function storedLayouts(): Record<string, Layout> {
+  const out: Record<string, Layout> = {};
   try {
-    const raw: unknown = JSON.parse(read(localStorage, STORAGE.panels) ?? "{}");
+    const raw: unknown = JSON.parse(read(localStorage, STORAGE.layouts) ?? "{}");
     if (!raw || typeof raw !== "object") return out;
-    for (const [id, p] of Object.entries(raw as Record<string, Partial<Panels>>)) {
-      if (!p || typeof p !== "object") continue;
-      out[id] = {
-        changes: bool(p.changes, defaultPanels.changes),
-        changesTab: tab(p.changesTab),
-        chat: bool(p.chat, defaultPanels.chat),
-        term: bool(p.term, defaultPanels.term),
-        design: bool(p.design, defaultPanels.design),
-      };
-    }
+    for (const [id, l] of Object.entries(raw)) if (isLayout(l)) out[id] = l;
   } catch {}
   return out;
 }
@@ -164,7 +152,7 @@ const store = createStore(
     storedRepo: read(localStorage, STORAGE.repo),
     storedRailOpen: read(localStorage, STORAGE.rail) === "1",
     storedChatSide: read(localStorage, STORAGE.chatSide) === "right" ? "right" : "left",
-    storedPanels: storedPanels(),
+    storedLayouts: storedLayouts(),
     storedLastActive: storedLastActive(),
     storedDiscoveredOpen: storedSectionOpen(STORAGE.discoveredOpen),
     storedArchivedOpen: storedSectionOpen(STORAGE.archivedOpen),

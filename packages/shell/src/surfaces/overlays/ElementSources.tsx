@@ -11,7 +11,7 @@ import { wtDir } from "../util.ts";
 export function ElementSources({ worktreeId, hits }: { worktreeId: string; hits: SearchHit[] }) {
   const dispatch = useDispatch();
   const sock = useSock();
-  const changesOpen = useStore((s) => s.changesOpen);
+  const changesOpen = useStore((s) => s.layout.changes);
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId)?.worktree;
     return w ? wtDir(w) : null;

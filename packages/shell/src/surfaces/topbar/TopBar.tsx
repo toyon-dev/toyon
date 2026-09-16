@@ -52,10 +52,10 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   // chat is the centre rather than a panel to toggle
   const chatCentred = useChatCentred();
   const zen = useStore((s) => s.zen) && !chatCentred;
-  const changesOpen = useStore((s) => s.changesOpen);
-  const chatOpen = useStore((s) => s.chatOpen);
+  const changesOpen = useStore((s) => s.layout.changes);
+  const chatOpen = useStore((s) => s.layout.chat);
   const firstRun = useFirstRun();
-  const designOpen = useStore((s) => s.designOpen);
+  const designOpen = useStore((s) => s.layout.design);
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
   const id = active?.worktree.id ?? null;

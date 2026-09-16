@@ -206,8 +206,8 @@ describe("per-worktree records", () => {
     const spoken = run([agent("main", { type: "user-message", text: "make a site", ts: 0 })], s);
     expect(isGreenfield(spoken)).toBe(false);
     // hiding the dock leaves no trace: show-chat opens it, and only that is remembered
-    expect(s.chatOpen).toBe(true);
-    expect(reducer({ ...s, chatOpen: false }, { a: "show-chat" }).chatOpen).toBe(true);
+    expect(s.layout.chat).toBe(true);
+    expect(reducer({ ...s, layout: { ...s.layout, chat: false } }, { a: "show-chat" }).layout.chat).toBe(true);
   });
   test("a repo confirmed with nothing to run puts the chat in the centre, with no preview", () => {
     const s = run([helloIn([pageless("r")], wt("main", "main"))]);
@@ -236,7 +236,8 @@ describe("per-worktree records", () => {
     expect(previewIdOf(drafting(repo("r")))).toBe("main");
   });
   test("with the chat in the centre, what would open or toggle a panel leaves the layout alone", () => {
-    const s = { ...run([helloIn([pageless("r")], wt("main", "main"))]), chatOpen: false };
+    const booted = run([helloIn([pageless("r")], wt("main", "main"))]);
+    const s = { ...booted, layout: { ...booted.layout, chat: false } };
     const moves: Action[] = [
       { a: "open-draft" },
       { a: "show-chat" },
@@ -247,11 +248,11 @@ describe("per-worktree records", () => {
     ];
     for (const move of moves) {
       const next = reducer(s, move);
-      expect([move.a, next.chatOpen, next.zen, next.designOpen]).toEqual([move.a, false, false, false]);
-      expect(next.panels).toBe(s.panels);
+      expect([move.a, next.layout.chat, next.zen, next.layout.design]).toEqual([move.a, false, false, false]);
+      expect(next.layouts).toBe(s.layouts);
     }
     // the box is still asked for: it is the centre's now
-    expect(reducer(s, { a: "focus-chat" })).toMatchObject({ chatOpen: false, focusChat: s.focusChat + 1 });
+    expect(reducer(s, { a: "focus-chat" })).toMatchObject({ layout: { chat: false }, focusChat: s.focusChat + 1 });
   });
   test("nothing is heard until a hello, from the socket or the bootstrap alike", () => {
     expect(initial.heard).toBe(false);
@@ -571,7 +572,7 @@ describe("drafting a worktree", () => {
     const s = run([{ a: "activate", id: "a" }, { a: "open-draft" }], found(wt("main", "main"), wt("a")));
     expect(s.activeId).toBe("main");
     expect(s.draft).toEqual(fresh());
-    expect(s.chatOpen).toBe(true);
+    expect(s.layout.chat).toBe(true);
     const again = reducer(s, { a: "open-draft" });
     expect(again.draft).toEqual(fresh());
     expect(again.focusChat).toBe(s.focusChat + 1);
@@ -587,7 +588,7 @@ describe("drafting a worktree", () => {
 
   test("a `!` command from a draft opens the base's shell and waits there until it is typed", () => {
     const s = run([{ a: "term-run", id: "main", command: "git pull" }], found(wt("main", "main")));
-    expect(s.termOpen).toBe(true);
+    expect(s.layout.term).toBe(true);
     expect(s.termRun).toEqual({ id: "main", command: "git pull" });
     expect(localOf(s, "main").termStream).toBe("shell");
     expect(run([{ a: "term-ran" }], s).termRun).toBeNull();
@@ -756,7 +757,7 @@ describe("attachments", () => {
   });
   test("an attachment opens a collapsed chat, since its chip is the only sign it landed", () => {
     const s = run([hello(wt("a")), { a: "toggle-chat" }, { a: "attach", id: "a", items: [paste] }]);
-    expect(s.chatOpen).toBe(true);
+    expect(s.layout.chat).toBe(true);
   });
   test("a sent message keeps its refs for the bubble, in the order they were attached", () => {
     const refs = [
@@ -949,26 +950,26 @@ describe("git status", () => {
   test("the changes panel starts closed and opens itself once, at the first diff", () => {
     const clean = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
     // an empty status does not spend the one shot
-    expect([clean.changesOpen, clean.changesAuto]).toEqual([false, true]);
+    expect([clean.layout.changes, clean.changesAuto]).toEqual([false, true]);
     const dirty = server({ t: "git-status", worktreeId: "main", files: [{ xy: " M", path: "a" }] });
     const opened = reducer(clean, dirty);
-    expect([opened.changesOpen, opened.changesAuto]).toEqual([true, false]);
+    expect([opened.layout.changes, opened.changesAuto]).toEqual([true, false]);
     // closed by hand, it stays closed however dirty the worktree gets
     const shut = reducer(opened, { a: "toggle-changes" });
-    expect(reducer(shut, dirty).changesOpen).toBe(false);
+    expect(reducer(shut, dirty).layout.changes).toBe(false);
   });
   test("a status for another worktree does not open the panel", () => {
     const s = run([
       hello(wt("main", "main"), wt("w1", "worktree")),
       server({ t: "git-status", worktreeId: "w1", files: [{ xy: " M", path: "a" }] }),
     ]);
-    expect(s.changesOpen).toBe(false);
+    expect(s.layout.changes).toBe(false);
   });
   test("focus-changes opens a shut panel and asks for the keyboard every time", () => {
     const shut = run([hello(wt("main", "main")), server({ t: "git-status", worktreeId: "main", files: [] })]);
-    expect(shut.changesOpen).toBe(false);
+    expect(shut.layout.changes).toBe(false);
     const once = reducer(shut, { a: "focus-changes" });
-    expect(once.changesOpen).toBe(true);
+    expect(once.layout.changes).toBe(true);
     expect(once.focusChanges).toBe(shut.focusChanges + 1);
     // already open and already asked: the request still has to be new, or the panel would only
     // take focus the first time
@@ -977,15 +978,15 @@ describe("git status", () => {
   test("focus-changes with a tab opens the panel on it, and without one keeps the tab it had", () => {
     const s = run([hello(wt("main", "main"))]);
     const files = reducer(s, { a: "focus-changes", tab: "files" });
-    expect([files.changesOpen, files.changesTab]).toEqual([true, "files"]);
-    expect(reducer(files, { a: "focus-changes" }).changesTab).toBe("files");
-    expect(reducer(files, { a: "changes-tab", v: "history" }).changesTab).toBe("history");
+    expect([files.layout.changes, files.layout.changesTab]).toEqual([true, "files"]);
+    expect(reducer(files, { a: "focus-changes" }).layout.changesTab).toBe("files");
+    expect(reducer(files, { a: "changes-tab", v: "history" }).layout.changesTab).toBe("history");
   });
   test("focus-chat and focus-rail open their panels and ask for the keyboard every time", () => {
     const s = run([hello(wt("main", "main"))]);
     const shut = reducer(reducer(s, { a: "toggle-chat" }), { a: "toggle-rail" });
     const right = reducer(shut, { a: "focus-chat" });
-    expect([shut.chatOpen, right.chatOpen, right.focusChat]).toEqual([false, true, shut.focusChat + 1]);
+    expect([shut.layout.chat, right.layout.chat, right.focusChat]).toEqual([false, true, shut.focusChat + 1]);
     expect(reducer(right, { a: "focus-chat" }).focusChat).toBe(right.focusChat + 1);
     const rail = reducer({ ...shut, railOpen: false }, { a: "focus-rail" });
     expect([rail.railOpen, rail.focusRail]).toEqual([true, shut.focusRail + 1]);
@@ -994,7 +995,7 @@ describe("git status", () => {
   test("focus-terminal opens the pane and asks for the keyboard every time", () => {
     const s = run([hello(wt("main", "main"))]);
     const once = reducer(s, { a: "focus-terminal" });
-    expect([s.termOpen, once.termOpen, once.focusTerm]).toEqual([false, true, s.focusTerm + 1]);
+    expect([s.layout.term, once.layout.term, once.focusTerm]).toEqual([false, true, s.focusTerm + 1]);
     expect(reducer(once, { a: "focus-terminal" }).focusTerm).toBe(once.focusTerm + 1);
   });
 });
@@ -1011,8 +1012,8 @@ describe("terminal tabs", () => {
 
   test("opening a stream opens the pane, which is how the rail shows a crashed proc", () => {
     const s = run([hello(wt("a"))]);
-    expect(s.termOpen).toBe(false);
-    expect(reducer(s, { a: "term-stream", id: "a", stream: "api" }).termOpen).toBe(true);
+    expect(s.layout.term).toBe(false);
+    expect(reducer(s, { a: "term-stream", id: "a", stream: "api" }).layout.term).toBe(true);
   });
 });
 
@@ -1028,10 +1029,10 @@ describe("streams and notices", () => {
   });
   test("an error frame naming a worktree is read on its chat, which opens for it", () => {
     const shut = run([hello(wt("a")), { a: "toggle-chat" }]);
-    expect(shut.chatOpen).toBe(false);
+    expect(shut.layout.chat).toBe(false);
     const s = run([server({ t: "error", message: "nope", worktreeId: "a" })], shut);
     expect(localOf(s, "a").chat).toEqual([{ kind: "error", text: "nope" }]);
-    expect(s.chatOpen).toBe(true);
+    expect(s.layout.chat).toBe(true);
   });
   test("an error frame naming no worktree is read under the composer on screen", () => {
     const s = run([hello(wt("a")), server({ t: "error", message: "nope" })]);
@@ -1108,10 +1109,10 @@ describe("streams and notices", () => {
     expect(off.zen).toBe(false);
   });
   test("the terminal pane starts hidden and toggles", () => {
-    expect(initial.termOpen).toBe(false);
+    expect(initial.layout.term).toBe(false);
     const on = run([{ a: "toggle-terminal" }]);
-    expect(on.termOpen).toBe(true);
-    expect(reducer(on, { a: "toggle-terminal" }).termOpen).toBe(false);
+    expect(on.layout.term).toBe(true);
+    expect(reducer(on, { a: "toggle-terminal" }).layout.term).toBe(false);
   });
 });
 
@@ -1244,10 +1245,10 @@ describe("the editor's open file", () => {
     const sources = (seq: number, hits: ReturnType<typeof hit>[], sure: boolean) =>
       server({ t: "element-sources", worktreeId: "a", seq, hits, sure });
     const booted = run([hello(wt("a"))]);
-    const closed = booted.changesOpen ? reducer(booted, { a: "toggle-changes" }) : booted;
+    const closed = booted.layout.changes ? reducer(booted, { a: "toggle-changes" }) : booted;
     const sure = reducer(closed, sources(5, [hit("src/render.ts", 33)], true));
     expect(sure.editor).toMatchObject({ path: "src/render.ts", view: "file", line: { n: 33 }, seq: 5, focus: true });
-    expect(sure.changesOpen).toBe(true);
+    expect(sure.layout.changes).toBe(true);
     const listed = reducer(closed, sources(5, [hit("src/a.ts", 3), hit("src/b.ts", 7)], false));
     expect(listed.editor).toBeNull();
     expect(listed.overlay).toMatchObject({
@@ -1493,67 +1494,67 @@ describe("panel layout", () => {
 
   test("opening a panel remembers it under the active project", () => {
     const s = run([two(), { a: "toggle-design" }, { a: "toggle-changes" }]);
-    expect(s.panels.r1).toEqual({ changes: true, changesTab: "changes", chat: true, term: false, design: true });
+    expect(s.layouts.r1).toEqual({ changes: true, changesTab: "changes", chat: true, term: false, design: true });
   });
 
   test("the changes dock's tab is remembered, so a reload with the files tree up comes back to it", () => {
     const s = run([two(), { a: "focus-changes", tab: "files" }]);
-    expect(s.panels.r1?.changesTab).toBe("files");
-    const reloaded = run([two()], initialState({ clientId: ME, storedRepo: "r1", storedPanels: s.panels }));
-    expect(reloaded.changesOpen).toBe(true);
-    expect(reloaded.changesTab).toBe("files");
+    expect(s.layouts.r1?.changesTab).toBe("files");
+    const reloaded = run([two()], initialState({ clientId: ME, storedRepo: "r1", storedLayouts: s.layouts }));
+    expect(reloaded.layout.changes).toBe(true);
+    expect(reloaded.layout.changesTab).toBe("files");
   });
 
   test("switching projects paints that project's layout, and switching back restores this one", () => {
     let s = run([two(), { a: "toggle-design" }]);
     // r2 has never been laid out: it adopts what is on screen rather than jumping
     s = reducer(s, { a: "activate-repo", id: "r2" });
-    expect(s.designOpen).toBe(true);
+    expect(s.layout.design).toBe(true);
     s = run([{ a: "toggle-design" }, { a: "toggle-terminal" }], s);
     s = reducer(s, { a: "activate-repo", id: "r1" });
-    expect(s.designOpen).toBe(true);
-    expect(s.termOpen).toBe(false);
+    expect(s.layout.design).toBe(true);
+    expect(s.layout.term).toBe(false);
     const back = reducer(s, { a: "activate-repo", id: "r2" });
-    expect(back.designOpen).toBe(false);
-    expect(back.termOpen).toBe(true);
+    expect(back.layout.design).toBe(false);
+    expect(back.layout.term).toBe(true);
   });
 
   test("selecting a worktree in another project carries that project's layout with it", () => {
     let s = run([two(), { a: "toggle-terminal" }, { a: "activate-repo", id: "r2" }, { a: "toggle-terminal" }]);
-    expect(s.termOpen).toBe(false);
+    expect(s.layout.term).toBe(false);
     s = reducer(s, { a: "activate", id: "m1" });
-    expect(s.termOpen).toBe(true);
+    expect(s.layout.term).toBe(true);
   });
 
   test("a reload paints the stored project's layout before hello, and hello keeps it", () => {
     const from = initialState({
       clientId: ME,
       storedRepo: "r2",
-      storedPanels: { r2: { changes: false, changesTab: "changes", chat: true, term: false, design: true } },
+      storedLayouts: { r2: { changes: false, changesTab: "changes", chat: true, term: false, design: true } },
     });
-    expect(from.changesOpen).toBe(false);
-    expect(from.designOpen).toBe(true);
+    expect(from.layout.changes).toBe(false);
+    expect(from.layout.design).toBe(true);
     const s = run([two()], from);
     expect(s.activeRepoId).toBe("r2");
-    expect(s.changesOpen).toBe(false);
-    expect(s.designOpen).toBe(true);
+    expect(s.layout.changes).toBe(false);
+    expect(s.layout.design).toBe(true);
   });
 
   test("the first-diff auto-open is not learned as the project's layout", () => {
     const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [{ xy: " M", path: "a" }] })]);
-    expect(s.changesOpen).toBe(true);
+    expect(s.layout.changes).toBe(true);
     // it opened for this session only: a reload on a clean worktree starts closed again
-    expect(s.panels.r1?.changes).toBe(false);
+    expect(s.layouts.r1?.changes).toBe(false);
   });
 
   test("a remembered layout outranks the first-diff auto-open", () => {
     const from = initialState({
       clientId: ME,
       storedRepo: "r1",
-      storedPanels: { r1: { changes: false, changesTab: "changes", chat: true, term: false, design: false } },
+      storedLayouts: { r1: { changes: false, changesTab: "changes", chat: true, term: false, design: false } },
     });
     const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [{ xy: " M", path: "a" }] })], from);
-    expect(s.changesOpen).toBe(false);
+    expect(s.layout.changes).toBe(false);
   });
 });
 
@@ -1635,17 +1636,14 @@ describe("discovered worktrees", () => {
   });
 
   test("git status for one fills its record and never closes the changes panel: only main does", () => {
-    const from = {
-      ...run([helloR(wt("main", "main")), withFound(found("/w/stray"))]),
-      changesOpen: true,
-      changesAuto: true,
-    };
+    const booted = run([helloR(wt("main", "main")), withFound(found("/w/stray"))]);
+    const from = { ...booted, layout: { ...booted.layout, changes: true }, changesAuto: true };
     const s = run(
       [{ a: "activate", id: "disc-/w/stray" }, server({ t: "git-status", worktreeId: "disc-/w/stray", files: [] })],
       from,
     );
     expect(localOf(s, "disc-/w/stray").git?.files).toEqual([]);
-    expect(s.changesOpen).toBe(true);
+    expect(s.layout.changes).toBe(true);
   });
 
   test("they are narrowed to the active project, like worktrees are", () => {
@@ -1747,14 +1745,14 @@ describe("an archived worktree's page", () => {
       [{ a: "open-archived", id: "x" }, server({ t: "git-status", worktreeId: "x", files: [], committed })],
       listed(),
     );
-    expect(s.changesOpen).toBe(true);
+    expect(s.layout.changes).toBe(true);
     expect(localOf(s, "x").git?.committed).toEqual(committed);
     // nothing kept and nothing landed: the panel is left as it was
     const empty = run(
       [{ a: "open-archived", id: "x" }, server({ t: "git-status", worktreeId: "x", files: [] })],
       listed(),
     );
-    expect(empty.changesOpen).toBe(false);
+    expect(empty.layout.changes).toBe(false);
   });
 
   test("a file of its worktree open in the editor closes with the page; the row's own file stays", () => {

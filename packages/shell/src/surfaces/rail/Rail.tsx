@@ -83,7 +83,7 @@ export function Rail() {
   const activeId = useActiveId();
   // offline the dots take the fault colour and every tip names it; the bar says what the socket is doing
   const offline = useOffline();
-  const changesOpen = useStore((s) => s.changesOpen);
+  const layout = useStore((s) => s.layout);
   const railOpen = useStore((s) => s.railOpen);
   // the worktree walk holds the strip's peek open while its modifier is down (app/keys.ts)
   const railPeek = useStore((s) => s.railPeek);
@@ -158,7 +158,7 @@ export function Rail() {
   /** what a row can do: the long list for ours, the short one for a found worktree */
   const rowItems = (w: WorktreeStatus) =>
     isOwned(w)
-      ? worktreeItems(w, repoOf(w), { changesOpen, shipping }, deps, { graft: graftWith })
+      ? worktreeItems(w, repoOf(w), { layout, shipping }, deps, { graft: graftWith })
       : discoveredItems(w, { clientId }, deps);
 
   /** An archived worktree, kept with its chat. It runs nothing, so it reads a rung down like a found

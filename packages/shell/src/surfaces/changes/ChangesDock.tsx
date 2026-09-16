@@ -49,7 +49,7 @@ export function ChangesDock({ width }: { width: number }) {
   const archived = useArchivedPage();
   const shownId = archived?.id ?? liveId;
   const active = useActive();
-  const changesOpen = useStore((s) => s.changesOpen);
+  const changesOpen = useStore((s) => s.layout.changes);
   // hidden, not closed, on a first-run screen: the layout remembers nothing of it and the panel is
   // back, as it was, with the first message
   const firstRun = useFirstRun();
@@ -62,7 +62,7 @@ export function ChangesDock({ width }: { width: number }) {
   const committed = gitInfo?.committed ?? NO_FILES;
   const clean = files.length === 0;
 
-  const storedTab = useStore((s) => s.changesTab);
+  const storedTab = useStore((s) => s.layout.changesTab);
   // an archived page has no checkout to list, so it shows its changes and leaves the kept tab be:
   // leaving the page brings the files tab back
   const tab: ChangesTab = archived && storedTab === "files" ? "changes" : storedTab;

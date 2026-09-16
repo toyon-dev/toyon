@@ -88,7 +88,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
   };
 }
 
-export type WorktreeItemState = Pick<State, "changesOpen" | "shipping">;
+export type WorktreeItemState = Pick<State, "layout" | "shipping">;
 
 /** Everything a worktree of ours can do, in the order the rail's menu shows it; the palette reads
  * the same list with the title appended. `graft` is the rail's own multi-select, so only the rail
@@ -114,13 +114,13 @@ export function worktreeItems(
   if (isBusy(w))
     stop.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
   const idle = !s.shipping[id];
-  if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !s.changesOpen) {
+  if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !s.layout.changes) {
     look.push({
       id: "changes",
       label: `view changes${(w.dirty ?? 0) > 0 ? ` (${w.dirty})` : ""}`,
       onClick: () => {
         dispatch({ a: "activate", id });
-        if (!s.changesOpen) dispatch({ a: "toggle-changes" });
+        if (!s.layout.changes) dispatch({ a: "toggle-changes" });
       },
     });
   }

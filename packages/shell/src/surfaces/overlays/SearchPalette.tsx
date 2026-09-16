@@ -16,7 +16,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
   const dispatch = useDispatch();
   const sock = useSock();
   const results = useLocal(worktreeId).search;
-  const changesOpen = useStore((s) => s.changesOpen);
+  const changesOpen = useStore((s) => s.layout.changes);
   // a hit is a file: open in an editor or reveal it, as the changes panel's rows offer
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId)?.worktree;

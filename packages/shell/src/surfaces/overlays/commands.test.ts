@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { OwnedWorktree, RepoInfo, Theme } from "@toyon/shared";
+import { defaultLayout } from "../../state/store.ts";
 import { buildCommands, type Command, type CommandState, commandHits, filterCommands } from "./commands.ts";
 
 describe("buildCommands", () => {
@@ -36,12 +37,9 @@ describe("buildCommands", () => {
   } as unknown as OwnedWorktree;
   const state = {
     picking: null,
-    changesOpen: true,
-    chatOpen: true,
+    layout: { ...defaultLayout, changes: true },
     chatSide: "left",
     railOpen: true,
-    termOpen: false,
-    designOpen: false,
     themePrefs: { mode: "system", dark: "t", light: "t" },
     themes: [{ id: "t", name: "Night", kind: "dark" } as Theme],
     systemDark: true,

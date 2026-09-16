@@ -6,18 +6,7 @@ import type { Deps } from "./deps.ts";
 
 export type AppState = Pick<
   State,
-  | "changesOpen"
-  | "changesTab"
-  | "chatOpen"
-  | "railOpen"
-  | "termOpen"
-  | "designOpen"
-  | "activeId"
-  | "activeRepoId"
-  | "repos"
-  | "rows"
-  | "remote"
-  | "self"
+  "layout" | "railOpen" | "activeId" | "activeRepoId" | "repos" | "rows" | "remote" | "self"
 >;
 
 /** The app's own actions, in three groups: somewhere to go, the panels, and the app itself. What
@@ -77,28 +66,30 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
   const panels: MenuItem[] = [
     {
       id: "changes",
-      label: `${show(s.changesOpen)} changes panel`,
+      label: `${show(s.layout.changes)} changes panel`,
       key: chord("changes"),
       onClick: () => dispatch({ a: "toggle-changes" }),
     },
     {
       id: "files",
-      label: `${show(s.changesOpen && s.changesTab === "files")} files`,
+      label: `${show(s.layout.changes && s.layout.changesTab === "files")} files`,
       key: chord("files"),
       onClick: () =>
         dispatch(
-          s.changesOpen && s.changesTab === "files" ? { a: "toggle-changes" } : { a: "focus-changes", tab: "files" },
+          s.layout.changes && s.layout.changesTab === "files"
+            ? { a: "toggle-changes" }
+            : { a: "focus-changes", tab: "files" },
         ),
     },
     {
       id: "chat",
-      label: `${show(s.chatOpen)} chat panel`,
+      label: `${show(s.layout.chat)} chat panel`,
       key: chord("composer"),
       onClick: () => dispatch({ a: "toggle-chat" }),
     },
     {
       id: "terminal",
-      label: `${show(s.termOpen)} terminal`,
+      label: `${show(s.layout.term)} terminal`,
       key: chord("terminal"),
       onClick: () => dispatch({ a: "toggle-terminal" }),
     },
@@ -110,7 +101,7 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
     },
     {
       id: "design",
-      label: `${show(s.designOpen)} design system`,
+      label: `${show(s.layout.design)} design system`,
       key: chord("design"),
       onClick: () => dispatch({ a: "toggle-design" }),
     },

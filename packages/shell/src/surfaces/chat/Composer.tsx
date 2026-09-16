@@ -201,7 +201,7 @@ export function Composer({
   const [newMode, setNewMode] = useNewWorktreeMode(repo);
   const activeMode = active?.worktree.mode ?? DEFAULT_PERMISSION_MODE;
   const picking = useStore((s) => s.picking);
-  const termOpen = useStore((s) => s.termOpen);
+  const termOpen = useStore((s) => s.layout.term);
   const trouble = procTrouble(active?.procs ?? []);
   const cm = useContextMenu("composer");
 

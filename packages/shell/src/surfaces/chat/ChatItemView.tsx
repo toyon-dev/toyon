@@ -463,7 +463,7 @@ function AuthCard({ item }: { item: Extract<ChatItem, { kind: "auth" }> }) {
   const sock = useSock();
   const dispatch = useDispatch();
   const id = useStore((s) => s.activeId);
-  const termOpen = useStore((s) => s.termOpen);
+  const termOpen = useStore((s) => s.layout.term);
   const loginRunning = useStore((s) => s.rows.find((r) => r.id === s.activeId)?.login ?? false);
   const [key, setKey] = useState("");
   const [keyFor, setKeyFor] = useState<string | null>(null);

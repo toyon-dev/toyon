@@ -332,13 +332,13 @@ const firstProject = () => newProjectState({ mode: "create", name: "", parent: `
 
 /** which side of the window the chat dock stands on; the rail stands outside it and the changes
  * dock takes the other edge. Per browser like the rail's pin (it is about this screen, not the
- * project), so it is not part of a project's Panels. */
+ * project), so it is not part of a project's Layout. */
 export type ChatSide = "left" | "right";
 
-/** which docks and panes a project is left with. The layout is remembered per project, so a reload
- * comes back to it and switching projects carries each one's own back (zen is deliberately not in
- * here: it is a mode you leave, not a layout). */
-export interface Panels {
+/** which docks and panes a project is left with. One value, because it is remembered and restored
+ * as a unit: per project, so a reload comes back to it and switching projects carries each one's
+ * own back (zen is deliberately not in here: it is a mode you leave, not a layout). */
+export interface Layout {
   changes: boolean;
   /** the changes dock's open tab, so a reload with the files tree up comes back to it */
   changesTab: ChangesTab;
@@ -348,7 +348,7 @@ export interface Panels {
 }
 
 /** what a project that has never been laid out gets: the docks open, the panes shut */
-export const defaultPanels: Panels = Object.freeze({
+export const defaultLayout: Layout = Object.freeze({
   changes: false,
   changesTab: "changes",
   chat: true,
@@ -356,37 +356,31 @@ export const defaultPanels: Panels = Object.freeze({
   design: false,
 });
 
-function panelsOf(s: State): Panels {
-  return {
-    changes: s.changesOpen,
-    changesTab: s.changesTab,
-    chat: s.chatOpen,
-    term: s.termOpen,
-    design: s.designOpen,
-  };
-}
-
-function samePanels(a: Panels, b: Panels): boolean {
+/** a stored layout is taken whole or not at all: one that does not fit costs the default */
+export function isLayout(v: unknown): v is Layout {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
   return (
-    a.changes === b.changes &&
-    a.changesTab === b.changesTab &&
-    a.chat === b.chat &&
-    a.term === b.term &&
-    a.design === b.design
+    typeof o.changes === "boolean" &&
+    (o.changesTab === "changes" || o.changesTab === "history" || o.changesTab === "files") &&
+    typeof o.chat === "boolean" &&
+    typeof o.term === "boolean" &&
+    typeof o.design === "boolean"
   );
 }
 
-function applyPanels(s: State, p: Panels): State {
+/** the live layout with a change, or the same state when the change is none: the layout object
+ * is what the project remembers, so a new one exists only when something in it moved */
+function withLayout(s: State, patch: Partial<Layout>): State {
+  const l = s.layout;
+  let moved = false;
+  for (const k of Object.keys(patch) as (keyof Layout)[]) if (patch[k] !== l[k]) moved = true;
+  return moved ? { ...s, layout: { ...l, ...patch } } : s;
+}
+
+function applyLayout(s: State, layout: Layout): State {
   // a remembered layout is a decision, so the first-diff auto-open must not second-guess it
-  return {
-    ...s,
-    changesOpen: p.changes,
-    changesTab: p.changesTab,
-    chatOpen: p.chat,
-    termOpen: p.term,
-    designOpen: p.design,
-    changesAuto: false,
-  };
+  return { ...s, layout, changesAuto: false };
 }
 
 /** what the editor pane draws for its file: the diff against main, or the file with none over it */
@@ -532,14 +526,12 @@ export interface State {
   paletteReturn: { mode: "commands" | "quick-open" | "keys"; q: string } | null;
   /** the daemon speaks another protocol version than this build: stop, ask for a reload */
   incompatible: boolean;
-  changesOpen: boolean;
-  /** the changes panel's open tab, kept across worktrees the way the panel's being open is */
-  changesTab: ChangesTab;
+  /** the docks and panes on screen: the active project's, and what it will be left with */
+  layout: Layout;
   /** bumped to put the keyboard in the changes list; focus is the DOM's, so this only asks */
   focusChanges: number;
   /** bumped to put the suggested commit message in the changes panel's box and the caret after it */
   editCommit: number;
-  chatOpen: boolean;
   /** bumped to put the keyboard in the composer, the same way */
   focusChat: number;
   /** bumped when a keyboard walk lands on a row: the composer takes the caret only if nothing
@@ -556,23 +548,20 @@ export interface State {
   /** a worktree marked unread while it was the one on screen: its ring stays until another row is
    * selected, where the moment of looking would otherwise clear it again (App.tsx) */
   unreadHold: string | null;
-  /** the layout each project was last left in; the active one's is what the flags above hold */
-  panels: Record<string, Panels>;
+  /** the layout each project was last left in; the active one's is `layout` itself */
+  layouts: Record<string, Layout>;
   /** one-shot: the changes panel starts closed and opens itself the first time the active
    * worktree has something to show, unless a remembered layout or a hand has already decided it */
   changesAuto: boolean;
   /** full-bleed preview: all chrome hidden */
   zen: boolean;
-  /** the terminal pane under the preview (one per worktree; the shells keep running when hidden) */
-  termOpen: boolean;
-  /** bumped to put the keyboard in the terminal */
+  /** bumped to put the keyboard in the terminal (the pane is `layout.term`; one shell per worktree,
+   * kept running while hidden) */
   focusTerm: number;
   /** a `!` command typed on a draft, waiting for that worktree's shell to be up to type it into */
   termRun: { id: string; command: string } | null;
   /** bumped when a stream opens that needs room to be read (a login's link and its prompt) */
   termTall: number;
-  /** the design pane: the worktree's own design system, beside the preview */
-  designOpen: boolean;
   /** themes the daemon knows (built-ins, ~/.toyon/themes, installed editors) + the selection */
   themes: Theme[];
   themePrefs: ThemePrefs;
@@ -652,7 +641,7 @@ export interface InitialOpts {
   /** the side the chat dock was left on */
   storedChatSide?: ChatSide;
   /** every project's remembered panel layout; the stored project's is painted before hello */
-  storedPanels?: Record<string, Panels>;
+  storedLayouts?: Record<string, Layout>;
   /** the worktree each project was left on, so switching projects after a reload lands where you
    * left off rather than on main */
   storedLastActive?: Record<string, string>;
@@ -696,11 +685,9 @@ export function initialState(opts: InitialOpts): State {
     overlay: null,
     paletteReturn: null,
     incompatible: false,
-    changesOpen: defaultPanels.changes,
-    changesTab: defaultPanels.changesTab,
+    layout: defaultLayout,
     focusChanges: 0,
     editCommit: 0,
-    chatOpen: defaultPanels.chat,
     focusChat: 0,
     walked: 0,
     railOpen: opts.storedRailOpen ?? false,
@@ -708,14 +695,12 @@ export function initialState(opts: InitialOpts): State {
     focusRail: 0,
     railPeek: false,
     unreadHold: null,
-    panels: opts.storedPanels ?? {},
+    layouts: opts.storedLayouts ?? {},
     changesAuto: true,
     zen: false,
-    termOpen: false,
     focusTerm: 0,
     termRun: null,
     termTall: 0,
-    designOpen: false,
     themes: builtinThemes.some((t) => t.id === cached.id) ? builtinThemes : [...builtinThemes, cached],
     themePrefs: { ...defaultThemePrefs, mode: cached.kind, [cached.kind]: cached.id },
     previewTheme: null,
@@ -745,8 +730,8 @@ export function initialState(opts: InitialOpts): State {
   };
   // paint the last project's layout before the daemon's hello names it, so a reload does not
   // flash the docks open and then shut them
-  const stored = opts.storedRepo ? state.panels[opts.storedRepo] : undefined;
-  return stored ? applyPanels(state, stored) : state;
+  const stored = opts.storedRepo ? state.layouts[opts.storedRepo] : undefined;
+  return stored ? applyLayout(state, stored) : state;
 }
 
 /** what the following modes follow. Daylight stands in with the OS until the daemon has answered,
@@ -816,7 +801,7 @@ export function isChatCentred(s: Pick<State, "repos" | "activeRepoId">): boolean
 /** the chat is about to be written in, so its dock opens; a chat in the centre has no dock to open,
  * and writing one into the layout would leave the project's remembered panels holding it */
 function revealChat(s: State): State {
-  return s.chatOpen || isChatCentred(s) ? s : { ...s, chatOpen: true };
+  return isChatCentred(s) ? s : withLayout(s, { chat: true });
 }
 
 export function repoById(s: State, id: string | null | undefined): RepoInfo | null {
@@ -1101,8 +1086,8 @@ function paletteBack(s: State, back: boolean | undefined): Pick<State, "overlay"
 function enterRepo(s: State): State {
   const id = s.activeRepoId;
   if (!id) return s;
-  const p = s.panels[id];
-  return p ? applyPanels(s, p) : { ...s, panels: { ...s.panels, [id]: panelsOf(s) } };
+  const remembered = s.layouts[id];
+  return remembered ? applyLayout(s, remembered) : { ...s, layouts: { ...s.layouts, [id]: s.layout } };
 }
 
 /** the first-diff auto-open is the one thing that opens a panel without anyone asking, so it is
@@ -1151,8 +1136,8 @@ export function reducer(s: State, action: Action): State {
   // every open/close routes through here, so the layout is remembered in one place rather than in
   // the dozen actions (a chord, a rail click, a dropped file) that move it
   if (next.activeRepoId !== s.activeRepoId) next = enterRepo(next);
-  else if (next.activeRepoId && !guessed(action) && !samePanels(panelsOf(s), panelsOf(next))) {
-    next = { ...next, panels: { ...next.panels, [next.activeRepoId]: panelsOf(next) } };
+  else if (next.activeRepoId && !guessed(action) && next.layout !== s.layout) {
+    next = { ...next, layouts: { ...next.layouts, [next.activeRepoId]: next.layout } };
   }
   if (next.rows === s.rows && next.activeRepoId === s.activeRepoId && next.archiving === s.archiving) {
     return next;
@@ -1398,22 +1383,20 @@ function reduce(s: State, action: Action): State {
     case "palette-return":
       return { ...s, paletteReturn: action.v };
     case "toggle-changes":
-      return { ...s, changesOpen: !s.changesOpen, changesAuto: false };
+      return { ...withLayout(s, { changes: !s.layout.changes }), changesAuto: false };
     case "focus-changes":
       return {
-        ...s,
-        changesOpen: true,
+        ...withLayout(s, { changes: true, changesTab: action.tab ?? s.layout.changesTab }),
         changesAuto: false,
         focusChanges: s.focusChanges + 1,
-        changesTab: action.tab ?? s.changesTab,
       };
     case "changes-tab":
-      return s.changesTab === action.v ? s : { ...s, changesTab: action.v };
+      return withLayout(s, { changesTab: action.v });
     case "edit-commit":
-      return { ...s, changesOpen: true, changesAuto: false, editCommit: s.editCommit + 1 };
+      return { ...withLayout(s, { changes: true }), changesAuto: false, editCommit: s.editCommit + 1 };
     case "toggle-chat":
       // a chat in the centre has no dock to hide or show
-      return isChatCentred(s) ? s : { ...s, chatOpen: !s.chatOpen };
+      return isChatCentred(s) ? s : withLayout(s, { chat: !s.layout.chat });
     case "focus-chat":
       return { ...revealChat(s), focusChat: s.focusChat + 1 };
     case "walked":
@@ -1445,22 +1428,26 @@ function reduce(s: State, action: Action): State {
       if (isChatCentred(s)) return s;
       return { ...s, zen: !s.zen };
     case "toggle-terminal":
-      return { ...s, termOpen: !s.termOpen };
+      return withLayout(s, { term: !s.layout.term });
     case "focus-terminal":
-      return { ...s, termOpen: true, focusTerm: s.focusTerm + 1 };
+      return { ...withLayout(s, { term: true }), focusTerm: s.focusTerm + 1 };
     case "toggle-design":
       // the pane outlines what it lists in the page; a project with nothing to run keeps it shut
-      return isChatCentred(s) ? s : { ...s, designOpen: !s.designOpen };
+      return isChatCentred(s) ? s : withLayout(s, { design: !s.layout.design });
     case "term-stream":
       return withLocal(
-        { ...s, termOpen: true, termTall: action.tall ? s.termTall + 1 : s.termTall },
+        { ...withLayout(s, { term: true }), termTall: action.tall ? s.termTall + 1 : s.termTall },
         action.id,
         (l) => ({ ...l, termStream: action.stream }),
       );
     case "term-run":
       // the shell's tab, with the keyboard, since what the command prints may ask for an answer
       return withLocal(
-        { ...s, termOpen: true, focusTerm: s.focusTerm + 1, termRun: { id: action.id, command: action.command } },
+        {
+          ...withLayout(s, { term: true }),
+          focusTerm: s.focusTerm + 1,
+          termRun: { id: action.id, command: action.command },
+        },
         action.id,
         (l) => ({ ...l, termStream: SHELL_STREAM }),
       );
@@ -1797,25 +1784,25 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // the panel is a place you go, not a fixture: it starts closed and opens itself once, the
       // first time the worktree on screen has something to show. An empty status does not spend
       // the one shot; the moment is the first diff, not the first answer.
-      let changesOpen = s.changesOpen;
+      let changes = s.layout.changes;
       let changesAuto = s.changesAuto;
-      if (s.changesAuto && msg.worktreeId === s.activeId && !s.changesOpen) {
+      if (s.changesAuto && msg.worktreeId === s.activeId && !changes) {
         if (msg.files.length > 0 || (msg.committed?.length ?? 0) > 0) {
-          changesOpen = true;
+          changes = true;
           changesAuto = false;
         }
       }
       // an archived worktree's page opens it when that worktree left work, or landed some: that
       // work is what the page is about
       const page = msg.worktreeId === s.archivedPage ? archivedPageOf(s) : null;
-      if (page && (msg.files.length > 0 || (msg.committed?.length ?? 0) > 0 || page.landed)) changesOpen = true;
+      if (page && (msg.files.length > 0 || (msg.committed?.length ?? 0) > 0 || page.landed)) changes = true;
       // ranges go stale whenever the worktree's git state moves
       const next = withLocal(s, msg.worktreeId, (l) => ({
         ...l,
         git: { files: msg.files, committed: msg.committed, ahead: msg.ahead, behind: msg.behind, head: msg.head },
         changedRanges: {},
       }));
-      return { ...next, changesOpen, changesAuto };
+      return { ...withLayout(next, { changes }), changesAuto };
     }
     case "changed-ranges": {
       const next = withLocal(s, msg.worktreeId, (l) => ({
@@ -1883,7 +1870,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
           seq: msg.seq,
         },
       });
-      return opened.changesOpen ? opened : reducer(opened, { a: "toggle-changes" });
+      return opened.layout.changes ? opened : reducer(opened, { a: "toggle-changes" });
     }
     case "design-index":
       return withLocal(s, msg.worktreeId, (l) => ({ ...l, design: msg.index }));

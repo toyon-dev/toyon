@@ -166,12 +166,12 @@ export function useChords() {
           // already on screen took it from a hand that had come to type in it.
           case "changes":
             dispatch(
-              s.changesOpen && inside(".changes-list, .tree") ? { a: "toggle-changes" } : { a: "focus-changes" },
+              s.layout.changes && inside(".changes-list, .tree") ? { a: "toggle-changes" } : { a: "focus-changes" },
             );
             break;
           case "files":
             dispatch(
-              s.changesOpen && s.changesTab === "files" && inside(".tree")
+              s.layout.changes && s.layout.changesTab === "files" && inside(".tree")
                 ? { a: "toggle-changes" }
                 : { a: "focus-changes", tab: "files" },
             );
@@ -180,7 +180,7 @@ export function useChords() {
             // a chat in the centre, a project's or an archived worktree's, is not a panel: there is
             // nothing to close, only the box to reach
             dispatch(
-              s.chatOpen && !isChatCentred(s) && !s.archivedPage && inside(".chat-input")
+              s.layout.chat && !isChatCentred(s) && !s.archivedPage && inside(".chat-input")
                 ? { a: "toggle-chat" }
                 : { a: "focus-chat" },
             );
@@ -192,7 +192,7 @@ export function useChords() {
             dispatch({ a: "toggle", overlay: { kind: "keys" } });
             break;
           case "terminal":
-            dispatch(s.termOpen && inside(".xterm") ? { a: "toggle-terminal" } : { a: "focus-terminal" });
+            dispatch(s.layout.term && inside(".xterm") ? { a: "toggle-terminal" } : { a: "focus-terminal" });
             break;
           case "design":
             dispatch({ a: "toggle-design" });
@@ -245,7 +245,7 @@ export function useChords() {
           const held = document.activeElement?.closest<HTMLElement>("[data-pane]")?.dataset.pane as
             | PaneKind
             | undefined;
-          const pane = held ?? (s.termOpen ? "terminal" : s.editor ? "editor" : s.designOpen ? "design" : null);
+          const pane = held ?? (s.layout.term ? "terminal" : s.editor ? "editor" : s.layout.design ? "design" : null);
           if (pane === "terminal") dispatch({ a: "toggle-terminal" });
           else if (pane === "editor") dispatch({ a: "close-editor" });
           else if (pane === "design") dispatch({ a: "toggle-design" });

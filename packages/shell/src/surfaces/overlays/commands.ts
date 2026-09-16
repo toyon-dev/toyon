@@ -112,13 +112,9 @@ export function buildCommands(
 export type CommandState = Pick<
   State,
   | "picking"
-  | "changesOpen"
-  | "changesTab"
-  | "chatOpen"
+  | "layout"
   | "chatSide"
   | "railOpen"
-  | "termOpen"
-  | "designOpen"
   | "themePrefs"
   | "themes"
   | "systemDark"
@@ -139,13 +135,9 @@ export function useCommands(): Command[] {
   const dispatch = useDispatch();
   const sock = useSock();
   const picking = useStore((s) => s.picking);
-  const changesOpen = useStore((s) => s.changesOpen);
-  const changesTab = useStore((s) => s.changesTab);
-  const chatOpen = useStore((s) => s.chatOpen);
+  const layout = useStore((s) => s.layout);
   const chatSide = useStore((s) => s.chatSide);
   const railOpen = useStore((s) => s.railOpen);
-  const termOpen = useStore((s) => s.termOpen);
-  const designOpen = useStore((s) => s.designOpen);
   const themePrefs = useStore((s) => s.themePrefs);
   const themes = useStore((s) => s.themes);
   const systemDark = useStore((s) => s.systemDark);
@@ -163,13 +155,9 @@ export function useCommands(): Command[] {
   return useMemo(() => {
     const st: CommandState = {
       picking,
-      changesOpen,
-      changesTab,
-      chatOpen,
+      layout,
       chatSide,
       railOpen,
-      termOpen,
-      designOpen,
       themePrefs,
       themes,
       systemDark,
@@ -188,13 +176,9 @@ export function useCommands(): Command[] {
     return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repoById(st as State, activeRepoId));
   }, [
     picking,
-    changesOpen,
-    changesTab,
-    chatOpen,
+    layout,
     chatSide,
     railOpen,
-    termOpen,
-    designOpen,
     themePrefs,
     themes,
     systemDark,

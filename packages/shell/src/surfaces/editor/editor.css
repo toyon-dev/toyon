@@ -42,6 +42,13 @@
     flex: 1;
     min-height: 0;
   }
+  /* the seat for a file the browser draws: it takes the keyboard so Escape finds the pane, and
+   the ring the browser would draw for that says nothing here */
+  .editor-viewer {
+    position: absolute;
+    inset: 0;
+    outline: none;
+  }
   /* an image file, drawn whole: never larger than the body, never scaled past its own size */
   .editor-image {
     position: absolute;

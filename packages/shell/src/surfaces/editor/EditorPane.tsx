@@ -124,7 +124,13 @@ export function EditorPane({
         {!disk ? (
           <div className="empty">loading {path}…</div>
         ) : viewer ? (
-          <FileViewer kind={viewer} src={worktreeFileUrl(worktreeId, path, disk.version)} path={path} />
+          <FileViewer
+            kind={viewer}
+            src={worktreeFileUrl(worktreeId, path, disk.version)}
+            path={path}
+            openSeq={editor.seq}
+            focus={editor.focus}
+          />
         ) : disk.binary ? (
           <div className="empty">not a text file: open it in another editor</div>
         ) : disk.tooLarge ? (

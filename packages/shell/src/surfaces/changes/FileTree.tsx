@@ -134,10 +134,13 @@ export function FileTree({
     const r = rows[sel];
     const go = (i: number) => {
       const to = rows[i];
-      if (to) setCursor(to.path);
+      if (!to) return;
+      setCursor(to.path);
+      // the arrows preview, as they do in the changes list: the file shows while the keyboard
+      // stays here, and Enter is what takes it into the pane. A folder shows nothing.
+      if (to.kind === "file") openAt(to.path, false);
     };
     switch (e.key) {
-      // the arrows only move: walking a tree to a folder should not open every file on the way
       case "ArrowDown":
       case "ArrowUp":
         e.preventDefault();

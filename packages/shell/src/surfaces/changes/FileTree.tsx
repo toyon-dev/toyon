@@ -6,16 +6,13 @@ import {
   memo,
   type RefObject,
   useCallback,
-  useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { openFile } from "../../state/actions/file.ts";
+import { listFiles, openFile } from "../../state/actions/file.ts";
 import { treeItems, treeSpaceItems } from "../../state/actions/fileTree.ts";
-import { useDispatch, useSock, useStoreInstance } from "../../state/context.tsx";
-import { STORAGE } from "../../state/keys.ts";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useLocalField } from "../../state/selectors.ts";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -26,7 +23,7 @@ import { rowState } from "../../ui/rowState.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { endPathDrag, PATH_MIME, startPathDrag } from "../chat/useIntake.ts";
 import { ancestors, xyClass, xyLetter } from "../util.ts";
-import { buildTree, listingKey, marks, type TreeRow, visibleRows } from "./fileTree.ts";
+import { buildTree, marks, type TreeRow, visibleRows } from "./fileTree.ts";
 import "./tree.css";
 
 const NO_PATHS: string[] = [];
@@ -34,43 +31,16 @@ const NO_STATUS: GitFileStatus[] = [];
 const NO_FOLDERS: ReadonlySet<string> = new Set();
 /** what the tree points `aria-activedescendant` at; the rows are not focusable */
 const treeRowId = (i: number) => `tree-row-${i}`;
-/** worktrees whose opened folders are remembered; the oldest are forgotten past this */
-const KEPT_WORKTREES = 50;
-
-function storedOpen(): Record<string, string[]> {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE.treeOpen) ?? "{}");
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, string[]>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function readOpen(worktreeId: string): Set<string> {
-  const list = storedOpen()[worktreeId];
-  return new Set(Array.isArray(list) ? list.filter((p) => typeof p === "string") : []);
-}
-
-function writeOpen(worktreeId: string, open: ReadonlySet<string>) {
-  const all = storedOpen();
-  delete all[worktreeId];
-  if (open.size > 0) all[worktreeId] = [...open];
-  const ids = Object.keys(all);
-  for (const old of ids.slice(0, Math.max(0, ids.length - KEPT_WORKTREES))) delete all[old];
-  try {
-    localStorage.setItem(STORAGE.treeOpen, JSON.stringify(all));
-  } catch {}
-}
 
 /**
  * The files tab: every file in the worktree, for reading and for pointing the agent at. A row opens
  * the file in the editor pane, names it in the chat, or is dragged there; the tree never adds,
  * renames or deletes anything (its menu asks the agent to).
  *
- * Folders are open for one of two reasons. The person opened them, which is remembered per worktree.
- * Or the file in the editor sits inside them, which lasts while that file is open and is never
- * remembered, so a few jumps with ⌘P do not leave the whole tree open. Closing a folder closes it
- * for both.
+ * Folders are open for one of two reasons. The person opened them, which the store remembers per
+ * worktree (`treeOpen`). Or the file in the editor sits inside them, which lasts while that file is
+ * open and is the tree's own, so a few jumps with ⌘P do not leave the whole tree open. Closing a
+ * folder closes it for both.
  */
 export function FileTree({
   worktreeId,
@@ -96,45 +66,29 @@ export function FileTree({
   const git = useLocalField(worktreeId, "git");
   const status = git?.files ?? NO_STATUS;
 
-  // Listed when the tab opens, and again only when the set of files can have changed: git-status
-  // arrives after every tool call, and an edit to a file that exists changes nothing here.
-  const key = listingKey(git?.head, status);
-  const listed = useRef("");
-  useEffect(() => {
-    const k = `${worktreeId}\n${key}`;
-    if (!sock || listed.current === k) return;
-    listed.current = k;
-    sock.send({ t: "list-files", worktreeId });
-  }, [worktreeId, key, sock]);
+  // Listed when the tab opens, and again on each status, which listFiles turns into a request
+  // only when the set of files can have changed: git-status arrives after every tool call, and an
+  // edit to a file that exists changes nothing here.
+  useOnChange([worktreeId, git, sock], () => listFiles(worktreeId, store.getState(), { sock, dispatch }));
 
-  const [open, setOpen] = useState(() => readOpen(worktreeId));
+  const openList = useStore((s) => s.treeOpen[worktreeId] ?? NO_PATHS);
+  const open = useMemo(() => new Set(openList), [openList]);
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(NO_FOLDERS);
-  const openNow = useRef(open);
-  openNow.current = open;
-  useOnChange([worktreeId], () => setOpen(readOpen(worktreeId)));
   useOnChange([worktreeId, openPath, openRef], () =>
-    setRevealed(
-      openPath && !openRef ? new Set(ancestors(openPath).filter((a) => !openNow.current.has(a))) : NO_FOLDERS,
-    ),
+    setRevealed(openPath && !openRef ? new Set(ancestors(openPath).filter((a) => !open.has(a))) : NO_FOLDERS),
   );
   const isOpen = useCallback((path: string) => open.has(path) || revealed.has(path), [open, revealed]);
   const toggle = useCallback(
     (path: string) => {
-      const next = new Set(open);
-      if (open.has(path) || revealed.has(path)) {
-        next.delete(path);
-        if (revealed.has(path)) {
-          const kept = new Set(revealed);
-          kept.delete(path);
-          setRevealed(kept);
-        }
-      } else {
-        next.add(path);
+      const shut = open.has(path) || revealed.has(path);
+      if (shut && revealed.has(path)) {
+        const kept = new Set(revealed);
+        kept.delete(path);
+        setRevealed(kept);
       }
-      setOpen(next);
-      writeOpen(worktreeId, next);
+      dispatch({ a: "tree-folder", worktreeId, path, open: !shut });
     },
-    [open, revealed, worktreeId],
+    [open, revealed, worktreeId, dispatch],
   );
 
   const tree = useMemo(() => buildTree(files ?? NO_PATHS, submodules ?? NO_PATHS), [files, submodules]);

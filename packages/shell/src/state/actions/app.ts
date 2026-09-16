@@ -37,10 +37,8 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       id: "jump",
       label: "jump to file…",
       key: chord("quick-open"),
-      onClick: () => {
-        sock?.send({ t: "list-files", worktreeId: id });
-        dispatch({ a: "open", overlay: { kind: "quick-open" } });
-      },
+      // the overlay asks for the files itself, as every reader of the list does
+      onClick: () => dispatch({ a: "open", overlay: { kind: "quick-open" } }),
     });
     go.push({
       id: "search",

@@ -84,18 +84,3 @@ export function marks(status: readonly GitFileStatus[]): TreeMarks {
   }
   return { files, folders };
 }
-
-/**
- * What decides that the file list is stale: the commit checked out, and the paths git says were
- * added, deleted or are untracked. An edit to a file that exists changes none of it, so an agent's
- * tool calls do not refetch the list. HEAD catches a rebase or pull that adds files while the
- * status stays clean; it also refetches after a plain commit, which costs one listing.
- */
-export function listingKey(head: string | undefined, status: readonly GitFileStatus[]): string {
-  const moved: string[] = [];
-  for (const s of status) {
-    if (s.xy.includes("D")) moved.push(`-${s.path}`);
-    else if (/[?ARC]/.test(s.xy)) moved.push(`+${s.path}`);
-  }
-  return `${head ?? ""}\n${moved.sort().join("\n")}`;
-}

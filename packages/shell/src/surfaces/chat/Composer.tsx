@@ -18,6 +18,7 @@ import {
 } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { previewBus, togglePick } from "../../app/previewBus.ts";
+import { listFiles } from "../../state/actions/file.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { toInput } from "../../state/attach.ts";
@@ -462,19 +463,19 @@ export function Composer({
           ? (said ?? landing?.subject ?? null)
           : null;
 
-  // On open: the file listing is cached and never invalidated, so refresh it (the agent may have
-  // written a file this turn); cached rows render meanwhile so the menu never looks empty. An
-  // empty command list means that worktree's agent has not run, so ask the daemon to start it
-  // rather than making the person send a message to find out what they could have typed.
+  // On open: the file listing is refreshed if the files can have moved since it was asked for
+  // (the agent may have written one this turn); cached rows render meanwhile so the menu never
+  // looks empty. An empty command list means that worktree's agent has not run, so ask the daemon
+  // to start it rather than making the person send a message to find out what they could have typed.
   const wasOpen = useRef(false);
   useEffect(() => {
     const opening = menuOpen && !wasOpen.current;
     wasOpen.current = menuOpen;
     if (!opening) return;
-    if (trigger?.kind === "file" && id) sock?.send({ t: "list-files", worktreeId: id });
+    if (trigger?.kind === "file" && id) listFiles(id, store.getState(), { sock, dispatch });
     else if (trigger?.kind === "command" && source && commands.length === 0)
       sock?.send({ t: "list-commands", worktreeId: source });
-  }, [menuOpen, trigger?.kind, commands.length, id, source, sock]);
+  }, [menuOpen, trigger?.kind, commands.length, id, source, sock, store, dispatch]);
 
   // ambient context: what the user is looking at, attached invisibly to every send
   const buildContext = (): string | undefined => {

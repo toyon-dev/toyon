@@ -70,6 +70,20 @@ function storedSectionOpen(key: string): Record<string, boolean> {
   return out;
 }
 
+/** the folders each worktree's files tab had open by hand. An entry that is not a list of strings
+ * is dropped: the cost is a tree that starts folded, which is the default anyway. */
+function storedTreeOpen(): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  try {
+    const raw: unknown = JSON.parse(read(localStorage, STORAGE.treeOpen) ?? "{}");
+    if (!raw || typeof raw !== "object") return out;
+    for (const [wtId, paths] of Object.entries(raw as Record<string, unknown>)) {
+      if (Array.isArray(paths) && paths.every((p) => typeof p === "string") && paths.length > 0) out[wtId] = paths;
+    }
+  } catch {}
+  return out;
+}
+
 /** a box sends its text once the typing has paused this long, and at least this often while it goes
  * on; an emptied box sends at once, so a message just sent does not come back in another tab's box */
 const DRAFT_QUIET_MS = 400;
@@ -156,6 +170,7 @@ const store = createStore(
     storedLastActive: storedLastActive(),
     storedDiscoveredOpen: storedSectionOpen(STORAGE.discoveredOpen),
     storedArchivedOpen: storedSectionOpen(STORAGE.archivedOpen),
+    storedTreeOpen: storedTreeOpen(),
     clientId: clientId(),
   }),
 );

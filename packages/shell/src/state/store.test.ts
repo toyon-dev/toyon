@@ -1687,6 +1687,28 @@ describe("discovered worktrees", () => {
     const from = initialState({ clientId: ME, storedArchivedOpen: { r: true, gone: true } });
     expect(run([helloR(wt("m1", "main"))], from).archivedOpen).toEqual({ r: true });
   });
+
+  test("a folder opened by hand in the files tab is remembered per worktree; closing the last forgets the entry", () => {
+    const one = run([{ a: "tree-folder", worktreeId: "w1", path: "src", open: true }]);
+    expect(one.treeOpen).toEqual({ w1: ["src"] });
+    const two = run([{ a: "tree-folder", worktreeId: "w1", path: "src/ui", open: true }], one);
+    expect(two.treeOpen.w1).toEqual(["src", "src/ui"]);
+    // said again, nothing moves
+    expect(run([{ a: "tree-folder", worktreeId: "w1", path: "src", open: true }], two)).toBe(two);
+    const shut = run(
+      [
+        { a: "tree-folder", worktreeId: "w1", path: "src", open: false },
+        { a: "tree-folder", worktreeId: "w1", path: "src/ui", open: false },
+      ],
+      two,
+    );
+    expect(shut.treeOpen).toEqual({});
+  });
+
+  test("a remembered tree survives a reload and goes with its worktree", () => {
+    const from = initialState({ clientId: ME, storedTreeOpen: { m1: ["src"], gone: ["lib"] } });
+    expect(run([helloR(wt("m1", "main"))], from).treeOpen).toEqual({ m1: ["src"] });
+  });
 });
 
 // An archived worktree has no row to select, so its page is a tab over the active row, like the

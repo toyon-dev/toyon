@@ -140,7 +140,9 @@ export interface ComposerWalk {
 export type ChatMark = ({ by: "walk" } & ComposerWalk) | { by: "reveal"; seq: number; n: number };
 
 /** the changes panel's lists: the working tree, the branch's commits, every file */
-export type ChangesTab = "changes" | "history" | "files";
+export const CHANGES_TABS = ["changes", "history", "files"] as const;
+export type ChangesTab = (typeof CHANGES_TABS)[number];
+const isChangesTab = (v: unknown): v is ChangesTab => CHANGES_TABS.includes(v as ChangesTab);
 
 /** everything the shell tracks for one worktree; dropped when the worktree disappears */
 export interface WorktreeLocal {
@@ -151,6 +153,8 @@ export interface WorktreeLocal {
   files?: string[];
   /** the submodules, listed with the files: entries the tree shows but cannot open */
   submodules?: string[];
+  /** the listing key (actions/file.ts) the files were last asked for; the same key asks nothing */
+  filesFor?: string;
   queue: string[];
   /** a message sent from an archived page, shown as sent while the worktree comes back: gone when
    * its own message reaches the chat, and back in the box if the restore is refused */
@@ -362,7 +366,7 @@ export function isLayout(v: unknown): v is Layout {
   const o = v as Record<string, unknown>;
   return (
     typeof o.changes === "boolean" &&
-    (o.changesTab === "changes" || o.changesTab === "history" || o.changesTab === "files") &&
+    isChangesTab(o.changesTab) &&
     typeof o.chat === "boolean" &&
     typeof o.term === "boolean" &&
     typeof o.design === "boolean"
@@ -483,6 +487,10 @@ export interface State {
   discoveredOpen: Record<string, boolean>;
   /** per repo: has the rail's archived section been opened; collapsed by default, like discovered */
   archivedOpen: Record<string, boolean>;
+  /** per worktree: the folders opened by hand in the files tab. Remembered, unlike the folders the
+   * open file reveals, which the tree keeps to itself: a few jumps with ⌘P must not leave the
+   * whole tree open. Dropped with the worktree. */
+  treeOpen: Record<string, string[]>;
   /** per repo: the ref palette's last reply, with the query it answered so a stale one is told
    * from the one the person is waiting on. Repo-scoped, since a ref is not a worktree's. */
   refs: Record<string, { query: string; refs: RefHit[] }>;
@@ -649,6 +657,8 @@ export interface InitialOpts {
   storedDiscoveredOpen?: Record<string, boolean>;
   /** which projects had the archived section open, for the same reason */
   storedArchivedOpen?: Record<string, boolean>;
+  /** the folders each worktree's files tab had open by hand */
+  storedTreeOpen?: Record<string, string[]>;
 }
 
 export function initialState(opts: InitialOpts): State {
@@ -665,6 +675,7 @@ export function initialState(opts: InitialOpts): State {
     visibleDiscovered: [],
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
     archivedOpen: opts.storedArchivedOpen ?? {},
+    treeOpen: opts.storedTreeOpen ?? {},
     refs: {},
     chats: {},
     archived: {},
@@ -1025,6 +1036,10 @@ export type Action =
   | { a: "rail-peek"; on: boolean }
   /** open or close the active project's discovered section */
   | { a: "toggle-discovered" }
+  /** a folder in the files tab opened or closed by hand */
+  | { a: "tree-folder"; worktreeId: string; path: string; open: boolean }
+  /** the files were asked for under this key; the same key again asks nothing */
+  | { a: "files-asked"; worktreeId: string; key: string }
   /** open or close the active project's archived section */
   | { a: "toggle-archived" }
   | { a: "toggle-zen" }
@@ -1423,6 +1438,17 @@ function reduce(s: State, action: Action): State {
       if (!repoId) return s;
       return { ...s, archivedOpen: { ...s.archivedOpen, [repoId]: !s.archivedOpen[repoId] } };
     }
+    case "tree-folder": {
+      const was = s.treeOpen[action.worktreeId] ?? [];
+      if (was.includes(action.path) === action.open) return s;
+      const now = action.open ? [...was, action.path] : was.filter((p) => p !== action.path);
+      const treeOpen = { ...s.treeOpen };
+      if (now.length > 0) treeOpen[action.worktreeId] = now;
+      else delete treeOpen[action.worktreeId];
+      return { ...s, treeOpen };
+    }
+    case "files-asked":
+      return withLocal(s, action.worktreeId, (l) => ({ ...l, filesFor: action.key }));
     case "toggle-zen":
       // zen gives the window to the page, and a project with nothing to run has no page to give it to
       if (isChatCentred(s)) return s;
@@ -1469,6 +1495,13 @@ function reduce(s: State, action: Action): State {
  * page state its preview reports) lives as long as it is listed; a repo's draft box is never a
  * row's, and any box with words in it stays, since an archived worktree keeps its draft under the
  * same id and the daemon says when one is gone for good. */
+/** a record keyed by worktree id, less the ids no row has any more; the same object when none */
+function pruneByRow<T>(byId: Record<string, T>, rows: WorktreeStatus[]): Record<string, T> {
+  const entries = Object.entries(byId);
+  const kept = entries.filter(([id]) => rows.some((w) => w.id === id));
+  return kept.length === entries.length ? byId : Object.fromEntries(kept);
+}
+
 function pruneLocal(
   local: State["local"],
   rows: WorktreeStatus[],
@@ -1559,6 +1592,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         shipping: retireShipping(s.shipping, () => true),
         local: pruneLocal(withDrafts(s.local, msg.drafts), msg.rows, msg.spares, s.archivedPage),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
+        treeOpen: pruneByRow(s.treeOpen, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
         archivedOpen: pruneByRepo(s.archivedOpen, msg.repos),
         refs: pruneByRepo(s.refs, msg.repos),
@@ -1705,6 +1739,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
             archiving: archiving.length === s.archiving.length ? s.archiving : archiving,
             shipping: retireShipping(s.shipping, (id) => !msg.rows.some((w) => w.id === id)),
             local: pruneLocal(s.local, msg.rows, msg.spares, s.archivedPage),
+            treeOpen: pruneByRow(s.treeOpen, msg.rows),
           },
           activeId,
         ),

@@ -122,10 +122,7 @@ export function useChords() {
             break;
           case "quick-open":
             if (s.overlay?.kind === "quick-open") dispatch({ a: "close" });
-            else if (s.activeId) {
-              sock?.send({ t: "list-files", worktreeId: s.activeId });
-              dispatch({ a: "open", overlay: { kind: "quick-open" } });
-            }
+            else if (s.activeId) dispatch({ a: "open", overlay: { kind: "quick-open" } });
             break;
           case "routes":
             // the address bar's own list, which has nowhere to go until the preview is up

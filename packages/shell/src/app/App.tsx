@@ -78,6 +78,7 @@ export function App() {
   const lastActive = useStore((s) => s.lastActive);
   const discoveredOpen = useStore((s) => s.discoveredOpen);
   const archivedOpen = useStore((s) => s.archivedOpen);
+  const treeOpen = useStore((s) => s.treeOpen);
   const theme = useTheme();
   const previewing = useStore((s) => s.previewTheme !== null);
   const openUrl = useStore((s) => s.openUrl);
@@ -290,6 +291,12 @@ export function App() {
       localStorage.setItem(STORAGE.archivedOpen, JSON.stringify(archivedOpen));
     } catch {}
   }, [archivedOpen]);
+  // the folders opened by hand in each files tab: a reload comes back to the tree as it was left
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE.treeOpen, JSON.stringify(treeOpen));
+    } catch {}
+  }, [treeOpen]);
 
   useChords();
   // only the chat panel attaches a dropped file, but the drag is intercepted app-wide: the

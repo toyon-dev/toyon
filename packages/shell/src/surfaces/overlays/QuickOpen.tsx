@@ -1,11 +1,12 @@
 import { type GitFileStatus, routeKey } from "@toyon/shared";
 import { useCallback } from "react";
 import { previewBus } from "../../app/previewBus.ts";
-import { fileItems, openFile } from "../../state/actions/file.ts";
-import { useDispatch, useSock, useStore } from "../../state/context.tsx";
+import { fileItems, listFiles, openFile } from "../../state/actions/file.ts";
+import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
 import { routeTarget, worktreeById } from "../../state/store.ts";
 import { markHits } from "../../ui/highlight.tsx";
+import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { LineCounts } from "../changes/GitFileRow.tsx";
 import { goVerb, narrowPage, pageMenu, pageRowTitle, RouteRow, usePageModel } from "../topbar/RoutePicker.tsx";
@@ -29,6 +30,9 @@ const EMPTY_STATUS: GitFileStatus[] = [];
 export function QuickOpen({ worktreeId }: { worktreeId: string }) {
   const dispatch = useDispatch();
   const sock = useSock();
+  const store = useStoreInstance();
+  // the list in hand is shown at once; a fresh one is asked for if the files can have moved
+  useOnChange([worktreeId, sock], () => listFiles(worktreeId, store.getState(), { sock, dispatch }));
   const local = useLocal(worktreeId);
   const paths = local.files ?? EMPTY_PATHS;
   const status = local.git?.files ?? EMPTY_STATUS;

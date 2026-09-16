@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildTree, listingKey, marks, visibleRows } from "./fileTree.ts";
+import { buildTree, marks, visibleRows } from "./fileTree.ts";
 
 describe("buildTree", () => {
   test("folders come before files, each in natural order", () => {
@@ -51,30 +51,5 @@ describe("marks", () => {
     const m = marks([{ path: "src/new/", xy: "??" }]);
     expect(m.files.size).toBe(0);
     expect([...m.folders].sort()).toEqual(["src", "src/new"]);
-  });
-});
-
-describe("listingKey", () => {
-  const head = "abc123";
-
-  test("editing files that exist leaves the key alone", () => {
-    const before = listingKey(head, [{ path: "a.ts", xy: " M", add: 1 }]);
-    const after = listingKey(head, [
-      { path: "a.ts", xy: " M", add: 9 },
-      { path: "b.ts", xy: "M ", add: 2 },
-    ]);
-    expect(after).toBe(before);
-  });
-
-  test("a file added or deleted changes it, and staging an added file does not", () => {
-    const clean = listingKey(head, []);
-    const added = listingKey(head, [{ path: "new.ts", xy: "??" }]);
-    expect(added).not.toBe(clean);
-    expect(listingKey(head, [{ path: "new.ts", xy: "A " }])).toBe(added);
-    expect(listingKey(head, [{ path: "old.ts", xy: " D" }])).not.toBe(clean);
-  });
-
-  test("a new commit changes it even when the status is clean", () => {
-    expect(listingKey("def456", [])).not.toBe(listingKey(head, []));
   });
 });

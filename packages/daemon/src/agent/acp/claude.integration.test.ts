@@ -138,7 +138,7 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
     const { t, wt, events, session } = world();
     try {
       const name = parseName(await session.ask(NAME_SYSTEM, namePrompt("make the header sticky on scroll")));
-      expect(name).toMatch(/^[a-z0-9]+(-[a-z0-9]+){1,3}$/);
+      expect(name).toMatch(/^[a-z0-9]+(-[a-z0-9]+){0,2}$/);
       expect(events).toEqual([]);
       const registry = new AgentRegistry(BUILTIN_AGENTS, makePaths().agentsDir);
       const plan = parsePlan(

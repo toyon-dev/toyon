@@ -30,14 +30,19 @@ describe("taskText", () => {
 });
 
 describe("parseName", () => {
-  test("keeps 2-4 kebab words, cleans quotes and case, takes the last line", () => {
+  test("keeps 1-3 kebab words, cleans quotes and case, takes the last line", () => {
     expect(parseName("Sticky-Header")).toBe("sticky-header");
     expect(parseName("`dark-mode-toggle`\n")).toBe("dark-mode-toggle");
     expect(parseName("Sure! Here is a name:\nadd about page")).toBe("add-about-page");
+    expect(parseName("planting")).toBe("planting");
   });
-  test("rejects sentences, errors and empties", () => {
+  test("rejects sentences, errors, long names and empties", () => {
     expect(parseName("I cannot name this task without more context about it")).toBeNull();
     expect(parseName("credit-balance-is-too-low-error")).toBeNull();
+    expect(parseName("unexpected status 401 Unauthorized")).toBeNull();
+    expect(parseName("status-401-unauthorized")).toBeNull();
+    expect(parseName("plant-photo-price-badge")).toBeNull();
+    expect(parseName("subagent-expanded-state")).toBeNull();
     expect(parseName("")).toBeNull();
     expect(parseName(null)).toBeNull();
     expect(parseName("ab")).toBeNull();

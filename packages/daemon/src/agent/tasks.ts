@@ -14,7 +14,7 @@ import type { AgentRegistry } from "./registry.ts";
 
 export const NAME_SYSTEM = "You are a naming assistant. Reply with only the requested name.";
 export const namePrompt = (task: string) =>
-  `Name this coding task in 2 to 4 lowercase kebab-case words (like "sticky-header" or "dark-mode-toggle"). Reply with ONLY the name, nothing else.\n\nTask: ${task.slice(0, 500)}`;
+  `Name this coding task the way a teammate would say it out loud: 1 or 2 lowercase kebab-case words, 16 characters at most (like "sticky-header", "dark-mode", "price-badge"). Leave out words every task in the project would share, like the product or the app. Reply with ONLY the name, nothing else.\n\nTask: ${task.slice(0, 500)}`;
 
 /** What a task is named from: its message's text, or, when the message was attachments alone,
  * what they carry: a paste's text, an image's name, a picked element's component or tag and its
@@ -30,7 +30,9 @@ function attachmentText(a: AttachmentInput): string {
   return `element <${a.component ?? a.tag}>${a.text ? ` "${a.text}"` : ""}`;
 }
 
-/** 2–4 kebab words or nothing: an error message or a sentence must not become a title */
+/** 1-3 kebab words or nothing: an error message or a sentence must not become a title. A name
+ * too long for the rail is refused rather than cut, since a cut can turn an error's opening
+ * words into a name that passes. */
 export function parseName(text: string | null): string | null {
   if (!text) return null;
   const line = text.trim().split("\n").at(-1) ?? "";
@@ -38,12 +40,10 @@ export function parseName(text: string | null): string | null {
     .toLowerCase()
     .replace(/[`"'.]/g, "")
     .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 30)
-    .replace(/-+$/g, "");
+    .replace(/^-+|-+$/g, "");
   const words = name.split("-").filter(Boolean);
-  if (words.length < 1 || words.length > 4 || name.length < 3) return null;
-  if (/error|fail|sorry|cannot|unable/.test(name)) return null;
+  if (words.length < 1 || words.length > 3 || name.length < 3 || name.length > 20) return null;
+  if (/error|fail|sorry|cannot|unable|unauthori|forbidden|denied|\b[45]\d\d\b/.test(name)) return null;
   return name;
 }
 

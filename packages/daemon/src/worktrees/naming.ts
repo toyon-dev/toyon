@@ -4,15 +4,16 @@ export function shortId(): string {
   return randomBytes(5).toString("hex");
 }
 
-/** first four words of the prompt as a branch-safe slug; random suffix unless the caller dedupes */
+/** first three words of the prompt as a branch-safe slug; random suffix unless the caller dedupes.
+ * It stays the title when naming fails, so it is held to about what the rail shows. */
 export function slugify(prompt: string, withRandom = true): string {
   const words = prompt
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
     .split(/\s+/)
     .filter(Boolean)
-    .slice(0, 4);
-  const base = words.join("-").slice(0, 40) || "task";
+    .slice(0, 3);
+  const base = words.join("-").slice(0, 20).replace(/-+$/g, "") || "task";
   return withRandom ? `${base}-${randomBytes(2).toString("hex")}` : base;
 }
 

@@ -93,7 +93,7 @@ describe("create / remove", () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "make the header sticky");
     expect(wt.kind).toBe("worktree");
-    expect(wt.branch.startsWith("toyon/make-the-header-sticky")).toBe(true);
+    expect(wt.branch).toMatch(/^toyon\/make-the-header-[0-9a-f]{4}$/);
     expect(existsSync(join(wt.path, "README.md"))).toBe(true);
     expect(wt.linkPath).toBeUndefined(); // the directory already carries the title
     expect(w.agents.get(wt.id)?.sent[0]?.text).toBe("make the header sticky");

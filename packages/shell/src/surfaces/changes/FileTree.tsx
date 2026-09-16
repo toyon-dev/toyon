@@ -362,6 +362,7 @@ const TreeItem = memo(function TreeItem({
       // a div, not a button: Firefox never starts a drag on a button
       className="row row-sm tree-row row-edge"
       data-state={rowState({ current, cursor })}
+      data-kind={row.kind}
       data-path={row.path}
       style={{ "--tree-depth": row.depth } as CSSProperties}
       draggable={!submodule}

@@ -2,7 +2,7 @@
 // newer work has pushed it down the rail and out of mind. Pure, so the daemon's sweep and its tests
 // read the same rule, and every condition errs toward keeping the row.
 
-import { hasOwnBranch, isUnseen, type WorktreeInfo } from "./model.ts";
+import { hasOwnBranch, isUnseen, siblingsOf, type WorktreeInfo } from "./model.ts";
 import { railOrder, railUnitOf } from "./railOrder.ts";
 
 /** rows sent to more recently that a worktree needs before it may go: someone with a handful of
@@ -27,7 +27,7 @@ export interface ArchiveFacts {
 
 /** why the worktree may archive itself now, as the rail will say it; null keeps it */
 export function archiveReason(wt: WorktreeInfo, f: ArchiveFacts): string | null {
-  const group = wt.variant ? f.rows.filter((w) => w.variant?.group === wt.variant?.group) : [wt];
+  const group = [wt, ...siblingsOf(wt, f.rows)];
   // once one attempt has landed the group is decided, and each of the others is an attempt it beat
   const decided = group.some((w) => !!w.lands?.length);
   const lost = decided && !wt.lands?.length;

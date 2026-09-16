@@ -1,5 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { agentDefault, defaultStandsFor } from "./model.ts";
+import { agentDefault, defaultStandsFor, siblingsOf, type WorktreeInfo } from "./model.ts";
+
+describe("siblingsOf", () => {
+  const wt = (id: string, group?: string): WorktreeInfo =>
+    ({ id, ...(group ? { variant: { group, index: 1, of: 2 } } : {}) }) as WorktreeInfo;
+  const rows = [wt("a", "g1"), wt("b", "g1"), wt("c", "g2"), wt("d")];
+
+  test("the other attempts in the group, never the worktree itself", () => {
+    expect(siblingsOf(rows[0]!, rows).map((w) => w.id)).toEqual(["b"]);
+  });
+
+  test("none for a worktree that is not a variant, and none for one alone in its group", () => {
+    expect(siblingsOf(rows[3]!, rows)).toEqual([]);
+    expect(siblingsOf(rows[2]!, rows)).toEqual([]);
+  });
+});
 
 describe("defaultStandsFor", () => {
   const claude = [

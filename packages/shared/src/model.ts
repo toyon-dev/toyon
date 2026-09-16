@@ -338,6 +338,13 @@ export interface Landing {
 /** the branch is toyon's to manage: made by create or a spare claim, so removing the
  * worktree may delete it and a title link may be planted beside it. An adopted worktree runs on
  * a branch the person made, in a directory they chose, and neither is toyon's to touch. */
+/** the other attempts in a variant's group, itself left out; none for a worktree that is not one */
+export function siblingsOf(wt: Pick<WorktreeInfo, "id" | "variant">, rows: readonly WorktreeInfo[]): WorktreeInfo[] {
+  if (!wt.variant) return [];
+  const group = wt.variant.group;
+  return rows.filter((w) => w.id !== wt.id && w.variant?.group === group);
+}
+
 export function hasOwnBranch(wt: Pick<WorktreeInfo, "branch">): boolean {
   return wt.branch.startsWith("toyon/");
 }

@@ -24,6 +24,7 @@ import {
   type RefKind,
   type RepoInfo,
   type SpareInfo,
+  siblingsOf,
   type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
@@ -604,7 +605,7 @@ export class WorktreeService {
       wt.id,
       (this.d.namer ?? makeNamer(this.d.runtime))(prompt, wt).then(async (name) => {
         if (!name) return;
-        for (const sibling of this.d.state.worktrees.filter((w) => w.variant?.group === variant.group)) {
+        for (const sibling of [wt, ...siblingsOf(wt, this.d.state.worktrees)]) {
           await this.rename(sibling.id, `${name}-v${sibling.variant!.index}`).catch((e) => {
             log.warn(sibling.id, "variant rename failed", e);
           });
@@ -995,9 +996,7 @@ export class WorktreeService {
   async pickVariant(worktreeId: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt?.variant) return;
-    const group = wt.variant.group;
-    const siblings = this.d.state.worktrees.filter((w) => w.variant?.group === group && w.id !== worktreeId);
-    for (const sibling of siblings) {
+    for (const sibling of siblingsOf(wt, this.d.state.worktrees)) {
       await this.archiveWorktree(sibling.id).catch((e) => log.warn(sibling.id, "could not archive variant sibling", e));
     }
     delete wt.variant;
@@ -1267,9 +1266,7 @@ export class WorktreeService {
       this.setLanded(wt.id, true);
     }
     if (!result.ok) return { result };
-    const archiveIds = wt.variant
-      ? this.d.state.worktrees.filter((w) => w.variant?.group === wt.variant?.group && w.id !== wt.id).map((w) => w.id)
-      : [];
+    const archiveIds = siblingsOf(wt, this.d.state.worktrees).map((w) => w.id);
     const where = policy.land === "push" ? `${repo.defaultBranch}, pushed` : repo.defaultBranch;
     return { result: { ...result, message: `${wt.title} is on ${where}` }, archiveIds };
   }

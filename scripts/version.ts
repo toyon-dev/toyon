@@ -19,3 +19,13 @@ for (const pkg of ["bridge", "cli", "daemon", "shared", "shell"]) {
   writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`);
   console.log(`${pkg}: ${version}`);
 }
+
+// bun.lock carries each workspace package's own version, so it is stale the moment the files
+// above are written and the next bun command in anyone's tree rewrites it. No dependency moved,
+// so this only rewrites those versions. The bun running this script, not whatever is on PATH.
+const install = Bun.spawnSync([process.execPath, "install"], { cwd: root, stdout: "inherit", stderr: "inherit" });
+if (install.exitCode !== 0) {
+  console.error("could not update bun.lock; commit the version bump only once `bun install` works");
+  process.exit(install.exitCode ?? 1);
+}
+console.log("bun.lock: updated");

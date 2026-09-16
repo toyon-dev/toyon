@@ -104,6 +104,20 @@ function editorOptions(readOnly: boolean) {
   };
 }
 
+/** Monaco colours the lines an editor shows on a 50ms timer after it shows them, so a model made
+ * for this open would paint its first frames in plain text and then flash into colour. Tokenizing
+ * those lines before the frame skips the plain paint. `tokenization` is not in monaco's types. Past
+ * the cap a jump deep into a long file would tokenize everything above it on the main thread, so
+ * there Monaco's own pass colours the lines, a frame or two late. */
+const TOKENIZE_NOW = 3000;
+function tokenizeThrough(model: monaco.editor.ITextModel, line: number) {
+  const through = Math.min(line, model.getLineCount());
+  if (through < 1 || through > TOKENIZE_NOW) return;
+  (model as unknown as { tokenization: { forceTokenization(line: number): void } }).tokenization.forceTokenization(
+    through,
+  );
+}
+
 /** the editor put over the models for one view */
 interface Instance {
   code: monaco.editor.IStandaloneCodeEditor;
@@ -279,11 +293,27 @@ export default function Editor({
       code = diffEditor.getModifiedEditor();
     }
 
+    // colour whatever the first shown frame holds: the viewport as created, and again each time a
+    // restore, a reveal or the diff's collapse moves it before that frame
+    const colour = () => {
+      const last = code.getVisibleRanges().at(-1)?.endLineNumber;
+      if (!last) return;
+      tokenizeThrough(m.modified, last);
+      // the diff's deleted lines are drawn from the other side, which runs longer by what was removed
+      if (diffEditor)
+        tokenizeThrough(m.original, last + Math.max(0, m.original.getLineCount() - m.modified.getLineCount()));
+    };
+    colour();
+    const scrolled = code.onDidScrollChange(colour);
+    let painted = 0;
     let shown = false;
     const show = () => {
       if (shown) return;
       shown = true;
+      colour();
       el.style.opacity = "1";
+      // once a frame is up, Monaco's own pass keeps up with scrolling
+      painted = requestAnimationFrame(() => scrolled.dispose());
     };
     let safety: ReturnType<typeof setTimeout> | undefined;
     // the diff is computed off the main thread: the editor first paints unfolded, then collapses, and
@@ -377,6 +407,8 @@ export default function Editor({
       code,
       dispose: () => {
         clearTimeout(safety);
+        cancelAnimationFrame(painted);
+        scrolled.dispose();
         subMove.dispose();
         subLeave.dispose();
         chatAction.dispose();

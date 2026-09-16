@@ -1495,6 +1495,8 @@ export class WorktreeService {
       this.countsCache.set(id, fresh);
       return fresh;
     } catch {
+      // git could not say (a checkout mid-removal, a lock held): the last counts stand, else none,
+      // and a count not known reads as work to the archive rule, so the row is kept
       return cached ?? {};
     }
   }

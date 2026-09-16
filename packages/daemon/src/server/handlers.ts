@@ -133,14 +133,7 @@ const notify = async (s: Services, ctx: HandlerCtx, worktreeId: string, msg: Shi
   await gitStatus(s, ctx, worktreeId);
 };
 
-/** The agent actions want a worktree toyon runs. One it merely found in git has a row and a pane
- * like the others, so the refusal names the way out rather than calling the worktree unknown. */
-const requireRun = (s: Services, id: string): WorktreeInfo => {
-  if (!s.state.worktree(id) && s.worktrees.readable(id)) {
-    throw new UserError("Toyon does not run this worktree: take it over first");
-  }
-  return s.state.requireWorktree(id);
-};
+const requireRun = (s: Services, id: string): WorktreeInfo => s.worktrees.requireRun(id);
 
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async subscribe(msg, ctx, s) {
@@ -224,19 +217,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async chat(msg, _ctx, s) {
-    // a box whose worktree was archived under it, a moment ago or mid-send: the message brings it
-    // back, the way one typed on its archived page does
-    await s.worktrees.archivingNow(msg.worktreeId);
-    if (!s.state.worktree(msg.worktreeId) && s.worktrees.hasArchived(msg.worktreeId)) {
-      await s.worktrees.restore(msg.worktreeId, msg.clientId, { text: msg.text, attachments: msg.attachments });
-      return;
-    }
-    requireRun(s, msg.worktreeId);
-    const agent = s.runtime.agentFor(msg.worktreeId);
-    if (!agent) throw new UserError("worktree still starting; try again in a moment");
-    agent.send(msg.text, { context: msg.context, attachments: msg.attachments });
-    // the stamp the rail sorts on; its frame also carries the queued count the send may have changed
-    s.worktrees.markPrompted(msg.worktreeId);
+    await s.worktrees.send(msg.worktreeId, {
+      text: msg.text,
+      clientId: msg.clientId,
+      context: msg.context,
+      attachments: msg.attachments,
+    });
   },
 
   async "create-worktree"(msg, _ctx, s) {

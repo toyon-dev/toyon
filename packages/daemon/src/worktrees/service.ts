@@ -1603,6 +1603,35 @@ export class WorktreeService {
     return (await this.archivedGit(worktreeId)?.commitFiles(sha)) ?? [];
   }
 
+  /** The agent actions want a worktree toyon runs. One it merely found in git has a row and a pane
+   * like the others, so the refusal names the way out rather than calling the worktree unknown. */
+  requireRun(worktreeId: string): WorktreeInfo {
+    if (!this.d.state.worktree(worktreeId) && this.readable(worktreeId)) {
+      throw new UserError("Toyon does not run this worktree: take it over first");
+    }
+    return this.d.state.requireWorktree(worktreeId);
+  }
+
+  /** A message typed into a worktree's box. A worktree archived under it, a moment ago or
+   * mid-send, comes back with the message as its first, the way one typed on its archived page
+   * does; otherwise the agent gets it and the row is stamped as prompted. */
+  async send(
+    worktreeId: string,
+    msg: { text: string; clientId?: string; context?: string; attachments?: AttachmentInput[] },
+  ): Promise<void> {
+    await this.archivingNow(worktreeId);
+    if (!this.d.state.worktree(worktreeId) && this.hasArchived(worktreeId)) {
+      await this.restore(worktreeId, msg.clientId, { text: msg.text, attachments: msg.attachments });
+      return;
+    }
+    this.requireRun(worktreeId);
+    const agent = this.d.runtime.agentFor(worktreeId);
+    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+    agent.send(msg.text, { context: msg.context, attachments: msg.attachments });
+    // the stamp the rail sorts on; its frame also carries the queued count the send may have changed
+    this.markPrompted(worktreeId);
+  }
+
   /** someone sent something here, a chat message or a `!` command: the rail sorts on it */
   markPrompted(worktreeId: string) {
     const wt = this.d.state.worktree(worktreeId);

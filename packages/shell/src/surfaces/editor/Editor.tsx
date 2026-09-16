@@ -203,6 +203,10 @@ export default function Editor({
     const scope = `/${file.worktreeId}/${file.ref ?? "work"}`;
     const modified = monaco.editor.createModel(disk.after, undefined, monaco.Uri.file(`${scope}/after/${file.path}`));
     const original = monaco.editor.createModel(disk.before, undefined, monaco.Uri.file(`${scope}/before/${file.path}`));
+    // a model reads bracket colouring when it is made, and these are made before any editor has
+    // pushed its options, so the editor's `bracketPairColorization` never reaches them
+    for (const m of [modified, original])
+      m.updateOptions({ bracketColorizationOptions: { enabled: false, independentColorPoolPerBracketType: false } });
     session.current = { modified, original, place: null, revealedFor: null, focusedFor: null };
     let applying = false;
     const buffer: SyncBuffer = {

@@ -4,7 +4,7 @@ Toyon is where you ask for changes to your web app and try them as they happen. 
 
 Each copy runs on your own machine, and the next one is pre-warmed. Works with Claude Code, Codex and OpenCode over the Agent Client Protocol (ACP).
 
-![Toyon with three chats on a plant shop: the open one is adding a dark mode, and the shop beside it has already turned dark while the agent works](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.jpg)
+![Toyon with four chats on a plant shop, each changing its own copy: a dark theme, one wide column, price badges and bigger photos. The rail walks through the copies and back to the dark one, which is ready to land](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.gif)
 
 **Status: pre-alpha, built in the open.** Runs on macOS and Linux. Windows through WSL2 is next. Expect rough edges, and say so in an issue.
 

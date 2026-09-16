@@ -345,7 +345,7 @@ describe("AcpSession", () => {
     // context reaches the prompt, wrapped as Toyon's, but never the transcript
     expect(fake.prompts[0]!.prompt).toEqual([
       { type: "text", text: "hi" },
-      { type: "text", text: "[Attached by Toyon, not written by the user:\nctx]" },
+      { type: "text", text: "[Attached by Toyon:\nctx]" },
     ]);
     expect((w.events[0] as { text: string }).text).toBe("hi");
     expect(fake.newSessions[0]!._meta).toEqual({ systemPrompt: { append: SYSTEM_APPEND } });
@@ -368,8 +368,8 @@ describe("AcpSession", () => {
     w.session.send("again");
     await w.idle();
     expect(fake.prompts.map((p) => p.prompt.map((b) => (b as { text: string }).text))).toEqual([
-      ["hi", "[Attached by Toyon, not written by the user:\nctx\n\npreview one]"],
-      ["again", "[Attached by Toyon, not written by the user:\npreview two]"],
+      ["hi", "[Attached by Toyon:\nctx\n\npreview one]"],
+      ["again", "[Attached by Toyon:\npreview two]"],
     ]);
     await w.session.close();
   });
@@ -1088,7 +1088,7 @@ describe("AcpSession", () => {
       { type: "text", text: "Image 2: two.png (8×4)" },
       { type: "image", mimeType: "image/png", data: "UE5H" },
       { type: "text", text: "what is this" },
-      { type: "text", text: "[Attached by Toyon, not written by the user:\nctx]" },
+      { type: "text", text: "[Attached by Toyon:\nctx]" },
     ]);
     expect(readFileSync(join(home, "attachments", w.id, "2.png"), "utf8")).toBe("PNG");
     await w.session.close();

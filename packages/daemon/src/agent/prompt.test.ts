@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import { attached, buildPrompt, pasteCaption, pickCaption, previewContext, SYSTEM_APPEND } from "./prompt.ts";
+import { ambientBlock, buildPrompt, pasteCaption, pickCaption, previewContext, SYSTEM_APPEND } from "./prompt.ts";
 
 const ref = {
   kind: "image" as const,
@@ -44,13 +44,11 @@ describe("SYSTEM_APPEND", () => {
   });
 });
 
-describe("attached", () => {
+describe("ambientBlock", () => {
   test("one block with one opening around whatever there is to say, and nothing around nothing", () => {
-    expect(attached([])).toBeUndefined();
-    expect(attached([undefined])).toBeUndefined();
-    expect(attached(["the page", undefined, "the preview"])).toBe(
-      "[Attached by Toyon, not written by the user:\nthe page\n\nthe preview]",
-    );
+    expect(ambientBlock([])).toBeUndefined();
+    expect(ambientBlock([undefined])).toBeUndefined();
+    expect(ambientBlock(["the page", undefined, "the preview"])).toBe("[Attached by Toyon:\nthe page\n\nthe preview]");
   });
 });
 

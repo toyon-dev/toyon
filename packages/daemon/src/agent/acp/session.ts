@@ -28,7 +28,7 @@ import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, SendOpts } from "../
 import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan } from "../modes.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
-import { attached, buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
+import { ambientBlock, buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
@@ -603,7 +603,7 @@ export class AcpSession implements AgentAdapter {
   /** what the shell attached when the message was sent, then where the preview stands now that
    * it is going out, wrapped as one block */
   private contextFor(item: QueueItem): string | undefined {
-    return attached([...(item.context ?? []), this.d.preview?.()]);
+    return ambientBlock([...(item.context ?? []), this.d.preview?.()]);
   }
 
   /** the adapter process, spawned and initialized once; concurrent callers share the spawn */

@@ -31,14 +31,15 @@ export interface PreviewStanding {
   detail?: string;
 }
 
-/** Everything Toyon adds behind a message, wrapped once: what the shell attached when it was sent
- * (the page under the user's eyes, what they ran, a new project's brief) and what the daemon knows
- * as it goes out (where the preview stands, what the tree owes main). One opening, so the agent
- * reads one voice and reads that none of it was typed; nothing when there is nothing to say. */
-export function attached(paragraphs: readonly (string | undefined)[]): string | undefined {
+/** Everything Toyon adds behind a message, wrapped once: what the shell sent with it (the page
+ * under the user's eyes, what they ran, a new project's brief) and what the daemon knows as it goes
+ * out (where the preview stands, what the tree owes main). One opening, so the agent reads one
+ * voice, and the name on it is enough to say the user typed none of it; nothing when there is
+ * nothing to say. */
+export function ambientBlock(paragraphs: readonly (string | undefined)[]): string | undefined {
   const said = paragraphs.filter((p): p is string => !!p);
   if (said.length === 0) return undefined;
-  return `[Attached by Toyon, not written by the user:\n${said.join("\n\n")}]`;
+  return `[Attached by Toyon:\n${said.join("\n\n")}]`;
 }
 
 /** The paragraph after every message that says where the preview is, so the agent checks its work

@@ -44,5 +44,5 @@ export function shellContext(chat: ChatItem[]): string | undefined {
     runs.unshift(`$ ${command}${shown ? `\n${shown}` : ""}`);
   }
   if (runs.length === 0) return undefined;
-  return `Shell commands the user ran in this worktree since their last message, with what each printed:\n${runs.join("\n")}`;
+  return `Shell commands the user ran since their last message, and what each printed:\n${runs.join("\n")}`;
 }

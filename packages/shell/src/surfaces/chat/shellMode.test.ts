@@ -40,7 +40,7 @@ describe("shellContext", () => {
   test("the runs since the last message, unfenced, oldest first", () => {
     const chat = [run("old", "```\nstale\n```"), user("hi"), run("ls", "```\na\nb\n```"), run("false", "exit 1")];
     expect(shellContext(chat)).toBe(
-      "Shell commands the user ran in this worktree since their last message, with what each printed:\n$ ls\na\nb\n$ false\nexit 1",
+      "Shell commands the user ran since their last message, and what each printed:\n$ ls\na\nb\n$ false\nexit 1",
     );
   });
 

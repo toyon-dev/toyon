@@ -114,6 +114,8 @@
     &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
       background: var(--element1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
       border-start-start-radius: 0;
       border-end-start-radius: 0;
     }
@@ -153,6 +155,8 @@
     &[data-state~="cursor"] {
       --row-edge-color: var(--accent);
       background: var(--element1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
       margin: -4px -6px;
       padding: 4px 6px;
       max-width: calc(100% + 12px);
@@ -328,6 +332,8 @@
       position: relative;
       & > summary {
         background: var(--element0);
+        --text1: var(--ink0);
+        --text2: var(--ink1);
       }
     }
     &[open]::before,
@@ -342,6 +348,9 @@
     }
     & summary {
       min-height: var(--row-height-sm);
+      /* the row's own tier, said again on the seat: an inherited colour was computed on .tool-row,
+       above the rung this seat moves, so a lifted summary would keep the colour it had at rest */
+      color: var(--text2);
       padding: 0 var(--row-inset);
       cursor: pointer;
       list-style: none;
@@ -354,32 +363,20 @@
       display: none;
     }
     /* the project pill's vocabulary, on a row instead of a button: a fill under the pointer, and the
-   same fill held while the row is open, since the header is the control you are still holding */
+   same fill held while the row is open, since the header is the control you are still holding.
+   The seat lifts the ladder a rung and every child rides it: the icon, the name and the shine all
+   name the skip tier, and on element1 the colour itself would be 1.06:1. */
     & summary:hover,
     &[open] > summary {
       background: var(--element1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
+    /* the hint is the exception, and it is deliberate: it goes up two rungs rather than one, because
+   what the call actually did is the thing you opened the row to read. */
     & summary:hover .tool-hint,
     &[open] > summary .tool-hint {
-      color: var(--text0);
-    }
-    & summary:hover .tool-icon,
-    &[open] > summary .tool-icon {
-      color: var(--text1);
-    }
-    /* the name rides up with the rest of the row. A tier is measured against the surface under it, and
-   text2 on element1 is 1.06:1, so text that stays put while its seat lifts does not stay legible: the hint
-   and the icon were already lifted here and the name was the one child that was not. */
-    & summary:hover .tool-name,
-    &[open] > summary .tool-name {
-      color: var(--text1);
-    }
-    /* the shine paints through its own gradient and never reads `color`, so the lifted tiers above
-     do nothing for a running row: its dim tier stayed text2 on element1 while the seat lifted under
-     it, and the band was the only legible part. The dim tier rides up with the name instead. */
-    & summary:hover .live-text,
-    &[open] > summary .live-text {
-      --live-dim: var(--text1);
+      color: var(--ink0);
     }
     /* a summary is one line: a command long enough to wrap would push the row into a paragraph of
    monospace, and a transcript of those is unreadable. The name is only there when the agent sent
@@ -639,11 +636,12 @@
    top of that ramp reads as lit at all, which is a band about three characters wide on a path.
    Holding text0 across the middle tenth is what makes it a band you watch travel.
 
-   The dim tier is a property rather than text2 written in, because the row lifts it: a hovered or
-   open row seats its summary on element1, where text2 is unreadable (the tool-name rule above). */
+   The dim tier is named as a tier: a hovered or open row seats its summary on element1 and moves
+   the ladder up with it, so text2 here is already the rung that stays legible there. It has to come
+   through the tier and not through `color`, because the shine paints through a gradient and reads
+   no colour it inherits. */
   .live-text {
-    --live-dim: var(--text2);
-    background: linear-gradient(90deg, var(--live-dim) 30%, var(--text0) 45%, var(--text0) 55%, var(--live-dim) 70%);
+    background: linear-gradient(90deg, var(--text2) 30%, var(--text0) 45%, var(--text0) 55%, var(--text2) 70%);
     background-size: 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;

@@ -71,10 +71,15 @@
     & .menu-detail {
       font: var(--type-ui-sm);
     }
-    /* the arrows and the pointer set the same index, so this is one highlight with two ways in */
+    /* the arrows and the pointer set the same index, so this is one highlight with two ways in. A
+     menu item is a .row and gets the lift from there under the pointer, but cursor moves a seat
+     here where on a file or a commit it moves none, so this one says so itself: the detail and the
+     chord are .row-dim and would otherwise stay the skip tier on element0. */
     & button:hover,
     & button[data-state~="cursor"] {
       background: var(--element0);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
     & button.danger {
       color: var(--red);

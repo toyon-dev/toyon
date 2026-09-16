@@ -195,7 +195,8 @@
     }
     &:hover {
       background: var(--element0);
-      --row-dim-color: var(--text1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
     /* Where the keyboard is, and nothing more. The orange edge means "this is the one you are on"
    (the active worktree, the open tool call); on a picker row it read as a choice already made,
@@ -204,7 +205,8 @@
     &[data-state~="cursor"] {
       background: var(--element1);
       color: var(--text0);
-      --row-dim-color: var(--text1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
   }
 }

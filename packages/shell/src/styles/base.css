@@ -123,32 +123,47 @@
       color: var(--text0);
     }
   }
-  /* A child that sits one rung below the row it is in. It reads its tier off a variable rather than
-   being selected through the row, the way --row-edge-color and --dot-gap already work here, so a
-   row type that is not .row (the picker's, which stays display:block for its ellipsis) opts in with
-   one declaration instead of a copy of the rule below per child. Those copies are exactly what went
-   wrong: the pickers had four and the file row's directory was the fifth nobody wrote, so it went
-   invisible the moment the row was picked. */
+  /* A child that sits one rung below the row it is in. It names the skip tier and nothing else; the
+   lift is the seat's, below. */
   .row-dim {
-    color: var(--row-dim-color, var(--text2));
+    color: var(--text2);
   }
-  /* a lifted seat lifts its dim child too, and picked lifts further than hover: text2 on element1 is
-   1.06:1, which is not a quiet tier but an invisible one. text1 rather than text0, because at text0
-   a filename and its directory read as one string instead of a name with a location after it. The
-   states are data-state words (ui/rowState.ts): current lifts the seat, cursor deliberately does
-   not, since on a file or a commit it is the keyboard cursor and moves no background. */
+
+  /* ---- the lifted seat ----
+   A seat that lifts moves the ladder up a rung for everything standing on it: text1 becomes the
+   read tier and text2 the scan tier, so a child that names text2 goes on being the quiet one
+   instead of becoming 1.06:1 on element1. It is one inherited declaration per seat rather than a
+   colour per child, which is what this kept costing: four rules had been written by hand in the
+   transcript alone, one per child someone noticed, and the pickers had four more with the file
+   row's directory as the fifth nobody wrote, so it went invisible the moment the row was picked.
+
+   The rungs move one step, not two: at text0 a filename and its directory read as one string
+   instead of a name with a location after it. text0 is not redeclared, because there is nothing
+   above it; a child that wants the top tier under the pointer names it and says why (the
+   transcript's hint does).
+
+   What must not ride is what is not measured against the surface under it: a control's own rest
+   and disabled tier, and a dot. Those name --ink0/1/2, which is the same colour held still.
+
+   The states are data-state words (ui/rowState.ts): current lifts the seat, cursor deliberately
+   does not, since on a file or a commit it is the keyboard cursor and moves no background. Any
+   other surface with a seat of its own opts in with the same two lines. */
   .row {
     &:hover,
     &[data-state~="current"],
     &.menu-open {
-      --row-dim-color: var(--text1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
   }
+  /* a whole row in the skip tier: a worktree git knows about that toyon does not run. It names the
+   tier on both sides, and the hover rule is there only to out-specify .row's own lift above; the
+   rung it lands on is the seat's, the same one every passenger gets. */
   .row-quiet {
     color: var(--text2);
     &:hover,
     &.menu-open {
-      color: var(--text1);
+      color: var(--text2);
     }
   }
 
@@ -180,6 +195,8 @@
   }
 
   /* ---- status dots ---- */
+  /* Every colour here is an ink rather than a tier: a dot is read, not run, and one that shifted as
+   the pointer crossed its row would read as the proc changing state. */
   .dot {
     width: 8px;
     height: 8px;
@@ -191,7 +208,7 @@
       background: var(--green);
     }
     &.starting {
-      background: var(--text2);
+      background: var(--ink2);
     }
     /* the same green as `running`, told apart by the pulse alone: a worktree with its server up
    and its agent busy is one healthy thing in two tenses, and the breath is the tense. Each dot
@@ -233,7 +250,7 @@
       background: none;
       /* 1.5px, not 1: at eight pixels across, a hairline ring on a dark surface reads as a smudge
      rather than as a dot with nothing in it, which is the whole message */
-      box-shadow: inset 0 0 0 1.5px var(--text2);
+      box-shadow: inset 0 0 0 1.5px var(--ink2);
     }
     /* a turn finished here and nobody has looked yet. A modifier rather than a colour of its own: the
    dot underneath still says what the worktree is, and the ring says you have not seen it. Drawn as
@@ -242,7 +259,7 @@
     &.unseen {
       box-shadow:
         0 0 0 1px var(--dot-gap, var(--surface1)),
-        0 0 0 2.5px var(--text2);
+        0 0 0 2.5px var(--ink2);
     }
   }
   @keyframes pulse {

@@ -12,14 +12,14 @@
    drawn into the gutter that opens: one 1px line per ancestor, each in the column that ancestor's
    caret sits in, so a run of children reads as one bracket rather than as rows that happen to
    start further right. They are the row's own background rather than an element per level, since a
-   straight rail needs nothing that the depth does not already say; 17px is the first caret's
+   straight rail needs nothing that the depth does not already say; 18px is the first caret's
    centre (--row-inset plus half the caret's box), and the step is the indent. */
   .tree-row {
     gap: 2px;
     padding-left: calc(var(--row-inset) + var(--tree-depth, 0) * 14px);
     cursor: default;
     background-image: repeating-linear-gradient(to right, var(--border0) 0 1px, transparent 1px 14px);
-    background-position: 17px 0;
+    background-position: 18px 0;
     background-repeat: no-repeat;
     background-size: calc(var(--tree-depth, 0) * 14px) 100%;
     /* the file open in the editor: the band and the edge, the pair every picked row carries. The
@@ -47,7 +47,7 @@
    glyph is wider than the column and overhangs it, which is why the rails are placed by this
    column's centre and not by its edge. */
   .tree-caret {
-    width: 10px;
+    width: 12px;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;

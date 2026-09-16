@@ -93,9 +93,9 @@ describe("color helpers", () => {
     // the fault paints whole rows, so it steps off the accent: red here, orange where a theme selects in red
     expect(v["--fault"]).toBe(gruvboxDarkSoft.colors.red);
     expect(themeToCssVars(toyonDark)["--fault"]).toBe(toyonDark.colors.orange);
-    // + accent, fault, the two sunken tones, scrim, shadow, a word weight per diff tint, and the seven
-    // syntax colours
-    expect(Object.keys(v).length).toBe(themeColorKeys.length + 15);
+    // + accent, fault, the two sunken tones, scrim, shadow, a word weight per diff tint, the three
+    // inks (the text ladder held still), and the seven syntax colours
+    expect(Object.keys(v).length).toBe(themeColorKeys.length + 18);
   });
 });
 

@@ -14,7 +14,11 @@
     --btn-pad-x: 8px;
     gap: var(--btn-gap);
     line-height: 1.4;
-    color: var(--text1);
+    /* An ink and not a tier, and the same goes for every rest and disabled colour below. A button
+     inside a row does not ride that row's seat: lifting with it would paint a resting control in
+     exactly the colour that control uses under the pointer, and you could no longer tell which of
+     a row's buttons you were on. A control's colour is its own state. */
+    color: var(--ink1);
     border-radius: var(--radius);
     padding: 1px var(--btn-pad-x);
     white-space: nowrap;
@@ -34,7 +38,7 @@
       background: var(--element0);
     }
     &:disabled {
-      color: var(--text2);
+      color: var(--ink2);
       cursor: default;
       background: none;
     }
@@ -47,7 +51,7 @@
       border-color: currentColor;
     }
     &:disabled {
-      color: var(--text2);
+      color: var(--ink2);
       border-color: var(--border0);
     }
   }
@@ -61,7 +65,7 @@
      whole tier, 4.3:1 for a text button against 2.1:1 for an icon one. There is a reading where
      chrome should be quieter than an action, but nothing wrote it down and .btn-outline was a
      third case again, so they are one rule now. */
-    color: var(--text1);
+    color: var(--ink1);
     border-radius: var(--radius);
     line-height: 1;
     &:hover {
@@ -71,7 +75,7 @@
     /* text2, the same tier every :disabled rule uses; 4.3:1 against rest's 2.1:1 says disabled on
    its own, so there is no fourth tier for it */
     &:disabled {
-      color: var(--text2);
+      color: var(--ink2);
       cursor: default;
       background: none;
     }
@@ -125,7 +129,7 @@
     color: var(--accent);
   }
   .tone-quiet {
-    color: var(--text2);
+    color: var(--ink2);
   }
   .tone-danger {
     color: var(--red);
@@ -185,7 +189,7 @@
       position: absolute;
       inset: 0;
       margin: auto;
-      color: var(--text2);
+      color: var(--ink2);
     }
   }
 

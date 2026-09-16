@@ -82,10 +82,12 @@
       font: var(--type-ui);
       list-style: none;
     }
+    /* the seat lifts and the line rides it: the colour is still the text2 declared above, one rung
+     up because the ladder moved */
     & > summary:hover {
       background: var(--element0);
-      color: var(--text1);
-      --row-dim-color: var(--text1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
     & > summary::-webkit-details-marker {
       display: none;
@@ -192,7 +194,8 @@
   .design-face-head:hover {
     background: var(--element0);
     --row-edge-color: var(--accent);
-    --row-dim-color: var(--text1);
+    --text1: var(--ink0);
+    --text2: var(--ink1);
   }
   .design-face-head {
     margin-bottom: 2px;
@@ -291,7 +294,8 @@
     &:focus-visible {
       background: var(--element0);
       --row-edge-color: var(--accent);
-      --row-dim-color: var(--text1);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
       outline: none;
     }
   }

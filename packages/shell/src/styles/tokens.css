@@ -27,7 +27,7 @@
    * Several of these carry the same value today. That is fine and it is the point: they are the
    * same colour for different reasons, and naming them apart is what makes moving one possible.
    * A tier is measured against the surface under it, so when a seat lifts, the text on it lifts
-   * too (see .tool-row summary:hover). That idiom is why there is no "text1 on element0" token,
+   * too (see the lifted seat in base.css). That idiom is why there is no "text1 on element0" token,
    * which is the tax VS Code and Dropbox both pay and an editor this size does not need. */
     --surface0: #32302d;
     --surface1: #3d3835;
@@ -39,6 +39,10 @@
     --text0: #e6dcb6;
     --text1: #9e927e;
     --text2: #6a6055;
+    /* the same three held still; see the ladder note below */
+    --ink0: var(--text0);
+    --ink1: var(--text1);
+    --ink2: var(--text2);
     --green: #78c945;
     --red: #ff4929;
     --yellow: #fcbe03;
@@ -58,7 +62,22 @@
      on the tier above it because nobody could see the order. text0 is what you read, text1 is what
      you scan (labels, filenames, controls at rest), text2 is what you skip (hints, comments, the
      tool log, and anything switched off). Three is enough: a fourth tier lived here for about an
-     hour and turned out to be covering for a control that was resting on the wrong rung. */
+     hour and turned out to be covering for a control that was resting on the wrong rung.
+
+     --text0/1/2 are the tier where you are standing, not a fixed colour: a seat that lifts
+     redeclares them one rung up for everything inside it (base.css, the lifted seat), so a child
+     that names text2 goes on being the skip tier instead of becoming 1.06:1 on element1. That
+     redeclaration is the whole mechanism, and it is why nothing has to name a hover colour per
+     child; four of those had been written by hand, one per child that someone noticed.
+
+     --ink0/1/2 are the same three colours held still, for a rule that means the colour and not the
+     tier. Two kinds of thing want them. A control says its own state and not its seat's: a resting
+     button inside a hovered row must not paint itself in the colour that same button uses under the
+     pointer, and a disabled one must stay disabled. And a mark that is read rather than run: a
+     status dot that shifted as the pointer crossed its row would read as the proc changing state.
+
+     The test is whether the thing is measured against the surface under it. Prose is, so it rides.
+     A control's rest tier and a dot are not, so they hold. */
 
     /* what "you are on this one" is painted in: the active worktree, the open tool call, a checked
      box. One hue for all of them, so a theme changes the whole idea of selected by

@@ -998,6 +998,14 @@ export function syntaxOf(theme: Theme): Record<ThemeSyntaxToken, string> {
 export function themeToCssVars(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {};
   for (const k of themeColorKeys) out[cssVarName(k)] = theme.colors[k];
+  // the ladder's three rungs as colours, beside the tier variables the loop just wrote. --text0/1/2
+  // are relative: a seat that lifts redefines them one rung up for everything inside it, so text in
+  // a hovered row stays as far from its ground as it was at rest. --ink0/1/2 are the same three
+  // colours held still, for the rules that mean the colour rather than the tier: a control's own
+  // rest and disabled, a status dot.
+  out["--ink0"] = theme.colors.text0;
+  out["--ink1"] = theme.colors.text1;
+  out["--ink2"] = theme.colors.text2;
   for (const [token, color] of Object.entries(syntaxOf(theme))) out[`--syntax-${token}`] = color;
   out["--accent"] = theme.colors[accentKey(theme)];
   out["--fault"] = theme.colors[faultKey(theme)];

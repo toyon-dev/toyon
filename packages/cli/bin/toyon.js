@@ -5,7 +5,6 @@
 // platform package keeps it when that postinstall never ran, and finally a bun already on PATH.
 
 import { spawnSync } from "node:child_process";
-import { closeSync, openSync, readSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,66 +12,71 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
-// A real bun is a native executable. When npm or pnpm skips bun's postinstall the package still
-// leaves a bin/bun.exe behind: a shell script that prints an error and exits 1. Existence alone
-// therefore proves nothing, and trusting it would hand the stub to spawnSync and swallow the
-// fallbacks below. The magic bytes tell the two apart for the price of one read.
-// ELF, then Mach-O in both widths and both byte orders, then a Mach-O universal binary.
-const NATIVE_MAGIC = new Set([0x7f454c46, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe, 0xbebafeca]);
+// The bun this package was built against: the daemon and bun-pty are tested on it, and an older one
+// on PATH fails somewhere opaque rather than here.
+const FLOOR = require("../package.json").dependencies.bun;
 
-function isNativeExecutable(file) {
-  let fd;
-  try {
-    fd = openSync(file, "r");
-    const head = Buffer.alloc(4);
-    if (readSync(fd, head, 0, 4, 0) < 4) return false;
-    return NATIVE_MAGIC.has(head.readUInt32BE(0));
-  } catch {
-    return false;
-  } finally {
-    if (fd !== undefined) closeSync(fd);
+function parse(v) {
+  const bare = v.trim().replace(/^[\^~]/, "");
+  return bare.split(".").map(Number);
+}
+function atLeast(version, floor) {
+  const a = parse(version);
+  const b = parse(floor);
+  for (let i = 0; i < b.length; i++) {
+    if ((a[i] ?? 0) !== b[i]) return (a[i] ?? 0) > b[i];
   }
+  return true;
+}
+
+// Whether a candidate is a bun we can use is asked of the candidate itself. When npm or pnpm skips
+// bun's postinstall the package still leaves a bin/bun.exe behind: a shell script that prints an
+// error and exits 1. And `npx` puts node_modules/.bin first on PATH, where that same stub sits
+// under the name `bun`. Existence proves nothing and so does the file's shape (an asdf or mise
+// shim is a script and a real bun); a run does, for the price of one spawn per candidate.
+function usable(file) {
+  const r = spawnSync(file, ["--version"], { encoding: "utf8" });
+  return r.status === 0 && /^\d+\.\d+\.\d+/.test(r.stdout.trim()) && atLeast(r.stdout, FLOOR);
 }
 
 function bundledBun() {
   try {
     // the package's postinstall leaves the real binary at bin/bun.exe on every platform
-    const exe = join(dirname(require.resolve("bun/package.json")), "bin", "bun.exe");
-    return isNativeExecutable(exe) ? exe : null;
+    return join(dirname(require.resolve("bun/package.json")), "bin", "bun.exe");
   } catch {
     return null;
   }
 }
 
-// Where the platform package keeps the binary before bun's postinstall moves it into place. A
+// Where the platform packages keep the binary before bun's postinstall moves it into place. A
 // skipped postinstall is the only reason bundledBun misses, so the binary is still right here.
-function platformBun() {
+// On Alpine both the glibc and the musl package install; the probe tells them apart.
+function platformBuns() {
   const arch = process.arch === "arm64" ? "aarch64" : process.arch;
   const names = [`@oven/bun-${process.platform}-${arch}`];
   if (process.platform === "linux") names.push(`@oven/bun-linux-${arch}-musl`);
+  const out = [];
   for (const name of names) {
     try {
-      const exe = join(dirname(require.resolve(`${name}/package.json`)), "bin", "bun");
-      if (isNativeExecutable(exe)) return exe;
+      out.push(join(dirname(require.resolve(`${name}/package.json`)), "bin", "bun"));
     } catch {
       // not installed for this platform; try the next candidate
     }
   }
-  return null;
+  return out;
 }
 
-function pathBun() {
-  const which = process.platform === "win32" ? "where" : "which";
-  const r = spawnSync(which, ["bun"], { encoding: "utf8" });
-  const found = r.status === 0 ? r.stdout.split("\n")[0].trim() : "";
-  return found || null;
+// every bun on PATH, not the first: under npx the first is the stub in node_modules/.bin
+function pathBuns() {
+  const r = spawnSync("which", ["-a", "bun"], { encoding: "utf8" });
+  return r.status === 0 ? r.stdout.split("\n").filter((line) => line.trim()) : [];
 }
 
-const bun = bundledBun() ?? platformBun() ?? pathBun();
+const bun = [bundledBun(), ...platformBuns(), ...pathBuns()].filter(Boolean).find(usable);
 if (!bun) {
   console.error(
-    "toyon: could not find a usable bun.\n" +
-      "the bundled copy is missing or incomplete, and there is no bun on PATH.\n" +
+    `toyon: could not find a usable bun (${FLOOR} or newer).\n` +
+      "the bundled copy is missing or incomplete, and there is none on PATH.\n" +
       "install bun from https://bun.sh, or reinstall toyon with install scripts enabled.",
   );
   process.exit(1);

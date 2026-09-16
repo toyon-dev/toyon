@@ -6,7 +6,7 @@ import { terminalBus } from "./app/terminalBus.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { FileSync } from "./state/fileSync.ts";
 import { migrateStorage, STORAGE } from "./state/keys.ts";
-import { defaultPanels, initialState, type Panels } from "./state/store.ts";
+import { type ChangesTab, defaultPanels, initialState, type Panels } from "./state/store.ts";
 import { ErrorBoundary, markStaleBuild } from "./ui/ErrorBoundary.tsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
@@ -34,6 +34,8 @@ function read(storage: Storage, key: string): string | null {
  * read field by field, so a bad one costs a default rather than a blank dock */
 function storedPanels(): Record<string, Panels> {
   const bool = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fallback);
+  const tab = (v: unknown): ChangesTab =>
+    v === "changes" || v === "history" || v === "files" ? v : defaultPanels.changesTab;
   const out: Record<string, Panels> = {};
   try {
     const raw: unknown = JSON.parse(read(localStorage, STORAGE.panels) ?? "{}");
@@ -42,6 +44,7 @@ function storedPanels(): Record<string, Panels> {
       if (!p || typeof p !== "object") continue;
       out[id] = {
         changes: bool(p.changes, defaultPanels.changes),
+        changesTab: tab(p.changesTab),
         chat: bool(p.chat, defaultPanels.chat),
         term: bool(p.term, defaultPanels.term),
         design: bool(p.design, defaultPanels.design),

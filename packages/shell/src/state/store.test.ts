@@ -1493,7 +1493,15 @@ describe("panel layout", () => {
 
   test("opening a panel remembers it under the active project", () => {
     const s = run([two(), { a: "toggle-design" }, { a: "toggle-changes" }]);
-    expect(s.panels.r1).toEqual({ changes: true, chat: true, term: false, design: true });
+    expect(s.panels.r1).toEqual({ changes: true, changesTab: "changes", chat: true, term: false, design: true });
+  });
+
+  test("the changes dock's tab is remembered, so a reload with the files tree up comes back to it", () => {
+    const s = run([two(), { a: "focus-changes", tab: "files" }]);
+    expect(s.panels.r1?.changesTab).toBe("files");
+    const reloaded = run([two()], initialState({ clientId: ME, storedRepo: "r1", storedPanels: s.panels }));
+    expect(reloaded.changesOpen).toBe(true);
+    expect(reloaded.changesTab).toBe("files");
   });
 
   test("switching projects paints that project's layout, and switching back restores this one", () => {
@@ -1521,7 +1529,7 @@ describe("panel layout", () => {
     const from = initialState({
       clientId: ME,
       storedRepo: "r2",
-      storedPanels: { r2: { changes: false, chat: true, term: false, design: true } },
+      storedPanels: { r2: { changes: false, changesTab: "changes", chat: true, term: false, design: true } },
     });
     expect(from.changesOpen).toBe(false);
     expect(from.designOpen).toBe(true);
@@ -1542,7 +1550,7 @@ describe("panel layout", () => {
     const from = initialState({
       clientId: ME,
       storedRepo: "r1",
-      storedPanels: { r1: { changes: false, chat: true, term: false, design: false } },
+      storedPanels: { r1: { changes: false, changesTab: "changes", chat: true, term: false, design: false } },
     });
     const s = run([two(), server({ t: "git-status", worktreeId: "m1", files: [{ xy: " M", path: "a" }] })], from);
     expect(s.changesOpen).toBe(false);

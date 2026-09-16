@@ -340,25 +340,53 @@ export type ChatSide = "left" | "right";
  * here: it is a mode you leave, not a layout). */
 export interface Panels {
   changes: boolean;
+  /** the changes dock's open tab, so a reload with the files tree up comes back to it */
+  changesTab: ChangesTab;
   chat: boolean;
   term: boolean;
   design: boolean;
 }
 
 /** what a project that has never been laid out gets: the docks open, the panes shut */
-export const defaultPanels: Panels = Object.freeze({ changes: false, chat: true, term: false, design: false });
+export const defaultPanels: Panels = Object.freeze({
+  changes: false,
+  changesTab: "changes",
+  chat: true,
+  term: false,
+  design: false,
+});
 
 function panelsOf(s: State): Panels {
-  return { changes: s.changesOpen, chat: s.chatOpen, term: s.termOpen, design: s.designOpen };
+  return {
+    changes: s.changesOpen,
+    changesTab: s.changesTab,
+    chat: s.chatOpen,
+    term: s.termOpen,
+    design: s.designOpen,
+  };
 }
 
 function samePanels(a: Panels, b: Panels): boolean {
-  return a.changes === b.changes && a.chat === b.chat && a.term === b.term && a.design === b.design;
+  return (
+    a.changes === b.changes &&
+    a.changesTab === b.changesTab &&
+    a.chat === b.chat &&
+    a.term === b.term &&
+    a.design === b.design
+  );
 }
 
 function applyPanels(s: State, p: Panels): State {
   // a remembered layout is a decision, so the first-diff auto-open must not second-guess it
-  return { ...s, changesOpen: p.changes, chatOpen: p.chat, termOpen: p.term, designOpen: p.design, changesAuto: false };
+  return {
+    ...s,
+    changesOpen: p.changes,
+    changesTab: p.changesTab,
+    chatOpen: p.chat,
+    termOpen: p.term,
+    designOpen: p.design,
+    changesAuto: false,
+  };
 }
 
 /** what the editor pane draws for its file: the diff against main, or the file with none over it */
@@ -669,7 +697,7 @@ export function initialState(opts: InitialOpts): State {
     paletteReturn: null,
     incompatible: false,
     changesOpen: defaultPanels.changes,
-    changesTab: "changes",
+    changesTab: defaultPanels.changesTab,
     focusChanges: 0,
     editCommit: 0,
     chatOpen: defaultPanels.chat,

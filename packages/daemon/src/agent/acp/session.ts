@@ -82,6 +82,9 @@ export interface AcpSessionDeps {
    * the picker. Only categories present are reported: an agent that has effort on some models
    * and not others keeps the last list it gave rather than flapping off. */
   onOptionsLearned?: (category: OptionCategory, choices: ModelChoice[]) => void;
+  /** where the preview stands, as a block after every message; read as each goes out, since the
+   * port belongs to the runtime and not to this session */
+  preview?: () => string | undefined;
 }
 
 const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
@@ -318,7 +321,12 @@ export class AcpSession implements AgentAdapter {
       outcome = steerOutcome(
         await live.conn.ctx.request(STEER_METHOD, {
           sessionId: live.sessionId,
-          prompt: buildPrompt(item.text, item.context, undefined, this.carried(live, item.recorded.attachments)),
+          prompt: buildPrompt(
+            item.text,
+            this.contextFor(item),
+            undefined,
+            this.carried(live, item.recorded.attachments),
+          ),
           // the turn can also end on the wire: ask for the message back rather than let the agent
           // prompt itself with it, since nothing here would be tracking a turn it started alone
           _meta: { steering: { idleBehavior: "promptRequired" } },
@@ -587,9 +595,16 @@ export class AcpSession implements AgentAdapter {
     live.prefixPending = false;
     const res = await live.conn.ctx.request(acp.methods.agent.session.prompt, {
       sessionId: live.sessionId,
-      prompt: buildPrompt(item.text, item.context, prefix, carried),
+      prompt: buildPrompt(item.text, this.contextFor(item), prefix, carried),
     });
     this.emit({ type: "turn-end", stopReason: mapStopReason(res.stopReason), ts: Date.now() });
+  }
+
+  /** the message's own context (what the shell attached when it was sent) and where the preview
+   * stands now that it is going out */
+  private contextFor(item: QueueItem): string | undefined {
+    const blocks = [item.context, this.d.preview?.()].filter((b): b is string => !!b);
+    return blocks.length ? blocks.join("\n\n") : undefined;
   }
 
   /** the adapter process, spawned and initialized once; concurrent callers share the spawn */

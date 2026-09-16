@@ -3,7 +3,7 @@
 // it; the others get it prepended to the first prompt of a session.
 
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import type { ImageRef, PasteRef, PickRef } from "@toyon/shared";
+import type { ImageRef, PasteRef, PickRef, ProcStatus } from "@toyon/shared";
 import { attachmentLabel, lineSpan } from "@toyon/shared";
 import type { Stored } from "./attachments.ts";
 
@@ -16,9 +16,49 @@ export const SYSTEM_APPEND = [
   "Keep the scope tight: do the asked task well, then stop. Suggest follow-ups in chat instead of expanding scope.",
   "`@some/path` in a message means read that file or directory first; `@changes` means this worktree's uncommitted files, which `git status` lists.",
   'Toyon previews the project in a browser panel by running the commands in its settings file, .toyon/settings.json (or toyon.json at the repo root, in a repo that keeps it there), shaped like {"setup": ["bun install"], "run": {"web": "bun run dev --port $PORT"}, "check": "bun run check", "land": {"route": "merge"}}: setup runs once in every new worktree, every command in run keeps running and must listen on $PORT, which toyon sets differently for each worktree, check (optional) runs after each of your turns and must pass before the work can land, and land (optional) says how the user lands work on main: route "merge" (onto main here), "push" (onto main here, then pushed) or "pr" (a pull request); method "merge", "squash" or "rebase" for how the commits arrive on main; automerge true when GitHub should merge the pull request itself. A settings.local.json beside it (toyon.local.json at the root) holds one person\'s overrides and is never committed.',
+  "Toyon runs those commands itself in every worktree, and the user watches the result live in a preview beside this chat, so never start a dev server or open a browser of your own to check your work. Each message says where this worktree's preview answers; fetch a page from there when you want to see it.",
   "When you scaffold a project, write its .gitignore (dependencies, build output, local env files) before installing anything, so an install never leaves thousands of untracked files for the user to wade through or commit.",
   "When you scaffold a project or change how it installs or starts, finish by updating the settings file Toyon already reads, or writing .toyon/settings.json when there is none, so the preview can run it.",
 ].join(" ");
+
+/** where the project's preview stands as a message goes out, for the block that tells the agent */
+export interface PreviewStanding {
+  /** the preview proc's status, or "setup" while the worktree is still being made and has no procs */
+  status: ProcStatus | "setup";
+  /** where the preview proc answers, or will; absent until it has a port */
+  url?: string;
+  /** the supervisor's diagnosis of a proc that is not answering */
+  detail?: string;
+}
+
+/** The block after every message that says where the preview is, so the agent checks its work
+ * there instead of starting a server of its own. It goes with each message rather than once at
+ * launch: the port lives with the runtime, which a settings change rebuilds under a session that
+ * stays up; the first message of a new worktree goes out before setup has given it one; and a proc
+ * that ignores $PORT is only found on its real port later. Nothing when there is nothing to run. */
+export function previewContext(p: PreviewStanding | null): string | undefined {
+  if (!p) return undefined;
+  const at = p.url ? ` at ${p.url}` : "";
+  let line: string;
+  switch (p.status) {
+    case "setup":
+      line =
+        "Toyon is setting this worktree up and starts the preview when that is done; the next message will say where it answers.";
+      break;
+    case "starting":
+      line = `Toyon is starting the preview; it answers${at} once it is up.`;
+      break;
+    case "running":
+      line = `The preview is running${at}, and the user sees it live beside this chat.`;
+      break;
+    case "asleep":
+      line = `The preview is asleep; it answers${at} once the user opens this worktree again.`;
+      break;
+    default:
+      line = `The preview is ${p.status}${p.detail ? `: ${p.detail}` : ""}; nothing answers${at} until it is back.`;
+  }
+  return `[Attached by Toyon: ${line}]`;
+}
 
 /** what the model reads as an image's label: its session number (how the user will refer to it
  * later) and where it came from */

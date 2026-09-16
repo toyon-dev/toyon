@@ -358,6 +358,22 @@ describe("AcpSession", () => {
     expect(w.links[0]!.killed).toBe(true);
   });
 
+  test("where the preview stands rides after the message's own context, read as the prompt goes out", async () => {
+    const fake = fakeAgent(say("ok"));
+    let standing: string | undefined = "[preview one]";
+    const w = world(fake, claudeSpec, 60_000, undefined, { preview: () => standing });
+    w.session.send("hi", { context: "ctx" });
+    await w.idle();
+    standing = "[preview two]";
+    w.session.send("again");
+    await w.idle();
+    expect(fake.prompts.map((p) => p.prompt.map((b) => (b as { text: string }).text))).toEqual([
+      ["hi", "ctx\n\n[preview one]"],
+      ["again", "[preview two]"],
+    ]);
+    await w.session.close();
+  });
+
   test("queued prompts run in order on one process; the queue is visible in between", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => {

@@ -9,6 +9,7 @@ import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
 import type { AgentAdapter, LoginRun } from "../agent/adapter.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
+import { type PreviewStanding, previewContext } from "../agent/prompt.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { cloud } from "../core/cloud.ts";
 import { UserError } from "../core/errors.ts";
@@ -50,7 +51,7 @@ export interface RuntimeDeps {
   remote?: Remote | null;
   grant?: string;
   /** factories, overridable so tests run without spawning anything */
-  makeAgent?: (wt: WorktreeInfo, deps: RuntimeDeps) => AgentAdapter;
+  makeAgent?: (wt: WorktreeInfo, deps: RuntimeDeps, preview: () => PreviewStanding | null) => AgentAdapter;
   makeProcs?: (wt: WorktreeInfo, deps: RuntimeDeps) => WorktreeProcs;
   makeProxy?: (
     wt: WorktreeInfo,
@@ -123,10 +124,11 @@ export interface ProxyWake {
 const PREVIEW_WAKE_MS = 8_000;
 const PREVIEW_POLL_MS = 100;
 
-function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps): AgentAdapter {
+function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps, preview: () => PreviewStanding | null): AgentAdapter {
   const agent = new AcpSession({
     worktreeId: wt.id,
     cwd: wt.path,
+    preview: () => previewContext(preview()),
     // resolved at spawn time: a spare is stamped with the task's agent when claimed, and rows from
     // before the registry existed get the default the first time they are used
     spec: () => {
@@ -427,7 +429,7 @@ export class RuntimeRegistry {
     if (existing) return existing;
     const rt: Runtime = {
       info: wt,
-      agent: (this.deps.makeAgent ?? defaultAgent)(wt, this.deps),
+      agent: (this.deps.makeAgent ?? defaultAgent)(wt, this.deps, () => this.previewStanding(wt.id)),
       procs: null,
       proxy: null,
       previewName: undefined,
@@ -683,6 +685,21 @@ export class RuntimeRegistry {
   previewTarget(id: string): ProxyTarget | null {
     const rt = this.runtimes.get(id);
     return rt?.procs ? previewTargetOf(rt.procs, rt.previewName) : null;
+  }
+
+  /** where the preview stands, for the block the agent reads with every message: its status and
+   * the address it answers (or will answer) at, "setup" while the tree is still being made, null
+   * when there is nothing to run here or nothing confirmed yet */
+  previewStanding(id: string): PreviewStanding | null {
+    if (this.settingUp.has(id)) return { status: "setup" };
+    const rt = this.runtimes.get(id);
+    if (!rt?.procs) return null;
+    const st = previewProcOf(rt.procs, rt.previewName);
+    if (!st) return null;
+    // a proc that ignored $PORT answers where it bound; a server on ::1 alone needs the brackets
+    const host = st.host ?? "127.0.0.1";
+    const url = `http://${host.includes(":") ? `[${host}]` : host}:${st.boundPort ?? st.port}`;
+    return { status: st.status, url, ...(st.detail ? { detail: st.detail } : {}) };
   }
 
   async shutdown(): Promise<void> {

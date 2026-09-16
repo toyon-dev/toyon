@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import { buildPrompt, pasteCaption, pickCaption, SYSTEM_APPEND } from "./prompt.ts";
+import { buildPrompt, pasteCaption, pickCaption, previewContext, SYSTEM_APPEND } from "./prompt.ts";
 
 const ref = {
   kind: "image" as const,
@@ -37,6 +37,40 @@ describe("SYSTEM_APPEND", () => {
     expect(SYSTEM_APPEND).toContain("$PORT");
     // an install before the ignore file floods the changes list with every dependency
     expect(SYSTEM_APPEND).toContain(".gitignore");
+  });
+  test("says the preview is already running, so the agent starts no server of its own", () => {
+    expect(SYSTEM_APPEND).toContain("never start a dev server");
+    expect(SYSTEM_APPEND).toContain("Each message says where this worktree's preview answers");
+  });
+});
+
+describe("previewContext", () => {
+  const url = "http://127.0.0.1:40001";
+  test("nothing to run is no block at all", () => {
+    expect(previewContext(null)).toBeUndefined();
+  });
+  test("a running preview gives its address and says the user is watching it", () => {
+    expect(previewContext({ status: "running", url })).toBe(
+      "[Attached by Toyon: The preview is running at http://127.0.0.1:40001, and the user sees it live beside this chat.]",
+    );
+  });
+  test("setup has no address yet and promises one with the next message", () => {
+    const block = previewContext({ status: "setup" })!;
+    expect(block).toContain("setting this worktree up");
+    expect(block).toContain("the next message will say where it answers");
+    expect(block).not.toContain("http");
+  });
+  test("starting and asleep name the address it will answer at", () => {
+    expect(previewContext({ status: "starting", url })).toContain(`it answers at ${url} once it is up`);
+    expect(previewContext({ status: "asleep", url })).toContain(`it answers at ${url} once the user opens`);
+  });
+  test("a proc that is down says so, with the diagnosis when there is one", () => {
+    expect(previewContext({ status: "crashed", url })).toBe(
+      `[Attached by Toyon: The preview is crashed; nothing answers at ${url} until it is back.]`,
+    );
+    expect(previewContext({ status: "unreachable", url, detail: "bound 3000 instead of $PORT" })).toContain(
+      "The preview is unreachable: bound 3000 instead of $PORT;",
+    );
   });
 });
 

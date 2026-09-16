@@ -154,6 +154,22 @@ describe("RuntimeRegistry", () => {
     expect(t?.host).toBe("127.0.0.1");
     expect(registry.previewTarget("nope")).toBeNull();
   });
+
+  test("previewStanding() follows the preview proc, and says setup while the tree is being made", async () => {
+    const { registry } = make();
+    expect(registry.previewStanding(wt.id)).toBeNull();
+    registry.markSetup(wt.id, true);
+    expect(registry.previewStanding(wt.id)).toEqual({ status: "setup" });
+    registry.markSetup(wt.id, false);
+    await registry.start(wt, repo);
+    // the fake numbers ports from 40001 in start order; web, the preview, starts second
+    expect(registry.previewStanding(wt.id)).toEqual({ status: "running", url: "http://127.0.0.1:40002" });
+    await registry.sleep(wt.id);
+    expect(registry.previewStanding(wt.id)?.status).toBe("asleep");
+    // an unconfirmed repo has procs but nothing in them
+    await registry.start(spare, { ...repo, needsSetup: true });
+    expect(registry.previewStanding(spare.id)).toBeNull();
+  });
 });
 
 describe("terminal env", () => {

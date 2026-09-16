@@ -317,7 +317,7 @@ function Fold({
  * put nothing in its place (openRow in group.ts). The body is the message's markdown, not a call's
  * mono: it is prose.
  *
- * The word and the spinner answer a narrower question than the fold does: the agent is thinking
+ * The word and its shine answer a narrower question than the fold does: the agent is thinking
  * while this is the newest thing in the log, and a row still reading "Thinking" over a call that
  * has started says the wrong thing about where the agent is. */
 export const ThoughtRow = memo(function ThoughtRow({

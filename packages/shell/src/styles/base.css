@@ -309,6 +309,54 @@
     color: var(--text2);
   }
 
+  /* ---- live text ----
+   A highlight travelling a line of text, for something under way whose words do not change while
+   it runs: a chat call still out, a top bar chip whose job is running. The words are the mark, so
+   nothing stands beside them to say the same thing again.
+
+   The band is the text's own two tiers rather than a colour of its own: a state colour on a line
+   of prose would read as a warning on that line. It paints through the glyphs rather than over
+   them, and it is `text-fill-color` that is cleared rather than `color`, so an element that names
+   its own colour keeps it the moment the animation stops and nothing has to be put back.
+
+   The lit part is a plateau and not a peak: ramping straight from one tier to the other and back
+   puts full brightness on a single column, and since the two tiers are a few steps apart only the
+   top of that ramp reads as lit at all, which is a band about three characters wide on a path.
+   Holding text0 across the middle tenth is what makes it a band you watch travel.
+
+   The dim tier is named as a tier: a hovered or open row seats its summary on element1 and moves
+   the ladder up with it, so text2 here is already the rung that stays legible there. It has to come
+   through the tier and not through `color`, because the shine paints through a gradient and reads
+   no colour it inherits. */
+  .live-text {
+    background: linear-gradient(90deg, var(--text2) 30%, var(--text0) 45%, var(--text0) 55%, var(--text2) 70%);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 2.6s linear infinite;
+  }
+  @keyframes shine {
+    from {
+      background-position: 150% 0;
+    }
+    to {
+      background-position: -150% 0;
+    }
+  }
+  /* a sweep across words modulates the contrast of the thing being read, which is what this setting
+   is for; there is no gentler form of it to fall back to. The band's lit tier is held still across
+   the whole text instead: running text reads in text0 where finished text reads in its dim tier,
+   which is the difference the band was drawing, without the travel. */
+  @media (prefers-reduced-motion: reduce) {
+    .live-text {
+      background: none;
+      -webkit-text-fill-color: currentColor;
+      color: var(--text0);
+      animation: none;
+    }
+  }
+
   /* ---- the composer ----
      One big editor, not a small box inside a panel: the whole region below the transcript is the
      typing surface, so the textarea drops the field's border and fills it, and the knobs row sits

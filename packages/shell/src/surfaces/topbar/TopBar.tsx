@@ -16,10 +16,10 @@ import {
 } from "../../state/selectors.ts";
 import { previewUp } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
 import { useEdges, useEdgesOf, useOnChange, useWindowWidth } from "../../ui/hooks.ts";
 import { Icon, type IconName } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
-import { Spinner } from "../../ui/Spinner.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
 import { chord, isInstalledApp } from "../util.ts";
@@ -315,8 +315,9 @@ function RouteBar({
 
 /** An offer about Toyon itself, in the bar's lead: an action and not a switch, so it takes no
  * chrome tone, and a word beside its icon rather than a bare icon, since it is not in the bar
- * every day and has to say what it is. While it is being done the icon gives way to the spinner
- * and the word says so, rather than Button's own `busy`, which hides the word. */
+ * every day and has to say what it is. While it is being done the word says so and shines, the way
+ * a chat call still out does, rather than Button's own `busy`, which hides the word under a
+ * spinner. The icon stays: the word is the chip, and a ring beside it would say the same thing twice. */
 function Offer({
   icon,
   busy,
@@ -325,7 +326,7 @@ function Offer({
 }: { icon: IconName; busy?: boolean; children: ReactNode } & Omit<ComponentProps<typeof Button>, "children">) {
   return (
     <Button disabled={busy} {...rest}>
-      {busy ? <Spinner /> : <Icon name={icon} className="icon-inline" />} {children}
+      <Icon name={icon} className="icon-inline" /> <span className={cx(busy && "live-text")}>{children}</span>
     </Button>
   );
 }

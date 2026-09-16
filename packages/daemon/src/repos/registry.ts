@@ -29,7 +29,7 @@ import { shortId } from "../worktrees/naming.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
 import type { AfterLand } from "./afterLand.ts";
 import { expandTilde } from "./browse.ts";
-import { configBody, configTarget, detectConfig, readConfigFile } from "./config.ts";
+import { configTarget, configText, detectConfig, readConfigFile } from "./config.ts";
 import {
   type CreateOpts,
   cloneInto,
@@ -364,7 +364,7 @@ export class RepoRegistry {
     const file = join(repo.path, rel);
     try {
       mkdirSync(dirname(file), { recursive: true });
-      writeFileSync(file, `${JSON.stringify(configBody(repo.path, rel, config), null, 2)}\n`);
+      writeFileSync(file, configText(repo.path, rel, config));
     } catch (e) {
       log.warn(repoId, `could not write ${rel}`, e);
     }

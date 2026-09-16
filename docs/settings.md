@@ -4,7 +4,7 @@ What Toyon reads from a project's settings file, and what it hands every command
 
 ## The file
 
-The settings live in `.toyon/settings.json`, or in `toyon.json` at the root for a project that wants the file in plain sight. Beside either one, `.toyon/settings.local.json` or `toyon.local.json` overrides it for one person and stays out of git.
+The settings live in `.toyon/settings.json`, or in `toyon.json` at the root for a project that wants the file in plain sight. Beside either one, `.toyon/settings.local.json` or `toyon.local.json` overrides it for one person and stays out of git. Comments and trailing commas are fine in any of them.
 
 The first open guesses a file from `package.json` and asks you to confirm it. Other stacks start from an empty guess the agent can fill in.
 

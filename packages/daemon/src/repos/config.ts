@@ -1,6 +1,7 @@
 import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIG_FILES, issueReason, landConfigSchema, type ToyonConfig, toyonConfigSchema } from "@toyon/shared";
+import { applyEdits, type JSONPath, modify, type ParseError, parse, printParseErrorCode } from "jsonc-parser";
 import { log } from "../core/log.ts";
 
 export interface DetectedConfig {
@@ -32,6 +33,17 @@ const present = (repoPath: string, place: Place) =>
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
+/** A settings file's text as JSON with comments and trailing commas, the dialect of VS Code's and
+ * tsconfig's settings, so a note beside a command survives. Throws with the first error's place. */
+function parseSettings(text: string): unknown {
+  const errors: ParseError[] = [];
+  const v = parse(text, errors, { allowTrailingComma: true });
+  const [first] = errors;
+  if (!first) return v;
+  const before = text.slice(0, first.offset).split("\n");
+  throw new Error(`${printParseErrorCode(first.error)} at line ${before.length}, column ${before.at(-1)!.length + 1}`);
+}
+
 /** The repo's settings: the shared file with the local one merged over it, parsed and validated;
  * invalid with a one-line reason; or null when there are none. Files in both places are invalid
  * too, since which one wins is the question nobody reading the repo could answer. */
@@ -47,7 +59,7 @@ export function readConfigFile(repoPath: string): ConfigFile {
   for (const rel of files) {
     let raw: unknown;
     try {
-      raw = JSON.parse(readFileSync(join(repoPath, rel), "utf8"));
+      raw = parseSettings(readFileSync(join(repoPath, rel), "utf8"));
     } catch (e) {
       return { ok: false, reason: `${rel} is not valid JSON: ${e instanceof Error ? e.message : String(e)}` };
     }
@@ -120,12 +132,43 @@ export function configBody(repoPath: string, rel: string, config: ToyonConfig): 
   if (!abs || !existsSync(abs)) return config;
   let shared: unknown;
   try {
-    shared = JSON.parse(readFileSync(abs, "utf8"));
+    shared = parseSettings(readFileSync(abs, "utf8"));
   } catch {
     // a broken shared file is reported by readConfigFile; the save stands on its own meanwhile
     return config;
   }
   return isObject(shared) ? diffPatch(shared, { ...config }) : config;
+}
+
+/** The text a save writes to `rel`. Over a file that parses, only the values that changed are
+ * edited in place, so the comments and layout around everything else stay as the person wrote them. */
+export function configText(repoPath: string, rel: string, config: ToyonConfig): string {
+  const body = configBody(repoPath, rel, config);
+  const fresh = `${JSON.stringify(body, null, 2)}\n`;
+  let text: string;
+  let was: unknown;
+  try {
+    text = readFileSync(join(repoPath, rel), "utf8");
+    was = parseSettings(text);
+  } catch {
+    // no file yet, or one too broken to edit around: the save replaces it whole
+    return fresh;
+  }
+  if (!isObject(was) || !isObject(body)) return fresh;
+  return editTo(text, [], was, body);
+}
+
+function editTo(text: string, path: JSONPath, from: Record<string, unknown>, to: Record<string, unknown>): string {
+  const set = (t: string, key: string, value: unknown) =>
+    applyEdits(t, modify(t, [...path, key], value, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
+  let out = text;
+  for (const k of Object.keys(from)) if (!(k in to)) out = set(out, k, undefined);
+  for (const [k, v] of Object.entries(to)) {
+    const was = from[k];
+    if (isObject(was) && isObject(v)) out = editTo(out, [...path, k], was, v);
+    else if (JSON.stringify(was) !== JSON.stringify(v)) out = set(out, k, v);
+  }
+  return out;
 }
 
 export function detectConfig(repoPath: string): DetectedConfig {

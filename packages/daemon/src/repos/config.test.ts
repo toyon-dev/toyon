@@ -3,7 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configFileKind, configSibling } from "@toyon/shared";
-import { configBody, configTarget, detectConfig, mergePatch, procCommand, readConfigFile } from "./config.ts";
+import {
+  configBody,
+  configTarget,
+  configText,
+  detectConfig,
+  mergePatch,
+  procCommand,
+  readConfigFile,
+} from "./config.ts";
 
 // a test can make several repos, so each one is kept for cleanup, not only the last
 let dirs: string[] = [];
@@ -248,5 +256,33 @@ describe("settings files", () => {
     // nothing shared to differ from, or a save to the shared file itself: the whole config
     expect(configBody(repo({}), ".toyon/settings.local.json", next)).toEqual(next);
     expect(configBody(folder(shared), ".toyon/settings.json", next)).toEqual(next);
+  });
+
+  test("comments and trailing commas read, and a save keeps them around what it changes", () => {
+    const text = `{
+  // the dev server
+  "run": {
+    "api": "a",
+    "web": "w", // keeps its port
+  },
+  /* before every commit */
+  "check": "c",
+}
+`;
+    const d = repo({ ".toyon/": "", ".toyon/settings.json": text });
+    expect(readConfigFile(d)).toEqual({ ok: true, config: { run: { web: "w", api: "a" }, check: "c" } });
+
+    const saved = configText(d, ".toyon/settings.json", { run: { web: "w2" }, check: "c", setup: ["make"] });
+    expect(saved).toContain("// the dev server");
+    expect(saved).toContain('"web": "w2", // keeps its port');
+    expect(saved).toContain("/* before every commit */");
+    expect(saved).not.toContain('"api"');
+    writeFileSync(join(d, ".toyon/settings.json"), saved);
+    expect(readConfigFile(d)).toEqual({ ok: true, config: { run: { web: "w2" }, check: "c", setup: ["make"] } });
+
+    const broken = repo({ "toyon.json": '{\n  // note\n  "run": {\n}' });
+    const r = readConfigFile(broken);
+    if (r && !r.ok) expect(r.reason).toMatch(/toyon\.json is not valid JSON: .* at line 4/);
+    else throw new Error("expected a refusal");
   });
 });

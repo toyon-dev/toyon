@@ -47,6 +47,9 @@ export interface HubEvents {
   draftChanged: (boxId: string, text: string, clientId?: string) => void;
   /** the editor saved or discarded a file: every tab's changes list, and any editor open on it, re-reads */
   filesChanged: (worktreeId: string) => void;
+  /** something the daemon ran on a worktree's behalf, unasked, stopped: `message` is read as a
+   * daemon error on that worktree, where a failure nobody requested would otherwise sit in a log */
+  failed: (worktreeId: string, message: string) => void;
 }
 
 type Listener<K extends keyof HubEvents> = HubEvents[K];

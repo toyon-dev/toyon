@@ -275,6 +275,9 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     }) satisfies ServerMsg;
   s.hub.on("agentsChanged", () => broadcast(agentsMsg()));
   s.hub.on("selfChanged", () => broadcast({ t: "self", self: s.self.get() }));
+  // every tab, not the worktree's subscribers: the person who landed has moved on to some other
+  // row by now, and the shell reads a main worktree's error under whichever composer is on screen
+  s.hub.on("failed", (worktreeId, message) => broadcast({ t: "error", message, worktreeId }));
   s.hub.on("updateChanged", () => broadcast({ t: "update", update: s.update.get() }));
   s.hub.on("visitsChanged", (repoId) => broadcast({ t: "visits", repoId, pages: s.routes.history(repoId) }));
   s.hub.on("archiveChanged", (repoId) => broadcast({ t: "archived", repoId, items: s.worktrees.archived(repoId) }));

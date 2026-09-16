@@ -74,6 +74,13 @@ export class SelfWatch {
     return this.root !== null && repo.path === this.root;
   }
 
+  /** Whether this project's `afterLand` reports on the self notice: the checkout the daemon runs
+   * from, once its branch has moved under it. Any other run has only the main row's log, so what
+   * stops it is said on the chat instead. */
+  reports(repo: RepoInfo): boolean {
+    return this.state !== null && this.own(repo);
+  }
+
   /** The project's default branch moved. Answers true when the notice a shell is showing should
    * change, so the caller only broadcasts on a real difference; a no-op for every other project,
    * and for a daemon with no tree behind it. */

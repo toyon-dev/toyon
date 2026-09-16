@@ -47,7 +47,7 @@
       "name": "@toyon/shared",
       "version": "0.3.0",
       "dependencies": {
-        "qrcode-generator": "2",
+        "qrcode-generator": "^2.0.4",
         "zod": "^4.5.4",
       },
     },

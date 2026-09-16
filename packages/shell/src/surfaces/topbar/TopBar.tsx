@@ -317,7 +317,8 @@ function RouteBar({
  * chrome tone, and a word beside its icon rather than a bare icon, since it is not in the bar
  * every day and has to say what it is. While it is being done the word says so and shines, the way
  * a chat call still out does, rather than Button's own `busy`, which hides the word under a
- * spinner. The icon stays: the word is the chip, and a ring beside it would say the same thing twice. */
+ * spinner. The icon goes with the press: at rest it marks the word as something to do, and once
+ * that is under way the shine already says so, and an icon beside it would say the same thing twice. */
 function Offer({
   icon,
   busy,
@@ -326,7 +327,8 @@ function Offer({
 }: { icon: IconName; busy?: boolean; children: ReactNode } & Omit<ComponentProps<typeof Button>, "children">) {
   return (
     <Button disabled={busy} {...rest}>
-      <Icon name={icon} className="icon-inline" /> <span className={cx(busy && "live-text")}>{children}</span>
+      {!busy && <Icon name={icon} className="icon-inline" />}
+      <span className={cx(busy && "live-text")}>{children}</span>
     </Button>
   );
 }

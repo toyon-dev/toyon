@@ -1,0 +1,74 @@
+/* The phone frame: its token tier, the strip at the top, and the row the screen stands in. */
+
+@layer tokens, base, surfaces;
+
+@layer surfaces {
+  /* The phone tier, on the frame's root. Each value a thumb and a held screen change is pointed at
+   the twin tokens.css declares beside it, and every rule under this root that reads the desk's
+   name grows without knowing why. Here rather than in a width query: the frame is one decision
+   (app/phone.ts) and this class is that decision on the page, so the tier cannot drift from it.
+
+   The font is restated after the redirect on purpose. A rule that reads var(--type-ui) inside this
+   root gets the phone value, but text that sets no font of its own inherits a computed font from
+   body, which sits outside this root and keeps the desk's 13px; restarting the inheritance here is
+   what carries the size into every row that never names a face. */
+  .phone {
+    --row-height: var(--row-height-phone);
+    --row-height-sm: var(--row-height-sm-phone);
+    --type-ui-sm: var(--type-ui-sm-phone);
+    --type-ui: var(--type-ui-phone);
+    --size-mono: var(--size-mono-phone);
+    --size-mono-sm: var(--size-mono-sm-phone);
+    font: var(--type-ui);
+  }
+
+  /* The row under the strip, holding the one column. It is the desk's .docks with a single column in
+   it, and it exists for the same reason .docks has min-height 0: .app's second row is 1fr, whose
+   floor is the tallest thing in it, so a grid item that lets its content size it grows to the
+   content. A chat longer than the screen then took the whole column past the bottom of the window,
+   and the box to reply in went with it. A flex row stretches the column to its own height instead,
+   so the transcript is what scrolls. */
+  .phone-screen {
+    display: flex;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* the strip: a control, where you are, and the palette. Its height is a row's, so it grows with
+   the thumb tier the same way every list does, and the title is the one thing in it that is read
+   rather than pressed. */
+  .phone-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: var(--row-height);
+    padding: 0 6px;
+    background: var(--surface1);
+    border-bottom: 1px solid var(--border0);
+    /* a phone's top edge is under a notch or a status bar, and the window starts behind it */
+    padding-top: env(safe-area-inset-top, 0px);
+    box-sizing: content-box;
+  }
+
+  .phone-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* from the start, not centred: the controls are all at one end, so a centred title sat off
+       the window's middle and read as misaligned rather than as centred */
+    text-align: start;
+    padding-inline: 6px;
+    font: var(--type-ui);
+    font-weight: var(--weight-strong);
+    color: var(--text0);
+  }
+  /* the title as the project switcher, when there are projects to switch between: the same seat in
+     the bar, and the button's own face and colour */
+  .phone-switch {
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+}

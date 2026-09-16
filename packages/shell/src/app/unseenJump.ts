@@ -9,6 +9,18 @@ export type UnseenJump = { activate: string } | null;
 
 type JumpRow = { id: string; unseen?: boolean; agent?: string };
 
+/** What the rail owes you right now, for a control with no chord behind it: the rows in the first
+ * two tiers above, the row on screen excepted, and the best tier present, so the control can say
+ * which it is. A row still working is not owed: nothing there is waiting on anyone. */
+export type NeedsYou = { n: number; tier: "waiting" | "unseen" } | null;
+
+export function needsYou(rows: readonly JumpRow[], activeId: string | null): NeedsYou {
+  const others = rows.filter((w) => w.id !== activeId);
+  const n = others.filter((w) => w.agent === "waiting" || w.unseen).length;
+  if (n === 0) return null;
+  return { n, tier: others.some((w) => w.agent === "waiting") ? "waiting" : "unseen" };
+}
+
 export function unseenJump(rows: readonly JumpRow[], activeId: string | null, dir: 1 | -1): UnseenJump {
   // the row on screen is looked at by definition, so it is never the answer
   const marked = (hit: (w: JumpRow) => boolean) =>

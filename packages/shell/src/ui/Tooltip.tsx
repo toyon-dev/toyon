@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useTouch } from "../state/selectors.ts";
 import { Float, type FloatHandle } from "./Float.tsx";
 import { Kbd } from "./Kbd.tsx";
 import { type Placement, type Point, pointRect, type Rect } from "./place.ts";
@@ -129,8 +130,14 @@ export function Tooltips() {
   const box = useRef<HTMLDivElement | null>(null);
   const handle = useRef<FloatHandle | null>(null);
   const pointer = useRef<Point>({ x: 0, y: 0 });
+  // A tip leaves when the pointer does. On touch there is no pointer: a tap fires the compatibility
+  // mouseover and no mouseout ever follows, so a tip would come up under a thumb and stay. Nothing
+  // is installed there; a row on a screen says its tip out loud instead (rowLine), and the
+  // focus-visible path below still answers a keyboard attached to a tablet.
+  const touch = useTouch();
 
   useEffect(() => {
+    if (touch) return;
     let showTimer = 0;
     let hideTimer = 0;
     let current: HTMLElement | null = null;
@@ -228,7 +235,7 @@ export function Tooltips() {
       document.removeEventListener("focusout", onBlur);
       window.removeEventListener("blur", hide);
     };
-  }, []);
+  }, [touch]);
 
   // the control a tip is about can leave while the tip is up (a row removed under it)
   useLayoutEffect(() => {

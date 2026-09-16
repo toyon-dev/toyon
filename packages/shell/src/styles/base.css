@@ -20,6 +20,9 @@
   body {
     overflow: hidden;
     overscroll-behavior: none;
+    /* the platform's tap flash, off: a row already answers a press by lifting its seat, and a
+       second, bluer answer over it reads as foreign */
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* Scrollbars are the platform's; color-scheme: dark on :root is what makes them dark. Do not style

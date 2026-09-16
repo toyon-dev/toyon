@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { unseenJump } from "./unseenJump.ts";
+import { needsYou, unseenJump } from "./unseenJump.ts";
 
 /** 1 is a turn nobody has looked at, "w" an agent waiting on an answer, "r" one still running */
 const rows = (...flags: (0 | 1 | "w" | "r")[]) =>
@@ -56,6 +56,21 @@ describe("unseenJump", () => {
     const r = rows(1, "r", 0, "r");
     expect(unseenJump(r, "w2", 1)).toEqual({ activate: "w0" });
     expect(unseenJump(r, "w2", -1)).toEqual({ activate: "w0" });
+  });
+});
+
+describe("needsYou", () => {
+  test("counts the rows waiting on you or finished unseen, and names the best tier present", () => {
+    expect(needsYou(rows(0, 1, 0, 1), null)).toEqual({ n: 2, tier: "unseen" });
+    expect(needsYou(rows(1, "w", 0), null)).toEqual({ n: 2, tier: "waiting" });
+  });
+  test("the row on screen is looked at by definition", () => {
+    expect(needsYou(rows(0, 1, 0), "w1")).toBeNull();
+    expect(needsYou(rows("w", 1, 0), "w0")).toEqual({ n: 1, tier: "unseen" });
+  });
+  test("a running row owes nothing yet", () => {
+    expect(needsYou(rows("r", 0, "r"), null)).toBeNull();
+    expect(needsYou([], null)).toBeNull();
   });
   test("with nothing waiting or unseen, running rows take turns", () => {
     const r = rows("r", 0, "r", 0);

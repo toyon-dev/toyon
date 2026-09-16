@@ -373,6 +373,23 @@ export function isLayout(v: unknown): v is Layout {
   );
 }
 
+/** Which screen the phone frame is on. One at a time, because the window is one column wide.
+ *
+ * Four names from the start, though the frame draws two: the rest arrive as screens of their own
+ * and every call site here would have to move if this were a boolean first. Preview and changes
+ * have no frame yet.
+ *
+ * Deliberately not the layout, and never written by anything that touches it: the docks are the
+ * desk's layout, remembered per project and carried to the next window that opens the project,
+ * so a phone navigating through them would redraw a desk it cannot see.
+ */
+export type Screen = "home" | "chat" | "preview" | "changes";
+
+/** Which frame this window draws: the desk's row of docks, or the phone's one screen at a time.
+ * Decided in app/phone.ts from the room and the input, and kept here so the reducer can hold what
+ * depends on it and no surface has to ask a question of its own. */
+export type Frame = "desk" | "phone";
+
 /** the live layout with a change, or the same state when the change is none: the layout object
  * is what the project remembers, so a new one exists only when something in it moved */
 function withLayout(s: State, patch: Partial<Layout>): State {
@@ -558,6 +575,16 @@ export interface State {
   unreadHold: string | null;
   /** the layout each project was last left in; the active one's is `layout` itself */
   layouts: Record<string, Layout>;
+  /** Where the phone frame is. The desk never reads it. Not persisted: it is where you are, not a
+   * setting, and the row you were last on is remembered already. */
+  screen: Screen;
+  /** Which frame this window draws (app/phone.ts). The panels a project remembers are the desk's
+   * layout, so `reducer` writes them only while this is the desk, whatever action moved a flag: a
+   * row menu or the palette reached from the phone can flip one, and the desk must not inherit it. */
+  frame: Frame;
+  /** the window has no hover, so a tap is the only pointer: what the desk shows on hover has to be
+   * reachable another way, on either frame */
+  touch: boolean;
   /** one-shot: the changes panel starts closed and opens itself the first time the active
    * worktree has something to show, unless a remembered layout or a hand has already decided it */
   changesAuto: boolean;
@@ -659,6 +686,10 @@ export interface InitialOpts {
   storedArchivedOpen?: Record<string, boolean>;
   /** the folders each worktree's files tab had open by hand */
   storedTreeOpen?: Record<string, string[]>;
+  /** the frame this window opens in, so the first paint is the right one (app/phone.ts) */
+  frame?: Frame;
+  /** whether this window has no hover to begin with */
+  touch?: boolean;
 }
 
 export function initialState(opts: InitialOpts): State {
@@ -707,6 +738,11 @@ export function initialState(opts: InitialOpts): State {
     railPeek: false,
     unreadHold: null,
     layouts: opts.storedLayouts ?? {},
+    // a reload on a phone comes back to the row it was reading, not to the list: the row is what
+    // was remembered, so landing on home would throw away the one thing the session knew
+    screen: opts.storedActive ? "chat" : "home",
+    frame: opts.frame ?? "desk",
+    touch: opts.touch ?? false,
     changesAuto: true,
     zen: false,
     focusTerm: 0,
@@ -1038,6 +1074,15 @@ export type Action =
   | { a: "toggle-chat-side" }
   /** pin the worktree panel if it is not, and ask its current row for the keyboard either way */
   | { a: "focus-rail" }
+  /** the phone frame goes to a screen it is not on. The only action that moves `screen` on its
+   * own: everywhere else it goes with something the person did to the selection, and nothing that
+   * moves it may touch a panel flag. */
+  | { a: "screen"; to: Screen }
+  /** the window's frame changed (a desktop window dragged across the breakpoint). Back on the desk
+   * the project's remembered layout is applied: the flags may have drifted while nothing drew them */
+  | { a: "frame"; v: Frame }
+  /** the window's input changed: hover appeared or went (a tablet's trackpad attached) */
+  | { a: "touch"; v: boolean }
   /** hold the collapsed rail's peek open while the worktree walk runs, or let it fall closed */
   | { a: "rail-peek"; on: boolean }
   /** open or close the active project's discovered section */
@@ -1103,12 +1148,15 @@ function paletteBack(s: State, back: boolean | undefined): Pick<State, "overlay"
 }
 
 /** landing on a project paints the layout it was left in; one that has never been laid out adopts
- * whatever is on screen, so the switch itself moves nothing */
+ * whatever is on screen, so the switch itself moves nothing. The adoption is the desk's alone: on
+ * the phone the flags describe no layout, and a first layout written from them would be the desk's
+ * to inherit. */
 function enterRepo(s: State): State {
   const id = s.activeRepoId;
   if (!id) return s;
   const remembered = s.layouts[id];
-  return remembered ? applyLayout(s, remembered) : { ...s, layouts: { ...s.layouts, [id]: s.layout } };
+  if (remembered) return applyLayout(s, remembered);
+  return s.frame === "desk" ? { ...s, layouts: { ...s.layouts, [id]: s.layout } } : s;
 }
 
 /** the first-diff auto-open is the one thing that opens a panel without anyone asking, so it is
@@ -1155,9 +1203,11 @@ export function reducer(s: State, action: Action): State {
     next = closeArchivedPage(next);
   }
   // every open/close routes through here, so the layout is remembered in one place rather than in
-  // the dozen actions (a chord, a rail click, a dropped file) that move it
+  // the dozen actions (a chord, a rail click, a dropped file) that move it. Only on the desk: the
+  // panels are its layout, and on the phone nothing draws them, so a flag flipped there (from the
+  // row menu, or the palette) is not a layout anyone chose
   if (next.activeRepoId !== s.activeRepoId) next = enterRepo(next);
-  else if (next.activeRepoId && !guessed(action) && next.layout !== s.layout) {
+  else if (next.frame === "desk" && next.activeRepoId && !guessed(action) && next.layout !== s.layout) {
     next = { ...next, layouts: { ...next.layouts, [next.activeRepoId]: next.layout } };
   }
   if (next.rows === s.rows && next.activeRepoId === s.activeRepoId && next.archiving === s.archiving) {
@@ -1177,7 +1227,10 @@ function reduce(s: State, action: Action): State {
       // showing "connecting" in between would flicker the pane on every backoff
       return { ...s, connected: action.v, connectFailure: action.v ? null : (action.failure ?? s.connectFailure) };
     case "activate":
-      return activate(s, action.id);
+      // the phone goes with the selection: choosing a row is choosing to read it. Set here and not
+      // inside activate(), which every worktrees frame runs to keep the selection valid, and which
+      // would pull the phone off the list at the moment it is being read.
+      return { ...activate(s, action.id), screen: action.id ? "chat" : "home" };
     case "open-draft": {
       // not on an empty project: a worktree off the root commit would take the scaffold to a
       // branch while main stayed blank. Nor from the new-project view, over a project not on screen.
@@ -1186,7 +1239,13 @@ function reduce(s: State, action: Action): State {
       if (!main) return s;
       // the chat is where the draft is written, so it has to be on screen; a palette the chord was
       // pressed over would sit in front of it. The launcher rule in `reducer` makes the draft itself.
-      return revealChat({ ...activate(s, main), overlay: null, paletteReturn: null, focusChat: s.focusChat + 1 });
+      return revealChat({
+        ...activate(s, main),
+        overlay: null,
+        paletteReturn: null,
+        focusChat: s.focusChat + 1,
+        screen: "chat",
+      });
     }
     case "draft-carry":
       return s.draft ? { ...s, draft: { ...s.draft, carry: action.v } } : s;
@@ -1204,7 +1263,7 @@ function reduce(s: State, action: Action): State {
       if (!s.activeRepoId || !s.archived[s.activeRepoId]?.some((a) => a.id === action.id)) return s;
       // a page over the row underneath: the file open there belongs to what was on screen, and is
       // not what the page is about (the draft follows main and goes by itself, see withLauncher)
-      return { ...s, archivedPage: action.id, editor: null };
+      return { ...s, archivedPage: action.id, editor: null, screen: "chat" };
     }
     case "close-archived":
       return s.archivedPage ? closeArchivedPage(s) : s;
@@ -1431,7 +1490,22 @@ function reduce(s: State, action: Action): State {
     case "toggle-chat-side":
       return { ...s, chatSide: s.chatSide === "left" ? "right" : "left" };
     case "focus-rail":
-      return { ...s, railOpen: true, focusRail: s.focusRail + 1 };
+      // asking for the list is asking for it on either frame. railOpen is the rail's pin, which is
+      // per browser and not one of the panels a project remembers, so the phone may write it.
+      return { ...s, railOpen: true, focusRail: s.focusRail + 1, screen: "home" };
+    case "screen":
+      return s.screen === action.to ? s : { ...s, screen: action.to };
+    case "frame": {
+      if (s.frame === action.v) return s;
+      const next = { ...s, frame: action.v };
+      if (action.v !== "desk" || !next.activeRepoId) return next;
+      // back on the desk, the layout is the project's remembered one: while the phone drew none of
+      // the docks, the row menu and the palette could still have flipped their flags
+      const remembered = next.layouts[next.activeRepoId];
+      return remembered ? applyLayout(next, remembered) : next;
+    }
+    case "touch":
+      return s.touch === action.v ? s : { ...s, touch: action.v };
     case "rail-peek":
       return s.railPeek === action.on ? s : { ...s, railPeek: action.on };
     case "toggle-discovered": {

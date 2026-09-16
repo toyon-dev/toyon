@@ -42,8 +42,16 @@ export type Waiting = {
   landsFrom: string | null;
 };
 
-/** the sentence, or null when a view of its own (boot, no preview) should stand here instead */
-export function waitingText(w: Waiting): string | null {
+/** the part of the wait that is about the connection and not the project: what either frame says,
+ * since a phone in a pocket loses its socket far more often than a laptop does */
+export type Connection = Pick<
+  Waiting,
+  "connected" | "heard" | "connectFailure" | "hasToken" | "projectChord" | "title"
+>;
+
+/** the sentence while the socket is down or nothing is open, or null once there is a project to
+ * talk about. The socket wins over everything, because nothing further is known. */
+export function connectionText(w: Connection): string | null {
   if (!w.connected && (!w.heard || w.connectFailure)) {
     return w.hasToken ? (CONNECT[w.connectFailure ?? "probing"] ?? CONNECT.probing) : NO_TOKEN;
   }
@@ -53,6 +61,13 @@ export function waitingText(w: Waiting): string | null {
       ? `nothing open yet.\npress ${w.projectChord} to open a project, or type a name there to start a new one`
       : "";
   }
+  return null;
+}
+
+/** the sentence, or null when a view of its own (boot, no preview) should stand here instead */
+export function waitingText(w: Waiting): string | null {
+  const connection = connectionText(w);
+  if (connection !== null) return connection;
   if (w.needsSetup && w.busy) return `building in ${w.title}; the preview appears once it starts`;
   if (w.needsSetup && w.treeEmpty) return `${w.title} is empty so far; say what to build`;
   // boot would say its dev servers are starting, and none will until the worktree brings the code

@@ -50,6 +50,39 @@
     }
   }
 
+  /* ---- the chat as the phone's screen ----
+     The same panel as the centre's, and for the same reason: the transcript and the box are what
+     a phone is for, so nothing here rebuilds either. Two things differ. It is a flex child of the
+     centre rather than a box pinned inside the frames wrap, since on a phone the screen is the
+     column. And the measure is the window: at 390px the centre's padding would leave a gutter on
+     each side of a line that has none to give.
+
+     The floor is set here rather than on --composer-min in the tokens, because .composer reads the
+     name but each region declares it on the element it owns, and an element declaration beats an
+     inherited one. Three lines is the floor a reply is written in; the on-screen keyboard takes
+     the rest of the window and the transcript gives way to it. */
+  .chat-screen {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    & .chat-input {
+      --composer-min: 96px;
+      background: var(--sunken-floor);
+      /* the box's own 10px, and under it the gesture bar a notched phone draws over the window */
+      padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      & .pick-chip {
+        background: var(--surface0);
+      }
+    }
+    /* the ask card's number keys and its key strip are a hardware keyboard's idioms; on a screen
+       the options are tapped and the buttons are what closes the card */
+    & .ask-num,
+    & .ask-keys {
+      display: none;
+    }
+  }
+
   .chat-wrap {
     flex: 1;
     min-height: 0;
@@ -506,6 +539,11 @@
       margin: 0;
       color: var(--text1);
       white-space: pre-wrap;
+      /* pre-wrap breaks only at spaces, and what a command prints is full of runs with none: a
+         path, a URL, a hash. One of those set the note's floor at its own length, and the note,
+         unlike the block beside it, does not scroll on its own, so the whole transcript scrolled
+         sideways instead. The command line above it breaks the same way. */
+      word-break: break-word;
     }
     /* a thought's body is prose, so it wears the message's face and the markdown idioms rather
      than the panel's mono, a tier under the message it precedes: it is the plan, not the answer */

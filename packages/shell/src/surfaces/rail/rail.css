@@ -228,11 +228,14 @@
         box-shadow 0.12s ease 50ms;
     }
     /* kept open: the rail is a column of its own, so it takes the width out of the layout and drops the
-   shadow with it. Nothing overlaps, nothing to lift off the page. */
-    &.pinned {
+   shadow with it. Nothing overlaps, nothing to lift off the page. A screen is a drawer kept open
+   too, in every list below that draws one: the fourth reason beside hover, hold and the pin. */
+    &.pinned,
+    &.rail-screen {
       width: var(--rail-width);
     }
-    &.pinned .rail-panel {
+    &.pinned .rail-panel,
+    &.rail-screen .rail-panel {
       box-shadow: none;
       /* the rail's own width, not the peek's: a drag sets that on every move, and under the pointer
          the peek's width would ease after it instead of following */
@@ -275,7 +278,8 @@
   .rail {
     &:hover .rail-foot,
     &.hold .rail-foot,
-    &.pinned .rail-foot {
+    &.pinned .rail-foot,
+    &.rail-screen .rail-foot {
       opacity: 1;
       pointer-events: auto;
       transition: opacity 0.12s ease 50ms;
@@ -305,13 +309,15 @@
   .rail {
     &:hover .rail-main-strip,
     &.hold .rail-main-strip,
-    &.pinned .rail-main-strip {
+    &.pinned .rail-main-strip,
+    &.rail-screen .rail-main-strip {
       opacity: 0;
       transition: opacity 0.12s ease 50ms;
     }
     &:hover .rail-main-dot,
     &.hold .rail-main-dot,
-    &.pinned .rail-main-dot {
+    &.pinned .rail-main-dot,
+    &.rail-screen .rail-main-dot {
       opacity: 1;
       transition: opacity 0.12s ease 50ms;
     }
@@ -351,7 +357,8 @@
   .rail {
     &:hover .rail-disc-head,
     &.hold .rail-disc-head,
-    &.pinned .rail-disc-head {
+    &.pinned .rail-disc-head,
+    &.rail-screen .rail-disc-head {
       height: var(--row-height-sm);
       width: 100%;
       display: flex;
@@ -374,7 +381,8 @@
   .rail {
     &:hover .rail-disc-item,
     &.hold .rail-disc-item,
-    &.pinned .rail-disc-item {
+    &.pinned .rail-disc-item,
+    &.rail-screen .rail-disc-item {
       display: flex;
       /* the same padding as .rail-item: these rows sit in the same column and
      their dots have to land on the same centre line. A rung down in height as well as colour,
@@ -483,6 +491,9 @@
     --rail-pad-r: var(--rail-gut);
     --rail-dot-ml: 0px;
     --rail-dot-mr: 12px;
+    /* on a screen, the line under a name starts where the name does, and here the dot's seat is in
+       front of it: the dot's 8px, its margin, and the row's 8px gap */
+    --rail-say-l: calc(8px + var(--rail-dot-mr) + 8px);
     /* a pair rather than a restated box-shadow: a box-shadow under this selector would outrank
        .pinned's box-shadow: none, and a hovered kept-open rail would lift off the page */
     --rail-shadow-x: 10px;
@@ -514,5 +525,116 @@
       border-right: 1px solid var(--border0);
       clip-path: inset(0 -32px 0 0);
     }
+  }
+
+  /* ---- The rail as the phone's home screen. A drawer kept open: .rail-screen sits beside :hover,
+   .hold and .pinned in every list above that draws one, so the width, the sections and main's dot
+   are the open drawer's. What is left here is only what a whole column needs that a drawer does
+   not.
+
+   Written on .rail-screen and never on .rail: two tests read .rail and .rail-panel by name, and a
+   rule on either would move what they assert. The frame is a branch in the markup, so none of this
+   needs a query. Last in the file so it beats the strip's rules on equal specificity. ---- */
+  .rail-screen {
+    /* the open width is the window's rather than 280 */
+    --rail-width: 100%;
+    --rail-inner: 100%;
+    /* where the line under a name starts: with the dot at the far end the name leads the row, and
+       the mirrored block moves this past the dot's seat when the dot leads instead */
+    --rail-say-l: 0px;
+    flex: 1;
+    min-height: 0;
+  }
+  /* The seam is restated by the mirrored block above at four classes, so this carries five and
+   wins outright, whichever of the two blocks a later hand moves. On a phone the panel is the window,
+   with nothing on either side to be divided from, and the border took a pixel off the list that
+   showed as a hairline down the edge of the screen. */
+  .app[data-chat-side] .rail.rail-screen .rail-panel {
+    border-inline: 0;
+  }
+  .rail-screen .rail-list {
+    /* the list runs to the bottom: the room at the foot was for the pin, which a screen has none of.
+       The last row clears the gesture bar a notched phone draws over the window. */
+    bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Two lines: the row's own, and under it what its tip says on a desk (rowLine in Rail.tsx). The
+   row wraps rather than being rebuilt, so the dot, the name, the badges and the counts stay the one
+   line they are everywhere else and the line under them breaks onto its own. The height the strip
+   fixes so both modes line up is let go: here there is no second mode to line up with. */
+  .rail-screen .rail-item,
+  .rail-screen .rail-disc-item {
+    height: auto;
+    flex-wrap: wrap;
+    align-content: center;
+    row-gap: 0;
+    padding-block: 8px;
+  }
+  .rail-say {
+    /* a line of its own, after everything: the dot's order is -1 on one hand and the line must
+       never be pulled up beside it */
+    order: 1;
+    flex-basis: 100%;
+    min-width: 0;
+    padding-left: var(--rail-say-l);
+    font: var(--type-ui-sm);
+    /* Two lines, then an ellipsis. A recap is the agent's own sentence about what it did, and one
+       line of it at a phone's width is half a sentence that stops before the part that says whether
+       it worked. Past two it is the chat's job, one tap away. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  /* The right side of a screen's row is one thing: the counts, centred on the row's two lines. The
+     control column's time has moved into the line under the name (rowLine's `at`), and its kebab
+     shows on a hover a phone never has, so both go and the column shrinks to a margin. Behind is
+     nearly always there and says only "stale"; on one column it is a number beside a number. */
+  .rail-screen .rail-item .rail-at,
+  .rail-screen .rail-item .rail-more,
+  .rail-screen .rail-disc-item .rail-at,
+  .rail-screen .rail-disc-item .rail-more,
+  .rail-screen .rail-behind {
+    display: none;
+  }
+  .rail-screen .rail-item {
+    /* room on the right for the counts to stand in, out of the line the name and badges wrap on */
+    padding-right: calc(var(--rail-pad-r) + 72px);
+  }
+  .rail-screen .rail-item .rail-counts {
+    position: absolute;
+    right: var(--rail-pad-r);
+    top: 50%;
+    translate: 0 -50%;
+  }
+  /* the current row's edge is at the near edge on a phone, the left, whichever hand the chat is on:
+     the far edge the desk's marker rides is a drawer's, and a screen has none. Five classes, to
+     outrank the mirrored block's four. */
+  .app[data-chat-side] .rail.rail-screen .rail-item::before,
+  .app[data-chat-side] .rail.rail-screen .rail-disc-item::before {
+    left: 0;
+    right: auto;
+  }
+
+  /* ---- Touch, on either frame. The app root says so (data-touch, from the store), and both the
+   strip on a tablet and the screen on a phone read it here. ---- */
+  [data-touch] .rail {
+    /* the control column is the seat a tap opens the row's menu from (Rail.tsx), so it is a
+       thumb's width rather than a pointer's */
+    --rail-gut: 44px;
+  }
+  /* Hover on touch is a tap's afterimage: it sticks to the last thing tapped until the next tap
+     lands elsewhere. A drawer that peeked on it would half-open under a resting finger and stay
+     there, over the dock beside it. On touch the drawer opens by the pin alone, which a tap on the
+     strip toggles (Rail.tsx); the hold (a menu up, a graft being picked) still opens it. */
+  [data-touch] .rail:not(.pinned):not(.hold):hover .rail-panel {
+    width: 100%;
+    box-shadow: none;
+    transition: none;
+  }
+  /* on a screen the control column holds nothing (see .rail-say), so it is a margin, not a seat;
+     after the touch rule above, which would otherwise widen it to a thumb */
+  .rail.rail-screen {
+    --rail-gut: 16px;
   }
 }

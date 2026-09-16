@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type Waiting, waitingText } from "./waiting.ts";
+import { connectionText, type Waiting, waitingText } from "./waiting.ts";
 
 /**
  * These sentences are the only interface the shell has while the daemon is down, which is exactly
@@ -38,6 +38,21 @@ describe("what the centre says while it waits", () => {
 
   test("heard over the bootstrap fetch means the socket is a moment away, so it does not say down", () => {
     expect(waitingText(w({ connected: false, heard: true, connectFailure: null }))).toBeNull();
+  });
+
+  // the phone has no preview to wait on, so it asks only this half and must get the same sentences
+  test("the connection's half stands on its own, and says nothing once a project is there", () => {
+    for (const over of [
+      { connected: false, heard: false },
+      { connected: false, connectFailure: "down" as const },
+      { connected: false, heard: false, hasToken: false },
+      { title: null },
+      { title: null, heard: false },
+    ]) {
+      expect(connectionText(w(over))).toBe(waitingText(w(over)));
+    }
+    expect(connectionText(w())).toBeNull();
+    expect(connectionText(w({ needsSetup: true, busy: true }))).toBeNull();
   });
 
   test("no token is its own sentence, since no failure explains it", () => {

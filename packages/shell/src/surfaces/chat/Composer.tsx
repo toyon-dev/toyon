@@ -126,6 +126,7 @@ export function Composer({
   draft,
   archived,
   greenfield,
+  placement = "dock",
 }: {
   /** the worktree, or main while drafting */
   active: OwnedWorktree | null;
@@ -135,7 +136,11 @@ export function Composer({
   /** rendered in the centre of an empty project: the scaffolding brief rides with the first
    * message, and the knobs that assume a preview or a second worktree stay out of the way */
   greenfield?: boolean;
+  /** where the panel holding this box stands (ChatPanel): on a phone's screen there is no pane
+   * or preview for a knob to open, and no hardware keyboard for a placeholder to teach */
+  placement?: "dock" | "centre" | "screen";
 }) {
+  const onScreen = placement === "screen";
   const dispatch = useDispatch();
   const sock = useSock();
   const store = useStoreInstance();
@@ -448,6 +453,9 @@ export function Composer({
     if (greenfield) return `describe ${title}…`;
     if (draft?.sent) return "starting the worktree…";
     if (spawning) return "describe a change";
+    // the two idioms are a hardware keyboard's, and two lines of hint in a three-line box on a
+    // phone is the box explaining itself instead of waiting to be written in
+    if (onScreen) return `message agent on ${title}`;
     return `message agent on ${title}; / for a command, ! for a shell command`;
   };
   const placeholderText = placeholderFor();
@@ -982,9 +990,10 @@ export function Composer({
         </span>
         <span className="spawn-tools">
           {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
-              actions rather than in the app's top bar. Not on an empty project or an archived chat:
-              the pane is hidden there, and a button that flips a hidden pane is a dead button. */}
-          {!greenfield && !archived && (
+              actions rather than in the app's top bar. Not on an empty project, an archived chat or
+              a phone's screen: the pane is hidden there, and a button that flips a hidden pane is a
+              dead button. */}
+          {!greenfield && !archived && !onScreen && (
             <IconButton
               icon="terminal"
               tone="chrome"
@@ -1006,7 +1015,7 @@ export function Composer({
               )}
             />
           )}
-          {!greenfield && !chatCentred && !archived && (
+          {!greenfield && !chatCentred && !archived && !onScreen && (
             <IconButton
               icon="pick"
               label="Pick an element on the page to attach"

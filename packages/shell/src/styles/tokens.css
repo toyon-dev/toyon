@@ -136,6 +136,12 @@
      reading as a paragraph and starts reading as rows. */
     --row-height-sm: 24px;
     --row-height: 32px;
+    /* the same two tiers under a thumb, swapped in on the phone frame's root (surfaces/phone/
+     phone.css). Their own values rather than a multiplier on the ones above: a row you point at and
+     a row you tap are sized by different things, so either has to be able to move without the
+     other. */
+    --row-height-sm-phone: 36px;
+    --row-height-phone: 52px;
     /* the horizontal padding of a full-bleed row: the text column every list sits on */
     --row-inset: 12px;
 
@@ -224,6 +230,12 @@
    * under you depends on that. */
     --type-ui-sm: 400 11px / 1.4 var(--face-ui);
     --type-ui: 400 13px / 1.5 var(--face-ui);
+    /* the two reading tiers held at arm's length. Written out rather than composed from a size, so
+     the phone can take a different ratio or weight later without the desktop value following it.
+     The small one is the line under a row's name there, which at 11px is a line nobody reads off a
+     phone; the step between the two stays the desk's two points. */
+    --type-ui-sm-phone: 400 13px / 1.4 var(--face-ui);
+    --type-ui-phone: 400 15px / 1.5 var(--face-ui);
     --type-ui-lg: 400 20px / 28px var(--face-ui);
     --type-ui-xl: 400 24px / 32px var(--face-ui);
     --type-mono-sm: 400 var(--size-mono-sm) var(--face-mono);
@@ -235,11 +247,29 @@
      so --type-mono-px would have read as a sibling of --type-mono-sm and it is not one. */
     --size-mono: 12px;
     --size-mono-sm: 11px;
+    --size-mono-phone: 13px;
+    --size-mono-sm-phone: 12px;
 
     /* 500 marks the one word in a row you would read first; 600 is for --type-ui-lg. Never 700:
      light text on a dark ground blooms, and mono bold at 12px on surface0 smears. These are applied
      after a --type-* shorthand, which is why they are values rather than part of one. */
     --weight-strong: 500;
     --weight-title: 600;
+
+    /* The -phone twins above are the phone tier: every value here that a thumb and a held screen
+     change. They are declared beside their desk values so the two read together, and swapped in
+     by the phone frame's own root (surfaces/phone/phone.css), never by a width query here. The
+     frame is decided once, in app/phone.ts, and a query in a stylesheet would be a second copy of
+     that decision to keep in step; on the frame's root the tier and the frame are one class. No
+     surface learns there is a phone at all: --row-height alone is read by twenty rules across
+     twelve stylesheets, and every one of them grows from the root above it.
+
+     Monaco and xterm parseFloat --size-mono. When a pane comes to the phone they must read it from
+     their own element, where the redirected value is, and not from documentElement, where it is
+     the desk's.
+
+     What is not a token: the composer's floor. .composer reads --composer-min (base.css) but each
+     region sets it on the element it owns, and an element declaration beats an inherited one, so a
+     value here would be dead on both. It belongs to the phone region's own rule. */
   }
 }

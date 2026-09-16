@@ -88,6 +88,10 @@ export const useChatCentred = (): boolean => useStore(isChatCentred);
 /** the new-project view, while it is up */
 export const useNewProject = () => useStore((s) => s.newProject);
 
+/** the window has no hover (app/phone.ts): a surface that shows something on hover offers it
+ * another way. Read by either frame; where a component *is* comes from its placement prop. */
+export const useTouch = (): boolean => useStore((s) => s.touch);
+
 /** the worktree whose composer should send what is in its box: the new-project view's description */
 export const useAutoSend = () => useStore((s) => s.autoSend);
 

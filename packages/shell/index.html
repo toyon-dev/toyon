@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- resizes-content: the on-screen keyboard shrinks the layout viewport rather than sliding a
+         visual one over it, so the chat's own bottom pinning keeps the newest row above the box.
+         viewport-fit=cover is what gives env(safe-area-inset-*) a value on a notched phone. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" content="#32302d" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />

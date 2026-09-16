@@ -164,6 +164,84 @@ describe("active worktree", () => {
   });
 });
 
+// The phone frame shows one screen at a time and the desk shows a row of docks, and the two are in
+// one store. What keeps them from treading on each other is that `screen` moves only on something
+// the person did to the selection, and that nothing moving it touches the layout: the docks are
+// remembered per project and travel to the next window that opens it, so a phone that navigated
+// through them would rearrange a desk nobody is sitting at.
+describe("the phone's screen", () => {
+  const panelFlags = (s: State) => ({ layout: s.layout, layouts: s.layouts });
+
+  test("a remembered row comes back to its chat, and a cold start to the list", () => {
+    expect(initialState({ clientId: ME, storedActive: "a" }).screen).toBe("chat");
+    expect(initial.screen).toBe("home");
+  });
+
+  test("choosing a row goes to it", () => {
+    const s = run([hello(wt("main", "main"), wt("a")), { a: "screen", to: "home" }]);
+    expect(reducer(s, { a: "activate", id: "a" }).screen).toBe("chat");
+  });
+
+  test("a worktrees frame does not, though it re-asserts the selection", () => {
+    const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }, { a: "screen", to: "home" }]);
+    expect(run([worktrees(wt("main", "main"), wt("a"))], s).screen).toBe("home");
+  });
+
+  test("moving around leaves the desk's layout byte-identical", () => {
+    const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
+    const before = panelFlags(s);
+    const after = panelFlags(
+      run(
+        [
+          { a: "screen", to: "home" },
+          { a: "activate", id: "main" },
+          { a: "screen", to: "chat" },
+          { a: "activate", id: "a" },
+          { a: "focus-rail" },
+        ],
+        s,
+      ),
+    );
+    expect(after).toEqual(before);
+  });
+
+  // The rule above is held by the reducer, not by the phone's own controls: the row menu and the
+  // palette are shared, reach the phone, and offer the dock and pane toggles. On the phone a toggle
+  // still flips its flag (a chord from an attached keyboard is a real request) but the project
+  // remembers nothing from it, and the desk comes back to what it had.
+  const onPhone = initialState({ clientId: ME, frame: "phone" });
+
+  test("on the phone, a dock toggle flips its flag and writes nothing the desk remembers", () => {
+    const s = run([hello(wt("main", "main"), wt("a"))], onPhone);
+    const next = run([{ a: "toggle-changes" }, { a: "toggle-terminal" }], s);
+    expect([next.layout.changes, next.layout.term]).toEqual([!s.layout.changes, !s.layout.term]);
+    expect(next.layouts).toEqual(s.layouts);
+  });
+
+  test("back on the desk, the project's remembered layout comes back", () => {
+    const desk = run([hello(wt("main", "main"), wt("a")), { a: "toggle-changes" }]);
+    const remembered = desk.layouts[desk.activeRepoId!]!;
+    const drifted = run([{ a: "frame", v: "phone" }, { a: "toggle-changes" }, { a: "toggle-terminal" }], desk);
+    expect(drifted.layout.changes).not.toBe(remembered.changes);
+    expect(panelFlags(reducer(drifted, { a: "frame", v: "desk" }))).toEqual({
+      layout: remembered,
+      layouts: desk.layouts,
+    });
+  });
+
+  test("entering a project on the phone writes no first layout", () => {
+    const rows = [wt("main", "main"), wt("m2", "main", undefined, "r2")];
+    expect(run([hello(...rows), { a: "activate", id: "m2" }]).layouts.r2).toBeDefined();
+    expect(run([hello(...rows), { a: "activate", id: "m2" }], onPhone).layouts.r2).toBeUndefined();
+  });
+
+  test("the frame and the touch are separate facts", () => {
+    const s = reducer(initial, { a: "touch", v: true });
+    expect([s.frame, s.touch]).toEqual(["desk", true]);
+    expect(reducer(s, { a: "frame", v: "phone" }).touch).toBe(true);
+  });
+});
+
 describe("per-worktree records", () => {
   test("an unknown worktree reads as the shared empty record", () => {
     expect(localOf(initial, "nope")).toBe(EMPTY_LOCAL);

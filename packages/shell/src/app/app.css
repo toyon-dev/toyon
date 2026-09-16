@@ -62,6 +62,11 @@
     &.left::after {
       right: 0;
     }
+    /* a finger's hit area on touch; what is drawn stays the same hairline, since only the
+       background paints and only while hovered or dragging */
+    [data-touch] &::after {
+      width: 14px;
+    }
     &.right::after {
       left: 0;
     }

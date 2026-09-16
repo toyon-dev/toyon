@@ -11,10 +11,13 @@ import {
 /** Focus on mount — a chord may arrive while the preview iframe or Monaco holds focus, and
  * autoFocus alone loses that race, so take it explicitly on the next frame too. `select` also
  * selects an input's text, and only when focus is actually taken: selecting again on the next
- * frame would swallow a keystroke typed in between. */
-export function useFocusOnMount<T extends HTMLElement>(select = false): RefObject<T> {
+ * frame would swallow a keystroke typed in between. `when` false takes nothing: on a touch screen
+ * focusing a field raises the keyboard over half the window, and a list opened to be tapped
+ * through should not open under one; a tap on the field asks for it. */
+export function useFocusOnMount<T extends HTMLElement>(select = false, when = true): RefObject<T> {
   const ref = useRef<T>(null);
   useEffect(() => {
+    if (!when) return;
     const take = () => {
       const el = ref.current;
       if (!el || document.activeElement === el) return;
@@ -24,7 +27,7 @@ export function useFocusOnMount<T extends HTMLElement>(select = false): RefObjec
     take();
     const f = requestAnimationFrame(take);
     return () => cancelAnimationFrame(f);
-  }, [select]);
+  }, [select, when]);
   return ref;
 }
 

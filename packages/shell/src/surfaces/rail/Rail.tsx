@@ -24,6 +24,7 @@ import {
   useArchivedPage,
   useDiscoveredOpen,
   useOffline,
+  useTouch,
   useVisibleArchived,
   useVisibleDiscovered,
   useVisibleWorktrees,
@@ -41,19 +42,34 @@ import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
+import { OFFLINE_LINE, rowLine } from "./rowLine.ts";
 
 /** a count in its 3ch column; past three digits the exact number stops meaning anything here */
 const count = (n: number) => (n > 999 ? "1k+" : String(n));
 
-/** what every row and the panel's ground say while the socket is down */
-const OFFLINE_TIP = "Lost the daemon; retrying";
+/** Where the rail is standing.
+ *
+ * `strip` is the desk's: a 40px column of dots at the chat's side of the window, which peeks the
+ * full panel toward the centre on hover and can be pinned open.
+ *
+ * `screen` is the phone's home. The same list and the same rows, because everything a row says is
+ * already computed here rather than drawn (stateLabel, recapLine, the path, the counts, the dot),
+ * and a second row written by hand would have to work all of it out again. It is the drawer kept
+ * open, with no strip to peek from and no pin to press, and each row says under its name what its
+ * tip would say on a desk. */
+export type RailPlacement = "strip" | "screen";
 
 /** the worktree rail, at the chat's side of the window: 40px dot strip, hover peeks the full panel
  * toward the centre; shift-click / "graft with…" enters a multi-select for grafting, bulk sync and
  * bulk remove. `width` is the panel's, dragged and held by the docks row like a dock's: the column
  * it is while kept open, and the width the peek opens to, so the rail has one size however it is
- * showing. */
-export function Rail({ width }: { width: number }) {
+ * showing. On a phone it is the home screen instead, see RailPlacement, and the window's width is
+ * its width. */
+export function Rail({ width, placement = "strip" }: { width?: number; placement?: RailPlacement }) {
+  const onScreen = placement === "screen";
+  // no hover: the kebab that shows on it never shows, so the seat it shares with the time takes a
+  // tap for the row's menu, and the strip takes a tap for the pin it would have peeked on
+  const touch = useTouch();
   // a row's tip stands off the rail toward the centre, whichever edge the rail is at
   const tipSide: TipPlacement = useStore((s) => s.chatSide) === "left" ? "right" : "left";
   const dispatch = useDispatch();
@@ -132,6 +148,7 @@ export function Rail({ width }: { width: number }) {
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(" · ") : undefined;
   };
+
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
 
@@ -184,7 +201,18 @@ export function Rail({ width }: { width: number }) {
       onClick={() => dispatch({ a: "open-archived", id: a.id })}
       {...cm.contextMenu(() => archivedItems(a, clientId, deps), a.id)}
     >
-      <span className="rail-gut">
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: on touch the whole seat opens the menu the kebab in it opens, since the kebab shows on a hover that never comes; the row menu carries the same actions for the keyboard */}
+      <span
+        className="rail-gut"
+        onClick={
+          touch
+            ? (e) => {
+                e.stopPropagation();
+                cm.openUnder(e.currentTarget, () => archivedItems(a, clientId, deps), a.id);
+              }
+            : undefined
+        }
+      >
         <span className="rail-at row-dim">{ago(a.archivedAt)}</span>
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: a control inside the row's button, which cannot nest one; the row menu carries the same actions for the keyboard */}
         <span
@@ -208,6 +236,10 @@ export function Rail({ width }: { width: number }) {
         </span>
       ) : (
         <span className="dot" />
+      )}
+      {/* its tip's detail, said out loud where there is no hover (see rowLine) */}
+      {onScreen && (
+        <span className="rail-say row-dim">{a.auto ? `Archived automatically: ${a.auto}` : archivedHint(a)}</span>
       )}
     </button>
   );
@@ -255,7 +287,7 @@ export function Rail({ width }: { width: number }) {
         // over a row painted in the fault colour, a green "Running" over an orange dot: the tip
         // names the fault instead, with no dot, since there is no live state for one to restate.
         {...(owned
-          ? tip(offline ? OFFLINE_TIP : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
+          ? tip(offline ? OFFLINE_LINE : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
               placement: tipSide,
               // an unseen stop says what happened above the path, so a hover is enough to triage it
               detail:
@@ -266,7 +298,7 @@ export function Rail({ width }: { width: number }) {
               lead: leadOf(w, isMain(owned.worktree) ? (repoOf(owned)?.name ?? null) : unspelled(w)),
             })
           : offline
-            ? tip(OFFLINE_TIP, undefined, {
+            ? tip(OFFLINE_LINE, undefined, {
                 placement: tipSide,
                 detail: wtDirLabel(w),
                 lead: unspelled(w) ?? undefined,
@@ -306,13 +338,27 @@ export function Rail({ width }: { width: number }) {
             else toggleSel(owned);
           }
           // main is where new work is written, so a click on it puts the caret in its box; the
-          // arrows above only select it, so a walk down the list keeps the keyboard on the list
-          else if (onMain) dispatch({ a: "open-draft" });
+          // arrows above only select it, so a walk down the list keeps the keyboard on the list.
+          // On a screen it is a plain selection: the draft opens on its own whenever main is the
+          // row (withLauncher), and open-draft would reveal the chat dock, which is a layout this
+          // frame cannot see and the other one would inherit.
+          else if (onMain && !onScreen) dispatch({ a: "open-draft" });
           else dispatch({ a: "activate", id });
         }}
         {...cm.contextMenu(() => rowItems(w), id)}
       >
-        <span className="rail-gut">
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: on touch the whole seat opens the menu the kebab in it opens, since the kebab shows on a hover that never comes; the row menu and the palette carry the same actions for the keyboard */}
+        <span
+          className="rail-gut"
+          onClick={
+            touch && !graftMode
+              ? (e) => {
+                  e.stopPropagation();
+                  cm.openUnder(e.currentTarget, () => rowItems(w), id);
+                }
+              : undefined
+          }
+        >
           {showCheck ? (
             <input type="checkbox" className="rail-graft-check" checked={sel.includes(id)} readOnly tabIndex={-1} />
           ) : (
@@ -402,7 +448,7 @@ export function Rail({ width }: { width: number }) {
           )}
           {cols.behind && (
             <span
-              className="rail-count row-dim"
+              className="rail-count rail-behind row-dim"
               data-tip={
                 w.behind ? `${w.behind} behind ${w.worktree && isMain(w.worktree) ? "origin" : "main"}` : undefined
               }
@@ -466,26 +512,61 @@ export function Rail({ width }: { width: number }) {
             />
           );
         })()}
+        {/* last in the row so it wraps onto a line of its own (rail.css); a tier below the name,
+            and the row's seat lifts it with everything else standing there */}
+        {onScreen && (
+          <span className="rail-say row-dim">
+            {rowLine(w, {
+              offline,
+              needsSetup: asksSetup(owned ? repoOf(owned) : null),
+              path: wtDirLabel(w),
+              // the time the desk's control column carries; main is never sent to
+              at: owned && !onMain ? ago(sentAt(owned.worktree)) : undefined,
+            })}
+          </span>
+        )}
       </button>
     );
   };
 
+  // On touch the strip cannot peek, since nothing hovers it, so a tap on it is the pin: the drawer
+  // opens into the layout and its own pin button closes it. A tap that lands on a row or a seat is
+  // theirs and does not count; the ground between and under the rows is the strip's.
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard's way to the pin is its chord, and the rows inside are buttons of their own
     <div
       className={cx(
         "rail",
-        (graftMode || menu?.owner === "rail" || railPeek) && "hold",
-        railOpen && "pinned",
+        // a screen is a drawer kept open: rail.css lists it beside hover, hold and the pin wherever
+        // it draws one, so the sections and main's dot are the open drawer's here too
+        onScreen && "rail-screen",
+        // the peek and the pin are the strip's alone; a screen has no edge to unfurl from
+        !onScreen && (graftMode || menu?.owner === "rail" || railPeek) && "hold",
+        !onScreen && railOpen && "pinned",
         offline && "offline",
       )}
-      style={{ "--rail-width": `${width}px` } as CSSProperties}
+      // the docks row's width for the drawer; a screen's width is the window's (rail.css), and an
+      // inline value here would outrank it
+      style={width !== undefined && !onScreen ? ({ "--rail-width": `${width}px` } as CSSProperties) : undefined}
+      onClick={
+        touch && !onScreen && !railOpen
+          ? (e) => {
+              if (e.target instanceof Element && e.target.closest("button, .rail-gut")) return;
+              dispatch({ a: "toggle-rail" });
+            }
+          : undefined
+      }
     >
       {/* the dots carry the socket's state, and every row's tip names it; the panel's own tip covers
           the ground between and under the rows, where the tooltip walks up to the nearest one */}
-      <div className="rail-panel" data-tip={offline ? OFFLINE_TIP : undefined} data-tip-placement="follow">
+      <div className="rail-panel" data-tip={offline ? OFFLINE_LINE : undefined} data-tip-placement="follow">
         <div className="rail-list" ref={listRef}>
-          {lead && railRow(lead)}
+          {/* main leads on a desk, where its box is where new work is written. On a screen the bar
+              carries the plus, and main is one row among the others rather than the first thing a
+              thumb lands on */}
+          {lead && !onScreen && railRow(lead)}
           {tasks.map(railRow)}
+          {lead && onScreen && railRow(lead)}
           {graftMode && (
             <div className="rail-graft">
               {(() => {
@@ -610,16 +691,19 @@ export function Rail({ width }: { width: number }) {
             </>
           )}
         </div>
-        <div className="rail-foot">
-          <IconButton
-            icon="worktrees"
-            label="Worktree panel"
-            hint={chord("rail")}
-            tone="chrome"
-            on={railOpen}
-            onClick={() => dispatch({ a: "toggle-rail" })}
-          />
-        </div>
+        {/* the pin is the strip's: on a screen there is nothing to pin open */}
+        {!onScreen && (
+          <div className="rail-foot">
+            <IconButton
+              icon="worktrees"
+              label="Worktree panel"
+              hint={chord("rail")}
+              tone="chrome"
+              on={railOpen}
+              onClick={() => dispatch({ a: "toggle-rail" })}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useTouch } from "../state/selectors.ts";
 import { cx } from "./cx.ts";
 import { Field } from "./Field.tsx";
 import { useFocusOnMount } from "./hooks.ts";
@@ -129,7 +130,9 @@ export function ListPicker<T>({
   const [q, setQ] = useState(initialQuery);
   const results = useMemo(() => filter(items, q), [items, q, filter]);
   const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useFocusOnMount<HTMLInputElement>(selectOnMount);
+  // the field takes the caret on open, except on touch, where that is the keyboard over the list
+  const touch = useTouch();
+  const inputRef = useFocusOnMount<HTMLInputElement>(selectOnMount, !touch);
   useEffect(() => {
     if (!onQuery) return;
     const h = setTimeout(() => onQuery(q), 150);

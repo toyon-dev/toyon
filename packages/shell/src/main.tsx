@@ -2,6 +2,7 @@ import { isFileMsg, isTermMsg, PROTOCOL_VERSION, type ServerMsg } from "@toyon/s
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
+import { frameNow, installFrame, touchNow } from "./app/phone.ts";
 import { terminalBus } from "./app/terminalBus.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { FileSync } from "./state/fileSync.ts";
@@ -172,8 +173,13 @@ const store = createStore(
     storedArchivedOpen: storedSectionOpen(STORAGE.archivedOpen),
     storedTreeOpen: storedTreeOpen(),
     clientId: clientId(),
+    // seeded rather than dispatched after mount, so the first paint is the right frame and the
+    // reducer never sees a desk action from a window that was a phone all along
+    frame: frameNow(),
+    touch: touchNow(),
   }),
 );
+installFrame(store);
 
 // The daemon's version as this page first heard it. A later hello naming another version, or
 // another protocol, is a daemon that restarted onto an install: this page's code is from before it

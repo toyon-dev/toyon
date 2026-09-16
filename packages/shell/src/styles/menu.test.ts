@@ -7,13 +7,18 @@ import { describe, expect, test } from "bun:test";
  * So the primitive is drawn once, by the singleton in ui/Menu.tsx, and a surface reaches the slot
  * only through `useContextMenu`, whose handler is spread onto the row rather than written by hand.
  * The two hand-written handlers are the singleton's own box (a right-click on the menu is not a
- * request for another) and the app root's fallback, which is what makes bare chrome answer.
+ * request for another) and the desk's fallback, which is what makes bare chrome answer.
  */
 
 const SRC = new URL("..", import.meta.url).pathname;
 
-/** `onContextMenu=` written by hand, rather than spread from the hook */
-const HAND_WRITTEN_OK = new Set(["ui/Menu.tsx", "app/App.tsx"]);
+/** the frames that root the window, one of which mounts the singleton. Never both at once: the
+ * width decides which is drawn (app/phone.ts). */
+const ROOTS = new Set(["app/DeskFrame.tsx", "surfaces/phone/PhoneFrame.tsx"]);
+
+/** `onContextMenu=` written by hand, rather than spread from the hook. The phone's frame is not
+ * here: a touch screen has no bare-chrome right-click to answer. */
+const HAND_WRITTEN_OK = new Set(["ui/Menu.tsx", "app/DeskFrame.tsx"]);
 
 async function sources(): Promise<Array<[string, string]>> {
   const out: Array<[string, string]> = [];
@@ -29,7 +34,7 @@ describe("the one context menu", () => {
     const offenders: string[] = [];
     for (const [file, src] of await sources()) {
       if (file !== "ui/Menu.tsx" && /<Menu\b/.test(src)) offenders.push(`${file}: renders <Menu>`);
-      if (file !== "app/App.tsx" && /\/Menu\.tsx"/.test(src)) offenders.push(`${file}: imports Menu.tsx`);
+      if (!ROOTS.has(file) && /\/Menu\.tsx"/.test(src)) offenders.push(`${file}: imports Menu.tsx`);
       if (/useState<(DOMRect|MenuState|\{ *at:)/.test(src)) offenders.push(`${file}: keeps a menu in local state`);
       if (!HAND_WRITTEN_OK.has(file) && file !== "ui/menu.ts" && /onContextMenu=/.test(src)) {
         offenders.push(`${file}: writes onContextMenu by hand`);

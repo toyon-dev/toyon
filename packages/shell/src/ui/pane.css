@@ -57,4 +57,9 @@
   body.resizing .pane-resize {
     background: var(--element0);
   }
+  /* a finger's hit area on touch, still centred on the seam it drags */
+  [data-touch] .pane-resize {
+    top: -7px;
+    height: 14px;
+  }
 }

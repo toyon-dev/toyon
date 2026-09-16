@@ -1,4 +1,5 @@
 import { launcherAddLink } from "@toyon/shared";
+import { unseenJump } from "../../app/unseenJump.ts";
 import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { changesTabShown, isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
@@ -12,6 +13,7 @@ export type AppState = Pick<
   | "activeRepoId"
   | "repos"
   | "rows"
+  | "visible"
   | "remote"
   | "self"
   | "archivedPage"
@@ -62,6 +64,25 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       label: "go to page…",
       key: chord("routes"),
       onClick: () => dispatch({ a: "open", overlay: { kind: "routes" } }),
+    });
+  }
+  if (repo) {
+    go.push({
+      id: "chats",
+      label: "search chats…",
+      key: chord("chats"),
+      onClick: () => dispatch({ a: "open", overlay: { kind: "chats" } }),
+    });
+  }
+  // the jump the chord makes, as a row: on a device with no chords the palette is the only way to
+  // most verbs, and a verb with no row in it does not exist there
+  const next = unseenJump(s.visible, s.activeId, 1);
+  if (next) {
+    go.push({
+      id: "wt-unseen-next",
+      label: "next that needs you",
+      key: chord("wt-unseen-next"),
+      onClick: () => dispatch({ a: "activate", id: next.activate }),
     });
   }
   go.push({

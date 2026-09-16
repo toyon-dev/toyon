@@ -15,6 +15,8 @@ import "./chat.css";
  * holds the draft's intro, and the composer writes the draft. It sits in the dock beside the
  * preview, or is what the centre shows for a project with nothing to run, or for a removed
  * worktree (`archived`): its chat as it was, ending in the removal, over a box that brings it back.
+ * On a phone it is a screen of its own, which is the same panel again: the transcript and the box
+ * are what the phone is for, and what differs is only the box it sits in.
  * Only one placement is ever mounted, so there is one composer to focus and one panel a dropped
  * file lands on. */
 export function ChatPanel({
@@ -23,7 +25,7 @@ export function ChatPanel({
   width,
   archived,
 }: {
-  placement: "dock" | "centre";
+  placement: "dock" | "centre" | "screen";
   className?: string;
   width?: number;
   archived?: ArchivedWorktree | null;
@@ -44,7 +46,11 @@ export function ChatPanel({
   const pathDrop = useMemo(() => pathDropHandlers(store), [store]);
   return (
     <div
-      className={cx(placement === "dock" ? "chat-dock" : "chat-centre", className, over && "drop-over")}
+      className={cx(
+        placement === "dock" ? "chat-dock" : placement === "centre" ? "chat-centre" : "chat-screen",
+        className,
+        over && "drop-over",
+      )}
       style={width === undefined ? undefined : { width }}
       {...pathDrop}
       ref={(el) => {
@@ -75,7 +81,11 @@ export function ChatPanel({
           }
         />
       )}
-      {archived ? <Composer active={null} archived={archived} /> : <Composer active={active} draft={draft} />}
+      {archived ? (
+        <Composer active={null} archived={archived} placement={placement} />
+      ) : (
+        <Composer active={active} draft={draft} placement={placement} />
+      )}
     </div>
   );
 }

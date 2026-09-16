@@ -60,6 +60,8 @@ import { useComposerPaste } from "./useIntake.ts";
 
 /** a frozen empty list, so a selector returning it does not read as a change every render */
 const NO_CHOICES: ModelChoice[] = [];
+/** one empty list for a worktree not yet listed, so the folder memo holds until the files arrive */
+const NO_PATHS: string[] = [];
 
 /** the keys that move the caret along the text: pressing one in a recalled message is starting to edit it */
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
@@ -210,7 +212,7 @@ export function Composer({
   // global esc handler would close this from anywhere in the app.
   const files = useLocalField(id, "files");
   // the folders the files tab shows, so `@src/app/` names one the tree has
-  const folders = useMemo(() => folderList(files ?? []), [files]);
+  const folders = useMemo(() => folderList(files ?? NO_PATHS), [files]);
   const git = useLocalField(id, "git");
   // this worktree's uncommitted files (main's, while drafting) and how far it trails main: the live
   // status when the row is subscribed, else the rail's ten-second count

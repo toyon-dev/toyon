@@ -72,6 +72,17 @@
       color: var(--text0);
       background: var(--element0);
     }
+    /* on touch the box stays the icon's, so nothing beside it moves, and the target grows to a
+       thumb's: the hit area is drawn outside the layout box, the way the crashed dot's is. Twenty
+       pixels is a pointer's target; a thumb missed the back chevron and the menu on a phone. */
+    [data-touch] & {
+      position: relative;
+      &::after {
+        content: "";
+        position: absolute;
+        inset: -10px;
+      }
+    }
     /* text2, the same tier every :disabled rule uses; 4.3:1 against rest's 2.1:1 says disabled on
    its own, so there is no fourth tier for it */
     &:disabled {

@@ -24,20 +24,29 @@ const Editor = lazy(() => import("./Editor.tsx"));
 /** an editor with nothing behind it (no daemon in a test): it holds the text and saves nowhere */
 const NO_SYNC: EditorSync = { attach: () => {}, edited: () => {}, saveNow: () => {} };
 
-/** the editor pane: the open file as its diff against main or on its own, with autosave, line-hover → preview highlight */
+/** a drag nobody starts: a pane on a phone's screen is not resized */
+const NO_DRAG = () => {};
+
+/** the editor pane: the open file as its diff against main or on its own, with autosave, line-hover → preview highlight.
+ * On a phone's `screen` it is the whole column, read-only and not resizable: the phone steers the
+ * agents and does not hand-edit files, and an on-screen keyboard over Monaco is not the place to
+ * find that out. */
 export function EditorPane({
   editor,
   height,
-  full,
+  full = false,
   onToggleFull,
   onDragStart,
+  placement = "stack",
 }: {
   editor: EditorFile;
-  height: number | string;
-  full: boolean;
-  onToggleFull: () => void;
-  onDragStart: (e: React.PointerEvent) => void;
+  height?: number | string;
+  full?: boolean;
+  onToggleFull?: () => void;
+  onDragStart?: (e: React.PointerEvent) => void;
+  placement?: "stack" | "screen";
 }) {
+  const onScreen = placement === "screen";
   const dispatch = useDispatch();
   const store = useStoreInstance();
   const sock = useSock();
@@ -81,9 +90,9 @@ export function EditorPane({
     <Pane
       kind="editor"
       className={cx("editor-pane", full && "full")}
-      height={full ? undefined : height}
-      resizable={!full}
-      onDragStart={onDragStart}
+      height={full || onScreen ? undefined : height}
+      resizable={!full && !onScreen}
+      onDragStart={onDragStart ?? NO_DRAG}
       title={history ? `${path} at ${ref?.slice(0, 7)}` : path}
       // the header names the file, so it answers with the file's actions, the same list its row in
       // the changes panel has; a commit's copy is read-only, so no discard
@@ -99,7 +108,8 @@ export function EditorPane({
       }
       onClose={() => dispatch({ a: "close-editor" })}
       full={full}
-      onToggleFull={onToggleFull}
+      // a screen is already the column, so it has no split to go back to
+      onToggleFull={onScreen ? undefined : onToggleFull}
       actions={
         <>
           {/* names the view it switches to, as the full toggle beside it does */}
@@ -147,7 +157,7 @@ export function EditorPane({
                 openSeq={editor.seq}
                 line={line}
                 focus={editor.focus}
-                readOnly={history || !disk.writable}
+                readOnly={history || !disk.writable || onScreen}
                 theme={theme}
                 sync={sync}
                 // the editor knows the lines; whose file they are, and at which commit, is the pane's

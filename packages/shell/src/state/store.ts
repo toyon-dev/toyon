@@ -373,11 +373,8 @@ export function isLayout(v: unknown): v is Layout {
   );
 }
 
-/** Which screen the phone frame is on. One at a time, because the window is one column wide.
- *
- * Four names from the start, though the frame draws two: the rest arrive as screens of their own
- * and every call site here would have to move if this were a boolean first. Preview and changes
- * have no frame yet.
+/** Which screen the phone frame is on. One at a time, because the window is one column wide:
+ * the list, or one of the three tabs a worktree shows under the bar.
  *
  * Deliberately not the layout, and never written by anything that touches it: the docks are the
  * desk's layout, remembered per project and carried to the next window that opens the project,
@@ -870,6 +867,17 @@ export function previewIdOf(s: State): string | null {
   return s.activeId;
 }
 
+/** The tab a row opens on, on a phone. Its app, when it has one and nothing is asked of you: the
+ * phone is for glancing at the work, and the app is the work. Its chat when the row needs an answer
+ * or finished unseen, since the answer is written there and the recap is read there; when it is
+ * main, whose box is the draft; and when the project runs nothing, which has no app to open on. */
+export function firstScreen(s: State, id: string): Screen {
+  const row = rowById(s, id);
+  if (!row || !isOwned(row) || isMain(row.worktree) || isChatCentred(s)) return "chat";
+  if (row.agent === "waiting" || row.unseen || row.worktree.lastTurn?.end === "failed") return "chat";
+  return "preview";
+}
+
 /** the worktree's app is running or on its way up, so its preview can be told where to go */
 export function previewUp(wt: OwnedWorktree): boolean {
   return wt.procs.some((p) => p.status === "running" || p.status === "starting");
@@ -1235,11 +1243,13 @@ function reduce(s: State, action: Action): State {
       // a retry's bare close keeps the last diagnosis: the probe that follows replaces it, and
       // showing "connecting" in between would flicker the pane on every backoff
       return { ...s, connected: action.v, connectFailure: action.v ? null : (action.failure ?? s.connectFailure) };
-    case "activate":
+    case "activate": {
       // the phone goes with the selection: choosing a row is choosing to read it. Set here and not
       // inside activate(), which every worktrees frame runs to keep the selection valid, and which
       // would pull the phone off the list at the moment it is being read.
-      return { ...activate(s, action.id), screen: action.id ? "chat" : "home" };
+      const next = activate(s, action.id);
+      return { ...next, screen: action.id ? firstScreen(next, action.id) : "home" };
+    }
     case "open-draft": {
       // not on an empty project: a worktree off the root commit would take the scaffold to a
       // branch while main stayed blank. Nor from the new-project view, over a project not on screen.

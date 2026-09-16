@@ -35,6 +35,19 @@
   .chat-dock.collapsed {
     display: none;
   }
+  /* The panel as a phone's screen: the column, not a dock beside a centre. No width to give and no
+     floor to keep. It keeps the dock's own ground rather than taking the screen's: its strip's
+     open tab is painted in that ground, and on the screen's the open tab and the track were two
+     shades of the same dark with nothing joined to anything. The seam goes, at the mirrored
+     rule's class count plus one: there is nothing beside a screen to face. */
+  .changes-screen {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+  }
+  .app[data-chat-side] .changes-dock.changes-screen {
+    border-inline: 0;
+  }
   .app[data-chat-side="left"] .changes-dock {
     border-right: 0;
     border-left: 1px solid var(--border0);

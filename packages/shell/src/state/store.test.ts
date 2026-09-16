@@ -178,9 +178,27 @@ describe("the phone's screen", () => {
     expect(initial.screen).toBe("home");
   });
 
-  test("choosing a row goes to it", () => {
-    const s = run([hello(wt("main", "main"), wt("a")), { a: "screen", to: "home" }]);
-    expect(reducer(s, { a: "activate", id: "a" }).screen).toBe("chat");
+  test("choosing a row opens its app, and its chat when the chat is where you are needed", () => {
+    const at = (...rows: WorktreeStatus[]) => run([helloIn([repo("r")], ...rows), { a: "screen", to: "home" }]);
+    const pick = (s: State, id: string) => reducer(s, { a: "activate", id }).screen;
+    expect(pick(at(wt("main", "main"), wt("a")), "a")).toBe("preview");
+    // an answer is written in the chat; a recap is read there
+    expect(pick(at(wt("main", "main"), { ...wt("a"), agent: "waiting" }), "a")).toBe("chat");
+    expect(pick(at(wt("main", "main"), { ...wt("a"), unseen: true }), "a")).toBe("chat");
+    // a turn that broke is read about, not looked at
+    const a = wt("a");
+    const failed: WorktreeStatus = {
+      ...a,
+      worktree: {
+        ...a.worktree!,
+        lastTurn: { at: 1, end: "failed", facts: { turns: 1, edits: 0, toolErrors: 1 } },
+      },
+    };
+    expect(pick(at(wt("main", "main"), failed), "a")).toBe("chat");
+    // main's box is the draft, and a project that runs nothing has no app to open on
+    expect(pick(at(wt("main", "main"), wt("a")), "main")).toBe("chat");
+    const chatty = run([helloIn([pageless("r")], wt("main", "main"), wt("a")), { a: "screen", to: "home" }]);
+    expect(pick(chatty, "a")).toBe("chat");
   });
 
   test("a worktrees frame does not, though it re-asserts the selection", () => {

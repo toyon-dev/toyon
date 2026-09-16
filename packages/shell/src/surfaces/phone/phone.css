@@ -34,41 +34,111 @@
     min-width: 0;
   }
 
+  /* The worktree's three faces, one open, as a segmented control (Tabs.tsx) in the bar. Not a
+     joined strip: the changes face holds a strip of its own (changes, history, files), and a strip
+     over a strip read as the same thing twice. On the bar's ground the track is sunken and the pill
+     is the element tier, each a rung from the bar in its own direction, so which face is open is
+     one shape and not a shade of text. */
+  .phone-tabs {
+    flex-shrink: 0;
+    padding: 0 14px 10px;
+    --tabs-ground: var(--element1);
+    --tabs-strip: var(--sunken);
+    --tabs-height: var(--row-height-sm);
+  }
+
+  /* the running app, in place: one frame, the column's width, on the centre's own ground. Hidden
+     rather than unmounted while another tab is open (PhoneFrame), and `hidden` has to win over the
+     flex display here or the frame would go on showing through the tab over it. */
+  .phone-preview {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone-preview[hidden] {
+    display: none;
+  }
+  .phone-preview-frame {
+    flex: 1;
+    width: 100%;
+    border: 0;
+    background: var(--surface0);
+  }
+
+  /* a pane on a screen is the column: the diff a changed file opens as, over whichever tab was
+     open, until its close returns there */
+  .phone-screen > .center > .pane {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
+
   /* the strip: a control, where you are, and the palette. Its height is a row's, so it grows with
    the thumb tier the same way every list does, and the title is the one thing in it that is read
    rather than pressed. */
   .phone-bar {
     display: flex;
-    align-items: center;
-    gap: 4px;
-    height: var(--row-height);
-    padding: 0 6px;
+    flex-direction: column;
     background: var(--surface1);
     border-bottom: 1px solid var(--border0);
     /* a phone's top edge is under a notch or a status bar, and the window starts behind it */
     padding-top: env(safe-area-inset-top, 0px);
-    box-sizing: content-box;
+  }
+  .phone-bar-row {
+    display: flex;
+    align-items: center;
+    /* a thumb's spacing, not a pointer's: the icons keep their box, and the room between them is
+       what keeps two taps from being one; the same room off the window's edge for the first */
+    gap: 16px;
+    /* a row's height at least; two lines of title (the name and its state) may take a little more */
+    min-height: var(--row-height);
+    padding: 4px 14px;
   }
 
+  /* Two lines: what you are looking at, and its state under it, which is what the row's line said
+     in the list and what a hover would say on a desk. From the start, not centred: the controls
+     are all at one end, so a centred title sat off the window's middle and read as misaligned
+     rather than as centred. */
   .phone-title {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding-inline: 6px;
+    /* the column's width is the bar's to give, never the text's to ask for: a recap under the
+       name is a sentence, and as a nowrap line it was the bar's min-content, which the app grid
+       honoured by growing past the window, which a phone then zoomed out to fit. Contained, the
+       text contributes nothing to the sizing and the ellipsis does its job. */
+    contain: inline-size;
+  }
+  .phone-name,
+  .phone-sub {
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* from the start, not centred: the controls are all at one end, so a centred title sat off
-       the window's middle and read as misaligned rather than as centred */
-    text-align: start;
-    padding-inline: 6px;
+  }
+  .phone-name {
     font: var(--type-ui);
     font-weight: var(--weight-strong);
     color: var(--text0);
   }
-  /* the title as the project switcher, when there are projects to switch between: the same seat in
-     the bar, and the button's own face and colour */
+  .phone-sub {
+    font: var(--type-ui-sm);
+    color: var(--text2);
+  }
+  /* the state that is asking for you takes the waiting dot's colour, as the dot beside its row does */
+  .phone-sub-asks {
+    color: var(--accent);
+  }
+  /* the name as the project switcher, when there are projects to switch between: the same seat in
+     the bar, the button's own face and colour, and its box pulled back so the name starts where
+     the line under it does */
   .phone-switch {
-    flex: 1;
+    max-width: 100%;
     min-width: 0;
-    justify-content: flex-start;
+    margin-inline-start: -8px;
   }
 }

@@ -114,4 +114,31 @@
     padding: 0 16px 0 12px;
     flex-shrink: 0;
   }
+
+  /* The strip as a segmented control (Tabs.tsx, `segmented`): the recess becomes a rounded track
+   inset from its parent's edges, the tabs sit inside it, and the open one is a pill raised out of
+   the track in the ground the parent names. The mark is a shape rather than a join, which is what
+   tells it apart from a joined strip standing further down the same screen. The pill is inset
+   from the track by the track's padding, so the track shows all round it. */
+  .tabs-segmented {
+    padding: 3px;
+    border-radius: var(--radius-lg);
+    min-height: 0;
+  }
+  .tabs-segmented .tabs-list {
+    gap: 2px;
+  }
+  .tabs-segmented .tab {
+    min-height: calc(var(--tabs-height, var(--row-height-sm)) - 6px);
+    border-radius: var(--radius-md);
+    /* the label tier rather than the strip's small one: a segment is pressed with a thumb, and
+       the control is the screen's own heading for what is under it. The closed labels keep a
+       tab's tier: a rung lower was unreadable on a sunken track, and the pill and the weight
+       already say which one is open. */
+    font: var(--type-ui);
+    &[data-state~="current"] {
+      color: var(--text0);
+      font-weight: var(--weight-strong);
+    }
+  }
 }

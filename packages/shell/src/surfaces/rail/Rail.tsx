@@ -540,9 +540,12 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         // a screen is a drawer kept open: rail.css lists it beside hover, hold and the pin wherever
         // it draws one, so the sections and main's dot are the open drawer's here too
         onScreen && "rail-screen",
-        // the peek and the pin are the strip's alone; a screen has no edge to unfurl from
+        // the peek is the strip's alone; a screen has no edge to unfurl from
         !onScreen && (graftMode || menu?.owner === "rail" || railPeek) && "hold",
-        !onScreen && railOpen && "pinned",
+        // a screen is pinned as well as being a screen: the peek's panel lifts over the docks
+        // beside it, and on a screen that lift would put the list over the palette and every
+        // picker, which open inside the same column
+        (onScreen || railOpen) && "pinned",
         offline && "offline",
       )}
       // the docks row's width for the drawer; a screen's width is the window's (rail.css), and an
@@ -561,12 +564,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           the ground between and under the rows, where the tooltip walks up to the nearest one */}
       <div className="rail-panel" data-tip={offline ? OFFLINE_LINE : undefined} data-tip-placement="follow">
         <div className="rail-list" ref={listRef}>
-          {/* main leads on a desk, where its box is where new work is written. On a screen the bar
-              carries the plus, and main is one row among the others rather than the first thing a
-              thumb lands on */}
+          {/* main leads on a desk, where its box is where new work is written. On a screen the bar's
+              plus is that box, and main is not listed: a row that only says "new worktree" under
+              a plus that does the same is one control twice, and a phone runs nothing on main */}
           {lead && !onScreen && railRow(lead)}
           {tasks.map(railRow)}
-          {lead && onScreen && railRow(lead)}
           {graftMode && (
             <div className="rail-graft">
               {(() => {

@@ -40,8 +40,11 @@ function landedWhen(at: number): string {
 /** a history row is a commit, or one file inside the commit expanded under it */
 type HistRow = { commit: CommitEntry; file?: GitFileStatus };
 
-/** the changes panel: the working tree over a commit box, or the branch's history */
-export function ChangesDock({ width }: { width: number }) {
+/** the changes panel: the working tree over a commit box, or the branch's history. `width` is the
+ * dock's, held by the docks row. On a phone it is a screen instead: the whole column, never
+ * collapsed, since the tab that shows it is the only way it is reached there. */
+export function ChangesDock({ width, placement = "dock" }: { width?: number; placement?: "dock" | "screen" }) {
+  const onScreen = placement === "screen";
   const sock = useSock();
   const dispatch = useDispatch();
   const liveId = useActiveId();
@@ -342,7 +345,14 @@ export function ChangesDock({ width }: { width: number }) {
   const noHover = useCallback(() => {}, []);
 
   return (
-    <div className={cx("changes-dock", (!changesOpen || firstRun) && "collapsed")} style={{ width }}>
+    <div
+      className={cx(
+        "changes-dock",
+        onScreen && "changes-screen",
+        !onScreen && (!changesOpen || firstRun) && "collapsed",
+      )}
+      style={onScreen ? undefined : { width }}
+    >
       {/* the count is the working tree's: the committed section under it keeps its own title */}
       <Tabs<ChangesTab>
         fill

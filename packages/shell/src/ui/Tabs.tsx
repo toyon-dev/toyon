@@ -36,6 +36,10 @@ export type TabsProps<Id extends string> = {
   fill?: boolean;
   /** mono for a strip of literals the person typed somewhere else (proc names); ui for labels */
   font?: "ui" | "mono";
+  /** a segmented control rather than a strip: a rounded track with the open tab raised out of it
+   * as a pill. For a strip that heads a whole screen with a strip of its own further down, where
+   * two joined strips read as one thing twice. */
+  segmented?: boolean;
   /** a cluster on the strip's far end, outside the scrolling list: a pane's close */
   end?: ReactNode;
   /** the strip's accessible name */
@@ -56,7 +60,17 @@ export type TabsProps<Id extends string> = {
  * Current is `data-state` on the tab, the same word a row uses; `aria-selected` on the button is
  * for the reader. A tab never takes Button's `on`: that is a toggle's accent.
  */
-export function Tabs<Id extends string>({ items, current, onPick, fill, font, end, label, owner }: TabsProps<Id>) {
+export function Tabs<Id extends string>({
+  items,
+  current,
+  onPick,
+  fill,
+  font,
+  segmented,
+  end,
+  label,
+  owner,
+}: TabsProps<Id>) {
   const cm = useContextMenu(owner);
   const list = useRef<HTMLDivElement>(null);
   // roving tabindex: the open tab is the one in the tab order, and the arrows move between them
@@ -70,7 +84,7 @@ export function Tabs<Id extends string>({ items, current, onPick, fill, font, en
     list.current?.querySelectorAll<HTMLElement>('[role="tab"]')[items.indexOf(next)]?.focus();
   };
   return (
-    <div className={cx("tabs", fill && "tabs-fill", font === "mono" && "tabs-mono")}>
+    <div className={cx("tabs", fill && "tabs-fill", font === "mono" && "tabs-mono", segmented && "tabs-segmented")}>
       <div className="tabs-list" role="tablist" aria-label={label} ref={list} onKeyDown={onKeyDown}>
         {items.map((it) => {
           const open = it.id === current;

@@ -552,6 +552,13 @@
   .app[data-chat-side] .rail.rail-screen .rail-panel {
     border-inline: 0;
   }
+  /* an archived row's blank seat is a row with something missing on a phone, where every row is two
+     lines tall and there is no hover to say what the blank means: the ring says it, a worktree
+     doing nothing, the same mark a found row carries */
+  .rail-screen .rail-disc-item .dot {
+    background: none;
+    box-shadow: inset 0 0 0 1.5px var(--ink2);
+  }
   .rail-screen .rail-list {
     /* the list runs to the bottom: the room at the foot was for the pin, which a screen has none of.
        The last row clears the gesture bar a notched phone draws over the window. */

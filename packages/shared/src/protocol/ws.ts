@@ -213,8 +213,12 @@ const relPath = z.string().min(1).max(4096);
 const sha = z.string().regex(/^[0-9a-f]{4,40}$/);
 /** a request the shell pairs with its answer, which echoes it */
 const seq = z.number().int().min(0);
-/** a chat message or its ambient context */
+/** a chat message */
 const prose = z.string().max(200_000);
+/** what Toyon attaches behind a message, paragraph by paragraph, out of the transcript: the page
+ * under the user's eyes, what they ran, a new project's brief. The daemon adds its own and wraps
+ * them into one block, so nothing here carries a wrapper of its own. */
+const attached = z.array(prose).max(8);
 const prompt = z.string().max(20_000);
 const shellCommand = z.string().max(2_000);
 const termSize = z.number().int().min(1).max(500);
@@ -365,7 +369,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     /** the sending tab: a message that brings an archived worktree back focuses it there */
     clientId: z.string().max(64).optional(),
     text: prose,
-    context: prose.optional(),
+    context: attached.optional(),
     attachments,
   }),
   z.object({
@@ -375,7 +379,7 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     repoId: id,
     prompt,
     variant: variantSchema.optional(),
-    context: prose.optional(),
+    context: attached.optional(),
     attachments,
     /** registry id; the daemon's default when absent */
     agent: id.optional(),

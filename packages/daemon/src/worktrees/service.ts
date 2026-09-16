@@ -147,7 +147,8 @@ export interface CreateOpts {
   /** registry id; the daemon's default when absent */
   agent?: string;
   variant?: Variant;
-  context?: string;
+  /** paragraphs Toyon attaches behind the text, out of the transcript */
+  context?: string[];
   /** in the order they were attached */
   attachments?: AttachmentInput[];
   /** one of the repo's profiles; the repo's default when absent */
@@ -175,13 +176,13 @@ interface Carried {
 /** The first prompt says what the tree it starts in owes to main's working copy. An agent that
  * finds a dirty tree with no word about it commits it or cleans it up; one told main still has
  * files it cannot see will not hunt for them. */
-function withCarry(context: string | undefined, c: Carried): string | undefined {
+function withCarry(context: string[] | undefined, c: Carried): string[] | undefined {
   if (c.count === 0) return context;
   const files = `${c.count} uncommitted ${c.count === 1 ? "file" : "files"}`;
   const line = c.moved
-    ? `[This worktree started with ${files} the person moved here from ${c.branch} by hand. They are part of the task, not something to clean up.]`
-    : `[${c.branch} has ${files} the person chose to leave there. This worktree does not have them.]`;
-  return context ? `${context}\n\n${line}` : line;
+    ? `This worktree started with ${files} the person moved here from ${c.branch} by hand. They are part of the task, not something to clean up.`
+    : `${c.branch} has ${files} the person chose to leave there. This worktree does not have them.`;
+  return [...(context ?? []), line];
 }
 
 export interface WorktreeServiceDeps {
@@ -1617,7 +1618,7 @@ export class WorktreeService {
    * does; otherwise the agent gets it and the row is stamped as prompted. */
   async send(
     worktreeId: string,
-    msg: { text: string; clientId?: string; context?: string; attachments?: AttachmentInput[] },
+    msg: { text: string; clientId?: string; context?: string[]; attachments?: AttachmentInput[] },
   ): Promise<void> {
     await this.archivingNow(worktreeId);
     if (!this.d.state.worktree(worktreeId) && this.hasArchived(worktreeId)) {

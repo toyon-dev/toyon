@@ -336,16 +336,16 @@ describe("AcpSession", () => {
   test("a turn: user-message, turn-start, session-info, deltas, turn-end; transcript on disk; status back to idle", async () => {
     const fake = fakeAgent(say("hello"));
     const w = world(fake);
-    w.session.send("hi", { context: "ctx" });
+    w.session.send("hi", { context: ["ctx"] });
     await w.idle();
     expect(w.types()).toEqual(["user-message", "turn-start", "session-info", "text-delta", "turn-end"]);
     expect(w.events[2]).toMatchObject({ sessionId: "s1", model: "test-model" });
     expect(w.events[4]).toMatchObject({ stopReason: "end_turn" });
     expect(w.statuses).toEqual(["working", "idle"]);
-    // context reaches the prompt but never the transcript
+    // context reaches the prompt, wrapped as Toyon's, but never the transcript
     expect(fake.prompts[0]!.prompt).toEqual([
       { type: "text", text: "hi" },
-      { type: "text", text: "ctx" },
+      { type: "text", text: "[Attached by Toyon, not written by the user:\nctx]" },
     ]);
     expect((w.events[0] as { text: string }).text).toBe("hi");
     expect(fake.newSessions[0]!._meta).toEqual({ systemPrompt: { append: SYSTEM_APPEND } });
@@ -358,18 +358,18 @@ describe("AcpSession", () => {
     expect(w.links[0]!.killed).toBe(true);
   });
 
-  test("where the preview stands rides after the message's own context, read as the prompt goes out", async () => {
+  test("where the preview stands rides after the message's own context, in one block, read as the prompt goes out", async () => {
     const fake = fakeAgent(say("ok"));
-    let standing: string | undefined = "[preview one]";
+    let standing: string | undefined = "preview one";
     const w = world(fake, claudeSpec, 60_000, undefined, { preview: () => standing });
-    w.session.send("hi", { context: "ctx" });
+    w.session.send("hi", { context: ["ctx"] });
     await w.idle();
-    standing = "[preview two]";
+    standing = "preview two";
     w.session.send("again");
     await w.idle();
     expect(fake.prompts.map((p) => p.prompt.map((b) => (b as { text: string }).text))).toEqual([
-      ["hi", "ctx\n\n[preview one]"],
-      ["again", "[preview two]"],
+      ["hi", "[Attached by Toyon, not written by the user:\nctx\n\npreview one]"],
+      ["again", "[Attached by Toyon, not written by the user:\npreview two]"],
     ]);
     await w.session.close();
   });
@@ -1072,7 +1072,7 @@ describe("AcpSession", () => {
   test("images: stored, numbered per session, captioned ahead of the text; numbering survives a restart", async () => {
     const fake = fakeAgent(say("ok"), { images: true });
     const w = world(fake);
-    w.session.send("what is this", { context: "ctx", attachments: [png, { ...png, name: "two.png" }] });
+    w.session.send("what is this", { context: ["ctx"], attachments: [png, { ...png, name: "two.png" }] });
     await w.idle();
     expect(w.events[0]).toMatchObject({
       type: "user-message",
@@ -1088,7 +1088,7 @@ describe("AcpSession", () => {
       { type: "text", text: "Image 2: two.png (8×4)" },
       { type: "image", mimeType: "image/png", data: "UE5H" },
       { type: "text", text: "what is this" },
-      { type: "text", text: "ctx" },
+      { type: "text", text: "[Attached by Toyon, not written by the user:\nctx]" },
     ]);
     expect(readFileSync(join(home, "attachments", w.id, "2.png"), "utf8")).toBe("PNG");
     await w.session.close();

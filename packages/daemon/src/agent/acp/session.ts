@@ -28,7 +28,7 @@ import type { AgentAdapter, AskOpts, AskReply, AuthOutcome, SendOpts } from "../
 import type { AttachmentStore, Stored } from "../attachments.ts";
 import { agentModeFor, modeAfterPlan } from "../modes.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
-import { buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
+import { attached, buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
 import { Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
@@ -140,7 +140,7 @@ interface Recorded {
 
 interface QueueItem {
   text: string;
-  context?: string;
+  context?: string[];
   attachments?: AttachmentInput[];
   recorded?: Recorded;
 }
@@ -600,11 +600,10 @@ export class AcpSession implements AgentAdapter {
     this.emit({ type: "turn-end", stopReason: mapStopReason(res.stopReason), ts: Date.now() });
   }
 
-  /** the message's own context (what the shell attached when it was sent) and where the preview
-   * stands now that it is going out */
+  /** what the shell attached when the message was sent, then where the preview stands now that
+   * it is going out, wrapped as one block */
   private contextFor(item: QueueItem): string | undefined {
-    const blocks = [item.context, this.d.preview?.()].filter((b): b is string => !!b);
-    return blocks.length ? blocks.join("\n\n") : undefined;
+    return attached([...(item.context ?? []), this.d.preview?.()]);
   }
 
   /** the adapter process, spawned and initialized once; concurrent callers share the spawn */

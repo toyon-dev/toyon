@@ -32,7 +32,9 @@ export interface AskOpts {
 
 /** everything a message carries besides its text */
 export interface SendOpts {
-  context?: string;
+  /** what Toyon attaches behind the text, paragraph by paragraph; the session wraps them with its
+   * own into the one block the transcript never shows */
+  context?: string[];
   /** in the order they were attached, which is the order the prompt carries them in */
   attachments?: AttachmentInput[];
 }

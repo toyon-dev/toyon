@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import { buildPrompt, pasteCaption, pickCaption, previewContext, SYSTEM_APPEND } from "./prompt.ts";
+import { attached, buildPrompt, pasteCaption, pickCaption, previewContext, SYSTEM_APPEND } from "./prompt.ts";
 
 const ref = {
   kind: "image" as const,
@@ -44,14 +44,24 @@ describe("SYSTEM_APPEND", () => {
   });
 });
 
+describe("attached", () => {
+  test("one block with one opening around whatever there is to say, and nothing around nothing", () => {
+    expect(attached([])).toBeUndefined();
+    expect(attached([undefined])).toBeUndefined();
+    expect(attached(["the page", undefined, "the preview"])).toBe(
+      "[Attached by Toyon, not written by the user:\nthe page\n\nthe preview]",
+    );
+  });
+});
+
 describe("previewContext", () => {
   const url = "http://127.0.0.1:40001";
-  test("nothing to run is no block at all", () => {
+  test("nothing to run is no paragraph at all", () => {
     expect(previewContext(null)).toBeUndefined();
   });
   test("a running preview gives its address and says the user is watching it", () => {
     expect(previewContext({ status: "running", url })).toBe(
-      "[Attached by Toyon: The preview is running at http://127.0.0.1:40001, and the user sees it live beside this chat.]",
+      "The preview is running at http://127.0.0.1:40001, and the user sees it live beside this chat.",
     );
   });
   test("setup has no address yet and promises one with the next message", () => {
@@ -66,7 +76,7 @@ describe("previewContext", () => {
   });
   test("a proc that is down says so, with the diagnosis when there is one", () => {
     expect(previewContext({ status: "crashed", url })).toBe(
-      `[Attached by Toyon: The preview is crashed; nothing answers at ${url} until it is back.]`,
+      `The preview is crashed; nothing answers at ${url} until it is back.`,
     );
     expect(previewContext({ status: "unreachable", url, detail: "bound 3000 instead of $PORT" })).toContain(
       "The preview is unreachable: bound 3000 instead of $PORT;",

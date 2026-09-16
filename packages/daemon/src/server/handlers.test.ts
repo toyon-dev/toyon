@@ -725,8 +725,12 @@ describe("handlers", () => {
       text: "",
       html: "<div></div>",
     };
-    await dispatch({ t: "chat", worktreeId: main.id, text: "hi", context: "ctx", attachments: [pick] }, ctx, services);
-    expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: "ctx", attachments: [pick] }]);
+    await dispatch(
+      { t: "chat", worktreeId: main.id, text: "hi", context: ["ctx"], attachments: [pick] },
+      ctx,
+      services,
+    );
+    expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: ["ctx"], attachments: [pick] }]);
     // a send is what moves a row up the rail
     expect(services.state.worktree(main.id)?.promptedAt).toBeGreaterThan(0);
   });
@@ -772,13 +776,14 @@ describe("handlers", () => {
     expect(readFileSync(join(repo, "README.md"), "utf8")).toBe(`${readme}started by hand\n`);
 
     // without a move the files stay, and the agent is told they are not in its tree
-    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "unrelated", context: "ctx" }, ctx, services);
+    await dispatch({ t: "create-worktree", repoId: r.id, prompt: "unrelated", context: ["ctx"] }, ctx, services);
     const fresh = services.state.worktrees.find((x) => x.kind === "worktree")!;
     expect(existsSync(join(fresh.path, "notes.txt"))).toBe(false);
     expect(readFileSync(join(repo, "notes.txt"), "utf8")).toBe("a new file\n");
-    expect(agents.get(fresh.id)?.sent[0]?.context).toBe(
-      "ctx\n\n[main has 2 uncommitted files the person chose to leave there. This worktree does not have them.]",
-    );
+    expect(agents.get(fresh.id)?.sent[0]?.context).toEqual([
+      "ctx",
+      "main has 2 uncommitted files the person chose to leave there. This worktree does not have them.",
+    ]);
 
     await dispatch({ t: "create-worktree", repoId: r.id, prompt: "finish it", carry: true }, ctx, services);
     const made = services.state.worktrees.find((x) => x.kind === "worktree" && x.id !== fresh.id)!;
@@ -788,9 +793,9 @@ describe("handlers", () => {
     expect(existsSync(join(repo, "notes.txt"))).toBe(false);
     // the agent's first look is at the tree with the changes in it, and it is told so
     expect(agents.get(made.id)?.sent[0]?.text).toBe("finish it");
-    expect(agents.get(made.id)?.sent[0]?.context).toBe(
-      "[This worktree started with 2 uncommitted files the person moved here from main by hand. They are part of the task, not something to clean up.]",
-    );
+    expect(agents.get(made.id)?.sent[0]?.context).toEqual([
+      "This worktree started with 2 uncommitted files the person moved here from main by hand. They are part of the task, not something to clean up.",
+    ]);
     // a clean main says nothing
     await dispatch({ t: "create-worktree", repoId: r.id, prompt: "next" }, ctx, services);
     const next = services.state.worktrees.find((x) => x.kind === "worktree" && x.id !== fresh.id && x.id !== made.id)!;

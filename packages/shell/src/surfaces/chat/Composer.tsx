@@ -477,8 +477,9 @@ export function Composer({
       sock?.send({ t: "list-commands", worktreeId: source });
   }, [menuOpen, trigger?.kind, commands.length, id, source, sock, store, dispatch]);
 
-  // ambient context: what the user is looking at, attached invisibly to every send
-  const buildContext = (): string | undefined => {
+  // ambient context: what the user is looking at, attached invisibly to every send as paragraphs
+  // of the one block the daemon wraps, which is where the opening lives
+  const buildContext = (): string[] | undefined => {
     if (!active) return undefined;
     const parts: string[] = [];
     const pc = page;
@@ -492,15 +493,12 @@ export function Composer({
     if (pc.errors.length) parts.push(`recent console errors:\n${pc.errors.map((e) => `- ${e}`).join("\n")}`);
     const blocks: string[] = [];
     if (greenfield) blocks.push(greenfieldContext(active.worktree.title, repo?.configFile));
-    if (parts.length > 0)
-      blocks.push(
-        `[Live preview context, attached automatically. This is what the user is looking at right now:\n${parts.join("\n")}]`,
-      );
+    if (parts.length > 0) blocks.push(`What the user is looking at right now:\n${parts.join("\n")}`);
     // what they ran with `!` since their last message: the output is on screen for them, and this
     // is how it gets in front of the agent too
     const shell = shellContext(chat);
     if (shell) blocks.push(shell);
-    return blocks.length > 0 ? blocks.join("\n\n") : undefined;
+    return blocks.length > 0 ? blocks : undefined;
   };
 
   // the mode, set the way its chip sets it: the new worktree's while spawning, else this one's

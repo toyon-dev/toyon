@@ -31,7 +31,17 @@ export interface PreviewStanding {
   detail?: string;
 }
 
-/** The block after every message that says where the preview is, so the agent checks its work
+/** Everything Toyon adds behind a message, wrapped once: what the shell attached when it was sent
+ * (the page under the user's eyes, what they ran, a new project's brief) and what the daemon knows
+ * as it goes out (where the preview stands, what the tree owes main). One opening, so the agent
+ * reads one voice and reads that none of it was typed; nothing when there is nothing to say. */
+export function attached(paragraphs: readonly (string | undefined)[]): string | undefined {
+  const said = paragraphs.filter((p): p is string => !!p);
+  if (said.length === 0) return undefined;
+  return `[Attached by Toyon, not written by the user:\n${said.join("\n\n")}]`;
+}
+
+/** The paragraph after every message that says where the preview is, so the agent checks its work
  * there instead of starting a server of its own. It goes with each message rather than once at
  * launch: the port lives with the runtime, which a settings change rebuilds under a session that
  * stays up; the first message of a new worktree goes out before setup has given it one; and a proc
@@ -57,7 +67,7 @@ export function previewContext(p: PreviewStanding | null): string | undefined {
     default:
       line = `The preview is ${p.status}${p.detail ? `: ${p.detail}` : ""}; nothing answers${at} until it is back.`;
   }
-  return `[Attached by Toyon: ${line}]`;
+  return line;
 }
 
 /** what the model reads as an image's label: its session number (how the user will refer to it

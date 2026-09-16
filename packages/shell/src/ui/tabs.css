@@ -44,8 +44,16 @@
     flex-shrink: 0;
     color: var(--text1);
     font: var(--type-ui-sm);
+    /* a hovered closed tab is a hovered row: the element seat, and the ladder up with it so the
+     count rides. It lands brighter than the open tab, and that is fine, because the open tab's mark
+     is that it joins the list under it, not its brightness; painting the hover in the ground
+     instead made two joined tabs and nothing said which one was open. Declared before the open
+     rule so a hovered open tab keeps its ground. */
     &:hover {
+      background: var(--element0);
       color: var(--text0);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
     }
     /* the open tab is the ground under the strip, named by the parent beside its own background */
     &[data-state~="current"] {

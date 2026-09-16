@@ -655,8 +655,12 @@ export class WorktreeService {
     // deleted, and its session-info callback would re-add the session entry removed below
     await this.d.runtime.stop(worktreeId);
     const kept = await withRepoLock(repo.path, async () => {
-      // before the directory goes: its uncommitted work exists nowhere else
+      // before the directory goes: its uncommitted work exists nowhere else. Nothing kept means
+      // nothing goes: the branch is deleted on the strength of the ref holding its commits, and a
+      // sweep runs with nobody watching, so the row stays and says why. The runtime is already
+      // down, which is what an idle row looks like; a look at it wakes it.
       const k = archive ? await this.keep(repo, wt) : null;
+      if (archive && !k) throw new UserError(`could not keep ${wt.title}'s work, so it was left in place`);
       await gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path);
       // the confirm promised the branch goes with the directory. Only toyon's own: an adopted
       // worktree's branch is the person's. Forced, since the archive ref holds its commits; best
@@ -687,7 +691,7 @@ export class WorktreeService {
   private async keep(repo: RepoInfo, wt: WorktreeInfo): Promise<KeptState | null> {
     const index = join(this.d.paths.archiveDir, `${wt.id}.index`);
     const kept = await keepState(repo.path, wt.path, archiveRef(wt.id), index);
-    if (!kept) log.warn(wt.id, "could not keep its git state: the chat is archived without its work");
+    if (!kept) log.warn(wt.id, "could not keep its git state");
     else if (kept.lost) log.warn(wt.id, "could not keep its uncommitted changes: only its commits are archived");
     return kept;
   }

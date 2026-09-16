@@ -11,6 +11,8 @@ export type ChordId =
   | "chats"
   | "changes"
   | "files"
+  | "panel-tab-prev"
+  | "panel-tab-next"
   | "composer"
   | "rail"
   | "keys"
@@ -70,6 +72,8 @@ export interface Chord {
   /** a key with no modifier at all that fires the same chord: F1 for the palette, as in VS Code and
    * Cursor, and the key Firefox users are shown because Firefox owns ⌘⇧P. */
   bareAlias?: string;
+  /** a focused text field keeps the chord: ⌥←/→ is a word jump in every field, editor and shell */
+  textKeeps?: true;
 }
 
 export const CHORDS: readonly Chord[] = [
@@ -91,6 +95,11 @@ export const CHORDS: readonly Chord[] = [
   // ⌘⇧E is the file tree's key in VS Code, Cursor and Zed, and here it opens the same panel on its
   // files tab
   { id: "files", key: "e", shift: true },
+  // ⌥←/→ walk the panel's tabs the way ⌥↑/↓ walk the worktrees beside it. Anywhere text is typed
+  // (the composer, the commit box, the editor, the terminal, a field on the page) keeps it as the
+  // word jump it is there.
+  { id: "panel-tab-prev", key: "ArrowLeft", alt: true, textKeeps: true },
+  { id: "panel-tab-next", key: "ArrowRight", alt: true, textKeeps: true },
   // ⌘L is Cursor's key for the chat, so it is the one a hand already reaches for, and the chat's only
   // chord: from elsewhere it puts the caret in the box, opening the panel if it must, and from the
   // box it closes the panel (app/keys.ts). From the editor it brings the selection along as Cursor's
@@ -227,4 +236,13 @@ export function worktreeIndex(digit: number, count: number): number | null {
   if (count === 0) return null;
   if (digit === 9) return count - 1;
   return digit - 1 < count ? digit - 1 : null;
+}
+
+/** the keyboard is in something text is typed into: a field, a textarea (Monaco's and xterm's
+ * included) or an editable element. Structural, so the daemon can import this file without the DOM. */
+export function isTyping(el: unknown): boolean {
+  const e = el as { tagName?: string; isContentEditable?: boolean; type?: string } | null;
+  if (!e?.tagName) return false;
+  if (e.isContentEditable || e.tagName === "TEXTAREA") return true;
+  return e.tagName === "INPUT" && !["button", "checkbox", "radio", "range", "submit", "reset"].includes(e.type ?? "");
 }

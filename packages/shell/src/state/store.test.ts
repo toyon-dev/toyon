@@ -6,6 +6,7 @@ import {
   type Action,
   asksSetup,
   canCarry,
+  changesTabStep,
   type Draft,
   draftKey,
   type EditorDisk,
@@ -1059,6 +1060,13 @@ describe("git status", () => {
     expect([files.layout.changes, files.layout.changesTab]).toEqual([true, "files"]);
     expect(reducer(files, { a: "focus-changes" }).layout.changesTab).toBe("files");
     expect(reducer(files, { a: "changes-tab", v: "history" }).layout.changesTab).toBe("history");
+  });
+  test("the tab walk wraps both ways: files, changes, history", () => {
+    const s = run([hello(wt("main", "main"))]);
+    const on = (changesTab: "files" | "changes" | "history") => ({ ...s, layout: { ...s.layout, changesTab } });
+    expect(changesTabStep(on("files"), 1)).toBe("changes");
+    expect(changesTabStep(on("history"), 1)).toBe("files");
+    expect(changesTabStep(on("files"), -1)).toBe("history");
   });
   test("focus-chat and focus-rail open their panels and ask for the keyboard every time", () => {
     const s = run([hello(wt("main", "main"))]);

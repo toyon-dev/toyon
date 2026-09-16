@@ -95,6 +95,10 @@ describe("matchChord", () => {
     expect(matchChord(ev("ArrowUp", { meta: false, alt: true, shift: true }))).toEqual({ id: "wt-unseen-prev" });
     expect(matchChord(ev("ArrowDown", { meta: false, alt: true, shift: true }))).toEqual({ id: "wt-unseen-next" });
     expect(matchChord(ev("k", { meta: false, alt: true, shift: true }))).toBeNull();
+    // ⌥←/→ is the panel's tabs, with no ⇧ form
+    expect(matchChord(ev("ArrowLeft", { meta: false, alt: true }))).toEqual({ id: "panel-tab-prev" });
+    expect(matchChord(ev("ArrowRight", { meta: false, alt: true }))).toEqual({ id: "panel-tab-next" });
+    expect(matchChord(ev("ArrowRight", { meta: false, alt: true, shift: true }))).toBeNull();
     // the arrows without ⌥ are the focused list's own
     expect(matchChord(ev("ArrowUp", { meta: false }))).toBeNull();
     expect(matchChord(ev("ArrowUp"))).toBeNull();

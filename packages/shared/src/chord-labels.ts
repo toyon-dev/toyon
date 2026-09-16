@@ -33,6 +33,8 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   chats: { label: "search in chats", section: "Find" },
   changes: { label: "changes panel", section: "Panels" },
   files: { label: "files panel", section: "Panels" },
+  "panel-tab-prev": { label: "previous panel tab", section: "Panels", hidden: true },
+  "panel-tab-next": { label: "next panel tab", section: "Panels" },
   composer: { label: "chat panel, with the editor's selection", section: "Panels" },
   rail: { label: "worktree panel", section: "Panels" },
   keys: { label: "settings & shortcuts", section: "Panels" },
@@ -56,7 +58,7 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
 };
 
 /** named keys as they are drawn: KeyboardEvent.key spells the arrows out, and Tab stays a word */
-const KEY_NAMES: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓", Tab: "Tab" };
+const KEY_NAMES: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Tab: "Tab" };
 
 /** "⌘⇧P" style label, showing the chord's advertised alias when the environment calls for it
  * (F1 on Firefox, ⌘N and ⌃Tab in an installed PWA). Other aliases stay unadvertised. */

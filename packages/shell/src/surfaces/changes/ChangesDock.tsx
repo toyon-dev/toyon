@@ -257,29 +257,22 @@ export function ChangesDock({ width }: { width: number }) {
       if (hist) enterHist(sel);
       else select(sel, true);
     } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-      // ←/→ are both the tab strip's keys and a tree's, and with two tabs they can be both: the
-      // tree answers while it has something to say (expand, collapse) and the strip when it does
-      // not, so → from the changes list opens the history and ← on a closed commit walks back
-      // out. The history is only ever a tree one commit deep, so ← anywhere inside a commit
-      // closes it and lands on it: a stop on the parent first is a step nobody asked for in a
-      // tree this shallow.
+      // ←/→ belong to the tree under them and never to the strip: a deep file in the files tree has
+      // no way to tell a step out from a walk away, so the tabs are ⌥←/⌥→ (app/keys.ts) on every
+      // tab alike. The history is only ever a tree one commit deep, so ← anywhere inside a commit
+      // closes it and lands on it: a stop on the parent first is a step nobody asked for in a tree
+      // this shallow.
       e.preventDefault();
-      const right = e.key === "ArrowRight";
-      if (!hist) {
-        if (right) setTab("history");
-        return;
-      }
       const r = histRows[sel];
-      if (right) {
-        if (!r || r.file) return;
+      if (!hist || !r) return;
+      if (e.key === "ArrowRight") {
+        if (r.file) return;
         if (r.commit.sha !== openSha) toggleCommit(r.commit.sha);
         else if (histRows[sel + 1]?.file) moveHist(sel + 1);
-      } else if (r && r.commit.sha === openSha) {
+      } else if (r.commit.sha === openSha) {
         // the commit's own row sits above its files, so its index survives the collapse
         if (r.file) setSel(histRows.findIndex((x) => !x.file && x.commit.sha === r.commit.sha));
         toggleCommit(r.commit.sha);
-      } else {
-        setTab("changes");
       }
     } else if (e.key === "Escape") {
       // Escape closes what the list opened and leaves the keyboard here, so the arrows can open the

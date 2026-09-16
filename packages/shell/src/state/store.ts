@@ -951,6 +951,15 @@ export function changesTabShown(s: Pick<State, "layout" | "archivedPage" | "acti
   return archivedPageOf(s) && s.layout.changesTab === "files" ? "changes" : s.layout.changesTab;
 }
 
+/** the tab `delta` steps from the one shown, wrapping; an archived page has no files tab to land on */
+export function changesTabStep(
+  s: Pick<State, "layout" | "archivedPage" | "activeRepoId" | "archived">,
+  delta: 1 | -1,
+): ChangesTab {
+  const order: readonly ChangesTab[] = archivedPageOf(s) ? CHANGES_TABS.filter((t) => t !== "files") : CHANGES_TABS;
+  return order[(order.indexOf(changesTabShown(s)) + delta + order.length) % order.length] ?? "changes";
+}
+
 export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | "archived">): ArchivedWorktree | null {
   if (!s.archivedPage || !s.activeRepoId) return null;
   return s.archived[s.activeRepoId]?.find((a) => a.id === s.archivedPage) ?? null;

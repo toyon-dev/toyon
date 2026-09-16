@@ -1,8 +1,17 @@
-import { type ChordId, LOGIN_STREAM, matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
+import { type ChordId, chordOf, isTyping, LOGIN_STREAM, matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
 import { useEffect } from "react";
 import { markUnread } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
-import { changesTabShown, isChatCentred, isSubPicker, localOf, previewIdOf, routeTarget } from "../state/store.ts";
+import {
+  changesTabShown,
+  changesTabStep,
+  isChatCentred,
+  isFirstRun,
+  isSubPicker,
+  localOf,
+  previewIdOf,
+  routeTarget,
+} from "../state/store.ts";
 import type { PaneKind } from "../ui/Pane.tsx";
 import { previewBus, togglePick } from "./previewBus.ts";
 import { PEEK_FALLBACK_MS, type WalkModifier, walkModifier } from "./railPeek.ts";
@@ -76,6 +85,8 @@ export function useChords() {
       // wherever the hand is.
       const monaco = !!document.activeElement?.closest(".monaco-editor");
       if (monaco && chord && (e.altKey || MONACO_OWNS.has(chord.id))) return;
+      // the terminal and the editor type into a textarea of their own, so this covers them as well
+      if (chord && chordOf(chord.id).textKeeps && isTyping(document.activeElement)) return;
       // with no page up (setup, a stopped app, an update waiting on a reload, a chat) ⌘R is the
       // browser's again: the shell is the only thing on screen that a reload could mean
       if (chord?.id === "reload" && !(previewIdOf(s) && routeTarget(s))) return;
@@ -173,6 +184,20 @@ export function useChords() {
                 : { a: "focus-changes", tab: "files" },
             );
             break;
+          // a shut panel opens on the tab it was left on, so the first press shows where the walk
+          // starts rather than stepping past a tab nobody has seen yet
+          case "panel-tab-prev":
+          case "panel-tab-next": {
+            if (isFirstRun(s)) break;
+            if (!s.layout.changes) {
+              dispatch({ a: "toggle-changes" });
+              break;
+            }
+            const tab = changesTabStep(s, chord.id === "panel-tab-next" ? 1 : -1);
+            // from inside the panel the keyboard follows the tab, so the arrows carry on there
+            dispatch(inside(".changes-dock") ? { a: "focus-changes", tab } : { a: "changes-tab", v: tab });
+            break;
+          }
           case "composer":
             // a chat in the centre, a project's or an archived worktree's, is not a panel: there is
             // nothing to close, only the box to reach

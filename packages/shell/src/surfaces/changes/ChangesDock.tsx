@@ -202,7 +202,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     if (!focusReq) return;
     // on the files tab the tree takes it, and picks up at the open file itself
     const files = tabRef.current === "files";
-    if (!files && atOpen.current >= 0) setSel(atOpen.current);
+    // the open file's index means a row only on the changes list; the history counts commits
+    if (tabRef.current === "changes" && atOpen.current >= 0) setSel(atOpen.current);
     const f = requestAnimationFrame(() => (files ? treeRef : listRef).current?.focus());
     return () => cancelAnimationFrame(f);
   }, [focusReq]);

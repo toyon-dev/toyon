@@ -185,19 +185,17 @@ export function useChords() {
             );
             break;
           // a shut panel opens on the tab it was left on, so the first press shows where the walk
-          // starts rather than stepping past a tab nobody has seen yet
+          // starts rather than stepping past a tab nobody has seen yet. The keyboard follows the tab
+          // from wherever it was: the next key after picking a tab is an arrow into it.
           case "panel-tab-prev":
-          case "panel-tab-next": {
+          case "panel-tab-next":
             if (isFirstRun(s)) break;
-            if (!s.layout.changes) {
-              dispatch({ a: "toggle-changes" });
-              break;
-            }
-            const tab = changesTabStep(s, chord.id === "panel-tab-next" ? 1 : -1);
-            // from inside the panel the keyboard follows the tab, so the arrows carry on there
-            dispatch(inside(".changes-dock") ? { a: "focus-changes", tab } : { a: "changes-tab", v: tab });
+            dispatch(
+              s.layout.changes
+                ? { a: "focus-changes", tab: changesTabStep(s, chord.id === "panel-tab-next" ? 1 : -1) }
+                : { a: "focus-changes" },
+            );
             break;
-          }
           case "composer":
             // a chat in the centre, a project's or an archived worktree's, is not a panel: there is
             // nothing to close, only the box to reach

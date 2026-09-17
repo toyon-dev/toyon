@@ -5,6 +5,7 @@ import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
+import { type PortLease, pickProxyPort } from "./ports.ts";
 import { oldestViewed, procUrlEnv, RuntimeRegistry, terminalEnv, worktreeEnv } from "./registry.ts";
 import type { WorktreeProcs } from "./supervisor.ts";
 
@@ -32,14 +33,42 @@ const spare: WorktreeInfo = { ...wt, id: "s1", path: "/nowhere/s1", branch: "spa
 let cleanup = () => {};
 afterEach(() => cleanup());
 
-function make() {
+/** a fixed range of two preview ports, the way a front that forwards a handful pins them */
+function twoPorts(): PortLease & { held: Set<number> } {
+  const range = { from: 1, to: 2 };
+  const held = new Set<number>();
+  return {
+    held,
+    lease(current) {
+      const port = pickProxyPort(current, range, held, () => true);
+      if (port !== null) held.add(port);
+      return port;
+    },
+    release: (port) => held.delete(port),
+    ranged: () => true,
+    label: () => "1-2",
+  };
+}
+
+function make(opts: { worktrees?: WorktreeInfo[]; ports?: PortLease; viewed?: (id: string) => boolean } = {}) {
   const t = tmpRepo();
   cleanup = t.cleanup;
-  const state = new StateStore(t.paths, { repos: [repo], worktrees: [wt, spare], sessions: {} });
+  // copies: the store hands out live records, and a port leased in one test must not reach the next
+  const worktrees = (opts.worktrees ?? [wt, spare]).map((w) => ({ ...w }));
+  const state = new StateStore(t.paths, { repos: [repo], worktrees, sessions: {} });
   const hub = new Hub();
   const f = fakeFactories();
   const agents = fakeAgents(t.paths.agentsDir);
-  const registry = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
+  const registry = new RuntimeRegistry({
+    hub,
+    state,
+    paths: t.paths,
+    agents,
+    bridgeScript: () => "",
+    ports: opts.ports,
+    viewed: opts.viewed,
+    ...f.factories,
+  });
   return { state, hub, registry, ...f };
 }
 
@@ -360,6 +389,77 @@ describe("RuntimeRegistry sleep and wake", () => {
     expect(registry.get(wt.id)?.procs).toBe(procs.get(wt.id) as unknown as WorktreeProcs);
     expect(registry.tiers()).toEqual({ awake: 1, asleep: 0 });
     expect(registry.awake().map((a) => a.id)).toEqual([wt.id]);
+  });
+
+  describe("in a fixed range of preview ports", () => {
+    const a: WorktreeInfo = { ...wt, id: "a", path: "/nowhere/a", proxyPort: 1, title: "a", viewedAt: 100 };
+    const b: WorktreeInfo = { ...wt, id: "b", path: "/nowhere/b", proxyPort: 2, title: "b", viewedAt: 200 };
+    const c: WorktreeInfo = { ...wt, id: "c", path: "/nowhere/c", proxyPort: 9, title: "c", viewedAt: 300 };
+    const s: WorktreeInfo = { ...spare, proxyPort: 9 };
+
+    test("sleep gives the port back and stops the proxy; wake takes one and opens a new proxy on it", async () => {
+      const ports = twoPorts();
+      const { registry, proxies, procs, state } = make({ worktrees: [a, { ...b, proxyPort: 1 }], ports });
+      await registry.start(a, repo);
+      const first = proxies.get(a.id)!;
+      await registry.sleep(a.id);
+      expect(first.stopped).toBe(true);
+      expect(registry.get(a.id)?.proxy).toBeNull();
+      expect(ports.held.size).toBe(0);
+      expect(procs.get(a.id)?.asleep).toBe(true);
+      // another copy takes its port meanwhile, so it comes back on the other one
+      await registry.start(b, repo);
+      await registry.wake(a.id);
+      expect(procs.get(a.id)?.asleep).toBe(false);
+      expect(registry.get(a.id)?.proxy).not.toBe(first);
+      expect(state.worktree(a.id)?.proxyPort).toBe(2);
+      expect(state.worktree(b.id)?.proxyPort).toBe(1);
+    });
+
+    test("with every port held, the copy viewed longest ago sleeps and its port goes to the one opening", async () => {
+      const ports = twoPorts();
+      const { registry, procs, state } = make({ worktrees: [a, b, c], ports });
+      await registry.start(a, repo);
+      await registry.start(b, repo);
+      await registry.start(c, repo);
+      expect(procs.get(a.id)?.asleep).toBe(true);
+      expect(procs.get(b.id)?.asleep).toBe(false);
+      expect(procs.get(c.id)?.asleep).toBe(false);
+      expect(state.worktree(c.id)?.proxyPort).toBe(1);
+    });
+
+    test("a copy being looked at or worked on keeps its port; with none to take, the start fails", async () => {
+      const ports = twoPorts();
+      const { registry, procs } = make({ worktrees: [a, b, c], ports, viewed: (id) => id === a.id });
+      await registry.start(a, repo);
+      await registry.start(b, repo);
+      registry.hold(b.id, "turn");
+      await expect(registry.start(c, repo)).rejects.toThrow(UserError);
+      expect(procs.get(a.id)?.asleep).toBe(false);
+      expect(procs.get(b.id)?.asleep).toBe(false);
+      expect(registry.get(c.id)?.procs ?? null).toBeNull();
+      registry.release(b.id, "turn");
+      await registry.start(c, repo);
+      expect(procs.get(b.id)?.asleep).toBe(true);
+    });
+
+    test("a spare takes nobody's port: it stays cold and says nothing", async () => {
+      const ports = twoPorts();
+      const { registry, procs } = make({ worktrees: [a, b, s], ports });
+      await registry.start(a, repo);
+      await registry.start(b, repo);
+      await registry.start(s, repo);
+      expect(procs.get(s.id)).toBeUndefined();
+      expect(procs.get(a.id)?.asleep).toBe(false);
+      // and a spare, never shown, is the first to give its port up
+      await registry.sleep(a.id);
+      await registry.start(s, repo);
+      expect(procs.get(s.id)?.started.length).toBe(2);
+      await registry.start(a, repo);
+      await registry.wake(a.id);
+      expect(procs.get(s.id)?.asleep).toBe(true);
+      expect(procs.get(a.id)?.asleep).toBe(false);
+    });
   });
 
   test("wake starts a cold worktree, and is a no-op while its setup runs", async () => {

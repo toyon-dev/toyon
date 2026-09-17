@@ -17,7 +17,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
-import { leaseProxyPort, proxyRangeLabel, returnProxyPort } from "./ports.ts";
+import { type PortLease, proxyPorts } from "./ports.ts";
 import { expandEnv, resolveRun } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { type PtyHandle, type PtyOpts, PtyStream } from "./pty.ts";
@@ -50,6 +50,10 @@ export interface RuntimeDeps {
    * (core/remote.ts); absent in tests, where previews answer loopback only */
   remote?: Remote | null;
   grant?: string;
+  /** the preview ports; the daemon's own when absent */
+  ports?: PortLease;
+  /** whether a tab shows the worktree; one shown never gives its preview port up. Absent in tests */
+  viewed?: (id: string) => boolean;
   /** factories, overridable so tests run without spawning anything */
   makeAgent?: (wt: WorktreeInfo, deps: RuntimeDeps, preview: () => PreviewStanding | null) => AgentAdapter;
   makeProcs?: (wt: WorktreeInfo, deps: RuntimeDeps) => WorktreeProcs;
@@ -309,6 +313,13 @@ export class RuntimeRegistry {
     const rt = this.runtimes.get(id);
     if (rt?.procs) {
       if (!rt.procs.asleep) return;
+      // a range port went back to sleep; a new one comes with the wake, and the rows frame carries it
+      if (!rt.proxy) {
+        const live = this.deps.state.requireWorktree(wt.id);
+        const port = this.leasePort(live);
+        if (port === null) return;
+        this.openProxy(rt, live, port);
+      }
       rt.procs.wake();
       log.info(id, "awake");
       this.deps.hub.emit("worktreesChanged");
@@ -320,12 +331,23 @@ export class RuntimeRegistry {
   }
 
   /** Stop the worktree's procs and nothing else: the proxy, its port, the agent, the shell and
-   * the login all stay, so its URL and its terminal are unchanged when it wakes. */
+   * the login all stay, so its URL and its terminal are unchanged when it wakes. The one
+   * exception is a port from a fixed range: the front forwards a handful, so an asleep copy holding
+   * one would keep a copy someone opens from starting, and it gives the port back first. */
   async sleep(id: string): Promise<void> {
     const rt = this.runtimes.get(id);
     if (!rt?.procs || rt.procs.asleep) return;
+    if (this.ports.ranged()) {
+      rt.proxy?.stop();
+      rt.proxy = null;
+      this.returnLease(id);
+    }
     await rt.procs.sleep();
     this.deps.hub.emit("worktreesChanged");
+  }
+
+  private get ports(): PortLease {
+    return this.deps.ports ?? proxyPorts;
   }
 
   /** the preview target once its proc answers, or null when nothing is coming: no procs, a proc
@@ -459,11 +481,7 @@ export class RuntimeRegistry {
     // keeps the port it got, and the rows frame sent once the proxy is up carries it to the shell
     const live = this.deps.state.requireWorktree(wt.id);
     const port = this.leasePort(live);
-    if (port !== live.proxyPort) {
-      live.proxyPort = port;
-      this.deps.state.save();
-    }
-    this.leased.set(wt.id, port);
+    if (port === null) return;
 
     const procs = (this.deps.makeProcs ?? defaultProcs)(wt, this.deps);
     rt.procs = procs;
@@ -499,46 +517,63 @@ export class RuntimeRegistry {
       await procs.stopAll();
       return;
     }
-    rt.proxy = (this.deps.makeProxy ?? defaultProxy)(live, previewName, procs, this.deps, {
-      // a request is someone using the preview: the worktree wakes for it, and the policy that
-      // decides when it sleeps hears about it
-      onRequest: () => {
-        this.deps.hub.emit("previewRequest", wt.id);
-        fireAndForget(wt.id, this.wake(wt.id), "wake on request");
-      },
-      ready: () => this.awaitPreview(wt.id, PREVIEW_WAKE_MS),
-    });
+    this.openProxy(rt, live, port);
     this.deps.hub.emit("worktreesChanged");
   }
 
-  /** the preview port each started worktree holds, returned when its proxy stops */
+  /** the proxy on the port just leased; the record keeps the port, and the rows frame sent once
+   * the proxy is up carries it to the shell */
+  private openProxy(rt: Runtime, live: WorktreeInfo, port: number) {
+    if (port !== live.proxyPort) {
+      live.proxyPort = port;
+      this.deps.state.save();
+    }
+    const procs = rt.procs!;
+    rt.proxy = (this.deps.makeProxy ?? defaultProxy)(live, rt.previewName, procs, this.deps, {
+      // a request is someone using the preview: the worktree wakes for it, and the policy that
+      // decides when it sleeps hears about it
+      onRequest: () => {
+        this.deps.hub.emit("previewRequest", live.id);
+        fireAndForget(live.id, this.wake(live.id), "wake on request");
+      },
+      ready: () => this.awaitPreview(live.id, PREVIEW_WAKE_MS),
+    });
+  }
+
+  /** the preview port each worktree holds while its proxy is up, returned when it stops */
   private leased = new Map<string, number>();
 
-  /** A port for the copy starting now. When running copies hold every port in the range, the one
-   * looked at longest ago gives its port up and stops the way a config change stops it; opening it
-   * again takes a port back the same way. Stays synchronous up to the lease, so two starts at once
-   * never pick the same copy or the same port. */
-  private leasePort(wt: WorktreeInfo): number {
-    const port = leaseProxyPort(wt.proxyPort);
-    if (port !== null) return port;
-    const holders = [...this.leased.keys()].filter((id) => id !== wt.id && !this.starting.has(id));
-    const victim = oldestViewed(holders, this.deps.state);
-    if (victim) {
-      log.info(victim.id, `stopped: its preview port went to ${wt.title}`);
-      // the proxy and the lease go before the first await inside, which is all the port needs
-      fireAndForget(victim.id, this.stopProcs(victim.id), "stop for a preview port");
-      this.deps.hub.emit("worktreesChanged");
-      const freed = leaseProxyPort(wt.proxyPort);
-      if (freed !== null) return freed;
+  /** A port for the copy coming up. When running copies hold every port in the range, the one
+   * looked at longest ago goes to sleep and its port comes here; opening it again takes one back
+   * the same way. Nothing being looked at or worked on gives its port up, and a spare, which
+   * nobody is waiting for, takes no one's: it stays cold, with nothing to tell. Synchronous up to
+   * the lease, so two starts at once never pick the same copy or the same port. */
+  private leasePort(wt: WorktreeInfo): number | null {
+    let port = this.ports.lease(wt.proxyPort);
+    if (port === null && wt.kind !== "spare") {
+      const holders = [...this.leased.keys()].filter(
+        (id) => id !== wt.id && !this.starting.has(id) && !this.busy(id) && !this.deps.viewed?.(id),
+      );
+      const victim = oldestViewed(holders, this.deps.state);
+      if (victim) {
+        log.info(victim.id, `asleep: its preview port went to ${wt.title}`);
+        // the proxy and the lease go before the first await inside, which is all the port needs
+        fireAndForget(victim.id, this.sleep(victim.id), "sleep for a preview port");
+        port = this.ports.lease(wt.proxyPort);
+      }
+      if (port === null) {
+        throw new UserError(`all preview ports ${this.ports.label()} are in use by running copies; stop one first`);
+      }
     }
-    throw new UserError(`all preview ports ${proxyRangeLabel()} are in use by running copies; stop one first`);
+    if (port !== null) this.leased.set(wt.id, port);
+    return port;
   }
 
   private returnLease(id: string) {
     const port = this.leased.get(id);
     if (port === undefined) return;
     this.leased.delete(id);
-    returnProxyPort(port);
+    this.ports.release(port);
   }
 
   /** stop procs and proxy but keep the agent (config confirmed → restart under the new config) */

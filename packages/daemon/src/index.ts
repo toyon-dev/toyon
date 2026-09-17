@@ -141,6 +141,8 @@ const runtime = new RuntimeRegistry({
   bridgeScript: () => bridge.get(),
   remote,
   grant: previewGrant(token),
+  // asked only once the policy exists: the first view comes from a socket, after boot
+  viewed: (id): boolean => idle.isViewed(id),
 });
 const drafts = new DraftStore({ file: paths.draftsFile, hub });
 const worktrees = new WorktreeService({ state, hub, runtime, paths, agents, drafts });

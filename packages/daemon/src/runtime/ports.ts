@@ -70,21 +70,30 @@ export function pickProxyPort(
   return null;
 }
 
-/** hold a port for a proxy about to start; hand it back with `returnProxyPort` when it stops. Null
- * when running copies hold every port in the range. */
-export function leaseProxyPort(current: number): number | null {
-  const port = pickProxyPort(current, range, allocated, (p) => tryBind(p, cloud.bindHost) === p);
-  if (port !== null && range) allocated.add(port);
-  return port;
+/** the ports a worktree's proxy leases and returns; the registry takes one so tests can hand it a
+ * small fixed range without pinning this module's */
+export interface PortLease {
+  /** hold a port for a proxy about to start, its own when free; null when running proxies hold
+   * every port in the range */
+  lease(current: number): number | null;
+  release(port: number): void;
+  /** whether the ports are the fixed few a front forwards, each worth keeping free */
+  ranged(): boolean;
+  label(): string;
 }
 
-export function proxyRangeLabel(): string {
-  return range ? `${range.from}-${range.to}` : "";
-}
-
-export function returnProxyPort(port: number) {
-  if (range) allocated.delete(port);
-}
+export const proxyPorts: PortLease = {
+  lease(current) {
+    const port = pickProxyPort(current, range, allocated, (p) => tryBind(p, cloud.bindHost) === p);
+    if (port !== null && range) allocated.add(port);
+    return port;
+  },
+  release(port) {
+    if (range) allocated.delete(port);
+  },
+  ranged: () => range !== null,
+  label: () => (range ? `${range.from}-${range.to}` : ""),
+};
 
 /** mark a persisted port as taken (worktrees restored at boot keep their port); a range port is
  * taken only by a running proxy */

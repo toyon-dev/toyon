@@ -3,6 +3,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
 import { frameNow, installFrame, touchNow } from "./app/phone.ts";
+import { installPhoneHistory } from "./app/phoneHistory.ts";
 import { terminalBus } from "./app/terminalBus.ts";
 import { createStore, StoreProvider } from "./state/context.tsx";
 import { FileSync } from "./state/fileSync.ts";
@@ -180,6 +181,7 @@ const store = createStore(
   }),
 );
 installFrame(store);
+installPhoneHistory(store);
 
 // The daemon's version as this page first heard it. A later hello naming another version, or
 // another protocol, is a daemon that restarted onto an install: this page's code is from before it

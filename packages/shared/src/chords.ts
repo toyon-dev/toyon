@@ -91,6 +91,7 @@ export const CHORDS: readonly Chord[] = [
   { id: "chats", key: "g" },
   // ⌘B is the panel with your files in VS Code, Cursor and Zed, whichever side it stands on here.
   // ⌃⇧G is the git panel in VS Code and Zed and stays a hidden alias for the hand that knows it.
+  // Both open the panel on its changes tab, whichever tab it was left on.
   { id: "changes", key: "b", ctrlAlias: { key: "g", shift: true } },
   // ⌘⇧E is the file tree's key in VS Code, Cursor and Zed, and here it opens the same panel on its
   // files tab

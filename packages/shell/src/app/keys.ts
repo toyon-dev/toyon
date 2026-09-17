@@ -172,9 +172,13 @@ export function useChords() {
           // it is shut and hand it the keyboard (the changes list, the chat box, the terminal, the
           // current worktree row); from inside that spot they close it. A press that shut a panel
           // already on screen took it from a hand that had come to type in it.
+          // the two panel keys each name a tab, so a press from the other tab, or from the panel shut
+          // on it, lands on the one the key names rather than on wherever the panel was left
           case "changes":
             dispatch(
-              s.layout.changes && inside(".changes-list, .tree") ? { a: "toggle-changes" } : { a: "focus-changes" },
+              s.layout.changes && changesTabShown(s) === "changes" && inside(".changes-list")
+                ? { a: "toggle-changes" }
+                : { a: "focus-changes", tab: "changes" },
             );
             break;
           case "files":

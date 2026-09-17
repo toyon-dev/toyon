@@ -16,13 +16,11 @@ In Toyon you point at a button in the page and ask for it to be bigger, watch it
 
 ## How it works
 
-- **Every idea gets its own copy of your project, with the app running.** A copy costs seconds and almost no space.
-- **You judge the work by using the app first, then read the change.** The diff is a tab beside the chat.
-- **When you're not sure, try more than one version.** One message can go to three copies at once.
-- **Watch and steer while it works, or leave and come back to your app already running.** Esc stops it mid-turn.
-- **Fix the small thing yourself. A one-line change does not need another prompt.** Edit the diff, or open a terminal in the copy.
-- **Nothing is kept until you say so.** Only land pushes, and only when you press it.
-- **Your editor stays yours.** Any file opens back in it from its menu.
+- Every idea gets its own running copy of your project.
+- You judge the work by using the app first, then read the change.
+- Watch and steer while it works, or leave and come back to it later.
+- Kick off more work or check in remotely from your phone.
+- Nothing is kept until you press land.
 
 Each copy is a branch and a git worktree with your dependencies and `.env` files; one spare per project is kept warm.
 
@@ -104,7 +102,7 @@ Copies start when you open them, and stop their servers when nobody has looked a
 
 Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. This moves Toyon and its copies off your laptop; it does not publish your app. None of it passes through a Toyon server; there is none. `toyon remote` puts a box on your own domain behind Caddy or on your Tailscale tailnet, `toyon deploy fly up` builds a machine on your Fly account and prints the link, and the Dockerfile in the package runs on any host with a disk and a port range. A Fly machine measured about $4-6 a month in ordinary use, plus whatever your agents spend, and its first chat can sign in with your Claude plan. [toyon.cloud](https://toyon.cloud) keeps a list of your machines in your browser, and nothing else.
 
-These routes are new, and the shell has no phone layout yet. How to set each one up, and what it has been checked with, is in [docs/remote.md](https://github.com/toyon-dev/toyon/blob/main/docs/remote.md).
+These routes are new. How to set each one up, and what it has been checked with, is in [docs/remote.md](https://github.com/toyon-dev/toyon/blob/main/docs/remote.md).
 
 ## Disk
 

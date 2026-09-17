@@ -117,12 +117,12 @@
     /* the seven a theme names for code (themes.ts, syntaxOf, which fills in any it left out); both
      the chat log and the diff pane colour from these, so a file reads the same in either */
     --syntax-comment: #6a6055;
-    --syntax-keyword: #fa891e;
-    --syntax-string: #78c945;
+    --syntax-keyword: #df714e;
+    --syntax-string: #a5bd4d;
     --syntax-number: #ca94ca;
-    --syntax-type: #fcbe03;
-    --syntax-function: #4dc7a7;
-    --syntax-variable: #69a9e8;
+    --syntax-type: #f5bf3a;
+    --syntax-function: #6bc198;
+    --syntax-variable: #81a99d;
     /* radii. The bare one is a control's, because that is the radius most rules ask for; xs is a
        chip or a badge, md a box that floats, lg a card, and pill a pill. Spelled out, like every
        other scale here: --r- read as a mystery beside --surface and --weight. */

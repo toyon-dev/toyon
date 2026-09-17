@@ -38,8 +38,9 @@ export function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
     { token: "identifier", foreground: bare(c.text0) },
     { token: "comment", foreground: bare(s.comment), fontStyle: "italic" },
     { token: "keyword", foreground: bare(s.keyword) },
-    // markup: a tag is the keyword of a document, its attributes are its variables
-    { token: "tag", foreground: bare(s.keyword) },
+    // markup: a tag is a call, not a keyword. In the keyword colour every `<div>` and `</a>` of a
+    // component is as loud as `return`, and the JSX half of a file is mostly tags
+    { token: "tag", foreground: bare(s.function) },
     { token: "metatag", foreground: bare(s.keyword) },
     { token: "attribute.name", foreground: bare(s.variable) },
     { token: "attribute.value", foreground: bare(s.string) },

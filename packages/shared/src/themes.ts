@@ -138,15 +138,19 @@ export const toyonDark: Theme = {
     diffDel: "#c07f6a29",
   },
   // syntax runs on the dry half of the palette (grass, seedhead, new growth) so a file of code
-  // stays one landscape; the berry stays out of it, since a keyword is not a fault.
+  // stays one landscape; the berry stays out of it, since a keyword is not a fault. It takes the
+  // hues without the accent weight: a status letter carries alone at 12px, but a file of code is
+  // colour on half its words, and at C78 the keyword orange and a lone C38 blue on the attributes
+  // made JSX shout. The keyword drops to a terracotta at L*60, darker than the words it leads, the
+  // way Gruvbox's red recedes; the attribute blue becomes a sage at C16, a name rather than a hue.
   syntax: {
     comment: "#6a6055",
-    keyword: "#fa891e",
-    string: "#78c945",
+    keyword: "#df714e",
+    string: "#a5bd4d",
     number: "#ca94ca",
-    type: "#fcbe03",
-    function: "#4dc7a7",
-    variable: "#69a9e8",
+    type: "#f5bf3a",
+    function: "#6bc198",
+    variable: "#81a99d",
   },
 };
 
@@ -185,12 +189,12 @@ export const toyonLight: Theme = {
   },
   syntax: {
     comment: "#b4aa9f",
-    keyword: "#b15b02",
-    string: "#3c8c03",
+    keyword: "#b54d2d",
+    string: "#697f1e",
     number: "#865889",
     type: "#ac7e02",
-    function: "#01775c",
-    variable: "#12689e",
+    function: "#397f5f",
+    variable: "#57796f",
   },
 };
 

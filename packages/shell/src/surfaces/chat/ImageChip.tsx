@@ -4,6 +4,7 @@ import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Float } from "../../ui/Float.tsx";
 import type { Placement, Rect } from "../../ui/place.ts";
+import { FullAttachment } from "./FullAttachment.tsx";
 import { fmtBytes } from "./images.ts";
 
 /** an attached image as a chip: thumbnail, its session number, name and size. In the composer it
@@ -41,6 +42,7 @@ export function ImageChip({
     </>
   );
   const chip = useRef<HTMLDivElement | null>(null);
+  const [full, setFull] = useState(false);
   if (onRemove) {
     return (
       <div className={cx("pick-chip image-chip", className)}>
@@ -57,10 +59,15 @@ export function ImageChip({
       data-tip="Open full size"
       data-tip-placement="follow"
     >
-      <a className="image-link" href={src} target="_blank" rel="noreferrer">
+      <button type="button" className="image-link" onClick={() => setFull(true)}>
         {body}
-      </a>
+      </button>
       <ImagePeek chip={chip} src={src} alt={name} width={width} height={height} />
+      {full && (
+        <FullAttachment onClose={() => setFull(false)}>
+          <img src={src} alt={name} />
+        </FullAttachment>
+      )}
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import { attachmentLabel, type PasteSource, sourceLabel } from "@toyon/shared";
+import { useEffect, useState } from "react";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { FullAttachment } from "./FullAttachment.tsx";
 
 /** A block of pasted text, collapsed. Same chip family as the picked element and the image: a
  * close button only when it can be removed, so the transcript's copy is inert. */
@@ -45,16 +47,47 @@ export function PasteChip({
       </span>
     </>
   );
+  const [full, setFull] = useState(false);
   return (
     <div className={cx("pick-chip paste-chip", className)} data-tip={preview || undefined}>
       {href ? (
-        <a className="image-link" href={href} target="_blank" rel="noreferrer">
+        <button type="button" className="image-link" onClick={() => setFull(true)}>
           {label}
-        </a>
+        </button>
       ) : (
         label
       )}
       {onRemove && <IconButton icon="close" label="Remove attachment" tone="quiet" onClick={onRemove} />}
+      {full && href && (
+        <FullAttachment onClose={() => setFull(false)}>
+          <FullPaste href={href} />
+        </FullAttachment>
+      )}
     </div>
   );
+}
+
+/** The text the daemon kept, read back the way it went out. Fetched when the box opens rather than
+ * held with the row: a transcript can carry a hundred of these and none of them is being read. */
+function FullPaste({ href }: { href: string }) {
+  const [text, setText] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    fetch(href)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((t) => {
+        if (live) setText(t);
+      })
+      .catch(() => {
+        if (live) setFailed(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [href]);
+
+  if (failed) return <p className="paste-full hint">Toyon could not read that paste back.</p>;
+  return <pre className="paste-full paste-text">{text}</pre>;
 }

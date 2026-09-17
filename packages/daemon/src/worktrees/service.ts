@@ -88,10 +88,19 @@ import { cleanTitle, shortId, slugify, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 import { isUnseen } from "./turns.ts";
 
-/** Gitignored local config a worktree needs and git will never bring over. Absent secrets fail
- * deep inside app code rather than as missing config (an empty AUTH_SECRET reads as a zero-length
- * HMAC key), so copy whatever the base checkout actually has. */
-const LOCAL_CONFIG_FILES = [".env", ".env.local", ".env.development", ".env.development.local", ".dev.vars"];
+/** Files a worktree needs that git will never bring over, copied from the base checkout when the
+ * worktree does not have them.
+ *
+ * Gitignored local config, because absent secrets fail deep inside app code rather than as missing
+ * config (an empty AUTH_SECRET reads as a zero-length HMAC key), so copy whatever the base
+ * checkout actually has.
+ *
+ * And .gitignore, for the checkout whose branch never committed one: git gives a worktree the
+ * branch's files, not the base checkout's disk, so a project scaffolded but not yet committed
+ * leaves the worktree with no ignore rules at all and every file of its copied node_modules reads
+ * as untracked work. The guard is what makes this safe: a repo that tracks its .gitignore has one
+ * here already, and this copies nothing. */
+const CARRIED_FILES = [".env", ".env.local", ".env.development", ".env.development.local", ".dev.vars", ".gitignore"];
 
 export type Variant = { group: string; index: number; of: number };
 
@@ -206,6 +215,11 @@ export class WorktreeService {
   private archive: WorktreeArchive;
   /** archives under way, by worktree id: a click during a sweep joins the one already running */
   private archiving = new Map<string, Promise<ArchivedWorktree | null>>();
+  /** worktrees whose directory is being removed. A forced remove empties a big tree over seconds
+   * and git answers honestly about a half-empty one, so a status read in that window reports every
+   * file still in it as deleted: 15k of them on a 20k-file tree. Reads answer from the last counts
+   * while an id is in here, and the row goes a moment later anyway. */
+  private going = new Set<string>();
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
   /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
   private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
@@ -371,6 +385,15 @@ export class WorktreeService {
         const i = list.out.split("\n").indexOf(sha);
         return i < 0 ? null : `stash@{${i}}`;
       };
+      // read before the apply, because after it they exist either way: the stash's own untracked
+      // files (its third parent) that this worktree does not already have. Undoing a half-applied
+      // stash is those paths and the tracked reset, and nothing else. A blanket `clean -fd` here
+      // took a claimed spare's node_modules and everything its setup wrote with it, and in a
+      // worktree whose branch has no .gitignore it took every ignored file in the tree.
+      const carried = await git(repo.path, "ls-tree", "-r", "--name-only", `${sha}^3`);
+      const restored = (carried.ok ? carried.out.split("\n").filter(Boolean) : []).filter(
+        (p) => !existsSync(join(wt.path, p)),
+      );
       const applied = await git(wt.path, "stash", "apply", sha);
       if (applied.ok) {
         const ref = await entry();
@@ -379,7 +402,11 @@ export class WorktreeService {
       }
       log.warn(wt.id, `moving ${main}'s changes failed`, applied.err);
       await git(wt.path, "reset", "--hard");
-      await git(wt.path, "clean", "-fd");
+      // literal pathspecs, so a file named with a `*` is that file; in chunks, because a pathspec
+      // list is argv and main's uncommitted set has no bound
+      for (let i = 0; i < restored.length; i += 100) {
+        await git(wt.path, "--literal-pathspecs", "clean", "-fd", "--", ...restored.slice(i, i + 100));
+      }
       const ref = await entry();
       const back = ref ? await git(repo.path, "stash", "pop", ref) : null;
       return back?.ok
@@ -645,7 +672,18 @@ export class WorktreeService {
     this.d.drafts?.drop(worktreeId);
   }
 
+  /** Marked as going for the whole of it, reads included: `archiving` covers a click during a
+   * sweep, and a discard is not in it at all. */
   private async takeDown(wt: WorktreeInfo, archive: boolean, reason?: string): Promise<ArchivedWorktree | null> {
+    this.going.add(wt.id);
+    try {
+      return await this.removeAndRecord(wt, archive, reason);
+    } finally {
+      this.going.delete(wt.id);
+    }
+  }
+
+  private async removeAndRecord(wt: WorktreeInfo, archive: boolean, reason?: string): Promise<ArchivedWorktree | null> {
     const worktreeId = wt.id;
     const repo = this.d.state.requireRepo(wt.repoId);
     // the agent first (inside runtime.stop): it may be mid-turn in the directory about to be
@@ -1108,7 +1146,7 @@ export class WorktreeService {
         await run("rm", ["-rf", dstNm], wt.path);
       }
     }
-    for (const f of LOCAL_CONFIG_FILES) {
+    for (const f of CARRIED_FILES) {
       const src = join(depsSource, f);
       if (!existsSync(src) || existsSync(join(wt.path, f))) continue;
       const r = await run("cp", [src, join(wt.path, f)], wt.path);
@@ -1489,9 +1527,14 @@ export class WorktreeService {
   ): Promise<{ ahead?: number; behind?: number; dirty?: number }> {
     const cached = this.countsCache.get(id);
     if (cached && Date.now() - cached.at < 10_000) return cached;
+    if (this.going.has(id)) return cached ?? {};
     try {
       const ab = countable ? await aheadBehind(path, defaultBranch) : await this.mainCounts(path);
-      const fresh = { ...ab, dirty: (await statusFiles(path)).length, at: Date.now() };
+      const dirty = (await statusFiles(path)).length;
+      // the removal started while those reads were in flight: the number is the tree being
+      // deleted, not the work, and it must not reach the cache the rail reads
+      if (this.going.has(id)) return cached ?? {};
+      const fresh = { ...ab, dirty, at: Date.now() };
       this.countsCache.set(id, fresh);
       return fresh;
     } catch {
@@ -1537,6 +1580,8 @@ export class WorktreeService {
   /** the working-tree state the changes panel shows (subscribe, edits, ref ticks). Also the one
    * place the `landed` badge is cleared: new work after a merge means it is no longer landed. */
   async gitStatus(worktreeId: string): Promise<GitInfo | null> {
+    // its directory is being deleted; no frame at all beats one that says every file went with it
+    if (this.going.has(worktreeId)) return null;
     const r = this.readable(worktreeId);
     if (!r) return this.archivedStatus(worktreeId);
     try {
@@ -1566,6 +1611,8 @@ export class WorktreeService {
       // the empty-tree fact lives on main's record, so the rows frame carries it without git: a
       // task worktree of an empty repo is not the greenfield surface, so only main keeps it
       if (r.wt && isMain) this.setEmpty(r.wt, files.length === 0 ? await treeEmpty(r.path) : false);
+      // the removal started while the reads were in flight
+      if (this.going.has(worktreeId)) return null;
       this.noteCounts(worktreeId, isMain, files.length, counts);
       return { files, committed, head: head.ok ? head.out : undefined, ...counts };
     } catch (e) {

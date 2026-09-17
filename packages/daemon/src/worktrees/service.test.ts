@@ -117,6 +117,32 @@ describe("create / remove", () => {
     expect(readFileSync(join(wt.path, ".env"), "utf8")).toBe("API=mine\n");
   });
 
+  // A worktree gets the branch's files, so a .gitignore nobody has committed is not among them,
+  // and every ignored file in the tree (the deps copy first of all) reads as untracked work.
+  test("an uncommitted .gitignore is carried in, so the deps copy is not untracked work", async () => {
+    const repoId = await registered();
+    writeFileSync(join(w.repo, ".gitignore"), "node_modules/\n");
+    mkdirSync(join(w.repo, "node_modules"), { recursive: true });
+    writeFileSync(join(w.repo, "node_modules", "dep.js"), "x\n");
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    expect(readFileSync(join(wt.path, ".gitignore"), "utf8")).toBe("node_modules/\n");
+    expect(existsSync(join(wt.path, "node_modules", "dep.js"))).toBe(true);
+    expect((await w.worktrees.gitStatus(wt.id))?.files.map((f) => f.path)).toEqual([".gitignore"]);
+  });
+
+  test("a committed .gitignore is the branch's own, and nothing is copied over it", async () => {
+    const repoId = await registered();
+    writeFileSync(join(w.repo, ".gitignore"), "dist/\n");
+    sh(w.repo, GIT, "add", ".gitignore");
+    sh(w.repo, GIT, "commit", "-qm", "ignore dist");
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    writeFileSync(join(w.repo, ".gitignore"), "dist/\nlater/\n");
+    await w.worktrees.setupAndStart(wt, w.state.repo(wt.repoId)!, w.repo);
+    expect(readFileSync(join(wt.path, ".gitignore"), "utf8")).toBe("dist/\n");
+  });
+
   test("create stamps the requested agent, else the daemon default; unknown ids are UserErrors", async () => {
     const repoId = await registered();
     expect((await w.worktrees.create(repoId, "a", { agent: "codex" })).agent).toBe("codex");
@@ -160,6 +186,30 @@ describe("create / remove", () => {
     const main = w.state.worktrees.find((x) => x.kind === "main")!;
     await w.worktrees.archiveWorktree(main.id);
     expect(w.state.worktree(main.id)).toBeDefined();
+  });
+
+  // The remove empties the directory file by file and git answers honestly about a half-empty
+  // tree, so mid-remove every file still in it reads as deleted: 15k of them on a 20k-file
+  // worktree, which the panel drew as the whole repo being wiped. Nothing is read on the way out.
+  test("a worktree on its way out is not read: no status frame, and no count for the rail", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    expect(await w.worktrees.gitStatus(wt.id)).not.toBeNull();
+    const going = w.worktrees.archiveWorktree(wt.id);
+    expect(await w.worktrees.gitStatus(wt.id)).toBeNull();
+    expect(await w.worktrees.freshCounts(wt.id)).toEqual({});
+    await going;
+  });
+
+  test("a discard is on its way out too, and no archive covers it", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    expect(await w.worktrees.gitStatus(wt.id)).not.toBeNull();
+    const going = w.worktrees.discardWorktree(wt.id);
+    expect(await w.worktrees.gitStatus(wt.id)).toBeNull();
+    await going;
   });
 });
 

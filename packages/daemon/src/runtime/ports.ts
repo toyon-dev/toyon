@@ -9,7 +9,6 @@
 // the range was pinned carry ephemeral ports no front forwards.
 
 import { cloud } from "../core/cloud.ts";
-import { UserError } from "../core/errors.ts";
 
 const allocated = new Set<number>();
 let range = cloud.proxyPorts;
@@ -71,14 +70,16 @@ export function pickProxyPort(
   return null;
 }
 
-/** hold a port for a proxy about to start; hand it back with `returnProxyPort` when it stops */
-export function leaseProxyPort(current: number): number {
+/** hold a port for a proxy about to start; hand it back with `returnProxyPort` when it stops. Null
+ * when running copies hold every port in the range. */
+export function leaseProxyPort(current: number): number | null {
   const port = pickProxyPort(current, range, allocated, (p) => tryBind(p, cloud.bindHost) === p);
-  if (port === null) {
-    throw new UserError(`all preview ports ${range?.from}-${range?.to} are in use by running copies; stop one first`);
-  }
-  if (range) allocated.add(port);
+  if (port !== null && range) allocated.add(port);
   return port;
+}
+
+export function proxyRangeLabel(): string {
+  return range ? `${range.from}-${range.to}` : "";
 }
 
 export function returnProxyPort(port: number) {

@@ -5,7 +5,7 @@ import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
-import { procUrlEnv, RuntimeRegistry, terminalEnv, worktreeEnv } from "./registry.ts";
+import { oldestViewed, procUrlEnv, RuntimeRegistry, terminalEnv, worktreeEnv } from "./registry.ts";
 import type { WorktreeProcs } from "./supervisor.ts";
 
 const repo: RepoInfo = {
@@ -42,6 +42,26 @@ function make() {
   const registry = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
   return { state, hub, registry, ...f };
 }
+
+describe("oldestViewed", () => {
+  const rows: Record<string, WorktreeInfo> = {
+    old: { ...wt, id: "old", viewedAt: 100 },
+    new: { ...wt, id: "new", viewedAt: 900 },
+    spare: { ...spare, viewedAt: undefined },
+  };
+  const state = { worktree: (id: string) => rows[id] };
+
+  test("the copy shown longest ago gives its port up first", () => {
+    expect(oldestViewed(["new", "old"], state)?.id).toBe("old");
+  });
+  test("a spare nobody has shown goes before any of them", () => {
+    expect(oldestViewed(["new", "spare", "old"], state)?.id).toBe("s1");
+  });
+  test("nothing to take from: undefined, and a removed record is skipped", () => {
+    expect(oldestViewed([], state)).toBeUndefined();
+    expect(oldestViewed(["gone", "new"], state)?.id).toBe("new");
+  });
+});
 
 describe("RuntimeRegistry", () => {
   test("ensureAgent is idempotent and start() reuses it", async () => {

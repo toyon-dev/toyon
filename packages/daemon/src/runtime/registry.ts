@@ -17,7 +17,7 @@ import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
-import { leaseProxyPort, returnProxyPort } from "./ports.ts";
+import { leaseProxyPort, proxyRangeLabel, returnProxyPort } from "./ports.ts";
 import { expandEnv, resolveRun } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { type PtyHandle, type PtyOpts, PtyStream } from "./pty.ts";
@@ -231,6 +231,14 @@ function previewTargetOf(procs: WorktreeProcs, previewName: string | undefined):
   const st = previewProcOf(procs, previewName);
   if (st?.status !== "running") return null;
   return { port: st.boundPort ?? st.port, host: st.host ?? "127.0.0.1" };
+}
+
+/** the worktree among `ids` a tab showed longest ago; a spare, never shown, goes first */
+export function oldestViewed(ids: string[], state: Pick<StateStore, "worktree">): WorktreeInfo | undefined {
+  return ids
+    .map((id) => state.worktree(id))
+    .filter((w): w is WorktreeInfo => w !== undefined)
+    .sort((a, b) => (a.viewedAt ?? 0) - (b.viewedAt ?? 0))[0];
 }
 
 export class RuntimeRegistry {
@@ -450,7 +458,7 @@ export class RuntimeRegistry {
     // before anything starts, so running out of preview ports leaves nothing half up. The record
     // keeps the port it got, and the rows frame sent once the proxy is up carries it to the shell
     const live = this.deps.state.requireWorktree(wt.id);
-    const port = leaseProxyPort(live.proxyPort);
+    const port = this.leasePort(live);
     if (port !== live.proxyPort) {
       live.proxyPort = port;
       this.deps.state.save();
@@ -505,6 +513,26 @@ export class RuntimeRegistry {
 
   /** the preview port each started worktree holds, returned when its proxy stops */
   private leased = new Map<string, number>();
+
+  /** A port for the copy starting now. When running copies hold every port in the range, the one
+   * looked at longest ago gives its port up and stops the way a config change stops it; opening it
+   * again takes a port back the same way. Stays synchronous up to the lease, so two starts at once
+   * never pick the same copy or the same port. */
+  private leasePort(wt: WorktreeInfo): number {
+    const port = leaseProxyPort(wt.proxyPort);
+    if (port !== null) return port;
+    const holders = [...this.leased.keys()].filter((id) => id !== wt.id && !this.starting.has(id));
+    const victim = oldestViewed(holders, this.deps.state);
+    if (victim) {
+      log.info(victim.id, `stopped: its preview port went to ${wt.title}`);
+      // the proxy and the lease go before the first await inside, which is all the port needs
+      fireAndForget(victim.id, this.stopProcs(victim.id), "stop for a preview port");
+      this.deps.hub.emit("worktreesChanged");
+      const freed = leaseProxyPort(wt.proxyPort);
+      if (freed !== null) return freed;
+    }
+    throw new UserError(`all preview ports ${proxyRangeLabel()} are in use by running copies; stop one first`);
+  }
 
   private returnLease(id: string) {
     const port = this.leased.get(id);

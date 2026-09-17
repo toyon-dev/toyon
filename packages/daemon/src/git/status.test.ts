@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { parsePorcelain } from "./status.ts";
+import { afterAll, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
+import { parsePorcelain, statusFilesWithCounts } from "./status.ts";
 
 describe("parsePorcelain", () => {
   test("plain modified / added / untracked", () => {
@@ -22,5 +25,22 @@ describe("parsePorcelain", () => {
   });
   test("empty output", () => {
     expect(parsePorcelain("")).toEqual([]);
+  });
+});
+
+describe("statusFilesWithCounts", () => {
+  const { repo, cleanup } = tmpRepo();
+  afterAll(cleanup);
+
+  test("counts an untracked file's lines, and stops counting once there are too many", async () => {
+    writeFileSync(join(repo, "one.txt"), "a\nb\nc\n");
+    const few = await statusFilesWithCounts(repo);
+    expect(few).toEqual([{ xy: "??", path: "one.txt", add: 3, del: 0 }]);
+    // past the cap the count would mean reading every file, and the list is a tree to scroll
+    // rather than a diff to read: a worktree with no .gitignore lists all of its node_modules
+    for (let i = 0; i < 501; i++) writeFileSync(join(repo, `f${i}.txt`), "a\nb\nc\n");
+    const many = await statusFilesWithCounts(repo);
+    expect(many).toHaveLength(502);
+    expect(many.every((f) => f.add === undefined && f.del === undefined)).toBe(true);
   });
 });

@@ -111,15 +111,26 @@ async function untrackedLines(worktreePath: string, file: string): Promise<LineC
   }
 }
 
+/** Untracked files whose lines are counted. Counting means reading every one of them, and past
+ * this many the list is a tree to scroll rather than a diff to read. A worktree whose branch never
+ * committed the project's .gitignore lists every file of its node_modules, which is tens of
+ * thousands of reads on every status push. */
+const MAX_UNTRACKED_COUNTED = 500;
+
 /** Uncommitted files with +/- line counts vs HEAD (staged and unstaged combined). */
 export async function statusFilesWithCounts(worktreePath: string): Promise<GitFileStatus[]> {
   const files = await statusFiles(worktreePath);
   if (files.length === 0) return files;
   const counts = files.some((f) => f.xy !== "??") ? await numstat(worktreePath, "HEAD") : new Map<string, LineCounts>();
+  const countUntracked = files.filter((f) => f.xy === "??").length <= MAX_UNTRACKED_COUNTED;
   return Promise.all(
     files.map(async (f) => ({
       ...f,
-      ...(f.xy === "??" ? await untrackedLines(worktreePath, f.path) : (counts.get(f.path) ?? {})),
+      ...(f.xy === "??"
+        ? countUntracked
+          ? await untrackedLines(worktreePath, f.path)
+          : {}
+        : (counts.get(f.path) ?? {})),
     })),
   );
 }

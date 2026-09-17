@@ -20,6 +20,14 @@
     & .monaco-editor .diff-hidden-lines .center {
       font: var(--type-ui-sm);
     }
+    /* removed text drawn in place inside a changed line: monaco gives it the editor's foreground and
+     only the word tint, which vanishes over the added line's green, so it read as live code and a
+     struck space as a hyphen. Dimmed, it reads as gone. The tint is a background-image because
+     monaco's own background-color is unlayered and wins over anything set here. */
+    & .monaco-editor .inline-deleted-text {
+      color: var(--text2);
+      background-image: linear-gradient(var(--diff-del), var(--diff-del));
+    }
   }
   /* a row between the head and the text when the text alone would mislead: changed on disk under
    unsaved edits, or not saveable from here. Its own row, so it never covers the lines it is about */

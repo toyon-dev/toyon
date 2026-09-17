@@ -4,11 +4,9 @@ Toyon is where you ask for changes to your web app and try them as they happen. 
 
 Each copy runs on your own machine, and the next one is pre-warmed. Works with Claude Code, Codex and OpenCode over the Agent Client Protocol (ACP).
 
-![Toyon with four chats on a plant shop, each changing its own copy: a dark theme, one wide column, price badges and bigger photos. The rail walks through the copies and back to the dark one, which is ready to land](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.gif)
-
-**Status: pre-alpha, built in the open.** Runs on macOS and Linux. Windows through WSL2 is next. Expect rough edges, and say so in an issue.
-
 [How it works](#how-it-works) · [Install](#install) · [Under the hood](#under-the-hood) · [Trust](#trust) · [Uninstall](#uninstall)
+
+![Toyon with four chats on a plant shop, each changing its own copy: a dark theme, one wide column, price badges and bigger photos. The rail walks through the copies and back to the dark one, which is ready to land](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.gif)
 
 ## Why
 
@@ -56,6 +54,7 @@ toyon ~/projects/app
 
 You need:
 
+- macOS or Linux. Windows through WSL2 is not supported yet.
 - git and Node 18 or newer. Bun comes with the package.
 - An account for the agent you pick: a Claude plan or an Anthropic API key for Claude Code, a ChatGPT plan or an OpenAI API key for Codex, or any provider OpenCode signs into.
 - On Linux, bubblewrap and socat for the agents' sandbox (`sudo apt install bubblewrap socat`). `toyon doctor` checks both and prints the AppArmor profile Ubuntu 24.04 and later ask for.

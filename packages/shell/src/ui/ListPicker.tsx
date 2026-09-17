@@ -249,8 +249,9 @@ export function ListPicker<T>({
       onEscape={onEscape}
       boxClass="picker"
       anchored={anchored}
-      // the strip's lead is what lands on the control: the chip's value stays where it was
-      coverBy={lead ? ".picker-input > *:first-child" : undefined}
+      // the strip's lead is what lands on the control: the chip's value stays where it was. With no
+      // lead, a trailing control lands there instead, so a close opens under the finger that opened it
+      coverBy={lead ? ".picker-input > *:first-child" : trailing ? ".picker-input > *:last-child" : undefined}
     >
       {inputEl}
       {listEl}

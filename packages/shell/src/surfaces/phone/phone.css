@@ -142,12 +142,19 @@
   }
   /* A control and the panel it drops, which is placed against this wrapper, so the wrapper is the
      control's box and nothing more. The panel takes the window less the bar's own inset rather than
-     the desk pill's 460px, which on a phone left a strip of the screen beside it for nothing. */
+     the desk pill's 460px, which on a phone left a strip of the screen beside it for nothing. The
+     inset is the bar's less the strip's, so a control in the strip lands on the control under it
+     and the panel's two sides match. */
   .phone-drop {
     display: flex;
     min-width: 0;
     & > .overlay-box.anchored {
-      width: min(460px, calc(100vw - 24px));
+      width: min(460px, calc(100vw - 12px));
     }
+  }
+  /* A picker's field is a row a thumb lands in, as tall as the bar it drops out of. At the desk
+     strip's height it was the one short thing between a tall button and tall rows. */
+  .phone .picker-input {
+    min-height: var(--row-height);
   }
 }

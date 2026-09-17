@@ -617,4 +617,12 @@
   .rail.rail-screen {
     --rail-gut: 16px;
   }
+  /* A section's caret on a screen stands in the bar's menu column, whichever hand the chat is on:
+     an icon's box at the bar's inset off the right edge, so it sits under the menu and not in the
+     16px margin, where it hung off the screen's edge. */
+  .app[data-chat-side] .rail.rail-screen .rail-disc-head .rail-gut {
+    left: auto;
+    right: 14px;
+    width: 20px;
+  }
 }

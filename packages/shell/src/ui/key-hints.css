@@ -14,6 +14,10 @@
     font: var(--type-ui-sm);
     border-top: 1px solid var(--border0);
   }
+  /* a key row says what the keys do, and a finger has none of them; the rows are the whole story */
+  [data-touch] .key-hints {
+    display: none;
+  }
   .key-hint {
     display: inline-flex;
     align-items: baseline;

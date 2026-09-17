@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useDispatch, useStore } from "../../state/context.tsx";
 import { markHits } from "../../ui/highlight.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
@@ -18,13 +19,14 @@ export function commandRow(c: Command, q: string) {
 }
 
 /** ⌘⇧P (F1 on Firefox), centred; the phone's menu renders it anchored, inside its button's wrapper */
-export function CommandPalette({ anchored }: { anchored?: Anchored }) {
+export function CommandPalette({ anchored, trailing }: { anchored?: Anchored; trailing?: ReactNode }) {
   const dispatch = useDispatch();
   const commands = useCommands();
   const initialQuery = useStore((s) => (s.paletteReturn?.mode === "commands" ? s.paletteReturn.q : ""));
   return (
     <ListPicker
       anchored={anchored}
+      trailing={trailing}
       items={commands}
       filter={filterCommands}
       rowClass={() => "picker-row"}

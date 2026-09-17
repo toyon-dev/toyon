@@ -1,5 +1,5 @@
 import { useDispatch, useStore } from "../../state/context.tsx";
-import { useActive, useArchivedPage, useChatCentred, useLocalField, useTouch } from "../../state/selectors.ts";
+import { useActive, useArchivedPage, useChatCentred, useTouch } from "../../state/selectors.ts";
 import type { Screen } from "../../state/store.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { Menus } from "../../ui/Menu.tsx";
@@ -76,7 +76,6 @@ export function PhoneFrame() {
   // archived worktree's page is about work that no longer runs
   const previewed = onWorktree && !chatCentred && !archivedPage ? active : null;
   const url = previewed ? previewUrl(previewed.worktree.id, previewed.worktree.proxyPort, remote) : null;
-  const changed = useLocalField(archivedPage?.id ?? active?.worktree.id, "git")?.files.length ?? 0;
   // the tab under the strip's mark: a preview the row has none of falls back to its chat
   const tab: Screen = screen === "preview" && !previewed ? "chat" : screen;
 
@@ -100,17 +99,9 @@ export function PhoneFrame() {
           },
         ]
       : []),
-    {
-      id: "changes",
-      label:
-        changed > 0 ? (
-          <>
-            changes <span className="tab-count">{changed}</span>
-          </>
-        ) : (
-          "changes"
-        ),
-    },
+    // the explorer, the diff and the history together, which is the code; the count stays on the
+    // changes tab inside it, where it names what it counts
+    { id: "changes", label: "code" },
   ];
 
   return (

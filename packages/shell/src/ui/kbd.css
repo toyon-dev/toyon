@@ -10,6 +10,10 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.04em;
   }
+  /* a chord beside a command is a promise a phone cannot keep, so touch shows the command alone */
+  [data-touch] .kbd {
+    display: none;
+  }
   /* the mac menu convention: modifiers sit tight against the key, a hair of air between */
   .kbd-mod {
     margin-right: 1px;

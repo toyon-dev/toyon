@@ -136,7 +136,17 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
             on={commands}
             onClick={() => dispatch({ a: "toggle", overlay: { kind: "commands" } })}
           />
-          {commands && <CommandPalette anchored={{ flip: "align", margin: 8 }} />}
+          {commands && (
+            <CommandPalette
+              // the bar's inset less the strip's, so the close can land on the menu button exactly
+              anchored={{ flip: "align", margin: 6 }}
+              // the panel covers the button that opened it, so its close takes that button's place:
+              // the same spot, the one a thumb just used
+              trailing={
+                <IconButton icon="close" label="Close" tone="chrome" onClick={() => dispatch({ a: "close" })} />
+              }
+            />
+          )}
         </span>
       </div>
       {/* the worktree's faces, in the header rather than under it: the bar's own edge then runs

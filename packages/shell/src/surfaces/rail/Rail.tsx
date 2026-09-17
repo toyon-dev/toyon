@@ -398,7 +398,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           // happens if I press this". The branch is the tip's lead.
           <span className="branch rail-main-label">
             <Icon name="plus" className="icon-inline" />
-            new workstream
+            new worktree
           </span>
         ) : (
           <span className="branch">{rowLabel(w, owned ? repoOf(owned) : null)}</span>

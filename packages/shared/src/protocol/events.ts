@@ -214,12 +214,16 @@ export type AgentEvent =
    * the card to the tool row the agent emitted just before it, which the card then replaces.
    * Always followed by an agent-ask-end. */
   | { type: "agent-question"; id: string; message: string; questions: AskQuestion[]; toolId?: string; ts: number }
-  /** the agent wants a decision it will not make for itself; `detail` is markdown (the plan) */
+  /** The agent wants a decision it will not make for itself; `detail` is markdown (the plan).
+   * `plan` is where that markdown was written in the worktree, so the card hands it to the editor
+   * pane to be read as a document instead of scrolled inside itself. A plan whose file could not
+   * be written carries none and is read from `detail` on the card, as every plan was before. */
   | {
       type: "agent-permission";
       id: string;
       title: string;
       detail?: string;
+      plan?: string;
       choices: AskChoice[];
       toolId?: string;
       ts: number;

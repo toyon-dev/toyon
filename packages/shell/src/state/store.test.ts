@@ -531,6 +531,23 @@ describe("chat folding", () => {
     expect(s.local.a?.chat[0]).toMatchObject({ outcome: "answered", choiceId: "ok" });
   });
 
+  test("a plan written to the worktree reaches the card as the file to open", () => {
+    const choices = [{ id: "ok", name: "Yes", kind: "allow_once" as const }];
+    const s = run([
+      hello(wt("a")),
+      agent("a", {
+        type: "agent-permission",
+        id: "k1",
+        title: "Approve Plan",
+        detail: "# plan",
+        plan: ".toyon/plan.md",
+        choices,
+        ts: 0,
+      }),
+    ]);
+    expect(s.local.a?.chat[0]).toMatchObject({ ask: { plan: ".toyon/plan.md" } });
+  });
+
   test("a card the daemon lost comes back closed, and a stray end event changes nothing", () => {
     // the daemon's own restart sweep writes the expired end, so backfill replays the pair
     let s = run([

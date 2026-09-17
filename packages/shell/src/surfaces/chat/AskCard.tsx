@@ -9,10 +9,12 @@
 
 import type { AskAnswer, AskQuestion } from "@toyon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSock, useStore } from "../../state/context.tsx";
+import { openFile } from "../../state/actions/file.ts";
+import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { TextArea } from "../../ui/Field.tsx";
+import { useOnChange } from "../../ui/hooks.ts";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { KeyHints } from "../../ui/KeyHints.tsx";
 import { useListNav } from "../../ui/listNav.ts";
@@ -243,8 +245,20 @@ function PermissionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { k
   const open = !item.outcome;
   const card = useAskFocus(open);
   const sock = useSock();
+  const dispatch = useDispatch();
   const worktreeId = useStore((s) => s.activeId);
-  const html = useMemo(() => (ask.detail ? renderMarkdown(ask.detail) : ""), [ask.detail]);
+  const plan = ask.plan;
+  // a plan is a file toyon wrote to the worktree, read in the pane as the document it is; only a
+  // card with no file behind it still carries its markdown
+  const html = useMemo(() => (ask.detail && !plan ? renderMarkdown(ask.detail) : ""), [ask.detail, plan]);
+  const readPlan = () => {
+    // the caret stays on the card, which is what the agent is blocked on
+    if (worktreeId && plan) openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview", focus: false });
+  };
+  // the plan opens beside the card as the card arrives: it is what the options are asking about
+  useOnChange([item.id, plan], () => {
+    if (open) readPlan();
+  });
   const decide = (choiceId: string) => {
     if (worktreeId && open) sock?.send({ t: "agent-decide", worktreeId, askId: item.id, choiceId });
   };
@@ -270,6 +284,14 @@ function PermissionBody({ item, ask }: { item: Ask; ask: Extract<Ask["ask"], { k
       {html && (
         // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown
         <div className="ask-detail md" dangerouslySetInnerHTML={{ __html: html }} />
+      )}
+      {plan && (
+        <div className="ask-plan hint">
+          the plan is in{" "}
+          <Button variant="inline" mono onClick={readPlan}>
+            {plan}
+          </Button>
+        </div>
       )}
       {open ? (
         <div className="ask-options">

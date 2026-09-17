@@ -9,6 +9,7 @@ import { AcpSession } from "../agent/acp/session.ts";
 import { spawnAcp } from "../agent/acp/transport.ts";
 import type { AgentAdapter, LoginRun } from "../agent/adapter.ts";
 import { AttachmentStore } from "../agent/attachments.ts";
+import { planEdited, writePlanDoc } from "../agent/planDoc.ts";
 import { type PreviewStanding, previewContext } from "../agent/prompt.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { cloud } from "../core/cloud.ts";
@@ -166,12 +167,16 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps, preview: () => PreviewSt
       d.state.save();
       d.hub.emit("worktreesChanged");
     },
-    onPlan: () => {
+    onPlan: async (markdown) => {
       const w = d.state.worktree(wt.id);
-      if (!w || w.planned) return;
-      w.planned = true;
-      d.state.save();
+      if (w && !w.planned) {
+        w.planned = true;
+        d.state.save();
+      }
+      // an agent that sent no prose has nothing to write; its card is the whole plan
+      return markdown.trim() ? writePlanDoc(wt.path, markdown) : null;
     },
+    planEdited: async (proposed) => planEdited(wt.path, proposed),
     option: (category) => d.state.requireWorktree(wt.id)[OPTION_FIELDS[category]],
     // kept per agent, not per worktree: the picker on a worktree whose session has not opened
     // yet shows what this agent offered last time

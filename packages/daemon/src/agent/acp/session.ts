@@ -73,8 +73,11 @@ export interface AcpSessionDeps {
   mode?: () => PermissionMode;
   /** a plan approval decided the mode for the work that follows */
   setMode?: (mode: PermissionMode) => void;
-  /** a plan card was shown, whatever becomes of it */
-  onPlan?: () => void;
+  /** A plan card is about to be shown, whatever becomes of it. Takes the plan's markdown and
+   * answers with the worktree-relative file it was written to, or null if it was not written. */
+  onPlan?: (markdown: string) => Promise<string | null>;
+  /** whether the plan file says something other than what the agent proposed */
+  planEdited?: (proposed: string) => Promise<boolean>;
   /** the value the worktree asks for in this category (its model, its effort level); undefined
    * leaves the agent on its own default */
   option?: (category: OptionCategory) => string | undefined;
@@ -894,9 +897,12 @@ export class AcpSession implements AgentAdapter {
 
   /** a decision toyon will not make for the person: draw the agent's own options as a card and
    * hold its request open until one is clicked */
-  private askPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
+  private async askPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
     const plan = params.toolCall.kind === "switch_mode";
-    if (plan) this.d.onPlan?.();
+    const detail = permissionDetail(params);
+    // the document is written before the card goes out, so the card names a file that is already
+    // there to open; a worktree that would not take it leaves the plan on the card
+    const planPath = plan ? ((await this.d.onPlan?.(detail)) ?? null) : null;
     // a plan's options are all one-time answers. An edit's or a command's include the agent's
     // "always allow", which would write a rule into its settings and take every later request of
     // that shape away from this policy; the card offers only what keeps the mode meaning something
@@ -907,7 +913,8 @@ export class AcpSession implements AgentAdapter {
         type: "agent-permission",
         id,
         title: params.toolCall.title ?? params.toolCall.name ?? "the agent needs a decision",
-        ...(permissionDetail(params) ? { detail: permissionDetail(params) } : {}),
+        ...(detail ? { detail } : {}),
+        ...(planPath ? { plan: planPath } : {}),
         choices,
         ...(params.toolCall.toolCallId ? { toolId: params.toolCall.toolCallId } : {}),
         ts: Date.now(),
@@ -920,10 +927,20 @@ export class AcpSession implements AgentAdapter {
         // whether edits are auto-accepted or approved one by one, and the worktree's mode follows
         if (plan && (choice.kind === "allow_once" || choice.kind === "allow_always")) {
           this.d.setMode?.(modeAfterPlan(choice.name));
+          // the yes said yes to the file, which may no longer be the plan the agent holds
+          if (planPath) fireAndForget(this.d.worktreeId, this.sayPlanEdited(detail, planPath), "edited plan");
         }
         return { outcome: { outcome: "selected", optionId: choice.id } };
       },
     );
+  }
+
+  /** A plan approved after it was rewritten. A permission answer is an option id and nothing else,
+   * so the agent would go and build the version it proposed; the file it must work from goes in as
+   * a message instead, which steers into the turn the approval just released. */
+  private async sayPlanEdited(proposed: string, path: string) {
+    if (!(await this.d.planEdited?.(proposed))) return;
+    this.send(`I edited the plan before approving it. Build what is in ${path}, not the plan you proposed.`);
   }
 
   private onElicit(

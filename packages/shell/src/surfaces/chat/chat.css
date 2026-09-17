@@ -1098,7 +1098,8 @@
     margin-top: 10px;
     margin-bottom: -10px;
   }
-  /* a plan is prose a person reads, and can be long: it scrolls in the card rather than the page */
+  /* what the agent proposes when no file was written for it: prose a person reads, and it can be
+     long, so it scrolls in the card rather than the page */
   .ask-detail {
     max-height: 40vh;
     overflow-y: auto;
@@ -1106,6 +1107,10 @@
     padding: 8px 10px;
     background: var(--sunken);
     border-radius: var(--radius);
+  }
+  /* a plan reads in the pane, so the card says which file it is and presses back open */
+  .ask-plan {
+    margin-bottom: 10px;
   }
   .ask-answered {
     color: var(--text2);

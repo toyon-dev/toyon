@@ -1,11 +1,12 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
 import type { AgentCommand, AgentEvent, AgentStatus, AuthStatus } from "@toyon/shared";
 import type { AuthObservation } from "../accounts.ts";
 import { AttachmentStore } from "../attachments.ts";
+import { PLAN_REL, planEdited, writePlanDoc } from "../planDoc.ts";
 import { SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import type { Bounds } from "../sandbox.ts";
@@ -1498,6 +1499,98 @@ describe("AcpSession ask cards", () => {
     w.session.answer(card.id, { kind: "choice", choiceId: "cancel" });
     await w.idle();
     expect(saidBack(w.events)).toEqual({ outcome: { outcome: "selected", optionId: "cancel" } });
+    await w.session.close();
+  });
+
+  test("the plan is written to the worktree, and the card names the file instead of carrying it", async () => {
+    const fake = fakeAgent(async (p, client) => {
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId: "t1",
+          title: "Approve Plan",
+          kind: "switch_mode",
+          content: [{ type: "content", content: { type: "text", text: "# the plan\n\nstep one" } }],
+        },
+        options: [
+          { optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" },
+          { optionId: "cancel", name: "No, keep planning", kind: "reject_once" },
+        ],
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, { onPlan: (md) => writePlanDoc(wt, md) });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    expect(card.plan).toBe(PLAN_REL);
+    expect(readFileSync(join(wt, PLAN_REL), "utf8")).toBe("# the plan\n\nstep one\n");
+    // the markdown rides along too: a shell whose worktree could not take the file still shows it
+    expect(card.detail).toBe("# the plan\n\nstep one");
+    w.session.answer(card.id, { kind: "choice", choiceId: "cancel" });
+    await w.idle();
+    await w.session.close();
+  });
+
+  test("a plan rewritten before the yes sends the agent to the file, not to what it proposed", async () => {
+    let turns = 0;
+    const fake = fakeAgent(async (p, client) => {
+      if (++turns > 1) return { stopReason: "end_turn" };
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId: "t2",
+          title: "Approve Plan",
+          kind: "switch_mode",
+          content: [{ type: "content", content: { type: "text", text: "# the plan\n\nrewrite the world" } }],
+        },
+        options: [
+          { optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" },
+          { optionId: "cancel", name: "No, keep planning", kind: "reject_once" },
+        ],
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      onPlan: (md) => writePlanDoc(wt, md),
+      planEdited: async (proposed) => planEdited(wt, proposed),
+    });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    writeFileSync(join(wt, PLAN_REL), "# the plan\n\nrewrite one file\n");
+    w.session.answer(card.id, { kind: "choice", choiceId: "exit_plan_default" });
+    await waitFor(() => fake.prompts.length > 1);
+    expect((fake.prompts.at(-1)!.prompt[0] as { text: string }).text).toContain(PLAN_REL);
+    await w.session.close();
+  });
+
+  test("an approved plan nobody touched says nothing further to the agent", async () => {
+    let turns = 0;
+    const fake = fakeAgent(async (p, client) => {
+      if (++turns > 1) return { stopReason: "end_turn" };
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId: "t3",
+          title: "Approve Plan",
+          kind: "switch_mode",
+          content: [{ type: "content", content: { type: "text", text: "# the plan\n\nas proposed" } }],
+        },
+        options: [{ optionId: "exit_plan_default", name: "Yes, manually approve edits", kind: "allow_once" }],
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      onPlan: (md) => writePlanDoc(wt, md),
+      planEdited: async (proposed) => planEdited(wt, proposed),
+    });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    w.session.answer(card.id, { kind: "choice", choiceId: "exit_plan_default" });
+    await w.idle();
+    expect(fake.prompts).toHaveLength(1);
     await w.session.close();
   });
 

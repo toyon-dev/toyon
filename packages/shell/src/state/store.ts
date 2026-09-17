@@ -111,7 +111,7 @@ export type ChatItem =
       id: string;
       ask:
         | { kind: "question"; message: string; questions: AskQuestion[] }
-        | { kind: "permission"; title: string; detail?: string; choices: AskChoice[] };
+        | { kind: "permission"; title: string; detail?: string; plan?: string; choices: AskChoice[] };
       outcome?: AskOutcome;
       answers?: AskAnswer[];
       choiceId?: string;
@@ -2232,6 +2232,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           kind: "permission",
           title: event.title,
           ...(event.detail ? { detail: event.detail } : {}),
+          ...(event.plan ? { plan: event.plan } : {}),
           choices: event.choices,
         },
       });

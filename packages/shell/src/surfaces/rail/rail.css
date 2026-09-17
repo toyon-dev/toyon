@@ -63,10 +63,6 @@
     align-items: center;
     justify-content: center;
   }
-  /* the plus holds main's seat the way the time holds a task's, and gives it to the kebab the same way */
-  .rail-plus {
-    display: flex;
-  }
   .rail-graft {
     display: flex;
     border-top: 1px solid var(--border0);
@@ -286,8 +282,8 @@
     }
   }
   /* Main's seat in the strip is a plus, drawn over the dot column out of the flow; as the panel
-   opens it hands off to the plus in the control column and the dot underneath shows through, so
-   the open row reads like every other: plus at the far edge, status at the near. The glyph is
+   opens it hands off to the plus in the row's own label and the dot underneath shows through, so
+   the open row reads like every other: status at the near edge, then what it is. The glyph is
    centred in the strip's 40px, the dots' centre line. */
   .rail .rail-main-strip {
     position: absolute;
@@ -321,26 +317,10 @@
       opacity: 1;
       transition: opacity 0.12s ease 50ms;
     }
-    /* Main's own row under the pointer takes the plus back into the dot's seat: the kebab has just
-       taken the plus's seat in the control column, so this is the one moment the open row would
-       otherwise say nothing about what its box does. It is the strip's glyph again, not a control:
-       the click is the row's, and the row opens the draft. */
-    & .rail-item:hover .rail-main-strip {
-      opacity: 1;
-      transition: opacity 0.12s ease;
-    }
-    & .rail-item:hover .rail-main-dot {
-      opacity: 0;
-      transition: opacity 0.12s ease;
-    }
-    /* and the name gives way to the verb, so the whole row reads as the one action it is */
-    & .rail-item .rail-main-verb,
-    & .rail-item:hover .rail-main-name {
-      display: none;
-    }
-    & .rail-item:hover .rail-main-verb {
-      display: inline;
-    }
+  }
+  /* the plus sits in the label's text, before the verb, the way the strip's sits before the row */
+  .rail-item .rail-main-label .icon-inline {
+    margin-right: 4px;
   }
   /* ---- discovered: worktrees git knows about that toyon did not create ---- */
   /* The section belongs to the open panel and nothing of it reaches the strip: no header, no rows,

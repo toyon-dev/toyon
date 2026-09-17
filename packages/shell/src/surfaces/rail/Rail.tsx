@@ -281,8 +281,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         // crosses the panel.
         // Badges and the crashed dot keep their own, since those are what a hover over them is
         // asking about. A found row has no state to name, so the path is its text, unless
-        // something holds it. Main's lead names the project, at the far start of the state's line,
-        // since its row goes by its branch and its path alone reads as one more worktree.
+        // something holds it. Main's lead names the project and the branch, at the far start of the
+        // state's line, since its row says what its click does and names neither.
         // Offline, the state is whatever the daemon last said, and a tip restating it as live sat
         // over a row painted in the fault colour, a green "Running" over an orange dot: the tip
         // names the fault instead, with no dot, since there is no live state for one to restate.
@@ -295,7 +295,12 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                   ? `${recapLine(owned.worktree.lastTurn)}\n${wtDirLabel(w)}`
                   : wtDirLabel(w),
               dot: offline ? undefined : dotClass(w),
-              lead: leadOf(w, isMain(owned.worktree) ? (repoOf(owned)?.name ?? null) : unspelled(w)),
+              lead: leadOf(
+                w,
+                isMain(owned.worktree)
+                  ? [repoOf(owned)?.name, rowLabel(w, repoOf(owned))].filter(Boolean).join(" · ")
+                  : unspelled(w),
+              ),
             })
           : offline
             ? tip(OFFLINE_LINE, undefined, {
@@ -364,17 +369,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           ) : (
             !graftMode && (
               <>
-                {owned &&
-                  (onMain ? (
-                    // main is never sent to: its seat says what its box does, starting new work
-                    <span className="rail-at rail-plus row-dim" data-tip="New worktree" data-tip-key={chord("new")}>
-                      <Icon name="plus" className="icon-inline" />
-                    </span>
-                  ) : (
-                    // at rest the column says how long since anyone sent something here, the time
-                    // the rail is sorted by; the kebab takes its seat while the row is lifted (rail.css)
-                    <span className="rail-at row-dim">{ago(sentAt(owned.worktree))}</span>
-                  ))}
+                {/* at rest the column says how long since anyone sent something here, the time the
+                    rail is sorted by; the kebab takes its seat while the row is lifted (rail.css).
+                    Main is never sent to, and its label already says what its click does, so its
+                    column holds nothing until the kebab comes */}
+                {owned && !onMain && <span className="rail-at row-dim">{ago(sentAt(owned.worktree))}</span>}
                 {/* not .row-dim: it is only there while the row is lifted, and its three dots are the
                     thinnest mark in the column, so it takes the row's own colour rather than a tier
                     under it. Full size for the same reason: at the inline size the dots go hairline. */}
@@ -394,12 +393,12 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           )}
         </span>
         {onMain ? (
-          // under the pointer the row says what its click does, with the plus back in the dot's
-          // seat (rail.css): main is never worked in from here, so its name is the one label on the
-          // list that is not the answer to "what happens if I press this"
-          <span className="branch">
-            <span className="rail-main-name">{rowLabel(w, repoOf(owned))}</span>
-            <span className="rail-main-verb">new worktree</span>
+          // the row says what its click does, not which branch it is: main is never worked in from
+          // here, so its name would be the one label on the list that is not the answer to "what
+          // happens if I press this". The branch is the tip's lead.
+          <span className="branch rail-main-label">
+            <Icon name="plus" className="icon-inline" />
+            new workstream
           </span>
         ) : (
           <span className="branch">{rowLabel(w, owned ? repoOf(owned) : null)}</span>
@@ -487,7 +486,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           // Main's seat in the strip is a plus: new work starts here, and the strip has no other
           // place to say so. The dot takes the seat back whenever it has something to say (main's
           // server down, the daemon gone), and it is drawn underneath either way, since the peek
-          // shows both, the plus at the far end of the row.
+          // shows the dot, with the plus in the row's own label.
           if (onMain && !trouble && state !== "crashed" && !offline) {
             return (
               <>

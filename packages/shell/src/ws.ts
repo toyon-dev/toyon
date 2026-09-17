@@ -81,6 +81,12 @@ export async function daemonPid(): Promise<number | null> {
 /** reconnect delay: 1s doubling to 30s, with jitter so many tabs don't stampede a restarting daemon */
 const BACKOFF_MIN = 1000;
 const BACKOFF_MAX = 30_000;
+/** How long the socket has to stay down before the screen is told why. A phone in a pocket loses
+ * its socket every time (the daemon gives up an unanswered tab after two idle minutes) and wakes
+ * holding the close it slept through, so naming a cause on the way back would replace the app with
+ * "the daemon is not running" for the length of one reconnect. A real outage keeps the socket down
+ * past this and says so. */
+const SETTLE = 1500;
 /** messages kept while disconnected; subscribe-shaped ones are deduped by worktree */
 const QUEUE_MAX = 50;
 
@@ -90,6 +96,10 @@ export class DaemonSocket {
   private closed = false;
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** when the socket went down with nothing connected since, or null while it is up */
+  private downAt: number | null = null;
+  /** the pending "say why" (see SETTLE); cancelled by a socket that comes back first */
+  private sayTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private onMsg: (msg: ServerMsg) => void,
@@ -97,7 +107,21 @@ export class DaemonSocket {
     private onStatus: (connected: boolean, failure?: ConnectFailure | null) => void,
   ) {
     this.connect();
+    document.addEventListener("visibilitychange", this.wake);
+    window.addEventListener("online", this.wake);
   }
+
+  /** Coming back to the page, or back onto a network, is the moment to try again: the phone was
+   * asleep while the backoff grew and the retry it is waiting on can be half a minute out. */
+  private wake = () => {
+    if (this.closed || document.visibilityState !== "visible") return;
+    const state = this.ws?.readyState;
+    if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.attempt = 0;
+    this.connect();
+  };
 
   /** A close with no code says nothing: a daemon that is down, a proxy that refuses upgrades and a
    * wrong token all look the same to the browser (1006). The daemon answers the token case with its
@@ -110,6 +134,24 @@ export class DaemonSocket {
     } catch {
       return "down";
     }
+  }
+
+  /** Work out why the socket is down and hand it up, once it has been down long enough to be worth
+   * a sentence (SETTLE). A socket that comes back first clears the pending one, so a drop nobody
+   * had time to notice never reaches the screen. */
+  private say(code: number) {
+    this.downAt ??= Date.now();
+    const down = this.downAt;
+    this.diagnose(code).then((failure) => {
+      if (this.closed || this.downAt === null || this.downAt !== down) return;
+      if (this.sayTimer) clearTimeout(this.sayTimer);
+      this.sayTimer = setTimeout(
+        () => {
+          if (!this.closed && this.downAt !== null) this.onStatus(false, failure);
+        },
+        Math.max(0, down + SETTLE - Date.now()),
+      );
+    });
   }
 
   private connect() {
@@ -125,6 +167,9 @@ export class DaemonSocket {
       if (!live) {
         live = true;
         this.attempt = 0;
+        this.downAt = null;
+        if (this.sayTimer) clearTimeout(this.sayTimer);
+        this.sayTimer = null;
         this.onStatus(true);
         for (const m of this.queue) ws.send(m.raw);
         this.queue = [];
@@ -134,13 +179,14 @@ export class DaemonSocket {
       } catch {}
     };
     ws.onclose = (ev) => {
+      // a socket this one replaced (a reconnect started on waking, before its close arrived) has
+      // nothing left to say: the live one owns the status and the retry
+      if (this.ws !== ws) return;
       this.onStatus(false);
       if (this.closed) return;
       // the socket is retried in any case: a fresh token arrives with a reload, a daemon comes
       // back on its own, and a proxy is the person's to fix, so the reason is a message, not a stop
-      this.diagnose(ev.code).then((failure) => {
-        if (this.ws === ws && !this.closed) this.onStatus(false, failure);
-      });
+      this.say(ev.code);
       const base = Math.min(BACKOFF_MAX, BACKOFF_MIN * 2 ** this.attempt++);
       this.timer = setTimeout(() => this.connect(), base / 2 + Math.random() * (base / 2));
     };
@@ -168,6 +214,9 @@ export class DaemonSocket {
   dispose() {
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
+    if (this.sayTimer) clearTimeout(this.sayTimer);
+    document.removeEventListener("visibilitychange", this.wake);
+    window.removeEventListener("online", this.wake);
     this.ws?.close();
   }
 }

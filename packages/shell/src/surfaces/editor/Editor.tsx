@@ -300,6 +300,9 @@ export default function Editor({
         ...options,
         originalEditable: false,
         renderSideBySide: false,
+        // a change within one line reads on that line: added text highlighted, removed text struck
+        // through in place, instead of the whole old line drawn again above the new one
+        experimental: { useTrueInlineView: true },
         renderOverviewRuler: false,
         renderGutterMenu: false,
         renderMarginRevertIcon: false,

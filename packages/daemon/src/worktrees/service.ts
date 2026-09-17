@@ -2,7 +2,7 @@
 // transport layer (server/handlers.ts) calls in here and shapes replies; git/, runtime/ and the
 // spare pool do the work.
 
-import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import {
   type AgentEvent,
@@ -51,6 +51,7 @@ import {
   landingMark,
   landRef,
 } from "../git/archive.ts";
+import { excludeBlock } from "../git/exclude.ts";
 import { GIT, git, gitOrThrow, NO_PROMPT, run } from "../git/exec.ts";
 import {
   commitWorktree,
@@ -88,19 +89,13 @@ import { cleanTitle, shortId, slugify, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 import { isUnseen } from "./turns.ts";
 
-/** Files a worktree needs that git will never bring over, copied from the base checkout when the
- * worktree does not have them.
- *
- * Gitignored local config, because absent secrets fail deep inside app code rather than as missing
- * config (an empty AUTH_SECRET reads as a zero-length HMAC key), so copy whatever the base
- * checkout actually has.
- *
- * And .gitignore, for the checkout whose branch never committed one: git gives a worktree the
- * branch's files, not the base checkout's disk, so a project scaffolded but not yet committed
- * leaves the worktree with no ignore rules at all and every file of its copied node_modules reads
- * as untracked work. The guard is what makes this safe: a repo that tracks its .gitignore has one
- * here already, and this copies nothing. */
-const CARRIED_FILES = [".env", ".env.local", ".env.development", ".env.development.local", ".dev.vars", ".gitignore"];
+/** Gitignored local config a worktree needs and git will never bring over. Absent secrets fail
+ * deep inside app code rather than as missing config (an empty AUTH_SECRET reads as a zero-length
+ * HMAC key), so copy whatever the base checkout actually has. */
+const LOCAL_CONFIG_FILES = [".env", ".env.local", ".env.development", ".env.development.local", ".dev.vars"];
+
+/** names the block in info/exclude, so a later setup rewrites that one and leaves the rest */
+const BASE_IGNORE = "base .gitignore";
 
 export type Variant = { group: string; index: number; of: number };
 
@@ -1120,12 +1115,35 @@ export class WorktreeService {
     }
   }
 
+  /** A worktree gets the branch's files, so a .gitignore nobody has committed is not among them,
+   * and then every ignored file in the tree reads as untracked work, the deps copy first of all.
+   * The base checkout's rules go into the repo's info/exclude rather than the file being copied
+   * in: git reads info/exclude from the common dir, so one write covers every worktree of the
+   * repo, and it leaves the tree clean, which a carried file would not. An untracked .gitignore is
+   * uncommitted work, and land and sync both refuse a worktree that has any. The block goes the
+   * moment the branch commits a .gitignore of its own, whose rules git reads ahead of
+   * info/exclude in any case. */
+  private async mirrorBaseIgnore(wt: WorktreeInfo, repo: RepoInfo, depsSource: string): Promise<void> {
+    const src = join(depsSource, ".gitignore");
+    // the worktree holds the branch's files, so one here is the branch's own and needs nothing:
+    // git reads a .gitignore in the tree ahead of info/exclude. One in the base checkout that the
+    // branch does not have is the uncommitted rules, and those are what the worktree is missing.
+    const mirror = existsSync(src) && !existsSync(join(wt.path, ".gitignore"));
+    const lines = mirror
+      ? readFileSync(src, "utf8")
+          .split("\n")
+          .filter((l) => l.trim() !== "")
+      : [];
+    await excludeBlock(repo.path, BASE_IGNORE, lines);
+  }
+
   private async setupThenStart(
     wt: WorktreeInfo,
     repo: RepoInfo,
     depsSource: string,
     { setupCommands = true }: { setupCommands?: boolean },
   ): Promise<void> {
+    await this.mirrorBaseIgnore(wt, repo, depsSource);
     // Copy-on-write where the fs allows it: `cp -c` (APFS clonefile), then GNU `--reflink=auto`
     // (btrfs/XFS), then a plain recursive copy (ext4). The log line records which
     // path ran and how long the fallback copy takes per worktree.
@@ -1146,7 +1164,7 @@ export class WorktreeService {
         await run("rm", ["-rf", dstNm], wt.path);
       }
     }
-    for (const f of CARRIED_FILES) {
+    for (const f of LOCAL_CONFIG_FILES) {
       const src = join(depsSource, f);
       if (!existsSync(src) || existsSync(join(wt.path, f))) continue;
       const r = await run("cp", [src, join(wt.path, f)], wt.path);

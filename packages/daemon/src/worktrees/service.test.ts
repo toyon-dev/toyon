@@ -118,28 +118,41 @@ describe("create / remove", () => {
   });
 
   // A worktree gets the branch's files, so a .gitignore nobody has committed is not among them,
-  // and every ignored file in the tree (the deps copy first of all) reads as untracked work.
-  test("an uncommitted .gitignore is carried in, so the deps copy is not untracked work", async () => {
+  // and every ignored file in the tree (the deps copy first of all) reads as untracked work. The
+  // rules are mirrored, not the file: a carried .gitignore would be untracked work of its own, and
+  // a worktree with any is one land and sync both refuse.
+  test("an uncommitted .gitignore is mirrored, so the deps copy is not untracked work", async () => {
     const repoId = await registered();
     writeFileSync(join(w.repo, ".gitignore"), "node_modules/\n");
     mkdirSync(join(w.repo, "node_modules"), { recursive: true });
     writeFileSync(join(w.repo, "node_modules", "dep.js"), "x\n");
     const wt = await w.worktrees.create(repoId, "task");
     await settle();
-    expect(readFileSync(join(wt.path, ".gitignore"), "utf8")).toBe("node_modules/\n");
+    expect(existsSync(join(wt.path, ".gitignore"))).toBe(false);
     expect(existsSync(join(wt.path, "node_modules", "dep.js"))).toBe(true);
-    expect((await w.worktrees.gitStatus(wt.id))?.files.map((f) => f.path)).toEqual([".gitignore"]);
+    expect((await w.worktrees.gitStatus(wt.id))?.files).toEqual([]);
   });
 
-  test("a committed .gitignore is the branch's own, and nothing is copied over it", async () => {
+  test("a second setup rewrites the mirrored block rather than stacking another", async () => {
+    const repoId = await registered();
+    writeFileSync(join(w.repo, ".gitignore"), "node_modules/\n");
+    const wt = await w.worktrees.create(repoId, "task");
+    await settle();
+    writeFileSync(join(w.repo, ".gitignore"), "node_modules/\ndist/\n");
+    await w.worktrees.setupAndStart(wt, w.state.repo(wt.repoId)!, w.repo);
+    const text = readFileSync(join(w.repo, ".git/info/exclude"), "utf8");
+    expect(text.match(/# toyon base \.gitignore$/gm)?.length).toBe(1);
+    expect(text).toContain("dist/");
+  });
+
+  test("a committed .gitignore is the branch's own, and nothing is mirrored over it", async () => {
     const repoId = await registered();
     writeFileSync(join(w.repo, ".gitignore"), "dist/\n");
     sh(w.repo, GIT, "add", ".gitignore");
     sh(w.repo, GIT, "commit", "-qm", "ignore dist");
     const wt = await w.worktrees.create(repoId, "task");
     await settle();
-    writeFileSync(join(w.repo, ".gitignore"), "dist/\nlater/\n");
-    await w.worktrees.setupAndStart(wt, w.state.repo(wt.repoId)!, w.repo);
+    expect(readFileSync(join(w.repo, ".git/info/exclude"), "utf8")).not.toContain("dist/");
     expect(readFileSync(join(wt.path, ".gitignore"), "utf8")).toBe("dist/\n");
   });
 
@@ -1802,6 +1815,8 @@ describe("main against origin", () => {
     const repoId = await withUpstream();
     const wt = await w.worktrees.create(repoId, "feature");
     const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    // after the setup, or its own frame lands in the count and the pull is blamed for it
+    await settle();
     let frames = 0;
     w.hub.on("worktreesChanged", () => frames++);
     const result = await w.worktrees.pull(main.id);

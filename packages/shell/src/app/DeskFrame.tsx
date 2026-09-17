@@ -107,6 +107,8 @@ export function DeskFrame() {
       // present while the window has no hover: the stylesheets that show something on hover key
       // a tap's route to it on this, on either frame
       data-touch={touch || undefined}
+      // its opposite, which every :hover rule is gated on (base.css says why)
+      data-hover={!touch || undefined}
       onContextMenu={(e) => {
         if (e.defaultPrevented || (e.target instanceof Element && e.target.closest(NATIVE_MENU))) return;
         appMenu.onContextMenu(e);

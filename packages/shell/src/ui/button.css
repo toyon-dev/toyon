@@ -33,7 +33,7 @@
     padding: 4px 16px;
   }
   .btn {
-    &:hover {
+    :where([data-hover]) &:hover {
       color: var(--text0);
       background: var(--element0);
     }
@@ -45,7 +45,7 @@
   }
   .btn-outline {
     border: 1px solid var(--border1);
-    &:hover {
+    :where([data-hover]) &:hover {
       background: none;
       color: inherit;
       border-color: currentColor;
@@ -68,7 +68,7 @@
     color: var(--ink1);
     border-radius: var(--radius);
     line-height: 1;
-    &:hover {
+    :where([data-hover]) &:hover {
       color: var(--text0);
       background: var(--element0);
     }
@@ -103,13 +103,13 @@
     color: var(--text0);
     background: var(--sunken);
     border-color: var(--border0);
-    &:hover {
+    :where([data-hover]) &:hover {
       color: var(--accent);
       background: var(--sunken);
       border-color: var(--accent);
     }
     &:disabled,
-    &:disabled:hover {
+    :where([data-hover]) &:disabled:hover {
       background: var(--sunken);
       border-color: var(--border0);
     }
@@ -128,7 +128,7 @@
     white-space: normal;
     text-decoration: underline dotted var(--border1);
     text-underline-offset: 0.2em;
-    &:hover {
+    :where([data-hover]) &:hover {
       color: var(--text0);
       background: none;
       text-decoration: underline solid currentColor;
@@ -172,8 +172,21 @@
       color: var(--text0);
       background: var(--element1);
     }
-    &:hover {
+    :where([data-hover]) &:hover {
       color: var(--text0);
+    }
+  }
+
+  /* A press on touch. There is no hover to answer a finger with, so the seat a pointer would have
+   lit comes up while the finger is down and fades once it lifts: the tap is seen, and nothing stays
+   lit after it. The fade is on the resting rule and the press drops it, so the fill arrives at once
+   and only its leaving is slow. After .on, so a switch being pressed flashes like any button and
+   fades to the seat its new state paints. */
+  [data-touch] :is(.btn, .btn-icon):not(.btn-inline) {
+    transition: background-color 0.35s ease-out;
+    &:active:not(:disabled) {
+      background: var(--element0);
+      transition: none;
     }
   }
 
@@ -211,7 +224,7 @@
   .deep-link {
     border-color: var(--border0);
     align-self: center;
-    &:hover {
+    :where([data-hover]) &:hover {
       color: var(--blue);
       border-color: var(--border1);
     }

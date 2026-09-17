@@ -41,11 +41,19 @@ export function cssRules(css: string): CssRule[] {
   return out;
 }
 
+/** what every :hover rule opens with (base.css): it adds no weight and names no element, so a test
+ * reads `.btn:hover` whether or not the rule was written behind it */
+export const HOVER_GATE = ":where([data-hover]) ";
+
 /** `&` takes the parent; a selector without one is a descendant of it, as in the spec */
 function resolve(parents: string[], own: string[]): string[] {
-  if (parents.length === 0) return own;
+  if (parents.length === 0) return own.map((c) => c.replace(HOVER_GATE, ""));
   const out: string[] = [];
-  for (const p of parents) for (const c of own) out.push(c.includes("&") ? c.replaceAll("&", p) : `${p} ${c}`);
+  for (const p of parents) {
+    for (const c of own.map((s) => s.replace(HOVER_GATE, ""))) {
+      out.push(c.includes("&") ? c.replaceAll("&", p) : `${p} ${c}`);
+    }
+  }
   return out;
 }
 

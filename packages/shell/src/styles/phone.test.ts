@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Glob } from "bun";
 import postcss from "postcss";
-import { shellCss } from "./cssRules.ts";
+import { HOVER_GATE, shellCss } from "./cssRules.ts";
 
 /**
  * The frame is one decision, made in app/phone.ts, and everything else reads it.
@@ -22,6 +22,17 @@ describe("the frame is one decision", () => {
     const offenders: string[] = [];
     postcss.parse(await shellCss()).walkAtRules("media", (at) => {
       if (/width|hover|pointer/.test(at.params)) offenders.push(`@media ${at.params}`);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  // On touch a hover is the afterimage of the last tap, so a hover rule that fires there leaves a
+  // button lit after the press and a shut row looking open. The root says whether this window
+  // hovers, and every :hover asks it.
+  test("every hover rule asks the root whether the window hovers", async () => {
+    const offenders: string[] = [];
+    postcss.parse(await shellCss()).walkRules((rule) => {
+      for (const s of rule.selectors) if (s.includes(":hover") && !s.startsWith(HOVER_GATE)) offenders.push(s);
     });
     expect(offenders).toEqual([]);
   });

@@ -116,14 +116,32 @@
     min-height: var(--row-height-sm);
     font: var(--type-mono);
   }
+  /* ---- hover is a pointer's ----
+   Every :hover in these stylesheets sits under :where([data-hover]), which the frame's root carries
+   while the window has a pointer that hovers. On touch a hover is a tap's afterimage: the browser
+   leaves it on the last thing tapped until a tap lands somewhere else, so a button stayed lit after
+   it was pressed and a tool row went on looking open after it was shut. The :where adds nothing to
+   a selector's weight, so every hover rule wins and loses exactly where it did before. Touch gets a
+   press instead, lit while the finger is down and fading after (below, and button.css). */
+
   /* .menu-open is the hover held: the row whose context menu is up keeps its lifted seat and its
    lifted text after the pointer has left it for the menu, or the text falls back to text1 on a
    seat that did not, and the row you are acting on is the hardest one to read */
   .row {
-    &:hover,
+    :where([data-hover]) &:hover,
     &.menu-open {
       background: var(--element0);
       color: var(--text0);
+    }
+  }
+  /* a press on touch, the row's answer to a finger in place of the hover it cannot have */
+  [data-touch] .row {
+    transition: background-color 0.35s ease-out;
+    &:active {
+      background: var(--element0);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
+      transition: none;
     }
   }
   /* A child that sits one rung below the row it is in. It names the skip tier and nothing else; the
@@ -152,7 +170,7 @@
    does not, since on a file or a commit it is the keyboard cursor and moves no background. Any
    other surface with a seat of its own opts in with the same two lines. */
   .row {
-    &:hover,
+    :where([data-hover]) &:hover,
     &[data-state~="current"],
     &.menu-open {
       --text1: var(--ink0);
@@ -164,7 +182,7 @@
    rung it lands on is the seat's, the same one every passenger gets. */
   .row-quiet {
     color: var(--text2);
-    &:hover,
+    :where([data-hover]) &:hover,
     &.menu-open {
       color: var(--text2);
     }

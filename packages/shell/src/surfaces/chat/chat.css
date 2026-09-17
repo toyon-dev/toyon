@@ -128,7 +128,7 @@
     padding: 3px 12px;
     color: var(--text0);
     box-shadow: 0 2px 10px var(--shadow);
-    &:hover {
+    :where([data-hover]) &:hover {
       border-color: var(--accent);
       color: var(--accent);
     }
@@ -334,7 +334,7 @@
    same fill held while the row is open, since the header is the control you are still holding.
    The seat lifts the ladder a rung and every child rides it: the icon, the name and the shine all
    name the skip tier, and on element1 the colour itself would be 1.06:1. */
-    & summary:hover,
+    :where([data-hover]) & summary:hover,
     &[open] > summary {
       background: var(--element1);
       --text1: var(--ink0);
@@ -342,9 +342,20 @@
     }
     /* the hint is the exception, and it is deliberate: it goes up two rungs rather than one, because
    what the call actually did is the thing you opened the row to read. */
-    & summary:hover .tool-hint,
+    :where([data-hover]) & summary:hover .tool-hint,
     &[open] > summary .tool-hint {
       color: var(--ink0);
+    }
+    /* a finger's press on the header, which fades once it lifts: a row being shut says so and
+     then goes back to rest, where a hover would have left it looking open */
+    [data-touch] & summary {
+      transition: background-color 0.35s ease-out;
+      &:active {
+        background: var(--element1);
+        --text1: var(--ink0);
+        --text2: var(--ink1);
+        transition: none;
+      }
     }
     /* a summary is one line: a command long enough to wrap would push the row into a paragraph of
    monospace, and a transcript of those is unreadable. The name is only there when the agent sent
@@ -580,7 +591,7 @@
     & .dl.more:disabled {
       cursor: default;
     }
-    & .dl.more:not(:disabled):hover {
+    :where([data-hover]) & .dl.more:not(:disabled):hover {
       color: var(--text0);
       background: var(--surface2);
     }
@@ -727,7 +738,7 @@
     box-shadow: 0 0 0 1.5px var(--surface0);
   }
   .composer-term {
-    &:hover .composer-term-dot,
+    :where([data-hover]) &:hover .composer-term-dot,
     &.on .composer-term-dot {
       box-shadow: 0 0 0 1.5px var(--border0);
     }
@@ -866,7 +877,7 @@
       text-decoration-color: transparent;
       text-underline-offset: 2px;
     }
-    & .pick-open:hover {
+    :where([data-hover]) & .pick-open:hover {
       text-decoration-color: currentColor;
     }
     &.in-chat {
@@ -875,7 +886,7 @@
       cursor: default;
       display: inline-flex;
     }
-    &.in-chat:hover {
+    :where([data-hover]) &.in-chat:hover {
       border-color: var(--accent);
     }
     /* a sent attachment that opens what the daemon stored (the full image, a paste's text) is the

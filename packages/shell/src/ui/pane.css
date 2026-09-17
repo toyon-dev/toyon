@@ -50,7 +50,7 @@
     cursor: row-resize;
     /* over this pane's own head and the pane above it; inside .pane, so it reaches no further */
     z-index: 1;
-    &:hover {
+    :where([data-hover]) &:hover {
       background: var(--element0);
     }
   }

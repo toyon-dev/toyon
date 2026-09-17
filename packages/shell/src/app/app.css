@@ -70,7 +70,7 @@
     &.right::after {
       left: 0;
     }
-    &:hover::after,
+    :where([data-hover]) &:hover::after,
     &.active::after {
       background: var(--element1);
     }

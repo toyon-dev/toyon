@@ -58,7 +58,7 @@
       color: var(--text2);
       cursor: default;
     }
-    & button.disabled:hover {
+    :where([data-hover]) & button.disabled:hover {
       background: none;
     }
     & .menu-label,
@@ -75,7 +75,7 @@
      menu item is a .row and gets the lift from there under the pointer, but cursor moves a seat
      here where on a file or a commit it moves none, so this one says so itself: the detail and the
      chord are .row-dim and would otherwise stay the skip tier on element0. */
-    & button:hover,
+    :where([data-hover]) & button:hover,
     & button[data-state~="cursor"] {
       background: var(--element0);
       --text1: var(--ink0);

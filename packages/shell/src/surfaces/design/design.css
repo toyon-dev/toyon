@@ -84,7 +84,7 @@
     }
     /* the seat lifts and the line rides it: the colour is still the text2 declared above, one rung
      up because the ladder moved */
-    & > summary:hover {
+    :where([data-hover]) & > summary:hover {
       background: var(--element0);
       --text1: var(--ink0);
       --text2: var(--ink1);
@@ -190,8 +190,8 @@
      is not part of the offset */
     padding: 2px 10px 2px 40px;
   }
-  .design-face:hover,
-  .design-face-head:hover {
+  :where([data-hover]) .design-face:hover,
+  :where([data-hover]) .design-face-head:hover {
     background: var(--element0);
     --row-edge-color: var(--accent);
     --text1: var(--ink0);
@@ -290,7 +290,7 @@
       cursor: default;
     }
     /* hovering a row outlines the thing in the running app, so the row has to look armed */
-    &:hover:not(:disabled),
+    :where([data-hover]) &:hover:not(:disabled),
     &:focus-visible {
       background: var(--element0);
       --row-edge-color: var(--accent);

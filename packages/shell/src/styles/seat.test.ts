@@ -24,6 +24,7 @@ const LIFT: [string, string][] = [
 const NOT_A_SEAT = [
   ".btn:hover",
   ".btn-icon:hover",
+  "[data-touch] :is(.btn, .btn-icon):not(.btn-inline):active:not(:disabled)",
   ".tone-chrome.on",
   ".jump-down",
   ".dock-resize:hover::after",

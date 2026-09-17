@@ -48,6 +48,12 @@
   .app[data-chat-side] .changes-dock.changes-screen {
     border-inline: 0;
   }
+  /* The files tab is an icon sized to itself, which on a dock leaves the words their room. On a
+     screen the two word tabs split the whole width, and beside them a folder in a pointer's 40px
+     read as squeezed in and was a small target for a thumb. */
+  .changes-screen .tab-fit .tab-btn {
+    padding-inline: 24px;
+  }
   .app[data-chat-side="left"] .changes-dock {
     border-right: 0;
     border-left: 1px solid var(--border0);

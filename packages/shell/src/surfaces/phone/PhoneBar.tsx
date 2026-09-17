@@ -15,6 +15,8 @@ import { asksSetup } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { CommandPalette } from "../overlays/CommandPalette.tsx";
+import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
 import { rowLine } from "../rail/rowLine.ts";
 import { ago, dotClass, wtDir } from "../util.ts";
 
@@ -70,6 +72,8 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
           })
         : null;
   const asks = !home && !archivedPage && !!active && dotClass(active) === "waiting";
+  const switching = useStore((s) => s.overlay?.kind === "projects" && s.overlay.form === "pill");
+  const commands = useStore((s) => s.overlay?.kind === "commands");
   return (
     <div className="phone-bar">
       <div className="phone-bar-row">
@@ -83,15 +87,20 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
         )}
         <div className="phone-title">
           {home && repos.length > 1 ? (
-            <Button
-              size="md"
-              tone="chrome"
-              className="phone-switch"
-              onClick={() => dispatch({ a: "open", overlay: { kind: "projects", form: "center" } })}
-            >
-              {title}
-              <Icon name="caret" className="icon-inline" />
-            </Button>
+            // the desk pill's form: the switcher opens over the name that was tapped, not in the
+            // middle of a screen the thumb is nowhere near
+            <span className="phone-drop phone-switch">
+              <Button
+                size="md"
+                tone="chrome"
+                on={switching}
+                onClick={() => dispatch({ a: "toggle", overlay: { kind: "projects", form: "pill" } })}
+              >
+                {title}
+                <Icon name="caret" className="icon-inline" />
+              </Button>
+              {switching && <ProjectPicker form="pill" />}
+            </span>
           ) : (
             <span className="phone-name">{title}</span>
           )}
@@ -117,12 +126,18 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
             onClick={() => dispatch({ a: "activate", id: main.id })}
           />
         )}
-        <IconButton
-          icon="more"
-          label="Menu"
-          tone="chrome"
-          onClick={() => dispatch({ a: "open", overlay: { kind: "commands" } })}
-        />
+        {/* the palette hangs from this button on a phone, from either end of the window it turns
+            to fit; Overlays leaves it out of the frame's centre */}
+        <span className="phone-drop">
+          <IconButton
+            icon="more"
+            label="Menu"
+            tone="chrome"
+            on={commands}
+            onClick={() => dispatch({ a: "toggle", overlay: { kind: "commands" } })}
+          />
+          {commands && <CommandPalette anchored={{ flip: "align", margin: 8 }} />}
+        </span>
       </div>
       {/* the worktree's faces, in the header rather than under it: the bar's own edge then runs
           under the control, and the control sits on the bar's ground, where a sunken track and a

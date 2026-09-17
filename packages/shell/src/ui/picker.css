@@ -193,7 +193,7 @@
       font-weight: inherit;
       color: var(--accent);
     }
-    &:hover {
+    :where([data-hover]) &:hover {
       background: var(--element0);
       --text1: var(--ink0);
       --text2: var(--ink1);

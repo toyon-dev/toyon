@@ -207,6 +207,19 @@ describe("the phone's screen", () => {
     expect(run([worktrees(wt("main", "main"), wt("a"))], s).screen).toBe("home");
   });
 
+  test("a tab or the way back closes the diff over the screen, the tab under it included", () => {
+    const open = run([
+      hello(wt("main", "main"), wt("a")),
+      { a: "activate", id: "a" },
+      { a: "screen", to: "changes" },
+      opening({ path: "x.ts", seq: 1 }),
+    ]);
+    expect(open.editor).not.toBeNull();
+    for (const to of ["chat", "preview", "changes", "home"] as const) {
+      expect(run([{ a: "screen", to }], open).editor).toBeNull();
+    }
+  });
+
   test("moving around leaves the desk's layout byte-identical", () => {
     const s = run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }]);
     const before = panelFlags(s);

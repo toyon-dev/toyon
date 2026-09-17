@@ -1532,7 +1532,9 @@ function reduce(s: State, action: Action): State {
       // per browser and not one of the panels a project remembers, so the phone may write it.
       return { ...s, railOpen: true, focusRail: s.focusRail + 1, screen: "home" };
     case "screen":
-      return s.screen === action.to ? s : { ...s, screen: action.to };
+      // the diff a file opens as lies over whichever tab it came from, so any tab, the one under
+      // it included, and the way back are all a way out of it
+      return s.screen === action.to && !s.editor ? s : { ...s, screen: action.to, editor: null };
     case "frame": {
       if (s.frame === action.v) return s;
       const next = { ...s, frame: action.v };

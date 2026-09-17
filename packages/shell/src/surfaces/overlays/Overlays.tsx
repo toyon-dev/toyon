@@ -18,9 +18,11 @@ import { ThemePicker } from "./ThemePicker.tsx";
 import "./overlays.css";
 
 /** whichever overlay is open (they are mutually exclusive). The project picker's pill form is not
- * here: it hangs off its pill in the top bar, where the click already is. */
+ * here: it hangs off its pill in the top bar, where the click already is. Nor is the command palette
+ * on a phone: it drops from the bar's menu button, the one visible way to it there. */
 export function Overlays() {
   const overlay = useOverlay();
+  const phone = useStore((s) => s.frame === "phone");
   const activeId = useActiveId();
   const activeRepoId = useStore((s) => s.activeRepoId);
   const newProject = useStore((s) => s.newProject);
@@ -38,7 +40,7 @@ export function Overlays() {
       {overlay?.kind === "appearance" && <AppearancePicker />}
       {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "agent-page" && <AgentPage agentId={overlay.agent} />}
-      {overlay?.kind === "commands" && <CommandPalette />}
+      {overlay?.kind === "commands" && !phone && <CommandPalette />}
       {/* keyed by form: the folder button swaps center for disk in this same slot, and the disk form
           has to mount fresh to start in the home directory with the caret in it */}
       {overlay?.kind === "projects" && overlay.form !== "pill" && (

@@ -114,7 +114,12 @@ export function PhoneFrame() {
   ];
 
   return (
-    <div className="app phone" data-chat-side={chatSide} data-touch={touch || undefined}>
+    <div
+      className="app phone"
+      data-chat-side={chatSide}
+      data-touch={touch || undefined}
+      data-hover={!touch || undefined}
+    >
       <Tooltips />
       <Menus />
       <PhoneBar
@@ -147,7 +152,7 @@ export function PhoneFrame() {
             <Rail placement="screen" />
           ) : editor ? (
             // a file opened from the changes list or from a tool row in the chat: the diff over
-            // whichever tab is open, and its close returns there
+            // whichever tab is open; its close returns there, and a tab or the way back shuts it
             <EditorPane editor={editor} placement="screen" />
           ) : tab === "chat" ? (
             <ChatPanel placement="screen" archived={archivedPage} />

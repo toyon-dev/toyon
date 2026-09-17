@@ -14,7 +14,7 @@
   /* --dot-gap follows the row's own background so the unseen ring keeps a clean gap instead of a
    grey band once the row is hovered or selected */
   .rail-item {
-    &:hover {
+    :where([data-hover]) &:hover {
       --dot-gap: var(--element0);
     }
     &[data-state~="current"] {
@@ -103,16 +103,16 @@
       padding: 1px 4px;
       border-radius: var(--radius-xs);
     }
-    & .rail-badge.clickable:hover {
+    :where([data-hover]) & .rail-badge.clickable:hover {
       background: var(--element0);
     }
     & .rail-badge .act {
       display: none;
     }
-    & .rail-badge.clickable:hover .num {
+    :where([data-hover]) & .rail-badge.clickable:hover .num {
       display: none;
     }
-    & .rail-badge.clickable:hover .act {
+    :where([data-hover]) & .rail-badge.clickable:hover .act {
       display: inline;
     }
     & .rail-more {
@@ -122,7 +122,7 @@
     }
     /* a box around the glyph, so its dots sit on the column's centre line with the plus. Shown by
        display rather than visibility, since at rest the time holds the same seat */
-    &:hover .rail-more {
+    :where([data-hover]) &:hover .rail-more {
       display: flex;
     }
     & .rail-at {
@@ -130,7 +130,7 @@
       /* the time ticks; `font` resets the variant */
       font-variant-numeric: tabular-nums;
     }
-    &:hover .rail-at,
+    :where([data-hover]) &:hover .rail-at,
     &.menu-open .rail-at {
       display: none;
     }
@@ -143,7 +143,7 @@
       color: var(--text0);
       background: var(--element1);
     }
-    & .rail-more:hover {
+    :where([data-hover]) & .rail-more:hover {
       color: var(--text0);
       background: var(--element0);
     }
@@ -212,7 +212,7 @@
     z-index: 2;
   }
   .rail {
-    &:hover .rail-panel,
+    :where([data-hover]) &:hover .rail-panel,
     &.hold .rail-panel {
       width: var(--rail-width);
       /* a step above the page, not a floating dialog: the negative spread keeps the dark out of the
@@ -272,7 +272,7 @@
     transition: opacity 0.12s ease 120ms;
   }
   .rail {
-    &:hover .rail-foot,
+    :where([data-hover]) &:hover .rail-foot,
     &.hold .rail-foot,
     &.pinned .rail-foot,
     &.rail-screen .rail-foot {
@@ -303,14 +303,14 @@
     transition: opacity 0.12s ease 120ms;
   }
   .rail {
-    &:hover .rail-main-strip,
+    :where([data-hover]) &:hover .rail-main-strip,
     &.hold .rail-main-strip,
     &.pinned .rail-main-strip,
     &.rail-screen .rail-main-strip {
       opacity: 0;
       transition: opacity 0.12s ease 50ms;
     }
-    &:hover .rail-main-dot,
+    :where([data-hover]) &:hover .rail-main-dot,
     &.hold .rail-main-dot,
     &.pinned .rail-main-dot,
     &.rail-screen .rail-main-dot {
@@ -335,7 +335,7 @@
     display: none;
   }
   .rail {
-    &:hover .rail-disc-head,
+    :where([data-hover]) &:hover .rail-disc-head,
     &.hold .rail-disc-head,
     &.pinned .rail-disc-head,
     &.rail-screen .rail-disc-head {
@@ -354,12 +354,12 @@
     }
   }
   .rail-disc-head {
-    &:hover {
+    :where([data-hover]) &:hover {
       color: var(--text1);
     }
   }
   .rail {
-    &:hover .rail-disc-item,
+    :where([data-hover]) &:hover .rail-disc-item,
     &.hold .rail-disc-item,
     &.pinned .rail-disc-item,
     &.rail-screen .rail-disc-item {
@@ -444,7 +444,7 @@
       position: absolute;
       inset: -8px;
     }
-    & .dot.clickable:hover {
+    :where([data-hover]) & .dot.clickable:hover {
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 35%, transparent);
     }
   }
@@ -608,16 +608,9 @@
   [data-touch] .rail {
     /* the control column is the seat a tap opens the row's menu from (Rail.tsx), so it is a
        thumb's width rather than a pointer's */
+    /* the peek is a hover, which touch has none of (base.css), so the drawer opens by the pin,
+       which a tap on the strip toggles (Rail.tsx), or by the hold */
     --rail-gut: 44px;
-  }
-  /* Hover on touch is a tap's afterimage: it sticks to the last thing tapped until the next tap
-     lands elsewhere. A drawer that peeked on it would half-open under a resting finger and stay
-     there, over the dock beside it. On touch the drawer opens by the pin alone, which a tap on the
-     strip toggles (Rail.tsx); the hold (a menu up, a graft being picked) still opens it. */
-  [data-touch] .rail:not(.pinned):not(.hold):hover .rail-panel {
-    width: 100%;
-    box-shadow: none;
-    transition: none;
   }
   /* on a screen the control column holds nothing (see .rail-say), so it is a margin, not a seat;
      after the touch rule above, which would otherwise widen it to a thumb */

@@ -49,7 +49,7 @@
      is that it joins the list under it, not its brightness; painting the hover in the ground
      instead made two joined tabs and nothing said which one was open. Declared before the open
      rule so a hovered open tab keeps its ground. */
-    &:hover {
+    :where([data-hover]) &:hover {
       background: var(--element0);
       color: var(--text0);
       --text1: var(--ink0);

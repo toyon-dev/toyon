@@ -13,14 +13,14 @@
     },
     "packages/bridge": {
       "name": "@toyon/bridge",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "dependencies": {
         "@toyon/shared": "workspace:*",
       },
     },
     "packages/cli": {
       "name": "toyon",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "bin": {
         "toyon": "bin/toyon.js",
       },
@@ -34,7 +34,7 @@
     },
     "packages/daemon": {
       "name": "@toyon/daemon",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "dependencies": {
         "@agentclientprotocol/sdk": "1.4.0",
         "@toyon/shared": "workspace:*",
@@ -45,7 +45,7 @@
     },
     "packages/shared": {
       "name": "@toyon/shared",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "dependencies": {
         "qrcode-generator": "^2.0.4",
         "zod": "^4.5.4",
@@ -53,7 +53,7 @@
     },
     "packages/shell": {
       "name": "@toyon/shell",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "dependencies": {
         "@shikijs/core": "^4.4.3",
         "@shikijs/engine-oniguruma": "^4.4.3",

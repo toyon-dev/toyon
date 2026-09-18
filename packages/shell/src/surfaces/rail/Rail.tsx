@@ -180,6 +180,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       ? worktreeItems(w, repoOf(w), { layout, shipping }, deps, { graft: graftWith })
       : discoveredItems(w, { clientId }, deps);
 
+  /* the archive keeps its own count column, reserved list-wide the way the worktrees' are, and not
+     drawn at all when no archived row has a number to put in it */
+  const archCounts = archived.some((a) => (a.dirty ?? 0) > 0);
+
   /** An archived worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
    * row and its dot's seat is blank: a seat rather than nothing, so its name starts where every
    * other name does when the dot leads the row. One that archived itself has a clock there, whose
@@ -187,13 +191,16 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
    * click opens its page in the
    * centre, the way a found row's does, and the restore button is there: a row that restored on
    * its own click was too easy to hit on the way past. Its menu (the kebab or a right-click) has
-   * restore too, with the rest. */
+   * restore too, with the rest.
+   *
+   * One line, on both frames. The archive is the one section that only grows, and what the row does
+   * not say (what it cost, whether it merged) is on the page a tap away. */
   const archivedRow = (a: ArchivedWorktree) => (
     <button
       key={a.id}
       type="button"
       className={cx(
-        "row row-edge row-quiet rail-disc-item",
+        "row row-edge row-quiet rail-disc-item rail-arch-item",
         menu?.owner === "rail" && menu.key === a.id && "menu-open",
       )}
       data-state={rowState({ current: archivedPage?.id === a.id })}
@@ -227,6 +234,16 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         </span>
       </span>
       <span className="branch">{a.title}</span>
+      {/* the work it was removed with, in the column the live rows count in, so a glance down the
+          rail reads one kind of number. Quiet rather than the dirty colour: nothing here is yours
+          to act on until the worktree is restored. */}
+      {archCounts && (
+        <span className="rail-counts">
+          <span className="rail-count row-dim" data-tip={a.dirty ? `${a.dirty} uncommitted, kept` : undefined}>
+            {a.dirty ? `~${count(a.dirty)}` : ""}
+          </span>
+        </span>
+      )}
       {a.auto ? (
         <span
           className="rail-glyph rail-auto row-dim"
@@ -237,10 +254,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       ) : (
         <span className="dot" />
       )}
-      {/* its tip's detail, said out loud where there is no hover (see rowLine) */}
-      {onScreen && (
-        <span className="rail-say row-dim">{a.auto ? `Archived automatically: ${a.auto}` : archivedHint(a)}</span>
-      )}
+      {/* the time the control column carries on the desk, where a screen has no column for it */}
+      {onScreen && <span className="rail-at rail-at-end row-dim">{ago(a.archivedAt)}</span>}
     </button>
   );
 

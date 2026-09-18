@@ -520,6 +520,9 @@ export interface ArchivedWorktree {
   restorable: boolean;
   /** uncommitted changes were kept beside the commits */
   uncommitted?: boolean;
+  /** how many files those changes touched, counted as the worktree was removed; absent when git
+   * could not say */
+  dirty?: number;
   /** it had been merged into main */
   landed?: boolean;
   /** what its agent's session cost, as the agent last reported it; only an agent that prices

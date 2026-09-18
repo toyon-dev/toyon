@@ -122,7 +122,7 @@ export function summarize(r: ArchiveRecord, repoId: string): ArchivedWorktree {
     archivedAt: r.archivedAt,
     ...(r.prompt ? { prompt: r.prompt } : {}),
     restorable: !!r.kept,
-    ...(r.kept?.snapshot ? { uncommitted: true } : {}),
+    ...(r.kept?.snapshot ? { uncommitted: true, ...(r.kept.dirty ? { dirty: r.kept.dirty } : {}) } : {}),
     ...(r.worktree.landed ? { landed: true } : {}),
     ...(r.cost !== undefined ? { cost: r.cost } : {}),
     ...(r.auto ? { auto: r.auto } : {}),

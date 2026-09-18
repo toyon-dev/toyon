@@ -3,7 +3,8 @@
 // ref alone keeps both reachable and gc collects neither.
 
 import { rmSync } from "node:fs";
-import { GIT, git, gitOrThrow, run } from "./exec.ts";
+import { GIT, git, gitOrThrow, gitRaw, run } from "./exec.ts";
+import { parsePorcelain } from "./status.ts";
 
 /** outside refs/heads, so no branch list, ref picker or push ever shows it */
 export const archiveRef = (worktreeId: string) => `refs/toyon/archive/${worktreeId}`;
@@ -13,6 +14,9 @@ export interface KeptState {
   head: string;
   /** its uncommitted work as a commit over head: untracked files included, ignored ones not */
   snapshot?: string;
+  /** how many files that work touched. Counted here because it is the last moment the directory
+   * exists, and a row that lists the archive should not open a diff to say a number. */
+  dirty?: number;
   /** there was uncommitted work and it could not be kept */
   lost?: boolean;
 }
@@ -28,12 +32,17 @@ export async function keepState(
 ): Promise<KeptState | null> {
   const head = await git(wtPath, "rev-parse", "--verify", "HEAD");
   if (!head.ok) return null;
-  const status = await git(wtPath, "status", "--porcelain");
+  // -uall, so the count is the one the rail showed this worktree while it was live
+  const status = await gitRaw(wtPath, "status", "--porcelain", "-uall");
   // a status that failed is treated as dirty: a snapshot of a clean tree costs one commit object
-  const dirty = !status.ok || status.out !== "";
+  const files = status.ok ? parsePorcelain(status.out).length : null;
+  const dirty = files === null || files > 0;
   const snapshot = dirty ? await snapshotCommit(wtPath, head.out, indexFile) : null;
   if (!(await git(repoPath, "update-ref", ref, snapshot ?? head.out)).ok) return null;
-  return { head: head.out, ...(snapshot ? { snapshot } : dirty ? { lost: true } : {}) };
+  return {
+    head: head.out,
+    ...(snapshot ? { snapshot, ...(files ? { dirty: files } : {}) } : dirty ? { lost: true } : {}),
+  };
 }
 
 async function snapshotCommit(wtPath: string, head: string, indexFile: string): Promise<string | null> {

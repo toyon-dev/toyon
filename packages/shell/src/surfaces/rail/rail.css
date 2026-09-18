@@ -532,9 +532,9 @@
   .app[data-chat-side] .rail.rail-screen .rail-panel {
     border-inline: 0;
   }
-  /* an archived row's blank seat is a row with something missing on a phone, where every row is two
-     lines tall and there is no hover to say what the blank means: the ring says it, a worktree
-     doing nothing, the same mark a found row carries */
+  /* an archived row's blank seat is a row with something missing on a phone, where there is no hover
+     to say what the blank means: the ring says it, a worktree doing nothing, the same mark a found
+     row carries */
   .rail-screen .rail-disc-item .dot {
     background: none;
     box-shadow: inset 0 0 0 1.5px var(--ink2);
@@ -576,11 +576,13 @@
   /* The right side of a screen's row is one thing: the counts, centred on the row's two lines. The
      control column's time has moved into the line under the name (rowLine's `at`), and its kebab
      shows on a hover a phone never has, so both go and the column shrinks to a margin. Behind is
-     nearly always there and says only "stale"; on one column it is a number beside a number. */
-  .rail-screen .rail-item .rail-at,
-  .rail-screen .rail-item .rail-more,
-  .rail-screen .rail-disc-item .rail-at,
-  .rail-screen .rail-disc-item .rail-more,
+     nearly always there and says only "stale"; on one column it is a number beside a number.
+     Scoped to the column, since an archived row, which has no line under its name, keeps its time at
+     the end of the row itself. */
+  .rail-screen .rail-item .rail-gut .rail-at,
+  .rail-screen .rail-item .rail-gut .rail-more,
+  .rail-screen .rail-disc-item .rail-gut .rail-at,
+  .rail-screen .rail-disc-item .rail-gut .rail-more,
   .rail-screen .rail-behind {
     display: none;
   }
@@ -593,6 +595,21 @@
     right: var(--rail-pad-r);
     top: 50%;
     translate: 0 -50%;
+  }
+  /* An archived row keeps to one line here. The archive is the only section that grows without
+     bound, so a second line on each of them pushes the worktrees anyone is working in off the
+     screen, and what that line said is on the row's own page, one tap away. It is then the shortest
+     row on the screen and still has to be hit, so it takes a thumb's height; three classes, to
+     outrank the row height the open drawer sets. */
+  .rail.rail-screen .rail-arch-item {
+    min-height: 44px;
+  }
+  /* last in the row, past a dot that leads it on one hand and trails it on the other */
+  .rail-at-end {
+    order: 1;
+    flex-shrink: 0;
+    min-width: 3ch;
+    text-align: right;
   }
   /* the current row's edge is at the near edge on a phone, the left, whichever hand the chat is on:
      the far edge the desk's marker rides is a drawer's, and a screen has none. Five classes, to

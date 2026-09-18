@@ -156,6 +156,13 @@ describe("create / remove", () => {
     expect(readFileSync(join(wt.path, ".gitignore"), "utf8")).toBe("dist/\n");
   });
 
+  test("a main that git reads as bare refuses the create and makes no worktree", async () => {
+    const repoId = await registered();
+    sh(w.repo, "git", "config", "core.bare", "true");
+    await expect(w.worktrees.create(repoId, "make the header sticky")).rejects.toBeInstanceOf(UserError);
+    expect(w.state.worktrees.filter((x) => x.kind === "worktree")).toEqual([]);
+  });
+
   test("create stamps the requested agent, else the daemon default; unknown ids are UserErrors", async () => {
     const repoId = await registered();
     expect((await w.worktrees.create(repoId, "a", { agent: "codex" })).agent).toBe("codex");

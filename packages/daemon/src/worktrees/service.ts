@@ -52,7 +52,7 @@ import {
   landRef,
 } from "../git/archive.ts";
 import { excludeBlock } from "../git/exclude.ts";
-import { GIT, git, gitOrThrow, NO_PROMPT, run } from "../git/exec.ts";
+import { GIT, git, gitOrThrow, isGitRepo, NO_PROMPT, run } from "../git/exec.ts";
 import {
   commitWorktree,
   fastForwardMain,
@@ -266,6 +266,14 @@ export class WorktreeService {
   async create(repoId: string, prompt: string, opts: CreateOpts = {}): Promise<WorktreeInfo> {
     const { variant, context, attachments } = opts;
     const repo = this.d.state.requireRepo(repoId);
+    // A checkout that git stops treating as one (`core.bare` set in the config its worktrees share)
+    // fails every step below with git's own words, after the worktree exists and before its message
+    // is sent. Refused here, nothing is made.
+    if (!(await isGitRepo(repo.path))) {
+      throw new UserError(
+        `git no longer reads ${repo.name} as a checkout, so there is nothing to start a worktree from. If \`git config core.bare\` says true there, \`git config --unset core.bare\` puts it back.`,
+      );
+    }
     // validated up front: an unknown or uninstalled agent is a refusal now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
     const profile = this.checkProfile(repo, opts.profile);
@@ -360,6 +368,18 @@ export class WorktreeService {
    * saying why for the person. Not asked to move, the files are only counted, so the agent can be
    * told they were left behind on purpose. */
   private async carryMain(repo: RepoInfo, wt: WorktreeInfo, move: boolean): Promise<Carried> {
+    // the worktree exists by now and its first message goes out after this: what main holds is
+    // context for that message, so failing to read it costs the context and never the message
+    try {
+      return await this.carryMainOrThrow(repo, wt, move);
+    } catch (e) {
+      log.warn(wt.id, `reading ${repo.defaultBranch}'s changes failed`, e);
+      const unmoved = move ? `the changes on ${repo.defaultBranch} could not be read, so they stayed there` : undefined;
+      return { branch: repo.defaultBranch, moved: false, count: 0, ...(unmoved ? { unmoved } : {}) };
+    }
+  }
+
+  private async carryMainOrThrow(repo: RepoInfo, wt: WorktreeInfo, move: boolean): Promise<Carried> {
     const main = repo.defaultBranch;
     if (!move) return { branch: main, moved: false, count: (await statusFiles(repo.path)).length };
     let count = 0;

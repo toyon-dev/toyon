@@ -16,6 +16,10 @@ export interface ShipResult {
   conflict?: true;
   /** the PR the route opened or found, for the record */
   pr?: Omit<PrState, "at">;
+  /** everything git printed when the commit was refused, both pipes, so a hook's complaint can go
+   * on the transcript whole rather than as the snippet in `message` */
+  output?: string;
+  exit?: number | string | null;
 }
 
 /** User-initiated commit of everything in the worktree, with the user's message. */
@@ -23,7 +27,11 @@ export async function commitWorktree(worktreePath: string, message: string): Pro
   if ((await statusFiles(worktreePath)).length === 0) return { ok: false, message: "nothing to commit" };
   await git(worktreePath, "add", "-A");
   const c = await git(worktreePath, "commit", "-m", message);
-  if (!c.ok) return { ok: false, message: `commit failed: ${c.err.slice(0, 200)}` };
+  if (!c.ok) {
+    // a hook writes to either pipe; stdout first, since a hook's summary usually follows its detail
+    const output = [c.out, c.err].filter(Boolean).join("\n");
+    return { ok: false, message: `commit failed: ${c.err.slice(0, 200)}`, output, exit: c.exit };
+  }
   return { ok: true, message: `committed: ${message}` };
 }
 

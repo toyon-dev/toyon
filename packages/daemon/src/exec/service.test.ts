@@ -43,6 +43,30 @@ function world() {
   return { exec, agent, dir, holds };
 }
 
+describe("ExecService.record", () => {
+  test("a command the daemon ran leaves the same two rows, fenced, with its exit", () => {
+    const { exec, agent, holds } = world();
+    exec.record("w1", 'git commit -m "x"', "hook says no\n", 1);
+    expect(holds).toEqual([]);
+    expect(agent.recorded.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    const start = agent.recorded[0];
+    expect(start?.type === "tool-start" && start.name === SHELL_TOOL && start.input).toEqual({
+      command: 'git commit -m "x"',
+    });
+    const end = agent.recorded[1];
+    expect(end?.type === "tool-end" && end.isError).toBe(true);
+    expect(end?.type === "tool-end" && end.output).toBe("```\nhook says no\n```\nexit 1");
+  });
+
+  test("output past the cap is cut the way a live command's is", () => {
+    const { exec, agent } = world();
+    exec.record("w1", "big", "x".repeat(250_000), 1);
+    const end = agent.recorded[1];
+    expect(end?.type === "tool-end" && end.output).toContain("output cut at 200 KB");
+    expect(end?.type === "tool-end" ? (end.output?.length ?? 0) : 0).toBeLessThan(201_000);
+  });
+});
+
 describe("ExecService.exec", () => {
   test("answers with the exit code and the output, and leaves the rows on the transcript", async () => {
     const { exec, agent, holds } = world();

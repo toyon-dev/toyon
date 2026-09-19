@@ -50,10 +50,19 @@ describe("shellContext", () => {
     expect(shellContext([user("hi"), run("sleep 9", undefined, false)])).toBeUndefined();
   });
 
-  test("a command that printed nothing is still a line, and a long one is cut", () => {
+  test("a command that printed nothing is still a line", () => {
     expect(shellContext([run("true", "")])).toEndWith("$ true");
-    const long = `\`\`\`\n${"x".repeat(7_000)}\n\`\`\``;
-    expect(shellContext([run("cat big", long)])).toContain("[output cut here]");
+  });
+
+  test("a long output keeps its opening and its end, since a test run puts what failed last", () => {
+    const lines = Array.from({ length: 800 }, (_, i) => `line ${i}: ${"x".repeat(20)}`);
+    const long = `\`\`\`\n${lines.join("\n")}\n\`\`\``;
+    const ctx = shellContext([run("bun test", long)]) ?? "";
+    expect(ctx).toContain("$ bun test\nline 0:");
+    expect(ctx).toContain("line 799:");
+    expect(ctx).toMatch(/\[\d+ characters cut here\]/);
+    expect(ctx).not.toContain("line 400:");
+    expect(ctx.length).toBeLessThan(6_200);
   });
 
   test("the repo's check rides along too, so 'fix it' after a failed check carries the failure", () => {

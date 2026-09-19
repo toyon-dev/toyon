@@ -10,13 +10,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
+import { SHELL_TOOL } from "@toyon/shared";
+import { type FakeAgent, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { SelfWatch } from "../core/self.ts";
 import { StateStore } from "../core/state.ts";
+import { ExecService } from "../exec/service.ts";
 import { GIT, git } from "../git/exec.ts";
 import { AfterLand } from "../repos/afterLand.ts";
 import { RepoRegistry } from "../repos/registry.ts";
@@ -41,7 +43,16 @@ function world() {
   const f = fakeFactories();
   const agents = fakeAgents(t.paths.agentsDir);
   const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
-  const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
+  const exec = new ExecService({ state, runtime });
+  const worktrees = new WorktreeService({
+    state,
+    hub,
+    runtime,
+    paths: t.paths,
+    agents,
+    namer: async () => null,
+    record: (id, command, text, exit) => exec.record(id, command, text, exit),
+  });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
   return { ...t, state, hub, runtime, worktrees, turns, repos, registry: agents, ...f };
@@ -943,6 +954,45 @@ describe("landing", () => {
     writeFileSync(join(wt.path, "more.txt"), "y\n");
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.landed).toBe(false);
+  });
+
+  /** a pre-commit hook for the repo that prints its complaint and refuses; repo-local hooksPath so
+   * a global one on this machine does not stand in for it */
+  const refusingHook = (lines: string[]) => {
+    const hooks = join(w.repo, ".toyon-test-hooks");
+    mkdirSync(hooks, { recursive: true });
+    const body = lines.map((l) => `echo ${JSON.stringify(l)}`).join("\n");
+    writeFileSync(join(hooks, "pre-commit"), `#!/bin/sh\n${body}\necho "and on stderr" 1>&2\nexit 1\n`, {
+      mode: 0o755,
+    });
+    sh(w.repo, "git", "config", "core.hooksPath", hooks);
+  };
+  const recorded = (id: string) => (w.runtime.agentFor(id) as unknown as FakeAgent).recorded;
+
+  test("a commit a hook refuses goes on the transcript whole, as the rows a ! command leaves", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    refusingHook(["a dash in copy: src/x.ts:3", "one file rejected"]);
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const result = await w.worktrees.commit(wt.id, "add feature\n\nwith a body");
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("commit refused: what git and its hooks printed is on the chat");
+    const rows = recorded(wt.id);
+    expect(rows.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    const start = rows[0];
+    expect(start?.type === "tool-start" && start.name === SHELL_TOOL && start.input).toEqual({
+      command: 'git commit -m "add feature"',
+    });
+    const end = rows[1];
+    expect(end?.type === "tool-end" && end.isError).toBe(true);
+    expect(end?.type === "tool-end" && end.output).toBe(
+      "```\na dash in copy: src/x.ts:3\none file rejected\nand on stderr\n```\nexit 1",
+    );
+    // land's commit step is the same commit: refused the same way, and nothing lands
+    const landed = await w.worktrees.land(wt.id, "add feature");
+    expect(landed.result.ok).toBe(false);
+    expect(recorded(wt.id).map((e) => e.type)).toEqual(["tool-start", "tool-end", "tool-start", "tool-end"]);
+    expect(existsSync(join(w.repo, "feature.txt"))).toBe(false);
   });
 
   test("a branch behind main is rebased first, so the landing carries no merge of main", async () => {

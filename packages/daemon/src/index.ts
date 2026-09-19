@@ -145,7 +145,16 @@ const runtime = new RuntimeRegistry({
   viewed: (id): boolean => idle.isViewed(id),
 });
 const drafts = new DraftStore({ file: paths.draftsFile, hub });
-const worktrees = new WorktreeService({ state, hub, runtime, paths, agents, drafts });
+const exec = new ExecService({ state, runtime });
+const worktrees = new WorktreeService({
+  state,
+  hub,
+  runtime,
+  paths,
+  agents,
+  drafts,
+  record: (id, command, text, exit) => exec.record(id, command, text, exit),
+});
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({
   state,
@@ -158,7 +167,6 @@ const turns = new TurnService({
 const files = new FileService(state, runtime, (id) => worktrees.readable(id));
 const design = new DesignService((id) => worktrees.readable(id));
 const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
-const exec = new ExecService({ state, runtime });
 // after the turn service: its verdict follows the turnSettled the turn service emits
 new LandingService({
   state,

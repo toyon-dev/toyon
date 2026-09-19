@@ -200,6 +200,9 @@ export interface WorktreeServiceDeps {
   drafts?: Pick<DraftStore, "drop">;
   /** task → short kebab-case name (the worktree's own agent by default; tests inject a stub) */
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
+  /** a command the service ran and the person should read whole, onto the worktree's transcript
+   * as the rows a `!` command leaves (ExecService.record) */
+  record?: (worktreeId: string, command: string, text: string, exit: number | string | null) => void;
 }
 
 /** how often main's upstream is fetched while its row is being counted */
@@ -1263,9 +1266,29 @@ export class WorktreeService {
   /** commit everything when there is anything, with the message a land or a ship was given */
   private async commitIfDirty(wt: WorktreeInfo, typed?: string): Promise<ShipResult | null> {
     if ((await statusFiles(wt.path)).length === 0) return null;
-    const result = await commitWorktree(wt.path, this.commitMessage(wt, typed));
-    if (result.ok) this.headMoved(wt.id);
-    return result;
+    return this.commitRecorded(wt, this.commitMessage(wt, typed));
+  }
+
+  /** the one commit, for land and the changes panel alike. A refusal with output (a hook that
+   * rejected the commit, and what it said) goes on the transcript whole: the line the person reads
+   * has room for a sentence, and the agent only learns of what is on the transcript. */
+  private async commitRecorded(wt: WorktreeInfo, message: string): Promise<ShipResult> {
+    const result = await commitWorktree(wt.path, message);
+    if (result.ok) {
+      this.headMoved(wt.id);
+      return result;
+    }
+    if (!result.output?.trim() || !this.d.record) return result;
+    const subject = message.split("\n", 1)[0] ?? "";
+    try {
+      this.d.record(wt.id, `git commit -m ${JSON.stringify(subject)}`, result.output, result.exit ?? null);
+    } catch (e) {
+      // no transcript to write to (the agent is not up yet): the line under the box still says
+      // the commit failed, with git's first words
+      log.warn(wt.id, `could not put the refused commit on the transcript: ${e instanceof Error ? e.message : e}`);
+      return result;
+    }
+    return { ...result, message: "commit refused: what git and its hooks printed is on the chat" };
   }
 
   /** The one press. Commit what is uncommitted, take main in (a rebase for toyon's own branch),
@@ -1434,9 +1457,7 @@ export class WorktreeService {
     const wt = this.d.state.requireWorktree(worktreeId);
     const m = message.trim();
     if (!m) throw new UserError("commit message required");
-    const result = await commitWorktree(wt.path, m);
-    if (result.ok) this.headMoved(wt.id);
-    return result;
+    return this.commitRecorded(wt, m);
   }
 
   /** stored, not cached: the first frame of a page load reads it before git has been asked */

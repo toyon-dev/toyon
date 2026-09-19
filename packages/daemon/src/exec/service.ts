@@ -78,6 +78,22 @@ export class ExecService {
     return this.collect(worktreeId, toolId, proc, agent);
   }
 
+  /** a command the daemon ran itself (the commit a land or the changes panel asked for, refused by
+   * a hook) on the transcript as the rows a `!` command leaves, so its output reads on the chat and
+   * goes to the agent with the next message. Refuses the way `exec` does when there is no
+   * transcript to write to. */
+  record(worktreeId: string, command: string, text: string, exit: number | string | null): void {
+    const wt = this.deps.state.requireWorktree(worktreeId);
+    if (wt.kind === "spare") throw new UserError("no shell for a spare worktree");
+    const agent = this.deps.runtime.agentFor(worktreeId);
+    if (!agent) throw new UserError("worktree still starting; try again in a moment");
+    const toolId = `${SHELL_TOOL}-${Date.now().toString(36)}-${++this.n}`;
+    agent.note({ type: "tool-start", toolId, name: SHELL_TOOL, input: { command }, kind: "execute" });
+    const truncated = text.length > OUTPUT_CAP;
+    const shown = truncated ? text.slice(0, OUTPUT_CAP) : text;
+    agent.note({ type: "tool-end", toolId, output: formatOutput(shown, exit, truncated), isError: exit !== 0 });
+  }
+
   /** kill everything still running for the worktree; each records its own end as it goes */
   stop(worktreeId: string): void {
     for (const toolId of this.running.get(worktreeId)?.keys() ?? []) this.kill(worktreeId, toolId);

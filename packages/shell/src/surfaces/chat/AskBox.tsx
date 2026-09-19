@@ -12,7 +12,7 @@ import type { AskAnswer } from "@toyon/shared";
 import { type RefObject, useMemo, useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { useLocalField } from "../../state/selectors.ts";
+import { useLocalField, useTouch } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -106,6 +106,9 @@ function QuestionBody({
   const { draft, current } = held;
   const q = questions[current];
   const [cursor, setCursor] = useState(() => cursorFor(q, draft[current]));
+  // the cursor is where the keyboard is, and a touch window has none: drawn there, it sat on the
+  // first row before anything was tapped and read as a choice already made, beside the badge
+  const touch = useTouch();
   const own = useRef<HTMLTextAreaElement>(null);
   const write = (next: AskAnswer[], at: number) =>
     dispatch({ a: "ask-draft", id: worktreeId, ask: { id: item.id, draft: next, current: at } });
@@ -213,7 +216,7 @@ function QuestionBody({
               key={o.value}
               type="button"
               className="picker-item ask-opt row-edge"
-              data-state={rowState({ cursor: oi === cursor, checked: on })}
+              data-state={rowState({ cursor: !touch && oi === cursor, checked: on })}
               // mousemove, not mouseenter, for the same reason the picker gives: a row arriving
               // under a stationary pointer must not steal the highlight the keyboard is on
               onMouseMove={() => oi !== cursor && setCursor(oi)}
@@ -294,6 +297,7 @@ function PermissionBody({
   const dispatch = useDispatch();
   const active = useStore((s) => s.activeId);
   const [cursor, setCursor] = useState(0);
+  const touch = useTouch();
   const plan = ask.plan;
   // a plan is a file toyon wrote to the worktree, read in the pane as the document it is; only an
   // ask with no file behind it still carries its markdown
@@ -353,7 +357,7 @@ function PermissionBody({
             key={c.id}
             type="button"
             className={cx("picker-item ask-opt row-edge", c.kind.startsWith("reject") && "deny")}
-            data-state={rowState({ cursor: i === cursor })}
+            data-state={rowState({ cursor: !touch && i === cursor })}
             onMouseMove={() => i !== cursor && setCursor(i)}
             onClick={() => decide(i)}
           >

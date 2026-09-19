@@ -61,7 +61,7 @@ describe("mapUpdate", () => {
       {
         type: "tool-start",
         toolId: "c1",
-        name: "Edit files",
+        name: "",
         input: { file_path: "/a" },
         kind: "edit",
         title: "Edit files",
@@ -70,7 +70,6 @@ describe("mapUpdate", () => {
         type: "tool-update",
         toolId: "c1",
         title: "Write /a",
-        name: "Write /a",
         input: { file_path: "/a", content: "y" },
       },
       { type: "tool-end", toolId: "c1", output: "```diff\n@@ -1,1 +1,2 @@\n-x\n+y\n+z\n```", isError: false },
@@ -102,9 +101,9 @@ describe("mapUpdate", () => {
     ).toEqual([
       { type: "tool-start", toolId: "c2", name: "Bash", input: { locations: [] }, kind: "execute", title: "ls" },
       { type: "tool-end", toolId: "c2", output: "a\nb", isError: false },
-      { type: "tool-start", toolId: "c3", name: "run", input: { locations: [] }, kind: "execute", title: "run" },
+      { type: "tool-start", toolId: "c3", name: "", input: { locations: [] }, kind: "execute", title: "run" },
       { type: "tool-end", toolId: "c3", output: "boom", isError: true },
-      { type: "tool-start", toolId: "c4", name: "late", input: { locations: [] }, title: "late" },
+      { type: "tool-start", toolId: "c4", name: "", input: { locations: [] }, title: "late" },
       { type: "tool-end", toolId: "c4", output: "raw", isError: false },
     ]);
   });
@@ -125,7 +124,7 @@ describe("mapUpdate", () => {
       {
         type: "tool-start",
         toolId: "c5",
-        name: "touch /x",
+        name: "",
         input: { locations: [] },
         kind: "execute",
         title: "touch /x",
@@ -187,7 +186,7 @@ describe("mapUpdate", () => {
       {
         type: "tool-start",
         toolId: "task1",
-        name: "Task",
+        name: "",
         input: { locations: [] },
         kind: "other",
         title: "Task",
@@ -196,7 +195,7 @@ describe("mapUpdate", () => {
       {
         type: "tool-start",
         toolId: "kid1",
-        name: "Read /a",
+        name: "",
         input: { locations: [] },
         kind: "read",
         title: "Read /a",
@@ -221,7 +220,7 @@ describe("mapUpdate", () => {
       {
         type: "tool-start",
         toolId: "c1",
-        name: "Start subagent reviewer",
+        name: "",
         input: { locations: [] },
         kind: "other",
         title: "Start subagent reviewer",
@@ -270,7 +269,7 @@ describe("mapUpdate", () => {
       {
         type: "tool-start",
         toolId: "orphan",
-        name: "Grep",
+        name: "",
         input: { locations: [] },
         title: "Grep",
         parentToolId: "task1",
@@ -305,9 +304,7 @@ describe("mapUpdate", () => {
   test("an agent that stamps no subagent meta gets neither field", () => {
     expect(
       run([{ sessionUpdate: "tool_call", toolCallId: "p", title: "Read", kind: "read", status: "pending" }]),
-    ).toEqual([
-      { type: "tool-start", toolId: "p", name: "Read", input: { locations: [] }, kind: "read", title: "Read" },
-    ]);
+    ).toEqual([{ type: "tool-start", toolId: "p", name: "", input: { locations: [] }, kind: "read", title: "Read" }]);
   });
 });
 

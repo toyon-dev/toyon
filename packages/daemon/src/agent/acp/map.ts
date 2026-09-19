@@ -63,7 +63,7 @@ function heading(update: { name?: string | null; title: string; kind?: ToolKind 
   title: string;
   kind?: ToolKind;
 } {
-  const name = update.name ?? update.title;
+  const name = typeof update.name === "string" ? update.name : "";
   const host = asRecord(update.rawInput).host;
   if (name === NETWORK_ASK && typeof host === "string") return { name: "network", title: host, kind: "fetch" };
   return { name, title: update.title, ...(update.kind ? { kind: update.kind } : {}) };
@@ -139,7 +139,7 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
       if (!memo) {
         // an update for a call we never saw start (adapter quirk): show it rather than lose it
         memo = {
-          name: update.name ?? update.title ?? "tool",
+          name: update.name ?? "",
           title: update.title ?? update.name ?? "tool",
           ...(update.kind ? { kind: update.kind } : {}),
           content: [],
@@ -160,10 +160,10 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
       if (update.title && update.title !== memo.title) {
         memo.title = update.title;
         refined.title = update.title;
-        // a placeholder title ("Preparing file…") was the name too; the real title is a better one
-        if (!update.name && memo.name !== update.title) refined.name = memo.name = update.title;
       }
-      if (update.name && update.name !== memo.name) refined.name = memo.name = update.name;
+      if (update.name && update.name !== memo.name) {
+        refined.name = memo.name = update.name;
+      }
       if (update.kind && update.kind !== memo.kind) refined.kind = memo.kind = update.kind;
       if (update.rawInput !== undefined) refined.input = update.rawInput;
       if (Object.keys(refined).length > 2 && !memo.ended && out.length === 0) out.push(refined);

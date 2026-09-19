@@ -124,6 +124,23 @@ describe("diffLineKind", () => {
 describe("toolLabel", () => {
   const wt = "/Users/k/.toyon/worktrees/cookbook/spare-0c0d";
 
+  test("an unnamed semantic call keeps its title as the row detail", () => {
+    expect(
+      toolLabel({
+        name: "",
+        title: "Read file '/repo/src/app.ts'",
+        toolKind: "read",
+        input: { locations: [{ path: "/repo/src/app.ts" }] },
+      }),
+    ).toEqual({
+      label: "read",
+      name: "",
+      icon: "book",
+      hint: "Read file '/repo/src/app.ts'",
+      command: "",
+    });
+  });
+
   test("an agent that sends no name gets one from the call's kind", () => {
     const call = {
       name: "grep -rn dark .",

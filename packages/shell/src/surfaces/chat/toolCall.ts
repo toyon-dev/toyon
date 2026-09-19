@@ -18,9 +18,9 @@ export interface OutputBlock {
   text: string;
 }
 
-/** ACP's `name` is optional; agents that omit it get the title as their name, which is the whole
- * call ("grep -rn ... | head -50"), so the row would print the command twice. Name those rows by
- * what kind of call it is and leave the command to the hint. */
+/** ACP's `name` is optional. The daemon preserves that omission as an empty string so the title can
+ * describe the call; a raw command title is still kept out of the name column and shown as the
+ * hint. Name those rows by what kind of call it is and leave the detail to the hint. */
 const KIND_LABEL: Record<ToolKind, string> = {
   read: "read",
   edit: "edit",

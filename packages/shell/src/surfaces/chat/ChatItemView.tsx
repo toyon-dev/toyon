@@ -25,6 +25,7 @@ import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
+import { normalizeThoughtMarkdown } from "./thought.ts";
 import { callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
 
@@ -325,7 +326,7 @@ export const ThoughtRow = memo(function ThoughtRow({
   worktreeId?: string | null;
   fileRoot?: string;
 }) {
-  const html = useMarkdown(item.text, fileRoot ? { fileRoot } : undefined);
+  const html = useMarkdown(normalizeThoughtMarkdown(item.text), fileRoot ? { fileRoot } : undefined);
   const sock = useSock();
   const dispatch = useDispatch();
   const word = streaming ? "Thinking" : "Thought";

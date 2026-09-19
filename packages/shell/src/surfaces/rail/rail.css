@@ -178,9 +178,10 @@
     --rail-shadow-x: -10px;
     /* The unfurl's timing, one pair for the panel and every part that shows with it: how long the
        slide takes and how long it waits first. At rest the pair is the leave's, and leaving is
-       forgiving: a flick off the rail on the way somewhere else does not shut it. Hover shortens
-       the wait to an intent pause (below). The walk's peek is a key's: a key is instant, so it waits
-       for nothing and slides in a few frames, the way an alt-tab switcher shows. */
+       forgiving: a flick off the rail on the way somewhere else does not shut it. Hover waits
+       longer, for intent (below), so a pointer passing over the strip opens nothing. The walk's peek
+       is a key's: a key is instant, so it waits for nothing and slides in a few frames, the way an
+       alt-tab switcher shows. */
     --rail-slide: 0.12s;
     --rail-wait: 120ms;
     width: 40px;
@@ -219,8 +220,10 @@
   }
   .rail {
     :where([data-hover]) &:hover {
-      /* hover intent: a brief pause before expanding */
-      --rail-wait: 50ms;
+      /* hover intent: a pointer that crosses the strip on its way to the window edge or the dock
+         is over it for well under this, and a hand that stops on a dot is past it before it feels
+         a wait */
+      --rail-wait: 250ms;
     }
     :where([data-hover]) &:hover .rail-panel,
     &.hold .rail-panel {

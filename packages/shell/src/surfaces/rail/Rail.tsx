@@ -105,6 +105,32 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const railOpen = useStore((s) => s.railOpen);
   // the worktree walk holds the strip's peek open while its modifier is down (app/keys.ts)
   const railPeek = useStore((s) => s.railPeek);
+  // That peek unfurls the panel over the dock beside it, under whatever the pointer is resting
+  // on, and from then on the hover would keep the panel open after the key that opened it was
+  // let go. So a peek that opened with no pointer on the strip goes quiet: the rail does not
+  // answer the pointer (rail.css) until the pointer moves, since a hand that moves it is
+  // reaching for the rail, and the hover is that hand's again.
+  const railRef = useRef<HTMLDivElement>(null);
+  const [quiet, setQuiet] = useState(false);
+  useOnChange([railPeek], () => {
+    if (railPeek && !onScreen && !touch && !railRef.current?.matches(":hover")) setQuiet(true);
+  });
+  useEffect(() => {
+    if (!quiet) return;
+    // the first move seen is the baseline, not a move: a layout change under a resting pointer
+    // can be reported as one, and the panel opening is such a change
+    let from: { x: number; y: number } | null = null;
+    const onMove = (e: PointerEvent) => {
+      if (!from) {
+        from = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      if (Math.abs(e.clientX - from.x) + Math.abs(e.clientY - from.y) < 3) return;
+      setQuiet(false);
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, [quiet]);
   // ⌘⇧K hands the keyboard to the row marked current so ↑↓ walk on from there; only a bump seen
   // after mount counts
   const focusReq = useStore((s) => s.focusRail);
@@ -549,6 +575,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard's way to the pin is its chord, and the rows inside are buttons of their own
     <div
+      ref={railRef}
       className={cx(
         "rail",
         // a screen is a drawer kept open: rail.css lists it beside hover, hold and the pin wherever
@@ -556,6 +583,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         onScreen && "rail-screen",
         // the peek is the strip's alone; a screen has no edge to unfurl from
         !onScreen && (graftMode || menu?.owner === "rail" || railPeek) && "hold",
+        quiet && "quiet",
         // a screen is pinned as well as being a screen: the peek's panel lifts over the docks
         // beside it, and on a screen that lift would put the list over the palette and every
         // picker, which open inside the same column

@@ -169,9 +169,10 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
         if (!d) return;
         switch (d.type) {
           case "key":
-            // bridge chord forwarding: replay as a real keydown so the app's handler sees it
+            // bridge chord forwarding: replay as a real keydown so the app's handler sees it, and
+            // the release of the modifier it rode as the keyup the walk's peek waits for
             window.dispatchEvent(
-              new KeyboardEvent("keydown", {
+              new KeyboardEvent(d.up ? "keyup" : "keydown", {
                 key: d.key,
                 metaKey: d.meta,
                 ctrlKey: !!d.ctrl,

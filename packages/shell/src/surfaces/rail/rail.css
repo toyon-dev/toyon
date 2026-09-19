@@ -223,6 +223,15 @@
         width 0.12s ease 50ms,
         box-shadow 0.12s ease 50ms;
     }
+    /* the walk's peek opened under a resting pointer (Rail.tsx): the rail does not answer that
+       pointer until it moves, or the hover would hold the panel open after the key that opened
+       it was let go. A key is instant, so a quiet peek comes and goes without the hover's pauses. */
+    &.quiet {
+      pointer-events: none;
+    }
+    &.quiet .rail-panel {
+      transition-delay: 0s;
+    }
     /* kept open: the rail is a column of its own, so it takes the width out of the layout and drops the
    shadow with it. Nothing overlaps, nothing to lift off the page. A screen is a drawer kept open
    too, in every list below that draws one: the fourth reason beside hover, hold and the pin. */

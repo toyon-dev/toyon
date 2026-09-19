@@ -85,6 +85,18 @@ let zen = false;
 // forward Toyon chords to the shell even when the preview has focus (plain ⌘F stays the
 // page's own find: it isn't in the table). Escape is forwarded too but not taken: the shell
 // closes whatever it has open, and the page still gets it for its own dialogs.
+// The release of the modifier a forwarded chord rode goes too: the worktree walk (⌥↑/↓) holds
+// the rail open while that key is down, and the keyup lands in here, where the shell cannot see it.
+let rode: string | null = null;
+window.addEventListener(
+  "keyup",
+  (e) => {
+    if (window.__toyonShell || e.key !== rode) return;
+    rode = null;
+    post({ type: "key", key: e.key, meta: false, up: true });
+  },
+  true,
+);
 window.addEventListener(
   "keydown",
   (e) => {
@@ -106,6 +118,7 @@ window.addEventListener(
     e.preventDefault();
     e.stopPropagation();
     post({ type: "key", key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
+    rode = e.altKey ? "Alt" : e.ctrlKey ? "Control" : e.metaKey ? "Meta" : null;
   },
   true,
 );

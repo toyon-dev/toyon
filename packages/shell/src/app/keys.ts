@@ -14,7 +14,7 @@ import {
 } from "../state/store.ts";
 import type { PaneKind } from "../ui/Pane.tsx";
 import { previewBus, togglePick } from "./previewBus.ts";
-import { PEEK_FALLBACK_MS, type WalkModifier, walkModifier } from "./railPeek.ts";
+import { modifierHeld, type WalkModifier, walkModifier } from "./railPeek.ts";
 import { railWalk } from "./railWalk.ts";
 import { unseenJump } from "./unseenJump.ts";
 
@@ -35,12 +35,11 @@ export function useChords() {
   const sock = useSock();
   useEffect(() => {
     // The walk's peek (railPeek.ts): the modifier the last walk press rode, while the collapsed
-    // rail is held open for it, and the timer that closes the peek if that key's release is
-    // never seen. Holding the modifier and pressing again keeps the same peek and resets the timer.
+    // rail is held open for it. The peek lasts exactly as long as that key is down: its keyup
+    // ends it, and so does the first key or pointer event that reports the key up, for a release
+    // that was never seen. Holding the modifier and pressing again keeps the same peek.
     let peekMod: WalkModifier | null = null;
-    let peekTimer: ReturnType<typeof setTimeout> | undefined;
     const endPeek = () => {
-      clearTimeout(peekTimer);
       peekMod = null;
       store.dispatch({ a: "rail-peek", on: false });
     };
@@ -48,14 +47,16 @@ export function useChords() {
       // a pinned rail is already wide; the peek is only for the strip
       if (store.getState().railOpen) return;
       peekMod = walkModifier(e);
-      clearTimeout(peekTimer);
-      peekTimer = setTimeout(endPeek, PEEK_FALLBACK_MS);
       store.dispatch({ a: "rail-peek", on: true });
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (peekMod && e.key === peekMod) endPeek();
     };
+    const onMods = (e: KeyboardEvent | PointerEvent) => {
+      if (peekMod && !modifierHeld(e, peekMod)) endPeek();
+    };
     const onKey = (e: KeyboardEvent) => {
+      onMods(e);
       const s = store.getState();
       const { dispatch } = store;
       // a walk that lands on a row is there to read and reply, so the composer is offered the
@@ -278,13 +279,16 @@ export function useChords() {
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("pointermove", onMods);
+    window.addEventListener("pointerdown", onMods);
     // the release lands in whatever window took the keyboard, so leaving this one ends the peek
     window.addEventListener("blur", endPeek);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("pointermove", onMods);
+      window.removeEventListener("pointerdown", onMods);
       window.removeEventListener("blur", endPeek);
-      clearTimeout(peekTimer);
     };
   }, [store, sock]);
 

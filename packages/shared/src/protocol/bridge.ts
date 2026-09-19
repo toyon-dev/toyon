@@ -111,7 +111,9 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
   /** a file dropped on the preview that the page itself did not take. The bridge swallowed it:
    * left alone the frame navigates to the file and the running app is gone */
   z.object({ type: z.literal("drop-files") }),
-  /** a Toyon chord pressed while the preview had focus; the shell replays it as a keydown */
+  /** a Toyon chord pressed while the preview had focus; the shell replays it as a keydown. With
+   * `up`, the release of the modifier that chord rode, replayed as a keyup: the worktree walk's
+   * peek lasts while its modifier is down, and the bridge is the only one to see it let go */
   z.object({
     type: z.literal("key"),
     key: z.string(),
@@ -119,6 +121,7 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
     ctrl: z.boolean().optional(),
     shift: z.boolean().optional(),
     alt: z.boolean().optional(),
+    up: z.boolean().optional(),
   }),
 ]);
 export type BridgeToShellMsg = z.infer<typeof bridgeToShellSchema>;

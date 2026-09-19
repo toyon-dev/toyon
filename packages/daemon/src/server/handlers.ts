@@ -3,7 +3,7 @@
 // run git or decide policy.
 
 import type { ClientMsg, ServerMsg, WorktreeInfo } from "@toyon/shared";
-import { pickTheme, SHELL_STREAM } from "@toyon/shared";
+import { isLead, pickTheme, SHELL_STREAM } from "@toyon/shared";
 import type { AgentAccounts } from "../agent/accounts.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { agentConfigFiles, describeAgentConfig } from "../agent/config.ts";
@@ -183,8 +183,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   // looking is what starts a cold worktree and wakes a sleeping one; the reply does not wait for it
-  view(msg, ctx) {
+  view(msg, ctx, s) {
     ctx.view(msg.worktreeId);
+    // opening the plus is when the trunk follows origin: the row shown is the latest main, and
+    // the fetch this costs is the one the plus is allowed
+    const wt = msg.worktreeId ? s.state.worktree(msg.worktreeId) : undefined;
+    if (wt && isLead(wt)) fireAndForget(wt.repoId, s.worktrees.syncTrunk(wt.repoId), "trunk sync");
   },
 
   seen(msg, _ctx, s) {

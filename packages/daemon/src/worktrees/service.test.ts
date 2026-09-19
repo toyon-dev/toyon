@@ -2043,6 +2043,83 @@ describe("main against origin", () => {
     expect((await w.worktrees.pull(main.id)).message).toBe("already up to date with origin");
   });
 
+  /** a commit on origin that main here does not have, made from a clone so main itself stays put */
+  function pushUpstream(message: string): string {
+    const bare = join(dirname(w.repo), "origin.git");
+    const clone = join(dirname(w.repo), "clone");
+    if (!existsSync(clone)) sh(dirname(w.repo), "git", "clone", "-q", bare, clone);
+    sh(clone, "git", "pull", "-q", "--rebase");
+    sh(clone, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-qm", message);
+    sh(clone, "git", "push", "-q", "origin", "main");
+    return sh(clone, "git", "rev-parse", "HEAD").trim();
+  }
+  /** a service with no fetch on record, the way a minute's wait leaves the trunk */
+  const fresh = () =>
+    new WorktreeService({
+      state: w.state,
+      hub: w.hub,
+      runtime: w.runtime,
+      paths: w.paths,
+      agents: w.registry,
+      namer: async () => null,
+    });
+  const headOf = (path: string) => sh(path, "git", "rev-parse", "HEAD").trim();
+
+  test("syncTrunk fast-forwards a clean main behind origin, and fetches once a minute at most", async () => {
+    const repoId = await withUpstream();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    const upstream = sh(w.repo, "git", "rev-parse", "origin/main").trim();
+    await w.worktrees.syncTrunk(repoId);
+    expect(headOf(w.repo)).toBe(upstream);
+    expect((await w.worktrees.trunks())[repoId]).toMatchObject({ id: main.id, behind: 0 });
+    expect((await w.worktrees.trunks())[repoId]?.stale).toBeUndefined();
+    // origin moves again within the minute: the plus opened now does not fetch, so nothing knows
+    const b = pushUpstream("b");
+    await w.worktrees.syncTrunk(repoId);
+    expect(sh(w.repo, "git", "rev-parse", "origin/main").trim()).toBe(upstream);
+    expect(headOf(w.repo)).not.toBe(b);
+    // a minute later it does, and main follows
+    await fresh().syncTrunk(repoId);
+    expect(headOf(w.repo)).toBe(b);
+  });
+
+  test("a dirty or diverged main is left where it is, and the trunk says which", async () => {
+    const repoId = await withUpstream();
+    const before = headOf(w.repo);
+    writeFileSync(join(w.repo, "wip.txt"), "x\n");
+    const dirty = fresh();
+    await dirty.syncTrunk(repoId);
+    expect(headOf(w.repo)).toBe(before);
+    expect((await dirty.trunks())[repoId]).toMatchObject({ behind: 1, dirty: 1, stale: "dirty" });
+    // committed here instead: main has its own commit and origin has one too
+    rmSync(join(w.repo, "wip.txt"));
+    sh(w.repo, "git", "commit", "--allow-empty", "-qm", "mine");
+    const diverged = fresh();
+    await diverged.syncTrunk(repoId);
+    expect((await diverged.trunks())[repoId]).toMatchObject({ behind: 1, stale: "diverged" });
+    expect(sh(w.repo, "git", "log", "-1", "--format=%s").trim()).toBe("mine");
+  });
+
+  test("a main with no upstream says so and is not fetched", async () => {
+    const repoId = await registered();
+    const svc = fresh();
+    await svc.syncTrunk(repoId);
+    const trunk = (await svc.trunks())[repoId]!;
+    expect(trunk.behind).toBeUndefined();
+    expect(trunk.stale).toBe("no-upstream");
+  });
+
+  test("the rows' own fetch finding main behind takes origin in the same way", async () => {
+    const repoId = await withUpstream();
+    const upstream = sh(w.repo, "git", "rev-parse", "origin/main").trim();
+    const c = pushUpstream("c");
+    // a service that has never fetched: the rows count main, fetch, and follow
+    const svc = fresh();
+    await svc.rows();
+    await until(() => headOf(w.repo) === c);
+    expect(headOf(w.repo)).not.toBe(upstream);
+  });
+
   test("pull refuses a dirty main and a worktree, and says why", async () => {
     const repoId = await withUpstream();
     const wt = await w.worktrees.create(repoId, "feature");

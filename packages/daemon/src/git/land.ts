@@ -3,7 +3,7 @@
 // rather than merged with it, so a branch reads as if it started from today's main and every
 // method after that is one command; a branch someone adopted keeps its history and is merged with.
 
-import type { MergeMethod, PrState } from "@toyon/shared";
+import type { MergeMethod, PrState, TrunkStatus } from "@toyon/shared";
 import { GIT, git, NO_PROMPT, run } from "./exec.ts";
 import { gh, ghMethod, prNumberOf } from "./gh.ts";
 import { aheadBehind, behindUpstream, statusFiles } from "./status.ts";
@@ -159,20 +159,46 @@ export async function fastForwardMain(repoPath: string, defaultBr: string): Prom
   }
   const f = await run(GIT, ["fetch", "--quiet"], repoPath, NO_PROMPT);
   if (!f.ok) return { ok: false, message: `fetch failed: ${f.err.slice(0, 200)}` };
+  return fastForwardFetched(repoPath, defaultBr);
+}
+
+/** what a fast-forward onto the last fetch found: `moved` when main took commits, and why it was
+ * left where it was otherwise, in the trunk's own words (see TrunkStatus.stale) */
+export type TrunkFf = ShipResult & { moved?: boolean; stale?: TrunkStatus["stale"] };
+
+/** The fast-forward alone, onto what the last fetch brought. The fetch is the slow half and holds
+ * the network for seconds, so the trunk's own sync runs it outside the repo lock and takes only
+ * this step inside. Git's own refusal of an edit the merge would overwrite stands; a main that is
+ * dirty is `stale: "dirty"` rather than merged around. */
+export async function fastForwardFetched(repoPath: string, defaultBr: string): Promise<TrunkFf> {
+  const current = await git(repoPath, "branch", "--show-current");
+  if (current.out !== defaultBr) {
+    return { ok: false, message: `main checkout is on '${current.out}', not ${defaultBr}; switch it first` };
+  }
   const behind = await behindUpstream(repoPath);
-  if (behind === null) return { ok: false, message: `${defaultBr} has no upstream to pull from` };
-  if (behind === 0) return { ok: true, message: "already up to date with origin" };
+  if (behind === null) {
+    return { ok: false, stale: "no-upstream", message: `${defaultBr} has no upstream to pull from` };
+  }
+  if (behind === 0) return { ok: true, moved: false, message: "already up to date with origin" };
+  if ((await statusFiles(repoPath)).length > 0) {
+    return {
+      ok: false,
+      stale: "dirty",
+      message: `${defaultBr} has uncommitted changes: commit or stash them there first`,
+    };
+  }
   const m = await git(repoPath, "merge", "--ff-only", "@{upstream}");
   if (!m.ok) {
     const clobber = /overwritten by merge|would be overwritten/.test(`${m.out}\n${m.err}`);
-    return {
-      ok: false,
-      message: clobber
-        ? `${defaultBr} here has edits the pull would overwrite; commit or stash them first`
-        : `${defaultBr} has diverged from origin; reconcile it in a terminal`,
-    };
+    return clobber
+      ? {
+          ok: false,
+          stale: "dirty",
+          message: `${defaultBr} here has edits the pull would overwrite; commit or stash them first`,
+        }
+      : { ok: false, stale: "diverged", message: `${defaultBr} has diverged from origin; reconcile it in a terminal` };
   }
-  return { ok: true, message: `pulled ${behind} commit(s) from origin` };
+  return { ok: true, moved: true, message: `pulled ${behind} commit(s) from origin` };
 }
 
 /** push main to origin after a local land; a rejection means origin moved in between */

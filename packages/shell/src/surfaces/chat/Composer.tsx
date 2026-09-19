@@ -36,7 +36,7 @@ import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
-import { behindNote, originNote } from "../chips/baseNote.ts";
+import { behindNote, canPull, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
@@ -240,7 +240,7 @@ export function Composer({
   // the checkout itself, since main is not a row while its spare stands in for it
   const trunk = useStore((s) => trunkOf(s, repoId));
   const trunkOp = useStore((s) => (trunk ? s.shipping[trunk.id] : undefined));
-  const origin = trunk && spawning ? originNote(trunk.behind) : null;
+  const origin = trunk && repo && spawning ? originNote(repo.defaultBranch, trunk) : null;
   // a draft's own session may not have run yet: a worktree of this repo that runs the same agent
   // stands in, the lead first (commandSource says why that is sound)
   const source = useStore((s) => (drafting ? commandSource(s.rows, repoId, spawnAgent, defaultAgent) : id));
@@ -1098,19 +1098,22 @@ export function Composer({
           {origin && trunk && (
             <div className="hint composer-note">
               <span>{origin}</span>
-              <Button
-                variant="outline"
-                busy={trunkOp === "pull-main"}
-                disabled={!!trunkOp || trunk.dirty > 0}
-                data-tip={
-                  trunk.dirty > 0
-                    ? `commit or discard the changes on ${repo?.defaultBranch} first`
-                    : "Fast-forward main to origin"
-                }
-                onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: trunk.id })}
-              >
-                pull
-              </Button>
+              {/* a diverged main is a terminal's job: no button promises what a fast-forward cannot do */}
+              {canPull(trunk) && (
+                <Button
+                  variant="outline"
+                  busy={trunkOp === "pull-main"}
+                  disabled={!!trunkOp || trunk.dirty > 0}
+                  data-tip={
+                    trunk.dirty > 0
+                      ? `commit or discard the changes on ${repo?.defaultBranch} first`
+                      : "Fast-forward main to origin"
+                  }
+                  onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: trunk.id })}
+                >
+                  pull
+                </Button>
+              )}
             </div>
           )}
           {behind && active && id && (

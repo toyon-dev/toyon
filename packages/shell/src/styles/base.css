@@ -519,16 +519,16 @@
     & a {
       color: var(--blue);
     }
-    /* A file is a place inside Toyon, not a trip out to the web. Keep it in the prose's palette;
-       the underline and path tooltip still say it can be opened without turning every filename
-       into a chip. */
+    /* A file is a place inside Toyon, not a trip out to the web. It keeps the colour of the words
+       around it, so a sentence naming five files still reads as one sentence; the underline alone
+       says it can be opened, and goes solid under the pointer. Never a tier down: the one thing in
+       the line you can click must not be its dimmest word. */
     & a.file-link {
-      color: var(--text1);
-      text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+      color: inherit;
+      text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
       text-underline-offset: 2px;
     }
     :where([data-hover]) & a.file-link:hover {
-      color: var(--text0);
       text-decoration-color: currentColor;
     }
     & blockquote {

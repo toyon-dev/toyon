@@ -69,6 +69,14 @@ export const NO_PROMPT: Record<string, string> = {
   GIT_SSH_COMMAND: "ssh -o BatchMode=yes",
 };
 
+/**
+ * Env every spawn gets. `GIT_OPTIONAL_LOCKS=0`: a read such as `git status` opportunistically
+ * refreshes stale stat data and writes the index back through `.git/index.lock`. The daemon reads
+ * the main checkout's status every few seconds, so a `git pull` typed in a terminal at that moment
+ * failed with "Unable to create index.lock: File exists". With the switch, a read never takes the lock.
+ */
+const SPAWN_ENV: Record<string, string> = { GIT_OPTIONAL_LOCKS: "0" };
+
 export interface GitResult {
   ok: boolean;
   out: string;
@@ -95,7 +103,7 @@ export async function run(
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore",
-      env: { ...process.env, ...env },
+      env: { ...process.env, ...SPAWN_ENV, ...env },
     });
     const [rawOut, err, status] = await Promise.all([
       new Response(p.stdout).text(),
@@ -138,7 +146,7 @@ export async function runLive(
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore",
-      env: { ...process.env, ...opts.env },
+      env: { ...process.env, ...SPAWN_ENV, ...opts.env },
     });
     const stop = () => p.kill();
     opts.signal?.addEventListener("abort", stop, { once: true });

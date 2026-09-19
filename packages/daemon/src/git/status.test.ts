@@ -1,8 +1,27 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { existsSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpRepo } from "../../test/helpers/tmp-repo.ts";
-import { parsePorcelain, statusFilesWithCounts } from "./status.ts";
+import { parsePorcelain, statusFiles, statusFilesWithCounts } from "./status.ts";
+
+describe("statusFiles", () => {
+  const { repo, cleanup } = tmpRepo();
+  afterAll(cleanup);
+
+  test("a status read never writes the index", async () => {
+    // a tracked file whose stat no longer matches the index: git re-hashes it, finds it unchanged,
+    // and would normally write the fresh stat back through .git/index.lock. The daemon reads the
+    // main checkout's status every few seconds, so that write collided with a `git pull` typed in
+    // a terminal ("Unable to create index.lock: File exists")
+    const index = join(repo, ".git", "index");
+    const stale = new Date(Date.now() - 3_600_000);
+    utimesSync(join(repo, "README.md"), stale, stale);
+    const before = statSync(index).mtimeMs;
+    expect(await statusFiles(repo)).toEqual([]);
+    expect(existsSync(join(repo, ".git", "index.lock"))).toBe(false);
+    expect(statSync(index).mtimeMs).toBe(before);
+  });
+});
 
 describe("parsePorcelain", () => {
   test("plain modified / added / untracked", () => {

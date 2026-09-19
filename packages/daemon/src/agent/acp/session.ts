@@ -1,8 +1,8 @@
 // One agent session per worktree over ACP. The adapter process is spawned on the first prompt and
 // reaped a few minutes after the last turn ends, so idle worktrees cost nothing; the next prompt
-// respawns it and resumes the agent's own session (session/load) when the agent supports that.
-// The transcript JSONL is the source of truth for rendering; the agent's session id only serves
-// resume. Two layers on purpose: a Conn (process + initialize) that logging in and side questions
+// respawns it and picks the agent's own session back up (session/resume) when the agent supports
+// that. The transcript JSONL is the source of truth for rendering; the agent's session id only
+// serves resume, and the agent is never asked to replay its history. Two layers on purpose: a Conn (process + initialize) that logging in and side questions
 // need, and a Live session on top of it that the chat turns use.
 
 import { randomUUID } from "node:crypto";
@@ -99,7 +99,12 @@ interface Conn {
   spec: AgentSpec;
   bounds: Bounds;
   authMethods: acp.AuthMethod[];
-  loadSession: boolean;
+  /** session/resume: the agent can pick its own session back up without replaying it. The
+   * transcript on disk is what the chat is drawn from, so a replay (session/load) has nothing to
+   * tell this side and is never asked for: every replayed chunk would have to be told apart from
+   * live output, and the SDK hands a notification over in more ticks than a response, so the tail
+   * of a replay can land after the request that carried it has resolved. */
+  resumeSession: boolean;
   closeSupported: boolean;
   /** session/delete: a side session is removed once its answer is in */
   deleteSupported: boolean;
@@ -175,8 +180,6 @@ export class AcpSession implements AgentAdapter {
   /** the spawn in flight, shared by whoever asks for the connection meanwhile */
   private connecting: Promise<Conn> | null = null;
   private live: Live | null = null;
-  /** session/load replays the history as updates; nothing from before the load resolves is new */
-  private loading = false;
   private reaper: ReturnType<typeof setTimeout> | null = null;
   /** questions in flight on side sessions; the reaper waits for them */
   private asking = 0;
@@ -668,7 +671,7 @@ export class AcpSession implements AgentAdapter {
         spec,
         bounds,
         authMethods: init.authMethods ?? [],
-        loadSession: !!init.agentCapabilities?.loadSession,
+        resumeSession: !!init.agentCapabilities?.sessionCapabilities?.resume,
         closeSupported: !!init.agentCapabilities?.sessionCapabilities?.close,
         deleteSupported: !!init.agentCapabilities?.sessionCapabilities?.delete,
         acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
@@ -693,10 +696,9 @@ export class AcpSession implements AgentAdapter {
     let modes: acp.SessionModeState | null | undefined;
     let configOptions: acp.SessionConfigOption[] | null | undefined;
     let resumed = false;
-    if (sessionId && conn.loadSession) {
-      this.loading = true;
+    if (sessionId && conn.resumeSession) {
       try {
-        const r = await conn.ctx.request(acp.methods.agent.session.load, {
+        const r = await conn.ctx.request(acp.methods.agent.session.resume, {
           sessionId,
           cwd: this.d.cwd,
           mcpServers: [],
@@ -708,8 +710,6 @@ export class AcpSession implements AgentAdapter {
       } catch (e) {
         if (isAuthRequired(e)) throw e;
         log.warn(this.d.worktreeId, `could not resume agent session ${sessionId}; starting a new one`, e);
-      } finally {
-        this.loading = false;
       }
     }
     if (!resumed) {
@@ -820,17 +820,15 @@ export class AcpSession implements AgentAdapter {
     side: Map<string, (text: string) => void>,
     commands: Map<string, AgentCommand[]>,
   ) {
-    // ahead of both guards below: the list arrives before session/new resolves (so `live` is still
-    // null) and again during a session/load replay (so `loading` is true). Buffered rather than
-    // published, because an ask session's list lands before askOnce has registered its id in
-    // `side` and must not win over the worktree's own.
+    // ahead of the session guard below: the list arrives before session/new resolves (so `live` is
+    // still null). Buffered rather than published, because an ask session's list lands before
+    // askOnce has registered its id in `side` and must not win over the worktree's own.
     if (params.update.sessionUpdate === "available_commands_update") {
       const mapped = mapCommands(params.update.availableCommands);
       commands.set(params.sessionId, mapped);
       if (this.live && params.sessionId === this.live.sessionId) this.setCommands(mapped);
       return;
     }
-    if (this.loading) return;
     const listener = side.get(params.sessionId);
     if (listener) {
       const u = params.update;

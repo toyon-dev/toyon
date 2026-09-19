@@ -53,7 +53,9 @@ interface FakeAgent {
   app: acp.AgentApp;
   inits: acp.InitializeRequest[];
   newSessions: acp.NewSessionRequest[];
+  /** session/load, which replays history: registered so a client that asks for one is caught */
   loads: acp.LoadSessionRequest[];
+  resumes: acp.ResumeSessionRequest[];
   prompts: acp.PromptRequest[];
   steers: Array<{ sessionId: string; prompt: acp.ContentBlock[]; _meta?: unknown }>;
   cancels: number;
@@ -69,8 +71,8 @@ interface FakeAgent {
   effort: string;
   options: () => acp.SessionConfigOption[];
   script: PromptScript;
-  loadSession: boolean;
-  failLoad: boolean;
+  resumeSession: boolean;
+  failResume: boolean;
   /** what a side question asks for besides new and prompt, in the order it arrived:
    * `config <id>=<value>`, `mode <id>`, `close <sessionId>`, `delete <sessionId>` */
   calls: string[];
@@ -79,7 +81,7 @@ interface FakeAgent {
 function fakeAgent(
   script: PromptScript,
   opts: {
-    loadSession?: boolean;
+    resumeSession?: boolean;
     withModes?: boolean;
     currentMode?: string;
     images?: boolean;
@@ -107,6 +109,7 @@ function fakeAgent(
     effort: "default",
     options: () => configOptions(),
     loads: [],
+    resumes: [],
     prompts: [],
     steers: [],
     cancels: 0,
@@ -115,8 +118,8 @@ function fakeAgent(
     modes: [],
     configs: [],
     script,
-    loadSession: opts.loadSession ?? true,
-    failLoad: false,
+    resumeSession: opts.resumeSession ?? true,
+    failResume: false,
     calls: [],
     app: null!,
   };
@@ -183,10 +186,12 @@ function fakeAgent(
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
         agentCapabilities: {
-          loadSession: f.loadSession,
+          // every real adapter advertises load; the point is that toyon must not take it
+          loadSession: true,
           promptCapabilities: { image: opts.images ?? false },
           ...(opts.logout ? { auth: { logout: {} } } : {}),
           sessionCapabilities: {
+            ...(f.resumeSession ? { resume: {} } : {}),
             ...(opts.caps?.close ? { close: {} } : {}),
             ...(opts.caps?.delete ? { delete: {} } : {}),
           },
@@ -231,13 +236,20 @@ function fakeAgent(
     })
     .onRequest(acp.methods.agent.session.load, async (c) => {
       f.loads.push(c.params);
-      if (f.failLoad) throw new acp.RequestError(-32602, "no such session");
-      // the replay: a client must not treat this as new output
-      await c.client.notify(acp.methods.client.session.update, {
-        sessionId: c.params.sessionId,
-        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "REPLAY" } },
-      });
+      // the replay: whatever a client did with these, the last of them has been seen to land after
+      // the response resolves, so the only safe number of them to receive is none
+      for (const text of ["RE", "PLAY"]) {
+        await c.client.notify(acp.methods.client.session.update, {
+          sessionId: c.params.sessionId,
+          update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+        });
+      }
       return { modes };
+    })
+    .onRequest(acp.methods.agent.session.resume, (c) => {
+      f.resumes.push(c.params);
+      if (f.failResume) throw new acp.RequestError(-32602, "no such session");
+      return { modes, configOptions: configOptions() };
     })
     .onRequest(acp.methods.agent.session.setMode, (c) => {
       f.modes.push(c.params.modeId);
@@ -786,7 +798,7 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
-  test("the reaper kills an idle process; the next prompt respawns, resumes via session/load, and drops the replay", async () => {
+  test("the reaper kills an idle process; the next prompt respawns and resumes via session/resume, never session/load", async () => {
     const fake = fakeAgent(say("again"));
     const w = world(fake, claudeSpec, 10);
     w.session.send("first");
@@ -796,8 +808,9 @@ describe("AcpSession", () => {
     w.session.send("second");
     await w.idle();
     expect(w.links).toHaveLength(2);
-    expect(fake.loads).toHaveLength(1);
-    expect(fake.loads[0]!.sessionId).toBe("s1");
+    expect(fake.resumes).toHaveLength(1);
+    expect(fake.resumes[0]!.sessionId).toBe("s1");
+    expect(fake.loads).toHaveLength(0);
     expect(fake.newSessions).toHaveLength(1);
     expect(w.events.filter((e) => e.type === "text-delta").map((e) => (e as { text: string }).text)).toEqual([
       "again",
@@ -807,30 +820,32 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
-  test("a failed session/load falls back to session/new and the stored id moves on", async () => {
+  test("a failed session/resume falls back to session/new and the stored id moves on", async () => {
     const fake = fakeAgent(say("x"));
     const w = world(fake, claudeSpec, 10);
     w.session.send("first");
     await w.idle();
     for (let i = 0; i < 100 && !w.links[0]!.killed; i++) await Bun.sleep(5);
-    fake.failLoad = true;
+    fake.failResume = true;
     w.session.send("second");
     await w.idle();
-    expect(fake.loads).toHaveLength(1);
+    expect(fake.resumes).toHaveLength(1);
+    expect(fake.loads).toHaveLength(0);
     expect(fake.newSessions).toHaveLength(2);
     expect(w.sessionId()).toBe("s2");
     expect(w.session.status).toBe("idle");
     await w.session.close();
   });
 
-  test("an agent without loadSession always starts a new session after a reap", async () => {
-    const fake = fakeAgent(say("x"), { loadSession: false });
+  test("an agent without session/resume starts a new session after a reap rather than replaying", async () => {
+    const fake = fakeAgent(say("x"), { resumeSession: false });
     const w = world(fake, claudeSpec, 10);
     w.session.send("first");
     await w.idle();
     for (let i = 0; i < 100 && !w.links[0]!.killed; i++) await Bun.sleep(5);
     w.session.send("second");
     await w.idle();
+    expect(fake.resumes).toHaveLength(0);
     expect(fake.loads).toHaveLength(0);
     expect(fake.newSessions).toHaveLength(2);
     await w.session.close();

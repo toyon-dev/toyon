@@ -9,7 +9,7 @@ import {
   useActiveId,
   useActiveRow,
   useArchivedPage,
-  useFirstRun,
+  useBare,
   useLocalField,
 } from "../../state/selectors.ts";
 import { type ChangesTab, changesTabShown, repoById } from "../../state/store.ts";
@@ -55,7 +55,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const changesOpen = useStore((s) => s.layout.changes);
   // hidden, not closed, on a first-run screen: the layout remembers nothing of it and the panel is
   // back, as it was, with the first message
-  const firstRun = useFirstRun();
+  const bare = useBare();
   const focusReq = useStore((s) => s.focusChanges);
   const gitInfo = useLocalField(shownId, "git");
   // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
@@ -347,11 +347,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
 
   return (
     <div
-      className={cx(
-        "changes-dock",
-        onScreen && "changes-screen",
-        !onScreen && (!changesOpen || firstRun) && "collapsed",
-      )}
+      className={cx("changes-dock", onScreen && "changes-screen", !onScreen && (!changesOpen || bare) && "collapsed")}
       style={onScreen ? undefined : { width }}
     >
       {/* the count is the working tree's: the committed section under it keeps its own title */}

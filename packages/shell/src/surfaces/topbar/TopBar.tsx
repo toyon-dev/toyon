@@ -9,8 +9,8 @@ import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/co
 import {
   useActive,
   useActiveRepo,
+  useBare,
   useChatCentred,
-  useFirstRun,
   useLocalField,
   usePreviewId,
 } from "../../state/selectors.ts";
@@ -54,7 +54,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   const zen = useStore((s) => s.zen) && !chatCentred;
   const changesOpen = useStore((s) => s.layout.changes);
   const chatOpen = useStore((s) => s.layout.chat);
-  const firstRun = useFirstRun();
+  const bare = useBare();
   const designOpen = useStore((s) => s.layout.design);
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
@@ -68,7 +68,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   const chatLeft = useStore((s) => s.chatSide) === "left";
   // the panel toggles leave the bar on a first-run screen: their panes are hidden there, and a
   // disabled button still lights and explains itself on hover as if it might do something
-  const changesToggle = !firstRun && (
+  const changesToggle = !bare && (
     <IconButton
       icon="branch"
       label="Changes panel"
@@ -78,7 +78,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
       onClick={() => dispatch({ a: "toggle-changes" })}
     />
   );
-  const chatToggle = !firstRun && !chatCentred && (
+  const chatToggle = !bare && !chatCentred && (
     <IconButton
       icon="chat"
       label="Chat panel"
@@ -130,7 +130,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
           {...cm.contextMenu(() => settingsItems(store.getState(), { sock, dispatch }))}
         />
-        {!firstRun && !chatCentred && (
+        {!bare && !chatCentred && (
           <IconButton
             icon="palette"
             label="Design system"

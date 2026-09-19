@@ -845,6 +845,14 @@ export function isFirstRun(s: State): boolean {
   return s.newProject !== null || isGreenfield(s);
 }
 
+/** The window shows one thing and nothing beside it: either first-run screen, or a page served by a
+ * daemon it cannot talk to. Nothing was read off that daemon's socket, so the rail, the docks and
+ * the panes would all stand empty around the card that offers the restart, and an empty rail beside
+ * "your chats are still replying" reads as the chats being gone. */
+export function isBare(s: State): boolean {
+  return s.incompatible || isFirstRun(s);
+}
+
 /** A repo with nothing to run: its settings were confirmed with no processes, or detection assumed
  * so from its build file (a Rust CLI, a Go library) and nobody has opened setup to say otherwise.
  * Nothing will ever answer on its preview, so there is no preview to show. */

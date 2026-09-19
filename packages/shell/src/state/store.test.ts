@@ -13,6 +13,7 @@ import {
   type EditorView,
   EMPTY_LOCAL,
   initialState,
+  isBare,
   isChatCentred,
   isFirstRun,
   isGreenfield,
@@ -1237,6 +1238,12 @@ describe("streams and notices", () => {
     const s = run([{ a: "connected", v: true }, { a: "incompatible" }]);
     expect(s.incompatible).toBe(true);
     expect(s.connected).toBe(false);
+  });
+  test("an incompatible tab is bare: the rail, the docks and the panes have nothing to show", () => {
+    expect(isBare(run([{ a: "connected", v: true }]))).toBe(false);
+    const s = run([{ a: "connected", v: true }, { a: "incompatible" }]);
+    expect(isBare(s)).toBe(true);
+    expect(isFirstRun(s)).toBe(false);
   });
   test("the update frame replaces what hello said about Toyon's own version", () => {
     const update = {

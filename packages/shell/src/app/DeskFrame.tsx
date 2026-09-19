@@ -2,7 +2,7 @@ import { useState } from "react";
 import { appItems } from "../state/actions/app.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
-import { useArchivedPage, useChatCentred, useFirstRun, useTouch } from "../state/selectors.ts";
+import { useArchivedPage, useBare, useChatCentred, useTouch } from "../state/selectors.ts";
 import { Center } from "../surfaces/center/Center.tsx";
 import { ChangesDock } from "../surfaces/changes/ChangesDock.tsx";
 import { ChatDock } from "../surfaces/chat/ChatDock.tsx";
@@ -33,7 +33,7 @@ export function DeskFrame() {
   const store = useStoreInstance();
   const dispatch = useDispatch();
   const sock = useSock();
-  const firstRun = useFirstRun();
+  const bare = useBare();
   const touch = useTouch();
   // a project with nothing to run has the chat as its centre: no dock beside it, and no page for
   // zen to give the window to (a zen left on by another project waits for that one)
@@ -43,11 +43,13 @@ export function DeskFrame() {
   // centre of an empty project. So is the rail: on the page it lists a project that is not the one
   // being made, and on an empty project its only row is main, already open, with no new worktree to
   // offer, since one off the root commit would take the scaffold to a branch while main stayed blank.
+  // All three go as well on a page its daemon cannot talk to, where they have nothing to show and
+  // the card in the centre lists the chats itself.
   // The chat dock is hidden on an archived worktree's page too, whose chat is the page itself; the
   // changes dock stays, showing that worktree's work rather than the row's underneath.
   const archivedPage = useArchivedPage();
-  const changesOpen = useStore((s) => s.layout.changes) && !firstRun;
-  const chatOpen = useStore((s) => s.layout.chat) && !firstRun && !chatCentred && !archivedPage;
+  const changesOpen = useStore((s) => s.layout.changes) && !bare;
+  const chatOpen = useStore((s) => s.layout.chat) && !bare && !chatCentred && !archivedPage;
   const chatSide = useStore((s) => s.chatSide);
   const railOpen = useStore((s) => s.railOpen);
 
@@ -87,11 +89,11 @@ export function DeskFrame() {
   // archived chat in the centre is the one chat panel too: a second composer, hidden, would answer
   // the focus chord and take a dropped file's bounds
   const chat = !chatCentred && !archivedPage && <ChatDock width={chatW} />;
-  const rail = !firstRun && <Rail width={railW} />;
+  const rail = !bare && <Rail width={railW} />;
   // its handle only while it is a column: the strip peeks over the dock beside it, and a peek is
   // not resized
   const railHandle = (side: DockSide) =>
-    !firstRun && railOpen && <div className={`dock-resize ${side}`} onPointerDown={dragRail} />;
+    !bare && railOpen && <div className={`dock-resize ${side}`} onPointerDown={dragRail} />;
   const chatLeft = chatSide === "left";
   const first = chatLeft
     ? { dock: chat, open: chatOpen, drag: dragChat }

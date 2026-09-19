@@ -12,8 +12,8 @@ import {
   useActiveRepoNeedingSetup,
   useActiveRow,
   useArchivedPage,
+  useBare,
   useChatCentred,
-  useFirstRun,
   useGreenfield,
   useLocalField,
   useNewProject,
@@ -99,8 +99,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   // on the new-project view before it
   const greenfield = useGreenfield();
   const newProject = useNewProject();
-  const firstRun = useFirstRun();
-  const termOpen = useStore((s) => s.layout.term) && !firstRun;
+  const bare = useBare();
+  const termOpen = useStore((s) => s.layout.term) && !bare;
   // The terminal pane is keyed by worktree, so choosing another row remounts it. Its terminal takes
   // the keyboard only when the pane is asked for (opened, or ⌘J and "open terminal" on one already
   // open), never when a switch carries an open pane along: the caret stays where the switch left
@@ -116,7 +116,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   // set up on purpose with nothing to run: no page will come, so the chat is what the centre shows
   const chatCentred = useChatCentred();
   // the design pane outlines what it lists in the page, and a project with nothing to run has none
-  const designOpen = useStore((s) => s.layout.design) && !firstRun && !chatCentred;
+  const designOpen = useStore((s) => s.layout.design) && !bare && !chatCentred;
   const reloadReq = useStore((s) => s.reloadReq);
   const theme = useTheme();
   const themeRef = useRef(theme);
@@ -410,7 +410,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
               src={previewUrl(f.id, f.port, remote)}
               title={f.title}
               style={{
-                display: f.id === previewId && !setupRepo && !watching && !firstRun && !chatCentred ? "block" : "none",
+                display: f.id === previewId && !setupRepo && !watching && !bare && !chatCentred ? "block" : "none",
               }}
             />
           ))}

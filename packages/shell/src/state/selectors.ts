@@ -8,8 +8,8 @@ import {
   archivedPageOf,
   asksSetup,
   currentTheme,
+  isBare,
   isChatCentred,
-  isFirstRun,
   isGreenfield,
   localOf,
   previewIdOf,
@@ -79,8 +79,8 @@ export const useTheme = () => useStore(currentTheme);
 /** an empty project nobody has spoken to yet: the composer sits in the centre, the chat dock is hidden */
 export const useGreenfield = (): boolean => useStore(isGreenfield);
 
-/** the new-project view or a greenfield project: the docks, the rail and the panes are hidden */
-export const useFirstRun = (): boolean => useStore(isFirstRun);
+/** the window shows one thing and nothing beside it: the docks, the rail and the panes are hidden */
+export const useBare = (): boolean => useStore(isBare);
 
 /** the active project runs nothing: the chat is the centre's view, and the chat dock is gone */
 export const useChatCentred = (): boolean => useStore(isChatCentred);

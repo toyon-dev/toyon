@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
-import { diffLineKind, diffLines, parseToolOutput, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
+import { composing, diffLineKind, diffLines, parseToolOutput, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 
 describe("parseToolOutput", () => {
   test("splits prose from a fenced block and drops the fences", () => {
@@ -234,6 +234,22 @@ describe("toolLabel", () => {
       input: { command: "cc main.c" },
     };
     expect(toolLabel(call)).toEqual({ label: "tool", name: "", icon: "dot", hint: "cc main.c", command: "" });
+  });
+
+  test("a call whose input has not streamed yet is being written, not stalled", () => {
+    // the adapter's placeholder rows: Bash before its command closes, Write before its path
+    expect(composing({ name: "Terminal", title: "Terminal", toolKind: "execute", input: {} })).toBe(true);
+    expect(composing({ name: "Preparing file…", title: "Preparing file…", toolKind: "edit", input: {} })).toBe(true);
+    expect(composing({ name: "Read File", title: "Read File", toolKind: "read", input: { locations: [] } })).toBe(true);
+    // the first field closing ends it: the row has a path to print
+    expect(composing({ name: "Edit", title: "Edit x.ts", toolKind: "edit", input: { file_path: "/r/x.ts" } })).toBe(
+      false,
+    );
+    // a call with nothing to write is whole on arrival, however empty its input
+    expect(
+      composing({ name: "Compact conversation", title: "Compact conversation", toolKind: "think", input: {} }),
+    ).toBe(false);
+    expect(composing({ name: "tool", title: "tool", input: {} })).toBe(false);
   });
 
   test("the glyph follows the command's verb where the kind only says `run`", () => {

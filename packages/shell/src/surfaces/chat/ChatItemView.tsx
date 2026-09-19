@@ -26,7 +26,7 @@ import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./syntax.ts";
 import { normalizeThoughtMarkdown } from "./thought.ts";
-import { callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
+import { callPath, composing, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
 
 /** the link at or around an element of a rendered message, and the worktree file it names when
@@ -447,7 +447,13 @@ export const ToolRow = memo(
     // are where the work is, and closed once it is done, when what it did is a line with a count
     // and the message after it says what came of it.
     const auto = !!live || (!!run && running);
-    const { label, name, icon, hint } = toolLabel(head, roots);
+    const text = toolLabel(head, roots);
+    // the agent is still typing the call: the row says so in the kind's own word, in place of the
+    // adapter's name for the tool it has not run yet
+    const writing = running && composing(head);
+    const { label, icon } = text;
+    const name = writing ? label : text.name;
+    const hint = writing ? "writing" : text.hint;
     // nothing under the line: no subagent rows, no net change, and no call that ran a command or
     // printed a block (ToolPart draws nothing for those). Read the same way ToolPart does, so the
     // row is a leaf exactly when opening it would show nothing.

@@ -143,6 +143,23 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   };
 }
 
+/** kinds whose input the agent writes out token by token: a command, a path and a replacement, a
+ * pattern. A think or a mode switch has nothing to write, so an empty input there is the whole
+ * call, not a call still being written. */
+const WRITTEN: ReadonlySet<ToolKind> = new Set(["read", "edit", "delete", "move", "search", "execute", "fetch"]);
+
+/** The agent has opened the call but none of its input has streamed yet. The adapter names such a
+ * row after the tool ("Terminal", "Preparing file…"), which reads as the tool stalled rather than
+ * as the agent typing, so the row says what is happening instead. A field arrives as it closes,
+ * and a command is one field, so a long script stays here for as long as it takes to write. */
+export function composing(call: ToolCall): boolean {
+  if (!call.toolKind || !WRITTEN.has(call.toolKind)) return false;
+  const input = call.input as Record<string, unknown> | null;
+  if (!input || typeof input !== "object") return true;
+  // a call with no raw input starts as an empty list of locations (acp/map.ts)
+  return Object.keys(input).every((k) => k === "locations" && Array.isArray(input[k]) && input[k].length === 0);
+}
+
 /** the blocks to show under the row: the adapter repeats the description as the first line of the
  * output, and the summary already carries it */
 export function toolBlocks(call: ToolCall, output: string): OutputBlock[] {

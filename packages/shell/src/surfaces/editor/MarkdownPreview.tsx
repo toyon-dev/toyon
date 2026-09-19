@@ -27,7 +27,7 @@ export function MarkdownPreview({
   const sock = useSock();
   const dispatch = useDispatch();
   const dir = dirOf(path);
-  const html = useMarkdown(text, version === undefined ? undefined : { worktreeId, dir, version });
+  const html = useMarkdown(text, version === undefined ? undefined : { base: { worktreeId, dir, version } });
   const ref = useRef<HTMLDivElement>(null);
   // nothing rendered takes focus on its own, so the body does, as a picture's does: Escape then
   // finds the pane

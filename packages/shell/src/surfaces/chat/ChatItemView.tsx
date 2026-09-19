@@ -6,7 +6,7 @@ import { blockedItems, messageItems } from "../../state/actions/message.ts";
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
-import { type ChatItem, worktreeById } from "../../state/store.ts";
+import { type ChatItem, readingView, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
@@ -20,6 +20,7 @@ import { AskCard } from "./AskCard.tsx";
 import { runCalls, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { useMarkdown } from "./markdown.ts";
+import { worktreeLink } from "./markdownPaths.ts";
 import { netOfCalls } from "./mergeDiffs.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -27,14 +28,49 @@ import { languageOf, type Piece, paintCode, paintDiff, pathInDiff } from "./synt
 import { callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
 
-function Markdown({ text, menu, marked }: { text: string; menu: () => MenuEntry[]; marked?: boolean }) {
-  const html = useMarkdown(text);
+function openChatLink(
+  e: React.MouseEvent,
+  root: string | undefined,
+  worktreeId: string | null | undefined,
+  deps: { dispatch: ReturnType<typeof useDispatch>; sock: ReturnType<typeof useSock> },
+) {
+  const link = (e.target as Element).closest("a");
+  const href = link?.getAttribute("href");
+  const target = root && href ? worktreeLink(root, href) : null;
+  if (!target || !worktreeId) return;
+  e.preventDefault();
+  openFile(deps, {
+    worktreeId,
+    path: target.path,
+    view: target.line ? "file" : readingView(target.path),
+    ...(target.line ? { line: { n: target.line } } : {}),
+  });
+}
+
+function Markdown({
+  text,
+  menu,
+  marked,
+  worktreeId,
+  fileRoot,
+}: {
+  text: string;
+  menu: () => MenuEntry[];
+  marked?: boolean;
+  worktreeId?: string | null;
+  fileRoot?: string;
+}) {
+  const html = useMarkdown(text, fileRoot ? { fileRoot } : undefined);
+  const sock = useSock();
+  const dispatch = useDispatch();
   const cm = useContextMenu("chat");
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
     <div
       className="msg-assistant md row-edge"
       data-state={rowState({ cursor: marked })}
       {...cm.contextMenu(menu)}
+      onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
       dangerouslySetInnerHTML={{ __html: html }}
     />
@@ -278,14 +314,20 @@ export const ThoughtRow = memo(function ThoughtRow({
   item,
   open,
   streaming,
+  worktreeId,
+  fileRoot,
 }: {
   item: ThinkingItem;
   /** the one row of the turn that opens itself */
   open?: boolean;
   /** the agent is thinking right now, rather than off doing what it decided */
   streaming?: boolean;
+  worktreeId?: string | null;
+  fileRoot?: string;
 }) {
-  const html = useMarkdown(item.text);
+  const html = useMarkdown(item.text, fileRoot ? { fileRoot } : undefined);
+  const sock = useSock();
+  const dispatch = useDispatch();
   const word = streaming ? "Thinking" : "Thought";
   return (
     <Fold
@@ -306,8 +348,13 @@ export const ThoughtRow = memo(function ThoughtRow({
       }
     >
       <div className="tool-part">
-        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output */}
-        <div className="tool-out thought-out md" dangerouslySetInnerHTML={{ __html: html }} />
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks */}
+        <div
+          className="tool-out thought-out md"
+          onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
       </div>
     </Fold>
   );
@@ -537,6 +584,8 @@ export const ChatItemView = memo(function ChatItemView({
     const w = worktreeById(store.getState(), worktreeId);
     return w ? wtDir(w.worktree) : null;
   };
+  // the agent runs at the worktree's real path even when the UI gives it a title-shaped symlink
+  const fileRoot = () => worktreeById(store.getState(), worktreeId)?.worktree.path;
   switch (item.kind) {
     case "user":
       return (
@@ -580,7 +629,15 @@ export const ChatItemView = memo(function ChatItemView({
         </div>
       );
     case "assistant":
-      return <Markdown text={item.text} menu={() => messageItems(item, worktreeId ?? null, deps)} marked={marked} />;
+      return (
+        <Markdown
+          text={item.text}
+          menu={() => messageItems(item, worktreeId ?? null, deps)}
+          marked={marked}
+          worktreeId={worktreeId}
+          fileRoot={fileRoot()}
+        />
+      );
     case "error":
       return (
         <div

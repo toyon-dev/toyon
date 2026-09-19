@@ -210,7 +210,14 @@ export function ChatLog({
               marked={entry.at === markAt}
             />
           ) : entry.item.kind === "thinking" ? (
-            <ThoughtRow key={entry.at} item={entry.item} open={i === liveRow} streaming={i === streaming} />
+            <ThoughtRow
+              key={entry.at}
+              item={entry.item}
+              open={i === liveRow}
+              streaming={i === streaming}
+              worktreeId={id}
+              fileRoot={active?.worktree.path}
+            />
           ) : (
             <ChatItemView
               key={entry.at}

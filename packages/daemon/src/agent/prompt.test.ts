@@ -42,6 +42,11 @@ describe("SYSTEM_APPEND", () => {
     expect(SYSTEM_APPEND).toContain("never start a dev server");
     expect(SYSTEM_APPEND).toContain("Each message says where this worktree's preview answers");
   });
+  test("asks for file references the chat can open in Toyon's editor", () => {
+    expect(SYSTEM_APPEND).toContain("Markdown link");
+    expect(SYSTEM_APPEND).toContain("absolute path");
+    expect(SYSTEM_APPEND).toContain("built-in editor");
+  });
 });
 
 describe("ambientBlock", () => {

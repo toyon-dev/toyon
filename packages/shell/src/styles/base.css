@@ -519,6 +519,18 @@
     & a {
       color: var(--blue);
     }
+    /* A file is a place inside Toyon, not a trip out to the web. Keep it in the prose's palette;
+       the underline and path tooltip still say it can be opened without turning every filename
+       into a chip. */
+    & a.file-link {
+      color: var(--text1);
+      text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+      text-underline-offset: 2px;
+    }
+    :where([data-hover]) & a.file-link:hover {
+      color: var(--text0);
+      text-decoration-color: currentColor;
+    }
     & blockquote {
       border-left: 3px solid var(--border1);
       margin: 0 0 8px;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { assetPath, dirOf } from "./markdownPaths.ts";
+import { assetPath, dirOf, worktreeLink } from "./markdownPaths.ts";
 
 describe("a markdown file's relative references", () => {
   test("resolve against the file's folder", () => {
@@ -22,5 +22,25 @@ describe("a markdown file's relative references", () => {
   test("a file's folder", () => {
     expect(dirOf("public/plants/CREDITS.md")).toBe("public/plants");
     expect(dirOf("README.md")).toBe("");
+  });
+});
+
+describe("a file link in chat", () => {
+  const root = "/Users/me/project";
+
+  test("becomes a worktree path, with the line when the agent names one", () => {
+    expect(worktreeLink(root, "/Users/me/project/src/App.tsx:42")).toEqual({ path: "src/App.tsx", line: 42 });
+    expect(worktreeLink(root, "/Users/me/project/docs/hello%20there.md#L8-L12")).toEqual({
+      path: "docs/hello there.md",
+      line: 8,
+    });
+    expect(worktreeLink(`${root}/`, "/Users/me/project/README.md")).toEqual({ path: "README.md" });
+  });
+
+  test("leaves web, relative and out-of-worktree links to the browser", () => {
+    expect(worktreeLink(root, "https://example.com/App.tsx")).toBeNull();
+    expect(worktreeLink(root, "src/App.tsx")).toBeNull();
+    expect(worktreeLink(root, "/Users/me/project-two/App.tsx")).toBeNull();
+    expect(worktreeLink(root, "/Users/me/project/../outside.ts")).toBeNull();
   });
 });

@@ -20,3 +20,33 @@ export function assetPath(dir: string, ref: string): string | null {
 
 /** the folder a worktree path sits in, "" at the root */
 export const dirOf = (path: string) => path.slice(0, Math.max(0, path.lastIndexOf("/")));
+
+export interface WorktreeLink {
+  path: string;
+  line?: number;
+}
+
+/** An absolute link the agent wrote to a file in this worktree, reduced to the path the daemon
+ * accepts. The root boundary and `..` check matter before a chat link earns editor behaviour: a
+ * filesystem-looking link outside the checkout stays an ordinary browser link. */
+export function worktreeLink(root: string, ref: string): WorktreeLink | null {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(ref);
+  } catch {
+    return null;
+  }
+  const hashLine = decoded.match(/#L(\d+)(?:-L?\d+)?$/i);
+  if (hashLine) decoded = decoded.slice(0, hashLine.index);
+  else decoded = decoded.split(/[?#]/)[0] ?? "";
+  const suffixLine = decoded.match(/:(\d+)(?::\d+)?$/);
+  if (suffixLine) decoded = decoded.slice(0, suffixLine.index);
+
+  const base = root.replace(/\/+$/, "");
+  if (!base || !decoded.startsWith(`${base}/`)) return null;
+  const path = decoded.slice(base.length + 1);
+  if (!path || path.split("/").some((part) => part === "..")) return null;
+  const lineText = hashLine?.[1] ?? suffixLine?.[1];
+  const line = lineText ? Number.parseInt(lineText, 10) : undefined;
+  return line && line > 0 ? { path, line } : { path };
+}

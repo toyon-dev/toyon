@@ -44,7 +44,16 @@ function world() {
   const hub = new Hub();
   const f = fakeFactories();
   const agents = fakeAgents(t.paths.agentsDir);
-  const runtime = new RuntimeRegistry({ hub, state, paths: t.paths, agents, bridgeScript: () => "", ...f.factories });
+  // main runs only while no spare stands in for it, as the daemon wires it
+  const runtime = new RuntimeRegistry({
+    hub,
+    state,
+    paths: t.paths,
+    agents,
+    bridgeScript: () => "",
+    mainLeads: (repoId: string): boolean => worktrees.spare.current(repoId) === null,
+    ...f.factories,
+  });
   const exec = new ExecService({ state, runtime });
   const worktrees = new WorktreeService({
     state,
@@ -91,13 +100,33 @@ async function until(done: () => boolean, ms = 15_000): Promise<void> {
 }
 
 describe("register", () => {
-  test("creates the main pseudo-worktree with an agent and running procs", async () => {
+  test("records the main pseudo-worktree and starts nothing; a look at it starts it while no spare stands in", async () => {
     const repoId = await registered();
     const main = w.state.worktrees.find((x) => x.kind === "main")!;
     expect(main.repoId).toBe(repoId);
+    expect(w.runtime.get(main.id) ?? null).toBeNull();
+    w.repos.touch(main.id);
+    await until(() => !!w.runtime.get(main.id)?.procs);
     expect(w.agents.get(main.id)).toBeDefined();
-    // needsSetup was true at register time: no procs until the config card is confirmed
-    expect(w.procs.get(main.id)?.started).toEqual([]);
+    expect(w.procs.get(main.id)?.started.length).toBe(1);
+  });
+
+  test("main runs only as the lead: the spare coming up stops its procs, and a start on it is refused", async () => {
+    const repoId = await registered();
+    const main = w.state.worktrees.find((x) => x.kind === "main")!;
+    w.repos.touch(main.id);
+    await until(() => !!w.runtime.get(main.id)?.procs);
+    await w.worktrees.spare.ensure(repoId);
+    await until(() => !w.runtime.get(main.id)?.procs);
+    expect(w.procs.get(main.id)?.stopped).toBe(true);
+    // while the spare stands in, nothing brings main's procs back
+    w.repos.touch(main.id);
+    await settle();
+    expect(w.runtime.get(main.id)?.procs ?? null).toBeNull();
+    // the spare claimed and the next one warming: main stays cold through it
+    await w.worktrees.create(repoId, "task");
+    await settle();
+    expect(w.runtime.get(main.id)?.procs ?? null).toBeNull();
   });
 });
 
@@ -1464,6 +1493,7 @@ describe("boot", () => {
       paths: w.paths,
       agents: w.registry,
       bridgeScript: () => "",
+      mainLeads: (repoId: string): boolean => worktrees2.spare.current(repoId) === null,
       ...f2.factories,
     });
     const worktrees2 = new WorktreeService({
@@ -1486,15 +1516,16 @@ describe("boot", () => {
     expect(state2.worktree(wt.id)).toBeUndefined();
     expect(state2.worktree("stale-spare")).toBeUndefined();
     expect(state2.worktrees.filter((x) => x.kind === "spare").length).toBe(1);
-    // boot starts nothing; opening main is what starts it, and only it
+    // boot starts nothing; main never starts while the adopted spare stands in for it, and a look
+    // at the spare, which is the row on screen, is what starts it
     const main = state2.worktrees.find((x) => x.kind === "main")!;
     const adopted = state2.worktrees.find((x) => x.kind === "spare")!;
     expect(runtime2.get(main.id)?.procs ?? null).toBeNull();
     repos2.touch(main.id);
     await settle();
-    expect(runtime2.get(main.id)?.procs).toBeTruthy();
+    expect(runtime2.get(main.id)?.procs ?? null).toBeNull();
     expect(runtime2.get(adopted.id)?.procs ?? null).toBeNull();
-    // the adopted spare comes back warm once the repo is in use: procs up, so the draft tab has a
+    // the adopted spare comes back warm once the repo is in use: procs up, so the plus has a
     // preview and a claim hands over a running worktree
     repos2.warm(repoId);
     await settle();
@@ -1525,6 +1556,7 @@ describe("boot", () => {
         paths: w.paths,
         agents: w.registry,
         bridgeScript: () => "",
+        mainLeads: (repoId: string): boolean => worktrees2.spare.current(repoId) === null,
         ...f2.factories,
       });
       const worktrees2 = new WorktreeService({

@@ -55,6 +55,13 @@ export interface RuntimeDeps {
   ports?: PortLease;
   /** whether a tab shows the worktree; one shown never gives its preview port up. Absent in tests */
   viewed?: (id: string) => boolean;
+  /** whether a tab shows this very row, a spare included: `viewed` counts a spare as shown when a
+   * sibling is, which is right for its sleep and wrong for a port it would take from that sibling */
+  shown?: (id: string) => boolean;
+  /** whether the repo's main checkout is the row new work starts from (no spare stands in for it):
+   * main runs only then. One server per repo: the spare is main's running copy, and two of the
+   * same code all day was the cost this saves. Absent in tests, where main runs when started. */
+  mainLeads?: (repoId: string) => boolean;
   /** factories, overridable so tests run without spawning anything */
   makeAgent?: (wt: WorktreeInfo, deps: RuntimeDeps, preview: () => PreviewStanding | null) => AgentAdapter;
   makeProcs?: (wt: WorktreeInfo, deps: RuntimeDeps) => WorktreeProcs;
@@ -481,6 +488,10 @@ export class RuntimeRegistry {
     if (!this.deps.state.worktree(wt.id)) return; // removed while setup was running
     const rt = this.ensureAgent(wt);
     if (rt.procs) return;
+    // main's copy of the app is the spare's while there is one; main itself runs only as the lead
+    // (setup unconfirmed, an empty project, a warm-up that failed), which keeps the setup pane and
+    // the first-run preview working
+    if (wt.kind === "main" && this.deps.mainLeads && !this.deps.mainLeads(wt.repoId)) return;
 
     // before anything starts, so running out of preview ports leaves nothing half up. The record
     // keeps the port it got, and the rows frame sent once the proxy is up carries it to the shell
@@ -550,12 +561,14 @@ export class RuntimeRegistry {
 
   /** A port for the copy coming up. When running copies hold every port in the range, the one
    * looked at longest ago goes to sleep and its port comes here; opening it again takes one back
-   * the same way. Nothing being looked at or worked on gives its port up, and a spare, which
-   * nobody is waiting for, takes no one's: it stays cold, with nothing to tell. Synchronous up to
-   * the lease, so two starts at once never pick the same copy or the same port. */
+   * the same way. Nothing being looked at or worked on gives its port up, and a spare nobody is
+   * looking at takes no one's: it stays cold, with nothing to tell. A spare a tab shows is the
+   * plus, and leases like any shown row, or a full range on a remote would leave the plus on a
+   * warming pane with no way out. Synchronous up to the lease, so two starts at once never pick
+   * the same copy or the same port. */
   private leasePort(wt: WorktreeInfo): number | null {
     let port = this.ports.lease(wt.proxyPort);
-    if (port === null && wt.kind !== "spare") {
+    if (port === null && (wt.kind !== "spare" || this.deps.shown?.(wt.id))) {
       const holders = [...this.leased.keys()].filter(
         (id) => id !== wt.id && !this.starting.has(id) && !this.busy(id) && !this.deps.viewed?.(id),
       );

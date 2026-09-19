@@ -39,6 +39,8 @@ export interface SparePoolDeps {
   /** a warm-up failed under someone's fingers: whatever was typed into the spare's box goes to the
    * row that stands in for it now (WorktreeService knows which) */
   carryDraft?: (fromId: string, repoId: string) => void;
+  /** the repo's spare is up: main's own procs, if any were running, are the second copy now */
+  ready?: (repoId: string) => void;
 }
 
 export class SparePool {
@@ -125,6 +127,7 @@ export class SparePool {
       await this.d.setupAndStart(wt, repo); // CoW deps + setup + warm servers
       entry.lockHash = lockfileHash(wt.path);
       entry.ready = true;
+      this.d.ready?.(repoId);
       // the frame that says the spare is ready: the runtime's own emit went out before this flag
       this.d.hub.emit("worktreesChanged");
     } catch (e) {

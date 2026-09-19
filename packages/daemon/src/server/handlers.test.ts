@@ -58,6 +58,12 @@ function lastShipped(replies: ServerMsg[]): string | undefined {
 }
 afterEach(() => cleanup());
 
+/** a tab landing on the row: the subscribe that gives a cold worktree its agent, which the shell
+ * always sends before it chats. Main starts nothing when its project opens, so a test that talks
+ * to main's agent lands on it first. */
+const opened = (id: string, ctx: HandlerCtx, services: Services) =>
+  dispatch({ t: "subscribe", worktreeId: id }, ctx, services);
+
 const IDENTITY = "[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n";
 
 /** git reads a config of the test's own for the length of `fn`, so identity is what the test says and
@@ -476,8 +482,7 @@ describe("handlers", () => {
     const { services, ctx, views, repo } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    // registering opens the project, which starts main; cold again, the way a restart leaves it
-    await services.runtime.stopProcs(main.id);
+    // opening the project starts nothing: main is cold, the way a restart leaves it
     await dispatch({ t: "subscribe", worktreeId: main.id }, ctx, services);
     await new Promise((res) => setTimeout(res, 50));
     expect(services.runtime.get(main.id)?.procs ?? null).toBeNull();
@@ -713,6 +718,7 @@ describe("handlers", () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await opened(main.id, ctx, services);
     const pick = {
       kind: "pick" as const,
       component: "App",
@@ -739,6 +745,7 @@ describe("handlers", () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await opened(main.id, ctx, services);
     const img = {
       kind: "image" as const,
       name: "a.png",
@@ -844,6 +851,7 @@ describe("handlers", () => {
     const { services, ctx, replies, terminals, agents, repo } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await opened(main.id, ctx, services);
     const agent = agents.get(main.id)!;
     await dispatch({ t: "agent-auth", worktreeId: main.id, methodId: "api-key", apiKey: "sk-1" }, ctx, services);
     expect(agent.auths).toEqual([["api-key", "sk-1"]]);
@@ -873,6 +881,7 @@ describe("handlers", () => {
     const { services, ctx, agents, repo } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await opened(main.id, ctx, services);
     const agent = agents.get(main.id)!;
     const answers = [{ selected: ["a"], note: "but only for now" }];
     await dispatch({ t: "agent-answer", worktreeId: main.id, askId: "k1", answers }, ctx, services);
@@ -993,6 +1002,7 @@ describe("handlers", () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await opened(main.id, ctx, services);
     const agent = agents.get(main.id)!;
     await dispatch({ t: "exec", worktreeId: main.id, command: "printf hi; pwd -P" }, ctx, services);
     // a `!` command is working in the worktree too, so it counts as a send
@@ -1023,6 +1033,7 @@ describe("handlers", () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
     const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
+    await opened(main.id, ctx, services);
     const agent = agents.get(main.id)!;
     await dispatch({ t: "exec", worktreeId: main.id, command: "echo started; sleep 30" }, ctx, services);
     // let the shell get as far as the sleep, so the kill lands on a running command

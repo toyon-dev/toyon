@@ -142,6 +142,9 @@ const runtime = new RuntimeRegistry({
   grant: previewGrant(token),
   // asked only once the policy exists: the first view comes from a socket, after boot
   viewed: (id): boolean => idle.isViewed(id),
+  shown: (id): boolean => idle.isShown(id),
+  // asked only when a start is, after the service below exists
+  mainLeads: (repoId): boolean => worktrees.spare.current(repoId) === null,
 });
 const drafts = new DraftStore({ file: paths.draftsFile, hub });
 const exec = new ExecService({ state, runtime });

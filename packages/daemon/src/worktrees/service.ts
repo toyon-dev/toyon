@@ -250,6 +250,14 @@ export class WorktreeService {
         const main = this.mainOf(repoId);
         if (text && main) this.d.drafts?.set(main.id, text);
       },
+      // main ran while it was the lead (the setup pane's preview, an empty project's); the spare
+      // is the trunk's running copy from here, so main's procs stop rather than run beside it
+      ready: (repoId) => {
+        const main = this.mainOf(repoId);
+        if (main && this.d.runtime.get(main.id)?.procs) {
+          fireAndForget(main.id, this.d.runtime.stopProcs(main.id), "main stops for the spare");
+        }
+      },
     });
     // worktrees claimed before links existed get theirs at boot
     for (const wt of d.state.worktrees) this.refreshLink(wt);

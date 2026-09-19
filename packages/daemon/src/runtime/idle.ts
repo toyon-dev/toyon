@@ -182,6 +182,11 @@ export class IdlePolicy {
     return !!wt && this.now() - (wt.viewedAt ?? 0) < (this.sleepMs ?? LOCAL_SLEEP_MS);
   }
 
+  /** whether a tab shows this very row: a spare counts only when it is the one on screen */
+  isShown(id: string): boolean {
+    return (this.entries.get(id)?.viewers.size ?? 0) > 0;
+  }
+
   /** whether any tab shows it; a spare is shown whenever one of its repo's worktrees is */
   isViewed(id: string): boolean {
     if ((this.entries.get(id)?.viewers.size ?? 0) > 0) return true;

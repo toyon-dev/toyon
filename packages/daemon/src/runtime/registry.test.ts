@@ -50,7 +50,15 @@ function twoPorts(): PortLease & { held: Set<number> } {
   };
 }
 
-function make(opts: { worktrees?: WorktreeInfo[]; ports?: PortLease; viewed?: (id: string) => boolean } = {}) {
+function make(
+  opts: {
+    worktrees?: WorktreeInfo[];
+    ports?: PortLease;
+    viewed?: (id: string) => boolean;
+    shown?: (id: string) => boolean;
+    mainLeads?: (repoId: string) => boolean;
+  } = {},
+) {
   const t = tmpRepo();
   cleanup = t.cleanup;
   // copies: the store hands out live records, and a port leased in one test must not reach the next
@@ -67,6 +75,8 @@ function make(opts: { worktrees?: WorktreeInfo[]; ports?: PortLease; viewed?: (i
     bridgeScript: () => "",
     ports: opts.ports,
     viewed: opts.viewed,
+    shown: opts.shown,
+    mainLeads: opts.mainLeads,
     ...f.factories,
   });
   return { state, hub, registry, ...f };
@@ -443,7 +453,7 @@ describe("RuntimeRegistry sleep and wake", () => {
       expect(procs.get(b.id)?.asleep).toBe(true);
     });
 
-    test("a spare takes nobody's port: it stays cold and says nothing", async () => {
+    test("a spare nobody shows takes no port: it stays cold and says nothing", async () => {
       const ports = twoPorts();
       const { registry, procs } = make({ worktrees: [a, b, s], ports });
       await registry.start(a, repo);
@@ -460,6 +470,30 @@ describe("RuntimeRegistry sleep and wake", () => {
       expect(procs.get(s.id)?.asleep).toBe(true);
       expect(procs.get(a.id)?.asleep).toBe(false);
     });
+
+    test("a spare a tab shows is the plus: it leases like any shown row", async () => {
+      const ports = twoPorts();
+      const { registry, procs } = make({ worktrees: [a, b, s], ports, shown: (id) => id === s.id });
+      await registry.start(a, repo);
+      await registry.start(b, repo);
+      await registry.start(s, repo);
+      expect(procs.get(s.id)?.started.length).toBe(2);
+      expect(procs.get(a.id)?.asleep).toBe(true);
+    });
+  });
+
+  test("main starts only while it is the lead: with a spare standing in, start() does nothing", async () => {
+    const main: WorktreeInfo = { ...wt, id: "m", kind: "main", branch: "main", path: "/nowhere/m", title: "m" };
+    let leads = false;
+    const { registry, procs } = make({ worktrees: [main, wt], mainLeads: () => leads });
+    await registry.start(main, repo);
+    expect(procs.get(main.id)).toBeUndefined();
+    // a task is untouched by the rule
+    await registry.start(wt, repo);
+    expect(procs.get(wt.id)?.started.length).toBe(2);
+    leads = true;
+    await registry.start(main, repo);
+    expect(procs.get(main.id)?.started.length).toBe(2);
   });
 
   test("wake starts a cold worktree, and is a no-op while its setup runs", async () => {

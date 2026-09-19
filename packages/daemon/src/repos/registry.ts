@@ -301,7 +301,9 @@ export class RepoRegistry {
     };
     this.d.state.addWorktree(main);
     this.warmed.add(repo.id);
-    await this.d.runtime.start(main, repo);
+    // main's procs do not start here: the spare is the trunk's running copy, and main runs only
+    // while it is the row new work starts from (see RuntimeRegistry.start), which a look at it
+    // brings up. The record and its port stay, since the setup pane and a first run need them.
     this.startWatcher(repo);
     fireAndForget(repo.id, this.d.worktrees.spare.ensure(repo.id), "spare warm-up");
     this.d.hub.emit("reposChanged");
@@ -377,9 +379,12 @@ export class RepoRegistry {
     this.d.state.save();
     // (re)start procs for this repo's worktrees — spares included, or a spare warmed under the old
     // config would be handed to the next task with stale procs; agents stay. Every worktree, cold
-    // ones too: the person is sitting in front of this repo's setup pane.
+    // ones too: the person is sitting in front of this repo's setup pane. Main only when it is
+    // running, since it runs only as the lead and the spare below takes over from it.
     this.warmed.add(repoId);
-    for (const wt of this.d.state.worktrees.filter((w) => w.repoId === repoId)) {
+    for (const wt of this.d.state.worktrees.filter(
+      (w) => w.repoId === repoId && (w.kind !== "main" || this.d.runtime.get(w.id)?.procs),
+    )) {
       fireAndForget(
         wt.id,
         this.d.runtime.stopProcs(wt.id).then(() => this.d.runtime.start(wt, repo)),

@@ -177,8 +177,9 @@ export class SparePool {
     await entry.refreshing;
   }
 
-  /** Claim the warm spare for a new task: branch it, return it, warm the next. Null if none is
-   * ready. `worktreeId` names the row the message was typed in: a spare still warming is waited
+  /** Claim the warm spare for a new task: branch it and return it. Null if none is ready. The
+   * next spare is the caller's to warm, once the claimed one's preview has answered: its boot must
+   * not share the core with the send the person is waiting on. `worktreeId` names the row the message was typed in: a spare still warming is waited
    * for rather than passed over for a cold checkout, since the person is looking at it; one
    * already claimed by another tab is nobody's to wait for, and null sends the caller down the
    * cold path. */
@@ -210,7 +211,6 @@ export class SparePool {
     this.d.state.save();
     // a spare that rested with its repo comes up for the task it now is
     fireAndForget(wt.id, this.d.runtime.wake(wt.id), "wake on claim");
-    fireAndForget(repoId, this.ensure(repoId), "spare warm-up");
     return wt;
   }
 }

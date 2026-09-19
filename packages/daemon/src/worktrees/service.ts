@@ -81,6 +81,7 @@ import {
 } from "../git/status.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
+import { STAGGER_MS } from "../runtime/idle.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
@@ -347,10 +348,19 @@ export class WorktreeService {
       const carried = await this.carryMain(repo, claimed, !!opts.carry);
       this.d.state.save();
       this.d.hub.emit("worktreesChanged");
-      this.d.runtime
-        .ensureAgent(claimed)
-        .agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
+      // the spare's agent may be up already, warmed on the first keystroke under the record's
+      // agent of the time; a task that asked for another gets that one, spawned by the send
+      const rt = this.d.runtime.ensureAgent(claimed);
+      if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
+      rt.agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
       this.scheduleNaming(claimed, task, variant);
+      // the next spare warms once this one's preview has answered, so its boot never shares the
+      // core with the send the person is waiting on
+      fireAndForget(
+        repoId,
+        this.d.runtime.awaitPreview(claimed.id, STAGGER_MS).then(() => this.spare.ensure(repoId)),
+        "spare refill",
+      );
       if (carried.unmoved) throw new UserError(carried.unmoved);
       return claimed;
     }

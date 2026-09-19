@@ -243,13 +243,32 @@ export class AcpSession implements AgentAdapter {
    * properly when they send something. */
   async warmCommands(): Promise<void> {
     if (this.commandList.length > 0 || this.stopped) return;
+    await this.warm();
+  }
+
+  /** Start the session now, so the first message meets a process that is up: the plus warms its
+   * agent on the first keystroke, seconds before enter. Best effort, like the commands warm-up;
+   * a failure is the send's to report properly. */
+  async warm(): Promise<void> {
+    if (this.stopped) return;
     try {
       await this.ensureLive();
       // nothing is running, so let the idle reaper take the process back on its usual schedule
       this.maybeArmReaper();
     } catch (e) {
-      log.debug(this.d.worktreeId, `commands warm-up skipped: ${this.describe(e)}`);
+      log.debug(this.d.worktreeId, `agent warm-up skipped: ${this.describe(e)}`);
     }
+  }
+
+  get runningAgent(): string | null {
+    return this.conn?.spec.id ?? null;
+  }
+
+  /** the process goes and the next message spawns whatever the record names now: a spare warmed
+   * under the default agent, claimed for a task that asked for another */
+  async restart(): Promise<void> {
+    this.clearReaper();
+    await this.dropConn();
   }
 
   private setCommands(next: AgentCommand[]) {

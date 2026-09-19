@@ -201,6 +201,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   "set-draft"(msg, _ctx, s) {
     s.drafts.set(msg.boxId, msg.text, msg.clientId);
+    // the first keystroke on the plus starts its agent, so enter meets a process that is up: the
+    // adapter's boot is the seconds before the first token, and typing is the earliest sign a send
+    // is coming. Only a spare that is ready and has no process yet; the send reports any failure.
+    const wt = s.state.worktree(msg.boxId);
+    if (wt?.kind !== "spare" || !msg.text.trim() || !s.worktrees.spare.current(wt.repoId)?.ready) return;
+    const agent = s.runtime.ensureAgent(wt).agent;
+    if (agent.runningAgent === null) fireAndForget(wt.id, agent.warm(), "warm on the first keystroke");
   },
 
   "refresh-git"(msg, _ctx, s) {

@@ -15,8 +15,19 @@ export class FakeAgent implements AgentAdapter {
   commands: AgentCommand[] = [];
   onCommandsChange: ((commands: AgentCommand[]) => void) | null = null;
   warms = 0;
+  /** the agent whose process is up; the warm-up counts as spawning the registry's default */
+  runningAgent: string | null = null;
   async warmCommands() {
+    await this.warm();
+  }
+  async warm() {
     this.warms++;
+    this.runningAgent ??= "claude";
+  }
+  restarts = 0;
+  async restart() {
+    this.restarts++;
+    this.runningAgent = null;
   }
   constructor(readonly worktreeId: string) {}
   get queueLength() {

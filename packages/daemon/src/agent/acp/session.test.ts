@@ -877,6 +877,27 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("warm starts the session under the record's agent, and restart drops the process for the next send", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    expect(w.session.runningAgent).toBeNull();
+    await w.session.warm();
+    expect(w.session.runningAgent).toBe("claude");
+    expect(fake.newSessions).toHaveLength(1);
+    expect(fake.prompts).toHaveLength(0);
+    // up already: nothing more happens
+    await w.session.warm();
+    expect(fake.newSessions).toHaveLength(1);
+    await w.session.restart();
+    expect(w.session.runningAgent).toBeNull();
+    // the next message spawns again and carries on
+    w.session.send("hi");
+    await w.idle();
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.session.runningAgent).toBe("claude");
+    await w.session.close();
+  });
+
   test("the command list survives the reaper, so `/` still works with no process running", async () => {
     const fake = fakeAgent(say("ok"), { commands: { s1: [{ name: "review", description: "mine" }] } });
     const w = world(fake, claudeSpec, 10);

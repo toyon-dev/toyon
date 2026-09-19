@@ -504,6 +504,54 @@ describe("spare pool", () => {
     expect(changed).toBeGreaterThan(0);
   });
 
+  test("the next spare warms only once the claimed one's preview has answered, never from the claim itself", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    // the claim alone warms nothing
+    const first = await w.worktrees.spare.claim(repoId, "toyon/first", "first");
+    expect(first?.kind).toBe("worktree");
+    await settle();
+    expect(w.state.worktrees.filter((x) => x.kind === "spare")).toHaveLength(0);
+    await w.worktrees.spare.ensure(repoId);
+    // a preview that takes its time: the refill waits on it
+    const awaited: string[] = [];
+    let answer: (() => void) | null = null;
+    w.runtime.awaitPreview = async (id) => {
+      awaited.push(id);
+      await new Promise<void>((r) => {
+        answer = r;
+      });
+      return null;
+    };
+    const wt = await w.worktrees.create(repoId, "task");
+    expect(awaited).toEqual([wt.id]);
+    await settle();
+    expect(w.state.worktrees.filter((x) => x.kind === "spare")).toHaveLength(0);
+    answer!();
+    await until(() => w.state.worktrees.some((x) => x.kind === "spare"));
+  });
+
+  test("a spare warmed under one agent is restarted for a task that asks for another", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    const agent = w.agents.get(spare.id)!;
+    await agent.warm();
+    expect(agent.runningAgent).toBe("claude");
+    const wt = await w.worktrees.create(repoId, "same agent", { agent: "claude" });
+    expect(wt.id).toBe(spare.id);
+    expect(agent.restarts).toBe(0);
+    // the refill's record lands before its runtime; the agent exists once the warm-up is done
+    await until(() => w.worktrees.spare.current(repoId)?.ready === true);
+    const next = w.state.worktrees.find((x) => x.kind === "spare")!;
+    const nextAgent = w.agents.get(next.id)!;
+    await nextAgent.warm();
+    const other = await w.worktrees.create(repoId, "other agent", { agent: "codex" });
+    expect(other.id).toBe(next.id);
+    expect(nextAgent.restarts).toBe(1);
+    expect(nextAgent.sent[0]?.text).toBe("other agent");
+  });
+
   test("a claim naming a spare still warming waits for it; one naming a row already claimed goes cold", async () => {
     const repoId = await registered();
     // a setup step that takes its time, so the warm-up is still under way when the send arrives
@@ -2110,7 +2158,7 @@ describe("main against origin", () => {
   });
 
   test("the rows' own fetch finding main behind takes origin in the same way", async () => {
-    const repoId = await withUpstream();
+    await withUpstream();
     const upstream = sh(w.repo, "git", "rev-parse", "origin/main").trim();
     const c = pushUpstream("c");
     // a service that has never fetched: the rows count main, fetch, and follow

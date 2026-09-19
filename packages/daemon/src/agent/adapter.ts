@@ -54,6 +54,14 @@ export interface AgentAdapter {
   onCommandsChange: ((commands: AgentCommand[]) => void) | null;
   /** start the session early so `commands` exists before the first message; best effort */
   warmCommands(): Promise<void>;
+  /** start the session now, under the worktree's agent, so the first message meets a process
+   * that is already up; idle, the reaper takes it back as usual. Best effort. */
+  warm(): Promise<void>;
+  /** the registry id of the agent whose process is up, or null while none is */
+  readonly runningAgent: string | null;
+  /** drop the process, keeping the session id and the transcript: the next message spawns the
+   * agent the record names now */
+  restart(): Promise<void>;
   /** context (live-page state) reaches the prompt but never the visible transcript */
   send(text: string, opts?: SendOpts): void;
   /** interrupt the running turn; anything queued goes next */

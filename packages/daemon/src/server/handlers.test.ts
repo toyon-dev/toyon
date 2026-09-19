@@ -605,6 +605,32 @@ describe("handlers", () => {
     expect(services.worktrees.archived(r.id).map((x) => x.id)).toEqual([wt.id]);
   });
 
+  test("a first keystroke on the plus warms its agent once; an empty box, a task's box and a spare still warming do not", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    r.config = { run: { web: "true" } };
+    const task = await services.worktrees.create(r.id, "a task");
+    await services.worktrees.spare.ensure(r.id);
+    const spare = services.state.worktrees.find((x) => x.repoId === r.id && x.kind === "spare")!;
+    const agent = agents.get(spare.id)!;
+    await dispatch({ t: "set-draft", boxId: spare.id, text: "   ", clientId: "tab1" }, ctx, services);
+    expect(agent.warms).toBe(0);
+    await dispatch({ t: "set-draft", boxId: spare.id, text: "f", clientId: "tab1" }, ctx, services);
+    await dispatch({ t: "set-draft", boxId: spare.id, text: "fi", clientId: "tab1" }, ctx, services);
+    expect(agent.warms).toBe(1);
+    expect(agent.runningAgent).toBe("claude");
+    await dispatch({ t: "set-draft", boxId: task.id, text: "x", clientId: "tab1" }, ctx, services);
+    expect(agents.get(task.id)?.warms ?? 0).toBe(0);
+    // a spare the pool no longer counts as ready (its warm-up rolled back, say) is not started
+    await services.worktrees.spare.claim(r.id, "toyon/x", "x");
+    await services.worktrees.spare.ensure(r.id);
+    const next = services.state.worktrees.find((x) => x.repoId === r.id && x.kind === "spare")!;
+    expect(next.id).not.toBe(spare.id);
+    await dispatch({ t: "set-draft", boxId: next.id, text: "g", clientId: "tab1" }, ctx, services);
+    expect(agents.get(next.id)?.warms).toBe(1);
+  });
+
   test("set-draft is kept and told with its writer, an archive keeps it, and deleting the archive drops it", async () => {
     const { services, ctx, repo } = make();
     const r = await services.repos.register(repo);

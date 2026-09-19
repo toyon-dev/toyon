@@ -50,7 +50,7 @@ const PRESSURE_EVERY_MS = 15_000;
 const COSTS_EVERY_MS = 60_000;
 /** how long a queued wake waits for the one before it to answer on its port, so two dev servers
  * never boot against each other on the core the person is waiting on */
-const STAGGER_MS = 3_000;
+export const STAGGER_MS = 3_000;
 
 interface Entry {
   /** the sockets whose tab shows this worktree */

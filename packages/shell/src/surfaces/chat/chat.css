@@ -92,6 +92,10 @@
     min-height: 0;
     position: relative;
     display: flex;
+    /* the box a thought's cap is a share of (cqh below): the transcript's own height, which the
+       window's is not once the chat is a dock beside the preview or a screen under the phone's bar.
+       Its size is the column's to give, so containing it costs nothing. */
+    container-type: size;
   }
 
   .chat-log {
@@ -500,6 +504,13 @@
       font: var(--type-ui);
       line-height: 1.6;
       color: var(--text1);
+      /* the one body in the log with a height of its own, and the exception to the rule above. A
+         call's output is bounded by what it printed; a thought is bounded by nothing, and a long
+         one filled the pane and kept filling it, with the message it was working toward pushed
+         out of sight under a wall of reasoning. It stops at most of the transcript (the cqh is the
+         chat wrap's) and scrolls inside, tailed by ThoughtRow while the agent is still writing it. */
+      max-height: 80cqh;
+      overflow-y: auto;
     }
     & .tool-block {
       font: var(--type-mono-sm);

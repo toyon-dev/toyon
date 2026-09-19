@@ -57,7 +57,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
   return {
     rename(w: OwnedWorktree) {
       if (!canRename(w.worktree)) return;
-      const title = window.prompt("Rename worktree (also renames its branch):", w.worktree.title);
+      const title = window.prompt("Rename worktree (its branch follows as a slug):", w.worktree.title);
       if (title?.trim()) sock?.send({ t: "rename-worktree", worktreeId: w.worktree.id, title: title.trim() });
     },
     pickVariant(w: OwnedWorktree) {

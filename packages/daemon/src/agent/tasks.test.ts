@@ -30,11 +30,11 @@ describe("taskText", () => {
 });
 
 describe("parseName", () => {
-  test("keeps 1-3 kebab words, cleans quotes and case, takes the last line", () => {
-    expect(parseName("Sticky-Header")).toBe("sticky-header");
-    expect(parseName("`dark-mode-toggle`\n")).toBe("dark-mode-toggle");
-    expect(parseName("Sure! Here is a name:\nadd about page")).toBe("add-about-page");
-    expect(parseName("planting")).toBe("planting");
+  test("keeps 1-3 plain words, cleans quotes and case, takes the last line", () => {
+    expect(parseName("Sticky-Header")).toBe("Sticky header");
+    expect(parseName("`dark-mode-toggle`\n")).toBe("Dark mode toggle");
+    expect(parseName("Sure! Here is a name:\nadd about page")).toBe("Add about page");
+    expect(parseName("planting")).toBe("Planting");
   });
   test("rejects sentences, errors, long names and empties", () => {
     expect(parseName("I cannot name this task without more context about it")).toBeNull();

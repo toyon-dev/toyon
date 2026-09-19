@@ -40,7 +40,7 @@ function knownPaths(known: WorktreeInfo[]): Set<string> {
   const paths = new Set<string>();
   for (const wt of known) {
     paths.add(canonical(wt.path));
-    // the title-named symlink beside a claimed spare: git reports whichever the person used
+    // the branch-named symlink beside a claimed spare: git reports whichever the person used
     if (wt.linkPath) paths.add(canonical(wt.linkPath));
   }
   return paths;

@@ -156,7 +156,7 @@ export class SparePool {
   }
 
   /** Claim the warm spare for a new task: branch it, return it, warm the next. Null if none is ready. */
-  async claim(repoId: string, branch: string, slug: string): Promise<WorktreeInfo | null> {
+  async claim(repoId: string, branch: string, title: string): Promise<WorktreeInfo | null> {
     const entry = this.spares.get(repoId);
     if (!entry?.ready) return null;
     this.spares.delete(repoId);
@@ -174,7 +174,7 @@ export class SparePool {
     }
     wt.kind = "worktree";
     wt.branch = branch;
-    wt.title = slug;
+    wt.title = title;
     wt.createdAt = Date.now();
     this.d.state.save();
     // a spare that rested with its repo comes up for the task it now is

@@ -95,7 +95,8 @@ describe("create / remove", () => {
     expect(wt.kind).toBe("worktree");
     expect(wt.branch).toMatch(/^toyon\/make-the-header-[0-9a-f]{4}$/);
     expect(existsSync(join(wt.path, "README.md"))).toBe(true);
-    expect(wt.linkPath).toBeUndefined(); // the directory already carries the title
+    expect(wt.title).toBe("Make the header");
+    expect(wt.linkPath).toBeUndefined(); // the directory is already named for the branch
     expect(w.agents.get(wt.id)?.sent[0]?.text).toBe("make the header sticky");
     expect(wt.promptedAt).toBeGreaterThan(0);
     expect(wt.agent).toBe("claude");
@@ -416,16 +417,18 @@ describe("spare pool", () => {
     expect(changed).toBeGreaterThan(0);
   });
 
-  test("a claimed spare keeps its directory but gets a title-named link that follows renames and removal", async () => {
+  test("a claimed spare keeps its directory but gets a branch-named link that follows renames and removal", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
     const wt = await w.worktrees.create(repoId, "use the spare");
     expect(wt.path.includes("wt-")).toBe(true);
     const first = wt.linkPath!;
-    expect(first).toBe(join(dirname(wt.path), wt.title));
+    expect(first).toBe(join(dirname(wt.path), wt.branch.replace("toyon/", "")));
     expect(readlinkSync(first)).toBe(wt.path);
     await w.worktrees.rename(wt.id, "Better Name");
-    expect(wt.title).toBe("better-name");
+    // the title is read as it was typed; the branch and the link carry its slug
+    expect(wt.title).toBe("Better Name");
+    expect(wt.branch).toBe("toyon/better-name");
     expect(lstatSync(first, { throwIfNoEntry: false })).toBeUndefined();
     expect(wt.linkPath).toBe(join(dirname(wt.path), "better-name"));
     expect(readlinkSync(wt.linkPath!)).toBe(wt.path);
@@ -445,6 +448,24 @@ describe("spare pool", () => {
     expect(a.linkPath).toBe(join(dirname(a.path), "same"));
     expect(b.linkPath).toBe(join(dirname(b.path), "same-2"));
     expect(readlinkSync(b.linkPath!)).toBe(b.path);
+  });
+
+  test("a renamed worktree keeps the title as words and gives its branch the slug", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "make the header sticky");
+    await w.worktrees.rename(wt.id, "  Sticky header!  ");
+    expect(wt.title).toBe("Sticky header");
+    expect(wt.branch).toBe("toyon/sticky-header");
+    expect(sh(w.repo, "git", "branch", "--list", "toyon/sticky-header")).toContain("toyon/sticky-header");
+  });
+
+  test("a title git cannot spell is still the title, and the branch stays where it is", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "make the header sticky");
+    const before = wt.branch;
+    await w.worktrees.rename(wt.id, "日本語");
+    expect(wt.title).toBe("日本語");
+    expect(wt.branch).toBe(before);
   });
 
   test("the spare's statuses row is hidden until claimed", async () => {

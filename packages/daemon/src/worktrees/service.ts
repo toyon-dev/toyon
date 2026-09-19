@@ -85,7 +85,7 @@ import { runSetup } from "../runtime/setup.ts";
 import { type ArchiveRecord, type ChatFiles, firstPrompt, lastUsage, summarize, WorktreeArchive } from "./archive.ts";
 import { ArchivedGit } from "./archivedGit.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
-import { cleanTitle, shortId, slugify, variantLens } from "./naming.ts";
+import { branchSlug, cleanTitle, shortId, slugify, titleFrom, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 import { isUnseen } from "./turns.ts";
 
@@ -280,6 +280,8 @@ export class WorktreeService {
     // a message that is attachments alone is named from what they carry
     const task = taskText(prompt, attachments);
     // variants share a name base so they read as siblings in the list
+    const base = titleFrom(task);
+    const title = variant ? `${base} v${variant.index}` : base;
     let slug = variant ? `${slugify(task, false)}-v${variant.index}` : slugify(task);
     if (variant && (await git(repo.path, "show-ref", "--verify", `refs/heads/toyon/${slug}`)).ok) {
       slug = `${slug}-${shortId().slice(0, 3)}`;
@@ -297,7 +299,7 @@ export class WorktreeService {
 
     // fast path: claim the pre-warmed spare. Its runtime — agent included — already exists, so the
     // task's first message goes to the spare's agent.
-    const claimed = await this.spare.claim(repoId, branch, slug);
+    const claimed = await this.spare.claim(repoId, branch, title);
     if (claimed) {
       if (variant) claimed.variant = variant;
       if (opts.createdBy) claimed.createdBy = opts.createdBy;
@@ -338,7 +340,7 @@ export class WorktreeService {
       branch,
       kind: "worktree",
       proxyPort: await allocateProxyPort(),
-      title: slug,
+      title,
       createdAt: Date.now(),
       // made from a prompt, which is a send
       promptedAt: Date.now(),
@@ -457,8 +459,9 @@ export class WorktreeService {
     const number = kind === "pr" ? Number.parseInt(ref, 10) : Number.NaN;
     if (kind === "pr" && !(number > 0)) throw new UserError("that is not a PR number");
     const branch = kind === "pr" ? `pr/${number}` : ref;
+    // the branch is the person's, so it is what the row says it is; the directory takes its slug
     const title = kind === "pr" ? `pr-${number}` : cleanTitle(ref) || "branch";
-    let slug = title;
+    let slug = branchSlug(title) || "branch";
     if (existsSync(join(this.d.paths.worktreesDir, repo.name, slug))) slug = `${slug}-${shortId().slice(0, 4)}`;
     const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
 
@@ -648,7 +651,7 @@ export class WorktreeService {
       (this.d.namer ?? makeNamer(this.d.runtime))(prompt, wt).then(async (name) => {
         if (!name) return;
         for (const sibling of [wt, ...siblingsOf(wt, this.d.state.worktrees)]) {
-          await this.rename(sibling.id, `${name}-v${sibling.variant!.index}`).catch((e) => {
+          await this.rename(sibling.id, `${name} v${sibling.variant!.index}`).catch((e) => {
             log.warn(sibling.id, "variant rename failed", e);
           });
         }
@@ -984,20 +987,24 @@ export class WorktreeService {
   async rename(worktreeId: string, title: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
-    // the branch moves with the title, and only a toyon/ branch is toyon's to move: an adopted
+    // the branch follows the title, and only a toyon/ branch is toyon's to move: an adopted
     // worktree's branch is the person's
     if (!canRename(wt)) throw new UserError(`${wt.title} keeps its own branch; rename it in git`);
     const repo = this.d.state.requireRepo(wt.repoId);
     const clean = cleanTitle(title);
     if (!clean) return;
+    // The title is read and the branch is spelled: "Sticky header" on toyon/sticky-header. They are
+    // set together so the two never drift, and a title git cannot spell (one written in another
+    // script) is kept as the title with the branch left where it is.
+    const slug = branchSlug(clean);
     await withRepoLock(repo.path, async () => {
-      let branch = `toyon/${clean}`;
-      if (branch !== wt.branch) {
+      let branch = `toyon/${slug}`;
+      if (slug && branch !== wt.branch) {
         // avoid collisions with an existing branch
         let n = 2;
         while (!(await git(wt.path, "branch", "-m", wt.branch, branch)).ok) {
           if (n > 5) return;
-          branch = `toyon/${clean}-${n++}`;
+          branch = `toyon/${slug}-${n++}`;
         }
         wt.branch = branch;
       }
@@ -1008,7 +1015,7 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** `<repo>/<title>` → the directory, when its own name is not the title (a claimed spare keeps
+  /** `<repo>/<branch tail>` → the directory, when its own name is not that (a claimed spare keeps
    * wt-xxxx). The terminal and editor links show the link; git and procs keep the real path.
    * Moving the directory for real would restart the procs and the agent session (its cwd). */
   private refreshLink(wt: WorktreeInfo) {
@@ -1017,8 +1024,8 @@ export class WorktreeService {
     // (adopting ~/Projects/app-editor-pane on branch `editor-pane` would create
     // ~/Projects/editor-pane, and again on every boot).
     if (!hasOwnBranch(wt)) return;
-    // the branch tail rather than the title: titles may repeat (three tasks named alike), branches
-    // never do (rename suffixes them)
+    // the branch tail rather than the title: a title is prose and may repeat (three tasks named
+    // alike), a branch is already a name a shell can type and never repeats (rename suffixes them)
     const name = wt.branch.replace(/^toyon\//, "");
     const desired = wt.kind === "worktree" ? join(dirname(wt.path), name) : wt.path;
     if (wt.linkPath && wt.linkPath !== desired) this.dropLink(wt);

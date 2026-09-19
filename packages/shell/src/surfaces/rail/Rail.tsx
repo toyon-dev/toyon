@@ -127,14 +127,14 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const menu = useMenu();
   // the daemon sends absolute paths; ~ is how the person wrote it and how the picker shows it back
   const home = useStore((s) => s.home);
-  // the title-named link rather than a claimed spare's wt-xxxx, so the path says which worktree it is
+  // the branch-named link rather than a claimed spare's wt-xxxx, so the path says which worktree it is
   const wtDirLabel = (d: WorktreeStatus) => {
     const p = d.worktree ? wtDir(d.worktree) : d.path;
     return home && p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p;
   };
-  // a long name truncates in the row; the path's last segment usually spells it out whole, and
-  // only when it does not (no link, a link named for a suffixed branch, a found worktree in a
-  // directory of its own naming) does the tip name the row again
+  // a long name truncates in the row, so the tip spells it out again. A name the path's last
+  // segment already is (a found worktree in a directory named for its branch) is left off: a
+  // toyon worktree's name is prose and its directory is the slug, so those two rarely match.
   const unspelled = (d: WorktreeStatus) => (wtDirLabel(d).split("/").pop() === d.name ? null : d.name);
   // the tip's lead: the project's name on main, whose row goes by its branch, then what its agent has
   // cost and filled so far. Kept off the path's line so the path reads whole and the figures are

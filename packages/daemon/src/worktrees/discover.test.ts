@@ -44,7 +44,7 @@ describe("subtractKnown", () => {
     expect(rows).toEqual([]);
   });
 
-  test("a claimed spare is matched through its title symlink too", () => {
+  test("a claimed spare is matched through its branch symlink too", () => {
     const rows = subtractKnown(
       "r1",
       [listed("/wt/wt-7bb1", { branch: "toyon/add-page" })],

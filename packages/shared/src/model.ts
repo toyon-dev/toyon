@@ -195,14 +195,19 @@ export interface WorktreeInfo {
   id: string;
   repoId: string;
   path: string;
-  /** a symlink named after the title, beside `path`, when the directory's own name is not the
-   * title (a claimed spare keeps its wt-xxxx directory): the terminal's cwd and editor links
+  /** a symlink named after the branch's tail, beside `path`, when the directory's own name is not
+   * that (a claimed spare keeps its wt-xxxx directory): the terminal's cwd and editor links
    * show this one; git and the procs use `path` */
   linkPath?: string;
+  /** `toyon/<slug>` for a worktree toyon made (the prompt's first words at first, the title's slug
+   * once it is named or renamed), the person's own branch for one it adopted. The slug keeps up
+   * with the title without ever being it. */
   branch: string;
   kind: WorktreeKind;
   /** port of this worktree's reverse proxy (preview iframe target) */
   proxyPort: number;
+  /** what the rail calls it, in words a person would say: spaces and capitals and all. Nothing is
+   * spelled from this; the branch and the directory take its slug. */
   title: string;
   createdAt: number;
   /** merged into main and no new work since */

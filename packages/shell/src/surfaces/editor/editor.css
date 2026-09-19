@@ -61,6 +61,79 @@
   .editor-preview {
     overflow-y: auto;
   }
+  /* the document's outline: a strip of ticks down the left of the body, outside the scroll box so it
+   holds still, centred on the body's height the way a page's margin notes are. It sits inside the
+   document's own side padding, so it covers no text at any width. The padding is hit area: a 2px
+   tick is nothing to point at. */
+  .editor-outline {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    translate: 0 -50%;
+    max-height: calc(100% - 24px);
+    overflow: hidden;
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: pointer;
+  }
+  /* a tick is as wide as its heading is high in the document: the title's is the long one */
+  .editor-outline-tick {
+    display: block;
+    flex: none;
+    height: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--text2);
+    width: 6px;
+    &[data-level="1"] {
+      width: 18px;
+    }
+    &[data-level="2"] {
+      width: 13px;
+    }
+    &[data-level="3"] {
+      width: 9px;
+    }
+    /* the section being read, marked on the strip itself */
+    &[data-state~="current"] {
+      background: var(--text0);
+    }
+  }
+  /* the strip with its titles beside the ticks: the menu's box, laid over the strip so the ticks
+   read as the rows' own and the pointer that opened it is already inside */
+  .editor-outline-list {
+    width: max-content;
+    max-width: 320px;
+    max-height: calc(100vh - 16px);
+    overflow: hidden auto;
+    padding: 4px 0;
+    background: var(--surface1);
+    border: 1px solid var(--border1);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-float);
+    display: flex;
+    flex-direction: column;
+    /* the strip's ticks stand 14px in from the body's edge, and the rows' stand on the same line:
+     the box's border, the row's inset and the gutter add up to it */
+    & .editor-outline-row {
+      min-height: var(--row-height-sm);
+      padding-left: 5px;
+      gap: 10px;
+      font: var(--type-ui);
+    }
+    /* the widest tick's column, so every title starts on one line whatever its level */
+    & .editor-outline-gutter {
+      flex: none;
+      width: 18px;
+    }
+    & .editor-outline-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
   /* an image file, drawn whole: never larger than the body, never scaled past its own size */
   .editor-image {
     position: absolute;

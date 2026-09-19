@@ -596,7 +596,9 @@
     color: var(--text0);
     max-width: var(--chat-measure);
     margin-inline: auto;
-    padding: 24px 32px 48px;
+    /* a document opens with more air above its title than beside it; under the pane's head, a top
+       pad smaller than the sides read as the title pressed against the head */
+    padding: 40px 32px 48px;
     & p,
     & ul,
     & ol,

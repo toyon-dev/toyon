@@ -701,7 +701,7 @@ describe("AcpSession", () => {
     w.session.send("install");
     await w.idle();
     expect(w.events.filter((e) => "toolId" in e && e.toolId === "n1")).toEqual([
-      { type: "tool-start", toolId: "n1", name: "network", input: { host }, kind: "fetch", title: host },
+      { type: "tool-start", toolId: "n1", name: "", input: { host }, kind: "fetch", title: host },
       { type: "tool-end", toolId: "n1", output: "allowed", isError: false },
     ]);
     await w.session.close();

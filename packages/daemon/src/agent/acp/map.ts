@@ -56,8 +56,9 @@ function asRecord(v: unknown): Record<string, unknown> {
  * call named for the check, with the host only in its input, and no tool ever runs behind it. */
 const NETWORK_ASK = "SandboxNetworkAccess";
 
-/** the words a call's row starts with: the agent's own, except a network ask's, which reads as a
- * fetch of the host it named rather than as the check's internal name */
+/** the words a call's row starts with: the agent's own, except a network ask's, which reads as the
+ * host it named under the fetch glyph rather than as the check's internal name. No word beside it:
+ * the answer under the row says allowed or refused, which is all that tells it from a fetch */
 function heading(update: { name?: string | null; title: string; kind?: ToolKind | null; rawInput?: unknown }): {
   name: string;
   title: string;
@@ -65,7 +66,7 @@ function heading(update: { name?: string | null; title: string; kind?: ToolKind 
 } {
   const name = typeof update.name === "string" ? update.name : "";
   const host = asRecord(update.rawInput).host;
-  if (name === NETWORK_ASK && typeof host === "string") return { name: "network", title: host, kind: "fetch" };
+  if (name === NETWORK_ASK && typeof host === "string") return { name: "", title: host, kind: "fetch" };
   return { name, title: update.title, ...(update.kind ? { kind: update.kind } : {}) };
 }
 

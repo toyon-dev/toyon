@@ -344,12 +344,12 @@ describe("network asks", () => {
   });
   const chose = (optionId: string): RequestPermissionResponse => ({ outcome: { outcome: "selected", optionId } });
 
-  test("the row reads as a fetch of the host, not as the check's name", () => {
+  test("the row reads as the host under the fetch glyph, not as the check's name", () => {
     expect(run([call("SandboxNetworkAccess")])).toEqual([
       {
         type: "tool-start",
         toolId: "n1",
-        name: "network",
+        name: "",
         input: { host: "fonts.googleapis.com" },
         kind: "fetch",
         title: "fonts.googleapis.com",

@@ -1,4 +1,4 @@
-import { type Span, splitSpanLines, type ToolKind, wordSpans } from "@toyon/shared";
+import { CHECK_TOOL, SHELL_TOOL, type Span, splitSpanLines, type ToolKind, wordSpans } from "@toyon/shared";
 import type { IconName } from "../../ui/Icon.tsx";
 /** How a tool call reads in the transcript: the two halves of its summary line, and the blocks of
  * its output. */
@@ -124,8 +124,11 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   // an older toyon can be a string neither map has: fall back rather than print "undefined".
   const kind = call.toolKind && call.toolKind in KIND_ICON ? call.toolKind : "other";
   const label = KIND_LABEL[kind];
-  // the agent's own word for the tool, where it sent one rather than the whole call as its name
-  const own = detail && call.name === call.title ? "" : call.name;
+  // the agent's own word for the tool, where it sent one rather than the whole call as its name.
+  // Toyon's own rows (a `!` command, the check after a turn) carry a name for the log to find
+  // them by, not a word to print: the glyph and the command already say what ran
+  const own =
+    detail && (call.name === call.title || call.name === SHELL_TOOL || call.name === CHECK_TOOL) ? "" : call.name;
   // the glyph already says the kind, so the row prints a word only where one adds to it: the tool's
   // own name, or the kind itself on a row with no detail to stand on
   const name = own && own.toLowerCase() !== label ? own : detail ? "" : label;

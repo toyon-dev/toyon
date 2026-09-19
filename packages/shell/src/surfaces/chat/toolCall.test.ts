@@ -188,20 +188,32 @@ describe("toolLabel", () => {
     });
   });
 
-  test("a network ask reads as the host it asked for, under a globe", () => {
+  test("a network ask reads as the host it asked for, under a globe and nothing else", () => {
     const call = {
-      name: "network",
+      name: "",
       title: "registry.npmjs.org",
       toolKind: "fetch" as const,
       input: { host: "registry.npmjs.org" },
     };
     expect(toolLabel(call)).toEqual({
       label: "fetch",
-      name: "network",
+      name: "",
       icon: "globe",
       hint: "registry.npmjs.org",
       command: "",
     });
+  });
+
+  test("toyon's own rows print the glyph and the command, never their tool name", () => {
+    const shell = { name: "shell", title: undefined, toolKind: "execute" as const, input: { command: "git status" } };
+    expect(toolLabel(shell)).toEqual({ label: "run", name: "", icon: "branch", hint: "git status", command: "" });
+    const check = {
+      name: "check",
+      title: undefined,
+      toolKind: "execute" as const,
+      input: { command: "bun run check" },
+    };
+    expect(toolLabel(check)).toEqual({ label: "run", name: "", icon: "run", hint: "bun run check", command: "" });
   });
 
   test("a title that only repeats the name leaves the row one word", () => {

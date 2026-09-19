@@ -43,14 +43,6 @@ export function ImageChip({
   );
   const chip = useRef<HTMLDivElement | null>(null);
   const [full, setFull] = useState(false);
-  if (onRemove) {
-    return (
-      <div className={cx("pick-chip image-chip", className)}>
-        {body}
-        <IconButton icon="close" label="Remove image" tone="quiet" onClick={onRemove} />
-      </div>
-    );
-  }
   return (
     // the tip trails the pointer: centred under a row this wide it lands on the row below
     <div
@@ -62,6 +54,7 @@ export function ImageChip({
       <button type="button" className="image-link" onClick={() => setFull(true)}>
         {body}
       </button>
+      {onRemove && <IconButton icon="close" label="Remove image" tone="quiet" onClick={onRemove} />}
       <ImagePeek chip={chip} src={src} alt={name} width={width} height={height} />
       {full && (
         <FullAttachment onClose={() => setFull(false)}>

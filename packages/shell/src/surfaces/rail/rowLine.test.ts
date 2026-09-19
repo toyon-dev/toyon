@@ -52,8 +52,9 @@ describe("the line under a row's name", () => {
     expect(rowLine(owned(), ctx({ at: "2d" }))).toBe("Idle · 2d");
     const turn = { ...done, recap: { at: 2, text: "Dropped the second handler" } };
     expect(rowLine(owned({}, { lastTurn: turn }), ctx({ at: "4m" }))).toBe("Dropped the second handler.");
-    // never on main (it is never sent to) or a found row (nobody sent there); the caller knows
+    // never on the lead (it is never sent to) or a found row (nobody sent there); the caller knows
     expect(rowLine(owned({}, { kind: "main" }), ctx({ at: "4m" }))).toBe("new worktree");
+    expect(rowLine(owned({}, { kind: "spare" }), ctx({ at: "4m" }))).toBe("new worktree");
   });
 
   test("the socket being down wins over everything", () => {

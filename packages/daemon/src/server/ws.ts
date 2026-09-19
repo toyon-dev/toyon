@@ -161,7 +161,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       (async () => {
         do {
           statusesDirty = false;
-          broadcast({ t: "worktrees", rows: await s.worktrees.rows(), spares: s.worktrees.spares() });
+          broadcast({ t: "worktrees", rows: await s.worktrees.rows(), trunks: await s.worktrees.trunks() });
         } while (statusesDirty);
       })().finally(() => {
         statusesInFlight = false;
@@ -298,7 +298,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       protocol: PROTOCOL_VERSION,
       repos: s.state.repos,
       rows: await s.worktrees.rows({ quick: true }),
-      spares: s.worktrees.spares(),
+      trunks: await s.worktrees.trunks({ quick: true }),
       themes: s.themes.themes,
       themePrefs: s.themes.prefs,
       agents: agentInfos(),

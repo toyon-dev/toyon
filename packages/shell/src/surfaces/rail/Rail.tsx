@@ -1,7 +1,7 @@
 import {
   type ArchivedWorktree,
   canGraft,
-  isMain,
+  isLead,
   isOwned,
   type OwnedWorktree,
   sentAt,
@@ -29,7 +29,7 @@ import {
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
-import { asksSetup } from "../../state/store.ts";
+import { asksSetup, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
@@ -75,9 +75,15 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const dispatch = useDispatch();
   const sock = useSock();
   const worktrees = useVisibleWorktrees();
-  // main leads, above the tasks (state/railOrder.ts)
-  const lead = worktrees[0] && isMain(worktrees[0].worktree) ? worktrees[0] : null;
+  // the lead (the spare, or main without one) is above the tasks (railOrder.ts): the row new work
+  // is typed in. It wears what main itself says, since main is not a row while the spare stands
+  // in for it: how far it trails origin, what is uncommitted there.
+  const lead = worktrees[0] && isLead(worktrees[0].worktree) ? worktrees[0] : null;
   const tasks = lead ? worktrees.slice(1) : worktrees;
+  const trunk = useStore((s) => trunkOf(s, s.activeRepoId));
+  /** a row's counts: the lead's are main's own */
+  const countsOf = (w: WorktreeStatus): { behind?: number; dirty?: number; ahead?: number } =>
+    lead && w.id === lead.id && trunk ? { behind: trunk.behind, dirty: trunk.dirty } : w;
   // the gutter's times read in minutes, and a quiet rail can go a long while without a frame
   const [, setMinute] = useState(0);
   useEffect(() => {
@@ -288,7 +294,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   /* The count columns are reserved list-wide, so a row with no dirty files still leaves the dirty
    * column empty and every number sits under the one above it. A column nobody uses is not drawn,
    * and the name takes its width. */
-  const all = [...worktrees, ...discovered];
+  const all = [...worktrees, ...discovered].map(countsOf);
   const cols = {
     dirty: all.some((w) => (w.dirty ?? 0) > 0),
     behind: all.some((w) => (w.behind ?? 0) > 0),
@@ -305,7 +311,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
    * control column at the far edge, the column the plus and the caret already share. */
   const railRow = (w: WorktreeStatus) => {
     const owned = isOwned(w) ? w : null;
-    const onMain = !!owned && isMain(owned.worktree);
+    const onLead = !!owned && isLead(owned.worktree);
+    const counts = countsOf(w);
     const id = w.id;
     const menuOpen = menu?.owner === "rail" && menu.key === id;
     const showCheck = owned && graftMode && canGraft(owned.worktree) && id !== activeId;
@@ -322,8 +329,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         // crosses the panel.
         // Badges and the crashed dot keep their own, since those are what a hover over them is
         // asking about. A found row has no state to name, so the path is its text, unless
-        // something holds it. Main's lead names the project and the branch, at the far start of the
-        // state's line, since its row says what its click does and names neither.
+        // something holds it. The lead's tip names the project and the branch, at the far start of
+        // the state's line, since its row says what its click does and names neither.
         // Offline, the state is whatever the daemon last said, and a tip restating it as live sat
         // over a row painted in the fault colour, a green "Running" over an orange dot: the tip
         // names the fault instead, with no dot, since there is no live state for one to restate.
@@ -338,9 +345,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               dot: offline ? undefined : dotClass(w),
               lead: leadOf(
                 w,
-                isMain(owned.worktree)
-                  ? [repoOf(owned)?.name, rowLabel(w, repoOf(owned))].filter(Boolean).join(" · ")
-                  : unspelled(w),
+                onLead ? [repoOf(owned)?.name, rowLabel(w, repoOf(owned))].filter(Boolean).join(" · ") : unspelled(w),
               ),
             })
           : offline
@@ -383,12 +388,12 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             if (id === activeId) setGraftMode(true);
             else toggleSel(owned);
           }
-          // main is where new work is written, so a click on it puts the caret in its box; the
+          // the lead is where new work is written, so a click on it puts the caret in its box; the
           // arrows above only select it, so a walk down the list keeps the keyboard on the list.
-          // On a screen it is a plain selection: the draft opens on its own whenever main is the
-          // row (withLauncher), and open-draft would reveal the chat dock, which is a layout this
-          // frame cannot see and the other one would inherit.
-          else if (onMain && !onScreen) dispatch({ a: "open-draft" });
+          // On a screen it is a plain selection: the draft opens on its own whenever the lead is
+          // the row (withLauncher), and open-draft would reveal the chat dock, which is a layout
+          // this frame cannot see and the other one would inherit.
+          else if (onLead && !onScreen) dispatch({ a: "open-draft" });
           else dispatch({ a: "activate", id });
         }}
         {...cm.contextMenu(() => rowItems(w), id)}
@@ -412,9 +417,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               <>
                 {/* at rest the column says how long since anyone sent something here, the time the
                     rail is sorted by; the kebab takes its seat while the row is lifted (rail.css).
-                    Main is never sent to, and its label already says what its click does, so its
-                    column holds nothing until the kebab comes */}
-                {owned && !onMain && <span className="rail-at row-dim">{ago(sentAt(owned.worktree))}</span>}
+                    The lead is never sent to, and its label already says what its click does, so
+                    its column holds nothing until the kebab comes */}
+                {owned && !onLead && <span className="rail-at row-dim">{ago(sentAt(owned.worktree))}</span>}
                 {/* not .row-dim: it is only there while the row is lifted, and its three dots are the
                     thinnest mark in the column, so it takes the row's own colour rather than a tier
                     under it. Full size for the same reason: at the inline size the dots go hairline. */}
@@ -433,10 +438,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             )
           )}
         </span>
-        {onMain ? (
-          // the row says what its click does, not which branch it is: main is never worked in from
-          // here, so its name would be the one label on the list that is not the answer to "what
-          // happens if I press this". The branch is the tip's lead.
+        {onLead ? (
+          // the row says what its click does, not which directory it is: the lead is never worked
+          // in from here, so its name would be the one label on the list that is not the answer to
+          // "what happens if I press this". The branch is the tip's lead.
           <span className="branch rail-main-label">
             <Icon name="plus" className="icon-inline" />
             new worktree
@@ -482,23 +487,27 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             from the quiet tier. The columns say which count is which, so no glyph does. */}
         <span className="rail-counts">
           {cols.dirty && (
-            <span className="rail-count badge-dirty" data-tip={w.dirty ? `${w.dirty} uncommitted` : undefined}>
-              {w.dirty ? `~${count(w.dirty)}` : ""}
+            <span
+              className="rail-count badge-dirty"
+              data-tip={counts.dirty ? `${counts.dirty} uncommitted${onLead ? " on main" : ""}` : undefined}
+            >
+              {counts.dirty ? `~${count(counts.dirty)}` : ""}
             </span>
           )}
           {cols.behind && (
             <span
               className="rail-count rail-behind row-dim"
-              data-tip={
-                w.behind ? `${w.behind} behind ${w.worktree && isMain(w.worktree) ? "origin" : "main"}` : undefined
-              }
+              data-tip={counts.behind ? `${counts.behind} behind ${onLead ? "origin" : "main"}` : undefined}
             >
-              {w.behind ? count(w.behind) : ""}
+              {counts.behind ? count(counts.behind) : ""}
             </span>
           )}
           {cols.ahead && (
-            <span className="rail-count badge-ahead" data-tip={w.ahead ? `${w.ahead} ahead of main` : undefined}>
-              {w.ahead ? `+${count(w.ahead)}` : ""}
+            <span
+              className="rail-count badge-ahead"
+              data-tip={counts.ahead ? `${counts.ahead} ahead of main` : undefined}
+            >
+              {counts.ahead ? `+${count(counts.ahead)}` : ""}
             </span>
           )}
         </span>
@@ -524,11 +533,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           // the ring is a modifier, not a state: it rides on whatever the dot already says
           const unseen = w.unseen ? " unseen" : "";
           const state = dotClass(w);
-          // Main's seat in the strip is a plus: new work starts here, and the strip has no other
-          // place to say so. The dot takes the seat back whenever it has something to say (main's
-          // server down, the daemon gone), and it is drawn underneath either way, since the peek
-          // shows the dot, with the plus in the row's own label.
-          if (onMain && !trouble && state !== "crashed" && !offline) {
+          // The lead's seat in the strip is a plus: new work starts here, and the strip has no
+          // other place to say so. The dot takes the seat back whenever it has something to say
+          // (its server down, the daemon gone), and it is drawn underneath either way, since the
+          // peek shows the dot, with the plus in the row's own label.
+          if (onLead && !trouble && state !== "crashed" && !offline) {
             return (
               <>
                 <span className={`dot ${state} rail-main-dot`} />
@@ -560,8 +569,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               offline,
               needsSetup: asksSetup(owned ? repoOf(owned) : null),
               path: wtDirLabel(w),
-              // the time the desk's control column carries; main is never sent to
-              at: owned && !onMain ? ago(sentAt(owned.worktree)) : undefined,
+              // the time the desk's control column carries; the lead is never sent to
+              at: owned && !onLead ? ago(sentAt(owned.worktree)) : undefined,
             })}
           </span>
         )}
@@ -606,9 +615,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           the ground between and under the rows, where the tooltip walks up to the nearest one */}
       <div className="rail-panel" data-tip={offline ? OFFLINE_LINE : undefined} data-tip-placement="follow">
         <div className="rail-list" ref={listRef}>
-          {/* main leads on a desk, where its box is where new work is written. On a screen the bar's
-              plus is that box, and main is not listed: a row that only says "new worktree" under
-              a plus that does the same is one control twice, and a phone runs nothing on main */}
+          {/* the lead is first on a desk, where its box is where new work is written. On a screen
+              the bar's plus is that box, and the lead is not listed: a row that only says "new
+              worktree" under a plus that does the same is one control twice */}
           {lead && !onScreen && railRow(lead)}
           {tasks.map(railRow)}
           {graftMode && (
@@ -654,13 +663,10 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                 disabled={!sel.some((id) => (worktrees.find((w) => w.worktree.id === id)?.behind ?? 0) > 0)}
                 data-tip="Pull main into every selected worktree that's behind"
                 onClick={() => {
+                  // the lead is never among them: it cannot be checked (canGraft)
                   for (const id of sel) {
                     const w = worktrees.find((x) => x.worktree.id === id);
-                    if ((w?.behind ?? 0) > 0)
-                      shipOp(sock, dispatch, {
-                        t: w && isMain(w.worktree) ? "pull-main" : "sync-main",
-                        worktreeId: id,
-                      });
+                    if ((w?.behind ?? 0) > 0) shipOp(sock, dispatch, { t: "sync-main", worktreeId: id });
                   }
                   cancelGraft();
                 }}

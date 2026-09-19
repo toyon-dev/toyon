@@ -44,6 +44,11 @@ export class DraftStore {
     return !!this.drafts[boxId]?.trim();
   }
 
+  /** what a box holds, or nothing */
+  text(boxId: string): string {
+    return this.drafts[boxId] ?? "";
+  }
+
   /** a box's text as one tab has it now; the other tabs are told, and the tab that wrote it knows
    * itself by `clientId` */
   set(boxId: string, text: string, clientId?: string): void {

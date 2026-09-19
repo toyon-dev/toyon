@@ -1,18 +1,19 @@
 import type { WorktreeInfo } from "./model.ts";
-import { isMain } from "./worktree-caps.ts";
+import { isLead } from "./worktree-caps.ts";
 
 /** when someone last put work into a row: what they sent, else its agent's last turn for a row from
  * before sends were stamped, else when it was made */
 export const sentAt = (w: WorktreeInfo) => w.promptedAt ?? w.lastTurn?.at ?? w.createdAt;
 
-/** where a row sits in the rail's order: main, open work, landed work */
-const tierOf = (w: WorktreeInfo) => (isMain(w) ? 0 : w.landed ? 2 : 1);
+/** where a row sits in the rail's order: the lead (the spare, or main without one), open work,
+ * landed work */
+const tierOf = (w: WorktreeInfo) => (isLead(w) ? 0 : w.landed ? 2 : 1);
 
 /** what a row moves with on the rail: itself, or its variant group on its tier, since a landed
  * attempt goes with landed work and the ones it beat stay where they were */
 export const railUnitOf = (w: WorktreeInfo): string => (w.variant ? `${tierOf(w)}:${w.variant.group}` : `row:${w.id}`);
 
-/** The rail's order: main, then the rows most recently sent to, then landed ones. Only a send moves
+/** The rail's order: the lead, then the rows most recently sent to, then landed ones. Only a send moves
  * a row, never an agent finishing or asking, so a row does not slide out from under the pointer
  * while agents run; what needs you is the dot's and the jump chord's to say. A variant group moves
  * as one, at its newest sibling's time and in index order, so a follow-up to one attempt does not

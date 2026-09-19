@@ -11,7 +11,7 @@ import {
   canSync,
   DEFAULT_PERMISSION_MODE,
   describeLand,
-  isMain,
+  isProvisional,
   landPolicy,
   nextNumbers,
   numbered,
@@ -25,7 +25,7 @@ import { toInput } from "../../state/attach.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
 import { useChatCentred, useGreenfield, useLocalField, usePreviewId } from "../../state/selectors.ts";
-import { canCarry, composerBoxOf, type Draft } from "../../state/store.ts";
+import { canCarry, composerBoxOf, type Draft, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { TextArea } from "../../ui/Field.tsx";
@@ -113,16 +113,16 @@ function insertionFor(r: Row): string {
   return r.kind === "changes" ? "@changes " : `@${r.path} `;
 }
 
-/** The message box: the text (kept per worktree, or per repo for a draft), picked-element, image
- * and paste attachments, the row saying what runs where the message goes, and the per-worktree
- * tools (terminal, element picker).
+/** The message box: the text (kept per row), picked-element, image and paste attachments, the row
+ * saying what runs where the message goes, and the per-worktree tools (terminal, element picker).
  *
- * Three ways to send from here. A message to the worktree's own agent. Main's message, where
- * `draft` is set, which starts a worktree from main: main has no agent of its own. The intro's
- * variants and batch apply, main's uncommitted files move with it when the intro's note says so,
- * and the draft gives way as the worktree it was for arrives. And a message into an `archived`
- * worktree's chat, which restores it and then goes to its agent: the box is that worktree's under
- * the id it comes back with, and nothing here that needs a running worktree is offered. */
+ * Three ways to send from here. A message to the worktree's own agent. The lead row's message,
+ * where `draft` is set, which starts a worktree: the row itself becomes it when it is the spare,
+ * or one is made from main when main is the lead. The intro's variants and batch apply, main's
+ * uncommitted files move with it when the intro's note says so, and the draft gives way as the row
+ * becomes the task. And a message into an `archived` worktree's chat, which restores it and then
+ * goes to its agent: the box is that worktree's under the id it comes back with, and nothing here
+ * that needs a running worktree is offered. */
 export function Composer({
   active,
   draft,
@@ -130,7 +130,7 @@ export function Composer({
   greenfield,
   placement = "dock",
 }: {
-  /** the worktree, or main while drafting */
+  /** the worktree, or the lead row while drafting */
   active: OwnedWorktree | null;
   draft?: Draft | null;
   /** a removed worktree whose chat is on screen; `active` is null with it */
@@ -149,7 +149,7 @@ export function Composer({
   const drafting = !!draft;
   const id = active?.worktree.id ?? null;
   const repoId = active?.worktree.repoId;
-  const boxId = archived ? archived.id : composerBoxOf(active, drafting);
+  const boxId = archived ? archived.id : composerBoxOf(active);
   const text = useLocalField(boxId, "draft");
   const attachments = useLocalField(boxId, "attachments");
   const notice = useLocalField(boxId, "notice");
@@ -166,8 +166,8 @@ export function Composer({
   const askUp = ask && askParked !== ask.id ? ask : null;
   const parked = ask && askParked === ask.id ? ask : null;
   const askRef = useRef<HTMLDivElement>(null);
-  // the frame on screen: while drafting the base's preview (or its warm spare's), which is what
-  // the picker picks from and the page context describes
+  // the frame on screen: while drafting the lead's own preview, which is what the picker picks
+  // from and the page context describes
   const frameId = usePreviewId();
   const page = useLocalField(frameId, "page");
   // a project with nothing to run has no page to pick from, so the picker's button goes
@@ -181,6 +181,8 @@ export function Composer({
 
   // A draft starts a worktree, and so does a new project's first message: the scaffold is work to
   // land like any other, so main is never where an agent starts writing.
+  // A provisional row's own agent may already be up (it warms on the first keystroke), and the
+  // send makes that row the task: still a draft, since the choices fixed at birth are its.
   const spawning = drafting || !!greenfield;
   // A main that has never run has no agent on its record, so its first message starts a fresh chat:
   // the agent and model are chosen the way a new worktree's are, and the send stamps them.
@@ -228,20 +230,19 @@ export function Composer({
   // the folders the files tab shows, so `@src/app/` names one the tree has
   const folders = useMemo(() => folderList(files ?? NO_PATHS), [files]);
   const git = useLocalField(id, "git");
-  // this worktree's uncommitted files (main's, while drafting) and how far it trails main: the live
-  // status when the row is subscribed, else the rail's ten-second count
+  // this worktree's uncommitted files and how far it trails main: the live status when the row is
+  // subscribed, else the rail's ten-second count
   const dirty = git?.files.length ?? active?.dirty ?? 0;
   const op = useStore((s) => (id ? s.shipping[id] : undefined));
   const behind =
     !active || !repo || spawning || !canSync(active) ? null : behindNote(repo.defaultBranch, active.behind);
-  // main against origin, said while main is the base
-  const mainRow = useStore(
-    (s) => s.rows.find((r) => r.repoId === repoId && r.worktree !== undefined && isMain(r.worktree)) ?? null,
-  );
-  const mainOp = useStore((s) => (mainRow ? s.shipping[mainRow.id] : undefined));
-  const origin = mainRow && spawning ? originNote(mainRow.behind) : null;
-  // a draft has no session of its own to ask for commands: a worktree of this repo that runs the
-  // same agent stands in, main first (commandSource says why that is sound)
+  // main against origin, said while a worktree is about to start from it: what the daemon says of
+  // the checkout itself, since main is not a row while its spare stands in for it
+  const trunk = useStore((s) => trunkOf(s, repoId));
+  const trunkOp = useStore((s) => (trunk ? s.shipping[trunk.id] : undefined));
+  const origin = trunk && spawning ? originNote(trunk.behind) : null;
+  // a draft's own session may not have run yet: a worktree of this repo that runs the same agent
+  // stands in, the lead first (commandSource says why that is sound)
   const source = useStore((s) => (drafting ? commandSource(s.rows, repoId, spawnAgent, defaultAgent) : id));
   const commands = useLocalField(source, "commands");
   // the one thing to do about a full context, offered by the ring: the agent's own command,
@@ -404,7 +405,7 @@ export function Composer({
   const shellGhost =
     shellCmd === "" && active
       ? drafting
-        ? ` a command to run in ${active.worktree.title}'s terminal`
+        ? " a command to run in the new worktree's terminal"
         : ` a command to run in ${active.worktree.title}; its output goes on the transcript`
       : null;
   const ghost = argGhost ?? shellGhost;
@@ -485,7 +486,6 @@ export function Composer({
     if (blocked) return blocked;
     if (standing) return recapLine(standing);
     if (greenfield) return `describe ${title}…`;
-    if (draft?.sent) return "starting the worktree…";
     if (spawning) return "describe a change";
     // the two idioms are a hardware keyboard's, and two lines of hint in a three-line box on a
     // phone is the box explaining itself instead of waiting to be written in
@@ -594,11 +594,9 @@ export function Composer({
       return;
     }
     if (!active || !id) return;
-    // the draft's message is on its way; a second enter before its worktree lands would start another
-    if (draft?.sent) return;
     if (shellCmd !== null) {
       // a command runs where it was typed: in the worktree's own transcript, or for a draft, which
-      // has none, in the base's terminal. Attachments are for the agent and stay for the next message.
+      // has none, in the lead's terminal. Attachments are for the agent and stay for the next message.
       if (shellCmd && drafting) dispatch({ a: "term-run", id, command: shellCmd });
       else if (shellCmd) sock?.send({ t: "exec", worktreeId: id, command: shellCmd });
       setText("");
@@ -636,6 +634,9 @@ export function Composer({
     // a typed mode is the chip's next value too, so the box remembers it the way the chip does
     if (mode) setMode(mode);
     if (spawning) {
+      // the row the message was typed in becomes the worktree, when it is the spare: the daemon
+      // claims that very row, so nothing on screen swaps. Main as the lead has no such row.
+      const here = isProvisional(active.worktree) ? { worktreeId: id } : {};
       const from = {
         clientId,
         repoId: active.worktree.repoId,
@@ -663,11 +664,18 @@ export function Composer({
         });
       } else if (draft && draft.variants > 1) {
         const group = Math.random().toString(36).slice(2, 10);
+        // the first attempt is this row; its siblings are made beside it
         for (let i = 0; i < draft.variants; i++) {
-          sock?.send({ t: "create-worktree", ...from, prompt, variant: { group, index: i + 1, of: draft.variants } });
+          sock?.send({
+            t: "create-worktree",
+            ...from,
+            ...(i === 0 ? here : {}),
+            prompt,
+            variant: { group, index: i + 1, of: draft.variants },
+          });
         }
       } else {
-        sock?.send({ t: "create-worktree", ...from, prompt });
+        sock?.send({ t: "create-worktree", ...from, ...here, prompt });
       }
     } else {
       // the session reads these when it opens, and the daemon handles frames in order, so they are
@@ -682,10 +690,6 @@ export function Composer({
     setText("");
     // the reply lands in the dock, so the dock comes back with the message that started it
     if (greenfield) dispatch({ a: "show-chat" });
-    // The worktree the draft was for is on its way and takes the selection when it lands, so the
-    // box holds read-only until then. A batch plans first and its rows are not this tab's, so
-    // nothing would release it; its box stays open and the rows arrive in the rail.
-    if (drafting && !draft?.batch) dispatch({ a: "draft-sent" });
   };
 
   // The description typed on the new-project view, in the box of the project it just made. It is
@@ -906,9 +910,6 @@ export function Composer({
             // the ghost draws the placeholder itself when it has a line to put under it
             placeholder={subline || verb ? "" : placeholderText}
             disabled={!active && !archived?.restorable}
-            // read-only rather than disabled while the draft's worktree starts: the caret stays, and
-            // the same box is that worktree's when it lands
-            readOnly={!!draft?.sent}
           />
           {ghost && (
             <div className="composer-ghost" aria-hidden="true">
@@ -1078,7 +1079,7 @@ export function Composer({
           since a new worktree starts from main as it is and a main nobody has pulled today hands
           the agent stale code. What the message will be (batch, variants, main's files coming
           along) is the intro's, above the box. And the question set aside, with the way back to it. */}
-      {((origin && mainRow) || (behind && active && id) || (parked && id)) && (
+      {((origin && trunk) || (behind && active && id) || (parked && id)) && (
         <div className="composer-notes">
           {parked && id && (
             <div className="hint composer-note">
@@ -1094,19 +1095,19 @@ export function Composer({
               </Button>
             </div>
           )}
-          {origin && mainRow && (
+          {origin && trunk && (
             <div className="hint composer-note">
               <span>{origin}</span>
               <Button
                 variant="outline"
-                busy={mainOp === "pull-main"}
-                disabled={!!mainOp || dirty > 0}
+                busy={trunkOp === "pull-main"}
+                disabled={!!trunkOp || trunk.dirty > 0}
                 data-tip={
-                  dirty > 0
+                  trunk.dirty > 0
                     ? `commit or discard the changes on ${repo?.defaultBranch} first`
                     : "Fast-forward main to origin"
                 }
-                onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: mainRow.id })}
+                onClick={() => shipOp(sock, dispatch, { t: "pull-main", worktreeId: trunk.id })}
               >
                 pull
               </Button>

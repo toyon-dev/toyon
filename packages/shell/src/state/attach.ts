@@ -6,7 +6,6 @@
 import {
   type AttachmentInput,
   type AttachmentKind,
-  isMain,
   limitMessage,
   PASTE_MAX_CHARS,
   type PasteSource,
@@ -16,7 +15,7 @@ import {
   stripAnsi,
 } from "@toyon/shared";
 import type { Store } from "./context.tsx";
-import { composerBoxOf, draftKey, type PendingAttachment, type State, worktreeById } from "./store.ts";
+import { composerBoxOf, type PendingAttachment, type State, worktreeById } from "./store.ts";
 
 /** what could not be attached, said under the box it was for */
 export const noticeIn = (store: Store, boxId: string, text: string) => store.dispatch({ a: "notice", id: boxId, text });
@@ -82,7 +81,7 @@ export interface Taken {
 export function addToChat(store: Store, taken: Taken | null) {
   const s = store.getState();
   const active = worktreeById(s, s.activeId);
-  const boxId = composerBoxOf(active, !!s.draft);
+  const boxId = composerBoxOf(active);
   // the editor holds the active worktree's file; lines from any other checkout would mislead
   if (taken && boxId && taken.worktreeId === active?.worktree.id && taken.text.trim()) {
     const { path, startLine, endLine, ref } = taken.source;
@@ -103,7 +102,7 @@ export function addToChat(store: Store, taken: Taken | null) {
  * Null for a worktree toyon only found, which has no composer to take them. */
 export function treeBox(s: State, worktreeId: string): string | null {
   if (worktreeId !== s.activeId) return null;
-  return composerBoxOf(worktreeById(s, worktreeId), !!s.draft);
+  return composerBoxOf(worktreeById(s, worktreeId));
 }
 
 /** a file or folder named in a message, the way the @ menu names one */
@@ -132,12 +131,10 @@ export function askAgent(store: Store, worktreeId: string, sentence: string) {
   appendToBox(store, worktreeId, sentence);
 }
 
-/** the box a pick from frame `frameId` belongs in: main's frame while main drafts goes to the
- * repo's draft; otherwise the frame is a worktree's preview, and the box is that worktree's */
+/** the box a pick from frame `frameId` belongs in: the frame is a row's preview, the lead's
+ * included, and the box is that row's */
 function pickBox(s: State, frameId: string): string | null {
-  const row = worktreeById(s, frameId);
-  if (!row) return null;
-  return s.draft && frameId === s.activeId && isMain(row.worktree) ? draftKey(row.repoId) : frameId;
+  return worktreeById(s, frameId) ? frameId : null;
 }
 
 /** the directories a frame's source paths can start with: a worktree's checkout and the link it

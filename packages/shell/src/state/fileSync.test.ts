@@ -93,7 +93,7 @@ function harness() {
     protocol: PROTOCOL_VERSION,
     repos: [],
     rows: [],
-    spares: [],
+    trunks: {},
     themes: initial.themes,
     themePrefs: initial.themePrefs,
     agents: [],

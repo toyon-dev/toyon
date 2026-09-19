@@ -1,8 +1,9 @@
 // Spare pool: one pre-warmed worktree per repo (deps cloned, setup run, servers started) so a new
-// task starts in seconds. Claiming hands the spare's runtime AND its agent to the task.
+// task starts in seconds. The spare is the row new work is typed in, and claiming turns that row
+// into the task in place: its runtime AND its agent go to the task under the same id.
 //
 // The placeholder entry ({worktreeId:"", ready:false}) goes in before the first await so a second
-// ensure() during warm-up is a no-op; refresh() and claim() key off `ready`.
+// ensure() during warm-up joins the one running; refresh() and claim() key off `ready`.
 
 import { join } from "node:path";
 import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
@@ -22,6 +23,8 @@ interface SpareEntry {
   lockHash: string;
   refreshing: Promise<void> | null;
   ready: boolean;
+  /** the warm-up under way, for a claim of the row that arrives before it is ready */
+  warming: Promise<void> | null;
 }
 
 export interface SparePoolDeps {
@@ -33,6 +36,9 @@ export interface SparePoolDeps {
   setupAndStart: (wt: WorktreeInfo, repo: RepoInfo) => Promise<void>;
   /** discard a worktree, spares allowed (WorktreeService owns it) */
   discard: (worktreeId: string) => Promise<void>;
+  /** a warm-up failed under someone's fingers: whatever was typed into the spare's box goes to the
+   * row that stands in for it now (WorktreeService knows which) */
+  carryDraft?: (fromId: string, repoId: string) => void;
 }
 
 export class SparePool {
@@ -59,6 +65,7 @@ export class SparePool {
       lockHash: lockfileHash(spare.path),
       refreshing: null,
       ready: true,
+      warming: null,
     });
   }
 
@@ -80,12 +87,22 @@ export class SparePool {
     await this.d.runtime.start(wt, this.d.state.requireRepo(repoId));
   }
 
-  async ensure(repoId: string): Promise<void> {
-    if (this.spares.has(repoId)) return;
+  /** See that the repo has a spare: the one there is, or a warm-up started now. Resolves once it
+   * is ready, or once the warm-up has been rolled back. */
+  ensure(repoId: string): Promise<void> {
+    const have = this.spares.get(repoId);
+    if (have) return have.warming ?? Promise.resolve();
     const repo = this.d.state.requireRepo(repoId);
-    if (repo.needsSetup) return; // don't run guessed setup commands
-    const entry: SpareEntry = { worktreeId: "", lockHash: "", refreshing: null, ready: false };
+    if (repo.needsSetup) return Promise.resolve(); // don't run guessed setup commands
+    const entry: SpareEntry = { worktreeId: "", lockHash: "", refreshing: null, ready: false, warming: null };
     this.spares.set(repoId, entry);
+    entry.warming = this.warmUp(repoId, repo, entry).finally(() => {
+      entry.warming = null;
+    });
+    return entry.warming;
+  }
+
+  private async warmUp(repoId: string, repo: RepoInfo, entry: SpareEntry): Promise<void> {
     try {
       // the directory name outlives the spare: a claim keeps it, so it must not say "spare"
       const slug = `wt-${shortId().slice(0, 4)}`;
@@ -114,8 +131,10 @@ export class SparePool {
       log.warn(repoId, "spare warm-up failed; rolling back", e);
       this.spares.delete(repoId);
       // the state row and git worktree were created before setup could fail: undo them, or the
-      // next boot adopts a half-built spare
+      // next boot adopts a half-built spare. The row was on screen while it warmed, so words typed
+      // into its box move to the row that takes its place before the box goes with it.
       if (entry.worktreeId && this.d.state.worktree(entry.worktreeId)) {
+        this.d.carryDraft?.(entry.worktreeId, repoId);
         await this.d.discard(entry.worktreeId).catch((re) => log.warn(repoId, "spare rollback failed", re));
       }
     }
@@ -155,10 +174,19 @@ export class SparePool {
     await entry.refreshing;
   }
 
-  /** Claim the warm spare for a new task: branch it, return it, warm the next. Null if none is ready. */
-  async claim(repoId: string, branch: string, title: string): Promise<WorktreeInfo | null> {
-    const entry = this.spares.get(repoId);
+  /** Claim the warm spare for a new task: branch it, return it, warm the next. Null if none is
+   * ready. `worktreeId` names the row the message was typed in: a spare still warming is waited
+   * for rather than passed over for a cold checkout, since the person is looking at it; one
+   * already claimed by another tab is nobody's to wait for, and null sends the caller down the
+   * cold path. */
+  async claim(repoId: string, branch: string, title: string, worktreeId?: string): Promise<WorktreeInfo | null> {
+    let entry = this.spares.get(repoId);
+    if (worktreeId && entry?.worktreeId === worktreeId && !entry.ready && entry.warming) {
+      await entry.warming;
+      entry = this.spares.get(repoId);
+    }
     if (!entry?.ready) return null;
+    if (worktreeId && entry.worktreeId !== worktreeId) return null;
     this.spares.delete(repoId);
     // a refresh in flight serializes in front of the agent's first action
     if (entry.refreshing) await entry.refreshing;

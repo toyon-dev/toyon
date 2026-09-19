@@ -346,12 +346,12 @@ describe("RuntimeRegistry terminals", () => {
     expect(t2.alive).toBe(false);
   });
 
-  test("input with no terminal is a no-op; a spare has no terminal", async () => {
+  test("input with no terminal is a no-op; a spare has a terminal, since it is the row new work is typed in", async () => {
     const { registry } = make();
     registry.terminalInput(wt.id, SHELL_STREAM, "x");
     registry.terminalResize(wt.id, SHELL_STREAM, 1, 1);
     await registry.restartStream(wt.id, SHELL_STREAM);
-    expect(() => registry.openTerminal(spare.id, SHELL_STREAM, 80, 24)).toThrow(UserError);
+    expect(registry.openTerminal(spare.id, SHELL_STREAM, 80, 24).alive).toBe(true);
     expect(() => registry.openTerminal("nope", SHELL_STREAM, 80, 24)).toThrow(UserError);
   });
 });

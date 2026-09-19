@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "./model.ts";
-import { canArchive, canGraft, canLand, canRename, canSync, isMain } from "./worktree-caps.ts";
+import { canArchive, canGraft, canLand, canRename, canSync, isLead, isMain, isProvisional } from "./worktree-caps.ts";
 
 const wt = (over: Partial<WorktreeInfo> = {}): WorktreeInfo => ({
   id: "w",
@@ -29,6 +29,15 @@ describe("worktree capabilities", () => {
     expect(canArchive(spare)).toBe(false);
     expect(canGraft(spare)).toBe(false);
     expect(canLand(spare)).toBe(false);
+    expect(canSync({ branch: "main", worktree: spare })).toBe(false);
+  });
+
+  test("the lead is the provisional row, or main when there is none", () => {
+    expect(isProvisional(wt({ kind: "spare" }))).toBe(true);
+    expect(isProvisional(wt({ kind: "main" }))).toBe(false);
+    expect(isLead(wt({ kind: "spare" }))).toBe(true);
+    expect(isLead(wt({ kind: "main" }))).toBe(true);
+    expect(isLead(wt())).toBe(false);
   });
 
   test("a task toyon made can do everything", () => {

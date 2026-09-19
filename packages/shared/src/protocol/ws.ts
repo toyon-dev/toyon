@@ -23,10 +23,10 @@ import type {
   RefHit,
   RepoInfo,
   SelfState,
-  SpareInfo,
   Theme,
   ThemePrefs,
   ToyonConfig,
+  TrunkStatus,
   UpdateState,
   WorktreeInfo,
   WorktreeStatus,
@@ -49,7 +49,8 @@ export type ServerMsg =
       /** every row: toyon's own worktrees first, in its order, then the ones git knows about that
        * toyon did not create; see the `worktrees` frame */
       rows: WorktreeStatus[];
-      spares: SpareInfo[];
+      /** each project's default-branch checkout, by repo id: see TrunkStatus */
+      trunks: Record<string, TrunkStatus>;
       themes: Theme[];
       themePrefs: ThemePrefs;
       /** the daemon's agent registry and which entry new worktrees get by default */
@@ -113,9 +114,10 @@ export type ServerMsg =
   /** the answer to `choose-folder`: null when the dialog was cancelled or could not open */
   | { t: "folder-chosen"; folder: ChosenFolder | null }
   /** One array, owned and found rows alike: take-over turns a row owned, and were the two kinds
-   * to travel in separate frames the rail would show it twice or not at all in between. The
-   * spares ride beside the rows rather than among them: see SpareInfo. */
-  | { t: "worktrees"; rows: WorktreeStatus[]; spares: SpareInfo[] }
+   * to travel in separate frames the rail would show it twice or not at all in between. A repo's
+   * spare is among them, as the row new work is typed in; what its main checkout says rides
+   * beside the rows in `trunks`, since main is not a row while a spare stands for it. */
+  | { t: "worktrees"; rows: WorktreeStatus[]; trunks: Record<string, TrunkStatus> }
   | { t: "proc"; worktreeId: string; proc: WorktreeStatus["procs"][number] }
   | { t: "log"; worktreeId: string; proc: string; line: string }
   | { t: "agent"; worktreeId: string; seq: number; event: AgentEvent }
@@ -382,6 +384,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     /** the requesting tab's id, echoed as WorktreeInfo.createdBy so only that tab auto-focuses it */
     clientId: z.string().max(64).optional(),
     repoId: id,
+    /** the provisional row the message was typed in: that very row becomes the worktree, so
+     * nothing on screen swaps. Another tab may have claimed it first, in which case a fresh one is
+     * made and `clientId` says which tab focuses it. */
+    worktreeId: id.optional(),
     prompt,
     variant: variantSchema.optional(),
     context: ambient.optional(),

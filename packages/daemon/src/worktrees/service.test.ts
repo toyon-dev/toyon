@@ -450,24 +450,54 @@ describe("spare pool", () => {
     if (spare) expect(() => w.worktrees.setEffort(spare.id, "high")).toThrow(UserError);
   });
 
-  test("the warm spare is listed for the draft tab's preview, and leaves the list on claim", async () => {
+  test("the warm spare is the lead row, main leaves the list for it, and a claim keeps the row's id", async () => {
     const repoId = await registered();
+    const main = w.state.worktrees.find((x) => x.repoId === repoId && x.kind === "main")!;
+    expect((await w.worktrees.rows()).map((r) => r.id)).toEqual([main.id]);
     await w.worktrees.spare.ensure(repoId);
     const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
-    expect(w.worktrees.spares()).toEqual([
-      { repoId, id: spare.id, path: spare.path, proxyPort: spare.proxyPort, ready: true },
-    ]);
-    const wt = await w.worktrees.create(repoId, "use the spare");
-    expect(w.worktrees.spares().some((s) => s.id === wt.id)).toBe(false);
-    // the next one warms in the background and says so with a frame once it is ready
+    const rows = await w.worktrees.rows();
+    expect(rows.map((r) => [r.id, r.worktree?.kind])).toEqual([[spare.id, "spare"]]);
+    // what main says rides beside the rows, under its own id
+    expect((await w.worktrees.trunks())[repoId]).toMatchObject({ id: main.id, dirty: 0, empty: false });
+    const wt = await w.worktrees.create(repoId, "use the spare", { worktreeId: spare.id });
+    expect(wt.id).toBe(spare.id);
+    expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.worktree?.kind).toBe("worktree");
+    // the next one warms in the background and says so with a frame once it is ready, and is the
+    // lead row from then on
     let changed = 0;
     w.hub.on("worktreesChanged", () => changed++);
+    await until(() => w.state.worktrees.some((x) => x.kind === "spare"));
     await settle();
-    await settle();
-    const next = w.worktrees.spares().find((s) => s.repoId === repoId);
-    expect(next?.id).not.toBe(wt.id);
-    expect(next?.ready).toBe(true);
+    const next = w.state.worktrees.find((x) => x.kind === "spare")!;
+    expect(next.id).not.toBe(wt.id);
+    expect((await w.worktrees.rows()).map((r) => r.id).sort()).toEqual([next.id, wt.id].sort());
     expect(changed).toBeGreaterThan(0);
+  });
+
+  test("a claim naming a spare still warming waits for it; one naming a row already claimed goes cold", async () => {
+    const repoId = await registered();
+    // a setup step that takes its time, so the warm-up is still under way when the send arrives
+    w.state.requireRepo(repoId).config.setup = ["sleep 0.5"];
+    // the warm-up under way: the row is on screen before it is ready, and a send from it is
+    // answered by that row rather than by a cold checkout beside it
+    const warming = w.worktrees.spare.ensure(repoId);
+    await until(() => w.state.worktrees.some((x) => x.kind === "spare"));
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    expect(w.worktrees.spare.current(repoId)).toEqual({ worktreeId: spare.id, ready: false });
+    const wt = await w.worktrees.create(repoId, "typed early", { worktreeId: spare.id });
+    await warming;
+    expect(wt.id).toBe(spare.id);
+    expect(wt.kind).toBe("worktree");
+    // a second tab on the same row: the first send took it, so the second is a worktree of its own
+    const other = await w.worktrees.create(repoId, "typed elsewhere", { worktreeId: spare.id });
+    expect(other.id).not.toBe(spare.id);
+    expect(other.kind).toBe("worktree");
+    // ensure() joins the warm-up running rather than starting a second
+    const a = w.worktrees.spare.ensure(repoId);
+    const b = w.worktrees.spare.ensure(repoId);
+    await Promise.all([a, b]);
+    expect(w.state.worktrees.filter((x) => x.kind === "spare")).toHaveLength(1);
   });
 
   test("a claimed spare keeps its directory but gets a branch-named link that follows renames and removal", async () => {
@@ -521,10 +551,16 @@ describe("spare pool", () => {
     expect(wt.branch).toBe(before);
   });
 
-  test("the spare's statuses row is hidden until claimed", async () => {
+  test("a spare the pool has let go of is not a row, and the spare can be read like any row", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
-    expect((await w.worktrees.rows()).some((s) => s.worktree?.kind === "spare")).toBe(false);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    // a stale extra as an older daemon might have left, which adopt() prunes: never a row
+    w.state.addWorktree({ ...spare, id: "stale-spare", path: `${spare.path}-gone`, proxyPort: 1 });
+    expect((await w.worktrees.rows()).map((r) => r.id)).toEqual([spare.id]);
+    expect(w.worktrees.readable(spare.id)?.path).toBe(spare.path);
+    expect((await w.worktrees.gitStatus(spare.id))?.files).toEqual([]);
+    await expect(w.worktrees.sync(spare.id)).rejects.toBeInstanceOf(UserError);
   });
 });
 
@@ -1464,9 +1500,7 @@ describe("boot", () => {
     await settle();
     await settle();
     expect(runtime2.get(adopted.id)?.procs).toBeTruthy();
-    expect(worktrees2.spares()).toEqual([
-      { repoId, id: adopted.id, path: adopted.path, proxyPort: adopted.proxyPort, ready: true },
-    ]);
+    expect((await worktrees2.rows()).map((r) => r.id)).toEqual([adopted.id]);
     await runtime2.shutdown();
     repos2.stopWatchers();
   });

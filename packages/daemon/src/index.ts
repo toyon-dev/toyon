@@ -8,7 +8,6 @@ import {
   addressedByPort,
   CHECK_TOOL,
   DAEMON_DEFAULT_PORT,
-  draftRepoOf,
   installCommand,
   installMethod,
   PREVIEW_PORTS,
@@ -300,12 +299,9 @@ writeFileSync(paths.pidFile, `${process.pid}\n`);
 const stopLagSampler = startLagSampler();
 
 await repos.boot();
-// after boot, which archives what went while the daemon was down: a box is kept while its worktree,
-// its archive or its repo is
-drafts.prune((id) => {
-  const repoId = draftRepoOf(id);
-  return repoId ? !!state.repo(repoId) : !!state.worktree(id) || worktrees.hasArchived(id);
-});
+// after boot, which archives what went while the daemon was down: a box is kept while its worktree
+// or its archive is
+drafts.prune((id) => !!state.worktree(id) || worktrees.hasArchived(id));
 // what was being looked at before the restart comes back on its own
 idle.boot();
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default

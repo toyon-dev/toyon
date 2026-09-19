@@ -1,7 +1,7 @@
 import {
   type ChordId,
   chordLabel,
-  isMain,
+  isLead,
   isOwned,
   type ProcState,
   previewOrigin,
@@ -206,11 +206,11 @@ export function pickLabel(p: { component: string | null; tag: string }): string 
  * claimed spare's, else the directory (git and the procs always use `path`) */
 export const wtDir = (w: WorktreeInfo) => w.linkPath ?? w.path;
 
-/** what a worktree row is called: main by its branch (main, master, trunk), since it is the base
- * every other row branches from and the project's own name is already on the pill; every other
- * row by its title */
+/** what a worktree row is called: the lead by main's branch (main, master, trunk), since it sits
+ * on the base every other row branches from and the project's own name is already on the pill;
+ * every other row by its title */
 export function rowLabel(w: WorktreeStatus, repo: RepoInfo | null): string {
-  return w.worktree && isMain(w.worktree) && repo ? repo.defaultBranch : w.name;
+  return w.worktree && isLead(w.worktree) && repo ? repo.defaultBranch : w.name;
 }
 
 /** Coarse on purpose: the question an age in a row answers is "how long ago", and a narrow row has
@@ -233,9 +233,9 @@ export function ago(at: number): string {
  * ⌘K opens before there is a worktree, so it has no session to ask, but it does not need its own:
  * commands come from the repo's settings, skills and MCP servers, so every worktree of a repo
  * running the same agent advertises the same list, and the one ⌘K is about to create will too.
- * Main first, because it exists from the moment the repo is registered and is the likeliest to
- * have run. An agent the person switched to but has never started anywhere yet has no stand-in,
- * and the menu says so rather than showing another agent's commands.
+ * The lead first: its own agent is the one the send goes to, and it may already be up. An agent
+ * the person switched to but has never started anywhere yet has no stand-in, and the menu says so
+ * rather than showing another agent's commands.
  *
  * A worktree carries no `agent` until its session first spawns, when the daemon stamps it with the
  * default: unstamped therefore reads as the default here too, or main would never match before it
@@ -249,6 +249,6 @@ export function commandSource(
   if (!repoId) return null;
   // only a worktree toyon runs has a session to ask
   const mine = rows.filter(isOwned).filter((w) => w.repoId === repoId && (w.worktree.agent ?? defaultAgent) === agent);
-  const main = mine.find((w) => isMain(w.worktree));
-  return (main ?? mine[0])?.id ?? null;
+  const lead = mine.find((w) => isLead(w.worktree));
+  return (lead ?? mine[0])?.id ?? null;
 }

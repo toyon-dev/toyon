@@ -800,11 +800,11 @@
     flex-shrink: 0;
   }
 
-  /* ---- the draft tab's intro: where the transcript would be ----
-   Sits on the composer the way a short transcript does, so the box is where the eye lands. */
+  /* ---- the lead row's intro: between its transcript and its box ----
+   Sits on the composer the way a short transcript does, so the box is where the eye lands; the
+   log above it takes the room, empty until the send lands the message in it. */
   .draft-intro {
-    flex: 1;
-    min-height: 0;
+    flex: 0 0 auto;
     /* never a scroll box: it is one row, and a scroll container would clip the panel a chip in
      that row opens over itself */
     overflow: visible;
@@ -812,7 +812,6 @@
     padding: 12px 10px;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
     gap: 6px;
     font: var(--type-ui);
     color: var(--text0);

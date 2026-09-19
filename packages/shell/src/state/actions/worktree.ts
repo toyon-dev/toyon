@@ -6,7 +6,8 @@ import {
   canRename,
   canSync,
   describeLand,
-  isMain,
+  isLead,
+  isProvisional,
   landPolicy,
   type OwnedWorktree,
   type RepoInfo,
@@ -125,24 +126,22 @@ export function worktreeItems(
       },
     });
   }
-  if (w.worktree.kind !== "spare") {
-    look.push({
-      id: "terminal",
-      label: "open terminal",
-      // asked for, so the terminal takes the keyboard even when the pane was already open elsewhere
-      onClick: () => {
-        dispatch({ a: "activate", id });
-        dispatch({ a: "focus-terminal" });
-      },
-    });
-  }
+  look.push({
+    id: "terminal",
+    label: "open terminal",
+    // asked for, so the terminal takes the keyboard even when the pane was already open elsewhere
+    onClick: () => {
+      dispatch({ a: "activate", id });
+      dispatch({ a: "focus-terminal" });
+    },
+  });
   look.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
   look.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
   // what a second agent is pointed at: the chat as a file it can read, and the id the agent's
-  // own CLI resumes. A path rather than a link, since a link would carry the token. Main has no
-  // chat, so nothing to hand over there.
+  // own CLI resumes. A path rather than a link, since a link would carry the token. The lead has
+  // no chat, so nothing to hand over there.
   const { transcript, sessionId } = w;
-  if (transcript && !isMain(w.worktree)) {
+  if (transcript && !isLead(w.worktree)) {
     look.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(transcript) });
   }
   if (sessionId) look.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
@@ -155,8 +154,9 @@ export function worktreeItems(
   });
   // main runs procs too, and is where switching is wanted most; flat items, the menu has no
   // submenus. The one running now is on the list with its check, so the list also answers which.
+  // Not on the provisional row: the worktree it starts takes its profile from the intro's chip.
   const current = profileOf(w.worktree, repo);
-  for (const name of profileNames(repo)) {
+  for (const name of isProvisional(w.worktree) ? [] : profileNames(repo)) {
     run.push({
       id: `profile:${name}`,
       label: `run with ${name}`,

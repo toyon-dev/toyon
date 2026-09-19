@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type WorktreeStatus } from "@toyon/shared";
+import { type AgentEvent, PROTOCOL_VERSION, type RepoInfo, type TrunkStatus, type WorktreeStatus } from "@toyon/shared";
 import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
 import {
@@ -8,7 +8,6 @@ import {
   canCarry,
   changesTabStep,
   type Draft,
-  draftKey,
   type EditorDisk,
   type EditorView,
   EMPTY_LOCAL,
@@ -95,6 +94,14 @@ const repo = (id: string): RepoInfo => ({
   needsSetup: false,
 });
 const pageless = (id: string): RepoInfo => ({ ...repo(id), config: { run: {} } });
+/** what the daemon says of each project's main checkout: `id` names main's record, which is a row
+ * of its own only while the project has no spare to stand in for it */
+const trunksOf = (rows: WorktreeStatus[], over: Partial<TrunkStatus> = {}): Record<string, TrunkStatus> =>
+  Object.fromEntries(
+    rows
+      .filter((w) => w.worktree?.kind === "main")
+      .map((w) => [w.repoId, { id: w.id, dirty: 0, empty: false, ...over }]),
+  );
 const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
   server({
     t: "hello",
@@ -102,7 +109,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     protocol: PROTOCOL_VERSION,
     repos,
     rows: w,
-    spares: [],
+    trunks: trunksOf(w),
     themes: initial.themes,
     themePrefs: initial.themePrefs,
     agents: [],
@@ -120,7 +127,7 @@ const helloIn = (repos: RepoInfo[], ...w: WorktreeStatus[]): Action =>
     drafts: {},
   });
 const hello = (...w: WorktreeStatus[]): Action => helloIn([], ...w);
-const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, spares: [] });
+const worktrees = (...w: WorktreeStatus[]): Action => server({ t: "worktrees", rows: w, trunks: trunksOf(w) });
 const repos = (...r: RepoInfo[]): Action => server({ t: "repos", repos: r });
 const agent = (id: string, event: AgentEvent): Action => server({ t: "agent", worktreeId: id, seq: 0, event });
 
@@ -305,15 +312,17 @@ describe("per-worktree records", () => {
   test("greenfield holds on an empty, unconfigured main until the first message lands", () => {
     const fresh = { ...repo("r"), needsSetup: true };
     const main = wt("main", "main");
-    const empty: WorktreeStatus = { ...main, worktree: { ...main.worktree!, empty: true } };
-    const s = run([helloIn([fresh], empty), { a: "activate", id: "main" }]);
+    // the empty-tree fact rides on the trunk, beside the rows
+    const emptyTrunk = (...rows: WorktreeStatus[]): Action =>
+      server({ t: "worktrees", rows, trunks: trunksOf(rows, { empty: true }) });
+    const s = run([helloIn([fresh], main), emptyTrunk(main), { a: "activate", id: "main" }]);
     expect(isGreenfield(s)).toBe(true);
     // a repo with history, a configured repo, and a busy agent are each not greenfield
     expect(isGreenfield(run([worktrees(main)], s))).toBe(false);
     expect(isGreenfield(run([repos(repo("r"))], s))).toBe(false);
-    expect(isGreenfield(run([worktrees({ ...empty, agent: "working" })], s))).toBe(false);
+    expect(isGreenfield(run([emptyTrunk({ ...main, agent: "working" })], s))).toBe(false);
     // the first message starts a worktree, and its row ends it while main stays empty
-    expect(isGreenfield(run([worktrees(empty, wt("make-a-site"))], s))).toBe(false);
+    expect(isGreenfield(run([emptyTrunk(main, wt("make-a-site"))], s))).toBe(false);
     // a message said on main itself ends it for good
     const spoken = run([agent("main", { type: "user-message", text: "make a site", ts: 0 })], s);
     expect(isGreenfield(spoken)).toBe(false);
@@ -690,14 +699,14 @@ describe("preview reload after a turn", () => {
   });
 });
 
-// A worktree that does not exist yet. Main has no agent, so while main is on screen its box always
-// drafts one, and nothing else does.
+// A worktree that does not exist yet. The lead row (the repo's spare, or main while it has none)
+// has no task, so while it is on screen its box always drafts one, and nothing else does.
 describe("drafting a worktree", () => {
   const helloR = (...w: WorktreeStatus[]): Action => helloIn([repo("r")], ...w);
   const found = (...w: WorktreeStatus[]) => run([helloR(...w)]);
   const fresh = (): Draft => ({ variants: 1, batch: false, agent: "claude" });
 
-  test("main on screen is always a draft; a worktree on screen is not", () => {
+  test("the lead on screen is always a draft; a worktree on screen is not", () => {
     const s = found(wt("main", "main"), wt("a"));
     expect(s.activeId).toBe("main");
     expect(s.draft).toEqual(fresh());
@@ -725,7 +734,7 @@ describe("drafting a worktree", () => {
     ).toEqual(fresh());
   });
 
-  test("open-draft goes to main and asks for the box, from a task or from main itself", () => {
+  test("open-draft goes to the lead and asks for the box, from a task or from the lead itself", () => {
     const s = run([{ a: "activate", id: "a" }, { a: "open-draft" }], found(wt("main", "main"), wt("a")));
     expect(s.activeId).toBe("main");
     expect(s.draft).toEqual(fresh());
@@ -733,6 +742,16 @@ describe("drafting a worktree", () => {
     const again = reducer(s, { a: "open-draft" });
     expect(again.draft).toEqual(fresh());
     expect(again.focusChat).toBe(s.focusChat + 1);
+  });
+
+  test("the spare is the lead: it lands first, drafts, and its box is its own", () => {
+    const s = found(wt("a"), wt("sp", "spare"));
+    expect(s.activeId).toBe("sp");
+    expect(s.draft).toEqual(fresh());
+    expect(s.visible.map((w) => w.id)).toEqual(["sp", "a"]);
+    expect(run([{ a: "activate", id: "a" }, { a: "open-draft" }], s).activeId).toBe("sp");
+    const typed = run([{ a: "set-draft", id: "sp", text: "hi" }], s);
+    expect(localOf(typed, "sp").draft).toBe("hi");
   });
 
   test("carrying main's changes holds for a single worktree only", () => {
@@ -758,26 +777,39 @@ describe("drafting a worktree", () => {
     expect(after.activeId).toBe("b");
   });
 
-  test("a sent draft holds the tab until its row lands; a refusal opens it for editing again", () => {
-    const s = run([{ a: "draft-sent" }], found(wt("main", "main")));
-    expect(s.draft?.sent).toBe(true);
-    // the base's snapshots keep arriving while the create runs; none of them shows main
-    const waiting = run([worktrees(wt("main", "main"))], s);
-    expect(waiting.draft?.sent).toBe(true);
-    expect(waiting.activeId).toBe("main");
-    const landed = run([worktrees(wt("main", "main"), wt("b", "worktree", ME))], waiting);
-    expect(landed.draft).toBeNull();
-    expect(landed.activeId).toBe("b");
-    const refused = run([server({ t: "error", message: "no such agent" })], s);
-    expect(refused.draft).toEqual(fresh());
+  test("a send from the spare makes that row the task in place: nothing moves, the draft closes", () => {
+    const s = run([{ a: "set-draft", id: "sp", text: "typed" }], found(wt("sp", "spare"), wt("a")));
+    // the daemon's frame: the same id, a worktree now, made by this tab; its siblings beside it
+    const claimed = run([worktrees(wt("sp", "worktree", ME), wt("v2", "worktree", ME), wt("a"))], s);
+    expect(claimed.activeId).toBe("sp");
+    expect(claimed.draft).toBeNull();
+    // the words went with the row; what the daemon's draft frame says clears them like any box's
+    expect(localOf(claimed, "sp").draft).toBe("typed");
+    // the next spare arrives as the lead, and the selection stays on the task
+    const next = run([worktrees(wt("sp", "worktree", ME), wt("a"), wt("sp2", "spare"))], claimed);
+    expect(next.activeId).toBe("sp");
+    expect(next.visible.map((w) => w.id)).toEqual(["sp2", "sp", "a"]);
+    expect(run([{ a: "open-draft" }], next).activeId).toBe("sp2");
+    // another tab's send took the row: this tab is on its task now, and a cold row this tab made
+    // beside it takes the selection the way any row it created does
+    const theirs = run([worktrees(wt("sp", "worktree", "tab-2"), wt("mine", "worktree", ME), wt("a"))], s);
+    expect(theirs.activeId).toBe("mine");
   });
 
-  test("its text lives under the repo's key, which no snapshot prunes", () => {
+  test("a refusal reads on the lead's chat, and its text stays where it was typed", () => {
+    const s = run([{ a: "set-draft", id: "sp", text: "hi" }], found(wt("sp", "spare")));
+    const refused = run([server({ t: "error", message: "no such agent", worktreeId: "sp" })], s);
+    expect(refused.draft).toEqual(fresh());
+    expect(localOf(refused, "sp").draft).toBe("hi");
+    expect(localOf(refused, "sp").chat.at(-1)).toMatchObject({ kind: "error", text: "no such agent" });
+  });
+
+  test("its text lives under the row's id, which its snapshots keep", () => {
     const s = run(
-      [{ a: "set-draft", id: draftKey("r"), text: "hi" }, worktrees(wt("main", "main"))],
+      [{ a: "set-draft", id: "main", text: "hi" }, worktrees(wt("main", "main"))],
       found(wt("main", "main")),
     );
-    expect(localOf(s, draftKey("r")).draft).toBe("hi");
+    expect(localOf(s, "main").draft).toBe("hi");
     expect(
       run(
         [
@@ -796,18 +828,28 @@ describe("drafting a worktree", () => {
     });
   });
 
-  test("main's preview is its own app while it drafts, and a spare's record lives while it is listed", () => {
-    const sp = { repoId: "r", id: "sp1", path: "/w/sp1", proxyPort: 9, ready: true };
-    const rows = [wt("main", "main"), wt("a")];
-    const s = run([server({ t: "worktrees", rows, spares: [sp] })], found(...rows));
-    expect(previewIdOf(s)).toBe("main");
-    // the spare's own record (its page state) lives while the spare is listed
-    const paged = run(
-      [{ a: "page", id: "sp1", url: "http://x/about" }, server({ t: "worktrees", rows, spares: [sp] })],
-      s,
+  test("the lead's preview is its own app while it drafts, and the trunk rides beside the rows", () => {
+    const rows = [wt("sp", "spare"), wt("a")];
+    const trunk: TrunkStatus = { id: "main-rec", behind: 3, dirty: 2, empty: false };
+    const s = run([server({ t: "worktrees", rows, trunks: { r: trunk } })], found(...rows));
+    expect(previewIdOf(s)).toBe("sp");
+    expect(s.trunks.r).toEqual(trunk);
+    // a pull is pressed under the lead's box and shows working until the daemon answers on it
+    const pulling = run([{ a: "shipping", id: "main-rec", op: "pull-main" }], s);
+    expect(pulling.shipping["main-rec"]).toBe("pull-main");
+    expect(run([server({ t: "worktrees", rows, trunks: { r: trunk } })], pulling).shipping["main-rec"]).toBe(
+      "pull-main",
     );
-    expect(localOf(paged, "sp1").page.url).toBe("http://x/about");
-    expect(localOf(run([worktrees(...rows)], paged), "sp1").page.url).toBeUndefined();
+    expect(
+      run([server({ t: "shipped", worktreeId: "main-rec", ok: true, message: "pulled" })], pulling).shipping,
+    ).toEqual({});
+    // main's failure has no row to answer on: it reads under the box on screen
+    const failed = run([server({ t: "shipped", worktreeId: "main-rec", ok: false, message: "dirty" })], pulling);
+    expect(localOf(failed, "sp").notice).toBe("dirty");
+    // the lead's own record (its page state) lives while it is listed
+    const paged = run([{ a: "page", id: "sp", url: "http://x/about" }], s);
+    expect(localOf(paged, "sp").page.url).toBe("http://x/about");
+    expect(localOf(run([worktrees(wt("a"))], paged), "sp").page.url).toBeUndefined();
   });
 });
 
@@ -2280,12 +2322,12 @@ describe("attach a pick", () => {
     attachPick(store, "a", { ...picked, file: "/elsewhere/x.tsx", callFile: null, callLine: null });
     expect(store.getState().local.a?.attachments).toMatchObject([{ file: "/elsewhere/x.tsx", callFile: null }]);
   });
-  test("on main, a pick from its frame goes to the draft, and a frame nobody lists nowhere", () => {
-    const store = createStore(run([hello(wt("m", "main"), wt("a")), { a: "open-draft" }]));
-    attachPick(store, "m", picked);
+  test("on the lead, a pick from its frame goes to its own box, and a frame nobody lists nowhere", () => {
+    const store = createStore(run([hello(wt("sp", "spare"), wt("a")), { a: "open-draft" }]));
+    attachPick(store, "sp", picked);
     attachPick(store, "gone-1", { ...picked, selector: "nav" });
-    expect(store.getState().local[draftKey("r")]?.attachments).toHaveLength(1);
-    expect(store.getState().local.m?.attachments ?? []).toHaveLength(0);
+    expect(store.getState().local.sp?.attachments).toHaveLength(1);
+    expect(store.getState().local["gone-1"]?.attachments ?? []).toHaveLength(0);
   });
 });
 

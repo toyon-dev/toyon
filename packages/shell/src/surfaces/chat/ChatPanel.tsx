@@ -11,8 +11,9 @@ import { DraftIntro } from "./DraftIntro.tsx";
 import { chatPanel, pathDropHandlers } from "./useIntake.ts";
 import "./chat.css";
 
-/** The chat: transcript above, composer below. On main, which has no chat, the transcript's place
- * holds the draft's intro, and the composer writes the draft. It sits in the dock beside the
+/** The chat: transcript above, composer below. On the lead row, whose box starts a worktree, the
+ * draft's intro sits between the transcript (empty until the send) and the composer, so the message
+ * that goes lands in the log above it with nothing swapping. It sits in the dock beside the
  * preview, or is what the centre shows for a project with nothing to run, or for a removed
  * worktree (`archived`): its chat as it was, ending in the removal, over a box that brings it back.
  * On a phone it is a screen of its own, which is the same panel again: the transcript and the box
@@ -61,8 +62,6 @@ export function ChatPanel({
     >
       {archived ? (
         <ChatLog active={null} archived={archived} tail={<ArchivedNote item={archived} />} />
-      ) : draft ? (
-        <DraftIntro draft={draft} main={active} />
       ) : (
         <ChatLog
           active={active}
@@ -81,6 +80,7 @@ export function ChatPanel({
           }
         />
       )}
+      {!archived && draft && <DraftIntro draft={draft} lead={active} />}
       {archived ? (
         <Composer active={null} archived={archived} placement={placement} />
       ) : (

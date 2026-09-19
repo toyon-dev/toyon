@@ -1,4 +1,4 @@
-import { isOwned, parseBridgeMsg } from "@toyon/shared";
+import { isLead, isOwned, parseBridgeMsg } from "@toyon/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { nextSeq } from "../../state/actions/file.ts";
@@ -33,6 +33,10 @@ const HAS_TOKEN = hasToken();
  * still knocking on the proxy, and a knock is what keeps a worktree from sleeping. Remounting
  * costs a flash, not a boot: the server is up. */
 const HIDDEN_FRAME_MS = 2 * 60_000;
+/** How long the app on screen stays there for the copy taking its place, while that one's frame is
+ * still blank. Long enough for a server that is already up to answer, short enough that one which
+ * never will gives way to the boot pane that says what its procs are doing. */
+const CARRY_MS = 8_000;
 
 import { View } from "../../ui/View.tsx";
 import { ChatPanel } from "../chat/ChatPanel.tsx";
@@ -44,6 +48,7 @@ import { TerminalPane } from "../terminal/TerminalPane.tsx";
 import { chord, isBusy, previewUrl, relFile, wtDir } from "../util.ts";
 import { Boot } from "./Boot.tsx";
 import { Discovered } from "./Discovered.tsx";
+import { carriedFrame, shownFrame } from "./frames.ts";
 import { Greenfield } from "./Greenfield.tsx";
 import { Import } from "./Import.tsx";
 import { NewProject } from "./NewProject.tsx";
@@ -148,6 +153,11 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const frameRefs = useRef(new Map<string, HTMLIFrameElement>());
   // each preview's origin: the only target we post to and the only sender we accept for that frame
   const originRefs = useRef(new Map<string, string>());
+  // Which frames have something on them: the `loaded` their bridge sends for each page. Not the
+  // store's `page.url`, which outlives the frame it was read from, while a frame that came down and
+  // went back up is blank again until its app answers. State, not a ref: the frame that has just
+  // painted is the one to show, and nothing else here would re-render to show it.
+  const [loadedFrames, setLoadedFrames] = useState<readonly string[]>([]);
 
   useEffect(() => {
     previewBus.post = (id, m) =>
@@ -185,6 +195,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             dispatch({ a: "hmr", id });
             break;
           case "loaded":
+            // this frame has a page on it now, so it is the one to show
+            setLoadedFrames((l) => (l.includes(id) ? l : [...l, id]));
             previewBus.post(id, bridgeThemeMsg(themeRef.current));
             previewBus.post(id, { type: "zen", on: zenRef.current });
             dispatch({ a: "hmr", id });
@@ -311,10 +323,44 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
       for (const t of timers) clearTimeout(t);
     };
   }, [mounted, previewId]);
+  // a frame that came down is blank when it goes back up, so it has to say `loaded` again. Kept
+  // here rather than in the iframe's ref callback, which React runs on every render: a write there
+  // is a render of its own, and two of them are a loop.
+  useEffect(() => {
+    setLoadedFrames((l) => (l.every((id) => mounted.includes(id)) ? l : l.filter((id) => mounted.includes(id))));
+  }, [mounted]);
   const frames = rows
     .filter(isOwned)
     .filter((w) => mounted.includes(w.id))
     .map((w) => ({ id: w.worktree.id, port: w.worktree.proxyPort, title: w.worktree.title }));
+
+  // The app on screen stays there while the one taking its place is still a blank frame, so a send
+  // that starts a worktree does not blank the centre (frames.ts has the rules). The carry ends when
+  // that frame paints, and CARRY_MS after it began whether it did or not: a server that never
+  // answers is what the boot pane is for.
+  //
+  // Taken during the render that switches, not in an effect after it: an effect runs once that
+  // render has painted, and the frame it paints is the one with nothing on screen. React re-renders
+  // on a set during render before it paints anything, which is the whole point of doing it here.
+  const [carry, setCarry] = useState<string | null>(null);
+  const [carryFrom, setCarryFrom] = useState<string | null>(previewId);
+  const shownRef = useRef<string | null>(null);
+  if (carryFrom !== previewId) {
+    setCarryFrom(previewId);
+    setCarry(carriedFrame(shownRef.current, previewId, (id) => rows.find((w) => w.id === id)?.repoId ?? null));
+  }
+  useEffect(() => {
+    if (!carry) return;
+    const t = setTimeout(() => setCarry(null), CARRY_MS);
+    return () => clearTimeout(t);
+  }, [carry]);
+  const painted = previewId !== null && loadedFrames.includes(previewId);
+  const shownId = shownFrame({ previewId, painted, ready: previewReady, carry, mounted });
+  const carried = shownId !== null && shownId !== previewId;
+  // the frame the next switch carries, read in the effect that follows the render that showed it
+  useEffect(() => {
+    shownRef.current = shownId;
+  });
 
   // editor pane: draggable height + full-height toggle, persisted
   const [editorH, setEditorH] = usePersisted(STORAGE.editorHeight, 0, (raw) => {
@@ -363,7 +409,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
 
   // a new project starts in a worktree, so its main stays empty until that worktree lands
   const landsFrom = useStore((s) =>
-    active?.worktree.kind === "main"
+    active && isLead(active.worktree)
       ? (s.rows.find((r) => r.repoId === active.worktree.repoId && r.worktree?.kind === "worktree")?.worktree?.title ??
         null)
       : null,
@@ -410,7 +456,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
               src={previewUrl(f.id, f.port, remote)}
               title={f.title}
               style={{
-                display: f.id === previewId && !setupRepo && !watching && !bare && !chatCentred ? "block" : "none",
+                display: f.id === shownId && !setupRepo && !watching && !bare && !chatCentred ? "block" : "none",
               }}
             />
           ))}
@@ -456,7 +502,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
                 ) : chatCentred ? (
                   // nothing runs, so no server is ever ready: this slot is always the chat's
                   <ChatPanel placement="centre" />
-                ) : (
+                ) : carried ? null : ( // the app still on screen says more than the pane would
                   active && <Boot worktree={active} log={log} />
                 ))}
             </>

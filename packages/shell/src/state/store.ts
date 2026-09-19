@@ -39,11 +39,11 @@ import type {
   SearchHit,
   SelfState,
   ServerMsg,
-  SpareInfo,
   TermServerMsg,
   Theme,
   ThemePrefs,
   ToolKind,
+  TrunkStatus,
   UpdateState,
   WorktreePages,
   WorktreeStatus,
@@ -51,12 +51,12 @@ import type {
 import {
   builtinThemes,
   defaultThemePrefs,
-  draftKey,
-  draftRepoOf,
   isEditTool,
+  isLead,
   isMain,
   isMarkdown,
   isOwned,
+  isProvisional,
   PROJECTS_FOLDER,
   railOrder,
   resolveTheme,
@@ -222,11 +222,11 @@ export interface WorktreeLocal {
   effort?: string;
 }
 
-/** The new worktree being drafted: a tab in the rail for a worktree that does not exist yet, with
- * the base it will branch from. While it is open the base is the active row, so the changes dock,
- * the terminal and ⌘1-9 keep meaning it; only the rail's mark, the centre frame and the chat dock
- * read this. Its text and attachments live in `local` under `draftKey(repoId)`. */
-/** the worktree main's box is about to start: open for as long as main is the row on screen */
+/** The worktree the lead row's box is about to start: open for as long as the lead is the row on
+ * screen. The lead is the repo's provisional row (its warm spare, sitting on main), or main itself
+ * while there is none, and the send turns that very row into the task, so what is chosen here is
+ * only what has to be fixed before the message goes. Its text and attachments live in `local`
+ * under the row's own id, like any box's. */
 export interface Draft {
   /** the same prompt in N parallel worktrees, keep the best */
   variants: 1 | 2 | 3;
@@ -238,22 +238,15 @@ export interface Draft {
   profile?: string;
   /** main's uncommitted changes move into the worktree; honoured only for a single one (canCarry) */
   carry?: boolean;
-  /** the message went; the box holds read-only until the worktree it started lands and takes the
-   * selection. Cleared by a refusal, so the draft can be sent again. */
-  sent?: true;
 }
 
 /** the draft moves its base's changes: asked for, and making one worktree, since one set of changes
  * cannot move into three */
 export const canCarry = (d: Draft | null | undefined): boolean => !!d?.carry && !d.batch && d.variants === 1;
 
-/** the `local` record a repo's draft is written under; never a row id, and never pruned by one */
-export { draftKey };
-
-/** the composer box the words are written in: while drafting it is the repo's draft, so it survives
- * the tab closing and reopening and is never a row's; otherwise it is the active worktree's */
-export const composerBoxOf = (active: OwnedWorktree | null, drafting: boolean): string | null =>
-  active ? (drafting ? draftKey(active.worktree.repoId) : active.worktree.id) : null;
+/** the composer box the words are written in: the active row's own, the lead's included, since the
+ * send makes that row the worktree and the words typed on it go with it */
+export const composerBoxOf = (active: OwnedWorktree | null): string | null => active?.worktree.id ?? null;
 
 /** an attachment waiting in a composer box: what the wire takes, a local key, and what its chip
  * shows before the daemon has stored it */
@@ -669,11 +662,12 @@ export interface State {
   agentChosen: boolean;
   /** what settings asked the daemon about an agent's setup, by agent id */
   agentConfigs: Record<string, AgentConfigInfo>;
-  /** the new worktree being drafted, if the draft tab is open */
+  /** the new worktree being drafted, while the lead row is on screen */
   draft: Draft | null;
-  /** every repo's warm spare, as the daemon last listed them: the preview behind a draft from
-   * main, and nothing else. Can shrink between frames (a warm-up rolled back). */
-  spares: SpareInfo[];
+  /** each project's main checkout as the daemon last described it, by repo id: what the lead row
+   * wears and the composer's line under the knobs reads, since main is not a row while its spare
+   * stands in for it */
+  trunks: Record<string, TrunkStatus>;
   /** each repo's remembered preview pages, best first, with their titles: the route bar's history */
   visits: Record<string, PageEntry[]>;
 }
@@ -792,7 +786,7 @@ export function initialState(opts: InitialOpts): State {
     agentChosen: false,
     agentConfigs: {},
     draft: null,
-    spares: [],
+    trunks: {},
     visits: {},
   };
   // paint the last project's layout before the daemon's hello names it, so a reload does not
@@ -832,8 +826,9 @@ export function worktreeById(s: State, id: string | null | undefined): OwnedWork
  * exactly as long as this holds; the first message starts a worktree, and that row ends it. */
 export function isGreenfield(s: State): boolean {
   const wt = worktreeById(s, s.activeId);
-  // the empty-tree fact rides on main's record, so the first frame already answers this
-  if (!wt || !isMain(wt.worktree) || wt.agent !== "idle" || wt.worktree.empty !== true) return false;
+  // the empty-tree fact rides on the trunk, so the first frame already answers this; an empty
+  // project is unconfirmed, so it has no spare and main itself is the lead
+  if (!wt || !isMain(wt.worktree) || wt.agent !== "idle" || !trunkOf(s, wt.repoId)?.empty) return false;
   const repo = repoById(s, wt.repoId);
   const started = s.rows.some((w) => w.repoId === wt.repoId && w.worktree?.kind === "worktree");
   return !!repo?.needsSetup && !started && localOf(s, wt.id).chat.length === 0;
@@ -883,12 +878,19 @@ export function repoById(s: State, id: string | null | undefined): RepoInfo | nu
   return (id && s.repos.find((r) => r.id === id)) || null;
 }
 
-/** a repo's main row, which is what a draft branches from when nothing else is named */
-export function mainOf(s: State, repoId: string | null): OwnedWorktree | null {
-  return (repoId && s.rows.filter(isOwned).find((w) => w.repoId === repoId && isMain(w.worktree))) || null;
+/** a repo's lead row, where new work is typed: its provisional row, else its main */
+export function leadOf(s: State, repoId: string | null): OwnedWorktree | null {
+  if (!repoId) return null;
+  const mine = s.rows.filter(isOwned).filter((w) => w.repoId === repoId);
+  return mine.find((w) => isProvisional(w.worktree)) ?? mine.find((w) => isMain(w.worktree)) ?? null;
 }
 
-/** the preview on screen, if there is one: the active worktree's (main's own app while main drafts),
+/** what a repo's main checkout says, as the daemon last described it */
+export function trunkOf(s: Pick<State, "trunks">, repoId: string | null | undefined): TrunkStatus | null {
+  return (repoId && s.trunks[repoId]) || null;
+}
+
+/** the preview on screen, if there is one: the active row's (the lead's own app while it drafts),
  * and none while the chat has the centre. The element picker and the bridge's page context follow
  * this one. */
 export function previewIdOf(s: State): string | null {
@@ -901,10 +903,10 @@ export function previewIdOf(s: State): string | null {
 /** The tab a row opens on, on a phone. Its app, when it has one and nothing is asked of you: the
  * phone is for glancing at the work, and the app is the work. Its chat when the row needs an answer
  * or finished unseen, since the answer is written there and the recap is read there; when it is
- * main, whose box is the draft; and when the project runs nothing, which has no app to open on. */
+ * the lead, whose box is the draft; and when the project runs nothing, which has no app to open on. */
 export function firstScreen(s: State, id: string): Screen {
   const row = rowById(s, id);
-  if (!row || !isOwned(row) || isMain(row.worktree) || isChatCentred(s)) return "chat";
+  if (!row || !isOwned(row) || isLead(row.worktree) || isChatCentred(s)) return "chat";
   if (row.agent === "waiting" || row.unseen || row.worktree.lastTurn?.end === "failed") return "chat";
   return "preview";
 }
@@ -938,7 +940,7 @@ function visibleDiscoveredOf(rows: WorktreeStatus[], repoId: string | null): Wor
   return repoId ? found.filter((d) => d.repoId === repoId) : found;
 }
 
-/** the worktree to land on in a repo: the one last selected there, else its main. Never a found
+/** the worktree to land on in a repo: the one last selected there, else its lead. Never a found
  * row, which may be gone next push, and never a row whose remove is pending: it is off screen, and
  * landing on it would select nothing. */
 function landingIn(s: State, repoId: string | null, rows = s.rows): string | null {
@@ -948,7 +950,7 @@ function landingIn(s: State, repoId: string | null, rows = s.rows): string | nul
   if (last && live.some((w) => w.id === last)) return last;
   const mine = repoId ? live.filter((w) => w.repoId === repoId) : live;
   // looked up, not taken from the top: the daemon lists rows in the order they were made
-  return (mine.find((w) => isMain(w.worktree)) ?? mine[0])?.id ?? null;
+  return (mine.find((w) => isProvisional(w.worktree)) ?? mine.find((w) => isMain(w.worktree)) ?? mine[0])?.id ?? null;
 }
 
 /** the client messages that end in a `shipped` frame: the daemon's word for them */
@@ -1027,12 +1029,10 @@ export type Action =
   | { a: "activate"; id: string }
   /** keep the ring on a row just marked unread for as long as it stays the one on screen */
   | { a: "hold-unread"; id: string }
-  /** start a new worktree: select the project's main, whose box drafts one, and put the caret there */
+  /** start a new worktree: select the project's lead row, whose box drafts one, and put the caret there */
   | { a: "open-draft" }
   /** main's uncommitted changes go into the worktree the box starts */
   | { a: "draft-carry"; v: boolean }
-  /** the draft's message was sent: the tab waits for its worktree instead of closing on main */
-  | { a: "draft-sent" }
   | { a: "draft-variants"; n: Draft["variants"] }
   | { a: "draft-batch"; v: boolean }
   | { a: "draft-agent"; id: string }
@@ -1191,15 +1191,16 @@ function noteError(s: State, id: string, text: string): State {
 /** a failure with no worktree to answer on (a batch, a project, a found row's sync) goes under the
  * composer on screen, the box the person is at */
 function noticeOnScreen(s: State, text: string): State {
-  const box = composerBoxOf(worktreeById(s, s.activeId), !!s.draft);
+  const box = composerBoxOf(worktreeById(s, s.activeId));
   return box ? withLocal(revealChat(s), box, (l) => ({ ...l, notice: text })) : s;
 }
 
-/** where a worktree's failure is read: its chat, unless it is main's, whose panel shows the draft
- * and not its log (a greenfield main aside), so main's goes under the box on screen */
+/** where a worktree's failure is read: its chat, the lead's included, since its log is on screen
+ * under the draft's intro; one with no row (main's while a spare stands for it) goes under the
+ * box on screen */
 function answerFor(s: State, id: string, text: string): State {
   const row = worktreeById(s, id);
-  if (!row || (isMain(row.worktree) && !isGreenfield(s))) return noticeOnScreen(s, text);
+  if (!row) return noticeOnScreen(s, text);
   return noteError(s, id, text);
 }
 
@@ -1233,15 +1234,16 @@ function freshDraft(s: State): Draft {
   return { variants: 1, batch: false, agent: s.defaultAgent };
 }
 
-/** Main has no agent of its own: its box always starts a worktree, so while main is the row on
- * screen a draft is open. Not on a first-run screen, which sends its first message from the centre,
- * and not under an archived worktree's page, which is about something else. Checked after every
- * action, so a snapshot, a reload or a click that lands on main opens it the same way, and leaving
- * main for anything else drops it: what was chosen (variants, moving main's changes) is for a send
- * from this visit. */
+/** The lead row's box always starts a worktree: the provisional row is not a task until something
+ * is sent to it, and main has no agent of its own. So while the lead is the row on screen a draft
+ * is open. Not on a first-run screen, which sends its first message from the centre, and not under
+ * an archived worktree's page, which is about something else. Checked after every action, so a
+ * snapshot, a reload or a click that lands on the lead opens it the same way, and leaving it for
+ * anything else drops it, the send included: the row becomes the task under the same id, and what
+ * was chosen (variants, moving main's changes) is spent. */
 function withLauncher(s: State): State {
   const active = worktreeById(s, s.activeId);
-  const launching = !!active && isMain(active.worktree) && !s.archivedPage && !isFirstRun(s);
+  const launching = !!active && isLead(active.worktree) && !s.archivedPage && !isFirstRun(s);
   if (launching) return s.draft ? s : { ...s, draft: freshDraft(s) };
   return s.draft ? { ...s, draft: null } : s;
 }
@@ -1300,12 +1302,12 @@ function reduce(s: State, action: Action): State {
       // not on an empty project: a worktree off the root commit would take the scaffold to a
       // branch while main stayed blank. Nor from the new-project view, over a project not on screen.
       if (isFirstRun(s)) return s;
-      const main = mainOf(s, s.activeRepoId)?.id ?? null;
-      if (!main) return s;
+      const lead = leadOf(s, s.activeRepoId)?.id ?? null;
+      if (!lead) return s;
       // the chat is where the draft is written, so it has to be on screen; a palette the chord was
       // pressed over would sit in front of it. The launcher rule in `reducer` makes the draft itself.
       return revealChat({
-        ...activate(s, main),
+        ...activate(s, lead),
         overlay: null,
         paletteReturn: null,
         focusChat: s.focusChat + 1,
@@ -1314,8 +1316,6 @@ function reduce(s: State, action: Action): State {
     }
     case "draft-carry":
       return s.draft ? { ...s, draft: { ...s.draft, carry: action.v } } : s;
-    case "draft-sent":
-      return s.draft ? { ...s, draft: { ...s.draft, sent: true } } : s;
     case "draft-variants":
       return s.draft ? { ...s, draft: { ...s.draft, variants: action.n } } : s;
     case "draft-batch":
@@ -1327,7 +1327,7 @@ function reduce(s: State, action: Action): State {
     case "open-archived": {
       if (!s.activeRepoId || !s.archived[s.activeRepoId]?.some((a) => a.id === action.id)) return s;
       // a page over the row underneath: the file open there belongs to what was on screen, and is
-      // not what the page is about (the draft follows main and goes by itself, see withLauncher)
+      // not what the page is about (the draft follows the lead and goes by itself, see withLauncher)
       return { ...s, archivedPage: action.id, editor: null, screen: "chat" };
     }
     case "close-archived":
@@ -1344,8 +1344,9 @@ function reduce(s: State, action: Action): State {
     case "shipping": {
       // one op per worktree at a time: the daemon serializes them under the repo lock anyway,
       // and a second press before the answer is the double-click this state exists to absorb
-      // any row: a found worktree can be synced, and its dot shows the op the same way
-      if (s.shipping[action.id] || !rowById(s, action.id)) return s;
+      // any row: a found worktree can be synced, and its dot shows the op the same way; and a
+      // trunk, whose pull is pressed under the lead's box
+      if (s.shipping[action.id] || !(rowById(s, action.id) || isTrunk(s, action.id))) return s;
       return { ...s, shipping: { ...s.shipping, [action.id]: action.op } };
     }
     case "activate-repo": {
@@ -1640,11 +1641,6 @@ function reduce(s: State, action: Action): State {
   }
 }
 
-/** drop per-worktree records for rows the daemon no longer lists, found rows included: theirs
- * hold git status and history too, and a push arrives on every proc event. A spare's record (the
- * page state its preview reports) lives as long as it is listed; a repo's draft box is never a
- * row's, and any box with words in it stays, since an archived worktree keeps its draft under the
- * same id and the daemon says when one is gone for good. */
 /** a record keyed by worktree id, less the ids no row has any more; the same object when none */
 function pruneByRow<T>(byId: Record<string, T>, rows: WorktreeStatus[]): Record<string, T> {
   const entries = Object.entries(byId);
@@ -1652,16 +1648,15 @@ function pruneByRow<T>(byId: Record<string, T>, rows: WorktreeStatus[]): Record<
   return kept.length === entries.length ? byId : Object.fromEntries(kept);
 }
 
-function pruneLocal(
-  local: State["local"],
-  rows: WorktreeStatus[],
-  spares: SpareInfo[],
-  archivedPage: string | null,
-): State["local"] {
-  const keep = new Set([...rows.map((w) => w.id), ...spares.map((sp) => sp.id)]);
+/** drop per-worktree records for rows the daemon no longer lists, found rows included: theirs
+ * hold git status and history too, and a push arrives on every proc event. Any box with words in
+ * it stays, since an archived worktree keeps its draft under the same id and the daemon says when
+ * one is gone for good. */
+function pruneLocal(local: State["local"], rows: WorktreeStatus[], archivedPage: string | null): State["local"] {
+  const keep = new Set(rows.map((w) => w.id));
   // the archived page's chat is under an id no row has, for as long as the page is up
   if (archivedPage) keep.add(archivedPage);
-  const kept = ([id, l]: [string, WorktreeLocal]) => keep.has(id) || draftRepoOf(id) !== null || !!l.draft;
+  const kept = ([id, l]: [string, WorktreeLocal]) => keep.has(id) || !!l.draft;
   const entries = Object.entries(local);
   if (entries.every(kept)) return local;
   return Object.fromEntries(entries.filter(kept));
@@ -1707,11 +1702,21 @@ function pruneByRepo<T>(flags: Record<string, T>, repos: RepoInfo[]): Record<str
 function settleView(s: State): State {
   const page = s.newProject;
   if (page?.phase !== "creating" || !page.repoId) return s;
-  const main = mainOf(s, page.repoId);
-  if (!main) return s;
+  const lead = leadOf(s, page.repoId);
+  if (!lead) return s;
   if (!page.prompt.trim()) return { ...s, newProject: null };
-  const seeded = withLocal(s, main.id, (l) => ({ ...l, draft: page.prompt }));
-  return { ...seeded, newProject: null, autoSend: main.id };
+  const seeded = withLocal(s, lead.id, (l) => ({ ...l, draft: page.prompt }));
+  return { ...seeded, newProject: null, autoSend: lead.id };
+}
+
+/** an id that names a project's main checkout rather than a row: the pull's target */
+function isTrunk(s: Pick<State, "trunks">, id: string): boolean {
+  return Object.values(s.trunks).some((t) => t.id === id);
+}
+
+/** `shipping` less the ops whose target the daemon no longer lists, a row or a trunk */
+function retireGone(s: State, rows: WorktreeStatus[], trunks: State["trunks"]): Record<string, ShipOp> {
+  return retireShipping(s.shipping, (id) => !rows.some((w) => w.id === id) && !isTrunk({ trunks }, id));
 }
 
 function onServer(s: State, msg: StoreServerMsg): State {
@@ -1737,10 +1742,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
         rows: msg.rows,
         activeId,
         activeRepoId: wt?.repoId ?? repoId ?? msg.repos[0]?.id ?? null,
-        spares: msg.spares,
+        trunks: msg.trunks,
         archiving: s.archiving.length ? [] : s.archiving,
         shipping: retireShipping(s.shipping, () => true),
-        local: pruneLocal(withDrafts(s.local, msg.drafts), msg.rows, msg.spares, s.archivedPage),
+        local: pruneLocal(withDrafts(s.local, msg.drafts), msg.rows, s.archivedPage),
         lastActive: pruneLastActive(s.lastActive, msg.rows),
         treeOpen: pruneByRow(s.treeOpen, msg.rows),
         discoveredOpen: pruneByRepo(s.discoveredOpen, msg.repos),
@@ -1874,12 +1879,17 @@ function onServer(s: State, msg: StoreServerMsg): State {
         activeId = landingIn(s, s.activeRepoId, msg.rows);
       }
       // auto-focus a worktree THIS tab just created (the "prompt spawns a tab" moment); one made
-      // from another tab or the CLI stays where it is
+      // from another tab or the CLI stays where it is. A send from the lead row makes the task of
+      // that very row, which is already the one on screen: nothing moves, and a sibling made in the
+      // same send (the other variants) does not pull the selection off it.
       const known = new Set(s.rows.map((w) => w.id));
-      const fresh = msg.rows.find(
-        (w) => !known.has(w.id) && w.worktree?.kind === "worktree" && w.worktree.createdBy === s.clientId,
-      );
-      if (fresh && s.rows.length > 0) activeId = fresh.id;
+      const mine = (w: WorktreeStatus) => w.worktree?.kind === "worktree" && w.worktree.createdBy === s.clientId;
+      const fresh = msg.rows.find((w) => !known.has(w.id) && mine(w));
+      const stayed =
+        !!activeId &&
+        s.rows.some((w) => w.id === activeId && w.worktree?.kind === "spare") &&
+        msg.rows.some((w) => w.id === activeId && mine(w));
+      if (fresh && s.rows.length > 0 && !stayed) activeId = fresh.id;
       // a pending remove is done once the daemon stops listing the row; one it still lists is
       // still in flight (this frame is as likely another worktree's proc event as the reply)
       const archiving = s.archiving.filter((id) => msg.rows.some((w) => w.id === id));
@@ -1888,10 +1898,10 @@ function onServer(s: State, msg: StoreServerMsg): State {
           {
             ...s,
             rows: msg.rows,
-            spares: msg.spares,
+            trunks: msg.trunks,
             archiving: archiving.length === s.archiving.length ? s.archiving : archiving,
-            shipping: retireShipping(s.shipping, (id) => !msg.rows.some((w) => w.id === id)),
-            local: pruneLocal(s.local, msg.rows, msg.spares, s.archivedPage),
+            shipping: retireGone(s, msg.rows, msg.trunks),
+            local: pruneLocal(s.local, msg.rows, s.archivedPage),
             treeOpen: pruneByRow(s.treeOpen, msg.rows),
           },
           activeId,
@@ -2032,11 +2042,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       if (s.editor && s.editor.seq > msg.seq) return s;
       const [first] = msg.hits;
       if (!first) {
-        // the pick came from the frame under the composer: main's frame while main drafts fills
-        // the draft's box, and the answer goes under the same one
-        const row = worktreeById(s, msg.worktreeId);
-        const box = row ? composerBoxOf(row, !!s.draft && msg.worktreeId === s.activeId) : msg.worktreeId;
-        return withLocal(s, box ?? msg.worktreeId, (l) => ({
+        // the pick came from the frame under the composer, and the answer goes under that frame's box
+        return withLocal(s, msg.worktreeId, (l) => ({
           ...l,
           notice: "nothing in the source matches this element",
         }));
@@ -2087,8 +2094,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const id = msg.worktreeId;
       const page = s.newProject;
       const refused = page?.phase === "creating" && !page.repoId;
-      // a sent draft is waiting on a worktree that may be what was refused: it opens for editing again
-      const { sent, ...draft } = s.draft ?? {};
       const next = {
         ...s,
         archiving: id
@@ -2105,7 +2110,6 @@ function onServer(s: State, msg: StoreServerMsg): State {
             ? null
             : page,
         pendingOpen: refused ? false : s.pendingOpen,
-        draft: sent ? (draft as Draft) : s.draft,
       };
       // the reason is read where the press was: a refused create on its view, a worktree's on its
       // chat, and anything else under the composer on screen

@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
+import { trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { ChipPicker } from "../../ui/ChipPicker.tsx";
 import { Field, TextArea } from "../../ui/Field.tsx";
@@ -50,10 +51,11 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   const sock = useSock();
   const store = useStoreInstance();
   const clientId = useStore((s) => s.clientId);
-  // the repo's main worktree, whose files the pane opens and whose settings the daemon watches
-  const main = useStore(
-    (s) => s.rows.find((r) => isOwned(r) && r.repoId === repo.id && r.worktree.kind === "main") ?? null,
-  );
+  // the repo's main checkout, whose files the pane opens and whose settings the daemon watches: a
+  // row of its own while the repo is unconfirmed (no spare stands in for it yet), which is when
+  // the pane is forced; reopened later, the trunk still names its record for the files
+  const main = useStore((s) => s.rows.find((r) => isOwned(r) && r.id === trunkOf(s, repo.id)?.id) ?? null);
+  const trunkId = useStore((s) => trunkOf(s, repo.id)?.id ?? null);
   // reopened for a configured repo: esc leaves it, the way every other overlay does
   useEffect(() => {
     if (!onClose) return;
@@ -241,14 +243,14 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
             must listen on <code {...tip("Toyon sets a different port for each worktree")}>$PORT</code>
             {/* where the guess came from, and the way to it: the file opens in the editor pane
                   under this card, so the script the person meant is a copy and a paste away */}
-            {repo.guess && main && (
+            {repo.guess && trunkId && (
               <>
                 {" · from "}
                 <Button
                   mono
                   tone="quiet"
                   {...tip(`open ${repo.guess} in the editor pane`)}
-                  onClick={() => openSource(store, sock, main.id, repo.guess ?? "", 1)}
+                  onClick={() => openSource(store, sock, trunkId, repo.guess ?? "", 1)}
                 >
                   {repo.guess}
                 </Button>

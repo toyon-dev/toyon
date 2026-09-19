@@ -7,7 +7,6 @@ import { basename, dirname, join } from "node:path";
 import {
   type ConfigFileKind,
   configSibling,
-  draftKey,
   isLocalConfigFile,
   type PendingRepo,
   type RepoInfo,
@@ -58,7 +57,7 @@ export interface RepoRegistryDeps {
   afterLand: AfterLand;
   /** whether that branch moving left the running daemon behind (core/self.ts) */
   self: SelfWatch;
-  /** the unsent text in composer boxes: a forgotten project takes its new-worktree draft with it */
+  /** the unsent text in composer boxes: a forgotten project takes its main's with it */
   drafts?: Pick<DraftStore, "drop">;
 }
 
@@ -330,8 +329,8 @@ export class RepoRegistry {
       // main's chat has nowhere to come back to: opening the project again makes a new main
       this.d.worktrees.deleteChat(wt.id);
       releasePort(wt.proxyPort);
+      this.d.drafts?.drop(wt.id);
     }
-    this.d.drafts?.drop(draftKey(repoId));
     this.d.state.removeRepo(repoId);
     this.d.hub.emit("reposChanged");
     this.d.hub.emit("worktreesChanged");

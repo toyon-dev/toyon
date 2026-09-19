@@ -492,19 +492,22 @@ export function defaultStandsFor(choices: ModelChoice[]): ModelChoice | undefine
   return choices.find((c) => c !== own && c.name === own.description);
 }
 
-/** The pre-warmed worktree a repo's next task will claim. Never a rail row: nobody works in it,
- * and the rail's ⌘1-9 must not count it. Its preview is what a draft tab shows while the prompt
- * is still being typed, since it is the code the task starts from; on claim the same id becomes
- * the task's row. */
-export interface SpareInfo {
-  repoId: string;
+/** The state of a repo's default branch checkout, which the plus's row wears and the composer's
+ * line under the knobs reads: how far it trails origin, what is uncommitted there, and whether an
+ * automatic fast-forward was held back. Never a rail row while the repo has a spare: the spare is
+ * main's running copy, and this is what main itself says. `id` is the checkout's own record, the
+ * target of `pull-main`, of a carry, and of the setup pane's log. */
+export interface TrunkStatus {
   id: string;
-  /** its checkout: the directory a picked element's source paths in its preview start with */
-  path: string;
-  proxyPort: number;
-  /** its procs and proxy are up, so the port answers (with the waiting page until the preview
-   * proc does) */
-  ready: boolean;
+  /** commits behind the upstream as of the last fetch; absent with no upstream */
+  behind?: number;
+  /** uncommitted files in the checkout */
+  dirty: number;
+  /** nothing tracked and nothing untracked: a project made from the picker before anything landed */
+  empty: boolean;
+  /** why the checkout was not fast-forwarded when origin moved: uncommitted files sit on it, its
+   * history diverged from origin's, or it has no upstream to follow */
+  stale?: "dirty" | "diverged" | "no-upstream";
 }
 
 /** A worktree that was removed. Removing archives: the directory and branch go, while the chat,

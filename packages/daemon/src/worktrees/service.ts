@@ -17,14 +17,15 @@ import {
   type GitFileStatus,
   hasOwnBranch,
   isMain,
+  isProvisional,
   type Landing,
   landPolicy,
   type PermissionMode,
   type PrState,
   type RefKind,
   type RepoInfo,
-  type SpareInfo,
   siblingsOf,
+  type TrunkStatus,
   type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
@@ -167,6 +168,8 @@ export interface CreateOpts {
   effort?: string;
   /** move main's uncommitted changes into the new worktree before its agent starts */
   carry?: boolean;
+  /** the provisional row the message was typed in, which becomes the worktree in place */
+  worktreeId?: string;
 }
 
 /** what became of main's uncommitted files when a worktree was made from it */
@@ -197,8 +200,9 @@ export interface WorktreeServiceDeps {
   runtime: RuntimeRegistry;
   paths: Paths;
   agents: AgentRegistry;
-  /** the unsent text in composer boxes: a worktree discarded or deleted from the archive takes its own */
-  drafts?: Pick<DraftStore, "drop">;
+  /** the unsent text in composer boxes: a worktree discarded or deleted from the archive takes its
+   * own, and a spare whose warm-up failed hands its words to the row that stands in for it */
+  drafts?: Pick<DraftStore, "drop" | "text" | "set">;
   /** task → short kebab-case name (the worktree's own agent by default; tests inject a stub) */
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
   /** a command the service ran and the person should read whole, onto the worktree's transcript
@@ -227,6 +231,8 @@ export class WorktreeService {
   private usage = new Map<string, WorktreeStatus["usage"] | null>();
   /** per repo path, when main's upstream was last fetched */
   private lastFetch = new Map<string, number>();
+  /** per repo, why main was last left where it was when origin had moved (see TrunkStatus) */
+  private trunkStale = new Map<string, TrunkStatus["stale"]>();
 
   constructor(private d: WorktreeServiceDeps) {
     this.archive = new WorktreeArchive(d.paths.archiveDir);
@@ -238,6 +244,11 @@ export class WorktreeService {
       setupAndStart: (wt, repo) => this.setupAndStart(wt, repo),
       discard: async (id) => {
         await this.discardWorktree(id);
+      },
+      carryDraft: (fromId, repoId) => {
+        const text = this.d.drafts?.text(fromId);
+        const main = this.mainOf(repoId);
+        if (text && main) this.d.drafts?.set(main.id, text);
       },
     });
     // worktrees claimed before links existed get theirs at boot
@@ -303,7 +314,7 @@ export class WorktreeService {
 
     // fast path: claim the pre-warmed spare. Its runtime — agent included — already exists, so the
     // task's first message goes to the spare's agent.
-    const claimed = await this.spare.claim(repoId, branch, title);
+    const claimed = await this.spare.claim(repoId, branch, title, opts.worktreeId);
     if (claimed) {
       if (variant) claimed.variant = variant;
       if (opts.createdBy) claimed.createdBy = opts.createdBy;
@@ -435,7 +446,7 @@ export class WorktreeService {
         : `the changes on ${main} did not apply in ${wt.title}; they are kept in git stash as "toyon: into ${wt.title}"`;
     });
     // main's count in the rail is cached; it is clean now, or back to what it was
-    const mainWt = this.d.state.worktrees.find((w) => w.repoId === repo.id && w.kind === "main");
+    const mainWt = this.mainOf(repo.id);
     if (mainWt) this.countsCache.delete(mainWt.id);
     return { branch: main, moved: count > 0 && !unmoved, count, unmoved };
   }
@@ -1473,6 +1484,8 @@ export class WorktreeService {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
     if (r.wt && isMain(r.wt)) throw new UserError("sync from a worktree, not main");
+    if (r.wt && isProvisional(r.wt))
+      throw new UserError("the new worktree already sits on main; it follows it on its own");
     if (!r.branch) throw new UserError(`${r.name} is detached: check out a branch in it first`);
     if (r.locked) throw new UserError(`${r.name} is held by another tool`);
     const repo = this.d.state.requireRepo(r.repoId);
@@ -1662,12 +1675,12 @@ export class WorktreeService {
     return this.counts(wt.id, wt.path, repo.defaultBranch, true);
   }
 
-  /** Resolve an id for reading: a worktree toyon runs, or one it merely knows about. Null for a
-   * spare (nobody looks at those) and for an id that is neither. */
+  /** Resolve an id for reading: a worktree toyon runs, the spare included (it is the row new work
+   * is typed in, and its checkout is what that row shows), or one toyon merely knows about. Null
+   * for an id that is neither. */
   readable(id: string): ReadableWorktree | null {
     const wt = this.d.state.worktree(id);
     if (wt) {
-      if (wt.kind === "spare") return null;
       const { defaultBranch } = this.d.state.requireRepo(wt.repoId);
       return { id, repoId: wt.repoId, path: wt.path, name: wt.title, branch: wt.branch, defaultBranch, wt };
     }
@@ -1812,19 +1825,42 @@ export class WorktreeService {
     return [...owned, ...found];
   }
 
-  /** every repo's warm spare, for the draft tab's preview; never part of rows(). Ready once its
-   * proxy is up (a boot-adopted spare has none until the repo's procs restart) and the pool still
-   * counts it (an extra row adopt() is pruning does not). */
-  spares(): SpareInfo[] {
-    return this.d.state.worktrees
-      .filter((wt) => wt.kind === "spare")
-      .map((wt) => ({
-        repoId: wt.repoId,
-        id: wt.id,
-        path: wt.path,
-        proxyPort: wt.proxyPort,
-        ready: this.d.runtime.get(wt.id)?.proxy != null && this.spare.current(wt.repoId)?.worktreeId === wt.id,
-      }));
+  /** the repo's main checkout record */
+  private mainOf(repoId: string): WorktreeInfo | undefined {
+    return this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "main");
+  }
+
+  /** the spare the pool counts as the repo's: the row new work is typed in. An extra spare record
+   * adopt() is still pruning, and one the pool has let go of, are nobody's. */
+  private leadSpareOf(repoId: string): string | null {
+    return this.spare.current(repoId)?.worktreeId ?? null;
+  }
+
+  /** Every project's main checkout as it stands: what the plus's row wears while a spare stands
+   * in for main, and what the composer's line under the knobs reads. `quick` answers from the
+   * counts already cached, like rows(). */
+  async trunks(opts: { quick?: boolean } = {}): Promise<Record<string, TrunkStatus>> {
+    const quick = opts.quick ? { missed: false } : null;
+    const out: Record<string, TrunkStatus> = {};
+    await Promise.all(
+      this.d.state.repos.map(async (repo) => {
+        const main = this.mainOf(repo.id);
+        if (!main) return;
+        const { behind, dirty } = quick
+          ? this.countsQuick(main.id, quick)
+          : await this.counts(main.id, main.path, repo.defaultBranch, false);
+        const stale = this.trunkStale.get(repo.id);
+        out[repo.id] = {
+          id: main.id,
+          ...(behind !== undefined ? { behind } : {}),
+          dirty: dirty ?? 0,
+          empty: main.empty === true,
+          ...(stale ? { stale } : {}),
+        };
+      }),
+    );
+    if (quick?.missed) setTimeout(() => this.d.hub.emit("worktreesChanged"), 0);
+    return out;
   }
 
   /** the cached counts for a row whatever their age, noting a miss for the quick pass */
@@ -1835,10 +1871,20 @@ export class WorktreeService {
     return {};
   }
 
+  /** Whether a record is a rail row. A task always is. The repo's spare is, as the row new work
+   * is typed in, ready or still warming; main is one only while the repo has no spare to stand in
+   * for it (setup unconfirmed, an empty project, a warm-up that failed), so the first-run screens
+   * and the setup pane keep a row to sit on. A spare record the pool has let go of is nobody's. */
+  private isRow(wt: WorktreeInfo): boolean {
+    if (wt.kind === "worktree") return true;
+    const lead = this.leadSpareOf(wt.repoId);
+    return wt.kind === "spare" ? lead === wt.id : lead === null;
+  }
+
   private async ownedRows(quick: { missed: boolean } | null): Promise<WorktreeStatus[]> {
     return Promise.all(
       this.d.state.worktrees
-        .filter((wt) => wt.kind !== "spare")
+        .filter((wt) => this.isRow(wt))
         .map(async (wt) => {
           const rt = this.d.runtime.get(wt.id);
           const { defaultBranch } = this.d.state.requireRepo(wt.repoId);

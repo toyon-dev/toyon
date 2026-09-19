@@ -615,7 +615,6 @@ export class RuntimeRegistry {
     if (stream === LOGIN_STREAM) return this.openLoginStream(id, cols, rows);
     if (stream !== SHELL_STREAM) return this.openProcStream(id, stream, cols, rows);
     const wt = this.deps.state.requireWorktree(id);
-    if (wt.kind === "spare") throw new UserError("no terminal for a spare worktree");
     const rt = this.ensureAgent(wt);
     let term = rt.shell;
     if (!term?.alive) {

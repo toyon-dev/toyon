@@ -228,6 +228,7 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async "create-worktree"(msg, _ctx, s) {
     await s.worktrees.create(msg.repoId, msg.prompt, {
       createdBy: msg.clientId,
+      worktreeId: msg.worktreeId,
       variant: msg.variant,
       context: msg.context,
       attachments: msg.attachments,

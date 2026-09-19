@@ -126,11 +126,11 @@ async function attachTextFiles(store: Store, boxId: string | null, files: File[]
   if (files.length > room) noticeIn(store, boxId, `kept ${room} of ${files.length}: ${limitMessage("paste")}`);
 }
 
-/** the box a drop lands in: the one the composer on screen writes in, which while drafting is the
- * draft's and not the active worktree's. Read at drop time, like the pending counts. */
+/** the box a drop lands in: the one the composer on screen writes in. Read at drop time, like the
+ * pending counts. */
 function dropBox(store: Store): string | null {
   const s = store.getState();
-  return composerBoxOf(worktreeById(s, s.activeId), !!s.draft);
+  return composerBoxOf(worktreeById(s, s.activeId));
 }
 
 /** a drop on the chat panel */

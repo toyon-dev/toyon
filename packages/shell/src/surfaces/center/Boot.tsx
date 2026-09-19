@@ -1,4 +1,4 @@
-import { isMain, type LogLine, type OwnedWorktree, type ProcState } from "@toyon/shared";
+import { isLead, isProvisional, type LogLine, type OwnedWorktree, type ProcState } from "@toyon/shared";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -20,12 +20,15 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
   const bad = procs.some((p) => p.status === "crashed" || p.status === "unreachable");
   const clientId = useStore((s) => s.clientId);
   // the diagnosis is specific enough to hand over: the agent gets it, the command, the tail and
-  // the rule, and the daemon restarts the proc when its turn ends. Main has no agent, so its fix is
-  // a worktree of its own, whose procs start from the same broken command.
+  // the rule, and the daemon restarts the proc when its turn ends. The lead has no task yet, so its
+  // fix is the worktree its box would start: the provisional row itself, made the task, or a
+  // worktree of main's own, whose procs start from the same broken command.
   const askAgent = () => {
     const prompt = procFixPrompt(worktree, log);
-    if (isMain(worktree.worktree)) sock?.send({ t: "create-worktree", clientId, repoId: worktree.repoId, prompt });
-    else sock?.send({ t: "chat", worktreeId: worktree.id, text: prompt });
+    if (isLead(worktree.worktree)) {
+      const from = isProvisional(worktree.worktree) ? { worktreeId: worktree.id } : {};
+      sock?.send({ t: "create-worktree", clientId, repoId: worktree.repoId, prompt, ...from });
+    } else sock?.send({ t: "chat", worktreeId: worktree.id, text: prompt });
   };
   return (
     <View wide>

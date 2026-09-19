@@ -1,4 +1,4 @@
-import { isMain, sentAt } from "@toyon/shared";
+import { isLead, sentAt } from "@toyon/shared";
 import type { ReactNode } from "react";
 import { needsYou, unseenJump } from "../../app/unseenJump.ts";
 import { archivedHint } from "../../state/actions/archive.ts";
@@ -24,9 +24,9 @@ import { ago, dotClass, wtDir } from "../util.ts";
  * The strip at the top of the phone.
  *
  * On the list: the project, which is the switcher when there is more than one, over how many
- * worktrees it has; the plus that starts new work, which is main's box (a plain selection of main,
- * whose draft opens on its own; main has no row on the screen, since the plus is what its row
- * would say); and the menu. On a worktree: the way back, its title over its state, and the menu.
+ * worktrees it has; the plus that starts new work, which is the lead row's box (a plain selection
+ * of the lead, whose draft opens on its own; the lead has no row on the screen, since the plus is
+ * what its row would say); and the menu. On a worktree: the way back, its title over its state, and the menu.
  * The list and the worktree are a master and its detail, so the way between them is back, not
  * tabs. What the worktree shows (its chat, its app, its changes) are tabs *within* the detail, a
  * control under this bar, and this bar stays what it is: the detail's header.
@@ -53,10 +53,10 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
   const visible = useVisibleWorktrees();
   const offline = useOffline();
   const owed = needsYou(visible, activeId);
-  const main = visible.find((w) => isMain(w.worktree));
+  const lead = visible.find((w) => isLead(w.worktree));
   const home = screen === "home";
   const title = home ? (repo?.name ?? null) : (archivedPage?.title ?? active?.worktree.title ?? null);
-  const tasks = visible.filter((w) => !isMain(w.worktree)).length;
+  const tasks = visible.filter((w) => !isLead(w.worktree)).length;
   const line = home
     ? tasks === 0
       ? "no worktrees yet"
@@ -68,7 +68,7 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
             offline,
             needsSetup: asksSetup(repo),
             path: wtDir(active.worktree),
-            at: isMain(active.worktree) ? undefined : ago(sentAt(active.worktree)),
+            at: isLead(active.worktree) ? undefined : ago(sentAt(active.worktree)),
           })
         : null;
   const asks = !home && !archivedPage && !!active && dotClass(active) === "waiting";
@@ -118,12 +118,12 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
             {owed.n} {owed.tier}
           </Button>
         )}
-        {home && main && (
+        {home && lead && (
           <IconButton
             icon="plus"
             label="New worktree"
             tone="chrome"
-            onClick={() => dispatch({ a: "activate", id: main.id })}
+            onClick={() => dispatch({ a: "activate", id: lead.id })}
           />
         )}
         {/* the palette hangs from this button on a phone, from either end of the window it turns

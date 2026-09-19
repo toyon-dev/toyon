@@ -41,6 +41,13 @@ describe("railOrder", () => {
     expect(ids(rows)).toEqual(["main", "new", "old", "done"]);
   });
 
+  test("the spare leads the same way: it is the row new work is typed in", () => {
+    expect(ids([row("new", { promptedAt: 5 }), row("spare", { kind: "spare", createdAt: 9 })])).toEqual([
+      "spare",
+      "new",
+    ]);
+  });
+
   test("an agent finishing a turn never outranks a send", () => {
     expect(ids([row("sent", { promptedAt: 5 }), row("busy", { promptedAt: 1, lastTurn: turned(99) })])).toEqual([
       "sent",

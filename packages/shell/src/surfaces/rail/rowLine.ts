@@ -1,4 +1,4 @@
-import { isMain, isOwned, type WorktreeStatus } from "@toyon/shared";
+import { isLead, isOwned, type WorktreeStatus } from "@toyon/shared";
 import { recapLine } from "../recap.ts";
 import { type DotState, dotClass, stateLabel } from "../util.ts";
 
@@ -11,8 +11,8 @@ import { type DotState, dotClass, stateLabel } from "../util.ts";
  * a choice like this: the order below is the whole logic, and it is what the test holds.
  *
  * The socket wins over everything, because nothing further is known. A found worktree runs nothing
- * of ours, so what it can say is where it is, or who is holding it. Main is where new work starts
- * and its dot describes procs a phone never previews, so it says what a tap on it does. Then what
+ * of ours, so what it can say is where it is, or who is holding it. The lead is where new work
+ * starts and its dot describes procs a phone never previews, so it says what a tap on it does. Then what
  * is happening now outranks what happened last: while a turn is running, waiting on you or broken,
  * the previous turn's sentence is about something already over, and next to a working dot it reads
  * as the current state. With nothing in flight the recap is the line worth having, since it is the
@@ -22,8 +22,8 @@ import { type DotState, dotClass, stateLabel } from "../util.ts";
 /** what every row and the panel's ground say while the socket is down */
 export const OFFLINE_LINE = "Lost the daemon; retrying";
 
-/** what main's tap does, the verb the desk shows on hover */
-const MAIN_LINE = "new worktree";
+/** what the lead's tap does, the verb the desk shows on hover */
+const LEAD_LINE = "new worktree";
 
 /** the dots that mean something is happening, or has broken, right now */
 const IN_FLIGHT: ReadonlySet<DotState> = new Set(["waiting", "working", "starting", "failed", "crashed"]);
@@ -43,7 +43,7 @@ export interface RowContext {
 export function rowLine(w: WorktreeStatus, ctx: RowContext): string {
   if (ctx.offline) return OFFLINE_LINE;
   if (!isOwned(w)) return w.locked ? `Held by ${w.lockReason ?? "another tool"}` : ctx.path;
-  if (isMain(w.worktree)) return MAIN_LINE;
+  if (isLead(w.worktree)) return LEAD_LINE;
   const state = stateLabel(w, ctx.needsSetup);
   const turn = w.worktree.lastTurn;
   // a recap carries its own time ("Finished 4h ago.") or is the agent's sentence, which the time

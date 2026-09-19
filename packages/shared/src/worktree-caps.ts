@@ -19,6 +19,18 @@ export function isMain(wt: Pick<WorktreeInfo, "kind">): boolean {
   return wt.kind === "main";
 }
 
+/** a row that is not a task yet: the repo's warm spare, sitting on main with nothing sent to it.
+ * It is where new work is typed, and the send makes it the task in place, same id and directory. */
+export function isProvisional(wt: Pick<WorktreeInfo, "kind">): boolean {
+  return wt.kind === "spare";
+}
+
+/** the row new work starts from: the repo's provisional row, or its main checkout while the pool
+ * has none (setup still to confirm, an empty project, a warm-up that failed) */
+export function isLead(wt: Pick<WorktreeInfo, "kind">): boolean {
+  return isProvisional(wt) || isMain(wt);
+}
+
 /** the directory and branch may go. A spare is removed by the pool, never by a person. */
 export function canArchive(wt: Pick<WorktreeInfo, "kind">): boolean {
   return wt.kind === "worktree";
@@ -43,7 +55,8 @@ export function canGraft(wt: Pick<WorktreeInfo, "kind">): boolean {
 /** main may be merged into it: any row with a branch, owned or not. Not main, which is its own
  * baseline; not a detached worktree, which has no branch to move; and not one another tool holds,
  * since a merge under a live agent session is exactly what take-over refuses for. The daemon
- * still refuses a dirty tree, which only it can see. */
+ * still refuses a dirty tree, which only it can see. Nor a provisional row, which sits on main
+ * already and follows it by being reset, not merged. */
 export function canSync(row: Pick<WorktreeStatus, "branch" | "locked" | "worktree">): boolean {
-  return !!row.branch && !row.locked && !(row.worktree && isMain(row.worktree));
+  return !!row.branch && !row.locked && !(row.worktree && isLead(row.worktree));
 }

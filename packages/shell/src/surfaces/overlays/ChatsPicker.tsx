@@ -1,4 +1,4 @@
-import { type ArchivedWorktree, type ChatHit, isMain, type OwnedWorktree } from "@toyon/shared";
+import { type ArchivedWorktree, type ChatHit, isLead, type OwnedWorktree } from "@toyon/shared";
 import { useCallback, useEffect, useMemo } from "react";
 import { archivedHint } from "../../state/actions/archive.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
@@ -54,9 +54,9 @@ export function ChatsPicker({ repoId }: { repoId: string }) {
   useEffect(() => {
     sock?.send({ t: "list-archived", repoId });
   }, [sock, repoId]);
-  // main has no chat of its own, so it is never a place to look
+  // the lead has no chat yet, so it is never a place to look
   const worktrees = useMemo(
-    () => [...live.filter((w) => !isMain(w.worktree)).map(liveRow), ...archived.map(archivedRow)],
+    () => [...live.filter((w) => !isLead(w.worktree)).map(liveRow), ...archived.map(archivedRow)],
     [live, archived],
   );
   const names = useMemo(() => new Map(worktrees.map((w) => [w.id, w.name])), [worktrees]);

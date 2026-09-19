@@ -633,6 +633,20 @@ describe("chat folding", () => {
     ]);
     expect(s.local.a?.chat.length).toBe(2);
   });
+
+  test("a turn-end closes the calls it left open: a turn cut off by a restart is not still running", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "turn-start", ts: 0 }),
+      agent("a", { type: "tool-start", toolId: "t1", name: "Bash", input: {} }),
+      agent("a", { type: "tool-end", toolId: "t1", output: "ok", isError: false }),
+      agent("a", { type: "tool-start", toolId: "t2", name: "Bash", input: {} }),
+      agent("a", { type: "turn-end", stopReason: "interrupted", ts: 0 }),
+    ]);
+    const tools = s.local.a!.chat.filter((i) => i.kind === "tool");
+    expect(tools.map((t) => t.done)).toEqual([true, true]);
+    expect(tools[1]).not.toHaveProperty("output");
+  });
 });
 
 describe("preview reload after a turn", () => {

@@ -2279,6 +2279,12 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       };
       return next;
     }
+    case "turn-end":
+      // a row reads as running by whether its call ended, and a turn cut off (a stop, a daemon
+      // restart) leaves calls with no end: what the turn left open closes with it
+      return items.some((i) => i.kind === "tool" && !i.done)
+        ? items.map((i) => (i.kind === "tool" && !i.done ? { ...i, done: true } : i))
+        : items;
     default:
       return items;
   }

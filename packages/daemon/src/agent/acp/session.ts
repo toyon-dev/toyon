@@ -67,6 +67,8 @@ export interface AcpSessionDeps {
   onCommandsLearned?: (commands: AgentCommand[]) => void;
   /** how long an idle adapter process lives after its last turn */
   idleMs?: number;
+  /** how long a turn the agent started on its own may go quiet before it is over */
+  ownSettleMs?: number;
   /** the worktree's bounds, after the agent's own setup has run (agent/sandbox.ts `prepareLaunch`) */
   prepare?: (cwd: string, spec: AgentSpec) => Promise<Prepared>;
   /** what the agent may do here without asking; read before every turn and every permission */
@@ -91,6 +93,17 @@ export interface AcpSessionDeps {
 }
 
 const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
+/** The quiet that ends a turn the agent started on its own. Between a tool's result and the next
+ * call the wire carries nothing while the model reads the result, seconds on a long context; a
+ * turn cut at that gap would come back as a second one, so the wait errs long. */
+const OWN_SETTLE_MS = 10_000;
+
+/** A turn the agent is running with no prompt out: the calls it has open, and the timer that ends
+ * the turn once they are all answered and it has gone quiet */
+interface OwnTurn {
+  open: Set<string>;
+  settle: ReturnType<typeof setTimeout> | null;
+}
 
 /** the adapter process, initialized: enough to log in and to ask side questions */
 interface Conn {
@@ -181,6 +194,10 @@ export class AcpSession implements AgentAdapter {
   private connecting: Promise<Conn> | null = null;
   private live: Live | null = null;
   private reaper: ReturnType<typeof setTimeout> | null = null;
+  /** The turn the agent is on with no prompt out, or null. Claude Code runs a background command
+   * past the end of the turn that started it and prompts itself when the command exits, so its
+   * work then arrives as updates alone; without this the worktree reads idle while it edits. */
+  private own: OwnTurn | null = null;
   /** questions in flight on side sessions; the reaper waits for them */
   private asking = 0;
   /** ask cards waiting on a person, by ask id. The agent's request stays open on the wire until
@@ -300,7 +317,7 @@ export class AcpSession implements AgentAdapter {
     // sending during a turn means "while you are doing that": an agent that takes steering reads the
     // message as part of the work it is already on, which is the whole reason a person types then.
     // A stop already on its way is the exception — that turn is going away, so the message waits.
-    if (this.running && !this.interrupted && this.live?.conn.steering) {
+    if ((this.running || this.own) && !this.interrupted && this.live?.conn.steering) {
       return fireAndForget(this.d.worktreeId, this.steer(item), "agent steer");
     }
     this.enqueue(item);
@@ -319,7 +336,7 @@ export class AcpSession implements AgentAdapter {
     item.recorded ??= await this.record(item);
     const live = this.live;
     // writing the attachments is a window the turn can settle in, and then this is a plain message
-    if (!live || !this.running || this.interrupted) return this.enqueue(item);
+    if (!live || !(this.running || this.own) || this.interrupted) return this.enqueue(item);
     // unanswered from the moment it goes out: a stop can land before the agent replies
     this.steered.push(item);
     let outcome: SteerOutcome;
@@ -351,9 +368,9 @@ export class AcpSession implements AgentAdapter {
     }
     if (outcome === "startedNewTurn") {
       // an agent that ignored the opt-in and prompted itself. Sending it again would run the same
-      // message twice and cancelling could take the new turn with it, so the agent keeps it: what
-      // is lost is the turn's framing, and status reads idle a beat early. Hold the reaper off it.
-      // That includes a copy a stop already queued.
+      // message twice and cancelling could take the new turn with it, so the agent keeps it: its
+      // updates open a turn of the agent's own. Hold the reaper off until they do. That includes
+      // a copy a stop already queued.
       if (!this.unsteer(item)) {
         this.queue = this.queue.filter((q) => q !== item);
         this.queueChanged();
@@ -376,7 +393,15 @@ export class AcpSession implements AgentAdapter {
     // before the running guard and before session/cancel: an open card is the thing holding the
     // turn open, so the agent unblocks on our answer whether or not its own cancel reaches it
     this.cancelAsks();
-    if (!this.running) return;
+    if (!this.running) {
+      // a turn of the agent's own has no prompt to fail: the cancel goes out and the turn ends here
+      if (this.own && this.live) {
+        const { conn, sessionId } = this.live;
+        fireAndForget(this.d.worktreeId, conn.ctx.notify(acp.methods.agent.session.cancel, { sessionId }), "cancel");
+        this.endOwn("interrupted");
+      }
+      return;
+    }
     this.interrupted = true;
     // what the agent had not got to goes first, ahead of anything sent after it
     if (this.steered.length > 0) {
@@ -408,6 +433,8 @@ export class AcpSession implements AgentAdapter {
   }
 
   private async drain() {
+    // the prompt going out is the next turn, so the one the agent was on alone is over
+    this.endOwn("end_turn");
     this.running = true;
     this.clearReaper();
     this.setStatus("working");
@@ -647,6 +674,7 @@ export class AcpSession implements AgentAdapter {
         this.conn = null;
         this.live = null;
         this.cancelAsks();
+        this.endOwn("interrupted");
       }
     });
     try {
@@ -847,7 +875,9 @@ export class AcpSession implements AgentAdapter {
     }
     // the agent changed its own model or effort (a slash command can): keep the comparison honest
     if (params.update.sessionUpdate === "config_option_update") this.absorb(live, params.update.configOptions);
-    for (const ev of mapUpdate(params.update, live.tools, this.d.worktreeId)) {
+    const events = mapUpdate(params.update, live.tools, this.d.worktreeId);
+    if (!this.running) this.trackOwn(events);
+    for (const ev of events) {
       // words or a call after a steer are the agent answering it. Output the pre-emption cut off can
       // still trail in and clear this early, and a stop then takes that message with the turn.
       if (ev.type === "text-delta" || ev.type === "tool-start") this.steered = [];
@@ -1022,18 +1052,54 @@ export class AcpSession implements AgentAdapter {
    * the agent is in fact blocked on a person */
   private syncStatus() {
     if (this.status === "error") return;
-    this.setStatus(this.asks.size > 0 ? "waiting" : this.running ? "working" : "idle");
+    this.setStatus(this.asks.size > 0 ? "waiting" : this.running || this.own ? "working" : "idle");
+  }
+
+  /** Updates with no prompt out are the agent working on its own. The first word or call opens a
+   * turn in the transcript so the shell reads it as one; it ends once every call it made has been
+   * answered and it has been quiet for a while, since nothing on the wire says it is done. */
+  private trackOwn(events: AgentEvent[]) {
+    if (!this.own) {
+      const doing = events.some(
+        (e) => e.type === "text-delta" || e.type === "thinking-delta" || e.type === "tool-start",
+      );
+      if (!doing) return;
+      this.own = { open: new Set(), settle: null };
+      this.clearReaper();
+      this.emit({ type: "turn-start", ts: Date.now() });
+      this.syncStatus();
+    }
+    for (const e of events) {
+      if (e.type === "tool-start") this.own.open.add(e.toolId);
+      else if (e.type === "tool-end") this.own.open.delete(e.toolId);
+    }
+    if (this.own.settle) clearTimeout(this.own.settle);
+    this.own.settle = null;
+    if (this.own.open.size > 0) return;
+    const t = setTimeout(() => this.endOwn("end_turn"), this.d.ownSettleMs ?? OWN_SETTLE_MS);
+    t.unref?.();
+    this.own.settle = t;
+  }
+
+  private endOwn(stopReason: string) {
+    if (!this.own) return;
+    if (this.own.settle) clearTimeout(this.own.settle);
+    this.own = null;
+    this.emit({ type: "turn-end", stopReason, ts: Date.now() });
+    this.syncStatus();
+    this.maybeArmReaper();
   }
 
   private maybeArmReaper() {
-    if (!this.running && !this.asking && this.asks.size === 0 && this.conn && !this.stopped) this.armReaper();
+    if (!this.running && !this.own && !this.asking && this.asks.size === 0 && this.conn && !this.stopped)
+      this.armReaper();
   }
 
   private armReaper() {
     this.clearReaper();
     const t = setTimeout(() => {
       this.reaper = null;
-      if (this.running || this.asking || this.asks.size > 0 || !this.conn) return;
+      if (this.running || this.own || this.asking || this.asks.size > 0 || !this.conn) return;
       log.debug(this.d.worktreeId, "agent idle; stopping its process");
       fireAndForget(this.d.worktreeId, this.dropConn(), "reap agent");
     }, this.d.idleMs ?? DEFAULT_IDLE_MS);

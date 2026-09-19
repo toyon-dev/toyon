@@ -346,6 +346,96 @@ function world(
 }
 
 describe("AcpSession", () => {
+  /** an agent whose prompt returns at once and hands back its context, for updates pushed after
+   * the turn: Claude Code prompting itself when a background command exits */
+  function selfDriven() {
+    let ctx: acp.AgentContext | undefined;
+    let sid = "";
+    const fake = fakeAgent(async (p, client) => {
+      ctx = client;
+      sid = p.sessionId;
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, { ownSettleMs: 30 });
+    const update = (u: acp.SessionUpdate) =>
+      ctx!.notify(acp.methods.client.session.update, { sessionId: sid, update: u });
+    const call = () =>
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "b1",
+        name: "Bash",
+        title: "bun test",
+        kind: "execute",
+        status: "pending",
+        rawInput: { command: "bun test" },
+      });
+    const working = async () => {
+      // a notification lands in later ticks than a request
+      for (let i = 0; i < 100 && w.session.status !== "working"; i++) await Bun.sleep(5);
+      expect(w.session.status).toBe("working");
+    };
+    return { fake, w, update, call, working };
+  }
+
+  test("updates with no prompt out are a turn of the agent's own: framed, working, idle once its calls end and it is quiet", async () => {
+    const { w, update, call, working } = selfDriven();
+    w.session.send("go");
+    await w.idle();
+    expect(w.session.status).toBe("idle");
+    const n = w.events.length;
+    await call();
+    await working();
+    expect(w.types().slice(n)).toEqual(["turn-start", "tool-start"]);
+    // quiet with a call open is a command still running, not the end
+    await Bun.sleep(80);
+    expect(w.session.status).toBe("working");
+    await update({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "b1",
+      status: "completed",
+      content: [{ type: "content", content: { type: "text", text: "ok" } }],
+    });
+    await update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "green" } });
+    await w.idle();
+    expect(w.session.status).toBe("idle");
+    expect(w.types().slice(n)).toEqual(["turn-start", "tool-start", "tool-end", "text-delta", "turn-end"]);
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
+    expect(w.statuses.slice(-2)).toEqual(["working", "idle"]);
+    await w.session.close();
+  });
+
+  test("a stop ends a turn of the agent's own as interrupted and cancels it on the wire", async () => {
+    const { fake, w, call, working } = selfDriven();
+    w.session.send("go");
+    await w.idle();
+    const n = w.events.length;
+    await call();
+    await working();
+    w.session.stop();
+    expect(w.session.status).toBe("idle");
+    expect(w.types().slice(n)).toEqual(["turn-start", "tool-start", "turn-end"]);
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "interrupted" });
+    for (let i = 0; i < 100 && fake.cancels === 0; i++) await Bun.sleep(5);
+    expect(fake.cancels).toBe(1);
+    await w.session.close();
+  });
+
+  test("a message sent during a turn of the agent's own ends it first and goes as the next prompt", async () => {
+    const { fake, w, call, working } = selfDriven();
+    w.session.send("go");
+    await w.idle();
+    const n = w.events.length;
+    await call();
+    await working();
+    w.session.send("and this");
+    await w.idle();
+    expect(w.types().slice(n, n + 5)).toEqual(["turn-start", "tool-start", "turn-end", "user-message", "turn-start"]);
+    expect(w.events[n + 2]).toMatchObject({ stopReason: "end_turn" });
+    expect(fake.prompts).toHaveLength(2);
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
+
   test("a turn: user-message, turn-start, session-info, deltas, turn-end; transcript on disk; status back to idle", async () => {
     const fake = fakeAgent(say("hello"));
     const w = world(fake);

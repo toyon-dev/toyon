@@ -6,7 +6,7 @@ import { type ChatLink, messageItems, pathItems } from "../../state/actions/mess
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
-import { type ChatItem, readingView, worktreeById } from "../../state/store.ts";
+import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
@@ -46,11 +46,12 @@ function openChatLink(
   const target = chatLink(e.target as Element, root)?.file;
   if (!target || !worktreeId) return;
   e.preventDefault();
+  // a message names a file because the agent touched it, so the view is left unsaid and the read
+  // opens the diff when there is one, the file otherwise. A line is an address into the file.
   openFile(deps, {
     worktreeId,
     path: target.path,
-    view: target.line ? "file" : readingView(target.path),
-    ...(target.line ? { line: { n: target.line } } : {}),
+    ...(target.line ? { view: "file", line: { n: target.line } } : {}),
   });
 }
 

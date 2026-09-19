@@ -176,6 +176,13 @@
     --rail-dot-mr: 0px;
     /* the peek's shadow falls toward the far edge */
     --rail-shadow-x: -10px;
+    /* The unfurl's timing, one pair for the panel and every part that shows with it: how long the
+       slide takes and how long it waits first. At rest the pair is the leave's, and leaving is
+       forgiving: a flick off the rail on the way somewhere else does not shut it. Hover shortens
+       the wait to an intent pause (below). The walk's peek is a key's: a key is instant, so it waits
+       for nothing and slides in a few frames, the way an alt-tab switcher shows. */
+    --rail-slide: 0.12s;
+    --rail-wait: 120ms;
     width: 40px;
     flex-shrink: 0;
     position: relative;
@@ -200,10 +207,9 @@
     /* the shadow only ever escapes toward the centre, never over the top bar. The clip has to hold
      while the panel collapses too, or the blur pops out on all four sides on the way back in. */
     clip-path: inset(0 0 0 -32px);
-    /* leaving is forgiving: a flick off the rail on the way somewhere else does not shut it */
     transition:
-      width 0.12s ease 120ms,
-      box-shadow 0.12s ease 120ms;
+      width var(--rail-slide) ease var(--rail-wait),
+      box-shadow var(--rail-slide) ease var(--rail-wait);
   }
   /* the peek grows toward the centre over the chat dock and its grab strip, which are its
      neighbours inside .docks and the only things it covers. Kept open it covers nothing and takes no
@@ -212,25 +218,31 @@
     z-index: 2;
   }
   .rail {
+    :where([data-hover]) &:hover {
+      /* hover intent: a brief pause before expanding */
+      --rail-wait: 50ms;
+    }
     :where([data-hover]) &:hover .rail-panel,
     &.hold .rail-panel {
       width: var(--rail-width);
       /* a step above the page, not a floating dialog: the negative spread keeps the dark out of the
      seam itself, so what shows is the tail of the blur */
       box-shadow: var(--rail-shadow-x) 0 20px -10px var(--shadow);
-      /* hover intent: brief pause before expanding */
-      transition:
-        width 0.12s ease 50ms,
-        box-shadow 0.12s ease 50ms;
+    }
+    /* Held open by a key (the walk) or by something the rail owns (its menu, a graft): nothing to
+       wait for on the way in. A quiet rail keeps the key's timing after the hold is let go, so the
+       peek closes the way it opened; a hold that ends under the pointer changes no width at all,
+       and one that ends with the pointer elsewhere falls back to the leave's forgiving pair. */
+    &.hold,
+    &.quiet {
+      --rail-slide: 0.06s;
+      --rail-wait: 0ms;
     }
     /* the walk's peek opened under a resting pointer (Rail.tsx): the rail does not answer that
        pointer until it moves, or the hover would hold the panel open after the key that opened
-       it was let go. A key is instant, so a quiet peek comes and goes without the hover's pauses. */
+       it was let go */
     &.quiet {
       pointer-events: none;
-    }
-    &.quiet .rail-panel {
-      transition-delay: 0s;
     }
     /* kept open: the rail is a column of its own, so it takes the width out of the layout and drops the
    shadow with it. Nothing overlaps, nothing to lift off the page. A screen is a drawer kept open
@@ -278,7 +290,7 @@
     background: var(--surface1);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.12s ease 120ms;
+    transition: opacity var(--rail-slide) ease var(--rail-wait);
   }
   .rail {
     :where([data-hover]) &:hover .rail-foot,
@@ -287,7 +299,6 @@
     &.rail-screen .rail-foot {
       opacity: 1;
       pointer-events: auto;
-      transition: opacity 0.12s ease 50ms;
     }
   }
   /* Main's seat in the strip is a plus, drawn over the dot column out of the flow; as the panel
@@ -305,11 +316,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 0.12s ease 120ms;
+    transition: opacity var(--rail-slide) ease var(--rail-wait);
   }
   .rail-main-dot {
     opacity: 0;
-    transition: opacity 0.12s ease 120ms;
+    transition: opacity var(--rail-slide) ease var(--rail-wait);
   }
   .rail {
     :where([data-hover]) &:hover .rail-main-strip,
@@ -317,14 +328,12 @@
     &.pinned .rail-main-strip,
     &.rail-screen .rail-main-strip {
       opacity: 0;
-      transition: opacity 0.12s ease 50ms;
     }
     :where([data-hover]) &:hover .rail-main-dot,
     &.hold .rail-main-dot,
     &.pinned .rail-main-dot,
     &.rail-screen .rail-main-dot {
       opacity: 1;
-      transition: opacity 0.12s ease 50ms;
     }
   }
   /* the plus sits in the label's text, before the verb, the way the strip's sits before the row */

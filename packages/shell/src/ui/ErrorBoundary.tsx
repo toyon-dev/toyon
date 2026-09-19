@@ -13,22 +13,26 @@ export function markStaleBuild() {
 
 /** The card for a thing that has stopped and the one move that brings it back: a render error, a
  * stale build, a stream that exited. `pane` fits it inside a Pane, from the head down, instead
- * of the whole window. */
+ * of the whole window. `children` sit between what it says and the move: a `crash-list` of what
+ * the move is waiting on. */
 export function CrashCard({
   title,
   body,
   action,
   pane,
+  children,
 }: {
   title: string;
   body?: string;
   action: ReactNode;
   pane?: boolean;
+  children?: ReactNode;
 }) {
   return (
     <div className={cx("crash", pane && "in-pane")}>
       <div className="crash-title">{title}</div>
       {body && <div className="crash-body">{body}</div>}
+      {children}
       {action}
     </div>
   );

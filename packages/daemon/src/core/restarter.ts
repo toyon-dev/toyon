@@ -3,6 +3,7 @@
 // settling. A chat stopped on a question is not waited on. It resumes after the restart, and
 // waiting on a person could hold the restart forever.
 
+import type { AgentStatus } from "@toyon/shared";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import type { Hub } from "./hub.ts";
 import type { StateStore } from "./state.ts";
@@ -50,9 +51,16 @@ export class Restarter {
 
   /** the chats replying right now, by title */
   working(): string[] {
-    return this.d.state.worktrees
-      .filter((w) => this.d.runtime.agentFor(w.id)?.status === "working")
-      .map((w) => w.title);
+    return this.titled("working");
+  }
+
+  /** the chats stopped on a question, by title: a restart goes past them and they resume after */
+  asking(): string[] {
+    return this.titled("waiting");
+  }
+
+  private titled(status: AgentStatus): string[] {
+    return this.d.state.worktrees.filter((w) => this.d.runtime.agentFor(w.id)?.status === status).map((w) => w.title);
   }
 
   private attempt(now = false): void {

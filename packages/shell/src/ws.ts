@@ -57,15 +57,17 @@ export async function restartDaemon(now = false): Promise<string | null> {
   }
 }
 
-/** The chats a requested restart is waiting on, by title; empty or null when it waits on none. The
- * daemon asked is by definition an older one, and one from before this route answers with
- * something else entirely, which reads as nothing known. */
-export async function restartWaiting(): Promise<string[] | null> {
+/** What a requested restart is waiting on and going past, by chat title; null when nobody asked.
+ * The daemon asked is by definition an older one: one from before this route answers with
+ * something else entirely, which reads as nothing known, and one from before a field reads as
+ * that field being empty. */
+export async function restartWaiting(): Promise<{ waiting: string[]; asking: string[] } | null> {
   try {
     const r = await fetch(`/restart?token=${getToken()}`, { signal: AbortSignal.timeout(2000) });
     if (!r.ok) return null;
-    const { waiting } = (await r.json()) as Partial<RestartWait>;
-    return Array.isArray(waiting) ? waiting : null;
+    const { waiting, asking } = (await r.json()) as Partial<RestartWait>;
+    if (!Array.isArray(waiting)) return null;
+    return { waiting, asking: Array.isArray(asking) ? asking : [] };
   } catch {
     // down between the old daemon and the new one, or not JSON; the caller asks again
     return null;

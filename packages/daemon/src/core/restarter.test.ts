@@ -65,6 +65,14 @@ describe("Restarter", () => {
     expect(restarts()).toBe(1);
   });
 
+  test("the chats stopped on a question are named apart from the ones replying", () => {
+    const { restarter, set } = make();
+    set("a", "waiting");
+    set("b", "working");
+    expect(restarter.asking()).toEqual(["fix login"]);
+    expect(restarter.working()).toEqual(["docs"]);
+  });
+
   test("asking twice is one restart", () => {
     const { restarter, set, restarts } = make();
     set("a", "working");

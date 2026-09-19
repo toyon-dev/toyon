@@ -53,7 +53,7 @@ const opts: HttpOpts = {
     restartNow = now;
     return restartRefusal;
   },
-  restartWait: () => restartWaiting,
+  restartWait: () => ({ waiting: restartWaiting, asking: ["pick a colour"] }),
   pair: new PairCodes(),
   onPaired: () => {},
 };
@@ -454,10 +454,13 @@ describe("/restart", () => {
     restartWaiting = ["fix login", "docs"];
     const r = await fetch(req("/restart?token=secret"), srv());
     expect(restartsAsked).toBe(before);
-    expect(await r?.json()).toEqual({ waiting: ["fix login", "docs"] });
+    expect(await r?.json()).toEqual({ waiting: ["fix login", "docs"], asking: ["pick a colour"] });
     expect(r?.headers.get("cache-control")).toBe("no-store");
     restartWaiting = null;
-    expect(await (await fetch(req("/restart?token=secret"), srv()))?.json()).toEqual({ waiting: null });
+    expect(await (await fetch(req("/restart?token=secret"), srv()))?.json()).toEqual({
+      waiting: null,
+      asking: ["pick a colour"],
+    });
   });
 
   test("chat titles are not for a caller without the token", async () => {
@@ -497,7 +500,7 @@ describe("static shell", () => {
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
     restart: () => null,
-    restartWait: () => null,
+    restartWait: () => ({ waiting: null, asking: [] }),
     pair: new PairCodes(),
     onPaired: () => {},
   });

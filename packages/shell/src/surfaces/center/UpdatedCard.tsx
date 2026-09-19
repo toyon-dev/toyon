@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { restartWaitLine } from "../../app/updateNotice.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { restartHeldLine, restartRows, restartSeen } from "../../app/updateNotice.ts";
 import { Button } from "../../ui/Button.tsx";
+import { cx } from "../../ui/cx.ts";
 import { CrashCard } from "../../ui/ErrorBoundary.tsx";
 import { daemonPid, restartDaemon, restartWaiting } from "../../ws.ts";
 
@@ -8,22 +9,28 @@ const COPY = {
   title: "Toyon was updated",
   body: "The Toyon running is older than the one installed. Restart it to finish the update.",
   waiting: "Restarting Toyon. This page reloads when it is back.",
-  held: (names: string[]) =>
-    `${restartWaitLine(names)}, and this page reloads when it is back. Restarting now stops ${
-      names.length === 1 ? "it" : "them"
-    } mid-reply.`,
 } as const;
 
 /** how often the card asks whether the new daemon is up, and what the old one is waiting on */
 const POLL_MS = 1000;
 
+/** what the daemon last said of its chats, and every chat the card has met holding the restart */
+interface Wait {
+  held: string[];
+  asking: string[];
+  seen: string[];
+}
+const NO_WAIT: Wait = { held: [], asking: [], seen: [] };
+
+type Heard = NonNullable<Awaited<ReturnType<typeof restartWaiting>>>;
+
 /** Reload once a daemon other than `before` answers, saying meanwhile what the old one waits on. */
-async function watch(before: number | null, onHeld: (names: string[]) => void) {
+async function watch(before: number | null, onHeard: (heard: Heard) => void) {
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-    const [pid, names] = await Promise.all([daemonPid(), restartWaiting()]);
+    const [pid, heard] = await Promise.all([daemonPid(), restartWaiting()]);
     if (pid !== null && pid !== before) break;
-    onHeld(names ?? []);
+    onHeard(heard ?? { waiting: [], asking: [] });
   }
   window.location.reload();
 }
@@ -32,13 +39,21 @@ async function watch(before: number | null, onHeld: (names: string[]) => void) {
  * before it. A reload would load the same files against the same daemon, so the card offers the
  * restart, over HTTP because the socket has stopped, and reloads once a new daemon answers. The
  * daemon waits out every chat mid-reply first, which can be minutes of a page that reads as hung,
- * so the card names the chats it is waiting on and offers the way past them. */
+ * and the rail that would show those chats is empty because nothing can be read off this daemon's
+ * socket. So the card lists them itself, a row leaving "replying" as its chat settles, and offers
+ * the way past them. */
 export function UpdatedCard() {
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
-  const [held, setHeld] = useState<string[]>([]);
+  const [wait, setWait] = useState<Wait>(NO_WAIT);
   /** the daemon that took the request; set once, so a second press does not start a second watch */
   const asked = useRef<{ pid: number | null } | null>(null);
+
+  const hear = useCallback(
+    (heard: Heard) =>
+      setWait((w) => ({ held: heard.waiting, asking: heard.asking, seen: restartSeen(w.seen, heard.waiting) })),
+    [],
+  );
 
   // The daemon remembers a restart it was asked for; this page does not survive a reload, and a
   // reload is what anyone tries on a page that looks stuck. So the card asks first, and takes up
@@ -46,17 +61,17 @@ export function UpdatedCard() {
   useEffect(() => {
     let live = true;
     void (async () => {
-      const [pid, names] = await Promise.all([daemonPid(), restartWaiting()]);
-      if (!live || names === null || asked.current) return;
+      const [pid, heard] = await Promise.all([daemonPid(), restartWaiting()]);
+      if (!live || heard === null || asked.current) return;
       asked.current = { pid };
       setBusy(true);
-      setHeld(names);
-      void watch(pid, setHeld);
+      hear(heard);
+      void watch(pid, hear);
     })();
     return () => {
       live = false;
     };
-  }, []);
+  }, [hear]);
 
   const restart = async (now: boolean) => {
     setBusy(true);
@@ -68,17 +83,20 @@ export function UpdatedCard() {
       setRefused(refusal);
       return;
     }
-    if (now) setHeld([]);
+    if (now) setWait(NO_WAIT);
     if (asked.current) return;
     asked.current = before;
-    void watch(before.pid, setHeld);
+    void watch(before.pid, hear);
   };
 
-  const waiting = busy && held.length > 0;
+  const waiting = busy && wait.held.length > 0;
+  const rows = waiting ? restartRows(wait.seen, wait.held, wait.asking) : [];
   return (
     <CrashCard
       title={COPY.title}
-      body={refused ?? (waiting ? COPY.held(held) : busy ? COPY.waiting : COPY.body)}
+      body={
+        refused ?? (waiting ? restartHeldLine(wait.held.length, wait.seen.length) : busy ? COPY.waiting : COPY.body)
+      }
       action={
         waiting ? (
           <Button variant="outline" onClick={() => void restart(true)}>
@@ -90,6 +108,19 @@ export function UpdatedCard() {
           </Button>
         )
       }
-    />
+    >
+      {rows.length > 0 && (
+        <ul className="crash-list">
+          {rows.map((row, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: two chats can share a title, and a row never moves
+            <li key={i} className={cx("crash-row", row.dot !== "working" && "row-dim")}>
+              <span className={cx("dot", row.dot)} />
+              <span className="crash-row-name">{row.name}</span>
+              {row.note && <span className="crash-row-note">{row.note}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </CrashCard>
   );
 }

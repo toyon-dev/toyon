@@ -28,4 +28,39 @@
     color: var(--text2);
     overflow-wrap: anywhere;
   }
+  /* What the move is waiting on, one row each, in the rail's own marks: the rail is what would
+   have shown these, and it is empty whenever this list has something to say. Left-aligned inside
+   a centred card, because a column of dots that does not line up is not a list. */
+  .crash-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 520px;
+    margin: 4px 0;
+    padding: 0;
+    list-style: none;
+    text-align: left;
+  }
+  .crash-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font: var(--type-ui);
+    color: var(--text1);
+    /* after the row's own colour: a row that has finished, or holds nothing, drops a tier */
+    &.row-dim {
+      color: var(--text2);
+    }
+  }
+  .crash-row-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .crash-row-note {
+    flex-shrink: 0;
+    color: var(--text2);
+  }
 }

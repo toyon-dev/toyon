@@ -335,7 +335,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       preview: (id) => s.runtime.get(id)?.proxy?.handler ?? null,
       bootstrap: helloFrame,
       restart: (now) => s.restarter.request({ now }),
-      restartWait: () => s.restarter.waitingOn(),
+      restartWait: () => ({ waiting: s.restarter.waitingOn(), asking: s.restarter.asking() }),
       pair: new PairCodes(),
       onPaired: () => {
         s.state.notePaired();

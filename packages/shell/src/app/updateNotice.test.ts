@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { UpdateState } from "@toyon/shared";
-import { updateNotice } from "./updateNotice.ts";
+import { restartHeldLine, restartRows, restartSeen, updateNotice } from "./updateNotice.ts";
 
 const state = (over: Partial<UpdateState> = {}): UpdateState => ({
   running: "0.2.0",
@@ -46,5 +46,41 @@ describe("updateNotice", () => {
     const n = updateNotice(state({ restarting: ["fix login", "docs"] }));
     expect(n?.word).toBe("restarts after 2 replies");
     expect(n?.text).toBe("Toyon restarts once fix login, docs finish");
+  });
+});
+
+describe("the card a held restart shows", () => {
+  test("a chat met holding the restart keeps its place once it has finished", () => {
+    const seen = restartSeen(restartSeen([], ["fix login", "docs"]), ["docs"]);
+    expect(seen).toEqual(["fix login", "docs"]);
+    expect(restartRows(seen, ["docs"], [])).toEqual([
+      { name: "fix login", dot: "idle", note: "finished" },
+      { name: "docs", dot: "working", note: null },
+    ]);
+  });
+
+  test("a chat that starts replying during the wait joins the end", () => {
+    expect(restartSeen(["docs"], ["docs", "new one"])).toEqual(["docs", "new one"]);
+  });
+
+  test("a chat stopped on a question is listed last and holds nothing", () => {
+    expect(restartRows(["docs"], ["docs"], ["pick a colour"])).toEqual([
+      { name: "docs", dot: "working", note: null },
+      { name: "pick a colour", dot: "waiting", note: "asking you" },
+    ]);
+  });
+
+  test("two chats sharing a title: one still replying marks one row, not both", () => {
+    expect(restartRows(["docs", "docs"], ["docs"], []).map((r) => r.dot)).toEqual(["working", "idle"]);
+  });
+
+  test("the sentence counts what is left of what was met", () => {
+    expect(restartHeldLine(1, 1)).toBe(
+      "Toyon restarts once this chat finishes its reply, and this page reloads when it is back. Restarting now stops it mid-reply.",
+    );
+    expect(restartHeldLine(3, 3)).toStartWith("Toyon restarts once these 3 chats finish their replies,");
+    expect(restartHeldLine(1, 5)).toStartWith("4 of 5 chats have finished; Toyon restarts after the last one,");
+    expect(restartHeldLine(2, 5)).toStartWith("3 of 5 chats have finished; Toyon restarts after the other 2,");
+    expect(restartHeldLine(2, 5)).toEndWith("Restarting now stops them mid-reply.");
   });
 });

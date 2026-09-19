@@ -56,8 +56,8 @@ export interface HttpOpts {
   /** ask for a restart; answers a refusal, or null having restarted or queued behind a reply.
    * `now` does not queue. */
   restart: (now: boolean) => string | null;
-  /** the chats a requested restart waits on; empty once it is under way, null when nobody asked */
-  restartWait: () => string[] | null;
+  /** what a requested restart waits on, and the chats it goes past */
+  restartWait: () => RestartWait;
   /** the one-time codes a phone trades for the token */
   pair: PairCodes;
   /** a code was just redeemed */
@@ -167,10 +167,7 @@ export function createFetch(opts: HttpOpts) {
     // titles, so the answer sits behind the token and not in /health.
     if (url.pathname === "/restart" && (req.method === "POST" || req.method === "GET")) {
       if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
-      if (req.method === "GET") {
-        const wait: RestartWait = { waiting: opts.restartWait() };
-        return Response.json(wait, { headers: { "cache-control": NO_STORE } });
-      }
+      if (req.method === "GET") return Response.json(opts.restartWait(), { headers: { "cache-control": NO_STORE } });
       const refused = opts.restart(url.searchParams.has(RESTART_NOW));
       return refused ? new Response(refused, { status: 409 }) : new Response(null, { status: 202 });
     }

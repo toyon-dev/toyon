@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CHORD_LABELS, CHORD_SECTIONS, chordLabel, chordsInSection } from "./chord-labels.ts";
-import { CHORDS, chordOf, matchChord, worktreeChord, worktreeIndex } from "./chords.ts";
+import { CHORDS, chordOf, matchChord, worktreeChord, worktreeIndex, ZEN_CHORDS } from "./chords.ts";
 
 const ev = (key: string, o: Partial<{ meta: boolean; shift: boolean; ctrl: boolean; alt: boolean }> = {}) => ({
   key,
@@ -146,7 +146,14 @@ describe("matchChord", () => {
   });
   test("keys the table doesn't own pass through", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find
-    expect(matchChord(ev("w"))).toBeNull();
+    expect(matchChord(ev("q"))).toBeNull(); // ⌘Q never reaches a page; the app menu quits
+  });
+  test("⌘W is a chord that does nothing, so an installed app's window stays; from the preview too", () => {
+    expect(matchChord(ev("w"))).toEqual({ id: "close" });
+    expect(matchChord(ev("w"), { guest: true })).toEqual({ id: "close" });
+    expect(matchChord(ev("W", { shift: true }))).toBeNull();
+    expect(matchChord(ev("w", { meta: false, ctrl: true }))).toBeNull(); // ⌃W is delete-word in a shell
+    expect(ZEN_CHORDS.has("close")).toBe(true);
   });
   test("an advertised key is always one of the chord's aliases", () => {
     for (const [id, shown] of Object.entries(CHORD_LABELS)) {
@@ -204,7 +211,11 @@ describe("labels", () => {
   });
   test("a hidden chord has wording but no row on the card", () => {
     expect(chordLabel("wt-unseen-prev")).toBeTruthy();
-    for (const section of CHORD_SECTIONS) expect(chordsInSection(section)).not.toContain("wt-unseen-prev");
+    for (const section of CHORD_SECTIONS) {
+      expect(chordsInSection(section)).not.toContain("wt-unseen-prev");
+      // a key that does nothing has no row to read
+      expect(chordsInSection(section)).not.toContain("close");
+    }
     expect(chordsInSection("Worktrees")).toContain("wt-unseen-next");
     expect(chordsInSection("Worktrees")).toContain("wt-next");
   });

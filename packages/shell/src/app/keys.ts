@@ -1,4 +1,13 @@
-import { type ChordId, chordOf, isTyping, LOGIN_STREAM, matchChord, SHELL_STREAM, worktreeIndex } from "@toyon/shared";
+import {
+  type ChordId,
+  chordOf,
+  isTyping,
+  LOGIN_STREAM,
+  matchChord,
+  SHELL_STREAM,
+  worktreeIndex,
+  ZEN_CHORDS,
+} from "@toyon/shared";
 import { useEffect } from "react";
 import { markUnread } from "../state/actions/worktree.ts";
 import { useSock, useStoreInstance } from "../state/context.tsx";
@@ -12,6 +21,7 @@ import {
   previewIdOf,
   routeTarget,
 } from "../state/store.ts";
+import { isInstalledApp } from "../surfaces/util.ts";
 import type { PaneKind } from "../ui/Pane.tsx";
 import { previewBus, togglePick } from "./previewBus.ts";
 import { modifierHeld, type WalkModifier, walkModifier } from "./railPeek.ts";
@@ -72,10 +82,14 @@ export function useChords() {
       // is matched as the guest keyboard it is and keeps its ⌃R
       const chord = matchChord(e, { guest: !!document.activeElement?.closest(".xterm") });
       // zen mirrors the bridge: the preview owns the keyboard and only the chord that leaves zen
-      // is ours, so a flow under test keeps Escape and its own hotkeys. An overlay or the element
-      // picker holds shell focus, so those keep the full ladder or there is no way back out.
-      // A zen left on by another project is not in force on one with nothing to run, which has no page.
-      if (s.zen && !isChatCentred(s) && !s.overlay && !s.picking && chord?.id !== "zen") return;
+      // (and ⌘W, which keeps the window) is ours, so a flow under test keeps Escape and its own
+      // hotkeys. An overlay or the element picker holds shell focus, so those keep the full ladder
+      // or there is no way back out. A zen left on by another project is not in force on one with
+      // nothing to run, which has no page.
+      if (s.zen && !isChatCentred(s) && !s.overlay && !s.picking && !(chord && ZEN_CHORDS.has(chord.id))) return;
+      // ⌘W is only ever swallowed in an installed app, where it would close the window. A browser
+      // tab takes it before the page sees it, and one that hands it over is asking about the tab.
+      if (chord?.id === "close" && !isInstalledApp()) return;
       // ⌘D, ⌘K and ⌘U are Monaco's (add cursor, chord prefix, cursor undo) while it has the keyboard, and
       // so is every ⌥ chord: ⌥↑/↓ is move line and ⌥⇧↑/↓ copy line. Taking them from a focused editor
       // made a design scan out of a second cursor, and would make a worktree switch out of a line move;
@@ -168,6 +182,9 @@ export function useChords() {
             break;
           case "zen":
             dispatch({ a: "toggle-zen" });
+            break;
+          case "close":
+            // the preventDefault above is the whole chord: the window stays
             break;
           // the panel chords answer where the keyboard is. From anywhere else they open the panel if
           // it is shut and hand it the keyboard (the changes list, the chat box, the terminal, the

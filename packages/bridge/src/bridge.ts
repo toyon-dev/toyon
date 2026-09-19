@@ -6,7 +6,7 @@
 // (postMessage drops a frame whose origin doesn't match, so posting once per candidate is safe);
 // inbound commands are accepted only from the parent frame at one of them. Without the list
 // (cloud with no known public host) both sides fall back to open.
-import { chordOf, isTyping, matchChord } from "@toyon/shared/chords";
+import { chordOf, isTyping, matchChord, ZEN_CHORDS } from "@toyon/shared/chords";
 import type { BridgeToShellMsg, ShellToBridgeMsg } from "@toyon/shared/protocol/bridge";
 import { type Fiber, pickedAt, pickTarget, type Source, sourceOf } from "./fiber.ts";
 
@@ -107,10 +107,11 @@ window.addEventListener(
     const chord = matchChord(e, { guest: true });
     // a word jump in one of the page's own fields stays the page's
     if (chord && chordOf(chord.id).textKeeps && isTyping(e.target)) return;
-    // in zen only the chord that leaves zen is ours: a flow under test that uses Escape or ⌘E
-    // has to reach the page, and the shell has no visible chrome for the rest to act on anyway
+    // in zen only the chord that leaves zen is ours (and ⌘W, which keeps the app's window): a flow
+    // under test that uses Escape or ⌘E has to reach the page, and the shell has no visible chrome
+    // for the rest to act on anyway
     if (zen) {
-      if (chord?.id !== "zen") return;
+      if (!chord || !ZEN_CHORDS.has(chord.id)) return;
     } else if (e.key === "Escape") {
       post({ type: "key", key: "Escape", meta: false });
       return;

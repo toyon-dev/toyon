@@ -242,11 +242,15 @@ function Painted({ pieces }: { pieces: Piece[] }) {
 
 /** the band a line of the transcript folds out into: a call, a run of calls, or a thought. `auto`
  * is whether the row opens itself, which only the row the agent is on does, so scrolling back over
- * a long turn is a list of one-line rows; a click pins the row either way from then on. */
+ * a long turn is a list of one-line rows; a click pins the row either way from then on. A `leaf`
+ * has nothing under its line: a call that printed nothing and ran no command. It stays a row, in
+ * the same column with the same glyph, but it is not a control: a click opened an empty band with
+ * the accent edge down it, and a fill under the pointer promised the same. */
 function Fold({
   className,
   state,
   auto,
+  leaf,
   label,
   summary,
   menu,
@@ -257,10 +261,12 @@ function Fold({
   /** the row's data-state words (ui/rowState.ts) */
   state?: string;
   auto: boolean;
+  leaf?: boolean;
   label: string;
   summary: ReactNode;
-  /** what a right-click on the row offers; told whether the row is open, and how to fold it */
-  menu: (fold: { open: boolean; toggle: () => void }) => MenuEntry[];
+  /** what a right-click on the row offers; told whether the row is open, and how to fold it, or
+   * that there is nothing to fold */
+  menu: (fold: { open: boolean; leaf: boolean; toggle: () => void }) => MenuEntry[];
   /** the row opened or closed, by a click or by `auto`, once the browser has applied it */
   onToggle?: (open: boolean) => void;
   children: ReactNode;
@@ -271,8 +277,11 @@ function Fold({
   // handed the card, not the summary: the summary is the one part of the row that is already on
   // the page, and measuring it alone found nothing to reveal.
   const reveal = useReveal(".chat-log");
-  const open = pinned ?? auto;
+  // a leaf is closed whatever was pinned: a row pinned open while its call ran, that then printed
+  // nothing, would otherwise hold an empty band
+  const open = !leaf && (pinned ?? auto);
   const toggle = () => {
+    if (leaf) return;
     if (!open) reveal(card.current);
     setPinned(!open);
   };
@@ -280,11 +289,11 @@ function Fold({
   return (
     <details
       ref={card}
-      className={className}
+      className={cx(className, leaf && "leaf")}
       data-state={state}
       open={open}
       onToggle={(e) => onToggle?.(e.currentTarget.open)}
-      {...cm.contextMenu(() => menu({ open, toggle }))}
+      {...cm.contextMenu(() => menu({ open, leaf: !!leaf, toggle }))}
       // clicking the output selects text and leaves focus on the body, so the card takes it: that is
       // what makes Escape close the row you are reading, not only the one whose chip you clicked
       tabIndex={-1}
@@ -298,9 +307,11 @@ function Fold({
         setPinned(false);
       }}
     >
-      {/* controlled: let the click set `pinned` rather than the element toggling itself */}
+      {/* controlled: let the click set `pinned` rather than the element toggling itself. A leaf's
+          line is not a control, so it leaves the tab order too. */}
       <summary
         aria-label={label}
+        tabIndex={leaf ? -1 : undefined}
         onClick={(e) => {
           e.preventDefault();
           toggle();
@@ -437,6 +448,13 @@ export const ToolRow = memo(
     // and the message after it says what came of it.
     const auto = !!live || (!!run && running);
     const { label, name, icon, hint } = toolLabel(head, roots);
+    // nothing under the line: no subagent rows, no net change, and no call that ran a command or
+    // printed a block (ToolPart draws nothing for those). Read the same way ToolPart does, so the
+    // row is a leaf exactly when opening it would show nothing.
+    const leaf =
+      !(run && run.length > 0) &&
+      !net &&
+      tools.every((t) => !toolLabel(t, roots).command && toolBlocks(t, t.output ?? "").length === 0);
     const calls = run ? runCalls(run) : 0;
     const what = [label, hint].filter(Boolean).join(" ");
     const count = run ? `${calls} ${calls === 1 ? "call" : "calls"}` : tools.length > 1 ? `×${tools.length}` : "";
@@ -452,6 +470,7 @@ export const ToolRow = memo(
         )}
         state={rowState({ cursor: marked })}
         auto={auto}
+        leaf={leaf}
         label={run ? `${what}, ${count}` : tools.length > 1 ? `${what}, ${tools.length} calls` : what}
         menu={(fold) => {
           const w = worktreeById(store.getState(), worktreeId);

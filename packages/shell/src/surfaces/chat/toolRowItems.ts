@@ -14,7 +14,7 @@ export function toolRowItems(
   roots: string[],
   wt: { id: string; dir: string } | null,
   deps: Deps,
-  ui: { open: boolean; toggle: () => void },
+  ui: { open: boolean; leaf: boolean; toggle: () => void },
 ): MenuEntry[] {
   const { sock } = deps;
   const head = tools[0];
@@ -39,6 +39,7 @@ export function toolRowItems(
     .filter(Boolean)
     .join("\n");
   if (output) copies.push({ id: "copy-output", label: "copy output", onClick: () => copyText(output) });
-  const fold: MenuItem[] = [{ id: "fold", label: ui.open ? "collapse" : "expand", onClick: ui.toggle }];
+  // a row with nothing under its line has nothing to expand
+  const fold: MenuItem[] = ui.leaf ? [] : [{ id: "fold", label: ui.open ? "collapse" : "expand", onClick: ui.toggle }];
   return grouped([open, copies, fold]);
 }

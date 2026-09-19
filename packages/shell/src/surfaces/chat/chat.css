@@ -341,7 +341,7 @@
    same fill held while the row is open, since the header is the control you are still holding.
    The seat lifts the ladder a rung and every child rides it: the icon, the name and the shine all
    name the skip tier, and on element1 the colour itself would be 1.06:1. */
-    :where([data-hover]) & summary:hover,
+    :where([data-hover]) &:not(.leaf) summary:hover,
     &[open] > summary {
       background: var(--element1);
       --text1: var(--ink0);
@@ -349,13 +349,18 @@
     }
     /* the hint is the exception, and it is deliberate: it goes up two rungs rather than one, because
    what the call actually did is the thing you opened the row to read. */
-    :where([data-hover]) & summary:hover .tool-hint,
+    :where([data-hover]) &:not(.leaf) summary:hover .tool-hint,
     &[open] > summary .tool-hint {
       color: var(--ink0);
     }
+    /* a line with nothing under it (Fold's `leaf`): the fill and the pointer promise a band that
+     would be empty, so the line reads as a row and not as a control */
+    &.leaf summary {
+      cursor: default;
+    }
     /* a finger's press on the header, which fades once it lifts: a row being shut says so and
      then goes back to rest, where a hover would have left it looking open */
-    [data-touch] & summary {
+    [data-touch] &:not(.leaf) summary {
       transition: background-color 0.35s ease-out;
       &:active {
         background: var(--element1);

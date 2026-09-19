@@ -723,6 +723,7 @@ export function Composer({
                 lines={item.lines}
                 chars={item.chars}
                 preview={item.preview}
+                text={item.text}
                 onRemove={detach}
               />
             );

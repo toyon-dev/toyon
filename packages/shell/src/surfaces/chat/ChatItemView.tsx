@@ -2,7 +2,7 @@ import { LOGIN_STREAM, type PickMeta } from "@toyon/shared";
 import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { copyText } from "../../state/actions/deps.ts";
 import { openFile } from "../../state/actions/file.ts";
-import { blockedItems, messageItems } from "../../state/actions/message.ts";
+import { type ChatLink, messageItems, pathItems } from "../../state/actions/message.ts";
 import { archiveWorktrees } from "../../state/actions/worktree.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { openSource } from "../../state/openSource.ts";
@@ -29,15 +29,21 @@ import { normalizeThoughtMarkdown } from "./thought.ts";
 import { callPath, diffLines, type OutputBlock, relPath, toolBlocks, toolLabel } from "./toolCall.ts";
 import { toolRowItems } from "./toolRowItems.ts";
 
+/** the link at or around an element of a rendered message, and the worktree file it names when
+ * the checkout root is known; null when the element is not in a link */
+function chatLink(target: Element, root: string | undefined): ChatLink | null {
+  const href = target.closest("a")?.getAttribute("href");
+  if (!href) return null;
+  return { href, file: root ? worktreeLink(root, href) : null };
+}
+
 function openChatLink(
   e: React.MouseEvent,
   root: string | undefined,
   worktreeId: string | null | undefined,
   deps: { dispatch: ReturnType<typeof useDispatch>; sock: ReturnType<typeof useSock> },
 ) {
-  const link = (e.target as Element).closest("a");
-  const href = link?.getAttribute("href");
-  const target = root && href ? worktreeLink(root, href) : null;
+  const target = chatLink(e.target as Element, root)?.file;
   if (!target || !worktreeId) return;
   e.preventDefault();
   openFile(deps, {
@@ -56,7 +62,9 @@ function Markdown({
   fileRoot,
 }: {
   text: string;
-  menu: () => MenuEntry[];
+  /** the row's menu, told which link the pointer was on, if any: the rendered markup is the row's,
+   * so a link inside it has no handler of its own */
+  menu: (link: ChatLink | null) => MenuEntry[];
   marked?: boolean;
   worktreeId?: string | null;
   fileRoot?: string;
@@ -70,7 +78,7 @@ function Markdown({
     <div
       className="msg-assistant md row-edge"
       data-state={rowState({ cursor: marked })}
-      {...cm.contextMenu(menu)}
+      {...cm.contextMenu((_from, target) => menu(chatLink(target, fileRoot)))}
       onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
       dangerouslySetInnerHTML={{ __html: html }}
@@ -633,7 +641,7 @@ export const ChatItemView = memo(function ChatItemView({
       return (
         <Markdown
           text={item.text}
-          menu={() => messageItems(item, worktreeId ?? null, deps)}
+          menu={(link) => messageItems(item, worktreeId ?? null, deps, { link, dir: dirOf() })}
           marked={marked}
           worktreeId={worktreeId}
           fileRoot={fileRoot()}
@@ -657,7 +665,7 @@ export const ChatItemView = memo(function ChatItemView({
       // was refused, so it reports a refusal as the person declining, and the row is the only place
       // the person can read whose rule this was
       return (
-        <div className="blocked-row" {...cm.contextMenu(() => blockedItems(item.path, dirOf()))}>
+        <div className="blocked-row" {...cm.contextMenu(() => pathItems(item.path, dirOf()))}>
           <div className="blocked-head">
             <span className="blocked-tag">blocked</span>
             <span className="tool-name">{item.tool}</span>

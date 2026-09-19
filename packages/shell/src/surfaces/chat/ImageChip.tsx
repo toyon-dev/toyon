@@ -1,8 +1,10 @@
 import { attachmentLabel, type ImageRef } from "@toyon/shared";
 import { type RefObject, useEffect, useRef, useState } from "react";
+import { imageItems } from "../../state/actions/message.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Float } from "../../ui/Float.tsx";
+import { useContextMenu } from "../../ui/menu.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
 import { FullAttachment } from "./FullAttachment.tsx";
 import { fmtBytes } from "./images.ts";
@@ -43,6 +45,7 @@ export function ImageChip({
   );
   const chip = useRef<HTMLDivElement | null>(null);
   const [full, setFull] = useState(false);
+  const cm = useContextMenu("chat");
   return (
     // the tip trails the pointer: centred under a row this wide it lands on the row below
     <div
@@ -50,6 +53,7 @@ export function ImageChip({
       className={cx("pick-chip image-chip", className)}
       data-tip="Open full size"
       data-tip-placement="follow"
+      {...cm.contextMenu(() => imageItems(src, { open: () => setFull(true), remove: onRemove }))}
     >
       <button type="button" className="image-link" onClick={() => setFull(true)}>
         {body}
@@ -57,7 +61,7 @@ export function ImageChip({
       {onRemove && <IconButton icon="close" label="Remove image" tone="quiet" onClick={onRemove} />}
       <ImagePeek chip={chip} src={src} alt={name} width={width} height={height} />
       {full && (
-        <FullAttachment onClose={() => setFull(false)}>
+        <FullAttachment onClose={() => setFull(false)} menu={() => imageItems(src)}>
           <img src={src} alt={name} />
         </FullAttachment>
       )}

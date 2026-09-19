@@ -178,16 +178,18 @@ export function menuPlacement(spec: Pick<MenuSpec, "at" | "anchor" | "align">): 
 export type MenuFrom = "pointer" | "keyboard";
 
 /** What a surface spreads on a row or a trigger. `build` runs when the menu opens, so it reads
- * whatever is current then; the items are a snapshot, and a menu lives about a second. A list
- * with nothing in it leaves the event alone, so the app menu behind the row answers instead. */
+ * whatever is current then; the items are a snapshot, and a menu lives about a second. It is
+ * handed the element under the pointer, for a row whose markup holds things of its own (a link in
+ * a message). A list with nothing in it leaves the event alone, so the app menu behind the row
+ * answers instead. */
 export function useContextMenu(owner: string) {
   return useMemo(
     () => ({
       /** right-click, shift+F10 or the menu key on the element */
-      contextMenu(build: (from: MenuFrom) => MenuEntry[], key?: string) {
+      contextMenu(build: (from: MenuFrom, target: Element) => MenuEntry[], key?: string) {
         return {
           onContextMenu: (e: ReactMouseEvent) => {
-            const items = tidy(build(fromKeyboard(e) ? "keyboard" : "pointer"));
+            const items = tidy(build(fromKeyboard(e) ? "keyboard" : "pointer", e.target as Element));
             if (items.length === 0) return;
             e.preventDefault();
             // the dock behind the row must not answer as well, and the app's fallback checks

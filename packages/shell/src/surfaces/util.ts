@@ -189,7 +189,8 @@ const IS_FIREFOX = /Firefox\//.test(navigator.userAgent);
 /** running as an installed app. The manifest asks for window-controls-overlay, and when Chrome
  * grants it `display-mode: standalone` is false, so both modes count. */
 export function isInstalledApp(): boolean {
-  const mq = (q: string) => window.matchMedia?.(`(display-mode: ${q})`).matches ?? false;
+  // globalThis, so a menu built under a test with no window reads as a browser tab
+  const mq = (q: string) => globalThis.matchMedia?.(`(display-mode: ${q})`).matches ?? false;
   return mq("standalone") || mq("window-controls-overlay");
 }
 

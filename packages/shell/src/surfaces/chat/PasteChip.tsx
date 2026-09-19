@@ -1,8 +1,10 @@
 import { attachmentLabel, type PasteSource, sourceLabel } from "@toyon/shared";
 import { useEffect, useState } from "react";
+import { pasteItems } from "../../state/actions/message.ts";
 import { IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { useContextMenu } from "../../ui/menu.ts";
 import { FullAttachment } from "./FullAttachment.tsx";
 
 /** A block of pasted text, collapsed. Same chip family as the picked element and the image: a
@@ -14,6 +16,7 @@ export function PasteChip({
   lines,
   chars,
   preview,
+  text,
   href,
   onRemove,
   className = "",
@@ -25,6 +28,8 @@ export function PasteChip({
   lines: number;
   chars: number;
   preview: string;
+  /** the whole text, while the composer still holds it */
+  text?: string;
   /** where the full text lives, once the daemon has stored it */
   href?: string;
   onRemove?: () => void;
@@ -48,8 +53,14 @@ export function PasteChip({
     </>
   );
   const [full, setFull] = useState(false);
+  const cm = useContextMenu("chat");
+  const paste = { text, href };
   return (
-    <div className={cx("pick-chip paste-chip", className)} data-tip={preview || undefined}>
+    <div
+      className={cx("pick-chip paste-chip", className)}
+      data-tip={preview || undefined}
+      {...cm.contextMenu(() => pasteItems(paste, { open: href ? () => setFull(true) : undefined, remove: onRemove }))}
+    >
       {href ? (
         <button type="button" className="image-link" onClick={() => setFull(true)}>
           {label}
@@ -59,7 +70,7 @@ export function PasteChip({
       )}
       {onRemove && <IconButton icon="close" label="Remove attachment" tone="quiet" onClick={onRemove} />}
       {full && href && (
-        <FullAttachment onClose={() => setFull(false)}>
+        <FullAttachment onClose={() => setFull(false)} menu={() => pasteItems(paste)}>
           <FullPaste href={href} />
         </FullAttachment>
       )}

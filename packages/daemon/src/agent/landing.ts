@@ -1,12 +1,13 @@
-// The landing question: after a finished turn, does the work read as done, and what would its
-// commit message be. One quick-model call per landable turn, parsed into a verdict and a message.
-// Pure, like recap.ts: the prompt is built from transcript slices and git's own summary of the diff.
+// The landing question: after a finished turn, does the work read as done, where does it stand in
+// one sentence, and what would its commit message be. One quick-model call per landable turn,
+// parsed into a verdict, a recap and a message. Pure, like recap.ts: the prompt is built from
+// transcript slices and git's own summary of the diff.
 
 import type { TurnSlice } from "./recap.ts";
-import { clip } from "./recap.ts";
+import { clip, parseRecap } from "./recap.ts";
 
 export const LAND_SYSTEM =
-  "You judge whether a coding task is finished and write its commit message. Reply in exactly the format asked, nothing else.";
+  "You judge whether a coding task is finished, recap where it stands, and write its commit message. Reply in exactly the format asked, nothing else.";
 
 const LAND_ASK = [
   "A coding agent just stopped in a git worktree. Decide whether the work is finished and ready to merge, or still in progress: a question the agent is waiting on, a step it said it would do next, or a part of the request it did not get to.",
@@ -14,8 +15,10 @@ const LAND_ASK = [
   "Reply with exactly this shape and nothing else:",
   "Line 1: READY, or NOT READY: <reason under 12 words>",
   "Line 2: blank",
-  "Line 3: a commit subject under 60 characters, lowercase, imperative, in the style of the recent subjects when given",
+  "Line 3: Recap: one sentence under 20 words for the user coming back to this task, saying what the task is and then what just happened or what to do next. Skip root-cause narrative, fix internals and secondary to-dos.",
   "Line 4: blank",
+  "Line 5: a commit subject under 60 characters, lowercase, imperative, in the style of the recent subjects when given",
+  "Line 6: blank",
   "Then: a short body, 1 to 4 plain sentences on what changed and why. No markdown, no bullets, no dashes as punctuation.",
 ].join("\n");
 
@@ -54,6 +57,8 @@ function turnBlock(t: TurnSlice): string {
 export interface LandVerdict {
   ready: boolean;
   why?: string;
+  /** where the work stands, as the one sentence the composer and the rail row read */
+  recap?: string;
   subject?: string;
   body?: string;
 }
@@ -61,8 +66,8 @@ export interface LandVerdict {
 /** the subject as the commit hook wants it: one line, short, no trailing stop */
 const SUBJECT_MAX = 72;
 
-/** A model's reply as a verdict and a message, or null when it did not follow the shape. Copy
- * rules apply to what lands in git and in the box: dashes as punctuation and arrows go. */
+/** A model's reply as a verdict, a recap and a message, or null when it did not follow the shape.
+ * Copy rules apply to what lands in git and in the box: dashes as punctuation and arrows go. */
 export function parseLanding(text: string | null): LandVerdict | null {
   if (!text) return null;
   const lines = text
@@ -74,20 +79,25 @@ export function parseLanding(text: string | null): LandVerdict | null {
   const verdict = /^not\s*ready\b/i.test(first) ? "not" : /^ready\b/i.test(first) ? "ready" : null;
   if (!verdict) return null;
   const why = verdict === "not" ? first.replace(/^not\s*ready\s*:?\s*/i, "").trim() : "";
-  // the rest, blank-separated: the subject is the first paragraph, the body the ones after
+  // the rest, blank-separated: the recap, then the subject, then the body. A model that skips the
+  // recap leaves its label out too, and one paragraph alone is read as the subject, since a
+  // message is what the land presses on.
   const rest = lines.slice(lines.indexOf(lines.find((l) => l.trim() === first) ?? "") + 1);
   const paragraphs = rest
     .join("\n")
     .split(/\n\s*\n/)
     .map((p) => p.trim())
     .filter(Boolean);
-  const subject = paragraphs[0]
+  const hasRecap = /^recap\s*:/i.test(paragraphs[0] ?? "") || paragraphs.length >= 3;
+  const recap = hasRecap ? parseRecap(paragraphs[0] ?? null) : null;
+  const message = hasRecap ? paragraphs.slice(1) : paragraphs;
+  const subject = message[0]
     ?.replace(/\s+/g, " ")
     .replace(/^(subject|title)\s*:\s*/i, "")
     .replace(/[.]+$/, "")
     .slice(0, SUBJECT_MAX)
     .trim();
-  const body = paragraphs
+  const body = message
     .slice(1)
     .join("\n\n")
     .replace(/^(body)\s*:\s*/i, "")
@@ -95,6 +105,7 @@ export function parseLanding(text: string | null): LandVerdict | null {
   return {
     ready: verdict === "ready",
     ...(why ? { why: clip(why, 120) } : {}),
+    ...(recap ? { recap } : {}),
     ...(subject && subject.split(" ").length >= 2 ? { subject } : {}),
     ...(body ? { body: body.slice(0, 1_500) } : {}),
   };

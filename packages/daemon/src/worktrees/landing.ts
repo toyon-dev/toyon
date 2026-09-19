@@ -1,8 +1,9 @@
 // Whether a worktree is ready to land, decided after every finished turn: the repo's check runs
 // in the worktree with its output on the transcript, and when it passes the agent's quick model is
-// asked for a commit message and whether the work reads as done. The check decides; the model's
-// doubt is kept as a sentence. The verdict sits on the worktree record until a new turn starts or
-// the tree changes under it (service.gitStatus).
+// asked for a commit message, whether the work reads as done, and one sentence on where it stands.
+// The check decides; the model's doubt is kept as a sentence. The verdict sits on the worktree
+// record until a new turn starts or the tree changes under it (service.gitStatus); the sentence is
+// the turn's recap and stays with the turn.
 
 import { canLand, type Landing, type LastTurn, type WorktreeInfo } from "@toyon/shared";
 import { type LandVerdict, landPrompt } from "../agent/landing.ts";
@@ -108,6 +109,9 @@ export class LandingService {
     };
     if (!live()) return;
     this.judging.delete(worktreeId);
+    // the sentence goes on the turn it describes; setLanding saves and broadcasts the record with it
+    const record = this.d.state.worktree(worktreeId)?.lastTurn;
+    if (record && verdict?.recap) record.recap = { at: Date.now(), text: verdict.recap };
     // how long the word took to appear: the check and the side question are the two costs here
     log.info(worktreeId, `landing: check ${check}${landing.why ? ", doubted" : ""}, ${Date.now() - started}ms`);
     this.d.worktrees.setLanding(worktreeId, landing);

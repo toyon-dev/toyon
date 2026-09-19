@@ -618,34 +618,6 @@ describe("chat folding", () => {
     expect(s.agentChosen).toBe(false);
   });
 
-  test("arriving latches an unseen stop's recap; writing, a new turn, leaving or hiding clears it", () => {
-    const turn = { at: 5, end: "done" as const, facts: { turns: 1, edits: 1, toolErrors: 0 }, recap: { at: 6 } };
-    const { recap: _due, ...notDue } = turn;
-    const stopped = (id: string, due = true): WorktreeStatus => {
-      const r = wt(id);
-      return { ...r, unseen: true, worktree: { ...r.worktree!, lastTurn: due ? turn : notDue } };
-    };
-    const latched = (s: State, id: string) => localOf(s, id).recapFor;
-    let s = run([hello(stopped("a"), stopped("b"), stopped("early", false), wt("seen"))]);
-    // nothing to latch: a row nobody left unseen, or a stop whose recap is not due yet
-    s = reducer(reducer(s, { a: "arrive", id: "seen" }), { a: "arrive", id: "early" });
-    expect([latched(s, "seen"), latched(s, "early")]).toEqual([undefined, undefined]);
-
-    s = reducer(s, { a: "arrive", id: "a" });
-    expect(latched(s, "a")).toBe(5);
-    s = reducer(s, { a: "set-draft", id: "a", text: "  " });
-    expect(latched(s, "a")).toBe(5);
-    s = reducer(s, { a: "set-draft", id: "a", text: "ok" });
-    expect(latched(s, "a")).toBeUndefined();
-
-    s = reducer(reducer(s, { a: "arrive", id: "b" }), agent("b", { type: "turn-start", ts: 9 }));
-    expect(latched(s, "b")).toBeUndefined();
-
-    s = reducer(reducer(s, { a: "activate", id: "a" }), { a: "set-draft", id: "a", text: "" });
-    s = reducer(reducer(s, { a: "arrive", id: "a" }), { a: "activate", id: "b" });
-    expect(latched(s, "a")).toBeUndefined();
-  });
-
   test("backfill rebuilds the chat from the transcript", () => {
     const s = run([
       hello(wt("a")),

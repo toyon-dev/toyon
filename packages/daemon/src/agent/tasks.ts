@@ -10,7 +10,6 @@ import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { sentenceCase } from "../worktrees/naming.ts";
 import { LAND_SYSTEM, type LandVerdict, parseLanding } from "./landing.ts";
 import { askFreshAgent } from "./oneshot.ts";
-import { parseRecap, RECAP_SYSTEM } from "./recap.ts";
 import type { AgentRegistry } from "./registry.ts";
 
 export const NAME_SYSTEM = "You are a naming assistant. Reply with only the requested name.";
@@ -81,22 +80,6 @@ export function makeNamer(runtime: RuntimeRegistry) {
     parseName(await runtime.ensureAgent(wt).agent.ask(NAME_SYSTEM, namePrompt(task), { quick: "prefer" }));
 }
 
-/** A recap's sentence on the worktree's own agent, on its quick model or not at all: the one side
- * question that would rather go unasked than cost what the chat costs. It never starts a runtime,
- * and never wakes an agent whose model list is already known to lack its quick model. */
-export function makeRecapper(
-  runtime: Pick<RuntimeRegistry, "agentFor">,
-  agents: Pick<AgentRegistry, "get">,
-  state: Pick<StateStore, "cachedOptions" | "defaultAgent">,
-) {
-  return async (wt: WorktreeInfo, prompt: string): Promise<string | null> => {
-    const spec = agents.get(wt.agent ?? state.defaultAgent ?? DEFAULT_AGENT_ID);
-    if (!spec || lacksQuickModel(spec, state)) return null;
-    const agent = runtime.agentFor(wt.id);
-    return agent ? parseRecap(await agent.ask(RECAP_SYSTEM, prompt, { quick: "require" })) : null;
-  };
-}
-
 /** Whether what is already known of the agent rules its quick model out, so a question that requires
  * one is not worth waking the agent for. A fixed id is checked against the models the agent last
  * listed. An agent that picks from its list (a function) decides on the session, where the current
@@ -112,8 +95,11 @@ function lacksQuickModel(
   return offered.length > 0 && !offered.some((m) => m.id === quick);
 }
 
-/** The landing verdict and commit message, on the same terms as the recap: the worktree's own
- * agent, its quick model or nothing. Without one, readiness rests on the check alone. */
+/** The landing verdict, the recap sentence and the commit message, on the worktree's own agent, its
+ * quick model or nothing: the one side question that would rather go unasked than cost what the
+ * chat costs. It never starts a runtime, and never wakes an agent whose model list is already
+ * known to lack its quick model. Without one, readiness rests on the check alone and the recap
+ * is facts. */
 export function makeLander(
   runtime: Pick<RuntimeRegistry, "agentFor">,
   agents: Pick<AgentRegistry, "get">,

@@ -45,7 +45,7 @@ import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
 import { fileRow } from "../overlays/QuickOpen.tsx";
 import { rankMentions } from "../overlays/quickOpen.ts";
-import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, recapShown, verbLine } from "../recap.ts";
+import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, verbLine } from "../recap.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
 import { openAsk } from "./ask.ts";
@@ -248,11 +248,11 @@ export function Composer({
   // when it has one and is not mid-turn
   const canCompact = commands.some((c) => c.name === "compact");
   const midTurn = active?.agent === "working" || active?.agent === "waiting";
-  // what happened while you were away: the stop this tab arrived to, until you write or it runs again
+  // where the work stands: the last stop, read while the box is empty and the agent is not on it.
+  // It is about the box you are looking at, and it goes when you type as a placeholder does.
   const lastTurn = active?.worktree.lastTurn;
-  const recapFor = useLocalField(id, "recapFor");
   const blank = !text.trim() && attachments.length === 0;
-  const recap = !drafting && !greenfield && recapShown(lastTurn, recapFor, blank, midTurn) ? lastTurn : undefined;
+  const standing = !drafting && !greenfield && blank && !midTurn ? lastTurn : undefined;
   // the landing verdict, read while the box is empty and the agent is not on it: once the work is
   // done the empty box is where the next step is offered, and it goes with the first letter typed
   // the way the recap does. A PR under review has no landing here, so it never shows one.
@@ -267,6 +267,9 @@ export function Composer({
   const hasLanded = !!active?.worktree.landed && dirty === 0 && (git?.ahead ?? 0) === 0;
   const landed = atRest && hasLanded;
   const pr = atRest && !landed ? active.worktree.pr : undefined;
+  // a PR closed without merging is the end of the branch too: its work is not on main, and the
+  // one thing left is to close the row
+  const prClosed = active?.worktree.pr?.state === "closed";
   const policy = landPolicy(repo?.config ?? {});
   // toyon's own `/` rows, ahead of the agent's: the modes and the seat's verbs, typed by name
   // (ownCommands.ts has the rules)
@@ -406,15 +409,16 @@ export function Composer({
       : null;
   const ghost = argGhost ?? shellGhost;
   // the placeholder, and the quieter line under it while the box is empty.
-  // The recap takes the placeholder outright while it stands. It is about the box you are looking
-  // at, it goes when you type as a placeholder does, and as a line of its own above the box it was
-  // a second block of grey text saying something the box already said.
+  // The standing line takes the placeholder outright. As a line of its own above the box it was a
+  // second block of grey text saying something the box already said.
   const title = active?.worktree.title ?? "untitled";
   // the agent's own sentence about the work, which is what the verb's line says after the word
   const said = lastTurn?.recap?.text;
   const land = () => {
     if (id) shipOp(sock, dispatch, { t: "land", worktreeId: id });
   };
+  const archiveTip =
+    "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.";
   // The next step, when the work has one, is the first word of the empty box's line: a word in the
   // sentence, bright and never the accent, which reads as an error. What it rests on (the facts,
   // the route, what the PR waits on) is its tooltip, opening above it so the line under it stays
@@ -425,7 +429,7 @@ export function Composer({
       ? {
           word: "archive",
           line: `landed on ${repo?.defaultBranch ?? "main"}.`,
-          tip: "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.",
+          tip: archiveTip,
           run: () => archiveWorktrees(sock, dispatch, [id]),
         }
       : pr?.state === "open"
@@ -443,24 +447,32 @@ export function Composer({
               tip: `${prLine(pr)} Open the PR on GitHub.`,
               run: () => window.open(pr.url, "_blank"),
             }
-        : landing?.ready && !landingLine(landing)
+        : pr?.state === "closed"
           ? {
-              word: "land",
-              line: verbLine(said ?? landing.subject ?? (landFacts(landing, landCount) || "ready")),
-              tip: [
-                landFacts(landing, landCount),
-                `${describeLand(policy, repo?.defaultBranch)}.`,
-                "Tab edits the message first.",
-              ]
-                .filter(Boolean)
-                .join(" "),
-              run: land,
-              ships: true,
+              word: "archive",
+              line: prLine(pr),
+              tip: `${prLine(pr)} ${archiveTip}`,
+              run: () => archiveWorktrees(sock, dispatch, [id]),
             }
-          : null;
+          : landing?.ready && !landingLine(landing)
+            ? {
+                word: "land",
+                line: verbLine(said ?? landing.subject ?? (landFacts(landing, landCount) || "ready")),
+                tip: [
+                  landFacts(landing, landCount),
+                  `${describeLand(policy, repo?.defaultBranch)}.`,
+                  landing.subject ? "Tab edits the message first." : "",
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+                run: land,
+                ships: true,
+              }
+            : null;
   const blocked = landing ? landingLine(landing) : null;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
-  // the next step on the work, then what the work is waiting on, then how to start
+  // the next step on the work, then what the work is waiting on, then where the last turn left it,
+  // then how to start
   const placeholderFor = (): string => {
     if (archived) {
       return archived.restorable
@@ -471,7 +483,7 @@ export function Composer({
     if (verb) return "";
     if (pr) return prLine(pr);
     if (blocked) return blocked;
-    if (recap) return recapLine(recap);
+    if (standing) return recapLine(standing);
     if (greenfield) return `describe ${title}…`;
     if (draft?.sent) return "starting the worktree…";
     if (spawning) return "describe a change";
@@ -546,7 +558,7 @@ export function Composer({
   const runSeat = (name: "land" | "archive") => {
     if (!active || !id) return;
     if (name === "archive") {
-      if (hasLanded) archiveWorktrees(sock, dispatch, [id]);
+      if (hasLanded || prClosed) archiveWorktrees(sock, dispatch, [id]);
       else refuse("archive is for a landed worktree; this one has not landed");
       return;
     }

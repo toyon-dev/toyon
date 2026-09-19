@@ -310,10 +310,10 @@ export interface LastTurn {
   at: number;
   end: TurnEnd;
   facts: TurnFacts;
-  /** set once the stop has stayed unseen for the recap delay, so the line is due. `text` is the
-   * agent's one-sentence summary: absent while it is written, when recaps show facts only, or when
-   * none came back. */
-  recap?: { at: number; text?: string };
+  /** the agent's one sentence on where the work stands, written with the landing verdict a moment
+   * after a finished turn with work on it. Absent on every other stop, and on an agent with no
+   * quick model, where the line is the facts. */
+  recap?: { at: number; text: string };
 }
 
 /** What the daemon knows about landing a worktree after a turn: whether the repo's check passed,

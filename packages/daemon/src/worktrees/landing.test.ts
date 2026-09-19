@@ -120,8 +120,11 @@ describe("LandingService", () => {
     });
   });
 
-  test("the box reads pending while the check runs, then the verdict with its message", async () => {
-    w = world({ check: "true", verdict: { ready: true, subject: "add the feature", body: "One file." } });
+  test("the box reads pending while the check runs, then the verdict with its message and the turn its sentence", async () => {
+    w = world({
+      check: "true",
+      verdict: { ready: true, recap: "Adding the feature; it is in.", subject: "add the feature", body: "One file." },
+    });
     w.dirty();
     await w.settle();
     expect(w.set[0]).toMatchObject({ at: 100, check: "pending", ready: false });
@@ -136,6 +139,15 @@ describe("LandingService", () => {
     });
     expect(w.wt()?.landing?.why).toBeUndefined();
     expect(w.wt()?.landing?.fingerprint).toBe(await treeFingerprint(w.wtPath));
+    expect(w.wt()?.lastTurn?.recap?.text).toBe("Adding the feature; it is in.");
+  });
+
+  test("a verdict with no sentence leaves the turn to its facts", async () => {
+    w = world({ verdict: { ready: true, subject: "add the feature" } });
+    w.dirty();
+    await w.settle();
+    expect(w.wt()?.landing?.subject).toBe("add the feature");
+    expect(w.wt()?.lastTurn?.recap).toBeUndefined();
   });
 
   test("the model's doubt is a sentence beside the word, not a gate; no check leaves the turn as the word", async () => {

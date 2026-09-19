@@ -207,10 +207,6 @@ export interface WorktreeLocal {
   /** the open ask the person set aside with escape to write a message instead: the plain box is
    * back, with a line offering the ask, until it is answered or a newer one arrives */
   askParked?: string;
-  /** the stop whose recap this tab arrived to, by its `lastTurn.at`. The line shows for that stop
-   * until the box is written in, a turn starts, or the worktree is left; coming back is a new
-   * arrival, which only a stop still unseen answers. */
-  recapFor?: number;
   /** the slash commands this worktree's agent advertises; empty until it has run once */
   commands: AgentCommand[];
   /** which stream the terminal pane is showing for this worktree: its shell or one of its procs.
@@ -968,11 +964,10 @@ function activate(s: State, id: string | null): State {
   // project and should be somewhere that still exists next time.
   const activeRepoId = row?.repoId ?? s.activeRepoId;
   const lastActive = row && isOwned(row) ? { ...s.lastActive, [row.repoId]: row.id } : s.lastActive;
-  // leaving a worktree ends the recap this tab arrived to there, and the hit a search landed on
+  // leaving a worktree ends the hit a search landed on there
   const leaving = s.activeId !== id ? s.activeId : null;
   const was = leaving ? s.local[leaving] : undefined;
-  const settled =
-    was && (was.recapFor !== undefined || was.mark?.by === "reveal") ? withoutMark(withoutRecap(was), "reveal") : null;
+  const settled = was && was.mark?.by === "reveal" ? withoutMark(was, "reveal") : null;
   const local = leaving && settled ? { ...s.local, [leaving]: settled } : s.local;
   // choosing a row is leaving an archived worktree's page: a snapshot that only re-asserts the
   // selection puts it back itself (see the worktrees frame). The draft follows main (withLauncher).
@@ -998,10 +993,6 @@ export function changesTabStep(
 export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | "archived">): ArchivedWorktree | null {
   if (!s.archivedPage || !s.activeRepoId) return null;
   return s.archived[s.activeRepoId]?.find((a) => a.id === s.archivedPage) ?? null;
-}
-
-function withoutRecap({ recapFor: _recapFor, ...l }: WorktreeLocal): WorktreeLocal {
-  return l;
 }
 
 /** the local without its mark, when the mark is of that kind */
@@ -1084,7 +1075,6 @@ export type Action =
   | { a: "opened-url" }
   | { a: "set-draft"; id: string; text: string }
   /** someone is looking at this worktree: latch the recap of a stop they have not seen */
-  | { a: "arrive"; id: string }
   /** the composer's up and down: the draft and where the walk is, in one write */
   | { a: "walk"; id: string; walk: ComposerWalk | null; text: string }
   /** a hit picked in the chats palette: mark its row, and bring it up once the chat has it */
@@ -1455,25 +1445,16 @@ function reduce(s: State, action: Action): State {
     case "opened-url":
       return s.openUrl ? { ...s, openUrl: null } : s;
     case "set-draft":
-      // writing in the box is answering the recap, and emptying the box again does not bring it
-      // back. A keystroke answers the notice too; the box emptying does not, since a refused
-      // command empties it on its way to saying why.
+      // a keystroke answers the notice; the box emptying does not, since a refused command
+      // empties it on its way to saying why
       return withLocal(s, action.id, (was) => {
-        const { recapFor, notice, ...l } = withoutMark(was, "walk");
+        const { notice, ...l } = withoutMark(was, "walk");
         return {
           ...l,
           draft: action.text,
-          ...(recapFor !== undefined && !action.text.trim() ? { recapFor } : {}),
           ...(notice !== undefined && action.text === "" ? { notice } : {}),
         };
       });
-    case "arrive": {
-      const turn = rowById(s, action.id)?.worktree?.lastTurn;
-      const unseen = rowById(s, action.id)?.unseen;
-      // only a stop nobody has seen whose recap is due; the ring clears a moment after this
-      if (!unseen || !turn?.recap) return s;
-      return withLocal(s, action.id, (l) => (l.recapFor === turn.at ? l : { ...l, recapFor: turn.at }));
-    }
     case "walk":
       // a walk takes the mark from a reveal, and a walk ending leaves a reveal where it is
       return withLocal(s, action.id, (l) => ({
@@ -1489,8 +1470,8 @@ function reduce(s: State, action: Action): State {
     case "attach":
       // the chips are the only sign an attachment landed, so one arriving on a collapsed chat opens it
       return withLocal(revealChat(s), action.id, ({ notice: _notice, ...l }) => ({
-        // attaching is writing the message, which answers the recap and the notice the way typing does
-        ...withoutRecap(l),
+        // attaching is writing the message, which answers the notice the way typing does
+        ...l,
         attachments: [...l.attachments, ...action.items],
       }));
     case "detach":
@@ -1937,14 +1918,12 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const model = ev.type === "session-info" && ev.model ? ev.model : l.model;
         const effort = ev.type === "session-info" && ev.effort ? ev.effort : l.effort;
         const usage = ev.type === "usage" ? figuresOf(ev) : l.usage;
-        // a message sent or a turn begun: the recap was about the stop before it
-        const moved = ev.type === "turn-start" || ev.type === "user-message";
-        // and a message an archived page sent is in the chat now, as the agent has it
+        // a message an archived page sent is in the chat now, as the agent has it
         const { restoring: _sent, ...heard } = l;
         const base = askSettled(ev.type === "user-message" ? heard : l, ev);
         return {
-          // and a message sent moves the conversation on from the hit a search landed on
-          ...(moved ? withoutRecap(ev.type === "user-message" ? withoutMark(base, "reveal") : base) : base),
+          // a message sent moves the conversation on from the hit a search landed on
+          ...(ev.type === "user-message" ? withoutMark(base, "reveal") : base),
           chat,
           turn,
           ...(model !== l.model ? { model } : {}),

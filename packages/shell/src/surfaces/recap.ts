@@ -1,5 +1,5 @@
-// The recap line: what happened while you were away, as the agent's own sentence about it. The
-// composer opens on it as its placeholder, and the rail row's tip carries it.
+// The recap line: where the work stands, as the agent's own sentence about it. The composer opens
+// on it as its placeholder, and the rail row's tip carries it.
 
 import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
 import { ago } from "./util.ts";
@@ -99,15 +99,4 @@ function facts(end: LastTurn["end"], f: TurnFacts, age: string): string {
 export function recapLine(turn: LastTurn): string {
   const text = turn.recap?.text;
   return text ? ended(text) : facts(turn.end, turn.facts, ago(turn.at));
-}
-
-/** The line is for the stop this tab arrived to, and only while the box is empty and the agent is
- * not running again: once you write, or a turn starts, it has done its job. */
-export function recapShown(
-  turn: LastTurn | undefined,
-  latched: number | undefined,
-  blank: boolean,
-  running: boolean,
-): boolean {
-  return !!turn?.recap && latched === turn.at && blank && !running;
 }

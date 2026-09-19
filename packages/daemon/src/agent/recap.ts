@@ -1,6 +1,7 @@
 // What the turns since someone last looked at a worktree did, read off its transcript: the facts a
-// recap states, and the prompt its one sentence is written from. Pure, over transcript entries, so
-// a live transcript and one read from disk give the same answer.
+// recap states, the slices the landing question is built from, and the scrub that turns a model's
+// sentence into one line of copy. Pure, over transcript entries, so a live transcript and one read
+// from disk give the same answer.
 
 import { isWriteTool, type TurnEnd, type TurnFacts } from "@toyon/shared";
 import type { TranscriptEntry } from "./transcript.ts";
@@ -137,75 +138,12 @@ export function firstAskOf(entries: readonly TranscriptEntry[]): string | undefi
   return undefined;
 }
 
-export const RECAP_SYSTEM =
-  "You write one-line status recaps for a developer coming back to a coding task. Reply with only the recap.";
-
-/** The sentence is read as the composer's placeholder, above the keys and the chips, so it is one
- * line or it is in the way: what this worktree is about, and then where the agent left it. */
-const RECAP_ASK =
-  "The user stepped away and is coming back. Recap in one sentence, under 20 words, no markdown. Say what the task is, then what just happened or what to do next. Skip root-cause narrative, fix internals and secondary to-dos.";
-
-export interface RecapInput {
-  title: string;
-  firstAsk?: string | undefined;
-  turns: readonly TurnSlice[];
-  end: TurnEnd;
-  facts: TurnFacts;
-}
-
-/** the newest turns a prompt carries, and its size: a recap costs what a short question costs */
-const RECAP_TURNS = 6;
-const RECAP_CHARS = 4_000;
-
-export function recapPrompt(i: RecapInput): string {
-  const head = [RECAP_ASK, "", `Task: ${clip(i.title, 200)}`];
-  if (i.firstAsk) head.push(`First request: ${clip(i.firstAsk, 300)}`);
-  const now = `Now: ${standing(i.end, i.facts)}`;
-  let blocks = i.turns.slice(-RECAP_TURNS).map(turnBlock);
-  const size = () => [...head, "", ...blocks, "", now].join("\n\n").length;
-  // oldest first: the newest turn is the one "the next action" follows from
-  while (blocks.length > 1 && size() > RECAP_CHARS) blocks = blocks.slice(1);
-  return [head.join("\n"), blocks.join("\n\n"), now].join("\n\n");
-}
-
-function turnBlock(t: TurnSlice): string {
-  const facts = [t.edits ? plural(t.edits, "edit") : "", t.toolErrors ? plural(t.toolErrors, "failed tool") : ""]
-    .filter(Boolean)
-    .join(", ");
-  const lines: string[] = [];
-  if (t.asks.length) lines.push(`You asked: ${clip(t.asks.join(" / "), 400)}`);
-  if (t.reply.trim()) lines.push(`Agent ended with: ${tail(t.reply, 800)}`);
-  if (facts) lines.push(`Facts: ${facts}`);
-  return lines.join("\n");
-}
-
-function standing(end: TurnEnd, f: TurnFacts): string {
-  switch (end) {
-    case "asking":
-      return f.ask ? `waiting for the user's answer to "${f.ask}"` : "waiting for the user";
-    case "failed":
-      return f.error ? `failed: ${f.error}` : "failed";
-    case "stopped":
-      return "stopped before it finished";
-    case "done":
-      return f.cut ? `finished early (${f.cut})` : "finished";
-  }
-}
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
-
-function tail(text: string, max: number): string {
-  const line = text.replace(/\s+/g, " ").trim();
-  return line.length > max ? `…${line.slice(-(max - 1))}` : line;
-}
-
 /** the longest sentence a row carries: a model that runs long is cut at its last full stop */
 const RECAP_MAX = 160;
 
-/** A model's reply as one plain line, or null when it is not a recap. Markdown and labels go, and
- * so do dashes used as punctuation and arrows: the line is read in the product like any other copy. */
+/** A model's sentence as one plain line, or null when it is not a recap. Markdown and labels go,
+ * and so do dashes used as punctuation and arrows: the line is read in the product like any other
+ * copy. */
 export function parseRecap(text: string | null): string | null {
   if (!text) return null;
   let s = text

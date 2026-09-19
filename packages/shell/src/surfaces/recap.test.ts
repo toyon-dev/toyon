@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
-import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, recapShown, verbLine } from "./recap.ts";
+import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, verbLine } from "./recap.ts";
 
 const turn = (end: LastTurn["end"], f: Partial<TurnFacts> = {}, minsAgo = 12, text?: string): LastTurn => ({
   at: Date.now() - minsAgo * 60_000,
@@ -113,18 +113,5 @@ describe("prLine", () => {
       { state: "merged" as const },
     ])
       expect(prCanMerge(pr(over))).toBe(false);
-  });
-});
-
-describe("recapShown", () => {
-  test("only for the stop this tab arrived to, with an empty box and no turn running", () => {
-    const t = turn("done", {}, 12, "Adding a header; check it next.");
-    const { recap: _due, ...notYet } = t;
-    expect(recapShown(t, t.at, true, false)).toBe(true);
-    expect(recapShown(t, t.at - 1, true, false)).toBe(false);
-    expect(recapShown(t, undefined, true, false)).toBe(false);
-    expect(recapShown(t, t.at, false, false)).toBe(false);
-    expect(recapShown(t, t.at, true, true)).toBe(false);
-    expect(recapShown(notYet, t.at, true, false)).toBe(false);
   });
 });

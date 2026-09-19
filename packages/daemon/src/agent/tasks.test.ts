@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "@toyon/shared";
 import { FakeAgent } from "../../test/helpers/fakes.ts";
 import type { AgentSpec } from "./registry.ts";
-import { makeRecapper, parseName, parsePlan, taskText } from "./tasks.ts";
+import { makeLander, parseName, parsePlan, taskText } from "./tasks.ts";
 
 describe("taskText", () => {
   test("the text when there is any, else what the attachments carry", () => {
@@ -61,23 +61,27 @@ describe("parsePlan", () => {
   });
 });
 
-describe("makeRecapper", () => {
+describe("makeLander", () => {
   const wt = { id: "w1", agent: "claude" } as WorktreeInfo;
   function setup(quickModel: string | undefined, offered: readonly string[], running = true) {
     const agent = new FakeAgent("w1");
-    agent.askReply = "Recap: adding a sticky header; check the page next.";
+    agent.askReply = "READY\n\nRecap: adding a sticky header; check the page next.\n\nadd a sticky header";
     const spec = { id: "claude", ...(quickModel ? { quickModel } : {}) } as AgentSpec;
-    const recap = makeRecapper(
+    const judge = makeLander(
       { agentFor: (id) => (running && id === "w1" ? agent : undefined) },
       { get: (id) => (id === "claude" ? spec : undefined) },
       { cachedOptions: () => offered.map((id) => ({ id, name: id })), defaultAgent: undefined },
     );
-    return { agent, recap };
+    return { agent, judge };
   }
 
   test("asks the worktree's own agent on its quick model, and cleans the answer", async () => {
-    const { agent, recap } = setup("haiku", ["opus", "haiku"]);
-    expect(await recap(wt, "the prompt")).toBe("adding a sticky header; check the page next.");
+    const { agent, judge } = setup("haiku", ["opus", "haiku"]);
+    expect(await judge(wt, "the prompt")).toEqual({
+      ready: true,
+      recap: "adding a sticky header; check the page next.",
+      subject: "add a sticky header",
+    });
     expect(agent.asked.map(([, prompt, opts]) => [prompt, opts])).toEqual([["the prompt", { quick: "require" }]]);
   });
 
@@ -88,8 +92,8 @@ describe("makeRecapper", () => {
       ["haiku", [], false],
     ];
     for (const [quick, offered, running] of cases) {
-      const { agent, recap } = setup(quick, offered, running);
-      expect(await recap(wt, "p")).toBeNull();
+      const { agent, judge } = setup(quick, offered, running);
+      expect(await judge(wt, "p")).toBeNull();
       expect(agent.asked).toEqual([]);
     }
   });

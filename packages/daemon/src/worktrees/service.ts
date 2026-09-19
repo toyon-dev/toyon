@@ -1276,6 +1276,7 @@ export class WorktreeService {
   private async commitRecorded(wt: WorktreeInfo, message: string): Promise<ShipResult> {
     const result = await commitWorktree(wt.path, message);
     if (result.ok) {
+      await this.verdictSurvivesCommit(wt);
       this.headMoved(wt.id);
       return result;
     }
@@ -1290,6 +1291,17 @@ export class WorktreeService {
       return result;
     }
     return { ...result, message: "commit refused: what git and its hooks printed is on the chat" };
+  }
+
+  /** A commit by hand moves HEAD, and the next status read would retire the verdict for it; but
+   * the check and the sentence were about these same bytes, so the verdict follows the commit with
+   * its fingerprint refreshed. The message goes with it: it is in git now, and the box would
+   * otherwise keep offering what was just committed. */
+  private async verdictSurvivesCommit(wt: WorktreeInfo) {
+    const l = wt.landing;
+    if (!l || l.check === "pending") return;
+    const { subject: _s, body: _b, ...kept } = l;
+    this.setLanding(wt.id, { ...kept, fingerprint: await treeFingerprint(wt.path) });
   }
 
   /** The one press. Commit what is uncommitted, take main in (a rebase for toyon's own branch),

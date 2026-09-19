@@ -20,6 +20,7 @@ import { SelfWatch } from "../core/self.ts";
 import { StateStore } from "../core/state.ts";
 import { ExecService } from "../exec/service.ts";
 import { GIT, git } from "../git/exec.ts";
+import { treeFingerprint } from "../git/status.ts";
 import { AfterLand } from "../repos/afterLand.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
@@ -958,6 +959,35 @@ describe("landing", () => {
     writeFileSync(join(wt.path, "more.txt"), "y\n");
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.landed).toBe(false);
+  });
+
+  test("a commit by hand keeps the verdict on the tree it saw, without the message that is in git now", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const row = w.state.worktree(wt.id)!;
+    row.landing = {
+      at: 1,
+      check: "pass",
+      ready: true,
+      why: "a question is open",
+      subject: "add feature",
+      body: "One file.",
+      fingerprint: await treeFingerprint(wt.path),
+    };
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landing).toEqual({
+      at: 1,
+      check: "pass",
+      ready: true,
+      why: "a question is open",
+      fingerprint: await treeFingerprint(wt.path),
+    });
+    // an edit after the commit is a tree the verdict never saw
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landing).toBeUndefined();
   });
 
   /** a pre-commit hook for the repo that prints its complaint and refuses; repo-local hooksPath so

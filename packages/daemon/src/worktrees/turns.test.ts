@@ -26,7 +26,7 @@ const record = (id: string, extra: Partial<WorktreeInfo> = {}): WorktreeInfo => 
   ...extra,
 });
 
-function build(opts: Pick<TurnServiceDeps, "summarize" | "delayMs" | "hold" | "release">, rows: WorktreeInfo[]) {
+function build(opts: Pick<TurnServiceDeps, "hold" | "release">, rows: WorktreeInfo[]) {
   const paths = makePaths(mkdtempSync(join(home, "w-")));
   ensureDirs(paths);
   const state = new StateStore(paths, { repos: [], worktrees: rows, sessions: {} });
@@ -171,114 +171,15 @@ describe("TurnService", () => {
     expect(isUnseen(w.wt("a"))).toBe(false);
     expect(w.wt("a").unread).toBeUndefined();
   });
-});
 
-// Timers run for real at 20ms: the service arms one per stop, and a test waits past it.
-describe("recaps", () => {
-  const DELAY = 20;
-  const past = () => Bun.sleep(DELAY * 3);
-  const finish = (w: ReturnType<typeof world>, id: string) => {
-    w.say(id, user("add a header", 10), start(11), edit(`${id}1`), { type: "text-delta", text: "Added it." }, end(20));
-    w.status(id, "working", "idle");
-  };
-
-  test("an unseen stop gets its recap after the delay: the facts at once, then the sentence", async () => {
-    const prompts: string[] = [];
-    let answer: (text: string | null) => void = () => {};
-    const w = build(
-      {
-        delayMs: DELAY,
-        summarize: (_wt, prompt) => {
-          prompts.push(prompt);
-          return new Promise((r) => {
-            answer = r;
-          });
-        },
-      },
-      [record("a", { title: "sticky-header" })],
-    );
-    finish(w, "a");
-    expect(w.wt("a").lastTurn?.recap).toBeUndefined();
-    await past();
-    expect(w.wt("a").lastTurn?.recap?.at).toBeNumber();
-    expect(w.wt("a").lastTurn?.recap?.text).toBeUndefined();
-    expect(prompts).toHaveLength(1);
-    expect(prompts[0]).toContain("Task: sticky-header");
-    expect(prompts[0]).toContain("You asked: add a header");
-    expect(prompts[0]).toContain("Agent ended with: Added it.");
-    answer("Adding a sticky header; it is in, so check the page next.");
-    await Bun.sleep(5);
-    expect(w.wt("a").lastTurn?.recap?.text).toBe("Adding a sticky header; it is in, so check the page next.");
-  });
-
-  test("looking before the delay, or another turn starting, means no recap and no call", async () => {
-    let calls = 0;
-    const summarize = async () => {
-      calls++;
-      return "a b c";
-    };
-    const w = build({ delayMs: DELAY, summarize }, [record("a"), record("b")]);
-    finish(w, "a");
-    finish(w, "b");
-    w.turns.markSeen("a");
-    w.status("b", "working");
-    await past();
-    expect(w.wt("a").lastTurn?.recap).toBeUndefined();
-    expect(w.wt("b").lastTurn?.recap).toBeUndefined();
-    expect(calls).toBe(0);
-  });
-
-  test("a refused login, or no sentence back: the recap is due and carries no text", async () => {
-    let calls = 0;
-    const summarize = async () => {
-      calls++;
-      return null;
-    };
-    const w = build({ delayMs: DELAY, summarize }, [record("a"), record("b"), record("c")]);
-    finish(w, "a");
-    await past();
-    w.say("b", user("go", 10), start(11), auth);
-    w.status("b", "working", "error");
-    finish(w, "c");
-    await past();
-    for (const id of ["a", "b", "c"]) {
-      expect(w.wt(id).lastTurn?.recap?.at).toBeNumber();
-      expect(w.wt(id).lastTurn?.recap?.text).toBeUndefined();
-    }
-    // a and c were asked and nothing came back; a login problem is never a question
-    expect(calls).toBe(2);
-  });
-
-  test("a sentence for a stop that has been replaced is dropped, and the same time away asks once", async () => {
-    const answers: Array<(text: string | null) => void> = [];
-    const w = build(
-      {
-        delayMs: DELAY,
-        summarize: () => new Promise((r) => answers.push(r)),
-      },
-      [record("a")],
-    );
-    finish(w, "a");
-    await past();
-    expect(answers).toHaveLength(1);
-    // a queued turn runs and stops while the first sentence is still being written
-    w.say("a", user("and a footer", 30), start(31), end(40));
-    w.status("a", "working", "idle");
-    answers[0]!("Adding a header; check it next.");
-    await past();
-    expect(w.wt("a").lastTurn?.recap?.at).toBeNumber();
-    expect(w.wt("a").lastTurn?.recap?.text).toBeUndefined();
-    expect(answers).toHaveLength(1);
-  });
-
-  test("after a restart an unseen stop has its facts recap, and a question nobody can answer is a stop", () => {
+  test("after a restart a question nobody can answer is a stop, and a finished turn keeps its record", () => {
     const facts = { turns: 1, edits: 2, toolErrors: 0 };
     const w = world(
       record("a", { lastTurn: { at: 5, end: "asking", facts: { ...facts, ask: "Which port?" } } }),
-      record("b", { lastTurn: { at: 5, end: "done", facts }, seenAt: 9 }),
+      record("b", { lastTurn: { at: 5, end: "done", facts, recap: { at: 6, text: "Header added." } }, seenAt: 9 }),
     );
-    expect(w.wt("a").lastTurn).toMatchObject({ end: "stopped", recap: { at: expect.any(Number) } });
+    expect(w.wt("a").lastTurn).toMatchObject({ end: "stopped" });
     expect(w.wt("a").lastTurn?.facts.ask).toBeUndefined();
-    expect(w.wt("b").lastTurn?.recap).toBeUndefined();
+    expect(w.wt("b").lastTurn?.recap?.text).toBe("Header added.");
   });
 });

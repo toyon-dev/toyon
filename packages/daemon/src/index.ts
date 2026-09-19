@@ -22,7 +22,7 @@ import { LinuxSandbox } from "./agent/linuxSandbox.ts";
 import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
-import { makeLander, makePlanner, makeRecapper } from "./agent/tasks.ts";
+import { makeLander, makePlanner } from "./agent/tasks.ts";
 import { transcriptPathFor } from "./agent/transcript.ts";
 import { locateAssets, pruneAssets } from "./core/assets.ts";
 import { cloud } from "./core/cloud.ts";
@@ -160,7 +160,6 @@ const turns = new TurnService({
   state,
   hub,
   transcript: (id) => runtime.agentFor(id)?.transcript() ?? [],
-  summarize: makeRecapper(runtime, agents, state),
   hold: (id, tag) => runtime.hold(id, tag),
   release: (id, tag) => runtime.release(id, tag),
 });

@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { landPrompt, parseLanding } from "./landing.ts";
 
 describe("parseLanding", () => {
-  test("a ready verdict carries the subject and body, with the model's punctuation scrubbed", () => {
+  test("a ready verdict carries the recap, the subject and body, with the model's punctuation scrubbed", () => {
     const v = parseLanding(
       // prose-ignore: the model's punctuation, which the parser is here to scrub
-      "READY\n\nshell: dark mode with a no-flash script\n\nColours move to variables on :root — the toggle persists the choice.\nA pre-paint script reads it → no flash.",
+      "READY\n\nRecap: **Dark mode** is in — check the toggle next.\n\nshell: dark mode with a no-flash script\n\nColours move to variables on :root — the toggle persists the choice.\nA pre-paint script reads it → no flash.",
     );
     expect(v).toEqual({
       ready: true,
+      recap: "Dark mode is in, check the toggle next.",
       subject: "shell: dark mode with a no-flash script",
       body: "Colours move to variables on :root, the toggle persists the choice.\nA pre-paint script reads it to no flash.",
     });
@@ -16,12 +17,29 @@ describe("parseLanding", () => {
 
   test("not ready keeps the reason and still offers the message", () => {
     const v = parseLanding(
-      "NOT READY: the agent asked which palette to use\n\nadd a dark palette\n\nOnly the variables so far.",
+      "NOT READY: the agent asked which palette to use\n\nRecap: dark palette started; the agent is asking which one.\n\nadd a dark palette\n\nOnly the variables so far.",
     );
     expect(v).toMatchObject({
       ready: false,
       why: "the agent asked which palette to use",
+      recap: "dark palette started; the agent is asking which one.",
       subject: "add a dark palette",
+      body: "Only the variables so far.",
+    });
+  });
+
+  test("a reply that skips the recap is still a message: labelled or not, two paragraphs are subject and body", () => {
+    expect(parseLanding("READY\n\nadd a dark palette\n\nOnly the variables so far.")).toEqual({
+      ready: true,
+      subject: "add a dark palette",
+      body: "Only the variables so far.",
+    });
+    // an unlabelled first paragraph counts as the recap only when the message follows it whole
+    expect(parseLanding("READY\n\nDark palette is in.\n\nadd a dark palette\n\nOnly the variables so far.")).toEqual({
+      ready: true,
+      recap: "Dark palette is in.",
+      subject: "add a dark palette",
+      body: "Only the variables so far.",
     });
   });
 

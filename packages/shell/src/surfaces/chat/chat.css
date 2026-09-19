@@ -75,11 +75,15 @@
         background: var(--surface0);
       }
     }
-    /* the ask card's number keys and its key strip are a hardware keyboard's idioms; on a screen
-       the options are tapped and the buttons are what closes the card */
+    /* the ask's number keys and its key strip are a hardware keyboard's idioms; on a screen the
+       options are tapped and the buttons are what closes the ask, and the digit's gutter goes with it */
     & .ask-num,
     & .ask-keys {
       display: none;
+    }
+    & .ask-opt {
+      grid-template-columns: 0 1fr;
+      column-gap: 0;
     }
   }
 
@@ -110,8 +114,7 @@
       margin-top: auto;
     }
     /* the log scrolls; a row never gives up height to make the transcript fit. Flex would take it
-       from any row that clips its own overflow (the ask card does, to keep its corners), and a card
-       squeezed to one row hides its question and its buttons behind the first option. */
+       from any row that clips its own overflow, and a row squeezed to a line hides what it holds. */
     & > * {
       flex-shrink: 0;
     }
@@ -1028,103 +1031,80 @@
     }
   }
 
-  /* The agent asked something and is waiting: the accent edge marks the one row in a long transcript
-   that is holding a turn open. Same box as .auth-card, which is the other card that asks for a
-   person rather than reporting to one. */
-  /* a fieldset, because that is what a group of controls with its own keyboard is; the browser's
-   own chrome for one is not wanted */
-  .ask-card {
-    min-width: 0;
-    margin: 6px 0;
-    padding: 10px 12px;
-    border: 1px solid var(--border0);
-    border-left: 2px solid var(--accent);
-    border-radius: var(--radius-lg);
-    background: var(--surface0);
+  /* ---- the ask ----
+   The agent asked something and its turn is stopped until it is answered, so the question takes
+   the message box: the keyboard is already there, the box never scrolls away, and the strip is
+   full bleed by design (the frame is base's .composer). One question at a time; the keys walk
+   them. Nothing here draws a card: the strip's sunken ground is the box, and the checked row's
+   edge is the one mark, where a card's own accent edge beside it read as two red bars. */
+  .ask-box {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
     outline: none;
-    /* the options are a picker's rows, so the card is the box they bleed out of: --picker-bleed undoes
-     this padding for the row bands and the key strip, --picker-inset puts it back inside the row, and
-     the labels stay in the same column as the question above them */
-    --picker-bleed: -12px;
-    --picker-inset: 12px;
-    overflow: hidden;
-    &.done {
-      border-left-color: var(--border0);
-      color: var(--text2);
-    }
-    &:focus-visible {
-      border-color: var(--border1);
-    }
+    /* the options are a picker's rows, so the strip is the box they bleed out of: --picker-bleed
+     undoes its padding for the row bands and the key strip, --picker-inset puts it back inside the
+     row, so the labels stay in the column the question above them starts in */
+    --picker-bleed: -10px;
+    --picker-inset: 10px;
   }
-  .ask-lead {
+  .ask-head {
     color: var(--text0);
-    margin-bottom: 8px;
-  }
-  .ask-card {
-    &.done .ask-lead {
-      color: var(--text2);
-      margin-bottom: 4px;
-    }
-  }
-  .ask-block {
-    & + .ask-block {
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid var(--border0);
-    }
   }
   .ask-header {
-    color: var(--text2);
     margin-bottom: 2px;
   }
+  /* the question itself wraps; a long one is still one question */
   .ask-text {
-    color: var(--text1);
-    margin-bottom: 6px;
+    overflow-wrap: anywhere;
   }
-  /* An answer is picked out of a list, so the options are the app's list rows: the same band, the
-   same highlight and the same edge as the command palette and the @ menu, wearing .picker-item and the
-   command row's name/description columns. They were chips in a padded box for a while, which read
-   as four controls to press rather than one choice to make, and .btn's nowrap meant a description
-   could not wrap and ran off the card instead. */
   .ask-options {
-    margin: 6px var(--picker-bleed) 0;
+    margin: 8px var(--picker-bleed) 0;
   }
-  /* Prose, not a path: the palette rows are mono because they hold literals you also type, and an
-   option's label and description are neither. And prose that is the reason to pick this row, so it
-   wraps rather than ellipsising the way the slash menu's descriptions do: there the name carries
-   the meaning and the description is a nicety, here it is often the only thing telling two options
-   apart.
-
-   The selection bar moves off the row's own left edge because the card is already wearing one
-   there: an accent border saying the turn is still open. Butted against it the two became a single
-   thicker segment and the mark stopped reading as a mark; six pixels in it is plainly its own. */
+  /* A row is a block, not a flex row: the digit in a gutter, the label on the first line, and the
+   description wrapping under the label at the row's full width. Side by side, the description
+   started at a different x on every row and, in a narrow dock, wrapped into a column one word
+   wide. Prose, not a path: the palette rows are mono because they hold literals you also type, and
+   an option's label and description are neither. The description is often the only thing telling
+   two options apart, so it wraps rather than ellipsising the way the slash menu's do. */
   .ask-opt {
-    font: var(--type-ui);
+    display: grid;
+    grid-template-columns: 14px 1fr;
+    column-gap: 8px;
     align-items: baseline;
+    padding-block: 5px;
+    font: var(--type-ui);
     white-space: normal;
-    --row-edge-x: 6px;
-    & .picker-desc {
-      white-space: normal;
-      overflow: visible;
-    }
-  }
-  /* the digit is how the row is reached, in a gutter of its own so the labels line up under each
-   other however many options there are */
-  .ask-num {
-    flex: none;
-    justify-content: flex-end;
-    min-width: 10px;
-  }
-  /* your answer, marked the one way this app marks a selection */
-  .ask-opt {
+    /* your answer, marked the one way this app marks a selection */
     &[data-state~="checked"] {
       --row-edge-color: var(--accent);
     }
-    /* saying no to the agent stops something mid-flight, which is what the danger tone is for. It sits
-   on the name rather than the row, so the seat still lifts under the pointer like any other row. */
-    &.deny .picker-name {
+    /* saying no to the agent stops something mid-flight, which is what the danger tone is for. It
+     sits on the label rather than the row, so the seat still lifts under the pointer like any other. */
+    &.deny .ask-label {
       color: var(--red);
     }
+    /* the agent's own convention for the option it would pick, read off the label and worn as a
+     badge, so the label itself is the choice and nothing more */
+    & .badge-recommended {
+      margin-left: 6px;
+      font: var(--type-ui-sm);
+    }
+  }
+  /* the digit is how the row is reached, in a gutter of its own so the labels line up under each
+   other however many options there are. Each part names its column: on a phone the digit is not
+   drawn, and the label must not fall into the gutter it left empty. */
+  .ask-num {
+    grid-column: 1;
+    justify-content: flex-end;
+  }
+  .ask-label {
+    grid-column: 2;
+    color: var(--text0);
+  }
+  .ask-desc {
+    grid-column: 2;
   }
   .ask-preview {
     margin: 6px 0 0;
@@ -1135,11 +1115,11 @@
     overflow-x: auto;
     white-space: pre;
   }
-  .ask-note {
-    display: block;
-    width: 100%;
-    margin-top: 6px;
-    resize: vertical;
+  /* the person's own answer, under the options: the composer's textarea in this mode, so the
+   strip still ends in a place to type. Two rows, since it rides with a pick rather than replacing it. */
+  .ask-own {
+    margin-top: 8px;
+    flex: none;
   }
   .ask-foot {
     display: flex;
@@ -1147,30 +1127,87 @@
     gap: 8px;
     margin-top: 10px;
   }
-  /* the key strip closes the card the way it closes a picker: its own band under the actions, ruled
-   off and reaching both edges, rather than a sentence squeezed to the right of the send button */
+  /* one dot per question, first in the row: the ones answered filled, the one on screen ringed the
+   way a rail row a turn finished on is, with the ring's gap cut in the strip's own ground. A count
+   beside them, since three dots say less than "2 of 3" does. */
+  .ask-steps {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: auto;
+    color: var(--text2);
+    font-variant-numeric: tabular-nums;
+    & .ask-count {
+      margin-left: 4px;
+    }
+  }
+  .ask-step {
+    background: var(--surface2);
+    &.answered {
+      background: var(--ink1);
+    }
+    &.here {
+      box-shadow:
+        0 0 0 1px var(--sunken),
+        0 0 0 2.5px var(--ink2);
+    }
+  }
+  /* the key strip closes the box the way it closes a picker: its own band under the actions, ruled
+   off and reaching both edges. The last thing in the strip, it takes the strip's padding back. */
   .ask-keys {
     margin-top: 10px;
+  }
+  .ask-box:last-child .ask-keys {
     margin-bottom: -10px;
   }
   /* what the agent proposes when no file was written for it: prose a person reads, and it can be
-     long, so it scrolls in the card rather than the page */
+     long, so it scrolls in the box rather than the page */
   .ask-detail {
     max-height: 40vh;
     overflow-y: auto;
-    margin-bottom: 10px;
+    margin-top: 8px;
     padding: 8px 10px;
-    background: var(--sunken);
+    background: var(--sunken-floor);
     border-radius: var(--radius);
   }
-  /* a plan reads in the pane, so the card says which file it is and presses back open */
+  /* a plan reads in the pane, so the box says which file it is and presses back open */
   .ask-plan {
-    margin-bottom: 10px;
+    margin-top: 6px;
+  }
+
+  /* ---- the ask in the transcript ----
+   While the question is open its row is one line, "asking" and what is asked, with the accent's
+   edge: in a long log it is what says the turn is waiting on you, and pressing it brings a parked
+   question back into the box. Closed, the row reads the answers back in the quiet tier. */
+  .ask-row {
+    min-height: 0;
+    padding: 4px 8px;
+    align-items: baseline;
+    background: var(--surface0);
+    border-left: 2px solid var(--accent);
+    :where([data-hover]) &:hover {
+      background: var(--element0);
+      --text1: var(--ink0);
+      --text2: var(--ink1);
+    }
+    & .ask-tag {
+      flex: none;
+      color: var(--accent);
+      font: var(--type-ui-sm);
+    }
+    & .ask-row-text {
+      flex: 1;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+  }
+  .ask-closed {
+    color: var(--text2);
+    & .ask-lead {
+      margin-bottom: 2px;
+    }
   }
   .ask-answered {
-    color: var(--text2);
-    & .ask-header {
-      margin-right: 6px;
-    }
+    overflow-wrap: anywhere;
   }
 }

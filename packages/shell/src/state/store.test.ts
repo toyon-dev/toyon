@@ -565,6 +565,48 @@ describe("chat folding", () => {
     expect(s.local.a?.chat[0]).toMatchObject({ outcome: "expired" });
   });
 
+  test("the box's answers and a parked ask live per worktree, and end with the ask", () => {
+    const question = agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 });
+    let s = run([hello(wt("a"), wt("b")), question]);
+    const ask = { id: "k1", draft: [{ selected: ["a"] }], current: 0 };
+    s = reducer(s, { a: "ask-draft", id: "a", ask });
+    s = reducer(s, { a: "ask-park", id: "a", askId: "k1" });
+    expect(s.local.a).toMatchObject({ ask, askParked: "k1" });
+    expect(s.local.b?.askParked).toBeUndefined();
+    s = reducer(s, { a: "ask-unpark", id: "a" });
+    expect(s.local.a?.askParked).toBeUndefined();
+    expect(s.local.a?.ask).toEqual(ask);
+    // an end for another ask leaves them be; the end of this one takes both
+    s = reducer(s, { a: "ask-park", id: "a", askId: "k1" });
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "other", outcome: "answered", ts: 1 }));
+    expect(s.local.a).toMatchObject({ ask, askParked: "k1" });
+    s = reducer(s, agent("a", { type: "agent-ask-end", id: "k1", outcome: "answered", ts: 2 }));
+    expect(s.local.a?.ask).toBeUndefined();
+    expect(s.local.a?.askParked).toBeUndefined();
+  });
+
+  test("a new ask starts over and takes the box back from a parked one", () => {
+    let s = run([
+      hello(wt("a")),
+      agent("a", { type: "agent-question", id: "k1", message: "Which?", questions, ts: 0 }),
+    ]);
+    s = reducer(s, { a: "ask-draft", id: "a", ask: { id: "k1", draft: [{ selected: ["a"] }], current: 0 } });
+    s = reducer(s, { a: "ask-park", id: "a", askId: "k1" });
+    s = reducer(s, agent("a", { type: "agent-question", id: "k2", message: "And?", questions, ts: 1 }));
+    expect(s.local.a?.ask).toBeUndefined();
+    expect(s.local.a?.askParked).toBeUndefined();
+  });
+
+  test("an ask on the worktree on screen opens a shut chat, the way a notice does", () => {
+    let s = run([hello(wt("a"), wt("b"))]);
+    s = { ...s, layout: { ...s.layout, chat: false } };
+    // another worktree's question is the rail's to announce
+    s = reducer(s, agent("b", { type: "agent-question", id: "k0", message: "Which?", questions, ts: 0 }));
+    expect(s.layout.chat).toBe(false);
+    s = reducer(s, agent("a", { type: "agent-permission", id: "k1", title: "Run it?", choices: [], ts: 0 }));
+    expect(s.layout.chat).toBe(true);
+  });
+
   test("hello and agents carry the registry, the default and whether anyone picked it", () => {
     const list = [{ id: "claude", name: "Claude", available: true, sandboxed: true }];
     let s = run([hello(wt("a"))]);

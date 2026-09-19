@@ -16,7 +16,7 @@ import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { attachmentUrl } from "../../ws.ts";
 import { wtDir } from "../util.ts";
-import { AskCard } from "./AskCard.tsx";
+import { AskRow } from "./AskRow.tsx";
 import { runCalls, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { useMarkdown } from "./markdown.ts";
@@ -659,7 +659,7 @@ export const ChatItemView = memo(function ChatItemView({
     case "auth":
       return <AuthCard item={item} />;
     case "ask":
-      return <AskCard item={item} />;
+      return <AskRow item={item} worktreeId={worktreeId} />;
     case "blocked":
       // the reason is on the row rather than in a tooltip: the agent is told only that its request
       // was refused, so it reports a refusal as the person declining, and the row is the only place

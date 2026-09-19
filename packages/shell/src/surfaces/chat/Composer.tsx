@@ -47,6 +47,8 @@ import { fileRow } from "../overlays/QuickOpen.tsx";
 import { rankMentions } from "../overlays/quickOpen.ts";
 import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, recapShown, verbLine } from "../recap.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble, wtDir } from "../util.ts";
+import { AskBox } from "./AskBox.tsx";
+import { openAsk } from "./ask.ts";
 import { ImageChip } from "./ImageChip.tsx";
 import { dataUrl } from "./images.ts";
 import { filterCommands, insertAt, triggerAt } from "./mentions.ts";
@@ -157,6 +159,13 @@ export function Composer({
   const walk = mark?.by === "walk" ? mark : undefined;
   const chat = useLocalField(id, "chat");
   const queue = useLocalField(id, "queue");
+  // the agent's open question takes the box until it is answered, unless it was set aside with
+  // escape to write a message instead: then the plain box is back with a line offering it
+  const ask = useMemo(() => (id && !drafting ? openAsk(chat) : null), [id, drafting, chat]);
+  const askParked = useLocalField(id, "askParked");
+  const askUp = ask && askParked !== ask.id ? ask : null;
+  const parked = ask && askParked === ask.id ? ask : null;
+  const askRef = useRef<HTMLDivElement>(null);
   // the frame on screen: while drafting the base's preview (or its warm spare's), which is what
   // the picker picks from and the page context describes
   const frameId = usePreviewId();
@@ -302,7 +311,9 @@ export function Composer({
   }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows]);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
-  const refocus = () => composerRef.current?.focus();
+  // the keyboard's place in the box: the ask while one is up, else the textarea
+  const focusBox = () => (askRef.current ?? composerRef.current)?.focus();
+  const refocus = focusBox;
   // An empty project's page is this one box, so it takes the caret when a project lands on it: made
   // from the form, whose close left focus on the body, or switched to. Only when nothing else has
   // the keyboard, so a palette opened in the meantime keeps it.
@@ -325,12 +336,23 @@ export function Composer({
     answered.current = focusReq;
     if (centred !== !!greenfield) return;
     // next frame: the dock may be re-appearing
-    const f = requestAnimationFrame(() => composerRef.current?.focus());
+    const f = requestAnimationFrame(focusBox);
+    return () => cancelAnimationFrame(f);
+  });
+  // Escape parked the ask to write a reply instead, so the caret goes where the reply is written.
+  // Only when the keyboard is nowhere: the ask's root went with the ask, and a hand elsewhere stays.
+  const parkedId = parked?.id;
+  useOnChange([parkedId], () => {
+    if (!parkedId || centred !== !!greenfield) return;
+    const f = requestAnimationFrame(() => {
+      const held = document.activeElement;
+      if (!held || held === document.body) composerRef.current?.focus();
+    });
     return () => cancelAnimationFrame(f);
   });
   // A worktree walk (⌥↑/↓, ⌃Tab) landed here to read and reply, so the box takes the caret when
   // only the body or the rail's row holds it. A hand in the editor or a terminal keeps its place,
-  // and an ask card that took the keyboard on mount keeps it: the row was jumped to for the ask.
+  // and an ask that took the keyboard as it arrived keeps it: the row was jumped to for the ask.
   const walked = useStore((s) => s.walked);
   const walkedSeen = useRef(walked);
   useOnChange([walked], () => {
@@ -339,7 +361,7 @@ export function Composer({
     if (centred !== !!greenfield) return;
     const f = requestAnimationFrame(() => {
       const held = document.activeElement;
-      if (!held || held === document.body || held.closest(".rail")) composerRef.current?.focus();
+      if (!held || held === document.body || held.closest(".rail")) focusBox();
     });
     return () => cancelAnimationFrame(f);
   });
@@ -778,142 +800,146 @@ export function Composer({
           }}
         />
       )}
-      <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
-        <TextArea
-          size="lg"
-          bare
-          font={shellCmd !== null ? "mono" : "ui"}
-          ref={composerRef}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setCaret(e.target.selectionStart ?? e.target.value.length);
-            nav.setIndex(0);
-            setDismissed(null);
-          }}
-          // arrow keys and clicks move the caret without changing the text, and the menu follows it;
-          // a click in a recalled message is starting to edit it
-          onKeyUp={(e) => {
-            onPasteKeyUp();
-            setCaret(e.currentTarget.selectionStart ?? 0);
-          }}
-          onClick={(e) => {
-            setCaret(e.currentTarget.selectionStart ?? 0);
-            keepRecalled();
-          }}
-          onPaste={onPaste}
-          onKeyDown={(e) => {
-            onPasteKey(e);
-            // an IME builds a word out of several keystrokes; a menu opening mid-composition would
-            // fight the candidate list
-            if (e.nativeEvent.isComposing) return;
-            if (menuOpen) {
-              if (e.key === "Escape") {
-                // no overlay is open, so the app-wide esc would toggle the terminal instead
+      {askUp && id ? (
+        <AskBox key={askUp.id} item={askUp} worktreeId={id} rootRef={askRef} />
+      ) : (
+        <div className={cx("composer-field", shellCmd !== null && "shell", walk && "recalled")}>
+          <TextArea
+            size="lg"
+            bare
+            font={shellCmd !== null ? "mono" : "ui"}
+            ref={composerRef}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCaret(e.target.selectionStart ?? e.target.value.length);
+              nav.setIndex(0);
+              setDismissed(null);
+            }}
+            // arrow keys and clicks move the caret without changing the text, and the menu follows it;
+            // a click in a recalled message is starting to edit it
+            onKeyUp={(e) => {
+              onPasteKeyUp();
+              setCaret(e.currentTarget.selectionStart ?? 0);
+            }}
+            onClick={(e) => {
+              setCaret(e.currentTarget.selectionStart ?? 0);
+              keepRecalled();
+            }}
+            onPaste={onPaste}
+            onKeyDown={(e) => {
+              onPasteKey(e);
+              // an IME builds a word out of several keystrokes; a menu opening mid-composition would
+              // fight the candidate list
+              if (e.nativeEvent.isComposing) return;
+              if (menuOpen) {
+                if (e.key === "Escape") {
+                  // no overlay is open, so the app-wide esc would toggle the terminal instead
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDismissed(trigger?.from ?? null);
+                  return;
+                }
+                if (nav.onKeyDown(e)) return;
+              }
+              if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                // a message still waiting in the queue is the nearest thing sent and the likeliest to
+                // want changing: up in an empty box takes the newest one back, as its edit button does
+                const queued = queue.at(-1);
+                if (e.key === "ArrowUp" && !walk && text === "" && id && !drafting && queued !== undefined) {
+                  e.preventDefault();
+                  sock?.send({ t: "unqueue", worktreeId: id, index: queue.length - 1 });
+                  walkTo({ walk: null, text: queued });
+                  return;
+                }
+                // while walking the arrows are the walk's however many lines the entry has; in a box
+                // with something typed in it they move the caret
+                const step = id ? stepWalk(chat, walk ?? null, text, e.key === "ArrowUp" ? "up" : "down") : null;
+                if (step) {
+                  e.preventDefault();
+                  if (step.walk !== walk || step.text !== text) walkTo(step);
+                  return;
+                }
+              }
+              if (walk && e.key === "Escape") {
+                // back to the box as it was; the app-wide esc would toggle the terminal instead
                 e.preventDefault();
                 e.stopPropagation();
-                setDismissed(trigger?.from ?? null);
+                walkTo({ walk: null, text: walk.from });
                 return;
               }
-              if (nav.onKeyDown(e)) return;
-            }
-            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-              // a message still waiting in the queue is the nearest thing sent and the likeliest to
-              // want changing: up in an empty box takes the newest one back, as its edit button does
-              const queued = queue.at(-1);
-              if (e.key === "ArrowUp" && !walk && text === "" && id && !drafting && queued !== undefined) {
+              if (e.key === "Escape" && midTurn && id && !drafting) {
+                // esc stops the turn, as it does in a terminal agent: what is typed stays, and what was
+                // queued or is sent next goes as the following turn. The app-wide esc would close a pane.
                 e.preventDefault();
-                sock?.send({ t: "unqueue", worktreeId: id, index: queue.length - 1 });
-                walkTo({ walk: null, text: queued });
+                e.stopPropagation();
+                sock?.send({ t: "stop-agent", worktreeId: id });
                 return;
               }
-              // while walking the arrows are the walk's however many lines the entry has; in a box
-              // with something typed in it they move the caret
-              const step = id ? stepWalk(chat, walk ?? null, text, e.key === "ArrowUp" ? "up" : "down") : null;
-              if (step) {
+              if (walk && CARET_KEYS.has(e.key)) keepRecalled();
+              // tab in the empty box, with a message suggested: the changes panel is where a commit
+              // message is edited (Enter breaks its lines there), so tab goes there with it
+              if (e.key === "Tab" && !e.shiftKey && text === "" && landing?.subject) {
                 e.preventDefault();
-                if (step.walk !== walk || step.text !== text) walkTo(step);
+                dispatch({ a: "edit-commit" });
                 return;
               }
-            }
-            if (walk && e.key === "Escape") {
-              // back to the box as it was; the app-wide esc would toggle the terminal instead
-              e.preventDefault();
-              e.stopPropagation();
-              walkTo({ walk: null, text: walk.from });
-              return;
-            }
-            if (e.key === "Escape" && midTurn && id && !drafting) {
-              // esc stops the turn, as it does in a terminal agent: what is typed stays, and what was
-              // queued or is sent next goes as the following turn. The app-wide esc would close a pane.
-              e.preventDefault();
-              e.stopPropagation();
-              sock?.send({ t: "stop-agent", worktreeId: id });
-              return;
-            }
-            if (walk && CARET_KEYS.has(e.key)) keepRecalled();
-            // tab in the empty box, with a message suggested: the changes panel is where a commit
-            // message is edited (Enter breaks its lines there), so tab goes there with it
-            if (e.key === "Tab" && !e.shiftKey && text === "" && landing?.subject) {
-              e.preventDefault();
-              dispatch({ a: "edit-commit" });
-              return;
-            }
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            } else if (e.key === "Backspace" && text === "" && removeLast()) {
-              e.preventDefault();
-            }
-          }}
-          // the ghost draws the placeholder itself when it has a line to put under it
-          placeholder={subline || verb ? "" : placeholderText}
-          disabled={!active && !archived?.restorable}
-          // read-only rather than disabled while the draft's worktree starts: the caret stays, and
-          // the same box is that worktree's when it lands
-          readOnly={!!draft?.sent}
-        />
-        {ghost && (
-          <div className="composer-ghost" aria-hidden="true">
-            <span className="picker-typed">{text}</span>
-            {ghost}
-          </div>
-        )}
-        {/* present only while the box is empty, so typing and landing are never offered at once;
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              } else if (e.key === "Backspace" && text === "" && removeLast()) {
+                e.preventDefault();
+              }
+            }}
+            // the ghost draws the placeholder itself when it has a line to put under it
+            placeholder={subline || verb ? "" : placeholderText}
+            disabled={!active && !archived?.restorable}
+            // read-only rather than disabled while the draft's worktree starts: the caret stays, and
+            // the same box is that worktree's when it lands
+            readOnly={!!draft?.sent}
+          />
+          {ghost && (
+            <div className="composer-ghost" aria-hidden="true">
+              <span className="picker-typed">{text}</span>
+              {ghost}
+            </div>
+          )}
+          {/* present only while the box is empty, so typing and landing are never offered at once;
               close takes the row at once and brings it back, the reason on its chat, if the daemon
               refuses, the way any remove does. Not aria-hidden while it holds the word, which is a
               control. */}
-        {(subline || verb) && (
-          <div className="composer-ghost" aria-hidden={verb ? undefined : "true"}>
-            <span className="composer-placeholder">
-              {verb ? (
+          {(subline || verb) && (
+            <div className="composer-ghost" aria-hidden={verb ? undefined : "true"}>
+              <span className="composer-placeholder">
+                {verb ? (
+                  <>
+                    <Button
+                      variant="inline"
+                      tone="strong"
+                      className="composer-verb"
+                      busy={!!verb.ships && op === "land"}
+                      disabled={!!verb.ships && !!op && op !== "land"}
+                      {...tip(verb.tip, undefined, { placement: "top" })}
+                      onClick={verb.run}
+                    >
+                      {verb.word}
+                    </Button>
+                    {`: ${verb.line}`}
+                  </>
+                ) : (
+                  placeholderText
+                )}
+              </span>
+              {subline && (
                 <>
-                  <Button
-                    variant="inline"
-                    tone="strong"
-                    className="composer-verb"
-                    busy={!!verb.ships && op === "land"}
-                    disabled={!!verb.ships && !!op && op !== "land"}
-                    {...tip(verb.tip, undefined, { placement: "top" })}
-                    onClick={verb.run}
-                  >
-                    {verb.word}
-                  </Button>
-                  {`: ${verb.line}`}
+                  {"\n"}
+                  <span className="composer-subline">{subline}</span>
                 </>
-              ) : (
-                placeholderText
               )}
-            </span>
-            {subline && (
-              <>
-                {"\n"}
-                <span className="composer-subline">{subline}</span>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
       {/* the answer to the last thing done to this box that could not be done, under the field
           where the hands are, until the next keystroke or attachment answers it */}
       {notice && (
@@ -923,121 +949,139 @@ export function Composer({
       )}
       {/* the row reads left to right as where this goes, then what runs there: each chip after the
           target is about the target. A chip's panel takes focus while it is up, so the caret goes
-          back when it closes. */}
-      <div className="hint composer-knobs">
-        <span className="spawn-left">
-          {choosing ? (
-            agents.length > 1 ? (
-              <AgentModelChip
-                agents={agents}
-                agent={spawnAgent}
-                model={newModel}
-                onChange={pickAgentModel}
-                onClose={refocus}
-              />
+          back when it closes. Not while the ask holds the box: its foot is the row. */}
+      {!askUp && (
+        <div className="hint composer-knobs">
+          <span className="spawn-left">
+            {choosing ? (
+              agents.length > 1 ? (
+                <AgentModelChip
+                  agents={agents}
+                  agent={spawnAgent}
+                  model={newModel}
+                  onChange={pickAgentModel}
+                  onClose={refocus}
+                />
+              ) : (
+                <ModelChip models={agentModels} value={newModel} onChange={setNewModel} onClose={refocus} />
+              )
             ) : (
-              <ModelChip models={agentModels} value={newModel} onChange={setNewModel} onClose={refocus} />
-            )
-          ) : (
-            active && (
-              <ModelChip
-                models={agentModels}
-                value={active.worktree.model ?? ""}
-                current={currentModel}
-                onChange={(model) => sock?.send({ t: "set-worktree-model", worktreeId: active.worktree.id, model })}
-                onClose={refocus}
+              active && (
+                <ModelChip
+                  models={agentModels}
+                  value={active.worktree.model ?? ""}
+                  current={currentModel}
+                  onChange={(model) => sock?.send({ t: "set-worktree-model", worktreeId: active.worktree.id, model })}
+                  onClose={refocus}
+                />
+              )
+            )}
+            {choosing ? (
+              <EffortChip efforts={agentEfforts} value={newEffort} onChange={setNewEffort} onClose={refocus} />
+            ) : (
+              active && (
+                <EffortChip
+                  efforts={agentEfforts}
+                  value={active.worktree.effort ?? ""}
+                  current={currentEffort}
+                  onChange={(effort) =>
+                    sock?.send({ t: "set-worktree-effort", worktreeId: active.worktree.id, effort })
+                  }
+                  onClose={refocus}
+                />
+              )
+            )}
+            {spawning ? (
+              <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
+            ) : (
+              active && (
+                <ModeChip
+                  value={activeMode}
+                  onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
+                  onClose={refocus}
+                />
+              )
+            )}
+            {usage && !spawning && id && (
+              <IconButton
+                icon={<Ring fraction={usage.used / usage.size} />}
+                tone="chrome"
+                label={`${Math.round((100 * usage.used) / usage.size)}% of context`}
+                detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}${compactable ? " · click to compact" : ""}`}
+                // a click does the one thing there is to do about a full context; when it cannot, the
+                // menu says why, and it is the right-click menu at all times
+                onClick={(e) => {
+                  if (compactable) compact();
+                  else cm.openUnder(e.currentTarget, compactItems);
+                }}
+                {...cm.contextMenu(compactItems)}
               />
-            )
-          )}
-          {choosing ? (
-            <EffortChip efforts={agentEfforts} value={newEffort} onChange={setNewEffort} onClose={refocus} />
-          ) : (
-            active && (
-              <EffortChip
-                efforts={agentEfforts}
-                value={active.worktree.effort ?? ""}
-                current={currentEffort}
-                onChange={(effort) => sock?.send({ t: "set-worktree-effort", worktreeId: active.worktree.id, effort })}
-                onClose={refocus}
-              />
-            )
-          )}
-          {spawning ? (
-            <ModeChip value={newMode} onChange={setNewMode} onClose={refocus} />
-          ) : (
-            active && (
-              <ModeChip
-                value={activeMode}
-                onChange={(mode) => sock?.send({ t: "set-worktree-mode", worktreeId: active.worktree.id, mode })}
-                onClose={refocus}
-              />
-            )
-          )}
-          {usage && !spawning && id && (
-            <IconButton
-              icon={<Ring fraction={usage.used / usage.size} />}
-              tone="chrome"
-              label={`${Math.round((100 * usage.used) / usage.size)}% of context`}
-              detail={`${tokens(usage.used)} of ${tokens(usage.size)}${usage.cost !== undefined ? ` · ${dollars(usage.cost)} this session` : ""}${compactable ? " · click to compact" : ""}`}
-              // a click does the one thing there is to do about a full context; when it cannot, the
-              // menu says why, and it is the right-click menu at all times
-              onClick={(e) => {
-                if (compactable) compact();
-                else cm.openUnder(e.currentTarget, compactItems);
-              }}
-              {...cm.contextMenu(compactItems)}
-            />
-          )}
-        </span>
-        <span className="spawn-tools">
-          {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
+            )}
+          </span>
+          <span className="spawn-tools">
+            {/* the terminal is one shell per worktree, so it belongs with the other per-worktree
               actions rather than in the app's top bar. Not on an empty project, an archived chat or
               a phone's screen: the pane is hidden there, and a button that flips a hidden pane is a
               dead button. */}
-          {!greenfield && !archived && !onScreen && (
-            <IconButton
-              icon="terminal"
-              tone="chrome"
-              on={termOpen}
-              className="composer-term"
-              disabled={!active}
-              label={trouble ? trouble.tip : "Terminal"}
-              hint={chord("terminal")}
-              badge={trouble && <span className="composer-term-dot" />}
-              onClick={() => {
-                // opening onto the badge's own tab: the dot is the only thing that says a proc died,
-                // so following it should land on the crash, not on whichever tab you left open
-                if (trouble && !termOpen && id) dispatch({ a: "term-stream", id, stream: trouble.stream });
-                else dispatch({ a: "toggle-terminal" });
-              }}
-              // the button opens the pane, so one level in is its tabs: a restart per proc and the shell
-              {...cm.contextMenu(() =>
-                active && id ? terminalItems(active.procs, id, termOpen, { sock, dispatch: store.dispatch }) : [],
-              )}
-            />
-          )}
-          {!greenfield && !chatCentred && !archived && !onScreen && (
-            <IconButton
-              icon="pick"
-              label="Pick an element on the page to attach"
-              hint={chord("pick")}
-              // the chat's verb only: ⌘I has its own button at the end of the route bar, and a press
-              // here while that one is armed swaps to this verb in place rather than stacking
-              on={picking === "chat"}
-              disabled={!frameId}
-              onClick={() => frameId && togglePick(frameId, picking, dispatch, "chat")}
-            />
-          )}
-        </span>
-      </div>
+            {!greenfield && !archived && !onScreen && (
+              <IconButton
+                icon="terminal"
+                tone="chrome"
+                on={termOpen}
+                className="composer-term"
+                disabled={!active}
+                label={trouble ? trouble.tip : "Terminal"}
+                hint={chord("terminal")}
+                badge={trouble && <span className="composer-term-dot" />}
+                onClick={() => {
+                  // opening onto the badge's own tab: the dot is the only thing that says a proc died,
+                  // so following it should land on the crash, not on whichever tab you left open
+                  if (trouble && !termOpen && id) dispatch({ a: "term-stream", id, stream: trouble.stream });
+                  else dispatch({ a: "toggle-terminal" });
+                }}
+                // the button opens the pane, so one level in is its tabs: a restart per proc and the shell
+                {...cm.contextMenu(() =>
+                  active && id ? terminalItems(active.procs, id, termOpen, { sock, dispatch: store.dispatch }) : [],
+                )}
+              />
+            )}
+            {!greenfield && !chatCentred && !archived && !onScreen && (
+              <IconButton
+                icon="pick"
+                label="Pick an element on the page to attach"
+                hint={chord("pick")}
+                // the chat's verb only: ⌘I has its own button at the end of the route bar, and a press
+                // here while that one is armed swaps to this verb in place rather than stacking
+                on={picking === "chat"}
+                disabled={!frameId}
+                onClick={() => frameId && togglePick(frameId, picking, dispatch, "chat")}
+              />
+            )}
+          </span>
+        </div>
+      )}
       {/* under the knobs, behind a rule: the state of where this message lands and the one thing to
           do about it now, each on its own line so the row above keeps its shape. How far this
           worktree trails main, with the sync; main against origin while drafting, with the pull,
           since a new worktree starts from main as it is and a main nobody has pulled today hands
           the agent stale code. What the message will be (batch, variants, main's files coming
-          along) is the intro's, above the box. */}
-      {((origin && mainRow) || (behind && active && id)) && (
+          along) is the intro's, above the box. And the question set aside, with the way back to it. */}
+      {((origin && mainRow) || (behind && active && id) || (parked && id)) && (
         <div className="composer-notes">
+          {parked && id && (
+            <div className="hint composer-note">
+              <span>the agent is waiting on a question</span>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  dispatch({ a: "ask-unpark", id });
+                  dispatch({ a: "focus-chat" });
+                }}
+              >
+                answer
+              </Button>
+            </div>
+          )}
           {origin && mainRow && (
             <div className="hint composer-note">
               <span>{origin}</span>

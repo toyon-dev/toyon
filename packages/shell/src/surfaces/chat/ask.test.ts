@@ -1,6 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import type { AskQuestion } from "@toyon/shared";
-import { answerText, askRows, canSubmit, choose, emptyDraft, nextQuestionRow, rowForDigit, setNote } from "./ask.ts";
+import type { ChatItem } from "../../state/store.ts";
+import {
+  advance,
+  answerText,
+  askLine,
+  canSubmit,
+  choose,
+  cursorFor,
+  emptyDraft,
+  nextUnanswered,
+  openAsk,
+  optionForDigit,
+  recommended,
+  setNote,
+  stripRecommended,
+} from "./ask.ts";
 
 const q = (id: string, labels: string[], extra: Partial<AskQuestion> = {}): AskQuestion => ({
   id,
@@ -11,76 +26,127 @@ const q = (id: string, labels: string[], extra: Partial<AskQuestion> = {}): AskQ
 
 const one = [q("auth", ["Cookies", "JWT"])];
 const two = [q("auth", ["Cookies", "JWT"]), q("store", ["Postgres", "SQLite", "MySQL"])];
+const three = [...two, q("cache", ["Redis", "None"])];
 
-describe("askRows", () => {
-  test("flattens every question's options in order, so one list walks the whole card", () => {
-    expect(askRows(two).map((r) => `${r.q}:${r.option.label}`)).toEqual([
-      "0:Cookies",
-      "0:JWT",
-      "1:Postgres",
-      "1:SQLite",
-      "1:MySQL",
-    ]);
+describe("openAsk", () => {
+  test("is the newest ask nothing has closed", () => {
+    const chat: ChatItem[] = [
+      { kind: "ask", id: "k1", ask: { kind: "question", message: "Which?", questions: one }, outcome: "answered" },
+      { kind: "ask", id: "k2", ask: { kind: "question", message: "And?", questions: one } },
+      { kind: "assistant", text: "…" },
+    ];
+    expect(openAsk(chat)?.id).toBe("k2");
+    expect(openAsk(chat.slice(0, 1))).toBeNull();
+    expect(openAsk([])).toBeNull();
+  });
+});
+
+describe("askLine", () => {
+  test("names the questions by their headers, else the message, and a permission by its title", () => {
+    const headed = [q("a", ["x"], { header: "Auto-pull" }), q("b", ["y"], { header: "Main's seat" }), q("c", ["z"])];
+    expect(
+      askLine({ kind: "ask", id: "k", ask: { kind: "question", message: "Please answer.", questions: headed } }),
+    ).toBe("Auto-pull, Main's seat");
+    expect(askLine({ kind: "ask", id: "k", ask: { kind: "question", message: "Which port?", questions: one } })).toBe(
+      "Which port?",
+    );
+    expect(askLine({ kind: "ask", id: "k", ask: { kind: "permission", title: "Approve the plan", choices: [] } })).toBe(
+      "Approve the plan",
+    );
   });
 });
 
 describe("choose", () => {
   test("single-select replaces", () => {
-    const rows = askRows(one);
     let d = emptyDraft(one);
-    d = choose(d, rows[0]!, false);
-    d = choose(d, rows[1]!, false);
+    d = choose(d, 0, "cookies", false);
+    d = choose(d, 0, "jwt", false);
     expect(d[0]!.selected).toEqual(["jwt"]);
   });
 
   test("multi-select toggles, and a second press takes it back off", () => {
-    const rows = askRows(one);
     let d = emptyDraft(one);
-    d = choose(d, rows[0]!, true);
-    d = choose(d, rows[1]!, true);
+    d = choose(d, 0, "cookies", true);
+    d = choose(d, 0, "jwt", true);
     expect(d[0]!.selected).toEqual(["cookies", "jwt"]);
-    d = choose(d, rows[0]!, true);
+    d = choose(d, 0, "cookies", true);
     expect(d[0]!.selected).toEqual(["jwt"]);
   });
 
   test("a pick only touches its own question", () => {
-    const rows = askRows(two);
     let d = emptyDraft(two);
-    d = choose(d, rows[1]!, false);
-    d = choose(d, rows[3]!, false);
+    d = choose(d, 0, "jwt", false);
+    d = choose(d, 1, "sqlite", false);
     expect(d).toEqual([{ selected: ["jwt"] }, { selected: ["sqlite"] }]);
   });
 });
 
 describe("canSubmit", () => {
-  test("a card with nothing required can always go back: skipping a question is an answer", () => {
+  test("an ask with nothing required can always go back: skipping a question is an answer", () => {
     expect(canSubmit(two, emptyDraft(two))).toBe(true);
   });
 
   test("a required question needs a pick, and a note counts as one", () => {
     const req = [q("auth", ["Cookies", "JWT"], { required: true })];
     expect(canSubmit(req, emptyDraft(req))).toBe(false);
-    expect(canSubmit(req, choose(emptyDraft(req), askRows(req)[0]!, false))).toBe(true);
+    expect(canSubmit(req, choose(emptyDraft(req), 0, "jwt", false))).toBe(true);
     expect(canSubmit(req, setNote(emptyDraft(req), 0, "neither"))).toBe(true);
     // whitespace is not an answer
     expect(canSubmit(req, setNote(emptyDraft(req), 0, "   "))).toBe(false);
   });
 });
 
-describe("the keyboard's view of the card", () => {
-  test("a digit means the nth option of the question the highlight is in", () => {
-    const rows = askRows(two);
-    expect(rowForDigit(rows, 0, 2)).toBe(1);
-    // highlight inside the second question: 2 is SQLite, not JWT
-    expect(rowForDigit(rows, 2, 2)).toBe(3);
-    expect(rowForDigit(rows, 2, 9)).toBe(-1);
+describe("the keyboard's view of the ask", () => {
+  test("a digit means the nth option of the question on screen", () => {
+    expect(optionForDigit(two[1], 2)?.label).toBe("SQLite");
+    expect(optionForDigit(two[1], 9)).toBeUndefined();
+    expect(optionForDigit(undefined, 1)).toBeUndefined();
   });
 
-  test("a single-select pick moves on to the next question", () => {
-    const rows = askRows(two);
-    expect(nextQuestionRow(rows, 0)).toBe(2);
-    // the last question has nowhere to go, so the highlight stays put
-    expect(nextQuestionRow(rows, 3)).toBe(3);
+  test("arriving at a question lands on its pick, else its first option", () => {
+    expect(cursorFor(two[1], { selected: [] })).toBe(0);
+    expect(cursorFor(two[1], { selected: ["mysql"] })).toBe(2);
+    // a value the question no longer offers is no pick
+    expect(cursorFor(two[1], { selected: ["gone"] })).toBe(0);
+  });
+
+  test("the next unanswered question is found in order, wrapping round to one skipped over", () => {
+    let d = emptyDraft(three);
+    expect(nextUnanswered(three, d, 0)).toBe(1);
+    // the third was answered first (walked to with the arrows), so after the first comes the second
+    d = choose(d, 2, "redis", false);
+    expect(nextUnanswered(three, d, 0)).toBe(1);
+    // and after the second, the wrap finds the first still open
+    d = choose(d, 1, "sqlite", false);
+    expect(nextUnanswered(three, d, 1)).toBe(0);
+    d = choose(d, 0, "jwt", false);
+    expect(nextUnanswered(three, d, 0)).toBe(-1);
+  });
+
+  test("a single-select pick moves on to what is left, and the last one sends", () => {
+    let d = choose(emptyDraft(two), 0, "jwt", false);
+    expect(advance(two, d, 0)).toEqual({ current: 1, cursor: 0, send: false });
+    d = choose(d, 1, "mysql", false);
+    // nothing left: stay on the question just answered, cursor on its pick, and go
+    expect(advance(two, d, 1)).toEqual({ current: 1, cursor: 2, send: true });
+    // one question is the common shape, and it answers as one keystroke
+    expect(advance(one, choose(emptyDraft(one), 0, "cookies", false), 0)).toEqual({
+      current: 0,
+      cursor: 0,
+      send: true,
+    });
+  });
+});
+
+describe("recommended", () => {
+  test("the agent's suffix comes off the label and becomes a badge", () => {
+    expect(recommended("Yes, fast-forward only (Recommended)")).toBe(true);
+    expect(stripRecommended("Yes, fast-forward only (Recommended)")).toBe("Yes, fast-forward only");
+    expect(recommended("Yes, fast-forward only (recommended) ")).toBe(true);
+    expect(recommended("No, local main only")).toBe(false);
+    expect(stripRecommended("No, local main only")).toBe("No, local main only");
+    // only a suffix: a label that says the word mid-sentence keeps it
+    expect(recommended("The (Recommended) option is gone")).toBe(false);
   });
 });
 

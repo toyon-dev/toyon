@@ -676,4 +676,9 @@
   .badge-changed {
     color: var(--yellow);
   }
+  /* the option the agent would pick, read off its label: a suggestion, so the arrival green rather
+     than the accent, which would read as the one already chosen */
+  .badge-recommended {
+    color: var(--green);
+  }
 }

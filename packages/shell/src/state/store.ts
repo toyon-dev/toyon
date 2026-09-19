@@ -126,6 +126,14 @@ export interface GitInfo {
   head?: string;
 }
 
+/** what the box holds against one ask (surfaces/chat/ask.ts): one answer per question, and the
+ * question on screen */
+export interface AskDraft {
+  id: string;
+  draft: AskAnswer[];
+  current: number;
+}
+
 /** where up-arrow has walked the composer back to (surfaces/chat/recall.ts) */
 export interface ComposerWalk {
   /** the sent entry's index in the chat, which is also the transcript row that is marked */
@@ -193,6 +201,12 @@ export interface WorktreeLocal {
    * with nothing to do, an attachment over the limit, a refusal from the daemon with no worktree to
    * answer on. Read under the field until the next keystroke or attachment answers it. */
   notice?: string;
+  /** the answers being put together to the agent's open question, and which question the box is
+   * on: kept here so switching worktrees and parking the ask keep them; gone when the ask closes */
+  ask?: AskDraft;
+  /** the open ask the person set aside with escape to write a message instead: the plain box is
+   * back, with a line offering the ask, until it is answered or a newer one arrives */
+  askParked?: string;
   /** the stop whose recap this tab arrived to, by its `lastTurn.at`. The line shows for that stop
    * until the box is written in, a turn starts, or the worktree is left; coming back is a new
    * arrival, which only a stop still unseen answers. */
@@ -564,7 +578,7 @@ export interface State {
   /** bumped to put the keyboard in the composer, the same way */
   focusChat: number;
   /** bumped when a keyboard walk lands on a row: the composer takes the caret only if nothing
-   * better (an editor, a terminal, an ask card) holds it */
+   * better (an editor, a terminal, an open ask) holds it */
   walked: number;
   /** the worktree panel is kept open, instead of peeking on hover and collapsing to the strip */
   railOpen: boolean;
@@ -1060,6 +1074,12 @@ export type Action =
   | { a: "editor-refused"; file: FileRef; message: string }
   /** the composer's answer to something that could not be done to this box, read until the next keystroke */
   | { a: "notice"; id: string; text: string }
+  /** the answers so far to the ask on this worktree's box, and the question it is on */
+  | { a: "ask-draft"; id: string; ask: AskDraft }
+  /** set the open ask aside: the plain box comes back, the ask stays open for the agent */
+  | { a: "ask-park"; id: string; askId: string }
+  /** bring the parked ask back into the box */
+  | { a: "ask-unpark"; id: string }
   /** the tab opened `openUrl` */
   | { a: "opened-url" }
   | { a: "set-draft"; id: string; text: string }
@@ -1141,6 +1161,21 @@ export type Action =
 
 function withLocal(s: State, id: string, fn: (l: WorktreeLocal) => WorktreeLocal): State {
   return { ...s, local: { ...s.local, [id]: fn(s.local[id] ?? EMPTY_LOCAL) } };
+}
+
+/** The box's answers and the parked ask belong to one ask. A new ask starts over and takes the box
+ * back from a parked one; the close of the ask they belong to ends them; anything else leaves
+ * them be. */
+function askSettled(l: WorktreeLocal, ev: AgentEvent): WorktreeLocal {
+  const asked = ev.type === "agent-question" || ev.type === "agent-permission";
+  const closed = ev.type === "agent-ask-end" ? ev.id : null;
+  if (!asked && !closed) return l;
+  const { ask, askParked, ...rest } = l;
+  return {
+    ...rest,
+    ...(ask && !asked && ask.id !== closed ? { ask } : {}),
+    ...(askParked && !asked && askParked !== closed ? { askParked } : {}),
+  };
 }
 
 /** a line of toyon's own on a worktree's chat: what the daemon answered about it, kept where the
@@ -1411,6 +1446,12 @@ function reduce(s: State, action: Action): State {
     case "notice":
       // the answer is under the box, so the box has to be on screen
       return withLocal(revealChat(s), action.id, (l) => ({ ...l, notice: action.text }));
+    case "ask-draft":
+      return withLocal(s, action.id, (l) => ({ ...l, ask: action.ask }));
+    case "ask-park":
+      return withLocal(s, action.id, (l) => ({ ...l, askParked: action.askId }));
+    case "ask-unpark":
+      return withLocal(s, action.id, ({ askParked: _parked, ...l }) => l);
     case "opened-url":
       return s.openUrl ? { ...s, openUrl: null } : s;
     case "set-draft":
@@ -1900,7 +1941,7 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const moved = ev.type === "turn-start" || ev.type === "user-message";
         // and a message an archived page sent is in the chat now, as the agent has it
         const { restoring: _sent, ...heard } = l;
-        const base = ev.type === "user-message" ? heard : l;
+        const base = askSettled(ev.type === "user-message" ? heard : l, ev);
         return {
           // and a message sent moves the conversation on from the hit a search landed on
           ...(moved ? withoutRecap(ev.type === "user-message" ? withoutMark(base, "reveal") : base) : base),
@@ -1917,6 +1958,9 @@ function onServer(s: State, msg: StoreServerMsg): State {
         const turn = next.local[id]!.turn;
         if (turn.edits && !turn.hmr) next = { ...next, reloadReq: { id, n: (next.reloadReq?.n ?? 0) + 1 } };
       }
+      // the question goes in the box, so the box has to be on screen, the way a notice's does
+      if ((ev.type === "agent-question" || ev.type === "agent-permission") && id === s.activeId)
+        next = revealChat(next);
       return next;
     }
     case "backfill": {

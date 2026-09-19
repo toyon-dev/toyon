@@ -14,7 +14,7 @@ Opening a repository in Toyon runs its setup and its dev server, and each agent 
 
 ## Permission modes
 
-Each chat has a permission mode, shown next to the prompt. **auto**, the default, lets edits and sandboxed commands run and asks only when the agent proposes a plan. **ask** turns every edit and every command into a card in the chat before it runs. **plan** puts the agent in its read-only mode; the plan comes back as a card, and approving it chooses whether the work runs in auto or ask. Three versions can run in auto while the one touching your database runs in ask.
+Each chat has a permission mode, shown next to the prompt. **auto**, the default, lets edits and sandboxed commands run and asks only when the agent proposes a plan. **ask** turns every edit and every command into a question in the message box before it runs. **plan** puts the agent in its read-only mode; the plan comes back as a question in the same box, and approving it chooses whether the work runs in auto or ask. Three versions can run in auto while the one touching your database runs in ask.
 
 ## Pushing
 

@@ -109,8 +109,8 @@ export function worktreeItems(
   const change: MenuItem[] = [];
   const land: MenuItem[] = [];
   const gone: MenuItem[] = [];
-  // stop stays offered while an ask card is open: that is the way out of a question you do not
-  // want to answer
+  // stop stays offered while an ask is open: that is the way out of a question you do not want
+  // to answer
   if (isBusy(w))
     stop.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
   const idle = !s.shipping[id];

@@ -4,8 +4,8 @@ import postcss, { type Container } from "postcss";
 /**
  * The stylesheets as the tests read them: every rule, with its selectors resolved through any
  * nesting and at-rule it sits in, and its declarations as property/value pairs. Resolving the
- * selector is what lets a test keep saying `.ask-card.done .ask-lead` in its allowlist after that
- * rule is written as `.ask-card { &.done .ask-lead { … } }`.
+ * selector is what lets a test keep saying `.ask-closed .ask-lead` in its allowlist after that
+ * rule is written as `.ask-closed { & .ask-lead { … } }`.
  *
  * PostCSS rather than css-tree: css-tree 3 only parses a nested rule that opens with `&`, and turns
  * `.row { … }` inside a block into a Raw node the walk never sees, which is a rule a test has

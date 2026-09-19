@@ -32,12 +32,13 @@ export class Restarter {
     d.hub.on("worktreesChanged", settle);
   }
 
-  /** Ask for a restart. Answers a refusal, or null having restarted or queued behind a reply. */
-  request(): string | null {
+  /** Ask for a restart. Answers a refusal, or null having restarted or queued behind a reply.
+   * `now` goes without the wait: whoever asked has read which chats it cuts off. */
+  request(opts: { now?: boolean } = {}): string | null {
     const refused = this.d.refusal();
     if (refused) return refused;
     this.asked = true;
-    this.attempt();
+    this.attempt(opts.now);
     return null;
   }
 
@@ -54,10 +55,9 @@ export class Restarter {
       .map((w) => w.title);
   }
 
-  private attempt(): void {
+  private attempt(now = false): void {
     if (this.gone) return;
-    const names = this.working();
-    if (names.length === 0) this.gone = true;
+    if (now || this.working().length === 0) this.gone = true;
     // announced before going, so every tab hears the restart is under way before its socket drops
     const key = JSON.stringify(this.waitingOn());
     if (key !== this.announced) {

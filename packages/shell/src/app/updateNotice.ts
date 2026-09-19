@@ -12,6 +12,11 @@ export interface UpdateNotice {
   busy: boolean;
 }
 
+/** what a restart held behind replies says, wherever it is read: the bar's chip and the card a page
+ * from a newer build shows. The names are the progress: each one leaves as its chat settles. */
+export const restartWaitLine = (names: string[]): string =>
+  `Toyon restarts once ${names.join(", ")} ${names.length === 1 ? "finishes" : "finish"}`;
+
 /**
  * Toyon updates itself the way a site does, so while that works the chip says nothing: a newer
  * version installs and the tab reloads onto it. It shows only what someone has to know: an
@@ -24,7 +29,7 @@ export function updateNotice(u: UpdateState | null): UpdateNotice | null {
     const n = u.restarting.length;
     return {
       word: n === 1 ? "restarts after a reply" : `restarts after ${n} replies`,
-      text: `Toyon restarts once ${u.restarting.join(", ")} ${n === 1 ? "finishes" : "finish"}`,
+      text: restartWaitLine(u.restarting),
       retry: false,
       busy: true,
     };

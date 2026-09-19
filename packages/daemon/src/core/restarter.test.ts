@@ -76,6 +76,18 @@ describe("Restarter", () => {
     expect(restarts()).toBe(1);
   });
 
+  test("`now` does not wait, and the chat settling later is not a second restart", () => {
+    const { restarter, set, restarts } = make();
+    set("a", "working");
+    restarter.request();
+    expect(restarts()).toBe(0);
+    expect(restarter.request({ now: true })).toBeNull();
+    expect(restarts()).toBe(1);
+    expect(restarter.waitingOn()).toEqual([]);
+    set("a", "idle");
+    expect(restarts()).toBe(1);
+  });
+
   test("a refusal is the answer, and nothing waits behind it", () => {
     const { restarter, set, restarts } = make("restart it from its terminal tab");
     set("a", "working");

@@ -23,6 +23,7 @@ export * from "./protocol/limits.ts";
 export * from "./protocol/pick.ts";
 export * from "./protocol/ws.ts";
 export * from "./railOrder.ts";
+export * from "./restart.ts";
 export * from "./routes.ts";
 export * from "./sandbox.ts";
 export * from "./themes.ts";

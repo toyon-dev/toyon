@@ -30,6 +30,9 @@ const learnedOrigins: (string | null)[] = [];
 /** what the daemon answers a restart with: a refusal, or null having taken it */
 let restartRefusal: string | null = null;
 let restartsAsked = 0;
+/** whether the last restart asked was one that does not wait */
+let restartNow = false;
+let restartWaiting: string[] | null = null;
 const opts: HttpOpts = {
   token: "secret",
   shellDist: "/nonexistent",
@@ -45,10 +48,12 @@ const opts: HttpOpts = {
   remote: null,
   preview: () => null,
   bootstrap: async () => ({ t: "hello", repos: [{ id: "r1" }] }),
-  restart: () => {
+  restart: (now) => {
     restartsAsked++;
+    restartNow = now;
     return restartRefusal;
   },
+  restartWait: () => restartWaiting,
   pair: new PairCodes(),
   onPaired: () => {},
 };
@@ -444,10 +449,29 @@ describe("/restart", () => {
     restartRefusal = null;
   });
 
-  test("a GET is not a restart", async () => {
+  test("a GET is not a restart: it answers what one is waiting on", async () => {
     const before = restartsAsked;
-    await fetch(req("/restart?token=secret"), srv());
+    restartWaiting = ["fix login", "docs"];
+    const r = await fetch(req("/restart?token=secret"), srv());
     expect(restartsAsked).toBe(before);
+    expect(await r?.json()).toEqual({ waiting: ["fix login", "docs"] });
+    expect(r?.headers.get("cache-control")).toBe("no-store");
+    restartWaiting = null;
+    expect(await (await fetch(req("/restart?token=secret"), srv()))?.json()).toEqual({ waiting: null });
+  });
+
+  test("chat titles are not for a caller without the token", async () => {
+    restartWaiting = ["fix login"];
+    expect((await fetch(req("/restart"), srv()))?.status).toBe(401);
+    expect(await (await fetch(req("/health"), srv()))?.text()).not.toContain("fix login");
+    restartWaiting = null;
+  });
+
+  test("`now` is passed on, and only when the page said it", async () => {
+    await post("/restart?token=secret");
+    expect(restartNow).toBe(false);
+    await post("/restart?token=secret&now");
+    expect(restartNow).toBe(true);
   });
 });
 
@@ -473,6 +497,7 @@ describe("static shell", () => {
     metrics: () => ({ lag: 0 }),
     bootstrap: async () => ({}),
     restart: () => null,
+    restartWait: () => null,
     pair: new PairCodes(),
     onPaired: () => {},
   });

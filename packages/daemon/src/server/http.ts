@@ -3,7 +3,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { type PairMint, type PairRedeem, pairLink, type Remote } from "@toyon/shared";
+import { type PairMint, type PairRedeem, pairLink, RESTART_NOW, type Remote, type RestartWait } from "@toyon/shared";
 import type { Server } from "bun";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import { UserError } from "../core/errors.ts";
@@ -53,8 +53,11 @@ export interface HttpOpts {
   preview: (worktreeId: string) => PreviewHandler | null;
   /** the hello frame, for a page that asks before its socket exists */
   bootstrap: () => Promise<unknown>;
-  /** ask for a restart; answers a refusal, or null having restarted or queued behind a reply */
-  restart: () => string | null;
+  /** ask for a restart; answers a refusal, or null having restarted or queued behind a reply.
+   * `now` does not queue. */
+  restart: (now: boolean) => string | null;
+  /** the chats a requested restart waits on; empty once it is under way, null when nobody asked */
+  restartWait: () => string[] | null;
   /** the one-time codes a phone trades for the token */
   pair: PairCodes;
   /** a code was just redeemed */
@@ -160,10 +163,15 @@ export function createFetch(opts: HttpOpts) {
 
     // A page served from files newer than the daemon speaks another protocol and has stopped its
     // socket, so the restart that brings the two level comes over plain HTTP, token in the query
-    // like /bootstrap.
-    if (url.pathname === "/restart" && req.method === "POST") {
+    // like /bootstrap. The same page then asks what the restart is waiting on, and those are chat
+    // titles, so the answer sits behind the token and not in /health.
+    if (url.pathname === "/restart" && (req.method === "POST" || req.method === "GET")) {
       if (!sameSecret(url.searchParams.get("token"), opts.token)) return new Response("unauthorized", { status: 401 });
-      const refused = opts.restart();
+      if (req.method === "GET") {
+        const wait: RestartWait = { waiting: opts.restartWait() };
+        return Response.json(wait, { headers: { "cache-control": NO_STORE } });
+      }
+      const refused = opts.restart(url.searchParams.has(RESTART_NOW));
       return refused ? new Response(refused, { status: 409 }) : new Response(null, { status: 202 });
     }
 

@@ -2,6 +2,8 @@ import {
   type ClientMsg,
   type ConnectFailure,
   type PairMint,
+  RESTART_NOW,
+  type RestartWait,
   type ServerMsg,
   WS_CLOSE_UNAUTHORIZED,
 } from "@toyon/shared";
@@ -41,15 +43,31 @@ export function worktreeFileUrl(worktreeId: string, path: string, version: strin
 }
 
 /** Ask the daemon to restart over plain HTTP, for a page whose socket stopped at a protocol mismatch.
- * Answers the daemon's refusal, or null once it has taken the request. */
-export async function restartDaemon(): Promise<string | null> {
+ * Answers the daemon's refusal, or null once it has taken the request. `now` goes without waiting
+ * out the chats mid-reply. */
+export async function restartDaemon(now = false): Promise<string | null> {
   try {
-    const r = await fetch(`/restart?token=${getToken()}`, { method: "POST" });
+    const r = await fetch(`/restart?token=${getToken()}${now ? `&${RESTART_NOW}` : ""}`, { method: "POST" });
     if (r.ok) return null;
     return (await r.text()) || "Toyon did not restart";
   } catch {
     // the connection dropping is what a restart looks like from here; the caller watches for the
     // new daemon, and a daemon that was already gone shows as the socket's own failure
+    return null;
+  }
+}
+
+/** The chats a requested restart is waiting on, by title; empty or null when it waits on none. The
+ * daemon asked is by definition an older one, and one from before this route answers with
+ * something else entirely, which reads as nothing known. */
+export async function restartWaiting(): Promise<string[] | null> {
+  try {
+    const r = await fetch(`/restart?token=${getToken()}`, { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return null;
+    const { waiting } = (await r.json()) as Partial<RestartWait>;
+    return Array.isArray(waiting) ? waiting : null;
+  } catch {
+    // down between the old daemon and the new one, or not JSON; the caller asks again
     return null;
   }
 }

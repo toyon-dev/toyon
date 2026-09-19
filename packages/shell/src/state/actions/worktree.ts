@@ -6,6 +6,7 @@ import {
   canRename,
   canSync,
   describeLand,
+  isMain,
   landPolicy,
   type OwnedWorktree,
   type RepoInfo,
@@ -137,6 +138,14 @@ export function worktreeItems(
   }
   look.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
   look.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
+  // what a second agent is pointed at: the chat as a file it can read, and the id the agent's
+  // own CLI resumes. A path rather than a link, since a link would carry the token. Main has no
+  // chat, so nothing to hand over there.
+  const { transcript, sessionId } = w;
+  if (transcript && !isMain(w.worktree)) {
+    look.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(transcript) });
+  }
+  if (sessionId) look.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
   // a ring to come back to; a row that already has one has nothing to add
   look.push({
     id: "unread",

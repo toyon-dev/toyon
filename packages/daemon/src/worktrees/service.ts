@@ -776,14 +776,15 @@ export class WorktreeService {
       ...(kept ? { kept } : {}),
       ...(reason ? { auto: reason } : {}),
     };
+    let at: ChatFiles;
     try {
-      this.archive.put(rec, files);
+      at = this.archive.put(rec, files);
     } catch (e) {
       log.warn(wt.id, "could not archive its chat; the files stay where they were", e);
       return null;
     }
     this.d.hub.emit("archiveChanged", repo.id);
-    return summarize(rec, repo.id);
+    return summarize(rec, repo.id, at.transcript);
   }
 
   private chatFiles(worktreeId: string): ChatFiles {
@@ -1819,6 +1820,8 @@ export class WorktreeService {
             queued: rt?.agent.queueLength || undefined,
             unseen: isUnseen(wt) || undefined,
             usage: this.usageFor(wt.id),
+            transcript: transcriptPathFor(this.d.paths.transcriptsDir, wt.id),
+            sessionId: this.d.state.session(wt.id),
           };
         }),
     );

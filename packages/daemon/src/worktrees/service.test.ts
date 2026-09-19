@@ -278,7 +278,11 @@ describe("archive", () => {
       restorable: true,
       uncommitted: true,
       cost: 1.4,
+      // the chat and the session stay handable to another tool from the archived row
+      transcript: join(w.paths.archiveDir, wt.id, "transcript.jsonl"),
+      sessionId: "session-1",
     });
+    expect(existsSync(archived?.transcript ?? "")).toBe(true);
     expect(existsSync(wt.path)).toBe(false);
     expect(sh(w.repo, "git", "branch", "--list", wt.branch)).toBe("");
     // the ref is the uncommitted work as a commit over the one the branch was on

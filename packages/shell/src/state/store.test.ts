@@ -1082,6 +1082,7 @@ describe("drafts", () => {
       createdAt: 0,
       archivedAt: 1,
       restorable: true,
+      transcript: "/a/z/transcript.jsonl",
     };
     const said = { type: "user-message" as const, text: "q", ts: 0 };
     const s = run([
@@ -1917,6 +1918,7 @@ describe("an archived worktree's page", () => {
         createdAt: 0,
         archivedAt: 0,
         restorable: true,
+        transcript: `/a/${id}/transcript.jsonl`,
       })),
     });
   const listed = () => run([hello(wt("main", "main"), wt("a")), { a: "activate", id: "a" }, archived("r", "x", "y")]);

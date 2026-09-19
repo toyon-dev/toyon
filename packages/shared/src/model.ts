@@ -535,6 +535,11 @@ export interface ArchivedWorktree {
   cost?: number;
   /** why it archived itself, as the rail says it; absent when someone archived it */
   auto?: string;
+  /** its chat's transcript on disk, where the archive keeps it now: what another tool is pointed
+   * at to read this chat */
+  transcript: string;
+  /** the agent's own session id, when it opened one: what its CLI resumes outside toyon */
+  sessionId?: string;
 }
 
 /** One row of the rail: a worktree toyon runs, or one git knows about that toyon did not create
@@ -584,6 +589,11 @@ export interface WorktreeStatus {
   /** a turn finished here since the last time anyone looked at it. The rail rings the dot: green
    * alone cannot separate "just finished" from "untouched for a week". */
   unseen?: boolean;
+  /** the chat's transcript on disk: what another tool is pointed at to read this chat. Absent on
+   * a found worktree, which has no chat. */
+  transcript?: string;
+  /** the agent's own session id here, once it has opened one: what its CLI resumes outside toyon */
+  sessionId?: string;
 }
 
 /** a row toyon owns, which is the one most of the shell reads: the chat, the composer, landing */

@@ -35,7 +35,14 @@ export function archivedItems(a: ArchivedWorktree, clientId: string, { sock, dis
       },
     },
   ];
-  const copy: MenuItem[] = [{ id: "copy-branch", label: "copy branch name", onClick: () => copyText(a.branch) }];
+  // the chat is still a file, moved under the archive, so it can be handed to another tool from
+  // here as well as from a live row
+  const copy: MenuItem[] = [
+    { id: "copy-branch", label: "copy branch name", onClick: () => copyText(a.branch) },
+    { id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(a.transcript) },
+  ];
+  const { sessionId } = a;
+  if (sessionId) copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
   const gone: MenuItem[] = [
     {
       id: "delete",

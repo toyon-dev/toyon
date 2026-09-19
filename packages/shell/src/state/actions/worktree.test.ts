@@ -77,6 +77,17 @@ describe("a worktree's actions", () => {
     ]);
   });
 
+  test("hands the chat over as a file path and a session id, but not from main, which has no chat", () => {
+    const s = { layout: { ...defaultLayout, changes: true }, shipping: {} };
+    const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps);
+    expect(labels(chat).slice(2, 5)).toEqual(["copy path", "copy transcript path", "copy session id"]);
+    // a session not opened yet has no id to copy
+    const cold = worktreeItems(owned({ transcript: "/t/w1.jsonl" }), null, s, deps);
+    expect(labels(cold).slice(2, 5)).toEqual(["copy path", "copy transcript path", "mark as unread"]);
+    const main = owned({ transcript: "/t/m.jsonl", sessionId: "s-2", worktree: { ...info, kind: "main" } });
+    expect(labels(worktreeItems(main, null, s, deps))).not.toContain("copy transcript path");
+  });
+
   test("a landing op in flight keeps the other landing ops on the list, off, until it answers", () => {
     const items = worktreeItems(
       owned({ behind: 3 }),

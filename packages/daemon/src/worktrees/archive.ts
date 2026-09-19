@@ -55,14 +55,16 @@ export class WorktreeArchive {
   }
 
   /** The files move in first and the record is written last: a crash in between leaves loose files
-   * nothing lists, rather than a listed worktree with nothing behind it. */
-  put(rec: ArchiveRecord, from: ChatFiles): void {
+   * nothing lists, rather than a listed worktree with nothing behind it. Hands back where the
+   * chat now sits. */
+  put(rec: ArchiveRecord, from: ChatFiles): ChatFiles {
     const at = this.filesOf(rec.worktree.id);
     mkdirSync(at.dir, { recursive: true });
     move(from.transcript, at.transcript);
     move(from.attachments, at.attachments);
     writeFileSync(at.record, JSON.stringify(rec, null, 2));
     this.records.set(rec.worktree.id, rec);
+    return { transcript: at.transcript, attachments: at.attachments };
   }
 
   /** move the chat back out to where a live worktree keeps it, and forget the record */
@@ -87,7 +89,7 @@ export class WorktreeArchive {
     return [...this.records.values()]
       .filter((r) => r.worktree.repoId === repo.id || r.repoPath === repo.path)
       .sort((a, b) => b.archivedAt - a.archivedAt)
-      .map((r) => summarize(r, repo.id));
+      .map((r) => summarize(r, repo.id, this.filesOf(r.worktree.id).transcript));
   }
 
   /** where an archived worktree's chat sits, for reading it in place: the page shows the chat as
@@ -110,8 +112,8 @@ export class WorktreeArchive {
 }
 
 /** what the shell is told about a record; `repoId` is the project's id now, which may not be the
- * one it was archived under */
-export function summarize(r: ArchiveRecord, repoId: string): ArchivedWorktree {
+ * one it was archived under, and `transcript` is where the archive keeps the chat */
+export function summarize(r: ArchiveRecord, repoId: string, transcript: string): ArchivedWorktree {
   return {
     id: r.worktree.id,
     repoId,
@@ -122,6 +124,8 @@ export function summarize(r: ArchiveRecord, repoId: string): ArchivedWorktree {
     archivedAt: r.archivedAt,
     ...(r.prompt ? { prompt: r.prompt } : {}),
     restorable: !!r.kept,
+    transcript,
+    ...(r.sessionId ? { sessionId: r.sessionId } : {}),
     ...(r.kept?.snapshot ? { uncommitted: true, ...(r.kept.dirty ? { dirty: r.kept.dirty } : {}) } : {}),
     ...(r.worktree.landed ? { landed: true } : {}),
     ...(r.cost !== undefined ? { cost: r.cost } : {}),

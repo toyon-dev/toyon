@@ -1,10 +1,12 @@
 // Removed worktrees, kept. One directory per worktree under ~/.toyon/archive holds its record, its
-// transcript and its attachments, so restoring is moving two things back and deleting is one rm.
-// Not rows in state.json: that file is rewritten whole on every save, and this only grows.
+// transcript, its attachments and the plans it was shown, so restoring is moving three things back
+// and deleting is one rm. Not rows in state.json: that file is rewritten whole on every save, and
+// this only grows.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { AgentEvent, ArchivedWorktree, WorktreeInfo, WorktreeStatus } from "@toyon/shared";
+import { isPlanPath } from "../agent/planDoc.ts";
 import { log } from "../core/log.ts";
 import type { KeptState } from "../git/archive.ts";
 
@@ -28,10 +30,12 @@ export interface ArchiveRecord {
   auto?: string;
 }
 
-/** where a worktree's chat lives on disk */
+/** where a worktree's chat lives on disk: its transcript, its attachments, and the folder of plans
+ * it was shown (in the worktree while it stands, copied out before the directory goes) */
 export interface ChatFiles {
   transcript: string;
   attachments: string;
+  plans: string;
 }
 
 export class WorktreeArchive {
@@ -62,9 +66,10 @@ export class WorktreeArchive {
     mkdirSync(at.dir, { recursive: true });
     move(from.transcript, at.transcript);
     move(from.attachments, at.attachments);
+    move(from.plans, at.plans);
     writeFileSync(at.record, JSON.stringify(rec, null, 2));
     this.records.set(rec.worktree.id, rec);
-    return { transcript: at.transcript, attachments: at.attachments };
+    return { transcript: at.transcript, attachments: at.attachments, plans: at.plans };
   }
 
   /** move the chat back out to where a live worktree keeps it, and forget the record */
@@ -73,6 +78,7 @@ export class WorktreeArchive {
     const at = this.filesOf(id);
     move(at.transcript, to.transcript);
     move(at.attachments, to.attachments);
+    move(at.plans, to.plans);
     this.delete(id);
   }
 
@@ -97,7 +103,22 @@ export class WorktreeArchive {
   chatFiles(id: string): ChatFiles | undefined {
     if (!this.records.has(id)) return undefined;
     const at = this.filesOf(id);
-    return { transcript: at.transcript, attachments: at.attachments };
+    return { transcript: at.transcript, attachments: at.attachments, plans: at.plans };
+  }
+
+  /** A plan an archived chat's card names, read from the copy kept here: the worktree it was
+   * written to is gone. The path arrives from a client, so only a plan's own shape reaches the
+   * filesystem. Null for any other path, or a plan that was never copied. */
+  planFile(id: string, rel: string): string | null {
+    if (!this.records.has(id) || !isPlanPath(rel)) return null;
+    const file = join(this.filesOf(id).plans, basename(rel));
+    if (!existsSync(file)) return null;
+    try {
+      return readFileSync(file, "utf8");
+    } catch (e) {
+      log.warn(id, `could not read its archived plan ${rel}`, e);
+      return null;
+    }
   }
 
   private filesOf(id: string) {
@@ -107,6 +128,7 @@ export class WorktreeArchive {
       record: join(dir, "record.json"),
       transcript: join(dir, "transcript.jsonl"),
       attachments: join(dir, "attachments"),
+      plans: join(dir, "plans"),
     };
   }
 }
@@ -168,6 +190,8 @@ export function firstPrompt(transcript: string): string | undefined {
 
 function move(from: string, to: string) {
   if (!existsSync(from)) return;
+  // a restored worktree has no .toyon/ yet for its plans to land in
+  mkdirSync(dirname(to), { recursive: true });
   rmSync(to, { recursive: true, force: true });
   renameSync(from, to);
 }

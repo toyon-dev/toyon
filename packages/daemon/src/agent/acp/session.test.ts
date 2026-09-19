@@ -6,7 +6,7 @@ import * as acp from "@agentclientprotocol/sdk";
 import type { AgentCommand, AgentEvent, AgentStatus, AuthStatus } from "@toyon/shared";
 import type { AuthObservation } from "../accounts.ts";
 import { AttachmentStore } from "../attachments.ts";
-import { PLAN_REL, planEdited, writePlanDoc } from "../planDoc.ts";
+import { PLANS_DIR, planEdited, writePlanDoc } from "../planDoc.ts";
 import { SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import type { Bounds } from "../sandbox.ts";
@@ -1628,11 +1628,48 @@ describe("AcpSession ask cards", () => {
     w.session.send("plan it");
     await waitFor(() => !!openAsk(w.events));
     const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
-    expect(card.plan).toBe(PLAN_REL);
-    expect(readFileSync(join(wt, PLAN_REL), "utf8")).toBe("# the plan\n\nstep one\n");
+    // numbered on from whatever this shared directory already holds
+    expect(card.plan).toMatch(/^\.toyon\/plans\/\d+\.md$/);
+    expect(readFileSync(join(wt, card.plan!), "utf8")).toBe("# the plan\n\nstep one\n");
     // the markdown rides along too: a shell whose worktree could not take the file still shows it
     expect(card.detail).toBe("# the plan\n\nstep one");
     w.session.answer(card.id, { kind: "choice", choiceId: "cancel" });
+    await w.idle();
+    await w.session.close();
+  });
+
+  test("a second plan in the same worktree gets its own file and leaves the first as it was", async () => {
+    let turns = 0;
+    const fake = fakeAgent(async (p, client) => {
+      const n = ++turns;
+      await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: {
+          toolCallId: `t${n}`,
+          title: "Approve Plan",
+          kind: "switch_mode",
+          content: [{ type: "content", content: { type: "text", text: `# plan ${n}` } }],
+        },
+        options: [{ optionId: "cancel", name: "No, keep planning", kind: "reject_once" }],
+      });
+      return { stopReason: "end_turn" };
+    });
+    const w = world(fake, claudeSpec, 60_000, undefined, { onPlan: (md) => writePlanDoc(wt, md) });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    const first = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    // the person's edit to the first plan is what the second card must not touch
+    writeFileSync(join(wt, first.plan!), "# plan 1, edited\n");
+    w.session.answer(first.id, { kind: "choice", choiceId: "cancel" });
+    await w.idle();
+    w.session.send("plan it again");
+    await waitFor(() => w.events.filter((e) => e.type === "agent-permission").length === 2);
+    const second = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
+    const n = Number(/(\d+)\.md$/.exec(first.plan!)?.[1]);
+    expect(second.plan).toBe(`${PLANS_DIR}/${n + 1}.md`);
+    expect(readFileSync(join(wt, first.plan!), "utf8")).toBe("# plan 1, edited\n");
+    expect(readFileSync(join(wt, second.plan!), "utf8")).toBe("# plan 2\n");
+    w.session.answer(second.id, { kind: "choice", choiceId: "cancel" });
     await w.idle();
     await w.session.close();
   });
@@ -1658,15 +1695,15 @@ describe("AcpSession ask cards", () => {
     });
     const w = world(fake, claudeSpec, 60_000, undefined, {
       onPlan: (md) => writePlanDoc(wt, md),
-      planEdited: async (proposed) => planEdited(wt, proposed),
+      planEdited: async (path, proposed) => planEdited(wt, path, proposed),
     });
     w.session.send("plan it");
     await waitFor(() => !!openAsk(w.events));
     const card = w.events.at(-1) as Extract<AgentEvent, { type: "agent-permission" }>;
-    writeFileSync(join(wt, PLAN_REL), "# the plan\n\nrewrite one file\n");
+    writeFileSync(join(wt, card.plan!), "# the plan\n\nrewrite one file\n");
     w.session.answer(card.id, { kind: "choice", choiceId: "exit_plan_default" });
     await waitFor(() => fake.prompts.length > 1);
-    expect((fake.prompts.at(-1)!.prompt[0] as { text: string }).text).toContain(PLAN_REL);
+    expect((fake.prompts.at(-1)!.prompt[0] as { text: string }).text).toContain(card.plan!);
     await w.session.close();
   });
 
@@ -1688,7 +1725,7 @@ describe("AcpSession ask cards", () => {
     });
     const w = world(fake, claudeSpec, 60_000, undefined, {
       onPlan: (md) => writePlanDoc(wt, md),
-      planEdited: async (proposed) => planEdited(wt, proposed),
+      planEdited: async (path, proposed) => planEdited(wt, path, proposed),
     });
     w.session.send("plan it");
     await waitFor(() => !!openAsk(w.events));

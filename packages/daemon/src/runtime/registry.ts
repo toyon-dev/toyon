@@ -176,7 +176,7 @@ function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps, preview: () => PreviewSt
       // an agent that sent no prose has nothing to write; its card is the whole plan
       return markdown.trim() ? writePlanDoc(wt.path, markdown) : null;
     },
-    planEdited: async (proposed) => planEdited(wt.path, proposed),
+    planEdited: async (path, proposed) => planEdited(wt.path, path, proposed),
     option: (category) => d.state.requireWorktree(wt.id)[OPTION_FIELDS[category]],
     // kept per agent, not per worktree: the picker on a worktree whose session has not opened
     // yet shows what this agent offered last time

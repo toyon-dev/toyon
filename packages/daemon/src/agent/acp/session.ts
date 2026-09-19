@@ -78,8 +78,8 @@ export interface AcpSessionDeps {
   /** A plan card is about to be shown, whatever becomes of it. Takes the plan's markdown and
    * answers with the worktree-relative file it was written to, or null if it was not written. */
   onPlan?: (markdown: string) => Promise<string | null>;
-  /** whether the plan file says something other than what the agent proposed */
-  planEdited?: (proposed: string) => Promise<boolean>;
+  /** whether the plan file the card named says something other than what the agent proposed */
+  planEdited?: (path: string, proposed: string) => Promise<boolean>;
   /** the value the worktree asks for in this category (its model, its effort level); undefined
    * leaves the agent on its own default */
   option?: (category: OptionCategory) => string | undefined;
@@ -967,7 +967,7 @@ export class AcpSession implements AgentAdapter {
    * so the agent would go and build the version it proposed; the file it must work from goes in as
    * a message instead, which steers into the turn the approval just released. */
   private async sayPlanEdited(proposed: string, path: string) {
-    if (!(await this.d.planEdited?.(proposed))) return;
+    if (!(await this.d.planEdited?.(path, proposed))) return;
     this.send(`I edited the plan before approving it. Build what is in ${path}, not the plan you proposed.`);
   }
 

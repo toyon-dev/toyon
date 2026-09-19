@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { SHELL_TOOL } from "@toyon/shared";
 import { type FakeAgent, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
+import { PLANS_DIR, writePlanDoc } from "../agent/planDoc.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
@@ -328,6 +329,42 @@ describe("archive", () => {
     await settle();
     expect(w.agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "and the header" });
     expect(w.worktrees.archivedTranscript(wt.id)).toBeNull();
+  });
+
+  test("the plans a worktree was shown go with its chat, read on its page, and come back on restore", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    const one = await writePlanDoc(wt.path, "# plan one");
+    const two = await writePlanDoc(wt.path, "# plan two");
+    expect([one, two]).toEqual([`${PLANS_DIR}/1.md`, `${PLANS_DIR}/2.md`]);
+    await w.worktrees.archiveWorktree(wt.id);
+    expect(readFileSync(join(w.paths.archiveDir, wt.id, "plans", "2.md"), "utf8")).toBe("# plan two\n");
+    expect(existsSync(join(w.paths.archiveDir, `${wt.id}.plans`))).toBe(false);
+    // kept out of git, so the snapshot has none of it: the copy beside the chat is the only one
+    expect((await git(w.repo, "show", `${ref(wt.id)}:${PLANS_DIR}/1.md`)).ok).toBe(false);
+    expect(await w.worktrees.archivedFile(wt.id, `${PLANS_DIR}/1.md`)).toEqual({
+      before: "# plan one\n",
+      after: "# plan one\n",
+    });
+    // a path shaped like a plan but not one never reaches the archive folder; it falls through to
+    // git, which has nothing there either
+    const stray = await w.worktrees.archivedFile(wt.id, `${PLANS_DIR}/../record.json`);
+    expect(stray?.after ?? "").not.toContain("archivedAt");
+    expect(await w.worktrees.archivedFile(wt.id, `${PLANS_DIR}/3.md`)).toEqual({ before: "", after: "" });
+    const back = await w.worktrees.restore(wt.id);
+    await settle();
+    expect(readFileSync(join(back.path, PLANS_DIR, "1.md"), "utf8")).toBe("# plan one\n");
+    expect(existsSync(join(w.paths.archiveDir, wt.id))).toBe(false);
+    expect(sh(back.path, "git", "status", "--porcelain", "--", ".toyon")).toBe("");
+  });
+
+  test("a worktree shown no plan archives and restores with no plans folder", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    await w.worktrees.archiveWorktree(wt.id);
+    expect(existsSync(join(w.paths.archiveDir, wt.id, "plans"))).toBe(false);
+    const back = await w.worktrees.restore(wt.id);
+    expect(existsSync(join(back.path, PLANS_DIR))).toBe(false);
   });
 
   test("a restore whose branch name was taken since comes back on a new branch", async () => {

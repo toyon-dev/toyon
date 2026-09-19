@@ -2,7 +2,7 @@
 // transport layer (server/handlers.ts) calls in here and shapes replies; git/, runtime/ and the
 // spare pool do the work.
 
-import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import {
   type AgentEvent,
@@ -31,6 +31,7 @@ import {
 import type { OptionField } from "../agent/acp/options.ts";
 import { attachmentsDirFor, isAttachmentFile } from "../agent/attachments.ts";
 import { canonical } from "../agent/bounds.ts";
+import { PLANS_DIR } from "../agent/planDoc.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
 import { coalesce, Transcript, type TranscriptEntry, transcriptPathFor } from "../agent/transcript.ts";
@@ -717,7 +718,14 @@ export class WorktreeService {
       // down, which is what an idle row looks like; a look at it wakes it.
       const k = archive ? await this.keep(repo, wt) : null;
       if (archive && !k) throw new UserError(`could not keep ${wt.title}'s work, so it was left in place`);
-      await gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path);
+      // the plans are kept out of git, so the snapshot has none of them; they leave with the chat
+      if (archive) this.keepPlans(wt);
+      try {
+        await gitOrThrow(repo.path, "worktree", "remove", "--force", wt.path);
+      } catch (e) {
+        rmSync(this.plansScratch(wt.id), { recursive: true, force: true });
+        throw e;
+      }
       // the confirm promised the branch goes with the directory. Only toyon's own: an adopted
       // worktree's branch is the person's. Forced, since the archive ref holds its commits; best
       // effort, since the checkout is already gone and a leftover branch is the lesser surprise
@@ -752,6 +760,23 @@ export class WorktreeService {
     return kept;
   }
 
+  /** where a worktree's plans wait between its directory going and its chat moving into the archive */
+  private plansScratch(worktreeId: string): string {
+    return join(this.d.paths.archiveDir, `${worktreeId}.plans`);
+  }
+
+  /** the plans a worktree was shown, copied out before its directory goes. Best effort: a chat
+   * without its plans is still the chat, and the card keeps the proposed text either way. */
+  private keepPlans(wt: WorktreeInfo): void {
+    const from = join(wt.path, PLANS_DIR);
+    if (!existsSync(from)) return;
+    try {
+      cpSync(from, this.plansScratch(wt.id), { recursive: true });
+    } catch (e) {
+      log.warn(wt.id, "could not keep its plans", e);
+    }
+  }
+
   /** The chat into the archive beside a record of the worktree. A failure leaves the files where
    * they were and says so, since deleting them is what the archive exists to stop. */
   private archiveChat(
@@ -761,7 +786,7 @@ export class WorktreeService {
     sessionId: string | undefined,
     reason?: string,
   ): ArchivedWorktree | null {
-    const files = this.chatFiles(wt.id);
+    const files = { ...this.chatFiles(wt.id), plans: this.plansScratch(wt.id) };
     const prompt = firstPrompt(files.transcript);
     // the spend goes on the record now, while the figure is one read away: the live map when the
     // stream reported this session, else the transcript about to move
@@ -787,7 +812,8 @@ export class WorktreeService {
     return summarize(rec, repo.id, at.transcript);
   }
 
-  private chatFiles(worktreeId: string): ChatFiles {
+  /** the chat's own files; its plans sit in the worktree, so the caller names where they are */
+  private chatFiles(worktreeId: string): Omit<ChatFiles, "plans"> {
     return {
       transcript: transcriptPathFor(this.d.paths.transcriptsDir, worktreeId),
       attachments: attachmentsDirFor(this.d.paths.attachmentsDir, worktreeId),
@@ -888,6 +914,9 @@ export class WorktreeService {
   /** a file on an archived worktree's page: a commit's copy with `ref`, else what never landed
    * against where it forked. Null when no archive with kept commits has the id. */
   async archivedFile(archiveId: string, path: string, ref?: string): Promise<{ before: string; after: string } | null> {
+    // a plan is a document the chat was shown, not a change: both sides are the file as it stands
+    const plan = ref ? null : this.archive.planFile(archiveId, path);
+    if (plan !== null) return { before: plan, after: plan };
     const kept = this.archivedGit(archiveId);
     return kept ? kept.file(path, ref) : null;
   }
@@ -955,7 +984,7 @@ export class WorktreeService {
       ...(createdBy ? { createdBy } : {}),
     };
     try {
-      this.archive.take(old.id, this.chatFiles(old.id));
+      this.archive.take(old.id, { ...this.chatFiles(old.id), plans: join(path, PLANS_DIR) });
     } catch (e) {
       log.warn(old.id, "could not move its chat back out of the archive", e);
     }

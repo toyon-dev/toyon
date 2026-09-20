@@ -111,6 +111,10 @@ export const bridgeToShellSchema = z.discriminatedUnion("type", [
   /** a file dropped on the preview that the page itself did not take. The bridge swallowed it:
    * left alone the frame navigates to the file and the running app is gone */
   z.object({ type: z.literal("drop-files") }),
+  /** the page took the keyboard: a hand clicked or typed in it (`gesture`), or it focused something
+   * on its own, the way a field focused on load or an app reloading under someone typing in the
+   * terminal does. The shell's window gets no event when focus enters a frame */
+  z.object({ type: z.literal("focus"), gesture: z.boolean() }),
   /** a Toyon chord pressed while the preview had focus; the shell replays it as a keydown. With
    * `up`, the release of the modifier that chord rode, replayed as a keyup: the worktree walk's
    * peek lasts while its modifier is down, and the bridge is the only one to see it let go */

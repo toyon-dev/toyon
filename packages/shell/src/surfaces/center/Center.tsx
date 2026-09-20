@@ -170,6 +170,22 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
 
   // attribute bridge messages to their worktree via event.source, validate, dispatch
   useEffect(() => {
+    // The seat that held the keyboard last, for a preview that takes it with no hand in it. This
+    // window gets no event when focus enters a frame, and by the time the bridge reports it the
+    // active element is the frame; a frame is not a seat, so focus landing on one leaves this be.
+    // Let go to the body (a blur, a closed pane) there is no seat to give it back to. A move into
+    // a frame reports no related target either, and the frame is the active element only once the
+    // event has run its course, so the body is read a task later, not in the event.
+    let held: HTMLElement | null = null;
+    const onFocusIn = (e: FocusEvent) => {
+      if (e.target instanceof HTMLElement && e.target.tagName !== "IFRAME") held = e.target;
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      if (e.relatedTarget !== null) return;
+      setTimeout(() => {
+        if (document.activeElement === document.body) held = null;
+      }, 0);
+    };
     const onMsg = (e: MessageEvent) => {
       if (!(e.data as { __toyon?: boolean } | null)?.__toyon) return;
       for (const [id, frame] of frameRefs.current) {
@@ -249,6 +265,14 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             // navigate to the file, and it attaches nowhere from out there
             missedFileDrop(store);
             break;
+          case "focus":
+            // a hand clicked or typed in the page: the keyboard is the page's and the seat is
+            // released. Taken with no hand in it (a field focused on load, an app reloading under
+            // someone typing in the terminal), it goes back to the seat that held it; with none
+            // held, the page keeps it
+            if (d.gesture) held = null;
+            else if (document.activeElement === frame && held?.isConnected && held !== document.body) held.focus();
+            break;
           case "highlight-miss":
             console.warn(
               `[toyon] highlight miss on ${d.path}: ${d.fileMatched} elements from this file, ` +
@@ -260,7 +284,13 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
       }
     };
     window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      window.removeEventListener("message", onMsg);
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
   }, [dispatch, store, sock, visits]);
 
   // in zen the page under test owns the keyboard: tell every bridge to stop taking chords

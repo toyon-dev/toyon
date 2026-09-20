@@ -124,6 +124,19 @@ window.addEventListener(
   true,
 );
 
+// A page that takes the keyboard on its own (a field focused on load, an app reloading under a
+// hand typing in the shell's terminal) takes it from the shell, whose window sees no event when
+// focus enters a frame. Reported with whether a hand in here asked for it: activation is a click
+// or a key in the page a moment ago, and a fresh load has none. A browser without the API is
+// read as a hand, so the shell leaves the page alone. A nested shell reports too: its field
+// focused on load is exactly the take the outer one answers.
+const tookKeyboard = () => post({ type: "focus", gesture: navigator.userActivation?.isActive ?? true });
+window.addEventListener("focusin", tookKeyboard, true);
+window.addEventListener("focus", tookKeyboard);
+// a page whose own script ran first (the tag lands at the end of a document with no head) may
+// have taken it already
+if (document.hasFocus() && document.activeElement && document.activeElement !== document.body) tookKeyboard();
+
 // A file dropped on a page that doesn't take it navigates that frame to the file: drop a
 // screenshot on the preview and the running app is gone. Swallow those and tell the shell, which
 // says where the drop should have gone. A page keeps its own drop zones: a handler that called

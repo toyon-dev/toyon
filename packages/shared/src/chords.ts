@@ -33,6 +33,8 @@ export type ChordId =
   | "refs"
   | "routes"
   | "reload"
+  | "back"
+  | "forward"
   | "close";
 
 /** what the shell knows about the browser it runs in; each flag can swap an advertised key */
@@ -173,6 +175,13 @@ export const CHORDS: readonly Chord[] = [
   // bigger reload should mean. With no preview up there is no frame to mean, so the shell lets ⌘R
   // through to the browser (app/keys.ts). An installed app always hands ⌘R over; a tab may keep it.
   { id: "reload", key: "r" },
+  // ⌘←/→ are the browser's back and forward, and with a preview up they step that frame, the page
+  // the hand is looking at, the same way ⌘R reloads it. Left to the browser they walk the tab's
+  // joint history, which is the preview's entries and then the shell's own, so a press with nothing
+  // behind the frame would take the tab out of the shell. In a field the pair is the caret's jump
+  // to the line's ends and stays so. With no preview up they are the browser's (app/keys.ts).
+  { id: "back", key: "ArrowLeft", textKeeps: true },
+  { id: "forward", key: "ArrowRight", textKeeps: true },
   // ⌘W closes the bottom pane Escape would (app/keys.ts), and keeps the window. In an installed app
   // the browser would close the window on it, and the hand that presses it there was closing a
   // terminal tab or an editor tab the way iTerm and VS Code taught it; the daemon keeps every agent
@@ -185,8 +194,10 @@ export const CHORDS: readonly Chord[] = [
 ];
 
 /** the chords that still act in zen, where the preview owns the keyboard: the one that leaves
- * zen, and ⌘W, which with the panes off screen only keeps the app's window where it is */
-export const ZEN_CHORDS: ReadonlySet<ChordId> = new Set<ChordId>(["zen", "close"]);
+ * zen, ⌘W, which with the panes off screen only keeps the app's window where it is, and ⌘←/→,
+ * which mean the page's own back and forward there as everywhere and, left to the browser,
+ * could walk the tab out of the shell */
+export const ZEN_CHORDS: ReadonlySet<ChordId> = new Set<ChordId>(["zen", "close", "back", "forward"]);
 
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };
 

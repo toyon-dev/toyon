@@ -258,6 +258,7 @@ function RouteBar({
       <IconButton
         icon="back"
         label="Back"
+        hint={chord("back")}
         disabled={!ready}
         onClick={() => id && previewBus.post(id, { type: "back" })}
         {...pageMenu}
@@ -265,6 +266,7 @@ function RouteBar({
       <IconButton
         icon="forward"
         label="Forward"
+        hint={chord("forward")}
         disabled={!ready}
         onClick={() => id && previewBus.post(id, { type: "forward" })}
         {...pageMenu}

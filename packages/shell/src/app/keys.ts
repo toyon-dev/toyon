@@ -34,6 +34,9 @@ const inside = (selector: string) => !!document.activeElement?.closest(selector)
 /** the ⌘ chords a focused Monaco keeps for itself; it keeps every ⌥ one too (see useChords) */
 const MONACO_OWNS = new Set<ChordId>(["design", "new", "routes", "chats"]);
 
+/** the chords that act on the previewed page itself, and so mean nothing without one */
+const PAGE_CHORDS = new Set<ChordId>(["reload", "back", "forward"]);
+
 /** the chords that answer on the new-project view: the rest act on a worktree, and the page is about
  * a project that has none yet, over one that is not on screen */
 const VIEW_CHORDS = new Set<ChordId>(["project", "commands", "keys", "zen"]);
@@ -104,9 +107,9 @@ export function useChords() {
       if (monaco && chord && (e.altKey || MONACO_OWNS.has(chord.id))) return;
       // the terminal and the editor type into a textarea of their own, so this covers them as well
       if (chord && chordOf(chord.id).textKeeps && isTyping(document.activeElement)) return;
-      // with no page up (setup, a stopped app, an update waiting on a reload, a chat) ⌘R is the
-      // browser's again: the shell is the only thing on screen that a reload could mean
-      if (chord?.id === "reload" && !(previewIdOf(s) && routeTarget(s))) return;
+      // with no page up (setup, a stopped app, an update waiting on a reload, a chat) ⌘R and ⌘←/→
+      // are the browser's again: the shell is the only thing on screen they could mean
+      if (chord && PAGE_CHORDS.has(chord.id) && !(previewIdOf(s) && routeTarget(s))) return;
       if (chord) {
         e.preventDefault();
         if (s.newProject && !VIEW_CHORDS.has(chord.id)) return;
@@ -158,10 +161,12 @@ export function useChords() {
             if (s.overlay?.kind === "routes") dispatch({ a: "close" });
             else if (routeTarget(s)) dispatch({ a: "open", overlay: { kind: "routes" } });
             break;
-          case "reload": {
+          case "reload":
+          case "back":
+          case "forward": {
             // the frame on screen only, which is up by now (a press with none went to the browser)
             const id = previewIdOf(s);
-            if (id) previewBus.post(id, { type: "reload" });
+            if (id) previewBus.post(id, { type: chord.id });
             break;
           }
           case "pick":

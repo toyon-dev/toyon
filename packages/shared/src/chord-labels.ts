@@ -43,6 +43,10 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   "term-tab": { label: "next terminal tab", section: "Panels" },
   routes: { label: "go to page", section: "Preview" },
   reload: { label: "reload the preview", section: "Preview" },
+  // never on the card: they are the browser's own back and forward keys, and the hand already has
+  // them; the bar's arrows carry the hint for anyone who wonders
+  back: { label: "back in the preview", section: "Preview", hidden: true },
+  forward: { label: "forward in the preview", section: "Preview", hidden: true },
   // never on the card: it is only live in an installed app, and there it is the key the hand
   // already presses to close a pane
   close: { label: "close the pane", section: "Panels", hidden: true },

@@ -480,11 +480,18 @@ window.addEventListener("message", (e) => {
       if (/^[/?#]/.test(d.path)) location.assign(d.path);
       break;
     case "back":
-      history.back();
+    case "forward": {
+      // history.back() walks the tab's joint session history, so a frame with nothing of its own
+      // behind it would step the shell's tab out of the shell. The Navigation API counts this
+      // frame's entries alone, so where it exists the step is only taken when the frame has one;
+      // a browser without it takes the step as before.
+      const nav = (window as { navigation?: { canGoBack: boolean; canGoForward: boolean } }).navigation;
+      const can = d.type === "back" ? nav?.canGoBack : nav?.canGoForward;
+      if (can === false) break;
+      if (d.type === "back") history.back();
+      else history.forward();
       break;
-    case "forward":
-      history.forward();
-      break;
+    }
     case "links": {
       // the pages an app with no route table offers from here: same-origin links a click would follow
       const seen = new Set<string>();

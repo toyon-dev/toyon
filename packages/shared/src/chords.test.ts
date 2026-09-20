@@ -140,6 +140,18 @@ describe("matchChord", () => {
     expect(matchChord(ev("r"), { guest: true })).toEqual({ id: "reload" });
     expect(matchChord(ev("R", { shift: true }))).toBeNull();
   });
+  test("⌘←/→ step the preview's history, from inside it too; a field keeps them as the caret's jumps", () => {
+    expect(matchChord(ev("ArrowLeft"))).toEqual({ id: "back" });
+    expect(matchChord(ev("ArrowRight"))).toEqual({ id: "forward" });
+    expect(matchChord(ev("ArrowLeft"), { guest: true })).toEqual({ id: "back" });
+    expect(matchChord(ev("ArrowLeft", { shift: true }))).toBeNull(); // ⌘⇧← extends a selection
+    expect(matchChord(ev("ArrowLeft", { meta: false, ctrl: true }))).toBeNull(); // ⌃← is a Space switch
+    expect(chordOf("back").textKeeps).toBe(true);
+    expect(chordOf("forward").textKeeps).toBe(true);
+    // left to the browser in zen they would walk the tab's history, and out of the shell
+    expect(ZEN_CHORDS.has("back")).toBe(true);
+    expect(ZEN_CHORDS.has("forward")).toBe(true);
+  });
   test("⌘⇧U marks the worktree unread, as it does a message in Mail", () => {
     expect(matchChord(ev("U", { shift: true }))).toEqual({ id: "mark-unread" });
     expect(matchChord(ev("u", { shift: true }))).toEqual({ id: "mark-unread" });
@@ -203,6 +215,8 @@ describe("labels", () => {
     expect(chordLabel("refs")).toBe("⌘⇧G");
     expect(chordLabel("chats")).toBe("⌘G");
     expect(chordLabel("reload")).toBe("⌘R");
+    expect(chordLabel("back")).toBe("⌘←");
+    expect(chordLabel("forward")).toBe("⌘→");
     // an installed app window has no tabs, so it lets ⌃Tab through; the ⇧ belongs to the alias
     expect(chordLabel("wt-next", { pwa: true })).toBe("⌃Tab");
     expect(chordLabel("wt-prev", { pwa: true })).toBe("⌃⇧Tab");
@@ -215,6 +229,9 @@ describe("labels", () => {
       expect(chordsInSection(section)).not.toContain("wt-unseen-prev");
       // a key only an installed app ever sees has no row to read
       expect(chordsInSection(section)).not.toContain("close");
+      // the browser's own keys: nothing to teach
+      expect(chordsInSection(section)).not.toContain("back");
+      expect(chordsInSection(section)).not.toContain("forward");
     }
     expect(chordsInSection("Worktrees")).toContain("wt-unseen-next");
     expect(chordsInSection("Worktrees")).toContain("wt-next");

@@ -8,7 +8,7 @@
 // is the turn's recap and stays with the turn.
 
 import { type AgentStatus, canLand, type Landing, type LastTurn, type WorktreeInfo } from "@toyon/shared";
-import { type LandVerdict, landPrompt } from "../agent/landing.ts";
+import { answerPrompt, type LandVerdict, landPrompt } from "../agent/landing.ts";
 import { firstAskOf, turnsSince } from "../agent/recap.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
@@ -30,6 +30,8 @@ export interface LandingServiceDeps {
   check: (worktreeId: string, command: string, opts?: { quiet?: boolean }) => Promise<ExecResult>;
   /** the verdict and message from the worktree's own agent, or null; without it the check decides */
   judge?: (wt: WorktreeInfo, prompt: string) => Promise<LandVerdict | null>;
+  /** the sentence alone, for a finished turn with nothing to land; without it the line is the facts */
+  recap?: (wt: WorktreeInfo, prompt: string) => Promise<string | null>;
 }
 
 /** how much of a failed check the placeholder gets: its last lines, where the verdict usually is */
@@ -76,7 +78,40 @@ export class LandingService {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || !canLand(wt)) return;
     if (turn.end !== "done") return this.clear(worktreeId);
+    if (!(await this.hasWork(wt))) {
+      // nothing to judge and no message to write, but the turn still said something worth a line
+      this.clear(worktreeId);
+      return this.recapAnswer(wt, turn);
+    }
     await this.run(wt, { at: turn.at, ask: true, quiet: false });
+  }
+
+  /** The sentence for a turn that answered rather than changed anything. It is stamped only while
+   * the turn it describes is still the last one: a new turn drops the question with the verdict's
+   * own bookkeeping, and a slower answer to an older turn is left out. */
+  private async recapAnswer(wt: WorktreeInfo, turn: LastTurn) {
+    if (!this.d.recap) return;
+    const worktreeId = wt.id;
+    const entries = this.d.transcript(worktreeId);
+    const turns = turnsSince(entries, 0);
+    // a turn with no words, tools alone or an empty reply, has nothing to recap
+    if (!turns.at(-1)?.reply.trim()) return;
+    this.judging.set(worktreeId, turn.at);
+    const started = Date.now();
+    let text: string | null = null;
+    try {
+      text = await this.d.recap(wt, answerPrompt({ title: wt.title, firstAsk: firstAskOf(entries), turns }));
+    } catch (e) {
+      log.warn(worktreeId, "answer recap failed", e);
+    }
+    if (this.judging.get(worktreeId) !== turn.at) return;
+    this.judging.delete(worktreeId);
+    const record = this.d.state.worktree(worktreeId)?.lastTurn;
+    if (!text || !record || record.at !== turn.at) return;
+    record.recap = { at: Date.now(), text };
+    log.info(worktreeId, `answer recap, ${Date.now() - started}ms`);
+    this.d.state.save();
+    this.d.hub.emit("worktreesChanged");
   }
 
   /** The verdict by hand: the same check and the same question, for a tree that moved under the

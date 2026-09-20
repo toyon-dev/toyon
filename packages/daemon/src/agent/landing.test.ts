@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { landPrompt, parseLanding } from "./landing.ts";
+import { answerPrompt, landPrompt, parseLanding } from "./landing.ts";
 
 describe("parseLanding", () => {
   test("a ready verdict carries the recap, the subject and body, with the model's punctuation scrubbed", () => {
@@ -78,6 +78,20 @@ describe("landPrompt", () => {
     expect(p).toContain("User asked: fix the flash");
     expect(p).toContain("Diff summary:\nsrc/App.tsx | 12 ++++");
     expect(p.indexOf("make a dark mode")).toBeLessThan(p.indexOf("fix the flash"));
+  });
+
+  test("the answer question carries the same turns and no diff", () => {
+    const p = answerPrompt({
+      title: "dark mode",
+      firstAsk: "make a dark mode",
+      turns: [turn(["make a dark mode"], "Dark mode is in."), turn(["is it accessible?"], "Yes, the contrast passes.")],
+    });
+    expect(p).toContain("Task: dark mode");
+    expect(p).toContain("First request: make a dark mode");
+    expect(p).toContain("User asked: is it accessible?");
+    expect(p).toContain("Agent ended with: Yes, the contrast passes.");
+    expect(p).not.toContain("Diff summary");
+    expect(p).not.toContain("READY");
   });
 
   test("drops the oldest turns first when the prompt runs long", () => {

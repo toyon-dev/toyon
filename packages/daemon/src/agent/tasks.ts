@@ -8,8 +8,9 @@ import type { AttachmentInput, WorktreeInfo } from "@toyon/shared";
 import type { StateStore } from "../core/state.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry } from "../runtime/registry.ts";
 import { sentenceCase } from "../worktrees/naming.ts";
-import { LAND_SYSTEM, type LandVerdict, parseLanding } from "./landing.ts";
+import { ANSWER_SYSTEM, LAND_SYSTEM, type LandVerdict, parseLanding } from "./landing.ts";
 import { askFreshAgent } from "./oneshot.ts";
+import { parseRecap } from "./recap.ts";
 import type { AgentRegistry } from "./registry.ts";
 
 export const NAME_SYSTEM = "You are a naming assistant. Reply with only the requested name.";
@@ -95,22 +96,36 @@ function lacksQuickModel(
   return offered.length > 0 && !offered.some((m) => m.id === quick);
 }
 
-/** The landing verdict, the recap sentence and the commit message, on the worktree's own agent, its
- * quick model or nothing: the one side question that would rather go unasked than cost what the
- * chat costs. It never starts a runtime, and never wakes an agent whose model list is already
- * known to lack its quick model. Without one, readiness rests on the check alone and the recap
- * is facts. */
-export function makeLander(
+/** A question on the worktree's own agent, its quick model or nothing: the side questions that
+ * would rather go unasked than cost what the chat costs. It never starts a runtime, and never
+ * wakes an agent whose model list is already known to lack its quick model. */
+function makeQuickAsker(
   runtime: Pick<RuntimeRegistry, "agentFor">,
   agents: Pick<AgentRegistry, "get">,
   state: Pick<StateStore, "cachedOptions" | "defaultAgent">,
 ) {
-  return async (wt: WorktreeInfo, prompt: string): Promise<LandVerdict | null> => {
+  return async (wt: WorktreeInfo, system: string, prompt: string): Promise<string | null> => {
     const spec = agents.get(wt.agent ?? state.defaultAgent ?? DEFAULT_AGENT_ID);
     if (!spec || lacksQuickModel(spec, state)) return null;
     const agent = runtime.agentFor(wt.id);
-    return agent ? parseLanding(await agent.ask(LAND_SYSTEM, prompt, { quick: "require" })) : null;
+    return agent ? agent.ask(system, prompt, { quick: "require" }) : null;
   };
+}
+
+/** The landing verdict, the recap sentence and the commit message, after a finished turn with
+ * work on it. Without a quick model, readiness rests on the check alone and the recap is facts. */
+export function makeLander(...deps: Parameters<typeof makeQuickAsker>) {
+  const ask = makeQuickAsker(...deps);
+  return async (wt: WorktreeInfo, prompt: string): Promise<LandVerdict | null> =>
+    parseLanding(await ask(wt, LAND_SYSTEM, prompt));
+}
+
+/** The recap sentence alone, after a finished turn that left nothing to land: an answer, a review,
+ * an explanation. Without a quick model the line is the facts, as for the landing question. */
+export function makeAnswerRecapper(...deps: Parameters<typeof makeQuickAsker>) {
+  const ask = makeQuickAsker(...deps);
+  return async (wt: WorktreeInfo, prompt: string): Promise<string | null> =>
+    parseRecap(await ask(wt, ANSWER_SYSTEM, prompt));
 }
 
 /** plans a batch on the agent the batch will run, spawned for the question (no worktree exists yet) */

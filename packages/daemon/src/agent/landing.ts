@@ -1,7 +1,9 @@
 // The landing question: after a finished turn, does the work read as done, where does it stand in
 // one sentence, and what would its commit message be. One quick-model call per landable turn,
-// parsed into a verdict, a recap and a message. Pure, like recap.ts: the prompt is built from
-// transcript slices and git's own summary of the diff.
+// parsed into a verdict, a recap and a message. A turn that finishes with nothing to land gets the
+// smaller answer question instead: the sentence alone, since there is no verdict to give and no
+// message to write. Pure, like recap.ts: the prompt is built from transcript slices and git's own
+// summary of the diff.
 
 import type { TurnSlice } from "./recap.ts";
 import { clip, parseRecap } from "./recap.ts";
@@ -52,6 +54,25 @@ function turnBlock(t: TurnSlice): string {
   if (t.asks.length) lines.push(`User asked: ${clip(t.asks.join(" / "), 400)}`);
   if (t.reply.trim()) lines.push(`Agent ended with: ${clip(t.reply, 1_000)}`);
   return lines.join("\n");
+}
+
+export const ANSWER_SYSTEM = "You recap where a coding task stands in one sentence. Reply with the sentence only.";
+
+const ANSWER_ASK = [
+  "A coding agent just replied in a git worktree without changing any files: it answered a question, reviewed something, or explained what it found.",
+  "Write one sentence under 20 words for the user coming back to this task, saying what was asked and what the agent answered or recommended. Skip narrative and secondary points. No markdown, no dashes as punctuation.",
+].join("\n");
+
+export type AnswerInput = Pick<LandInput, "title" | "firstAsk" | "turns">;
+
+/** the answer question: the same turns the landing question reads, with no diff to describe */
+export function answerPrompt(i: AnswerInput): string {
+  const head = [ANSWER_ASK, "", `Task: ${clip(i.title, 200)}`];
+  if (i.firstAsk) head.push(`First request: ${clip(i.firstAsk, 300)}`);
+  let blocks = i.turns.slice(-LAND_TURNS).map(turnBlock);
+  const size = () => [...head, "", ...blocks].join("\n\n").length;
+  while (blocks.length > 1 && size() > LAND_CHARS) blocks = blocks.slice(1);
+  return [head.join("\n"), blocks.join("\n\n")].join("\n\n");
 }
 
 export interface LandVerdict {

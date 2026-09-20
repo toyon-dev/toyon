@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Landing, LastTurn, RepoInfo, WorktreeInfo } from "@toyon/shared";
+import type { AgentEvent, Landing, LastTurn, RepoInfo, WorktreeInfo } from "@toyon/shared";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import type { LandVerdict } from "../agent/landing.ts";
+import type { TranscriptEntry } from "../agent/transcript.ts";
 import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT } from "../git/exec.ts";
@@ -21,6 +22,21 @@ interface Opts {
   verdict?: LandVerdict | null | "none";
   /** a judge of the test's own, for an answer that has to arrive late */
   judge?: (prompt: string) => Promise<LandVerdict | null>;
+  /** the answer question's sentence for a turn with nothing to land; absent leaves it unasked */
+  recap?: (prompt: string) => Promise<string | null>;
+  /** what the worktree's agent has on its transcript */
+  transcript?: TranscriptEntry[];
+}
+
+/** a transcript of one finished turn: the ask, the reply, and how it ended */
+function answered(ask: string, reply: string): TranscriptEntry[] {
+  const events: AgentEvent[] = [
+    { type: "user-message", text: ask, ts: 1 },
+    { type: "turn-start", ts: 2 },
+    { type: "text-delta", text: reply },
+    { type: "turn-end", stopReason: "end_turn", ts: 3 },
+  ];
+  return events.map((event, seq) => ({ seq, event }));
 }
 
 function world(opts: Opts = {}) {
@@ -53,6 +69,8 @@ function world(opts: Opts = {}) {
   /** whether each check was asked to keep its rows off the transcript unless it failed */
   const quiet: boolean[] = [];
   const judged: string[] = [];
+  /** the prompts the answer question was asked with */
+  const recapped: string[] = [];
   const service = new LandingService({
     state,
     hub,
@@ -65,7 +83,15 @@ function world(opts: Opts = {}) {
         else delete row.landing;
       },
     },
-    transcript: () => [],
+    transcript: () => opts.transcript ?? [],
+    ...(opts.recap
+      ? {
+          recap: async (_wt, prompt) => {
+            recapped.push(prompt);
+            return opts.recap?.(prompt) ?? null;
+          },
+        }
+      : {}),
     check: async (_id, command, o) => {
       checks.push(command);
       quiet.push(!!o?.quiet);
@@ -98,6 +124,10 @@ function world(opts: Opts = {}) {
     for (let i = 0; i < 50 && !set.slice(n).some((l) => l === undefined || l.check !== "pending"); i++)
       await Bun.sleep(10);
   };
+  /** the answer question has settled once the turn carries its sentence, or a wait runs out */
+  const recapSettled = async () => {
+    for (let i = 0; i < 50 && !state.worktree("w1")?.lastTurn?.recap; i++) await Bun.sleep(10);
+  };
   return {
     ...t,
     wtPath,
@@ -108,8 +138,10 @@ function world(opts: Opts = {}) {
     checks,
     quiet,
     judged,
+    recapped,
     settle,
     settled,
+    recapSettled,
     dirty,
     wt: () => state.worktree("w1"),
   };
@@ -221,6 +253,54 @@ describe("LandingService", () => {
     await Bun.sleep(30);
     expect(w.wt()?.landing).toBeUndefined();
     expect(w.set.every((l) => l === undefined || l.check === "pending")).toBe(true);
+  });
+
+  test("a clean tree after a finished turn asks the answer question and the turn gets its sentence", async () => {
+    w = world({
+      recap: async () => "Asked whether a clean turn gets a recap; it does not, the row shows the facts.",
+      transcript: answered("do we still recap with no files changed?", "No. The sentence rides with the verdict."),
+    });
+    await w.settle();
+    await w.recapSettled();
+    expect(w.set).toEqual([undefined]);
+    expect(w.checks).toEqual([]);
+    expect(w.judged).toEqual([]);
+    expect(w.recapped.length).toBe(1);
+    expect(w.recapped[0]).toContain("Task: feature");
+    expect(w.recapped[0]).toContain("User asked: do we still recap with no files changed?");
+    expect(w.recapped[0]).toContain("Agent ended with: No. The sentence rides with the verdict.");
+    expect(w.recapped[0]).not.toContain("Diff summary");
+    expect(w.wt()?.lastTurn?.recap?.text).toBe(
+      "Asked whether a clean turn gets a recap; it does not, the row shows the facts.",
+    );
+    expect(w.wt()?.landing).toBeUndefined();
+  });
+
+  test("the answer question is not asked for a turn with no reply, nor for a stop that is not a finish", async () => {
+    w = world({ recap: async () => "A sentence.", transcript: answered("hello", "   ") });
+    await w.settle();
+    await Bun.sleep(30);
+    expect(w.recapped).toEqual([]);
+    expect(w.wt()?.lastTurn?.recap).toBeUndefined();
+    await w.settle("stopped", 200);
+    await Bun.sleep(30);
+    expect(w.recapped).toEqual([]);
+  });
+
+  test("an answer to an older turn is dropped once a new one has started", async () => {
+    let release: (v: string) => void = () => {};
+    const slow = new Promise<string>((r) => {
+      release = r;
+    });
+    w = world({ recap: () => slow, transcript: answered("wdyt", "I'd do it.") });
+    await w.settle("done", 100, false);
+    for (let i = 0; i < 200 && !w.recapped.length; i++) await Bun.sleep(10);
+    expect(w.recapped.length).toBe(1);
+    w.hub.emit("agentStatus", "w1", "working");
+    release("Asked for a view; the agent would do it.");
+    await slow;
+    await Bun.sleep(30);
+    expect(w.wt()?.lastTurn?.recap).toBeUndefined();
   });
 
   test("judge() by hand runs the check and asks the question, for a tree with no verdict", async () => {

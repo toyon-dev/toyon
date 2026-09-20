@@ -310,9 +310,10 @@ export interface LastTurn {
   at: number;
   end: TurnEnd;
   facts: TurnFacts;
-  /** the agent's one sentence on where the work stands, written with the landing verdict a moment
-   * after a finished turn with work on it. Absent on every other stop, and on an agent with no
-   * quick model, where the line is the facts. */
+  /** the agent's one sentence on where the work stands, written a moment after a finished turn:
+   * with the landing verdict when there is work on the tree, from the smaller answer question when
+   * there is none. Absent on every other stop, and on an agent with no quick model, where the line
+   * is the facts. */
   recap?: { at: number; text: string };
 }
 

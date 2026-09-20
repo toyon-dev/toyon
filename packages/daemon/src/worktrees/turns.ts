@@ -1,8 +1,9 @@
 // When a worktree's agent stops, and whether anyone has seen it since. The rail rings a worktree
 // that stopped while nobody was looking and the recap line says what happened; both read the one
 // record stamped here, of how the agent last stopped and what the turns since you looked did. The
-// sentence on that record is the landing service's: it is written with the verdict, from the same
-// question, so a finished turn with work on it has one within seconds whoever was looking.
+// sentence on that record is the landing service's: written with the verdict, from the same
+// question, when the turn left work on the tree, and from a smaller question when it only
+// answered, so a finished turn has one within seconds whoever was looking.
 
 import type { AgentStatus, TurnEnd } from "@toyon/shared";
 import { factsOf, openAskOf, turnsSince } from "../agent/recap.ts";

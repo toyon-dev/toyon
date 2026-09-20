@@ -21,7 +21,7 @@ import { LinuxSandbox } from "./agent/linuxSandbox.ts";
 import { OptionProbe } from "./agent/probe.ts";
 import { loadAgentRegistry } from "./agent/registry.ts";
 import { prepareLaunch } from "./agent/sandbox.ts";
-import { makeLander, makePlanner } from "./agent/tasks.ts";
+import { makeAnswerRecapper, makeLander, makePlanner } from "./agent/tasks.ts";
 import { transcriptPathFor } from "./agent/transcript.ts";
 import { locateAssets, pruneAssets } from "./core/assets.ts";
 import { cloud } from "./core/cloud.ts";
@@ -176,6 +176,7 @@ const landing = new LandingService({
   transcript: (id) => runtime.agentFor(id)?.transcript() ?? [],
   check: (id, command, opts) => exec.exec(id, command, CHECK_TOOL, opts),
   judge: makeLander(runtime, agents, state),
+  recap: makeAnswerRecapper(runtime, agents, state),
 });
 const refs = new RefSearch({ state });
 const chats = new ChatSearch({

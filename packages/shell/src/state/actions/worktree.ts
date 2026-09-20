@@ -19,7 +19,7 @@ import type { DaemonSocket } from "../../ws.ts";
 import { profileNames, profileOf } from "../profiles.ts";
 import type { Action, ShipOp, State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
-import { editorItems } from "./editor.ts";
+import { revealItems } from "./editor.ts";
 
 type Dispatch = (a: Action) => void;
 
@@ -95,8 +95,8 @@ export type WorktreeItemState = Pick<State, "layout" | "shipping">;
 
 /** Everything a worktree of ours can do, in the order the rail's menu shows it; the palette reads
  * the same list with the title appended. `graft` is the rail's own multi-select, so only the rail
- * passes it and the palette has no graft line. `hostname` is where the page is open: the editor
- * and Finder rows only mean something on the daemon's own machine. */
+ * passes it and the palette has no graft line. `hostname` is where the page is open: the Finder
+ * row only means something on the daemon's own machine. */
 export function worktreeItems(
   w: OwnedWorktree,
   repo: RepoInfo | null,
@@ -138,7 +138,7 @@ export function worktreeItems(
       dispatch({ a: "focus-terminal" });
     },
   });
-  go.push(...editorItems(w.path, () => sock?.send({ t: "reveal", worktreeId: id }), ui.hostname));
+  go.push(...revealItems(() => sock?.send({ t: "reveal", worktreeId: id }), ui.hostname));
   copy.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
   copy.push({ id: "copy-branch", label: "copy branch name", onClick: () => copyText(w.worktree.branch) });
   // what a second agent is pointed at: the chat as a file it can read, and the id the agent's
@@ -247,6 +247,6 @@ export function discoveredItems(
       dispatch({ a: "focus-terminal" });
     },
   });
-  items.push(...editorItems(d.path, () => sock?.send({ t: "reveal", worktreeId: d.id }), hostname));
+  items.push(...revealItems(() => sock?.send({ t: "reveal", worktreeId: d.id }), hostname));
   return grouped([adopt, items, [{ id: "copy-path", label: "copy path", onClick: () => copyText(d.path) }]]);
 }

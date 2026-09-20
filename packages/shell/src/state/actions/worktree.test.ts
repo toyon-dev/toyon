@@ -48,9 +48,8 @@ describe("a worktree's actions", () => {
     );
     expect(labels(quiet)).toEqual([
       "open terminal",
-      "open in Zed",
-      "open in VS Code",
-      "open in Cursor",
+      // no editor rows: a whole copy is reached from its terminal or its path, and the editor
+      // deep links stay on the file rows
       "reveal in Finder",
       "|",
       "copy path",
@@ -76,9 +75,6 @@ describe("a worktree's actions", () => {
       "|",
       "view changes (2)",
       "open terminal",
-      "open in Zed",
-      "open in VS Code",
-      "open in Cursor",
       "reveal in Finder",
       "|",
       "copy path",
@@ -95,7 +91,7 @@ describe("a worktree's actions", () => {
     ]);
   });
 
-  test("from another device the editor and Finder rows go, since nothing there could open", () => {
+  test("from another device the Finder row goes, since nothing there could open", () => {
     const away = worktreeItems(owned(), null, { layout: { ...defaultLayout, changes: true }, shipping: {} }, deps, {
       hostname: "box.tail1234.ts.net",
     });
@@ -104,7 +100,7 @@ describe("a worktree's actions", () => {
 
   test("hands the chat over as a file path and a session id, but not from main, which has no chat", () => {
     const s = { layout: { ...defaultLayout, changes: true }, shipping: {} };
-    const copies = (items: MenuEntry[]) => labels(items).slice(6, 10);
+    const copies = (items: MenuEntry[]) => labels(items).slice(3, 7);
     const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, here);
     expect(copies(chat)).toEqual(["copy path", "copy branch name", "copy transcript path", "copy session id"]);
     // a session not opened yet has no id to copy
@@ -187,9 +183,6 @@ describe("a worktree's actions", () => {
       "|",
       "sync from main (1 behind)",
       "open a shell here",
-      "open in Zed",
-      "open in VS Code",
-      "open in Cursor",
       "reveal in Finder",
       "|",
       "copy path",

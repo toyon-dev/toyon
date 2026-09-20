@@ -26,6 +26,14 @@ export function editorItems(absPath: string, onReveal?: () => void, hostname = l
       window.location.href = `${ed.scheme}://file${absPath}`;
     },
   }));
-  if (onReveal) items.push({ id: "reveal", label: "reveal in Finder", onClick: onReveal });
+  items.push(...revealItems(onReveal, hostname));
   return items;
+}
+
+/** the Finder reveal alone, for a directory: a worktree's row offers no editor rows, since opening
+ * a file in an editor is the way out of the editor pane and a whole copy is reached from its
+ * terminal or its path */
+export function revealItems(onReveal: (() => void) | undefined, hostname = location.hostname): MenuItem[] {
+  if (!onReveal || !openedOnDaemonMachine(hostname)) return [];
+  return [{ id: "reveal", label: "reveal in Finder", onClick: onReveal }];
 }

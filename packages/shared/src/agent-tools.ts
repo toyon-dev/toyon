@@ -23,3 +23,21 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set(["Edit", "Write", "Multi
 export function isWriteTool(ev: { name: string; kind?: ToolKind }): boolean {
   return ev.kind ? WRITE_KINDS.has(ev.kind) : WRITE_TOOLS.has(ev.name);
 }
+
+// A call whose input the agent writes out token by token: its row exists before the path or
+// command it names has arrived, and until then the call is being written, not run. A think or a
+// mode switch has nothing to write, so an empty input there is the whole call. A tuple, so the
+// phrase the shell prints per kind is typed over exactly this set.
+export const WRITTEN_KINDS = ["read", "edit", "delete", "move", "search", "execute", "fetch"] as const;
+export type WrittenKind = (typeof WRITTEN_KINDS)[number];
+
+export function isWrittenKind(kind: string | undefined): kind is WrittenKind {
+  return (WRITTEN_KINDS as readonly string[]).includes(kind ?? "");
+}
+
+/** no input yet: nothing, or the empty list of locations a call with no raw input starts as */
+export function emptyInput(input: unknown): boolean {
+  if (!input || typeof input !== "object") return true;
+  const rec = input as Record<string, unknown>;
+  return Object.keys(rec).every((k) => k === "locations" && Array.isArray(rec[k]) && rec[k].length === 0);
+}

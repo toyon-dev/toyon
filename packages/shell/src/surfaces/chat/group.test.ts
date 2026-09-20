@@ -304,6 +304,22 @@ describe("groupTools", () => {
     expect(open([tool("think", "/wt/a.ts", { done: false })])).toBe(0);
   });
 
+  test("a call cut off before its input arrived is not a row", () => {
+    // the adapter's placeholder for a Bash call, ended with nothing under it: a message sent
+    // mid-turn pre-empted it. Between two edits of one file it is not there to break the run.
+    const ghost = (extra: Partial<ChatItem> = {}) =>
+      tool("execute", "", { name: "", title: "Terminal", input: {}, ...extra });
+    const items = [tool("edit", "/wt/a.ts"), ghost(), tool("edit", "/wt/a.ts"), ghost({ input: { locations: [] } })];
+    expect(shape(items, ["/wt"])).toEqual([{ at: 0, n: 2 }]);
+    // the same shape still running is the row that says "writing the command"
+    expect(shape([ghost({ done: false })])).toEqual([{ at: 0, n: 1 }]);
+    // and one that failed, or printed, ran: it stays
+    expect(shape([ghost({ isError: true }), ghost({ output: "x" })])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 1 },
+    ]);
+  });
+
   test("two subagents reading one file do not fold into each other's row", () => {
     const items = [
       tool("read", "/wt/a.ts", { parentToolId: "task1" }),

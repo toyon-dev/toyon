@@ -1,3 +1,4 @@
+import { emptyInput, isWrittenKind } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 import { toolLabel } from "./toolCall.ts";
 
@@ -78,6 +79,15 @@ function spawnIds(items: ChatItem[]): ReadonlySet<string> {
   return ids;
 }
 
+/** a call the agent was cut off writing: opened, then ended with no input and nothing to show. A
+ * message sent mid-turn pre-empts the generation, and the daemon ends the half-written call once
+ * the agent moves on (acp/map.ts); a turn that stopped or was cut by a restart ends it the same
+ * way. Nothing ran, so there is no row: printed, it would carry the adapter's placeholder title
+ * ("Terminal") as if a tool by that name had. */
+function cutOff(item: ToolItem): boolean {
+  return item.done && !item.output && !item.isError && isWrittenKind(item.toolKind) && emptyInput(item.input);
+}
+
 export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
   const spawns = spawnIds(items);
   const out: ChatEntry[] = [];
@@ -91,6 +101,7 @@ export function groupTools(items: ChatItem[], roots: string[]): ChatEntry[] {
       out.push({ at, item });
       continue;
     }
+    if (cutOff(item)) continue;
     if (spawns.has(item.id)) {
       key = "";
       const run: ToolEntry[] = [];

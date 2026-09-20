@@ -11,7 +11,7 @@ import type {
   ToolCallContent,
   ToolKind,
 } from "@agentclientprotocol/sdk";
-import type { AgentCommand, AgentEvent } from "@toyon/shared";
+import { type AgentCommand, type AgentEvent, emptyInput, isWrittenKind } from "@toyon/shared";
 import { log } from "../../core/log.ts";
 import { unifiedDiff } from "./diff.ts";
 import { currentValues, readOptions } from "./options.ts";
@@ -23,6 +23,10 @@ export interface ToolMemo {
   content: ToolCallContent[];
   rawOutput?: unknown;
   ended: boolean;
+  /** the agent is still writing the call: its kind takes an input and none has been forwarded */
+  writing: boolean;
+  /** the call that spawned this one, so a subagent's stream is read apart from the main agent's */
+  parent?: string;
 }
 
 /** per-session memory of tool calls; cleared when the session's process goes away */
@@ -106,43 +110,69 @@ export function endOfAsk(
   };
 }
 
+/** The calls still waiting for their input when this stream moved on, ended: nothing more is coming
+ * for them. The Claude adapter finishes one call's input before it opens the next, two calls in one
+ * message included, and its prose never follows a call it is still writing; so a call with no
+ * input when the next call or word arrives was cut off, which a message sent mid-turn does
+ * (steering.ts: the agent pre-empts its own generation), and the adapter then sends nothing for it,
+ * no status and no update. Left alone the row would shimmer until the turn ends and then print
+ * the adapter's placeholder title as if a tool by that name had run. Read per spawning call: two
+ * subagents' streams interleave, and one of them writing a call says nothing about the other's. */
+function abandoned(memos: ToolMemos, parent: string | undefined): AgentEvent[] {
+  const out: AgentEvent[] = [];
+  for (const [toolId, memo] of memos) {
+    if (memo.ended || !memo.writing || memo.parent !== parent) continue;
+    memo.ended = true;
+    out.push({ type: "tool-end", toolId });
+  }
+  return out;
+}
+
 export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string): AgentEvent[] {
   switch (update.sessionUpdate) {
     case "agent_message_chunk": {
-      const text = textOf(update.content, tag, "message");
-      if (text === null) return [];
       // the adapter forwards a subagent's prose like any other chunk and only declines to count it
       // as the turn's answer, so without this it lands in the transcript under the main agent's
       // name: the one thing it is not
       const { parentToolId } = spawnOf(update._meta);
-      return [parentToolId ? { type: "tool-delta", toolId: parentToolId, text } : { type: "text-delta", text }];
+      const out = abandoned(memos, parentToolId);
+      const text = textOf(update.content, tag, "message");
+      if (text === null) return out;
+      out.push(parentToolId ? { type: "tool-delta", toolId: parentToolId, text } : { type: "text-delta", text });
+      return out;
     }
     case "agent_thought_chunk": {
       // a subagent's reasoning stays where it was thought. The row is a record of what the call
       // produced, and unlabelled thinking folded into that panel reads as something it decided.
-      if (spawnOf(update._meta).parentToolId) return [];
+      const { parentToolId } = spawnOf(update._meta);
+      const out = abandoned(memos, parentToolId);
+      if (parentToolId) return out;
       const text = textOf(update.content, tag, "thought");
-      return text === null ? [] : [{ type: "thinking-delta", text }];
+      if (text !== null) out.push({ type: "thinking-delta", text });
+      return out;
     }
     case "tool_call": {
+      const spawn = spawnOf(update._meta);
+      const out = abandoned(memos, spawn.parentToolId);
+      const input = update.rawInput ?? { locations: update.locations ?? [] };
       const memo: ToolMemo = {
         ...heading(update),
         content: update.content ?? [],
         rawOutput: update.rawOutput,
         ended: false,
+        writing: isWrittenKind(update.kind ?? undefined) && emptyInput(input),
+        ...(spawn.parentToolId ? { parent: spawn.parentToolId } : {}),
       };
       memos.set(update.toolCallId, memo);
-      const out: AgentEvent[] = [
-        {
-          type: "tool-start",
-          toolId: update.toolCallId,
-          name: memo.name,
-          input: update.rawInput ?? { locations: update.locations ?? [] },
-          ...(memo.kind ? { kind: memo.kind } : {}),
-          title: memo.title,
-          ...spawnOf(update._meta),
-        },
-      ];
+      out.push({
+        type: "tool-start",
+        toolId: update.toolCallId,
+        name: memo.name,
+        input,
+        ...(memo.kind ? { kind: memo.kind } : {}),
+        title: memo.title,
+        ...spawn,
+      });
       // some agents report a one-shot tool already finished
       if (update.status === "completed" || update.status === "failed")
         out.push(endOf(update.toolCallId, memo, update.status));
@@ -153,22 +183,26 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
       const out: AgentEvent[] = [];
       if (!memo) {
         // an update for a call we never saw start (adapter quirk): show it rather than lose it
+        const spawn = spawnOf(update._meta);
+        const input = update.rawInput ?? { locations: update.locations ?? [] };
         memo = {
           name: update.name ?? "",
           title: update.title ?? update.name ?? "tool",
           ...(update.kind ? { kind: update.kind } : {}),
           content: [],
           ended: false,
+          writing: isWrittenKind(update.kind ?? undefined) && emptyInput(input),
+          ...(spawn.parentToolId ? { parent: spawn.parentToolId } : {}),
         };
         memos.set(update.toolCallId, memo);
         out.push({
           type: "tool-start",
           toolId: update.toolCallId,
           name: memo.name,
-          input: update.rawInput ?? { locations: update.locations ?? [] },
+          input,
           ...(memo.kind ? { kind: memo.kind } : {}),
           title: memo.title,
-          ...spawnOf(update._meta),
+          ...spawn,
         });
       }
       // an update with input but neither content nor status is the Claude adapter's partial-input
@@ -187,7 +221,10 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
         refined.name = memo.name = update.name;
       }
       if (update.kind && update.kind !== memo.kind) refined.kind = memo.kind = update.kind;
-      if (update.rawInput !== undefined) refined.input = update.rawInput;
+      if (update.rawInput !== undefined) {
+        refined.input = update.rawInput;
+        if (!emptyInput(update.rawInput)) memo.writing = false;
+      }
       if (Object.keys(refined).length > 2 && !memo.ended && out.length === 0) out.push(refined);
       if (update.content) memo.content = [...memo.content, ...update.content];
       if (update.rawOutput !== undefined) memo.rawOutput = update.rawOutput;

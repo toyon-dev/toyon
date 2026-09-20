@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RequestPermissionRequest, RequestPermissionResponse, SessionUpdate } from "@agentclientprotocol/sdk";
+import type { AgentEvent } from "@toyon/shared";
 import {
   endOfAsk,
   mapCommands,
@@ -108,6 +109,79 @@ describe("mapUpdate", () => {
       { type: "tool-end", toolId: "c3", output: "boom", isError: true },
       { type: "tool-start", toolId: "c4", name: "", input: { locations: [] }, title: "late" },
       { type: "tool-end", toolId: "c4", output: "raw", isError: false },
+    ]);
+  });
+
+  test("a call still being written when the agent moves on ends there: nothing more comes for it", () => {
+    const bash = (toolCallId: string): SessionUpdate => ({
+      sessionUpdate: "tool_call",
+      toolCallId,
+      title: "Terminal",
+      kind: "execute",
+      status: "pending",
+      rawInput: {},
+    });
+    const start = (toolId: string): AgentEvent => ({
+      type: "tool-start",
+      toolId,
+      name: "",
+      input: {},
+      kind: "execute",
+      title: "Terminal",
+    });
+    // a message sent mid-turn pre-empts the generation after c1 opened: the agent's answer to it
+    // starts with a new call, and c1 never gets an update
+    expect(run([bash("c1"), bash("c2")])).toEqual([start("c1"), { type: "tool-end", toolId: "c1" }, start("c2")]);
+    // the same, cut off after a field of the input closed (a partial refine the map holds back)
+    expect(
+      run([
+        bash("c3"),
+        { sessionUpdate: "tool_call_update", toolCallId: "c3", rawInput: { command: "ls" } },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Instead" } },
+      ]),
+    ).toEqual([start("c3"), { type: "tool-end", toolId: "c3" }, { type: "text-delta", text: "Instead" }]);
+    // two calls in one message: the first's input is in before the second opens, so it stays open
+    expect(
+      run([
+        bash("c4"),
+        { sessionUpdate: "tool_call_update", toolCallId: "c4", rawInput: { command: "echo one" }, content: [] },
+        bash("c5"),
+      ]),
+    ).toEqual([start("c4"), { type: "tool-update", toolId: "c4", input: { command: "echo one" } }, start("c5")]);
+    // a call with nothing to write is whole on arrival: nothing to cut off
+    expect(
+      run([
+        { sessionUpdate: "tool_call", toolCallId: "c6", title: "Task", kind: "think", status: "pending", rawInput: {} },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "on it" } },
+      ]).filter((e) => e.type === "tool-end"),
+    ).toEqual([]);
+  });
+
+  test("a subagent writing a call is read apart from the main agent, and the other way round", () => {
+    const meta = { claudeCode: { parentToolUseId: "task1" } };
+    const events = run([
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "m1",
+        title: "Terminal",
+        kind: "execute",
+        status: "pending",
+        rawInput: {},
+      },
+      // the subagent's stream opens a call of its own while the main agent is still writing m1
+      { sessionUpdate: "tool_call", toolCallId: "s1", title: "Read File", kind: "read", rawInput: {}, _meta: meta },
+      { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "sub" }, _meta: meta },
+      // and the main agent moving on ends only its own
+      { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "main" } },
+    ]);
+    expect(events.filter((e) => e.type === "tool-end").map((e) => e.toolId)).toEqual(["s1", "m1"]);
+    expect(events.map((e) => e.type)).toEqual([
+      "tool-start",
+      "tool-start",
+      "tool-end",
+      "tool-delta",
+      "tool-end",
+      "text-delta",
     ]);
   });
 

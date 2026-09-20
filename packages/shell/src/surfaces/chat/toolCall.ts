@@ -1,4 +1,14 @@
-import { CHECK_TOOL, SHELL_TOOL, type Span, splitSpanLines, type ToolKind, wordSpans } from "@toyon/shared";
+import {
+  CHECK_TOOL,
+  emptyInput,
+  isWrittenKind,
+  SHELL_TOOL,
+  type Span,
+  splitSpanLines,
+  type ToolKind,
+  type WrittenKind,
+  wordSpans,
+} from "@toyon/shared";
 import type { IconName } from "../../ui/Icon.tsx";
 /** How a tool call reads in the transcript: the two halves of its summary line, and the blocks of
  * its output. */
@@ -147,10 +157,10 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
  * got yet, so the line reads as a status and not as a file called "writing". "writing" where the
  * agent is composing something (a command, a change, a search), "choosing" where the only thing
  * streaming is which file: a read is not writing anything a person would call written, and
- * "writing" under a file glyph reads as a file write. Only kinds whose input the agent types out
- * token by token are here; a think or a mode switch has nothing to write, so an empty input there
- * is the whole call, not a call still being written. */
-const WRITING: Partial<Record<ToolKind, string>> = {
+ * "writing" under a file glyph reads as a file write. Typed over the kinds whose input the agent
+ * types out token by token, so a kind that joins that set is a compile error here until it has a
+ * phrase. */
+const WRITING: Record<WrittenKind, string> = {
   read: "choosing a file",
   edit: "writing the change",
   delete: "choosing a file",
@@ -164,15 +174,12 @@ const WRITING: Partial<Record<ToolKind, string>> = {
  * "" once the input is in. The adapter names such a row after the tool ("Terminal", "Preparing
  * file…"), which reads as the tool stalled rather than as the agent typing, so the row says what is
  * happening instead. The input lands whole (the daemon holds back the field-by-field refines), so
- * a long script stays here for as long as it takes to write. */
+ * a long script stays here for as long as it takes to write. A call the agent never finished
+ * writing (a message sent mid-turn cuts the generation off) ends with no input, which is what
+ * `cutOff` in group.ts reads it by. */
 export function composing(call: ToolCall): string {
-  const phrase = call.toolKind ? WRITING[call.toolKind] : undefined;
-  if (!phrase) return "";
-  const input = call.input as Record<string, unknown> | null;
-  if (!input || typeof input !== "object") return phrase;
-  // a call with no raw input starts as an empty list of locations (acp/map.ts)
-  const empty = Object.keys(input).every((k) => k === "locations" && Array.isArray(input[k]) && input[k].length === 0);
-  return empty ? phrase : "";
+  const kind = call.toolKind;
+  return isWrittenKind(kind) && emptyInput(call.input) ? WRITING[kind] : "";
 }
 
 /** the blocks to show under the row: the adapter repeats the description as the first line of the

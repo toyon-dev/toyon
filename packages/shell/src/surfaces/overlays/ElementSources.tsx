@@ -4,7 +4,6 @@ import { fileItems, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { worktreeById } from "../../state/store.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
-import { wtDir } from "../util.ts";
 
 /** A picked element with no recorded source that more than one line could have written: the
  * daemon's places for it, best first, to open the one it is. Rows read as search hits do. */
@@ -14,7 +13,7 @@ export function ElementSources({ worktreeId, hits }: { worktreeId: string; hits:
   const changesOpen = useStore((s) => s.layout.changes);
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId)?.worktree;
-    return w ? wtDir(w) : null;
+    return w ? w.path : null;
   });
   const filter = useCallback((items: SearchHit[], q: string) => {
     const t = q.trim().toLowerCase();

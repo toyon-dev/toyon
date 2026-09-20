@@ -45,7 +45,7 @@ import { DesignPane } from "../design/DesignPane.tsx";
 import { EditorPane } from "../editor/EditorPane.tsx";
 import { Overlays } from "../overlays/Overlays.tsx";
 import { TerminalPane } from "../terminal/TerminalPane.tsx";
-import { chord, isBusy, previewUrl, relFile, wtDir } from "../util.ts";
+import { chord, isBusy, previewUrl, relFile } from "../util.ts";
 import { Boot } from "./Boot.tsx";
 import { Discovered } from "./Discovered.tsx";
 import { carriedFrame, shownFrame } from "./frames.ts";
@@ -245,7 +245,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
             if (verb === "code") {
               dispatch({ a: "set-picking", v: false });
               const wt = worktreeById(store.getState(), id)?.worktree;
-              if (from.file) openSource(store, sock, id, relFile(from.file, wt && wtDir(wt)), from.line ?? 1);
+              if (from.file) openSource(store, sock, id, relFile(from.file, wt?.path), from.line ?? 1);
               // the page recorded no file: the daemon searches the source for what the element shows,
               // and its answer carries this seq so a file opened meanwhile is not taken over
               else sock?.send({ t: "find-element", worktreeId: id, seq: nextSeq(), element: pick.element });

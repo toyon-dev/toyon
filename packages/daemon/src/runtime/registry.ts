@@ -637,8 +637,8 @@ export class RuntimeRegistry {
     const rt = this.ensureAgent(wt);
     let term = rt.shell;
     if (!term?.alive) {
-      // PWD keeps zsh/bash on the logical (title-named) path instead of resolving the link
-      const cwd = wt.linkPath ?? wt.path;
+      // PWD keeps zsh/bash on the path as toyon spells it rather than a resolved one
+      const cwd = wt.path;
       const opts: PtyOpts = {
         cwd,
         env: { ...this.shellEnv(wt), PWD: cwd },
@@ -675,7 +675,7 @@ export class RuntimeRegistry {
     const prev = rt.login;
     rt.login = null;
     if (prev) fireAndForget(id, Promise.resolve(prev.pty.kill()), "replace the agent login");
-    const cwd = wt.linkPath ?? wt.path;
+    const cwd = wt.path;
     let pty: PtyHandle;
     try {
       pty = (this.deps.makeTerminal ?? defaultTerminal)(

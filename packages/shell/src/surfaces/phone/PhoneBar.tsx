@@ -18,7 +18,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { CommandPalette } from "../overlays/CommandPalette.tsx";
 import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
 import { rowLine } from "../rail/rowLine.ts";
-import { ago, dotClass, wtDir } from "../util.ts";
+import { ago, dotClass } from "../util.ts";
 
 /**
  * The strip at the top of the phone.
@@ -67,7 +67,7 @@ export function PhoneBar({ screen, tabs }: { screen: "home" | "chat"; tabs?: Rea
         ? rowLine(active, {
             offline,
             needsSetup: asksSetup(repo),
-            path: wtDir(active.worktree),
+            path: active.worktree.path,
             at: isLead(active.worktree) ? undefined : ago(sentAt(active.worktree)),
           })
         : null;

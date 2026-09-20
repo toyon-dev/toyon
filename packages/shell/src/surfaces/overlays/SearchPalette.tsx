@@ -5,7 +5,6 @@ import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useLocal } from "../../state/selectors.ts";
 import { worktreeById } from "../../state/store.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
-import { wtDir } from "../util.ts";
 
 const NONE: SearchHit[] = [];
 /** short queries would match everything */
@@ -20,7 +19,7 @@ export function SearchPalette({ worktreeId }: { worktreeId: string }) {
   // a hit is a file: open in an editor or reveal it, as the changes panel's rows offer
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId)?.worktree;
-    return w ? wtDir(w) : null;
+    return w ? w.path : null;
   });
   // stale = the daemon hasn't answered this query yet; keep showing the previous hits meanwhile
   const filter = useCallback((hits: SearchHit[], q: string) => (q.trim().length >= MIN ? hits : NONE), []);

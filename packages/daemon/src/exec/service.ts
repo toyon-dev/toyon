@@ -63,8 +63,8 @@ export class ExecService {
     // rows are what lets "fix it" work, and a pass has nothing to fix
     const start = { type: "tool-start", toolId, name, input: { command }, kind: "execute" } as const;
     if (!opts.quiet) agent.note(start);
-    // PWD keeps the shell on the logical path, the same as the terminal pane
-    const cwd = wt.linkPath ?? wt.path;
+    // PWD keeps the shell on the path as spelled, the same as the terminal pane
+    const cwd = wt.path;
     // a login shell so PATH is the person's own; TERM=dumb and NO_COLOR because escape codes would
     // print as text in the transcript, which has no terminal to interpret them
     const env = { ...this.deps.runtime.shellEnv(wt), PWD: cwd, TERM: "dumb", NO_COLOR: "1" };

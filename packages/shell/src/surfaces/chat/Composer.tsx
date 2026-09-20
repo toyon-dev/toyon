@@ -55,7 +55,7 @@ import {
   recapLine,
   verbLine,
 } from "../recap.ts";
-import { chord, commandSource, folderList, pickLabel, procTrouble, wtDir } from "../util.ts";
+import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
 import { openAsk } from "./ask.ts";
 import { ImageChip } from "./ImageChip.tsx";
@@ -770,7 +770,7 @@ export function Composer({
   // the number each chip will carry on send, counting each kind on from this session's: a message
   // that starts a worktree starts that worktree's session, so its count starts over
   const sentBefore = spawning ? [] : chat.map((c) => (c.kind === "user" ? c.attachments : undefined));
-  const dir = active ? wtDir(active.worktree) : null;
+  const dir = active ? active.worktree.path : null;
 
   return (
     <div className="composer chat-input">

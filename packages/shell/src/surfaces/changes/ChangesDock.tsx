@@ -18,7 +18,7 @@ import { step } from "../../ui/listNav.ts";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { Tabs } from "../../ui/Tabs.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
-import { ago, chord, shiftRanges, wtDir } from "../util.ts";
+import { ago, chord, shiftRanges } from "../util.ts";
 import { CommitBox } from "./CommitBox.tsx";
 import { CommitRow } from "./CommitRow.tsx";
 import { FileTree } from "./FileTree.tsx";
@@ -290,7 +290,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
 
   // the rows are memoized on their props, so what they are handed to build a menu from is stable
   const wtId = archived ? archived.id : active?.worktree.id;
-  const dir = archived ? archived.path : active ? wtDir(active.worktree) : "";
+  const dir = archived ? archived.path : active ? active.worktree.path : "";
   // an archived worktree's files are only in git: nothing to open elsewhere, reveal or discard
   const kept = archived !== null;
   const menuUncommitted = useCallback(
@@ -388,7 +388,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       {tab === "files" && shownId ? (
         <FileTree
           worktreeId={shownId}
-          dir={active ? wtDir(active.worktree) : (activeRow?.path ?? "")}
+          dir={active ? active.worktree.path : (activeRow?.path ?? "")}
           openPath={openPath}
           openRef={openRef}
           rootRef={treeRef}

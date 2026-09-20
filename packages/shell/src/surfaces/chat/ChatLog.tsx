@@ -166,7 +166,7 @@ export function ChatLog({
   // one array per worktree: a fresh one on every render would defeat the rows' memo. An archived
   // chat's paths are under the directory it had, which is gone but is still what they are relative to
   const root = wt?.path ?? archived?.path;
-  const roots = useMemo(() => [root, wt?.linkPath].filter((p): p is string => !!p), [root, wt?.linkPath]);
+  const roots = useMemo(() => (root ? [root] : []), [root]);
   // calls that did the same thing to the same file, back to back, are one row carrying a count,
   // and a subagent's calls are the run under the row that started it
   const entries = useMemo(() => groupTools(items, roots), [items, roots]);

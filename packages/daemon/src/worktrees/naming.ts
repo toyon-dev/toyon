@@ -1,24 +1,31 @@
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 export function shortId(): string {
   return randomBytes(5).toString("hex");
 }
 
-/** first three words of the prompt as a branch-safe slug; random suffix unless the caller dedupes. */
-export function slugify(prompt: string, withRandom = true): string {
-  const words = prompt
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 3);
-  const base = words.join("-").slice(0, 20).replace(/-+$/g, "") || "task";
-  return withRandom ? `${base}-${randomBytes(2).toString("hex")}` : base;
+/** A record id and, from its first four characters, the directory a worktree toyon makes lives in
+ * and the branch it is born on: `wt-xxxx`, with no directory of that name under `parent` yet. An id
+ * rather than words from the prompt because the directory outlives every name (a rename moves the
+ * branch, never the checkout, or the procs and the agent's cwd would restart) and the words a
+ * prompt opens with are filler; the title says what the task is, and the branch takes its slug once
+ * it is named. The directory is the record id's head so a terminal prompt and a log line about the
+ * same worktree are recognisable as each other. Only the directory is checked: toyon deletes its
+ * own branches with their worktrees, so a `toyon/wt-xxxx` left over is a hand-made one, and the
+ * branch step fails with git's words before anything changes. */
+export function freeSlot(parent: string): { id: string; dir: string } {
+  for (;;) {
+    const id = shortId();
+    const dir = `wt-${id.slice(0, 4)}`;
+    if (!existsSync(join(parent, dir))) return { id, dir };
+  }
 }
 
 /** The first words of the prompt, as the title the task keeps until the agent names it. Words with
- * their spaces left in: only the branch has to be spelled the way git spells things, and it carries
- * the slug for that. Held to about what the rail shows. */
+ * their spaces left in: nothing is spelled from the title, so it never has to be spelled git's way.
+ * Held to about what the rail shows. */
 export function titleFrom(prompt: string): string {
   const words = prompt.split(/\s+/).filter(Boolean).slice(0, 3).join(" ");
   return sentenceCase(cleanTitle(words) || "task");

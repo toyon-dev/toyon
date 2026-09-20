@@ -664,7 +664,7 @@ describe("handlers", () => {
     await dispatch({ t: "set-draft", boxId: task.id, text: "x", clientId: "tab1" }, ctx, services);
     expect(agents.get(task.id)?.warms ?? 0).toBe(0);
     // a spare the pool no longer counts as ready (its warm-up rolled back, say) is not started
-    await services.worktrees.spare.claim(r.id, "toyon/x", "x");
+    await services.worktrees.spare.claim(r.id, "x");
     await services.worktrees.spare.ensure(r.id);
     const next = services.state.worktrees.find((x) => x.repoId === r.id && x.kind === "spare")!;
     expect(next.id).not.toBe(spare.id);

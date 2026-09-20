@@ -37,7 +37,7 @@ import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
 import { dollars, tokens } from "../chat/usage.ts";
 import { recapLine } from "../recap.ts";
-import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel, wtDir } from "../util.ts";
+import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -159,14 +159,13 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const menu = useMenu();
   // the daemon sends absolute paths; ~ is how the person wrote it and how the picker shows it back
   const home = useStore((s) => s.home);
-  // the branch-named link rather than a claimed spare's wt-xxxx, so the path says which worktree it is
   const wtDirLabel = (d: WorktreeStatus) => {
-    const p = d.worktree ? wtDir(d.worktree) : d.path;
+    const p = d.worktree ? d.worktree.path : d.path;
     return home && p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p;
   };
   // a long name truncates in the row, so the tip spells it out again. A name the path's last
   // segment already is (a found worktree in a directory named for its branch) is left off: a
-  // toyon worktree's name is prose and its directory is the slug, so those two rarely match.
+  // toyon worktree's name is prose and its directory is an id, so those two never match.
   const unspelled = (d: WorktreeStatus) => (wtDirLabel(d).split("/").pop() === d.name ? null : d.name);
   // the tip's lead: what the agent has cost and filled so far, on the state's line and nowhere
   // else, so the figures are found in one place
@@ -445,7 +444,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
             new worktree
           </span>
         ) : (
-          <span className="branch">{rowLabel(w, owned ? repoOf(owned) : null)}</span>
+          <span className={cx("branch", owned?.worktree.unnamed && "row-dim")}>
+            {rowLabel(w, owned ? repoOf(owned) : null)}
+          </span>
         )}
         {owned?.worktree.mode && owned.worktree.mode !== "auto" && (
           // auto is the default and says nothing; ask and plan change what happens when you look away

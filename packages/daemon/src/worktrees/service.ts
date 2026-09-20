@@ -2,8 +2,8 @@
 // transport layer (server/handlers.ts) calls in here and shapes replies; git/, runtime/ and the
 // spare pool do the work.
 
-import { cpSync, existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   type AgentEvent,
   type ArchivedWorktree,
@@ -87,7 +87,7 @@ import { runSetup } from "../runtime/setup.ts";
 import { type ArchiveRecord, type ChatFiles, firstPrompt, lastUsage, summarize, WorktreeArchive } from "./archive.ts";
 import { ArchivedGit } from "./archivedGit.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
-import { branchSlug, cleanTitle, shortId, slugify, titleFrom, variantLens } from "./naming.ts";
+import { branchSlug, cleanTitle, freeSlot, shortId, titleFrom, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
 import { mainOf, Trunk } from "./trunk.ts";
 import { isUnseen } from "./turns.ts";
@@ -275,8 +275,6 @@ export class WorktreeService {
         }
       },
     });
-    // worktrees claimed before links existed get theirs at boot
-    for (const wt of d.state.worktrees) this.refreshLink(wt);
     d.hub.on("agent", (worktreeId, _seq, event) => {
       if (event.type !== "usage") return;
       const { used, size, cost } = event;
@@ -310,14 +308,11 @@ export class WorktreeService {
     const profile = this.checkProfile(repo, opts.profile);
     // a message that is attachments alone is named from what they carry
     const task = taskText(prompt, attachments);
-    // variants share a name base so they read as siblings in the list
+    // the title is the prompt's first words until the agent names it; variants share a base so they
+    // read as siblings in the list. The branch is born on the directory's id and takes the title's
+    // slug with the name.
     const base = titleFrom(task);
     const title = variant ? `${base} v${variant.index}` : base;
-    let slug = variant ? `${slugify(task, false)}-v${variant.index}` : slugify(task);
-    if (variant && (await git(repo.path, "show-ref", "--verify", `refs/heads/toyon/${slug}`)).ok) {
-      slug = `${slug}-${shortId().slice(0, 3)}`;
-    }
-    const branch = `toyon/${slug}`;
 
     // one set of changes can only move once
     if (opts.carry && variant && variant.of > 1) {
@@ -330,7 +325,7 @@ export class WorktreeService {
 
     // fast path: claim the pre-warmed spare. Its runtime — agent included — already exists, so the
     // task's first message goes to the spare's agent.
-    const claimed = await this.spare.claim(repoId, branch, title, opts.worktreeId);
+    const claimed = await this.spare.claim(repoId, title, opts.worktreeId);
     if (claimed) {
       if (variant) claimed.variant = variant;
       if (opts.createdBy) claimed.createdBy = opts.createdBy;
@@ -341,7 +336,6 @@ export class WorktreeService {
       if (opts.mode) claimed.mode = opts.mode;
       if (opts.model) claimed.model = opts.model;
       if (opts.effort) claimed.effort = opts.effort;
-      this.refreshLink(claimed);
       // the spare was warmed under the default profile; another one means its procs restart
       // (the agent stays, and gets the prompt now rather than after the restart)
       if (profile !== undefined && profile !== resolveRun(repo, claimed).profile) {
@@ -370,19 +364,22 @@ export class WorktreeService {
         `git no longer reads ${repo.name} as a checkout, so there is nothing to start a worktree from. If \`git config core.bare\` says true there, \`git config --unset core.bare\` puts it back.`,
       );
     }
-    const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
+    const { id, dir } = freeSlot(join(this.d.paths.worktreesDir, repo.name));
+    const wtPath = join(this.d.paths.worktreesDir, repo.name, dir);
+    const branch = `toyon/${dir}`;
     await withRepoLock(repo.path, () =>
       gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch),
     );
 
     const wt: WorktreeInfo = {
-      id: shortId(),
+      id,
       repoId,
       path: wtPath,
       branch,
       kind: "worktree",
       proxyPort: await allocateProxyPort(),
       title,
+      unnamed: true,
       createdAt: Date.now(),
       // made from a prompt, which is a send
       promptedAt: Date.now(),
@@ -506,7 +503,9 @@ export class WorktreeService {
     const number = kind === "pr" ? Number.parseInt(ref, 10) : Number.NaN;
     if (kind === "pr" && !(number > 0)) throw new UserError("that is not a PR number");
     const branch = kind === "pr" ? `pr/${number}` : ref;
-    // the branch is the person's, so it is what the row says it is; the directory takes its slug
+    // the branch is the person's, so it is what the row says it is, and the directory takes its
+    // slug rather than a wt-xxxx id: a branch checked out by name is never renamed by toyon, so a
+    // directory named for it stays true, where a task's directory would outlive its first name
     const title = kind === "pr" ? `pr-${number}` : cleanTitle(ref) || "branch";
     let slug = branchSlug(title) || "branch";
     if (existsSync(join(this.d.paths.worktreesDir, repo.name, slug))) slug = `${slug}-${shortId().slice(0, 4)}`;
@@ -779,7 +778,6 @@ export class WorktreeService {
       }
       return k;
     });
-    this.dropLink(wt);
     const sessionId = this.d.state.session(worktreeId);
     this.d.state.removeWorktree(worktreeId);
     releasePort(wt.proxyPort);
@@ -881,7 +879,6 @@ export class WorktreeService {
   async forgetGone(wt: WorktreeInfo): Promise<void> {
     const repo = this.d.state.repo(wt.repoId);
     const sessionId = this.d.state.session(wt.id);
-    this.dropLink(wt);
     this.d.state.removeWorktree(wt.id);
     if (!repo || wt.kind !== "worktree") {
       this.deleteChat(wt.id);
@@ -984,9 +981,9 @@ export class WorktreeService {
     // how often a worktree that archived itself is wanted back is what says whether the rule needs a
     // way to keep a row
     if (rec.auto) log.info(old.id, `restoring a worktree that archived itself (${rec.auto})`);
-    const path = existsSync(old.path)
-      ? join(dirname(old.path), `${basename(old.path)}-${shortId().slice(0, 4)}`)
-      : old.path;
+    // its old directory when that is free, else a fresh slot's: the record keeps its id either way,
+    // since its chat, session and archive ref are keyed by it
+    const path = existsSync(old.path) ? join(dirname(old.path), freeSlot(dirname(old.path)).dir) : old.path;
     const branch = await withRepoLock(repo.path, async () => {
       if (!(await commitOf(repo.path, archiveRef(old.id)))) {
         throw new UserError(`${old.title}'s kept commits are gone from git`);
@@ -1015,7 +1012,7 @@ export class WorktreeService {
       }
       return name;
     });
-    const { variant: _variant, linkPath: _linkPath, ...rest } = old;
+    const { variant: _variant, ...rest } = old;
     const wt: WorktreeInfo = {
       ...rest,
       repoId: repo.id,
@@ -1035,7 +1032,6 @@ export class WorktreeService {
     const dropped = await git(repo.path, "update-ref", "-d", archiveRef(old.id));
     if (!dropped.ok) log.warn(old.id, `could not drop its archive ref: ${dropped.err}`);
     this.countsCache.delete(wt.id);
-    this.refreshLink(wt);
     this.launch(wt, repo, repo.path);
     // setup and procs warm in the background; the agent takes the message now, as on create
     if (message) this.d.runtime.ensureAgent(wt).agent.send(message.text, { attachments: message.attachments });
@@ -1085,47 +1081,10 @@ export class WorktreeService {
         wt.branch = branch;
       }
       wt.title = clean;
+      delete wt.unnamed;
     });
-    this.refreshLink(wt);
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
-  }
-
-  /** `<repo>/<branch tail>` → the directory, when its own name is not that (a claimed spare keeps
-   * wt-xxxx). The terminal and editor links show the link; git and procs keep the real path.
-   * Moving the directory for real would restart the procs and the agent session (its cwd). */
-  private refreshLink(wt: WorktreeInfo) {
-    // Only toyon's own branches get a link. An adopted worktree sits in a directory the person
-    // chose, and `desired` would put a symlink next to it under a name they never asked for
-    // (adopting ~/Projects/app-editor-pane on branch `editor-pane` would create
-    // ~/Projects/editor-pane, and again on every boot).
-    if (!hasOwnBranch(wt)) return;
-    // the branch tail rather than the title: a title is prose and may repeat (three tasks named
-    // alike), a branch is already a name a shell can type and never repeats (rename suffixes them)
-    const name = wt.branch.replace(/^toyon\//, "");
-    const desired = wt.kind === "worktree" ? join(dirname(wt.path), name) : wt.path;
-    if (wt.linkPath && wt.linkPath !== desired) this.dropLink(wt);
-    if (desired === wt.path) return;
-    try {
-      const st = lstatSync(desired, { throwIfNoEntry: false });
-      // a real directory, or another worktree's link, keeps the name
-      if (st && !(st.isSymbolicLink() && readlinkSync(desired) === wt.path)) return;
-      if (!st) symlinkSync(wt.path, desired);
-      wt.linkPath = desired;
-    } catch (e) {
-      log.warn(wt.id, "could not link the title to the directory", e);
-    }
-  }
-
-  private dropLink(wt: WorktreeInfo) {
-    const p = wt.linkPath;
-    wt.linkPath = undefined;
-    if (!p) return;
-    try {
-      if (lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink()) unlinkSync(p);
-    } catch (e) {
-      log.warn(wt.id, "could not remove the title link", e);
-    }
   }
 
   /** Declare a variant the winner: remove its siblings, drop its variant badge. */

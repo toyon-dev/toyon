@@ -1,15 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readlinkSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { SHELL_TOOL } from "@toyon/shared";
 import { type FakeAgent, fakeAgents, fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -135,10 +126,13 @@ describe("create / remove", () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "make the header sticky");
     expect(wt.kind).toBe("worktree");
-    expect(wt.branch).toMatch(/^toyon\/make-the-header-[0-9a-f]{4}$/);
+    // born on its directory's id, which is the record id's head; the words are the title's, and
+    // the branch takes them once named
+    expect(basename(wt.path)).toBe(`wt-${wt.id.slice(0, 4)}`);
+    expect(wt.branch).toBe(`toyon/${basename(wt.path)}`);
     expect(existsSync(join(wt.path, "README.md"))).toBe(true);
     expect(wt.title).toBe("Make the header");
-    expect(wt.linkPath).toBeUndefined(); // the directory is already named for the branch
+    expect(wt.unnamed).toBe(true);
     expect(w.agents.get(wt.id)?.sent[0]?.text).toBe("make the header sticky");
     expect(wt.promptedAt).toBeGreaterThan(0);
     expect(wt.agent).toBe("claude");
@@ -612,37 +606,33 @@ describe("spare pool", () => {
     expect(w.state.worktrees.filter((x) => x.kind === "spare")).toHaveLength(1);
   });
 
-  test("a claimed spare keeps its directory but gets a branch-named link that follows renames and removal", async () => {
+  test("a claimed spare is born on a branch named for its directory, and a rename moves only the branch", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
     const wt = await w.worktrees.create(repoId, "use the spare");
-    expect(wt.path.includes("wt-")).toBe(true);
-    const first = wt.linkPath!;
-    expect(first).toBe(join(dirname(wt.path), wt.branch.replace("toyon/", "")));
-    expect(readlinkSync(first)).toBe(wt.path);
+    const path = wt.path;
+    expect(basename(path)).toBe(`wt-${wt.id.slice(0, 4)}`);
+    expect(wt.branch).toBe(`toyon/${basename(path)}`);
+    expect(wt.title).toBe("Use the spare");
+    expect(wt.unnamed).toBe(true);
     await w.worktrees.rename(wt.id, "Better Name");
-    // the title is read as it was typed; the branch and the link carry its slug
+    // the title is read as it was typed; the branch carries its slug; the checkout stays put
     expect(wt.title).toBe("Better Name");
+    expect(wt.unnamed).toBeUndefined();
     expect(wt.branch).toBe("toyon/better-name");
-    expect(lstatSync(first, { throwIfNoEntry: false })).toBeUndefined();
-    expect(wt.linkPath).toBe(join(dirname(wt.path), "better-name"));
-    expect(readlinkSync(wt.linkPath!)).toBe(wt.path);
-    const link = wt.linkPath!;
-    await w.worktrees.archiveWorktree(wt.id);
-    expect(lstatSync(link, { throwIfNoEntry: false })).toBeUndefined();
+    expect(wt.path).toBe(path);
+    expect(sh(w.repo, "git", "branch", "--list", "toyon/better-name")).toContain("toyon/better-name");
   });
 
-  test("worktrees sharing a title link by branch tail, so links never collide", async () => {
+  test("worktrees sharing a title get branches that never collide", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "first task");
     const b = await w.worktrees.create(repoId, "second task");
     await w.worktrees.rename(a.id, "same");
     await w.worktrees.rename(b.id, "same");
     expect([a.title, b.title]).toEqual(["same", "same"]);
+    expect(a.branch).toBe("toyon/same");
     expect(b.branch).toBe("toyon/same-2");
-    expect(a.linkPath).toBe(join(dirname(a.path), "same"));
-    expect(b.linkPath).toBe(join(dirname(b.path), "same-2"));
-    expect(readlinkSync(b.linkPath!)).toBe(b.path);
   });
 
   test("a renamed worktree keeps the title as words and gives its branch the slug", async () => {
@@ -2045,29 +2035,6 @@ describe("adopt", () => {
     const wt = await adoptDir(dir);
     await settle();
     expect(existsSync(join(wt.path, "SETUP_RAN"))).toBe(false);
-  });
-
-  test("no stray symlink is planted beside it, on adopt or on the next boot", async () => {
-    await registered();
-    await settle();
-    const dir = foreignWorktree("linkless", "editor-pane");
-
-    const wt = await adoptDir(dir);
-    await settle();
-    expect(wt.linkPath).toBeUndefined();
-    // the name refreshLink would otherwise have chosen: <parent>/<branch>
-    expect(existsSync(join(dirname(dir), "editor-pane"))).toBe(false);
-
-    // the constructor re-links every worktree at boot, so this has to survive a restart
-    new WorktreeService({
-      state: w.state,
-      hub: w.hub,
-      runtime: w.runtime,
-      paths: w.paths,
-      agents: w.registry,
-      namer: async () => null,
-    });
-    expect(existsSync(join(dirname(dir), "editor-pane"))).toBe(false);
   });
 
   test("a locked worktree belongs to whoever locked it", async () => {

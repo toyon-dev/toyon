@@ -15,7 +15,7 @@
 // core with the send the person is waiting on.
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { RepoInfo, WorktreeInfo } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -27,7 +27,7 @@ import { STAGGER_MS } from "../runtime/idle.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
 import { runSetup } from "../runtime/setup.ts";
-import { shortId } from "./naming.ts";
+import { freeSlot } from "./naming.ts";
 
 /** the warm-up under way for a repo: the git worktree, then the whole of it. `cut` ends the wait
  * on the previous task's preview, for a claim that will not sit through it. */
@@ -132,16 +132,16 @@ export class SparePool {
    * names a task reads the list as it stands */
   private async record(repoId: string, repo: RepoInfo): Promise<WorktreeInfo> {
     // the directory name outlives the spare: a claim keeps it, so it must not say "spare"
-    const slug = `wt-${shortId().slice(0, 4)}`;
+    const { id, dir } = freeSlot(join(this.d.paths.worktreesDir, repo.name));
     const wt: WorktreeInfo = {
-      id: shortId(),
+      id,
       repoId,
-      path: join(this.d.paths.worktreesDir, repo.name, slug),
+      path: join(this.d.paths.worktreesDir, repo.name, dir),
       branch: repo.defaultBranch,
       kind: "spare",
       phase: "reserved",
       proxyPort: await allocateProxyPort(),
-      title: slug,
+      title: dir,
       createdAt: Date.now(),
     };
     this.d.state.addWorktree(wt);
@@ -257,13 +257,14 @@ export class SparePool {
     await run;
   }
 
-  /** Claim the spare for a new task: branch it and return it. Null if there is none, or if the
-   * row named is not the pool's. `worktreeId` names the row the message was typed in: one still
-   * warming is claimed as it is, since the person is looking at it, and its finish runs on for
-   * the task; a row nobody named takes the spare only once it is ready. A row already claimed by
-   * another tab is nobody's to wait for, and null sends the caller down the cold path. The next
-   * spare is reserved before this returns, so the frame that names the task lists it. */
-  async claim(repoId: string, branch: string, title: string, worktreeId?: string): Promise<WorktreeInfo | null> {
+  /** Claim the spare for a new task: branch it, on `toyon/<its directory>` until it is named, and
+   * return it. Null if there is none, or if the row named is not the pool's. `worktreeId` names
+   * the row the message was typed in: one still warming is claimed as it is, since the person is
+   * looking at it, and its finish runs on for the task; a row nobody named takes the spare only
+   * once it is ready. A row already claimed by another tab is nobody's to wait for, and null sends
+   * the caller down the cold path. The next spare is reserved before this returns, so the frame
+   * that names the task lists it. */
+  async claim(repoId: string, title: string, worktreeId?: string): Promise<WorktreeInfo | null> {
     const wt = this.spareOf(repoId);
     if (!wt) return null;
     if (worktreeId && wt.id !== worktreeId) return null;
@@ -281,12 +282,15 @@ export class SparePool {
     await this.refreshing.get(repoId);
     const repo = this.d.state.requireRepo(repoId);
     // a switch that fails changes nothing: the spare stays the spare, and git's words go up
+    const branch = `toyon/${basename(wt.path)}`;
     await withRepoLock(repo.path, () => gitOrThrow(wt.path, "switch", "-c", branch));
     wt.kind = "worktree";
     delete wt.phase;
     delete wt.lockfile;
     wt.branch = branch;
+    // the title is the prompt's first words until the task is named
     wt.title = title;
+    wt.unnamed = true;
     wt.createdAt = Date.now();
     // a spare that rested with its repo comes up for the task it now is; one still warming gets
     // its start at the end of its own finish rather than from a wake onto a tree with no deps yet

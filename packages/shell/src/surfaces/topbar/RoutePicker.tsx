@@ -11,7 +11,6 @@ import { worktreeById } from "../../state/store.ts";
 import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { type MenuEntry, SEP, tidy } from "../../ui/menu.ts";
-import { wtDir } from "../util.ts";
 import { completionOf, fillTemplate, type PageModel, pageModel, pathOf, type Row, rowsFor } from "./routePicker.ts";
 
 /** module constants, so a repo with no visits yet answers the selector with the same array */
@@ -106,7 +105,7 @@ export function RoutePicker({
   const sock = useSock();
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId);
-    return w ? wtDir(w.worktree) : null;
+    return w ? w.worktree.path : null;
   });
   const model = usePageModel(worktreeId, repoId);
   const current = pathOf(url);

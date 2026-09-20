@@ -15,7 +15,6 @@ import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { attachmentUrl } from "../../ws.ts";
-import { wtDir } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { runCalls, runLive, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
@@ -503,7 +502,7 @@ export const ToolRow = memo(
         label={run ? `${what}, ${count}` : tools.length > 1 ? `${what}, ${tools.length} calls` : what}
         menu={(fold) => {
           const w = worktreeById(store.getState(), worktreeId);
-          const wt = w ? { id: w.worktree.id, dir: wtDir(w.worktree) } : null;
+          const wt = w ? { id: w.worktree.id, dir: w.worktree.path } : null;
           return toolRowItems(tools, roots ?? [], wt, { sock, dispatch: store.dispatch }, fold);
         }}
         summary={
@@ -672,7 +671,7 @@ export const ChatItemView = memo(function ChatItemView({
   // the worktree's directory, for a path a row names without its root
   const dirOf = () => {
     const w = worktreeById(store.getState(), worktreeId);
-    return w ? wtDir(w.worktree) : null;
+    return w ? w.worktree.path : null;
   };
   // the agent runs at the worktree's real path even when the UI gives it a title-shaped symlink
   const fileRoot = () => worktreeById(store.getState(), worktreeId)?.worktree.path;

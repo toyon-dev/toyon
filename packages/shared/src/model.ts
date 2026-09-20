@@ -199,12 +199,11 @@ export interface LandMark {
 export interface WorktreeInfo {
   id: string;
   repoId: string;
+  /** the checkout: `<worktrees>/<repo>/wt-xxxx` for one toyon made, the directory the person chose
+   * for one it adopted. A rename never moves it (the procs and the agent's cwd would restart), so
+   * the branch is what carries the name. */
   path: string;
-  /** a symlink named after the branch's tail, beside `path`, when the directory's own name is not
-   * that (a claimed spare keeps its wt-xxxx directory): the terminal's cwd and editor links
-   * show this one; git and the procs use `path` */
-  linkPath?: string;
-  /** `toyon/<slug>` for a worktree toyon made (the prompt's first words at first, the title's slug
+  /** `toyon/<slug>` for a worktree toyon made (its directory's `wt-xxxx` at birth, the title's slug
    * once it is named or renamed), the person's own branch for one it adopted. The slug keeps up
    * with the title without ever being it. */
   branch: string;
@@ -217,8 +216,12 @@ export interface WorktreeInfo {
   /** port of this worktree's reverse proxy (preview iframe target) */
   proxyPort: number;
   /** what the rail calls it, in words a person would say: spaces and capitals and all. Nothing is
-   * spelled from this; the branch and the directory take its slug. */
+   * spelled from this; the branch takes its slug. */
   title: string;
+  /** the title is the prompt's first words, standing in until the agent or the person names it:
+   * the rail shows it a tier down so its changing is no surprise, and one never named stays that
+   * way as the cue to rename it */
+  unnamed?: true;
   createdAt: number;
   /** merged into main and no new work since */
   landed?: boolean;

@@ -80,7 +80,7 @@ export class RefSearch {
   private rowIdForPath = (path: string): string | null => {
     const want = canonical(path);
     for (const wt of this.d.state.worktrees) {
-      if (canonical(wt.path) === want || (wt.linkPath && canonical(wt.linkPath) === want)) return wt.id;
+      if (canonical(wt.path) === want) return wt.id;
     }
     return discoveredId(path);
   };

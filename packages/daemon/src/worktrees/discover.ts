@@ -38,11 +38,7 @@ export function discoveredId(path: string): string {
  * also registered as its own project is toyon's, and should not be offered for adoption twice. */
 function knownPaths(known: WorktreeInfo[]): Set<string> {
   const paths = new Set<string>();
-  for (const wt of known) {
-    paths.add(canonical(wt.path));
-    // the branch-named symlink beside a claimed spare: git reports whichever the person used
-    if (wt.linkPath) paths.add(canonical(wt.linkPath));
-  }
+  for (const wt of known) paths.add(canonical(wt.path));
   return paths;
 }
 

@@ -22,7 +22,6 @@ import { useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { worktreeFileUrl } from "../../ws.ts";
-import { wtDir } from "../util.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { OpenInMenu } from "./OpenInMenu.tsx";
@@ -89,7 +88,7 @@ export function EditorPane({
   const kept = useStore((s) => archivedPageOf(s)?.id === worktreeId);
   const wtPath = useStore((s) => {
     const w = worktreeById(s, worktreeId)?.worktree;
-    return w ? wtDir(w) : archivedPageOf(s)?.path;
+    return w ? w.path : archivedPageOf(s)?.path;
   });
   const absPath = wtPath ? `${wtPath}/${path}` : path;
   // a commit's copy: read-only, and none of the working-tree wiring below applies to it

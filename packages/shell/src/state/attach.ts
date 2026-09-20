@@ -137,11 +137,10 @@ function pickBox(s: State, frameId: string): string | null {
   return worktreeById(s, frameId) ? frameId : null;
 }
 
-/** the directories a frame's source paths can start with: a worktree's checkout and the link it
- * is reached by */
+/** the directory a frame's source paths can start with: the worktree's checkout */
 function checkoutOf(s: State, frameId: string): string[] {
   const wt = worktreeById(s, frameId)?.worktree;
-  return wt ? [wt.path, wt.linkPath].filter((p): p is string => !!p) : [];
+  return wt ? [wt.path] : [];
 }
 
 /** `path` relative to the checkout when it lies inside it, else as it came: a guessed root would

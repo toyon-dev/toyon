@@ -30,7 +30,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { Pane } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
-import { chord, wtDir } from "../util.ts";
+import { chord } from "../util.ts";
 import { contrastRatio, parseHex } from "./contrast.ts";
 import "./design.css";
 import { cx } from "../../ui/cx.ts";
@@ -855,7 +855,7 @@ function Row({
         disabled={!path}
         {...cm.contextMenu(() =>
           active
-            ? designRowItems({ id: active.worktree.id, dir: wtDir(active.worktree) }, path, { sock, dispatch }, onOpen)
+            ? designRowItems({ id: active.worktree.id, dir: active.worktree.path }, path, { sock, dispatch }, onOpen)
             : [],
         )}
       >

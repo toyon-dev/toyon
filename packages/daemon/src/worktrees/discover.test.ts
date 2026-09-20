@@ -44,15 +44,6 @@ describe("subtractKnown", () => {
     expect(rows).toEqual([]);
   });
 
-  test("a claimed spare is matched through its branch symlink too", () => {
-    const rows = subtractKnown(
-      "r1",
-      [listed("/wt/wt-7bb1", { branch: "toyon/add-page" })],
-      [known("/wt/wt-7bb1", { linkPath: "/wt/add-page" })],
-    );
-    expect(rows).toEqual([]);
-  });
-
   test("worktrees of every repo count as known, not just the one being scanned", () => {
     // registering a worktree as its own project should not then offer it back for adoption
     const rows = subtractKnown(

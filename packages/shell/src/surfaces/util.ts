@@ -7,7 +7,6 @@ import {
   previewOrigin,
   type RemoteView,
   type RepoInfo,
-  type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
 import type { ShipOp } from "../state/store.ts";
@@ -223,10 +222,6 @@ export const chord = (id: ChordId) => chordLabel(id, { firefox: IS_FIREFOX, pwa:
 export function pickLabel(p: { component: string | null; tag: string }): string {
   return p.component ? `<${p.component} />` : `<${p.tag}>`;
 }
-
-/** the path to show people for a worktree: the title-named link when the directory itself is a
- * claimed spare's, else the directory (git and the procs always use `path`) */
-export const wtDir = (w: WorktreeInfo) => w.linkPath ?? w.path;
 
 /** what a worktree row is called: the lead by main's branch (main, master, trunk), since it sits
  * on the base every other row branches from and the project's own name is already on the pill;

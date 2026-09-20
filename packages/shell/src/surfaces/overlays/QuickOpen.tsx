@@ -11,7 +11,7 @@ import { ListPicker } from "../../ui/ListPicker.tsx";
 import { LineCounts } from "../changes/GitFileRow.tsx";
 import { goVerb, narrowPage, pageMenu, pageRowTitle, RouteRow, usePageModel } from "../topbar/RoutePicker.tsx";
 import { type Row as PageRow, completionOf as pageCompletion, rowsFor } from "../topbar/routePicker.ts";
-import { wtDir, xyClass, xyLetter } from "../util.ts";
+import { xyClass, xyLetter } from "../util.ts";
 import { commandRow } from "./CommandPalette.tsx";
 import { type Command, filterCommands, useCommands } from "./commands.ts";
 import { matchPositions, rankFiles, splitPath } from "./quickOpen.ts";
@@ -41,7 +41,7 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
   // a file row is a file: open in an editor or reveal it, as the changes panel's rows offer
   const dir = useStore((s) => {
     const w = worktreeById(s, worktreeId)?.worktree;
-    return w ? wtDir(w) : null;
+    return w ? w.path : null;
   });
   const repoId = useStore((s) => worktreeById(s, worktreeId)?.repoId ?? null);
   const live = useStore((s) => routeTarget(s)?.worktreeId === worktreeId);

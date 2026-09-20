@@ -140,3 +140,64 @@ export async function sampleCosts(pgids: number[]): Promise<Map<number, number>>
   }
   return costs;
 }
+
+/** The machine's boot, as an id that changes only when it restarts: the boot time in seconds.
+ * A pid recorded before a reboot names nothing that is running now, however the table reads.
+ * Null where this platform gives none. */
+export async function bootId(): Promise<string | null> {
+  if (process.platform === "darwin") {
+    // renders `{ sec = 1789021297, usec = 12345 } Thu Sep 10 ...`
+    const r = await run("sysctl", ["-n", "kern.boottime"], "/");
+    const m = r.ok ? r.out.match(/sec = (\d+)/) : null;
+    return m ? m[1]! : null;
+  }
+  if (process.platform === "linux") {
+    try {
+      const m = (await Bun.file("/proc/stat").text()).match(/^btime (\d+)/m);
+      return m ? m[1]! : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** one process in the table, for the boot that reclaims the groups the last daemon left */
+export interface PsRow {
+  pid: number;
+  pgid: number;
+  ppid: number;
+  /** when it started, ms wall clock, to the second */
+  startedAt: number;
+  command: string;
+}
+
+/** The whole process table in one `ps`. `etime` renders the same on macOS and Linux and in every
+ * locale; `etimes` and `lstart` do not. */
+export async function psGroups(now = Date.now()): Promise<PsRow[]> {
+  const r = await run("ps", ["-axo", "pid=,pgid=,ppid=,etime=,command="], "/");
+  if (!r.ok) return [];
+  const rows: PsRow[] = [];
+  for (const line of r.out.split("\n")) {
+    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s*(.*)$/);
+    if (!m) continue;
+    const elapsed = parseEtime(m[4]!);
+    if (elapsed === null) continue;
+    rows.push({
+      pid: Number(m[1]),
+      pgid: Number(m[2]),
+      ppid: Number(m[3]),
+      startedAt: now - elapsed * 1000,
+      command: m[5] ?? "",
+    });
+  }
+  return rows;
+}
+
+/** `ps` elapsed time, `[[dd-]hh:]mm:ss`, in seconds; null for anything else */
+export function parseEtime(text: string): number | null {
+  const m = text.match(/^(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)$/);
+  if (!m) return null;
+  const [, days, hours, minutes, seconds] = m;
+  return Number(days ?? 0) * 86400 + Number(hours ?? 0) * 3600 + Number(minutes) * 60 + Number(seconds);
+}

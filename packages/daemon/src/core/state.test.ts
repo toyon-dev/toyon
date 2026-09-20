@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDirs, makePaths } from "./paths.ts";
@@ -101,5 +101,52 @@ describe("state", () => {
     const backups = readdirSync(home).filter((f) => f.startsWith("state.json.corrupt-"));
     expect(backups.length).toBe(1);
     expect(readFileSync(join(home, backups[0]!), "utf8")).toBe('{"repos": [');
+  });
+});
+
+describe("process group ledger", () => {
+  test("load prunes groups whose worktree is gone and keeps a found worktree's", () => {
+    const g = [{ pgid: 1, name: "web", startedAt: 0 }];
+    saveState(paths, {
+      repos: [],
+      worktrees: [wt("a")],
+      sessions: {},
+      groups: { a: g, "disc-0123456789ab": g, gone: g },
+      bootAt: "b1",
+    });
+    const loaded = loadState(paths);
+    expect(Object.keys(loaded.groups ?? {}).sort()).toEqual(["a", "disc-0123456789ab"]);
+    expect(loaded.bootAt).toBe("b1");
+  });
+
+  test("a removed worktree takes its groups with it", () => {
+    const store = new StateStore(paths, { repos: [], worktrees: [wt("a")], sessions: {} });
+    store.setGroups("a", [{ pgid: 1, name: "web", startedAt: 0 }]);
+    expect(store.allGroups()).toEqual([{ worktreeId: "a", pgid: 1, name: "web", startedAt: 0 }]);
+    store.removeWorktree("a");
+    expect(store.groups("a")).toEqual([]);
+    expect(store.allGroups()).toEqual([]);
+  });
+
+  test("setGroups coalesces into one save, and flushGroups writes now", async () => {
+    const store = new StateStore(paths, { repos: [], worktrees: [wt("a")], sessions: {} });
+    store.save();
+    const before = statSync(paths.stateFile).mtimeMs;
+    await Bun.sleep(5);
+    store.setGroups("a", [{ pgid: 1, name: "web", startedAt: 0 }]);
+    store.setGroups("a", [{ pgid: 2, name: "web", startedAt: 0 }]);
+    expect(statSync(paths.stateFile).mtimeMs).toBe(before);
+    store.flushGroups();
+    expect(statSync(paths.stateFile).mtimeMs).toBeGreaterThan(before);
+    expect(loadState(paths).groups).toEqual({ a: [{ pgid: 2, name: "web", startedAt: 0 }] });
+    // nothing pending: a second flush writes nothing
+    const flushed = statSync(paths.stateFile).mtimeMs;
+    await Bun.sleep(5);
+    store.flushGroups();
+    expect(statSync(paths.stateFile).mtimeMs).toBe(flushed);
+    // left alone, the write lands on its own a beat later
+    store.setGroups("a", []);
+    await Bun.sleep(300);
+    expect(loadState(paths).groups).toEqual({});
   });
 });

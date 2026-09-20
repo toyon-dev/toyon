@@ -100,6 +100,8 @@ function fakeAgent(
     modeOption?: string;
     /** offer a login through a terminal-auth `_meta`, as OpenCode does */
     authMeta?: boolean;
+    /** refuse initialize, as an adapter whose install is broken does */
+    failInit?: boolean;
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
@@ -181,6 +183,7 @@ function fakeAgent(
     .agent({ name: "fake" })
     .onRequest(acp.methods.agent.initialize, async (c) => {
       f.inits.push(c.params);
+      if (opts.failInit) throw new acp.RequestError(-32603, "broken adapter");
       // the identity push goes out before the response, as both real adapters send it
       if (opts.authStatus) await c.client.notify(AUTH_STATUS_UPDATE_METHOD, { authStatus: opts.authStatus });
       return {
@@ -304,18 +307,24 @@ function world(
   const statuses: AgentStatus[] = [];
   const auths: Array<[string, AuthObservation]> = [];
   let sessionId: string | undefined;
-  const links: Array<{ killed: boolean }> = [];
+  const processes: Array<[number, boolean]> = [];
+  const links: Array<{ pid: number; killed: boolean; exit: () => void }> = [];
   const connect = (app: acp.ClientApp): AcpLink => {
     const conn = app.connect(fake.app);
-    const rec = { killed: false };
+    let exit = () => {};
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((r) => {
+      exit = () => r({ code: 0, signal: null });
+    });
+    const rec = { pid: 1000 + links.length, killed: false, exit };
     links.push(rec);
     return {
       conn,
+      pid: rec.pid,
       kill: async () => {
         rec.killed = true;
         conn.close();
       },
-      exited: new Promise(() => {}),
+      exited,
       exitInfo: () => null,
     };
   };
@@ -334,6 +343,7 @@ function world(
     onEvent: (e) => events.push(e),
     onStatus: (s) => statuses.push(s),
     onAuth: (agentId, o) => auths.push([agentId, o]),
+    onProcess: (pgid, up) => processes.push([pgid, up]),
     idleMs,
     prepare: async () => ({ bounds, env: {} }),
     ...extra,
@@ -342,7 +352,7 @@ function world(
     for (let i = 0; i < 200 && (session.status === "working" || session.queueLength > 0); i++) await Bun.sleep(5);
   };
   const types = () => events.map((e) => e.type);
-  return { session, events, statuses, auths, types, idle, links, sessionId: () => sessionId, id };
+  return { session, events, statuses, auths, types, idle, links, processes, sessionId: () => sessionId, id };
 }
 
 describe("AcpSession", () => {
@@ -2078,6 +2088,59 @@ describe("AcpSession options", () => {
     w.session.send("three");
     await w.idle();
     expect(fake.configs).toEqual(["effort=high", "effort=high"]);
+    await w.session.close();
+  });
+});
+
+describe("AcpSession process group", () => {
+  test("reports the pgid at spawn and clears it on drop", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    expect(w.session.pgid).toBeNull();
+    await w.session.warm();
+    expect(w.session.pgid).toBe(1000);
+    expect(w.processes).toEqual([[1000, true]]);
+    await w.session.restart();
+    expect(w.session.pgid).toBeNull();
+    expect(w.processes).toEqual([
+      [1000, true],
+      [1000, false],
+    ]);
+  });
+
+  test("clears it when the process exits on its own", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    await w.session.warm();
+    w.links[0]!.exit();
+    for (let i = 0; i < 50 && w.session.pgid !== null; i++) await Bun.sleep(5);
+    expect(w.session.pgid).toBeNull();
+    expect(w.processes.at(-1)).toEqual([1000, false]);
+  });
+
+  test("clears it when initialize fails", async () => {
+    const fake = fakeAgent(say("ok"), { failInit: true });
+    const w = world(fake);
+    await w.session.warm();
+    expect(w.session.pgid).toBeNull();
+    expect(w.processes).toEqual([
+      [1000, true],
+      [1000, false],
+    ]);
+    expect(w.links[0]!.killed).toBe(true);
+  });
+
+  test("a late exit of a replaced link does not clear the new one", async () => {
+    const fake = fakeAgent(say("ok"));
+    const w = world(fake);
+    await w.session.warm();
+    await w.session.restart();
+    await w.session.warm();
+    expect(w.session.pgid).toBe(1001);
+    w.links[0]!.exit();
+    await Bun.sleep(20);
+    expect(w.session.pgid).toBe(1001);
+    expect(w.processes.at(-1)).toEqual([1000, false]);
     await w.session.close();
   });
 });

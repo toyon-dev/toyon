@@ -13,6 +13,8 @@ export interface AcpLink {
   conn: acp.ClientConnection;
   /** SIGTERM the group, SIGKILL after 3s; resolves when the process is gone */
   kill(): Promise<void>;
+  /** the process, which is its own group (spawned detached); null when the spawn failed */
+  pid: number | null;
   /** resolves when the process exits, however it exits */
   exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
   /** once exited: how, plus the last lines it wrote to stderr; null while alive */
@@ -55,5 +57,5 @@ export function spawnAcp(app: acp.ClientApp, launch: Launch, cwd: string, tag: s
     exitInfo = `agent process exited (${why})${tail ? `: ${tail}` : ""}`;
     conn.close(new Error(exitInfo));
   });
-  return { conn, kill: () => killProcessGroup(child), exited, exitInfo: () => exitInfo };
+  return { conn, pid: child.pid ?? null, kill: () => killProcessGroup(child), exited, exitInfo: () => exitInfo };
 }

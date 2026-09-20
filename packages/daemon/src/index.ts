@@ -303,6 +303,9 @@ writeFileSync(paths.pidFile, `${process.pid}\n`);
 
 const stopLagSampler = startLagSampler();
 
+// before anything spawns: what the last daemon left running goes first, so the memory and the
+// ports it held are free for the first wake
+await runtime.reclaimOrphans();
 await repos.boot();
 // after boot, which archives what went while the daemon was down: a box is kept while its worktree
 // or its archive is
@@ -370,6 +373,8 @@ async function shutdown(signal: string, opts: { respawn?: boolean } = {}) {
   drafts.flush();
   const deadline = new Promise<void>((resolve) => setTimeout(resolve, 5000));
   await Promise.race([runtime.shutdown(), deadline]);
+  // whatever is still alive at the deadline is what the next daemon has to reclaim
+  state.flushGroups();
   // a crash leaves the file behind on purpose: `toyon stop` checks the pid is alive before trusting it
   rmSync(paths.pidFile, { force: true });
   if (opts.respawn) {

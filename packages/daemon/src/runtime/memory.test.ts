@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { darwinSignal, memoryTight, parseVmStat, sampleCosts, sustainedPaging } from "./memory.ts";
+import {
+  bootId,
+  darwinSignal,
+  memoryTight,
+  parseEtime,
+  parseVmStat,
+  psGroups,
+  sampleCosts,
+  sustainedPaging,
+} from "./memory.ts";
 
 describe("memoryTight", () => {
   test("gives a reading with a reason on this platform", async () => {
@@ -105,5 +114,38 @@ describe("sampleCosts", () => {
 
   test("asks nothing of the machine for no groups", async () => {
     expect((await sampleCosts([])).size).toBe(0);
+  });
+});
+
+describe("parseEtime", () => {
+  test("reads every shape ps prints", () => {
+    expect(parseEtime("05")).toBeNull();
+    expect(parseEtime("00:05")).toBe(5);
+    expect(parseEtime("12:34")).toBe(754);
+    expect(parseEtime("01:02:03")).toBe(3723);
+    expect(parseEtime("2-01:02:03")).toBe(2 * 86400 + 3723);
+    expect(parseEtime("garbage")).toBeNull();
+  });
+});
+
+describe("bootId", () => {
+  test("gives a stable non-empty id on this platform", async () => {
+    const a = await bootId();
+    expect(a).not.toBeNull();
+    expect(a).not.toBe("");
+    expect(await bootId()).toBe(a);
+  });
+});
+
+describe("psGroups", () => {
+  test("lists this process with its own group and parent", async () => {
+    const now = Date.now();
+    const rows = await psGroups(now);
+    const me = rows.find((r) => r.pid === process.pid);
+    expect(me).toBeDefined();
+    expect(me?.ppid).toBe(process.ppid);
+    expect(me?.pgid).toBeGreaterThan(0);
+    expect(me?.startedAt).toBeLessThanOrEqual(now);
+    expect(me?.command).toContain("bun");
   });
 });

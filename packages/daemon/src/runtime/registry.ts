@@ -17,7 +17,10 @@ import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
-import type { StateStore } from "../core/state.ts";
+import type { GroupEntry, StateStore } from "../core/state.ts";
+import { reclaimGroup } from "./kill.ts";
+import { bootId, type PsRow, psGroups } from "./memory.ts";
+import { type Orphan, orphansIn, strayAdapters } from "./orphans.ts";
 import { type PortLease, proxyPorts } from "./ports.ts";
 import { expandEnv, resolveRun } from "./profile.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
@@ -62,8 +65,18 @@ export interface RuntimeDeps {
    * main runs only then. One server per repo: the spare is main's running copy, and two of the
    * same code all day was the cost this saves. Absent in tests, where main runs when started. */
   mainLeads?: (repoId: string) => boolean;
-  /** factories, overridable so tests run without spawning anything */
-  makeAgent?: (wt: WorktreeInfo, deps: RuntimeDeps, preview: () => PreviewStanding | null) => AgentAdapter;
+  /** the boot id and the process table, for the reclaim at boot; the machine's own when absent */
+  machine?: { bootId: () => Promise<string | null>; psGroups: () => Promise<PsRow[]> };
+  /** kills a group another daemon left; the real signal when absent */
+  reclaim?: (pgid: number) => Promise<void>;
+  /** factories, overridable so tests run without spawning anything. `onProcess` is told when the
+   * agent's process group comes up or goes, so the ledger follows it. */
+  makeAgent?: (
+    wt: WorktreeInfo,
+    deps: RuntimeDeps,
+    preview: () => PreviewStanding | null,
+    onProcess: () => void,
+  ) => AgentAdapter;
   makeProcs?: (wt: WorktreeInfo, deps: RuntimeDeps) => WorktreeProcs;
   makeProxy?: (
     wt: WorktreeInfo,
@@ -136,11 +149,17 @@ export interface ProxyWake {
 const PREVIEW_WAKE_MS = 8_000;
 const PREVIEW_POLL_MS = 100;
 
-function defaultAgent(wt: WorktreeInfo, d: RuntimeDeps, preview: () => PreviewStanding | null): AgentAdapter {
+function defaultAgent(
+  wt: WorktreeInfo,
+  d: RuntimeDeps,
+  preview: () => PreviewStanding | null,
+  onProcess: () => void,
+): AgentAdapter {
   const agent = new AcpSession({
     worktreeId: wt.id,
     cwd: wt.path,
     preview: () => previewContext(preview()),
+    onProcess,
     // resolved at spawn time: a spare is stamped with the task's agent when claimed, and rows from
     // before the registry existed get the default the first time they are used
     spec: () => {
@@ -281,8 +300,15 @@ export class RuntimeRegistry {
   private settingUp = new Set<string>();
   /** worktrees whose start() is between its first proc spawn and its proxy */
   private starting = new Set<string>();
+  /** runtimes stop() has taken out of `runtimes` and is still killing: the ledger keeps their
+   * groups until the kills are through, or a daemon dying mid-stop would have nothing to reclaim */
+  private stopping = new Map<string, Runtime>();
 
-  constructor(private deps: RuntimeDeps) {}
+  constructor(private deps: RuntimeDeps) {
+    // a proc came up or went (a crash, a restart, a wake); an exit while asleep or stopped says
+    // nothing here, and the sleep and stop paths record after their kills instead
+    deps.hub.on("proc", (id) => this.recordGroups(id));
+  }
 
   hold(id: string, tag: string): void {
     let tags = this.holds.get(id);
@@ -367,6 +393,7 @@ export class RuntimeRegistry {
       this.returnLease(id);
     }
     await rt.procs.sleep(why);
+    this.recordGroups(id);
     this.deps.hub.emit("worktreesChanged");
   }
 
@@ -435,12 +462,16 @@ export class RuntimeRegistry {
           { id },
           opts,
           (data) => this.deps.hub.emit("termData", id, SHELL_STREAM, data),
-          (code) => this.deps.hub.emit("termExit", id, SHELL_STREAM, code),
+          (code) => {
+            this.deps.hub.emit("termExit", id, SHELL_STREAM, code);
+            this.recordGroups(id);
+          },
         );
       } catch (e) {
         throw new UserError(`could not start a shell: ${e instanceof Error ? e.message : String(e)}`);
       }
       this.looseShells.set(id, term);
+      this.recordGroups(id);
     } else if (term.cols !== cols || term.rows !== rows) {
       term.resize(cols, rows);
     }
@@ -458,6 +489,7 @@ export class RuntimeRegistry {
       if (keep.has(id)) continue;
       this.looseShells.delete(id);
       fireAndForget(id, Promise.resolve(term.kill()), "loose shell cleanup");
+      this.recordGroups(id);
     }
   }
 
@@ -483,7 +515,12 @@ export class RuntimeRegistry {
     if (existing) return existing;
     const rt: Runtime = {
       info: wt,
-      agent: (this.deps.makeAgent ?? defaultAgent)(wt, this.deps, () => this.previewStanding(wt.id)),
+      agent: (this.deps.makeAgent ?? defaultAgent)(
+        wt,
+        this.deps,
+        () => this.previewStanding(wt.id),
+        () => this.recordGroups(wt.id),
+      ),
       procs: null,
       proxy: null,
       previewName: undefined,
@@ -619,6 +656,7 @@ export class RuntimeRegistry {
     proxy?.stop();
     this.returnLease(id);
     await procs?.stopAll();
+    this.recordGroups(id);
   }
 
   /** stop everything for a worktree and forget it */
@@ -628,11 +666,17 @@ export class RuntimeRegistry {
     const rt = this.runtimes.get(id);
     if (!rt) return;
     this.runtimes.delete(id);
+    this.stopping.set(id, rt);
     rt.proxy?.stop();
     this.returnLease(id);
     const login = rt.login;
     rt.login = null;
-    await Promise.all([rt.agent.close(), rt.procs?.stopAll(), rt.shell?.kill(), login?.pty.kill()]);
+    try {
+      await Promise.all([rt.agent.close(), rt.procs?.stopAll(), rt.shell?.kill(), login?.pty.kill()]);
+    } finally {
+      if (this.stopping.get(id) === rt) this.stopping.delete(id);
+      this.recordGroups(id);
+    }
   }
 
   /** one of the worktree's streams: its shell (spawned on the first open or after it exited) or a
@@ -661,12 +705,16 @@ export class RuntimeRegistry {
           wt,
           opts,
           (data) => this.deps.hub.emit("termData", wt.id, SHELL_STREAM, data),
-          (code) => this.deps.hub.emit("termExit", wt.id, SHELL_STREAM, code),
+          (code) => {
+            this.deps.hub.emit("termExit", wt.id, SHELL_STREAM, code);
+            this.recordGroups(wt.id);
+          },
         );
       } catch (e) {
         throw new UserError(`could not start a shell: ${e instanceof Error ? e.message : String(e)}`);
       }
       rt.shell = term;
+      this.recordGroups(wt.id);
     } else if (term.cols !== cols || term.rows !== rows) {
       term.resize(cols, rows);
     }
@@ -700,6 +748,7 @@ export class RuntimeRegistry {
         (data) => this.deps.hub.emit("termData", id, LOGIN_STREAM, data),
         (code) => {
           this.deps.hub.emit("termExit", id, LOGIN_STREAM, code);
+          this.recordGroups(id);
           // a login that was replaced, or whose worktree went away, says nothing about credentials
           if (rt.login?.pty !== pty) return;
           if (code === 0) {
@@ -713,6 +762,7 @@ export class RuntimeRegistry {
       throw new UserError(`could not start the login: ${e instanceof Error ? e.message : String(e)}`);
     }
     rt.login = { pty, run };
+    this.recordGroups(id);
     this.deps.hub.emit("worktreesChanged");
   }
 
@@ -795,6 +845,56 @@ export class RuntimeRegistry {
     const host = st.host ?? "127.0.0.1";
     const url = `http://${host.includes(":") ? `[${host}]` : host}:${st.boundPort ?? st.port}`;
     return { status: st.status, url, ...(st.detail ? { detail: st.detail } : {}) };
+  }
+
+  /** The ledger entry for a worktree, rebuilt from what is live: each proc's pty, the adapter,
+   * the shell, the login, or a found worktree's loose shell. Live ptys only, never `ProcState.pid`,
+   * which a crash leaves set. An entry keeps its first `startedAt` across rebuilds; the reclaim
+   * matches a leader's start against it. */
+  private recordGroups(id: string) {
+    const rt = this.runtimes.get(id) ?? this.stopping.get(id);
+    const live: Array<{ name: string; pgid: number }> = [];
+    if (rt) {
+      for (const g of rt.procs?.groups() ?? []) live.push(g);
+      if (rt.agent.pgid !== null) {
+        const agentId = this.deps.state.worktree(id)?.agent ?? this.deps.state.defaultAgent ?? DEFAULT_AGENT_ID;
+        live.push({ name: `agent:${agentId}`, pgid: rt.agent.pgid });
+      }
+      if (rt.shell?.alive) live.push({ name: "shell", pgid: rt.shell.pid });
+      if (rt.login?.pty.alive) live.push({ name: "login", pgid: rt.login.pty.pid });
+    }
+    const loose = this.looseShells.get(id);
+    if (loose?.alive) live.push({ name: "shell", pgid: loose.pid });
+    const before = new Map(this.deps.state.groups(id).map((g) => [g.pgid, g]));
+    const now = Date.now();
+    const next: GroupEntry[] = live.map((g) => ({ ...g, startedAt: before.get(g.pgid)?.startedAt ?? now }));
+    this.deps.state.setGroups(id, next);
+  }
+
+  /** Kill what the last daemon left running: the groups its ledger names that are still up with
+   * no daemon over them, and any adapter reparented to init. Before anything is spawned, so the
+   * memory and the ports come back before the first wake takes them. Then the ledger starts over
+   * under this boot. */
+  async reclaimOrphans(): Promise<void> {
+    const machine = this.deps.machine ?? { bootId, psGroups };
+    const [boot, rows] = await Promise.all([machine.bootId(), machine.psGroups()]);
+    const state = this.deps.state;
+    const found: Orphan[] = orphansIn(state.allGroups(), rows, boot, state.bootAt, Date.now());
+    const seen = new Set(found.map((o) => o.pgid));
+    for (const row of strayAdapters(rows, this.deps.paths.agentsDir)) {
+      if (seen.has(row.pgid)) continue;
+      seen.add(row.pgid);
+      found.push({ worktreeId: "daemon", pgid: row.pgid, name: "adapter" });
+    }
+    const reclaim = this.deps.reclaim ?? reclaimGroup;
+    await Promise.all(
+      found.map(async (o) => {
+        await reclaim(o.pgid);
+        log.info(o.worktreeId, `reclaimed ${o.name} group ${o.pgid} left by the last daemon`);
+      }),
+    );
+    state.clearGroups();
+    state.setBootAt(boot);
   }
 
   async shutdown(): Promise<void> {

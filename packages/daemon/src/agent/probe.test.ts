@@ -51,6 +51,7 @@ function fakeAdapter(opts: { failNew?: boolean } = {}) {
         seen.kills++;
         conn.close();
       },
+      pid: null,
       exited: new Promise(() => {}),
       exitInfo: () => null,
     };

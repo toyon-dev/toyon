@@ -36,7 +36,27 @@ export interface PersistedState {
   updateFailed?: { version: string; at: number };
   /** when a phone first redeemed a pairing code here; the desk stops offering one in the bar */
   pairedAt?: number;
+  /** The process groups the daemon owns, per worktree (found ones included, under their disc- id):
+   * every dev server, agent adapter, shell and login it spawned. The next daemon reads this to
+   * reclaim what a crash or a kill left running, since a pgid otherwise lives only in the runtime. */
+  groups?: Record<string, GroupEntry[]>;
+  /** the machine's boot id when the ledger was last written; a different one at load means every
+   * pid in it belongs to another life of the machine */
+  bootAt?: string;
 }
+
+/** one process group the daemon owns */
+export interface GroupEntry {
+  pgid: number;
+  /** what it is, for the log line: the proc's key, `agent:<id>`, `shell` or `login` */
+  name: string;
+  /** when it was first recorded, ms; a leader found later with another start time is a reused pid */
+  startedAt: number;
+}
+
+/** proc events come in bursts (a wake spawns every proc of a worktree), and each save rewrites
+ * the file; one write a beat later covers the burst */
+const GROUPS_SAVE_MS = 250;
 
 /** one page's standing in a repo's list: a count that decays, as of `last`, and the title the page
  * had when it was last there */
@@ -95,6 +115,10 @@ export function loadState(paths: Paths): PersistedState {
   for (const id of Object.keys(state.seen ?? {})) {
     if (!ids.has(id) && !id.startsWith("disc-")) delete state.seen?.[id];
   }
+  // the ledger too, with the same exception: a found worktree's shell has no record here either
+  for (const id of Object.keys(state.groups ?? {})) {
+    if (!ids.has(id) && !id.startsWith("disc-")) delete state.groups?.[id];
+  }
   if (state.modelCache) {
     state.optionCache ??= {};
     for (const [agentId, models] of Object.entries(state.modelCache)) {
@@ -133,6 +157,8 @@ export function loadOrCreateToken(paths: Paths): string {
  */
 export class StateStore {
   readonly state: PersistedState;
+  /** the coalesced ledger write, while one is pending */
+  private groupsTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private paths: Paths,
@@ -227,6 +253,54 @@ export class StateStore {
     this.state.worktrees = this.state.worktrees.filter((w) => w.id !== id);
     delete this.state.sessions[id];
     if (this.state.seen) delete this.state.seen[id];
+    if (this.state.groups) delete this.state.groups[id];
+    this.save();
+  }
+
+  /** the process groups recorded for a worktree; empty when none */
+  groups(worktreeId: string): GroupEntry[] {
+    return this.state.groups?.[worktreeId] ?? [];
+  }
+  /** replace a worktree's list; written a beat later, so a burst of proc events is one save */
+  setGroups(worktreeId: string, list: GroupEntry[]) {
+    this.state.groups ??= {};
+    if (list.length === 0) delete this.state.groups[worktreeId];
+    else this.state.groups[worktreeId] = list;
+    if (this.groupsTimer) return;
+    const t = setTimeout(() => {
+      try {
+        this.save();
+      } catch (e) {
+        log.warn("state", "could not write the process group ledger", e);
+      }
+    }, GROUPS_SAVE_MS);
+    // a write pending must not keep a test, or a shutdown, waiting
+    t.unref?.();
+    this.groupsTimer = t;
+  }
+  /** the write that is pending, now: a shutdown is about to remove the pid file and exit */
+  flushGroups() {
+    if (this.groupsTimer) this.save();
+  }
+  /** every entry with its worktree, for the boot that reads the ledger */
+  allGroups(): Array<GroupEntry & { worktreeId: string }> {
+    const out: Array<GroupEntry & { worktreeId: string }> = [];
+    for (const [worktreeId, list] of Object.entries(this.state.groups ?? {})) {
+      for (const g of list) out.push({ ...g, worktreeId });
+    }
+    return out;
+  }
+  /** the whole ledger goes: what it listed has been reclaimed, or belongs to another boot */
+  clearGroups() {
+    delete this.state.groups;
+    this.save();
+  }
+  get bootAt(): string | undefined {
+    return this.state.bootAt;
+  }
+  setBootAt(id: string | null) {
+    if (id === null) delete this.state.bootAt;
+    else this.state.bootAt = id;
     this.save();
   }
   session(worktreeId: string): string | undefined {
@@ -296,6 +370,9 @@ export class StateStore {
   }
 
   save() {
+    // the ledger is part of the file, so any save covers a write it had pending
+    if (this.groupsTimer) clearTimeout(this.groupsTimer);
+    this.groupsTimer = null;
     saveState(this.paths, this.state);
   }
 }

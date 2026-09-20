@@ -35,6 +35,7 @@ function fakeAdapter(opts: { logout?: boolean; pushOnInit?: AuthStatus; pushOnLo
         seen.kills++;
         conn.close();
       },
+      pid: null,
       exited: new Promise(() => {}),
       exitInfo: () => null,
     };

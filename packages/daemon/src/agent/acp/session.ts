@@ -90,6 +90,9 @@ export interface AcpSessionDeps {
   /** where the preview stands, as a block after every message; read as each goes out, since the
    * port belongs to the runtime and not to this session */
   preview?: () => string | undefined;
+  /** the adapter's process group came up (`true`, right after the spawn and before initialize,
+   * so a daemon dying mid-start still has it on record) or went (`false`), for the ledger */
+  onProcess?: (pgid: number, up: boolean) => void;
 }
 
 const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
@@ -262,6 +265,20 @@ export class AcpSession implements AgentAdapter {
 
   get runningAgent(): string | null {
     return this.conn?.spec.id ?? null;
+  }
+
+  /** set at the spawn rather than read off `conn`, which exists only once initialize has answered */
+  private pgid_: number | null = null;
+  get pgid(): number | null {
+    return this.pgid_;
+  }
+
+  private noteProcess(link: AcpLink, up: boolean) {
+    if (link.pid === null) return;
+    if (up) this.pgid_ = link.pid;
+    // keyed by the link's own pid: a replaced link's late exit must not clear the new one's record
+    else if (this.pgid_ === link.pid) this.pgid_ = null;
+    this.d.onProcess?.(link.pid, up);
   }
 
   /** the process goes and the next message spawns whatever the record names now: a spare warmed
@@ -685,9 +702,11 @@ export class AcpSession implements AgentAdapter {
         if (c.params) this.d.onAuth?.(spec.id, { status: c.params });
       });
     const link = this.d.connect(app, spec, prepared);
+    this.noteProcess(link, true);
     const ctx = link.conn.agent;
     // the process dying while idle must not leave a dead handle for the next prompt to use
     link.exited.then(() => {
+      this.noteProcess(link, false);
       if (this.conn?.link === link) {
         log.warn(this.d.worktreeId, "agent process exited while idle");
         this.conn = null;
@@ -730,6 +749,7 @@ export class AcpSession implements AgentAdapter {
       return this.conn;
     } catch (e) {
       fireAndForget(this.d.worktreeId, link.kill(), "kill agent after failed start");
+      this.noteProcess(link, false);
       throw e;
     }
   }
@@ -1142,6 +1162,7 @@ export class AcpSession implements AgentAdapter {
     if (!conn) return;
     conn.link.conn.close();
     await conn.link.kill();
+    this.noteProcess(conn.link, false);
   }
 }
 

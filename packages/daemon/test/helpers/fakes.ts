@@ -29,6 +29,14 @@ export class FakeAgent implements AgentAdapter {
     this.restarts++;
     this.runningAgent = null;
   }
+  pgid: number | null = null;
+  /** the registry's ear for the process group, wired by the factory */
+  onProcess: (() => void) | null = null;
+  /** play the adapter process coming up (a pgid) or going (null) */
+  setProcess(pgid: number | null) {
+    this.pgid = pgid;
+    this.onProcess?.();
+  }
   constructor(readonly worktreeId: string) {}
   get queueLength() {
     return 0;
@@ -114,8 +122,12 @@ export class FakeProcs {
       s.detail = undefined;
     }
   }
+  /** the live fakes by name, the way the supervisor reports its ptys */
+  groups(): Array<{ name: string; pgid: number }> {
+    return [...this.ptys].filter(([, t]) => t.alive).map(([name, t]) => ({ name, pgid: t.pid }));
+  }
   pgids(): number[] {
-    return [];
+    return this.groups().map((g) => g.pgid);
   }
   restarts: string[] = [];
   restart(name: string) {
@@ -169,9 +181,12 @@ export class FakeProxy implements WorktreeProxy {
   setTarget() {}
 }
 
-/** records writes/resizes/kills; `emit`/`exit` play the pty's side */
+let nextFakePid = 4242;
+
+/** records writes/resizes/kills; `emit`/`exit` play the pty's side. Each gets a pid of its own,
+ * as each pty leads its own group */
 export class FakeTerminal implements PtyHandle {
-  pid = 4242;
+  pid = nextFakePid++;
   alive = true;
   cols: number;
   rows: number;
@@ -257,8 +272,9 @@ export function fakeFactories() {
       terminals.set(wt.id, [...(terminals.get(wt.id) ?? []), t]);
       return t;
     },
-    makeAgent: (wt: WorktreeInfo) => {
+    makeAgent: (wt: WorktreeInfo, _deps, _preview, onProcess) => {
       const a = new FakeAgent(wt.id);
+      a.onProcess = onProcess;
       agents.set(wt.id, a);
       return a;
     },

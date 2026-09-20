@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProcState } from "@toyon/shared";
+import { reclaimGroup } from "./kill.ts";
 import { reachableHost } from "./listeners.ts";
 import { execForm, WorktreeProcs } from "./supervisor.ts";
 
@@ -265,5 +267,31 @@ describe("a proc is one process", () => {
     for (const c of ["a && b", "a | b", "a; b", "a &", "$(x) y", "`x` y", "(a)", "FOO=1 bun dev", "a > log", "a\nb"]) {
       expect(execForm(c)).toBe(c);
     }
+  });
+});
+
+describe("reclaimGroup", () => {
+  test("kills a detached group this process never waited on and resolves once it is gone", async () => {
+    // detached: its own group, the way a proc of a dead daemon sits under init
+    const child = spawn("sh", ["-c", "sleep 30"], { detached: true, stdio: "ignore" });
+    child.on("error", noop);
+    child.unref();
+    const pid = child.pid!;
+    expect(alive(pid)).toBe(true);
+    const t0 = Date.now();
+    await reclaimGroup(pid);
+    expect(Date.now() - t0).toBeLessThan(2000);
+    for (let i = 0; i < 50 && alive(pid); i++) await Bun.sleep(20);
+    expect(alive(pid)).toBe(false);
+  });
+
+  test("on a group already gone it returns at once", async () => {
+    const child = spawn("sh", ["-c", "exit 0"], { detached: true, stdio: "ignore" });
+    child.on("error", noop);
+    const pid = child.pid!;
+    await new Promise<void>((r) => child.once("exit", () => r()));
+    const t0 = Date.now();
+    await reclaimGroup(pid);
+    expect(Date.now() - t0).toBeLessThan(200);
   });
 });

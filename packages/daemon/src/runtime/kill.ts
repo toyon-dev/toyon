@@ -43,3 +43,31 @@ async function within(p: Promise<void>, ms: number): Promise<boolean> {
   clearTimeout(timer);
   return done;
 }
+
+/** how often a group that is not this process's child is asked whether it is still there */
+const GONE_POLL_MS = 100;
+
+/** Resolves once nothing in the group answers a signal. For a group this process did not spawn,
+ * which gives no exit event. Polls only as long as killGroup can be waiting on it: past that it
+ * resolves regardless, so a group that will not die never keeps a timer alive. */
+export function groupGone(pgid: number): Promise<void> {
+  const deadline = Date.now() + KILL_GRACE_MS + EXIT_GRACE_MS + 500;
+  return new Promise<void>((resolve) => {
+    const poll = () => {
+      try {
+        process.kill(-pgid, 0);
+      } catch (e) {
+        // ESRCH: gone. Anything else (EPERM) means something in it is alive
+        if ((e as NodeJS.ErrnoException).code === "ESRCH") return resolve();
+      }
+      if (Date.now() >= deadline) return resolve();
+      setTimeout(poll, GONE_POLL_MS).unref?.();
+    };
+    poll();
+  });
+}
+
+/** the group policy for a group left by another daemon: no child, no exit event */
+export function reclaimGroup(pgid: number): Promise<void> {
+  return killGroup(pgid, groupGone(pgid));
+}

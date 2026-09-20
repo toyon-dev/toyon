@@ -286,11 +286,16 @@ export class WorktreeProcs {
     }
   }
 
-  /** the process group of each live proc (its pid: a pty child leads its own group), for a cost sample */
-  pgids(): number[] {
-    const out: number[] = [];
-    for (const mp of this.procs.values()) if (mp.pty?.alive) out.push(mp.pty.pid);
+  /** the process group of each live proc (its pid: a pty child leads its own group), by name */
+  groups(): Array<{ name: string; pgid: number }> {
+    const out: Array<{ name: string; pgid: number }> = [];
+    for (const [name, mp] of this.procs) if (mp.pty?.alive) out.push({ name, pgid: mp.pty.pid });
     return out;
+  }
+
+  /** the same groups, for a cost sample */
+  pgids(): number[] {
+    return this.groups().map((g) => g.pgid);
   }
 
   /** Stop every proc; resolves when they have all exited (bounded by the SIGKILL grace). */

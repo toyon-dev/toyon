@@ -64,6 +64,11 @@ function make(
   // copies: the store hands out live records, and a port leased in one test must not reach the next
   const worktrees = (opts.worktrees ?? [wt, spare]).map((w) => ({ ...w }));
   const state = new StateStore(t.paths, { repos: [repo], worktrees, sessions: {} });
+  // the ledger write pending lands before the temp home goes
+  cleanup = () => {
+    state.flushGroups();
+    t.cleanup();
+  };
   const hub = new Hub();
   const f = fakeFactories();
   const agents = fakeAgents(t.paths.agentsDir);
@@ -563,5 +568,139 @@ describe("RuntimeRegistry sleep and wake", () => {
     const t0 = Date.now();
     expect(await registry.awaitPreview(wt.id, 1000)).toBeNull();
     expect(Date.now() - t0).toBeLessThan(200);
+  });
+});
+
+describe("process group ledger", () => {
+  const running = (name: string, pid: number) => ({ name, command: "true", port: 1, status: "running" as const, pid });
+  const pgids = (state: StateStore, id: string) => state.groups(id).map((g) => `${g.name}:${g.pgid}`);
+
+  test("follows proc spawns and exits, the shell, the login and the agent process", async () => {
+    const { registry, state, hub, procs, agents, terminals } = make();
+    await registry.start(wt, repo);
+    const web = procs.get(wt.id)!.spawnFake("web");
+    hub.emit("proc", wt.id, running("web", web.pid));
+    expect(pgids(state, wt.id)).toEqual([`web:${web.pid}`]);
+    registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
+    const shell = terminals.get(wt.id)![0]!;
+    registry.startLogin(wt.id, { command: "/bin/login", args: [], env: {} });
+    const login = terminals.get(wt.id)![1]!;
+    agents.get(wt.id)!.setProcess(777);
+    expect(pgids(state, wt.id)).toEqual([
+      `web:${web.pid}`,
+      "agent:claude:777",
+      `shell:${shell.pid}`,
+      `login:${login.pid}`,
+    ]);
+    web.exit(1);
+    hub.emit("proc", wt.id, { ...running("web", web.pid), status: "crashed" });
+    shell.exit(0);
+    login.exit(1);
+    agents.get(wt.id)!.setProcess(null);
+    expect(pgids(state, wt.id)).toEqual([]);
+  });
+
+  test("a rebuild keeps an entry's first startedAt", async () => {
+    const { registry, state, hub, procs } = make();
+    await registry.start(wt, repo);
+    const web = procs.get(wt.id)!.spawnFake("web");
+    hub.emit("proc", wt.id, running("web", web.pid));
+    const first = state.groups(wt.id)[0]!.startedAt;
+    await Bun.sleep(5);
+    hub.emit("proc", wt.id, running("web", web.pid));
+    expect(state.groups(wt.id)[0]!.startedAt).toBe(first);
+  });
+
+  test("sleep, stop and removal clear it", async () => {
+    const { registry, state, hub, procs, terminals } = make();
+    await registry.start(wt, repo);
+    const web = procs.get(wt.id)!.spawnFake("web");
+    hub.emit("proc", wt.id, running("web", web.pid));
+    registry.openTerminal(wt.id, SHELL_STREAM, 80, 24);
+    expect(state.groups(wt.id)).toHaveLength(2);
+    // the fake's sleep leaves its pty alive, so the shell alone must not decide this
+    web.exit(0);
+    await registry.sleep(wt.id, "nobody looked");
+    expect(pgids(state, wt.id)).toEqual([`shell:${terminals.get(wt.id)![0]!.pid}`]);
+    await registry.stop(wt.id);
+    expect(state.groups(wt.id)).toEqual([]);
+    state.setGroups(wt.id, [{ pgid: 9, name: "web", startedAt: 0 }]);
+    state.removeWorktree(wt.id);
+    expect(state.allGroups()).toEqual([]);
+  });
+
+  test("a loose shell is recorded under its found id and goes with the prune", () => {
+    const { registry, state, terminals } = make();
+    registry.openLooseShell("disc-abc", "/nowhere", 80, 24);
+    const t = terminals.get("disc-abc")![0]!;
+    expect(pgids(state, "disc-abc")).toEqual([`shell:${t.pid}`]);
+    registry.pruneLooseShells(new Set());
+    expect(state.groups("disc-abc")).toEqual([]);
+  });
+
+  test("reclaimOrphans kills what the ledger names that is still up, and stray adapters", async () => {
+    const t = tmpRepo();
+    cleanup = t.cleanup;
+    const now = Date.now();
+    const state = new StateStore(t.paths, {
+      repos: [repo],
+      worktrees: [{ ...wt }],
+      sessions: {},
+      groups: { w1: [{ pgid: 500, name: "web", startedAt: now - 60_000 }] },
+      bootAt: "b1",
+    });
+    const killed: number[] = [];
+    const rows = [
+      { pid: 510, pgid: 500, ppid: 1, startedAt: now - 60_000, command: "node vite" },
+      { pid: 700, pgid: 700, ppid: 1, startedAt: now - 60_000, command: `node ${t.paths.agentsDir}/claude/x.js` },
+    ];
+    const registry = new RuntimeRegistry({
+      hub: new Hub(),
+      state,
+      paths: t.paths,
+      agents: fakeAgents(t.paths.agentsDir),
+      bridgeScript: () => "",
+      machine: { bootId: async () => "b1", psGroups: async () => rows },
+      reclaim: async (pgid) => {
+        killed.push(pgid);
+      },
+      ...fakeFactories().factories,
+    });
+    await registry.reclaimOrphans();
+    expect(killed.sort()).toEqual([500, 700]);
+    expect(state.allGroups()).toEqual([]);
+    expect(state.bootAt).toBe("b1");
+  });
+
+  test("reclaimOrphans on another boot kills nothing and stamps the new boot", async () => {
+    const t = tmpRepo();
+    cleanup = t.cleanup;
+    const state = new StateStore(t.paths, {
+      repos: [repo],
+      worktrees: [{ ...wt }],
+      sessions: {},
+      groups: { w1: [{ pgid: 500, name: "web", startedAt: Date.now() }] },
+      bootAt: "b1",
+    });
+    const killed: number[] = [];
+    const registry = new RuntimeRegistry({
+      hub: new Hub(),
+      state,
+      paths: t.paths,
+      agents: fakeAgents(t.paths.agentsDir),
+      bridgeScript: () => "",
+      machine: {
+        bootId: async () => "b2",
+        psGroups: async () => [{ pid: 510, pgid: 500, ppid: 1, startedAt: Date.now(), command: "node vite" }],
+      },
+      reclaim: async (pgid) => {
+        killed.push(pgid);
+      },
+      ...fakeFactories().factories,
+    });
+    await registry.reclaimOrphans();
+    expect(killed).toEqual([]);
+    expect(state.allGroups()).toEqual([]);
+    expect(state.bootAt).toBe("b2");
   });
 });

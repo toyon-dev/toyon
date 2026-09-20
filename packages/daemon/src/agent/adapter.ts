@@ -59,6 +59,9 @@ export interface AgentAdapter {
   warm(): Promise<void>;
   /** the registry id of the agent whose process is up, or null while none is */
   readonly runningAgent: string | null;
+  /** the process group of the adapter up, from its spawn until it is gone, for the ledger the next
+   * daemon reclaims from; null while none is */
+  readonly pgid: number | null;
   /** drop the process, keeping the session id and the transcript: the next message spawns the
    * agent the record names now */
   restart(): Promise<void>;

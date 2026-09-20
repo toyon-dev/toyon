@@ -10,7 +10,7 @@ import { Icon } from "../../ui/Icon.tsx";
 import { useSelectAllWithin } from "../../ui/selectAll.ts";
 import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
-import { groupTools, indexOfSeq, openRow } from "./group.ts";
+import { groupTools, indexOfSeq, openRow, subagentsAtWork } from "./group.ts";
 import { isBlank } from "./recall.ts";
 
 /** seconds of silence before the working line starts counting */
@@ -190,11 +190,17 @@ export function ChatLog({
   // difference: nothing while results keep landing, a number climbing when they stop. It measures
   // silence rather than the turn, so a running call counts too: a hung command is silence.
   const quiet = useQuietSeconds(items, busy);
-  // What in the log already says busy: the shimmer on a running call, or on a thought still
-  // arriving. The word under the log would say it again, so it shows only when nothing does, in
-  // the gap between two calls. The count stays either way: a call that hangs shimmers like one
-  // that runs, and the seconds are what tell them apart.
-  const moving = streaming >= 0 || items.some((i) => i.kind === "tool" && !i.done);
+  // What in the log already says busy where the reader is looking: the shimmer on a running call
+  // of the main agent's own, which is the newest row, or on a thought still arriving. The word
+  // under the log would say it again, so it shows only when nothing does, in the gap between two
+  // calls. A subagent's call does not count: it runs under a spawn row that closed when the spawn
+  // returned and has since been folded up the log, so its shimmer is one nobody sees, and the word
+  // hiding for it would blink with every call the subagent makes. The count stays either way: a
+  // call that hangs shimmers like one that runs, and the seconds are what tell them apart.
+  const moving = streaming >= 0 || items.some((i) => i.kind === "tool" && !i.done && !i.parentToolId);
+  // the subagents the main agent is waiting on: named in the word, with their calls ticking beside
+  // it, since their rows are out of sight and this line is the one place that can say so
+  const fanout = useMemo(() => subagentsAtWork(items), [items]);
   // The rows under the transcript land a frame after the message that caused them: the agent goes
   // busy after the send is in the log, a queued message after the daemon takes it. They add height
   // without touching `items`, so the send they follow scrolls out from under them.
@@ -251,15 +257,20 @@ export function ChatLog({
               // stop alone, since the shimmer above is saying the rest
               quiet >= QUIET_AFTER && (
                 <span>
-                  quiet for<span className="working-quiet">{quiet}s</span>
+                  quiet for<span className="working-num">{quiet}s</span>
                 </span>
               )
             ) : (
               <span>
-                working…
+                {fanout.agents ? `${fanout.agents} ${fanout.agents === 1 ? "agent" : "agents"} working…` : "working…"}
+                {fanout.agents > 0 && (
+                  <span className="working-num">
+                    {fanout.calls} {fanout.calls === 1 ? "call" : "calls"}
+                  </span>
+                )}
                 {/* under the threshold a healthy turn would flick the number on and off with
                     every result; past it, the silence is the news */}
-                {quiet >= QUIET_AFTER && <span className="working-quiet">{quiet}s</span>}
+                {quiet >= QUIET_AFTER && <span className="working-num">{quiet}s</span>}
               </span>
             )}
             <Button

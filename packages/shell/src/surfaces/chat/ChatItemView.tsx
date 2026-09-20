@@ -17,7 +17,7 @@ import { rowState } from "../../ui/rowState.ts";
 import { attachmentUrl } from "../../ws.ts";
 import { wtDir } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
-import { runCalls, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
+import { runCalls, runLive, sameRun, sameTools, type ThinkingItem, type ToolEntry, type ToolItem } from "./group.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { useMarkdown } from "./markdown.ts";
 import { worktreeLink } from "./markdownPaths.ts";
@@ -453,14 +453,19 @@ export const ToolRow = memo(
     const streaming = !tools.at(-1)?.done;
     // the row is alive while its own last call runs, and while the agent writes the run's next
     // call: that one has no row until its path is in, and this row's shine is what says it is coming
-    const running = streaming || !!next;
+    const alive = streaming || !!next;
+    // A spawn row shines for its subagent's calls too. A spawn run in the background returns at
+    // once, so its own call says nothing about the subagent, and the calls landing under the
+    // closed row are what say it is still going.
+    const running = alive || (!!run && runLive(run));
     // The log decides which row opens itself, and it hands the row two answers: the turn's one
     // self-opening row (openRow in group.ts, reasoning only) and the newest `!` command, which is
     // open from the start because what it printed is the reason the person ran it. A subagent's
-    // row is the third case and decides for itself: open while the subagent works, since its rows
-    // are where the work is, and closed once it is done, when what it did is a line with a count
-    // and the message after it says what came of it.
-    const auto = !!live || (!!run && running);
+    // row is the third case and decides for itself: open while its own call runs, since its rows
+    // are where the work is, and closed once that returns, when what it did is a line with a count
+    // and the message after it says what came of it. A background spawn's row stays closed while
+    // its subagent works: opening on each of its calls would flap the fold shut and open.
+    const auto = !!live || (!!run && alive);
     const text = toolLabel(head, roots);
     // the agent is still typing the call: the row says what it is typing, in the slot the path or
     // command will take, and the glyph alone names the kind, as on every row that has its detail

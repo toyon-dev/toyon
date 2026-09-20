@@ -269,7 +269,8 @@
   }
   /* the seconds of silence after the word: a number that ticks holds its width, so the stop button
    beside it does not step when 9 becomes 10 */
-  .working-quiet {
+  /* a number on the working line: the seconds of silence, or a fan-out's calls ticking */
+  .working-num {
     margin-left: 6px;
     font-variant-numeric: tabular-nums;
   }

@@ -64,6 +64,15 @@ export function landFacts(l: Landing, count: number): string {
   return facts ? ended(capital(facts)) : "";
 }
 
+/** How far the branch trails main, for the land verb's tooltip: the count is decided at the
+ * press, since land takes main in before anything else, so it is said there and not on a row of
+ * its own under the box, which would leave as the land ran and move the verb from under the
+ * cursor. Empty when the branch is level. */
+export function behindFact(defaultBranch: string, behind: number | undefined): string {
+  const n = behind ?? 0;
+  return n > 0 ? `${n} behind ${defaultBranch}; land takes it in first.` : "";
+}
+
 /** What is here to check, when no sentence and no message says it: the count alone */
 export function filesLine(count: number): string {
   return count > 0 ? ended(capital(`${count} ${count === 1 ? "file" : "files"} changed`)) : "";

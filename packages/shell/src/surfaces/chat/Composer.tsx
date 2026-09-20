@@ -8,7 +8,6 @@ import type {
 } from "@toyon/shared";
 import {
   canLand,
-  canSync,
   DEFAULT_PERMISSION_MODE,
   describeLand,
   isProvisional,
@@ -36,7 +35,7 @@ import { useContextMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { greenfieldContext } from "../center/greenfield.ts";
-import { behindNote, canPull, originNote } from "../chips/baseNote.ts";
+import { canPull, originNote } from "../chips/baseNote.ts";
 import { EffortChip, useNewWorktreeEffort } from "../chips/EffortChip.tsx";
 import { ModeChip, useNewWorktreeMode } from "../chips/ModeChip.tsx";
 import { AgentModelChip, ModelChip, rememberNewWorktreeModel, useNewWorktreeModel } from "../chips/ModelChip.tsx";
@@ -45,7 +44,17 @@ import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
 import { fileRow } from "../overlays/QuickOpen.tsx";
 import { rankMentions } from "../overlays/quickOpen.ts";
-import { filesLine, landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, verbLine } from "../recap.ts";
+import {
+  behindFact,
+  filesLine,
+  landCaveat,
+  landFacts,
+  landingLine,
+  prCanMerge,
+  prLine,
+  recapLine,
+  verbLine,
+} from "../recap.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
 import { openAsk } from "./ask.ts";
@@ -230,12 +239,10 @@ export function Composer({
   // the folders the files tab shows, so `@src/app/` names one the tree has
   const folders = useMemo(() => folderList(files ?? NO_PATHS), [files]);
   const git = useLocalField(id, "git");
-  // this worktree's uncommitted files and how far it trails main: the live status when the row is
-  // subscribed, else the rail's ten-second count
+  // this worktree's uncommitted files: the live status when the row is subscribed, else the
+  // rail's ten-second count
   const dirty = git?.files.length ?? active?.dirty ?? 0;
   const op = useStore((s) => (id ? s.shipping[id] : undefined));
-  const behind =
-    !active || !repo || spawning || !canSync(active) ? null : behindNote(repo.defaultBranch, active.behind);
   // main against origin, said while a worktree is about to start from it: what the daemon says of
   // the checkout itself, since main is not a row while its spare stands in for it
   const trunk = useStore((s) => trunkOf(s, repoId));
@@ -484,6 +491,7 @@ export function Composer({
                   line: verbLine(said ?? landing.subject ?? (landFacts(landing, landCount) || "ready")),
                   tip: [
                     landFacts(landing, landCount),
+                    behindFact(repo?.defaultBranch ?? "main", active?.behind),
                     `${describeLand(policy, repo?.defaultBranch)}.`,
                     landing.subject ? "Tab edits the message first." : "",
                   ]
@@ -1108,12 +1116,15 @@ export function Composer({
         </div>
       )}
       {/* under the knobs, behind a rule: the state of where this message lands and the one thing to
-          do about it now, each on its own line so the row above keeps its shape. How far this
-          worktree trails main, with the sync; main against origin while drafting, with the pull,
-          since a new worktree starts from main as it is and a main nobody has pulled today hands
-          the agent stale code. What the message will be (batch, variants, main's files coming
-          along) is the intro's, above the box. And the question set aside, with the way back to it. */}
-      {((origin && trunk) || (behind && active && id) || (parked && id)) && (
+          do about it now, each on its own line so the row above keeps its shape. Main against
+          origin while drafting, with the pull, since a new worktree starts from main as it is and
+          a main nobody has pulled today hands the agent stale code. What the message will be
+          (batch, variants, main's files coming along) is the intro's, above the box. And the
+          question set aside, with the way back to it. How far a worktree trails main is not a row
+          here: land takes main in first, so the count is a fact on the verb's tooltip, and a row
+          that left as the land ran moved the verb from under the cursor before archive took its
+          place. The sync itself stays in the changes tab's foot and the rail menu. */}
+      {((origin && trunk) || (parked && id)) && (
         <div className="composer-notes">
           {parked && id && (
             <div className="hint composer-note">
@@ -1148,24 +1159,6 @@ export function Composer({
                   pull
                 </Button>
               )}
-            </div>
-          )}
-          {behind && active && id && (
-            <div className="hint composer-note">
-              <span>{behind}</span>
-              <Button
-                variant="outline"
-                busy={op === "sync-main"}
-                disabled={!!op || dirty > 0}
-                data-tip={
-                  dirty > 0
-                    ? "commit or discard the changes here first"
-                    : `Merge ${repo?.defaultBranch} into this worktree`
-                }
-                onClick={() => shipOp(sock, dispatch, { t: "sync-main", worktreeId: id })}
-              >
-                sync
-              </Button>
             </div>
           )}
         </div>

@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
-import { filesLine, landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, verbLine } from "./recap.ts";
+import {
+  behindFact,
+  filesLine,
+  landCaveat,
+  landFacts,
+  landingLine,
+  prCanMerge,
+  prLine,
+  recapLine,
+  verbLine,
+} from "./recap.ts";
 
 const turn = (end: LastTurn["end"], f: Partial<TurnFacts> = {}, minsAgo = 12, text?: string): LastTurn => ({
   at: Date.now() - minsAgo * 60_000,
@@ -65,6 +75,12 @@ describe("landingLine", () => {
     expect(landFacts(landing({ check: "pass" }), 0)).toBe("Check passed.");
     expect(landFacts(landing({}), 2)).toBe("2 files changed.");
     expect(landFacts(landing({}), 0)).toBe("");
+  });
+
+  test("the behind count is a fact for the verb, and nothing when the branch is level", () => {
+    expect(behindFact("main", 4)).toBe("4 behind main; land takes it in first.");
+    expect(behindFact("main", 0)).toBe("");
+    expect(behindFact("main", undefined)).toBe("");
   });
 
   test("the model's doubt is a sentence of its own, and none without one", () => {

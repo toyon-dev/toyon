@@ -8,8 +8,9 @@ import { log } from "../core/log.ts";
 import { run } from "../git/exec.ts";
 
 export interface MemorySignal {
-  /** memory is short: available memory under the floor, the same on every platform, or the macOS
-   * kernel at critical. What a worktree is put to sleep on. */
+  /** memory is short: available memory under the floor, the same on every platform, the macOS
+   * kernel at critical, or macOS paging to disk at a steady rate. What a worktree is put to sleep
+   * on. */
   tight: boolean;
   /** the reading in words, for the log line a sleep leaves behind */
   why: string;
@@ -21,6 +22,22 @@ export interface MemorySignal {
 const MAC_PRESSURE_CRITICAL = 4;
 /** available memory under this share of the total is short, on macOS and Linux alike */
 const AVAILABLE_FLOOR = 0.15;
+/** Swapping out to disk at or above this rate, bytes per second, is short whatever the level and
+ * the share say. A machine can page hundreds of MB/s each way for minutes while the level stays at
+ * warn and a third of memory reads as available, because the compressor and the SSD absorb the
+ * paging and the kernel counts that as working. */
+const PAGING_FLOOR_BPS = 16 * 2 ** 20;
+
+/** one reading of the cumulative swap-out counter */
+export interface PagingSample {
+  /** wall clock, ms */
+  at: number;
+  /** bytes swapped out since boot */
+  bytes: number;
+}
+
+/** the last readings, enough for two windows */
+let paging: PagingSample[] = [];
 
 let unsupportedLogged = false;
 
@@ -35,20 +52,56 @@ export async function memoryTight(): Promise<MemorySignal | null> {
 }
 
 async function darwin(): Promise<MemorySignal | null> {
-  const r = await run("sysctl", ["-n", "kern.memorystatus_vm_pressure_level", "kern.memorystatus_level"], "/");
+  const [r, v] = await Promise.all([
+    run("sysctl", ["-n", "kern.memorystatus_vm_pressure_level", "kern.memorystatus_level"], "/"),
+    run("vm_stat", [], "/"),
+  ]);
   if (!r.ok) return null;
   const [level, available] = r.out.split(/\s+/).map(Number);
   if (level === undefined || available === undefined || Number.isNaN(level) || Number.isNaN(available)) return null;
-  return darwinSignal(level, available);
+  const sample = v.ok ? parseVmStat(v.out, Date.now()) : null;
+  if (sample) paging = [...paging, sample].slice(-3);
+  return darwinSignal(level, available, sustainedPaging(paging));
 }
 
-/** `kern.memorystatus_vm_pressure_level` and `kern.memorystatus_level` (percent available) */
-export function darwinSignal(level: number, available: number): MemorySignal {
+/** `vm_stat`: the page size from its header and the cumulative swap-outs, as one sample in bytes */
+export function parseVmStat(text: string, at: number): PagingSample | null {
+  const pageSize = text.match(/page size of (\d+) bytes/);
+  const swapouts = text.match(/^Swapouts:\s+(\d+)/m);
+  if (!pageSize || !swapouts) return null;
+  return { at, bytes: Number(swapouts[1]) * Number(pageSize[1]) };
+}
+
+/** Bytes per second swapped out, the slower of the last two windows, so a single burst (an app
+ * opening, a build's first seconds) never counts and only paging that holds across two checks
+ * does. Null until there are two windows, and for a window that read nothing (no time passed, or
+ * the counter went backwards). */
+export function sustainedPaging(samples: PagingSample[]): number | null {
+  if (samples.length < 3) return null;
+  const rates: number[] = [];
+  for (let i = samples.length - 2; i < samples.length; i++) {
+    const prev = samples[i - 1] as PagingSample;
+    const next = samples[i] as PagingSample;
+    const seconds = (next.at - prev.at) / 1000;
+    const bytes = next.bytes - prev.bytes;
+    if (seconds <= 0 || bytes < 0) return null;
+    rates.push(bytes / seconds);
+  }
+  return Math.min(...rates);
+}
+
+/** `kern.memorystatus_vm_pressure_level`, `kern.memorystatus_level` (percent available), and the
+ * sustained swap-out rate in bytes per second when two windows have been read */
+export function darwinSignal(level: number, available: number, pagingBps: number | null = null): MemorySignal {
   const pressure =
     level === 1 ? "normal" : level === 2 ? "warn" : level === MAC_PRESSURE_CRITICAL ? "critical" : `level ${level}`;
+  const swapping = pagingBps === null ? "" : `, swapping out ${Math.round(pagingBps / 2 ** 20)} MB/s`;
   return {
-    tight: level === MAC_PRESSURE_CRITICAL || available < AVAILABLE_FLOOR * 100,
-    why: `memory pressure ${pressure} with ${available}% available`,
+    tight:
+      level === MAC_PRESSURE_CRITICAL ||
+      available < AVAILABLE_FLOOR * 100 ||
+      (pagingBps !== null && pagingBps >= PAGING_FLOOR_BPS),
+    why: `memory pressure ${pressure} with ${available}% available${swapping}`,
   };
 }
 

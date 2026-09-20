@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { darwinSignal, memoryTight, sampleCosts } from "./memory.ts";
+import { darwinSignal, memoryTight, parseVmStat, sampleCosts, sustainedPaging } from "./memory.ts";
 
 describe("memoryTight", () => {
   test("gives a reading with a reason on this platform", async () => {
@@ -24,6 +24,57 @@ describe("darwinSignal", () => {
 
   test("names the level and the share", () => {
     expect(darwinSignal(2, 42).why).toBe("memory pressure warn with 42% available");
+  });
+
+  test("steady paging is short while the level says warn and a third is available", () => {
+    // the 2026-09-20 thrash: 200 MB/s each way at warn with 31-40% available
+    const signal = darwinSignal(2, 35, 200 * 2 ** 20);
+    expect(signal.tight).toBe(true);
+    expect(signal.why).toBe("memory pressure warn with 35% available, swapping out 200 MB/s");
+  });
+
+  test("a trickle to swap is not short", () => {
+    expect(darwinSignal(2, 42, 2 * 2 ** 20).tight).toBe(false);
+    expect(darwinSignal(1, 49, 0).why).toBe("memory pressure normal with 49% available, swapping out 0 MB/s");
+  });
+});
+
+describe("parseVmStat", () => {
+  const MB = 2 ** 20;
+  const text = [
+    "Mach Virtual Memory Statistics: (page size of 16384 bytes)",
+    "Pages free:                                     1166.",
+    "Pageouts:                                    2651175.",
+    "Swapins:                                   185860715.",
+    "Swapouts:                                  200739839.",
+    "Pages tagged:                                 111535.",
+  ].join("\n");
+
+  test("reads swap-outs in the header's page size", () => {
+    expect(parseVmStat(text, 7)).toEqual({ at: 7, bytes: 200739839 * 16384 });
+  });
+
+  test("gives nothing for output missing either half", () => {
+    expect(parseVmStat("Pages free: 1.\nSwapouts: 5.", 0)).toBeNull();
+    expect(parseVmStat("Mach Virtual Memory Statistics: (page size of 4096 bytes)\nPages free: 1.", 0)).toBeNull();
+  });
+
+  const at = (s: number, mb: number) => ({ at: s * 1000, bytes: mb * MB });
+
+  test("sustained paging is the slower of the last two windows, known after three readings", () => {
+    expect(sustainedPaging([])).toBeNull();
+    expect(sustainedPaging([at(0, 0), at(15, 3000)])).toBeNull();
+    // one burst of 3000 MB then a quiet window: the quiet one counts
+    expect(sustainedPaging([at(0, 0), at(15, 3000), at(30, 3015)])).toBe(MB);
+    // paging that holds: 200 MB/s then 150 MB/s reads as 150 MB/s
+    expect(sustainedPaging([at(0, 0), at(15, 3000), at(30, 5250)])).toBe(150 * MB);
+    // only the last two windows are read
+    expect(sustainedPaging([at(0, 0), at(15, 3000), at(30, 3000), at(45, 3000)])).toBe(0);
+  });
+
+  test("a window with no time passed or a counter that went backwards is no reading", () => {
+    expect(sustainedPaging([at(0, 0), at(15, 3000), at(15, 6000)])).toBeNull();
+    expect(sustainedPaging([at(0, 5000), at(15, 100), at(30, 200)])).toBeNull();
   });
 });
 

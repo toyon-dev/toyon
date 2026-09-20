@@ -259,8 +259,17 @@ export class WorktreeService {
       // is the trunk's running copy from here, so main's procs stop rather than run beside it
       ready: (repoId) => {
         const main = this.mainOf(repoId);
-        if (main && this.d.runtime.get(main.id)?.procs) {
+        if (!main) return;
+        if (this.d.runtime.get(main.id)?.procs) {
           fireAndForget(main.id, this.d.runtime.stopProcs(main.id), "main stops for the spare");
+        }
+        // words typed into main's box while it stood in (the spare warming, or one that failed
+        // under someone's fingers) go with the row: main's box is out of sight from here
+        const text = this.d.drafts?.text(main.id);
+        const spare = this.leadSpareOf(repoId);
+        if (text && spare && !this.d.drafts?.text(spare)) {
+          this.d.drafts?.set(spare, text);
+          this.d.drafts?.drop(main.id);
         }
       },
     });
@@ -1797,7 +1806,10 @@ export class WorktreeService {
       await this.restore(worktreeId, msg.clientId, { text: msg.text, attachments: msg.attachments });
       return;
     }
-    this.requireRun(worktreeId);
+    const wt = this.requireRun(worktreeId);
+    // the shell starts new work from the plus, never here; a client that names main by hand is
+    // refused the same way, so no agent turn ever runs in the main checkout
+    if (wt.kind === "main") throw new UserError("nothing runs on main: the plus starts a worktree for it");
     const agent = this.d.runtime.agentFor(worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
     agent.send(msg.text, { context: msg.context, attachments: msg.attachments });

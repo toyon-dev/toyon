@@ -48,6 +48,9 @@ export class ExecService {
   exec(worktreeId: string, command: string, name: string = SHELL_TOOL): Promise<ExecResult> {
     const wt = this.deps.state.requireWorktree(worktreeId);
     if (wt.kind === "spare") throw new UserError("no shell for a spare worktree");
+    // the lead's `!` runs in its terminal pane; a command sent for main by name would run in the
+    // main checkout, which nothing else is allowed to do
+    if (wt.kind === "main") throw new UserError("nothing runs on main: the plus starts a worktree for it");
     const agent = this.deps.runtime.agentFor(worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
     const toolId = `${name}-${Date.now().toString(36)}-${++this.n}`;

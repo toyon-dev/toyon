@@ -605,6 +605,19 @@ describe("handlers", () => {
     expect(services.worktrees.archived(r.id).map((x) => x.id)).toEqual([wt.id]);
   });
 
+  test("words typed into main's box while it stood in go to the spare that takes the row", async () => {
+    const { services, ctx, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    r.config = { run: { web: "true" } };
+    const main = services.state.worktrees.find((x) => x.repoId === r.id && x.kind === "main")!;
+    await dispatch({ t: "set-draft", boxId: main.id, text: "half a thought", clientId: "tab1" }, ctx, services);
+    await services.worktrees.spare.ensure(r.id);
+    const spare = services.state.worktrees.find((x) => x.repoId === r.id && x.kind === "spare")!;
+    expect(services.drafts.text(spare.id)).toBe("half a thought");
+    expect(services.drafts.text(main.id)).toBe("");
+  });
+
   test("a first keystroke on the plus warms its agent once; an empty box, a task's box and a spare still warming do not", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
@@ -743,8 +756,9 @@ describe("handlers", () => {
   test("chat hands the text, context and attachments to the agent", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
-    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await opened(main.id, ctx, services);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    await opened(task.id, ctx, services);
     const pick = {
       kind: "pick" as const,
       component: "App",
@@ -757,21 +771,40 @@ describe("handlers", () => {
       text: "",
       html: "<div></div>",
     };
+    const before = services.state.worktree(task.id)?.promptedAt ?? 0;
     await dispatch(
-      { t: "chat", worktreeId: main.id, text: "hi", context: ["ctx"], attachments: [pick] },
+      { t: "chat", worktreeId: task.id, text: "hi", context: ["ctx"], attachments: [pick] },
       ctx,
       services,
     );
-    expect(agents.get(main.id)?.sent).toEqual([{ text: "hi", context: ["ctx"], attachments: [pick] }]);
+    expect(agents.get(task.id)?.sent.at(-1)).toEqual({ text: "hi", context: ["ctx"], attachments: [pick] });
     // a send is what moves a row up the rail
-    expect(services.state.worktree(main.id)?.promptedAt).toBeGreaterThan(0);
+    expect(services.state.worktree(task.id)?.promptedAt).toBeGreaterThanOrEqual(before);
+    expect(services.state.worktree(task.id)?.promptedAt).toBeGreaterThan(0);
+  });
+
+  test("chat and exec on main are refused: work never runs in the main checkout", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    const main = services.state.worktrees.find((x) => x.repoId === r.id && x.kind === "main")!;
+    await opened(main.id, ctx, services);
+    await expect(dispatch({ t: "chat", worktreeId: main.id, text: "hi" }, ctx, services)).rejects.toThrow(
+      "nothing runs on main",
+    );
+    await expect(dispatch({ t: "exec", worktreeId: main.id, command: "ls" }, ctx, services)).rejects.toThrow(
+      "nothing runs on main",
+    );
+    expect(agents.get(main.id)?.sent ?? []).toEqual([]);
+    expect(agents.get(main.id)?.recorded ?? []).toEqual([]);
+    expect(services.state.worktree(main.id)?.promptedAt).toBeUndefined();
   });
 
   test("chat images reach the agent as sent; the schema refuses formats the models do not take", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
-    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await opened(main.id, ctx, services);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    await opened(task.id, ctx, services);
     const img = {
       kind: "image" as const,
       name: "a.png",
@@ -780,8 +813,8 @@ describe("handlers", () => {
       width: 2,
       height: 1,
     };
-    await dispatch({ t: "chat", worktreeId: main.id, text: "see", attachments: [img] }, ctx, services);
-    expect(agents.get(main.id)?.sent[0]?.attachments).toEqual([img]);
+    await dispatch({ t: "chat", worktreeId: task.id, text: "see", attachments: [img] }, ctx, services);
+    expect(agents.get(task.id)?.sent.at(-1)?.attachments).toEqual([img]);
     const bad = clientMsgSchema.safeParse({
       t: "chat",
       worktreeId: "w",
@@ -1027,12 +1060,13 @@ describe("handlers", () => {
   test("exec runs the command in the worktree and records it on the transcript as a shell tool call", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
-    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await opened(main.id, ctx, services);
-    const agent = agents.get(main.id)!;
-    await dispatch({ t: "exec", worktreeId: main.id, command: "printf hi; pwd -P" }, ctx, services);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    await opened(task.id, ctx, services);
+    const agent = agents.get(task.id)!;
+    await dispatch({ t: "exec", worktreeId: task.id, command: "printf hi; pwd -P" }, ctx, services);
     // a `!` command is working in the worktree too, so it counts as a send
-    expect(services.state.worktree(main.id)?.promptedAt).toBeGreaterThan(0);
+    expect(services.state.worktree(task.id)?.promptedAt).toBeGreaterThan(0);
     expect(agent.recorded[0]).toMatchObject({
       type: "tool-start",
       name: "shell",
@@ -1044,10 +1078,10 @@ describe("handlers", () => {
     if (end.type !== "tool-end") throw new Error("expected a tool-end");
     expect(end.isError).toBe(false);
     // fenced, so the transcript draws it as a block; the cwd is the worktree
-    expect(end.output).toBe(`\`\`\`\nhi${require("node:fs").realpathSync(main.path)}\n\`\`\``);
+    expect(end.output).toBe(`\`\`\`\nhi${require("node:fs").realpathSync(task.path)}\n\`\`\``);
     expect(end.toolId).toBe((agent.recorded[0] as { toolId: string }).toolId);
     // a failing command says so under its output rather than in the output
-    await dispatch({ t: "exec", worktreeId: main.id, command: "echo nope >&2; exit 3" }, ctx, services);
+    await dispatch({ t: "exec", worktreeId: task.id, command: "echo nope >&2; exit 3" }, ctx, services);
     await until(() => agent.recorded.length === 4);
     expect(agent.recorded[3]).toMatchObject({ type: "tool-end", isError: true, output: "```\nnope\n```\nexit 3" });
     await expect(dispatch({ t: "exec", worktreeId: "nope", command: "ls" }, ctx, services)).rejects.toBeInstanceOf(
@@ -1058,13 +1092,14 @@ describe("handlers", () => {
   test("exec-stop kills what is running and the row ends as killed", async () => {
     const { services, ctx, repo, agents } = make();
     const r = await services.repos.register(repo);
-    const main = services.state.worktrees.find((x) => x.repoId === r.id)!;
-    await opened(main.id, ctx, services);
-    const agent = agents.get(main.id)!;
-    await dispatch({ t: "exec", worktreeId: main.id, command: "echo started; sleep 30" }, ctx, services);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    await opened(task.id, ctx, services);
+    const agent = agents.get(task.id)!;
+    await dispatch({ t: "exec", worktreeId: task.id, command: "echo started; sleep 30" }, ctx, services);
     // let the shell get as far as the sleep, so the kill lands on a running command
     await Bun.sleep(300);
-    await dispatch({ t: "exec-stop", worktreeId: main.id }, ctx, services);
+    await dispatch({ t: "exec-stop", worktreeId: task.id }, ctx, services);
     await until(() => agent.recorded.length === 2);
     const end = agent.recorded[1]!;
     if (end.type !== "tool-end") throw new Error("expected a tool-end");

@@ -48,13 +48,13 @@ import { rankMentions } from "../overlays/quickOpen.ts";
 import {
   behindFact,
   filesLine,
-  landCaveat,
   landFacts,
   landingLine,
   prCanMerge,
   prLine,
   recapLine,
   verbLine,
+  verdictLine,
 } from "../recap.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
@@ -459,6 +459,9 @@ export function Composer({
   // sentence, bright and never the accent, which reads as an error. What it rests on (the facts,
   // the route, what the PR waits on) is its tooltip, opening above it so the line under it stays
   // readable. A check still running or failed offers no word; its line says why.
+  // After the word, what the work is: the commit subject when the verdict wrote one, since it is
+  // the one line that names the change and it settles once the change stops moving, where the
+  // recap is a new sentence every turn. The recap stands in until a subject exists.
   const verb: Verb | null = !id
     ? null
     : landed
@@ -493,7 +496,7 @@ export function Composer({
           : checkable
             ? {
                 word: "check",
-                line: verbLine(said ?? verdict?.subject ?? filesLine(landCount)),
+                line: verdict?.subject ?? verbLine(said ?? filesLine(landCount)),
                 tip: verdict?.stale
                   ? `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`
                   : `${hasCheck ? "Run the repo's check here, then write" : "Write"} the recap and the commit message.`,
@@ -502,7 +505,7 @@ export function Composer({
             : landing?.ready && !landingLine(landing)
               ? {
                   word: shipWord,
-                  line: verbLine(said ?? landing.subject ?? (landFacts(landing, landCount) || "ready")),
+                  line: landing.subject ?? verbLine(said ?? (landFacts(landing, landCount) || "ready")),
                   tip: [
                     landFacts(landing, landCount),
                     behindFact(repo?.defaultBranch ?? "main", active?.behind),
@@ -539,15 +542,16 @@ export function Composer({
     return `message agent on ${title}; / for a command, ! for a shell command`;
   };
   const placeholderText = placeholderFor();
-  // under the verb, the model's doubt as a sentence of its own. Under a line with no word (a check
-  // running or failed, a PR merged or closed): the recap's sentence when one has been written, else
-  // the message the work would land with, the next most useful thing to read.
+  // under the verb, the verdict behind its label: ready with the facts, or what is left. Under a
+  // line with no word (a check running or failed, a PR merged or closed): the recap's sentence
+  // when one has been written, else the message the work would land with, the next most useful
+  // thing to read.
   const subline =
     text !== "" || ghost || !active
       ? null
       : verb
         ? (verb.word === "land" || verb.word === "update" || verb.word === "check") && landing
-          ? landCaveat(landing)
+          ? verdictLine(landing, landCount)
           : null
         : pr || blocked
           ? (said ?? landing?.subject ?? null)

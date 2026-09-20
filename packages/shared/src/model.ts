@@ -353,7 +353,8 @@ export interface Landing {
   checkTail?: string;
   /** the check passed, or there is none, and the verdict is in: the word can show */
   ready: boolean;
-  /** the model's doubt, in one line, when the work did not read as finished to it */
+  /** what the model read as still left to do, in a clause, when the work did not read as finished
+   * to it; the composer's second line puts "Not ready:" in front of it */
   why?: string;
   /** the suggested commit message: a subject, and a body when there was more to say */
   subject?: string;

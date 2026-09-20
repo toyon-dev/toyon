@@ -757,14 +757,13 @@
       color: var(--text1);
     }
   }
-  /* an empty box with something to say under its placeholder draws both itself: the placeholder
-   line on the quiet tier, the line under it a step quieter still, since it is an aside to the
-   prompt rather than the prompt */
-  .composer-placeholder {
-    color: var(--text1);
-  }
+  /* an empty box with something to say under its placeholder draws both itself, on one tier and
+   with no gap: a tight pair reads as one card, what the work is over where it stands, and the
+   label opening the second line does the separating. A quieter second line read as a hint under
+   a prompt rather than a statement of its own. */
+  .composer-placeholder,
   .composer-subline {
-    opacity: 0.8;
+    color: var(--text1);
   }
   /* chips ride on that same tone, so they take the panel's to stay raised */
   .chat-input {

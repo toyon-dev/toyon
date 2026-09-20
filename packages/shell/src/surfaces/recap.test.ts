@@ -3,13 +3,13 @@ import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
 import {
   behindFact,
   filesLine,
-  landCaveat,
   landFacts,
   landingLine,
   prCanMerge,
   prLine,
   recapLine,
   verbLine,
+  verdictLine,
 } from "./recap.ts";
 
 const turn = (end: LastTurn["end"], f: Partial<TurnFacts> = {}, minsAgo = 12, text?: string): LastTurn => ({
@@ -84,13 +84,20 @@ describe("landingLine", () => {
     expect(behindFact("main", undefined)).toBe("");
   });
 
-  test("the model's doubt is a sentence of its own, and none without one", () => {
-    expect(landCaveat(landing({ why: "a question is open" }))).toBe("A question is open.");
-    expect(landCaveat(landing({}))).toBeNull();
+  test("the verdict leads with its label: what is left, or ready with the facts", () => {
+    expect(verdictLine(landing({ why: "verify the fix live" }), 3)).toBe("Not ready: verify the fix live.");
+    expect(verdictLine(landing({ why: "Live hover unverified" }), 3)).toBe("Not ready: live hover unverified.");
+    expect(verdictLine(landing({ why: "ChatLog.tsx fix is unverified" }), 3)).toBe(
+      "Not ready: ChatLog.tsx fix is unverified.",
+    );
+    expect(verdictLine(landing({ check: "pass" }), 3)).toBe("Ready: 3 files changed, check passed.");
+    expect(verdictLine(landing({}), 1)).toBe("Ready: 1 file changed.");
+    expect(verdictLine(landing({}), 0)).toBe("Ready.");
   });
 
-  test("a tree that moved under the verdict says so ahead of any doubt", () => {
-    expect(landCaveat(landing({ why: "a question is open", stale: true }))).toBe("Changed since this was written.");
+  test("a tree that moved under the verdict says so ahead of any verdict", () => {
+    expect(verdictLine(landing({ why: "a question is open", stale: true }), 3)).toBe("Changed since this was written.");
+    expect(verdictLine(landing({ check: "pass", stale: true }), 3)).toBe("Changed since this was written.");
   });
 
   test("the count alone, for a line with nothing else to say", () => {

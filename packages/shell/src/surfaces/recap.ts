@@ -58,11 +58,21 @@ export function landingLine(l: Landing): string | null {
 /** What would land, for the verb's tooltip: `count` is the files that would go, uncommitted or
  * committed. Empty when there is nothing to count and no check ran. */
 export function landFacts(l: Landing, count: number): string {
-  const files = count > 0 ? `${count} ${count === 1 ? "file" : "files"} changed` : "";
-  const check = l.check === "pass" ? "check passed" : "";
-  const facts = [files, check].filter(Boolean).join(", ");
+  const facts = factsOf(l, count);
   return facts ? ended(capital(facts)) : "";
 }
+
+/** the facts as a clause, no capital and no stop, so a label can lead them */
+function factsOf(l: Landing, count: number): string {
+  const files = count > 0 ? `${count} ${count === 1 ? "file" : "files"} changed` : "";
+  const check = l.check === "pass" ? "check passed" : "";
+  return [files, check].filter(Boolean).join(", ");
+}
+
+/** a clause after a label: the model's opening capital comes down when the first word is a plain
+ * one; a name (ChatLog.tsx, API) keeps its case */
+const clause = (text: string) =>
+  /^[A-Z][a-z]+(\s|$)/.test(text) ? `${text.charAt(0).toLowerCase()}${text.slice(1)}` : text;
 
 /** How far the branch trails main, for the land verb's tooltip: the count is decided at the
  * press, since land takes main in before anything else, so it is said there and not on a row of
@@ -78,12 +88,16 @@ export function filesLine(count: number): string {
   return count > 0 ? ended(capital(`${count} ${count === 1 ? "file" : "files"} changed`)) : "";
 }
 
-/** Under the verb's line, a sentence of its own: that the tree moved since the verdict was
- * written, which is why the word is `check` and not `land`; else the model's doubt, a caveat and
- * never a refusal, so the word stays */
-export function landCaveat(l: Landing): string | null {
+/** Under the verb's line, the verdict behind a fixed label, so the eye gets the answer before the
+ * sentence: rewritten after every turn, the line is scanned far more often than it is read. What
+ * is left when the model did not read the work as done; else ready, with the facts. A tree that
+ * moved since the verdict was written says so instead, which is why the word above is `check` and
+ * not `land`. Never a refusal: the word stays. */
+export function verdictLine(l: Landing, count: number): string | null {
   if (l.stale) return "Changed since this was written.";
-  return l.why ? ended(capital(l.why)) : null;
+  if (l.why) return `Not ready: ${ended(clause(l.why))}`;
+  const facts = factsOf(l, count);
+  return facts ? `Ready: ${facts}.` : "Ready.";
 }
 
 /** what the verb's line says after the word, as a whole sentence */

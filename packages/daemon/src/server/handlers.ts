@@ -413,6 +413,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   "update-now"(_msg, _ctx, s) {
     return s.update.updateNow();
   },
+
+  "check-update"(_msg, _ctx, s) {
+    return s.update.checkNow();
+  },
   async commit(msg, ctx, s) {
     const result = await s.worktrees.commit(msg.worktreeId, msg.message);
     await notify(s, ctx, msg.worktreeId, shipped(msg.worktreeId, result.ok, result.message));

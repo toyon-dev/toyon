@@ -90,6 +90,7 @@ function harness() {
   server({
     t: "hello",
     version: "0",
+    install: "npm",
     protocol: PROTOCOL_VERSION,
     repos: [],
     rows: [],

@@ -16,6 +16,7 @@ import type {
   CommitEntry,
   DesignIndex,
   GitFileStatus,
+  InstallMethod,
   LogLine,
   PathEntry,
   PathTarget,
@@ -44,6 +45,9 @@ export type ServerMsg =
   | {
       t: "hello";
       version: string;
+      /** how this Toyon was installed: what the settings card says under the version, and whether
+       * a press there can ask for a newer one */
+      install: InstallMethod;
       protocol: number;
       repos: RepoInfo[];
       /** every row: toyon's own worktrees first, in its order, then the ones git knows about that
@@ -474,6 +478,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** try a failed update again: install the newest Toyon and restart onto it once no chat is
    * mid-reply */
   z.object({ t: z.literal("update-now") }),
+  /** a press on the version chip: ask the registry now. A newer version announces itself in
+   * `update`; anything else the check learns comes back as an error, since a check that finds
+   * nothing would otherwise say nothing. */
+  z.object({ t: z.literal("check-update") }),
   /** fast-forward the main checkout (`worktreeId` is main's row) to its upstream */
   z.object({ t: z.literal("pull-main"), worktreeId: id }),
   /** save the editor's text only over `base`, the version it was read or last saved as (null: no

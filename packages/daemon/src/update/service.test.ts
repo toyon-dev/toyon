@@ -269,6 +269,29 @@ describe("UpdateService: a press on the failed chip", () => {
   });
 });
 
+describe("UpdateService: a press on the version chip", () => {
+  test("asks the registry now, and what it finds is announced the usual way", async () => {
+    const { update, registryAsks } = make({ latest: "0.3.0" });
+    await update.checkNow();
+    expect(registryAsks()).toBe(1);
+    expect(update.get()).toMatchObject({ latest: "0.3.0" });
+  });
+
+  test("a check that finds nothing says so in words, since nothing else would move", async () => {
+    const { update } = make({ latest: "0.2.0" });
+    await expect(update.checkNow()).rejects.toThrow("Toyon 0.2.0 is the newest version");
+    const { update: off } = make();
+    await expect(off.checkNow()).rejects.toThrow(`Could not reach ${REGISTRY}`);
+  });
+
+  test("a checkout is told it does not update itself, without asking the registry", async () => {
+    const { update, registryAsks } = make({ latest: "0.3.0", method: "none" });
+    await expect(update.checkNow()).rejects.toThrow("runs from a checkout");
+    expect(registryAsks()).toBe(0);
+    expect(update.install()).toBe("none");
+  });
+});
+
 describe("UpdateService: TOYON_UPDATES=off", () => {
   test("the registry is never asked, nothing installs, a press is refused, and doctor can say so", async () => {
     const { update, advance, installs, registryAsks } = make({ latest: "0.3.0", managed: true });

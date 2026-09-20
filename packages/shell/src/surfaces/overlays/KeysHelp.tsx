@@ -1,4 +1,5 @@
 import { type AgentInfo, CHORD_LABELS, CHORD_SECTIONS, chordsInSection, resolveTheme } from "@toyon/shared";
+import { versionRow } from "../../app/versionRow.ts";
 import { agentItems } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
 import { appearanceLabel } from "../../state/actions/settings.ts";
@@ -9,6 +10,7 @@ import { Button } from "../../ui/Button.tsx";
 import { Kbd } from "../../ui/Kbd.tsx";
 import { useContextMenu } from "../../ui/menu.ts";
 import { Overlay } from "../../ui/Overlay.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
 import { chord } from "../util.ts";
 
 const KEY_SECTIONS = CHORD_SECTIONS.map((title) => ({
@@ -93,6 +95,11 @@ export function KeysHelp() {
               {chatSide}
             </Button>
           </div>
+          {/* under the preferences, since it is the one row here nobody sets: which Toyon this
+              is, and what is happening to it. The bar's chips show only what needs a person; this
+              row is always there, so someone asking "am I current" has one place to look. */}
+          <div className="section-title keys-h">Toyon</div>
+          <VersionRow />
         </div>
       </div>
       <div className="keys-card">
@@ -109,6 +116,41 @@ export function KeysHelp() {
         ))}
       </div>
     </Overlay>
+  );
+}
+
+/** The running version as a chip, one word after it when something is under way. A press does
+ * the one thing the state is waiting on: restart onto an install, rebuild a checkout, install what
+ * is out, or ask the registry. The daemon answers a check that finds nothing in words, since the
+ * chip would otherwise not move. */
+function VersionRow() {
+  const sock = useSock();
+  const version = useStore((s) => s.version);
+  const install = useStore((s) => s.install);
+  const update = useStore((s) => s.update);
+  const self = useStore((s) => s.self);
+  const repos = useStore((s) => s.repos);
+  const row = versionRow(version, install, update, self, repos);
+  const act = () => {
+    if (row.act === "restart") sock?.send({ t: "restart-daemon" });
+    else if (row.act === "rebuild" && self) sock?.send({ t: "run-after-land", repoId: self.repoId });
+    else if (row.act === "update") sock?.send({ t: "update-now" });
+    else if (row.act === "check") sock?.send({ t: "check-update" });
+  };
+  return (
+    <div className="keys-setting">
+      <span className="keys-d">version</span>
+      <Button
+        variant="field"
+        mono
+        busy={row.busy}
+        disabled={row.act === null}
+        onClick={act}
+        {...tip(row.text, undefined, { detail: row.detail })}
+      >
+        {row.value}
+      </Button>
+    </div>
   );
 }
 

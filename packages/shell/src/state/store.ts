@@ -23,6 +23,7 @@ import type {
   FileServerMsg,
   GitFileStatus,
   ImageInput,
+  InstallMethod,
   LogLine,
   OwnedWorktree,
   PageEntry,
@@ -644,6 +645,10 @@ export interface State {
   /** the Toyon installed on this machine is not the one running, or a restart someone asked for is
    * waiting on a chat to finish. Null the rest of the time. */
   update: UpdateState | null;
+  /** the Toyon running, and how it was installed: the settings card's version row. Empty until
+   * hello, which is before the page shows. */
+  version: string;
+  install: InstallMethod;
   /** the Finder dialog is up, and which of the new-project view's controls asked for it: where the
    * project goes, or a folder to open. Escape is the dialog's while it is up. */
   choosingFolder: false | "location" | "open";
@@ -782,6 +787,8 @@ export function initialState(opts: InitialOpts): State {
     gitIdentity: true,
     self: null,
     update: null,
+    version: "",
+    install: "none",
     choosingFolder: false,
     newProject: null,
     autoSend: null,
@@ -1798,6 +1805,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
         visits: msg.visits,
         self: msg.self,
         update: msg.update,
+        version: msg.version,
+        install: msg.install,
         // an import this tab was watching may have finished while it was away
         activeImportId: msg.pending.some((x) => x.id === s.activeImportId) ? s.activeImportId : null,
       };

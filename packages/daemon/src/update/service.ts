@@ -147,6 +147,24 @@ export class UpdateService {
     await this.proceed();
   }
 
+  /** A press on the version chip while nothing is out: ask the registry now. A newer version
+   * announces itself and installs when the machine settles; every other answer is thrown, since a
+   * check that finds nothing announces nothing and the press would otherwise land in silence. */
+  async checkNow(): Promise<void> {
+    if (this.d.managed) throw new UserError("Updates are turned off for this machine (TOYON_UPDATES=off)");
+    if (this.d.method === "none") {
+      throw new UserError(`Toyon ${this.d.running} runs from a checkout, which does not update itself`);
+    }
+    await this.check();
+    if (this.unreachable) throw new UserError(`Could not reach ${this.unreachable}`);
+    if (this.target() === null) throw new UserError(`Toyon ${this.d.running} is the newest version`);
+  }
+
+  /** how this Toyon was installed, for hello: the settings card reads it under the version */
+  install(): InstallMethod {
+    return this.d.method;
+  }
+
   get(): UpdateState | null {
     const restarting =
       this.d.restarter.waitingOn() ?? (this.wanted && !this.installing ? this.d.restarter.working() : null);

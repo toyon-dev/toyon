@@ -295,6 +295,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
     return {
       t: "hello",
       version,
+      install: s.update.install(),
       protocol: PROTOCOL_VERSION,
       repos: s.state.repos,
       rows: await s.worktrees.rows({ quick: true }),

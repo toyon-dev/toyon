@@ -10,7 +10,7 @@ import { type ChatItem, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Field } from "../../ui/Field.tsx";
-import { useOnChange, useReveal } from "../../ui/hooks.ts";
+import { useOnChange, useReveal, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { grouped, type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
@@ -365,21 +365,11 @@ export const ThoughtRow = memo(function ThoughtRow({
   const dispatch = useDispatch();
   const word = streaming ? "Thinking" : "Thought";
   // The body stops growing at a share of the transcript (chat.css, .thought-out) and scrolls
-  // inside, so while the agent is still writing it the newest line has to be kept in view the way
-  // the log keeps its newest row: pinned to the bottom until the reader scrolls up, and pinned
-  // again once they come back. Read from the element on scroll, not from where a jump meant to
-  // land, for the reason the log does. A body that is not open has no height and the write is a
-  // no-op, so the pin costs nothing on the closed rows of an old turn.
+  // inside, so it tails the way the log does: the newest line in view while the agent writes,
+  // until the reader scrolls up. A body that is not open has no height and the pin is a no-op,
+  // so it costs nothing on the closed rows of an old turn.
   const body = useRef<HTMLDivElement>(null);
-  const tail = useRef(true);
-  useOnChange([html], () => {
-    const el = body.current;
-    if (el && tail.current) el.scrollTop = el.scrollHeight;
-  });
-  const onBodyScroll = () => {
-    const el = body.current;
-    if (el) tail.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  };
+  useTail(body);
   // A folded row keeps its body's scroll (the browser hides the contents rather than dropping
   // them), so a finished thought opened later to be read would open where the tail left it, on
   // its last line. A thought at rest is read from the start; one still streaming opens tailed.
@@ -412,7 +402,6 @@ export const ThoughtRow = memo(function ThoughtRow({
         <div
           ref={body}
           className="tool-out thought-out md"
-          onScroll={onBodyScroll}
           onClick={(e) => openChatLink(e, fileRoot, worktreeId, { sock, dispatch })}
           // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
           dangerouslySetInnerHTML={{ __html: html }}

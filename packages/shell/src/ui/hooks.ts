@@ -2,6 +2,7 @@ import {
   type EffectCallback,
   type RefCallback,
   type RefObject,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -134,6 +135,79 @@ export function useReveal(scroller: string) {
   return (el: HTMLElement | null) => {
     armed.current = el;
   };
+}
+
+/** how close to the end still counts as reading the end, so a pixel of rounding does not let go */
+const TAIL_SLACK = 40;
+
+/** A scroller that tails what it holds, the way a terminal does: the end stays in view while the
+ * reader is at the end, whatever grew and whatever made it grow, and the moment they scroll up it
+ * stops following. Growth is watched in the layout, not in state: the box itself (a sibling that
+ * grows takes height off it), every child (a streamed message's markdown lands behind its text,
+ * a row opens, a picture arrives), and children as they come and go. A pin keyed on data has to
+ * name every one of those and misses the next; the observers need no list. "At the end" is read
+ * from the element when it scrolls, never from where a jump meant to land: a programmatic scroll
+ * (a row's reveal, a walk) dispatches its event in the frame's scroll steps, which run before the
+ * observers deliver, so a reader taken elsewhere is known to have left before anything could pull
+ * them back. `away` is what the way back is for: `news` changed while the reader was up the
+ * scroller. It is a value and not the layout because a row the reader opened themselves grows the
+ * same way a message arriving does, and only one of those is news. `read` is for a caller that
+ * moved the scroller itself and wants the answer now rather than on the event. The element is
+ * read when the effect mounts, so it must be rendered from the first paint. */
+export function useTail(
+  ref: RefObject<HTMLElement | null>,
+  news?: unknown,
+): {
+  away: boolean;
+  pinned: () => boolean;
+  jump: (smooth?: boolean) => void;
+  read: () => void;
+} {
+  const pinned = useRef(true);
+  const [away, setAway] = useState(false);
+  useOnChange([news], () => {
+    if (!pinned.current) setAway(true);
+  });
+  const read = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < TAIL_SLACK;
+    if (pinned.current) setAway(false);
+  }, [ref]);
+  const jump = useCallback(
+    (smooth = false) => {
+      const el = ref.current;
+      if (!el) return;
+      if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      else el.scrollTop = el.scrollHeight;
+      pinned.current = true;
+      setAway(false);
+    },
+    [ref],
+  );
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.addEventListener("scroll", read, { passive: true });
+    const ro = new ResizeObserver(() => {
+      if (pinned.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    for (const child of el.children) ro.observe(child);
+    const mo = new MutationObserver((records) => {
+      for (const r of records) {
+        for (const n of r.addedNodes) if (n instanceof Element) ro.observe(n);
+        for (const n of r.removedNodes) if (n instanceof Element) ro.unobserve(n);
+      }
+    });
+    mo.observe(el, { childList: true });
+    return () => {
+      el.removeEventListener("scroll", read);
+      mo.disconnect();
+      ro.disconnect();
+    };
+  }, [ref, read]);
+  return { away, pinned: () => pinned.current, jump, read };
 }
 
 /** Run `fn` when `deps` change (and once on mount), reading whatever is current at that moment.

@@ -5,7 +5,7 @@ import { useDispatch, useSock, useStoreInstance } from "../../state/context.tsx"
 import { useLocalField } from "../../state/selectors.ts";
 import { localOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
-import { useOnChange } from "../../ui/hooks.ts";
+import { useOnChange, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { useSelectAllWithin } from "../../ui/selectAll.ts";
 import { isBusy, pickLabel } from "../util.ts";
@@ -64,52 +64,10 @@ export function ChatLog({
   // a hand resting on the transcript: select-all is the conversation, not the shell around it
   useSelectAllWithin(logRef);
 
-  // pin to bottom while streaming; offer a jump-down pill when scrolled up
-  const atBottomRef = useRef(true);
-  const [showJump, setShowJump] = useState(false);
-  useEffect(() => {
-    const el = logRef.current;
-    if (!el) return;
-    if (atBottomRef.current) {
-      el.scrollTop = el.scrollHeight;
-      setShowJump(false);
-    } else if (items.length > 0) {
-      setShowJump(true);
-    }
-  }, [items]);
-  useOnChange([id], () => {
-    atBottomRef.current = true;
-    setShowJump(false);
-  });
-  // The composer is a sibling that grows: a recap line, the target sentence, a chip that wraps the
-  // model row. Each one takes height off the log without a scroll event, so the newest row slides
-  // under the box and nothing puts it back.
-  useEffect(() => {
-    const el = logRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      if (atBottomRef.current) el.scrollTop = el.scrollHeight;
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Read from the element rather than from where a scroll meant to land: a programmatic scroll has
-  // to answer here before it paints, because the pinning above runs on the same frame and a stale
-  // `true` would pull the log straight back to the bottom.
-  const onScroll = () => {
-    const el = logRef.current;
-    if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    atBottomRef.current = atBottom;
-    if (atBottom) setShowJump(false);
-  };
-  const jumpDown = () => {
-    const el = logRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    atBottomRef.current = true;
-    setShowJump(false);
-  };
+  // the log tails the conversation: the newest line stays in view until the reader scrolls up,
+  // and a pill offers the way back once something new is said. Another chat opens at its end.
+  const follow = useTail(logRef, items);
+  useOnChange([id], () => follow.jump());
 
   // The composer's walk back through what was sent marks the row it is on and brings that row to
   // the top of the log, so what came after it is what fills the pane. A walk that ends in a blank box
@@ -125,7 +83,7 @@ export function ChatLog({
     if (!el || !row) return;
     const pad = parseFloat(getComputedStyle(el).paddingTop) || 0;
     el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - pad;
-    onScroll();
+    follow.read();
   };
   useOnChange([walkAt], () => {
     const el = logRef.current;
@@ -134,12 +92,14 @@ export function ChatLog({
       const start = walkStart.current;
       walkStart.current = null;
       if (!start || !isBlank(localOf(store.getState(), id).draft)) return;
-      el.scrollTop = start.bottom ? el.scrollHeight : start.top;
-      atBottomRef.current = start.bottom;
-      if (start.bottom) setShowJump(false);
+      if (start.bottom) follow.jump();
+      else {
+        el.scrollTop = start.top;
+        follow.read();
+      }
       return;
     }
-    walkStart.current ??= { bottom: atBottomRef.current, top: el.scrollTop };
+    walkStart.current ??= { bottom: follow.pinned(), top: el.scrollTop };
     scrollToMarked();
   });
   // A hit picked in the chats palette marks its row the same way. The chat may still be on its way
@@ -212,17 +172,10 @@ export function ChatLog({
   // spawn rows that started them shine for the same window.
   const fanout = useMemo(() => subagentsAtWork(items), [items]);
   const agents = fanout.ids.size;
-  // The rows under the transcript land a frame after the message that caused them: the agent goes
-  // busy after the send is in the log, a queued message after the daemon takes it. They add height
-  // without touching `items`, so the send they follow scrolls out from under them.
-  useOnChange([busy, active?.agent, shellRunning, queue.length], () => {
-    const el = logRef.current;
-    if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
-  });
 
   return (
     <div className="chat-wrap">
-      <div className="chat-log" ref={logRef} onScroll={onScroll}>
+      <div className="chat-log" ref={logRef}>
         {lead}
         {entries.map((entry, i) =>
           "spawn" in entry ? (
@@ -353,8 +306,8 @@ export function ChatLog({
           </div>
         )}
       </div>
-      {showJump && (
-        <button className="jump-down" onClick={jumpDown} data-tip="Jump to latest">
+      {follow.away && (
+        <button className="jump-down" onClick={() => follow.jump(true)} data-tip="Jump to latest">
           <Icon name="caret" className="icon-inline" /> new messages
         </button>
       )}

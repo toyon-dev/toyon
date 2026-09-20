@@ -117,6 +117,42 @@ export async function landingMark(worktreePath: string, defaultBr: string): Prom
   return { base: base.out, tip: tip.out };
 }
 
+/** A landing git did without toyon: the agent, or a hand in the terminal, put the branch's commits
+ * on main. Asked of a branch that is clean and level with main, so the only question left is
+ * whether it ever had commits of its own, which its reflog says: entries a commit wrote since the
+ * branch was created or last reset. Commits reset away by hand leave a newer reset entry, so they
+ * are not a landing. The range is the branch's own commits by first parent, which a rebase keeps
+ * together, from `since` (the tip of its last landing, when the branch went on from it: a reset
+ * onto a main the branch already equals writes no entry to count from) or else from where the
+ * count runs out. Null with nothing new to land, or history too short to walk. */
+export async function handLanding(
+  worktreePath: string,
+  branch: string,
+  defaultBr: string,
+  since?: string,
+): Promise<LandingRange | null> {
+  const log = await git(worktreePath, "reflog", "show", "--format=%H %gs", branch);
+  if (!log.ok || !log.out) return null;
+  let own = 0;
+  for (const line of log.out.split("\n")) {
+    const subject = line.slice(line.indexOf(" ") + 1);
+    // newest first: where the branch last stood on main ends the count
+    if (/^(reset|branch):/.test(subject)) break;
+    // an amend replaces the commit under it; a merge is one commit by first parent
+    if (/^(commit|cherry-pick)\b/.test(subject) && !subject.startsWith("commit (amend)")) own++;
+  }
+  if (own === 0) return null;
+  const [tip, walked, onMain, fromSince] = await Promise.all([
+    git(worktreePath, "rev-parse", "HEAD"),
+    git(worktreePath, "rev-parse", `HEAD~${own}`),
+    git(worktreePath, "merge-base", "--is-ancestor", "HEAD", defaultBr),
+    since ? git(worktreePath, "merge-base", "--is-ancestor", since, "HEAD") : null,
+  ]);
+  if (!tip.ok || !onMain.ok || !walked.ok) return null;
+  const base = fromSince?.ok && since ? since : walked.out;
+  return base === tip.out ? null : { base, tip: tip.out };
+}
+
 /** Drop every landing ref a worktree holds. Best effort: a ref left behind only keeps commits alive. */
 export async function dropLandRefs(repoPath: string, worktreeId: string): Promise<void> {
   const r = await git(repoPath, "for-each-ref", "--format=%(refname)", `refs/toyon/lands/${worktreeId}/`);

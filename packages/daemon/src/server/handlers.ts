@@ -30,6 +30,7 @@ import { daylightNow } from "../themes/daylight.ts";
 import type { ThemeStore } from "../themes/store.ts";
 import type { UpdateService } from "../update/service.ts";
 import type { ChatSearch } from "../worktrees/chats.ts";
+import type { LandingService } from "../worktrees/landing.ts";
 import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
@@ -60,6 +61,9 @@ export interface Services {
   drafts: DraftStore;
   /** what GitHub says about the PRs toyon opened */
   prs: PrService;
+  /** whether a worktree's work is ready to land, and the message it would land with: the verdict
+   * asked for by hand, and the check alone again after a discard */
+  landing: Pick<LandingService, "judge" | "recheck">;
   themes: ThemeStore;
   agents: AgentRegistry;
   /** per-agent login state, and the one write on it (sign out) */
@@ -479,6 +483,12 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     // every tab's changes list re-reads from the git-status this pushes, and an editor open on the
     // file re-reads the file from that; the file leaving the list is the word on it
     s.hub.emit("filesChanged", msg.worktreeId);
+    // the work is narrower, not different: the verdict's words stand, the check runs again
+    s.landing.recheck(msg.worktreeId);
+  },
+
+  async judge(msg, _ctx, s) {
+    await s.landing.judge(msg.worktreeId);
   },
 
   async "write-file"(msg, ctx, s) {

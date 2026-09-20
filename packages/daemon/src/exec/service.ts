@@ -6,7 +6,7 @@
 // command that stops to ask a question should fail on a closed stdin rather than sit forever
 // waiting for keystrokes nobody can type. Anything interactive belongs in the terminal pane.
 
-import { SHELL_TOOL } from "@toyon/shared";
+import { type AgentEvent, SHELL_TOOL } from "@toyon/shared";
 import type { Subprocess } from "bun";
 import type { AgentAdapter } from "../agent/adapter.ts";
 import { UserError } from "../core/errors.ts";
@@ -45,7 +45,12 @@ export class ExecService {
    * the exit code, and the transcript still gets the rows so the output is in the conversation.
    * Synchronous up to the spawn, so a refusal (a spare, an agent not up yet) throws to the
    * handler as a UserError rather than surfacing as a rejected promise nobody awaits. */
-  exec(worktreeId: string, command: string, name: string = SHELL_TOOL): Promise<ExecResult> {
+  exec(
+    worktreeId: string,
+    command: string,
+    name: string = SHELL_TOOL,
+    opts: { quiet?: boolean } = {},
+  ): Promise<ExecResult> {
     const wt = this.deps.state.requireWorktree(worktreeId);
     if (wt.kind === "spare") throw new UserError("no shell for a spare worktree");
     // the lead's `!` runs in its terminal pane; a command sent for main by name would run in the
@@ -54,7 +59,10 @@ export class ExecService {
     const agent = this.deps.runtime.agentFor(worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
     const toolId = `${name}-${Date.now().toString(36)}-${++this.n}`;
-    agent.note({ type: "tool-start", toolId, name, input: { command }, kind: "execute" });
+    // a quiet run (the check again after a discard) is on the transcript only when it fails: the
+    // rows are what lets "fix it" work, and a pass has nothing to fix
+    const start = { type: "tool-start", toolId, name, input: { command }, kind: "execute" } as const;
+    if (!opts.quiet) agent.note(start);
     // PWD keeps the shell on the logical path, the same as the terminal pane
     const cwd = wt.linkPath ?? wt.path;
     // a login shell so PATH is the person's own; TERM=dumb and NO_COLOR because escape codes would
@@ -71,6 +79,7 @@ export class ExecService {
       });
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
+      if (opts.quiet) agent.note(start);
       agent.note({ type: "tool-end", toolId, output: `could not run: ${reason}`, isError: true });
       return Promise.resolve({ exit: reason, text: "" });
     }
@@ -78,7 +87,7 @@ export class ExecService {
     this.track(worktreeId, toolId, { proc, timer });
     // a command is outstanding work: the dev servers it may be talking to stay up until it ends
     this.deps.runtime.hold(worktreeId, `exec:${toolId}`);
-    return this.collect(worktreeId, toolId, proc, agent);
+    return this.collect(worktreeId, toolId, proc, agent, opts.quiet ? start : undefined);
   }
 
   /** a command the daemon ran itself (the commit a land or the changes panel asked for, refused by
@@ -134,6 +143,8 @@ export class ExecService {
     toolId: string,
     proc: Subprocess,
     agent: AgentAdapter,
+    /** the start row still to write, for a quiet run: written with the end only when it failed */
+    heldStart?: AgentEvent,
   ): Promise<ExecResult> {
     // both pipes into one buffer in arrival order, which is as close to what a terminal would have
     // shown as two pipes allow; a separate stderr block would put the error under the output it
@@ -171,6 +182,8 @@ export class ExecService {
       if (r) clearTimeout(r.timer);
       this.deps.runtime.release(worktreeId, `exec:${toolId}`);
     }
+    if (heldStart && exit === 0) return { exit, text };
+    if (heldStart) agent.note(heldStart);
     agent.note({ type: "tool-end", toolId, output: formatOutput(text, exit, truncated), isError: exit !== 0 });
     return { exit, text };
   }

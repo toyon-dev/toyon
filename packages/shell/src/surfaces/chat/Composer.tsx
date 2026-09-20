@@ -45,7 +45,7 @@ import { CommandRow } from "../overlays/CommandRow.tsx";
 import { PaletteRow } from "../overlays/PaletteRow.tsx";
 import { fileRow } from "../overlays/QuickOpen.tsx";
 import { rankMentions } from "../overlays/quickOpen.ts";
-import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, verbLine } from "../recap.ts";
+import { filesLine, landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, verbLine } from "../recap.ts";
 import { chord, commandSource, folderList, pickLabel, procTrouble, wtDir } from "../util.ts";
 import { AskBox } from "./AskBox.tsx";
 import { openAsk } from "./ask.ts";
@@ -418,6 +418,20 @@ export function Composer({
   const land = () => {
     if (id) shipOp(sock, dispatch, { t: "land", worktreeId: id });
   };
+  const judge = () => {
+    if (id) sock?.send({ t: "judge", worktreeId: id });
+  };
+  const hasCheck = !!repo?.config.check?.trim();
+  // work with no verdict, or one the tree moved under: the check is the next step, and the word
+  // for it sits where `land` will once it passes. A check running or failed keeps its own line.
+  const checkable =
+    atRest &&
+    !spawning &&
+    canLand(active.worktree) &&
+    !hasLanded &&
+    !prClosed &&
+    landCount > 0 &&
+    (!verdict || !!verdict.stale);
   const archiveTip =
     "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.";
   // The next step, when the work has one, is the first word of the empty box's line: a word in the
@@ -455,21 +469,30 @@ export function Composer({
               tip: `${prLine(pr)} ${archiveTip}`,
               run: () => archiveWorktrees(sock, dispatch, [id]),
             }
-          : landing?.ready && !landingLine(landing)
+          : checkable
             ? {
-                word: "land",
-                line: verbLine(said ?? landing.subject ?? (landFacts(landing, landCount) || "ready")),
-                tip: [
-                  landFacts(landing, landCount),
-                  `${describeLand(policy, repo?.defaultBranch)}.`,
-                  landing.subject ? "Tab edits the message first." : "",
-                ]
-                  .filter(Boolean)
-                  .join(" "),
-                run: land,
-                ships: true,
+                word: "check",
+                line: verbLine(said ?? verdict?.subject ?? filesLine(landCount)),
+                tip: verdict?.stale
+                  ? `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`
+                  : `${hasCheck ? "Run the repo's check here, then write" : "Write"} the recap and the commit message.`,
+                run: judge,
               }
-            : null;
+            : landing?.ready && !landingLine(landing)
+              ? {
+                  word: "land",
+                  line: verbLine(said ?? landing.subject ?? (landFacts(landing, landCount) || "ready")),
+                  tip: [
+                    landFacts(landing, landCount),
+                    `${describeLand(policy, repo?.defaultBranch)}.`,
+                    landing.subject ? "Tab edits the message first." : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
+                  run: land,
+                  ships: true,
+                }
+              : null;
   const blocked = landing ? landingLine(landing) : null;
   // the empty box's line, first match wins: what the box is for when it is not a worktree's, then
   // the next step on the work, then what the work is waiting on, then where the last turn left it,
@@ -500,7 +523,7 @@ export function Composer({
     text !== "" || ghost || !active
       ? null
       : verb
-        ? verb.word === "land" && landing
+        ? (verb.word === "land" || verb.word === "check") && landing
           ? landCaveat(landing)
           : null
         : pr || blocked
@@ -555,11 +578,18 @@ export function Composer({
   const refuse = (text: string) => boxId && dispatch({ a: "notice", id: boxId, text });
   // the seat's verb by name. The seat only offers it from an empty box, so this reads the facts
   // under it rather than the seat, and says why when there is nothing for the word to do.
-  const runSeat = (name: "land" | "archive") => {
+  const runSeat = (name: "check" | "land" | "archive") => {
     if (!active || !id) return;
     if (name === "archive") {
       if (hasLanded || prClosed) archiveWorktrees(sock, dispatch, [id]);
       else refuse("archive is for a landed worktree; this one has not landed");
+      return;
+    }
+    if (name === "check") {
+      if (spawning || !canLand(active.worktree)) refuse("nothing to check from here");
+      else if (midTurn) refuse("wait for the turn to end");
+      else if (landCount === 0) refuse("nothing to check: no changes here");
+      else judge();
       return;
     }
     const stuck = verdict ? landingLine(verdict) : null;
@@ -567,6 +597,7 @@ export function Composer({
     else if (hasLanded) refuse(`already landed on ${repo?.defaultBranch ?? "main"}`);
     else if (midTurn) refuse("wait for the turn to end");
     else if (stuck) refuse(stuck);
+    else if (verdict?.stale) refuse("the work changed since this was checked; check again first");
     else land();
   };
 
@@ -608,7 +639,7 @@ export function Composer({
     const typed = ownCommandOf(text, ownRows);
     const mode = typed && isMode(typed.name) ? typed.name : undefined;
     if (typed && !mode) {
-      runSeat(typed.name as "land" | "archive");
+      runSeat(typed.name as "check" | "land" | "archive");
       setText("");
       return;
     }

@@ -336,8 +336,11 @@ export interface Landing {
   /** the suggested commit message: a subject, and a body when there was more to say */
   subject?: string;
   body?: string;
-  /** HEAD plus the diff's shape when this was written: a tree that no longer matches retires it */
+  /** HEAD plus the diff's shape when this was written: a tree that no longer matches marks it stale */
   fingerprint: string;
+  /** the tree moved since this was written, by a hand or another tool: the message and the
+   * sentence still describe the work, the check does not, so the word waits on it running again */
+  stale?: true;
 }
 
 /** the branch is toyon's to manage: made by create or a spare claim, so removing the

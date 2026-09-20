@@ -64,9 +64,16 @@ export function landFacts(l: Landing, count: number): string {
   return facts ? ended(capital(facts)) : "";
 }
 
-/** The model's doubt as a sentence of its own under the verb's line: a caveat, never a refusal, so
- * the word stays */
+/** What is here to check, when no sentence and no message says it: the count alone */
+export function filesLine(count: number): string {
+  return count > 0 ? ended(capital(`${count} ${count === 1 ? "file" : "files"} changed`)) : "";
+}
+
+/** Under the verb's line, a sentence of its own: that the tree moved since the verdict was
+ * written, which is why the word is `check` and not `land`; else the model's doubt, a caveat and
+ * never a refusal, so the word stays */
 export function landCaveat(l: Landing): string | null {
+  if (l.stale) return "Changed since this was written.";
   return l.why ? ended(capital(l.why)) : null;
 }
 

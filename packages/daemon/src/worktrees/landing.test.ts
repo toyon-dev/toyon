@@ -50,8 +50,10 @@ function world(opts: Opts = {}) {
   const hub = new Hub();
   const set: Array<Landing | undefined> = [];
   const checks: string[] = [];
+  /** whether each check was asked to keep its rows off the transcript unless it failed */
+  const quiet: boolean[] = [];
   const judged: string[] = [];
-  new LandingService({
+  const service = new LandingService({
     state,
     hub,
     worktrees: {
@@ -64,8 +66,9 @@ function world(opts: Opts = {}) {
       },
     },
     transcript: () => [],
-    check: async (_id, command) => {
+    check: async (_id, command, o) => {
       checks.push(command);
+      quiet.push(!!o?.quiet);
       return { exit: opts.exit ?? 0, text: opts.output ?? "" };
     },
     ...(opts.verdict === "none"
@@ -89,7 +92,27 @@ function world(opts: Opts = {}) {
     for (let i = 0; wait && i < 50 && !done(); i++) await Bun.sleep(10);
   };
   const dirty = () => writeFileSync(join(wtPath, "feature.txt"), `${Date.now()}\n`);
-  return { ...t, wtPath, state, hub, set, checks, judged, settle, dirty, wt: () => state.worktree("w1") };
+  /** a run asked for by hand or a recheck has settled once a verdict past pending was set */
+  const settled = async () => {
+    const n = set.length;
+    for (let i = 0; i < 50 && !set.slice(n).some((l) => l === undefined || l.check !== "pending"); i++)
+      await Bun.sleep(10);
+  };
+  return {
+    ...t,
+    wtPath,
+    state,
+    hub,
+    service,
+    set,
+    checks,
+    quiet,
+    judged,
+    settle,
+    settled,
+    dirty,
+    wt: () => state.worktree("w1"),
+  };
 }
 
 let w: ReturnType<typeof world> | undefined;
@@ -198,6 +221,68 @@ describe("LandingService", () => {
     await Bun.sleep(30);
     expect(w.wt()?.landing).toBeUndefined();
     expect(w.set.every((l) => l === undefined || l.check === "pending")).toBe(true);
+  });
+
+  test("judge() by hand runs the check and asks the question, for a tree with no verdict", async () => {
+    w = world({ check: "bun run check", verdict: { ready: true, recap: "Feature in.", subject: "add the feature" } });
+    w.dirty();
+    w.wt()!.lastTurn = { at: 50, end: "stopped", facts: { turns: 1, edits: 1, toolErrors: 0 } };
+    const settledAt = w.settled();
+    await w.service.judge("w1");
+    await settledAt;
+    expect(w.checks).toEqual(["bun run check"]);
+    expect(w.quiet).toEqual([false]);
+    expect(w.judged.length).toBe(1);
+    expect(w.wt()?.landing).toMatchObject({ check: "pass", ready: true, subject: "add the feature" });
+    expect(w.wt()?.landing?.stale).toBeUndefined();
+    // the sentence goes on the stopped turn, which had none
+    expect(w.wt()?.lastTurn?.recap?.text).toBe("Feature in.");
+  });
+
+  test("judge() is refused mid-turn and with nothing to land", async () => {
+    w = world({ verdict: { ready: true, subject: "add the feature" } });
+    await expect(w.service.judge("w1")).rejects.toThrow("nothing to check");
+    w.dirty();
+    w.hub.emit("agentStatus", "w1", "working");
+    await expect(w.service.judge("w1")).rejects.toThrow("wait for the turn");
+    w.hub.emit("agentStatus", "w1", "idle");
+    const settledAt = w.settled();
+    await w.service.judge("w1");
+    await settledAt;
+    expect(w.wt()?.landing?.subject).toBe("add the feature");
+  });
+
+  test("recheck() runs the check quietly and keeps the words; a row with no verdict is left alone", async () => {
+    w = world({ check: "bun run check", verdict: { ready: true, subject: "a fresh message" } });
+    w.dirty();
+    w.service.recheck("w1");
+    await Bun.sleep(30);
+    expect(w.checks).toEqual([]);
+    w.wt()!.landing = {
+      at: 1,
+      check: "pass",
+      ready: true,
+      why: "a question is open",
+      subject: "add the feature",
+      body: "One file.",
+      fingerprint: "old",
+      stale: true,
+    };
+    const settledAt = w.settled();
+    w.service.recheck("w1");
+    await settledAt;
+    expect(w.checks).toEqual(["bun run check"]);
+    expect(w.quiet).toEqual([true]);
+    expect(w.judged).toEqual([]);
+    expect(w.wt()?.landing).toEqual({
+      at: expect.any(Number),
+      check: "pass",
+      ready: true,
+      why: "a question is open",
+      subject: "add the feature",
+      body: "One file.",
+      fingerprint: await treeFingerprint(w.wtPath),
+    });
   });
 
   test("the fingerprint moves with the tree", async () => {

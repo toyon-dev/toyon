@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Landing, LastTurn, PrState, TurnFacts } from "@toyon/shared";
-import { landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, verbLine } from "./recap.ts";
+import { filesLine, landCaveat, landFacts, landingLine, prCanMerge, prLine, recapLine, verbLine } from "./recap.ts";
 
 const turn = (end: LastTurn["end"], f: Partial<TurnFacts> = {}, minsAgo = 12, text?: string): LastTurn => ({
   at: Date.now() - minsAgo * 60_000,
@@ -70,6 +70,16 @@ describe("landingLine", () => {
   test("the model's doubt is a sentence of its own, and none without one", () => {
     expect(landCaveat(landing({ why: "a question is open" }))).toBe("A question is open.");
     expect(landCaveat(landing({}))).toBeNull();
+  });
+
+  test("a tree that moved under the verdict says so ahead of any doubt", () => {
+    expect(landCaveat(landing({ why: "a question is open", stale: true }))).toBe("Changed since this was written.");
+  });
+
+  test("the count alone, for a line with nothing else to say", () => {
+    expect(filesLine(3)).toBe("3 files changed.");
+    expect(filesLine(1)).toBe("1 file changed.");
+    expect(filesLine(0)).toBe("");
   });
 
   test("the verb's line ends as a sentence", () => {

@@ -2,13 +2,16 @@
 // in the worktree with its output on the transcript, and when it passes the agent's quick model is
 // asked for a commit message, whether the work reads as done, and one sentence on where it stands.
 // The check decides; the model's doubt is kept as a sentence. The verdict sits on the worktree
-// record until a new turn starts or the tree changes under it (service.gitStatus); the sentence is
-// the turn's recap and stays with the turn.
+// record until a new turn starts; a tree that changes under it goes stale (service.gitStatus), and
+// the same question can be asked again by hand, or the check alone re-run after a discard, which
+// narrows the work without changing what the sentence and the message say about it. The sentence
+// is the turn's recap and stays with the turn.
 
-import { canLand, type Landing, type LastTurn, type WorktreeInfo } from "@toyon/shared";
+import { type AgentStatus, canLand, type Landing, type LastTurn, type WorktreeInfo } from "@toyon/shared";
 import { type LandVerdict, landPrompt } from "../agent/landing.ts";
 import { firstAskOf, turnsSince } from "../agent/recap.ts";
 import type { TranscriptEntry } from "../agent/transcript.ts";
+import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
@@ -22,8 +25,9 @@ export interface LandingServiceDeps {
   hub: Hub;
   worktrees: Pick<WorktreeService, "setLanding">;
   transcript: (worktreeId: string) => readonly TranscriptEntry[];
-  /** run the repo's check in the worktree, its rows on the transcript, and report how it ended */
-  check: (worktreeId: string, command: string) => Promise<ExecResult>;
+  /** run the repo's check in the worktree and report how it ended: its rows on the transcript,
+   * or only when it fails with `quiet` */
+  check: (worktreeId: string, command: string, opts?: { quiet?: boolean }) => Promise<ExecResult>;
   /** the verdict and message from the worktree's own agent, or null; without it the check decides */
   judge?: (wt: WorktreeInfo, prompt: string) => Promise<LandVerdict | null>;
 }
@@ -33,16 +37,34 @@ const TAIL_CHARS = 400;
 /** how much of the diff summary the question carries */
 const DIFF_CHARS = 2_000;
 
+/** one run of the verdict: what it is for, and whether the model is asked or only the check runs */
+interface Run {
+  /** the moment this run was asked for; a run stamped later supersedes it */
+  at: number;
+  /** ask the model for the message and the sentence, or keep the ones the verdict has */
+  ask: boolean;
+  /** the check's rows on the transcript only when it fails */
+  quiet: boolean;
+}
+
 export class LandingService {
-  /** the turn each worktree's verdict is being written for, so a slower answer to an older turn is dropped */
+  /** the run each worktree's verdict is being written by, so a slower answer to an older run is dropped */
   private judging = new Map<string, number>();
+  /** worktrees whose agent is mid-turn: a verdict by hand waits for it to end */
+  private busy = new Set<string>();
 
   constructor(private d: LandingServiceDeps) {
     d.hub.on("turnSettled", (id, turn) => fireAndForget(id, this.settle(id, turn), "landing verdict"));
     // a new turn is new work: whatever the last verdict said is about a tree that is changing
     d.hub.on("agentStatus", (id, status) => {
+      this.note(id, status);
       if (status === "working") this.clear(id);
     });
+  }
+
+  private note(worktreeId: string, status: AgentStatus) {
+    if (status === "working" || status === "waiting") this.busy.add(worktreeId);
+    else this.busy.delete(worktreeId);
   }
 
   private clear(worktreeId: string) {
@@ -54,32 +76,70 @@ export class LandingService {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || !canLand(wt)) return;
     if (turn.end !== "done") return this.clear(worktreeId);
+    await this.run(wt, { at: turn.at, ask: true, quiet: false });
+  }
+
+  /** The verdict by hand: the same check and the same question, for a tree that moved under the
+   * last one, a turn that stopped short of one, or a row that never had one. Refused while the
+   * agent is mid-turn, since the tree is changing, and with nothing to land. The run goes on in the
+   * background; the box reads pending from the first frame. */
+  async judge(worktreeId: string): Promise<void> {
+    const wt = this.d.state.requireWorktree(worktreeId);
+    if (!canLand(wt)) throw new UserError("nothing to land from here");
+    if (this.busy.has(worktreeId)) throw new UserError("wait for the turn to end");
+    if (!(await this.hasWork(wt))) throw new UserError("nothing to check: no changes here");
+    fireAndForget(worktreeId, this.run(wt, { at: Date.now(), ask: true, quiet: false }), "landing verdict by hand");
+  }
+
+  /** The check alone, after a discard narrowed the work: the sentence and the message still
+   * describe what is left, so the model is not asked again, and a check that passes leaves no rows
+   * on the transcript. A row with no verdict to refresh, or mid-turn, is left alone. */
+  recheck(worktreeId: string): void {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt?.landing || !canLand(wt) || this.busy.has(worktreeId)) return;
+    fireAndForget(worktreeId, this.run(wt, { at: Date.now(), ask: false, quiet: true }), "landing recheck");
+  }
+
+  private async hasWork(wt: WorktreeInfo): Promise<boolean> {
     const repo = this.d.state.requireRepo(wt.repoId);
     const files = await statusFiles(wt.path);
+    if (files.length > 0) return true;
     const { ahead } = await aheadBehind(wt.path, repo.defaultBranch);
-    if (files.length === 0 && ahead === 0) return this.clear(worktreeId);
+    return ahead > 0;
+  }
 
-    this.judging.set(worktreeId, turn.at);
+  private async run(wt: WorktreeInfo, opts: Run) {
+    const worktreeId = wt.id;
+    const repo = this.d.state.requireRepo(wt.repoId);
+    if (!(await this.hasWork(wt))) return this.clear(worktreeId);
+    // what the verdict keeps when only the check runs again: the words, never the old check's result
+    const held = opts.ask ? undefined : wt.landing;
+    const kept = {
+      ...(held?.why ? { why: held.why } : {}),
+      ...(held?.subject ? { subject: held.subject } : {}),
+      ...(held?.body ? { body: held.body } : {}),
+    };
+
+    this.judging.set(worktreeId, opts.at);
     const started = Date.now();
     // the box says the check is running rather than going back to its plain placeholder: the gap
     // between the agent's last word and the verdict is where a person is reading
-    this.d.worktrees.setLanding(worktreeId, { at: turn.at, check: "pending", ready: false, fingerprint: "" });
-    // still the turn being judged: a newer stop or a new turn since means this answer is stale
-    const live = () =>
-      this.judging.get(worktreeId) === turn.at && this.d.state.worktree(worktreeId)?.lastTurn?.at === turn.at;
+    this.d.worktrees.setLanding(worktreeId, { at: opts.at, check: "pending", ready: false, fingerprint: "", ...kept });
+    // still the run being judged: a newer run, or a new turn since, means this answer is stale
+    const live = () => this.judging.get(worktreeId) === opts.at && !!this.d.state.worktree(worktreeId);
 
     let check: Landing["check"] = "none";
     let checkTail: string | undefined;
     const command = repo.config.check?.trim();
     if (command) {
-      const r = await this.d.check(worktreeId, command);
+      const r = await this.d.check(worktreeId, command, { quiet: opts.quiet });
       if (!live()) return;
       check = r.exit === 0 ? "pass" : "fail";
       if (check === "fail") checkTail = tail(r.text) || `exit ${r.exit}`;
     }
 
     let verdict: LandVerdict | null = null;
-    if (check !== "fail" && this.d.judge) {
+    if (opts.ask && check !== "fail" && this.d.judge) {
       const entries = this.d.transcript(worktreeId);
       const prompt = landPrompt({
         title: wt.title,
@@ -97,11 +157,12 @@ export class LandingService {
     }
 
     const landing: Landing = {
-      at: turn.at,
+      at: opts.at,
       check,
       ...(checkTail ? { checkTail } : {}),
       // the facts decide: the model's doubt rides beside the word as `why`, never in front of it
       ready: check !== "fail",
+      ...kept,
       ...(verdict && !verdict.ready && verdict.why ? { why: verdict.why } : {}),
       ...(verdict?.subject ? { subject: verdict.subject } : {}),
       ...(verdict?.body ? { body: verdict.body } : {}),
@@ -113,7 +174,10 @@ export class LandingService {
     const record = this.d.state.worktree(worktreeId)?.lastTurn;
     if (record && verdict?.recap) record.recap = { at: Date.now(), text: verdict.recap };
     // how long the word took to appear: the check and the side question are the two costs here
-    log.info(worktreeId, `landing: check ${check}${landing.why ? ", doubted" : ""}, ${Date.now() - started}ms`);
+    log.info(
+      worktreeId,
+      `landing: check ${check}${landing.why ? ", doubted" : ""}${opts.ask ? "" : ", check only"}, ${Date.now() - started}ms`,
+    );
     this.d.worktrees.setLanding(worktreeId, landing);
   }
 }

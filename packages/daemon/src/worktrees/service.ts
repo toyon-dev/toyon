@@ -47,6 +47,7 @@ import {
   checkOutKept,
   commitOf,
   dropLandRefs,
+  handLanding,
   type KeptState,
   keepState,
   type LandingRange,
@@ -224,6 +225,8 @@ export class WorktreeService {
    * while an id is in here, and the row goes a moment later anyway. */
   private going = new Set<string>();
   private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
+  /** the HEAD each clean, level worktree was last asked about a hand landing at: one reflog read per move */
+  private handChecked = new Map<string, string>();
   /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
   private discoverCache = new Map<string, { rows: FoundWorktree[]; at: number }>();
   /** the last usage figures per worktree: live from the stream, else read once from the transcript
@@ -1347,7 +1350,7 @@ export class WorktreeService {
   private async commitRecorded(wt: WorktreeInfo, message: string): Promise<ShipResult> {
     const result = await commitWorktree(wt.path, message);
     if (result.ok) {
-      await this.verdictSurvivesCommit(wt);
+      await this.verdictSurvives(wt, { dropMessage: true });
       this.headMoved(wt.id);
       return result;
     }
@@ -1364,15 +1367,28 @@ export class WorktreeService {
     return { ...result, message: "commit refused: what git and its hooks printed is on the chat" };
   }
 
-  /** A commit by hand moves HEAD, and the next status read would retire the verdict for it; but
-   * the check and the sentence were about these same bytes, so the verdict follows the commit with
-   * its fingerprint refreshed. The message goes with it: it is in git now, and the box would
-   * otherwise keep offering what was just committed. */
-  private async verdictSurvivesCommit(wt: WorktreeInfo) {
+  /** A commit by hand or a sync moves HEAD, and the next status read would mark the verdict stale
+   * for it; but the check and the sentence were about these same bytes, so the verdict follows
+   * with its fingerprint refreshed. After a commit the message goes: it is in git now, and the box
+   * would otherwise keep offering what was just committed. After a sync it stays. */
+  private async verdictSurvives(wt: WorktreeInfo, opts: { dropMessage: boolean }) {
     const l = wt.landing;
     if (!l || l.check === "pending") return;
-    const { subject: _s, body: _b, ...kept } = l;
-    this.setLanding(wt.id, { ...kept, fingerprint: await treeFingerprint(wt.path) });
+    const { subject, body, ...kept } = l;
+    const message = opts.dropMessage ? {} : { ...(subject ? { subject } : {}), ...(body ? { body } : {}) };
+    this.setLanding(wt.id, { ...kept, ...message, fingerprint: await treeFingerprint(wt.path) });
+  }
+
+  /** The row lands the way the press lands it, for a landing git did without toyon (handLanding):
+   * the range kept under a ref, the branch restarted from main so the next hand landing counts only
+   * the commits after this one, and the verdict gone with the work it described. */
+  private async landedByHand(wt: WorktreeInfo, mark: LandingRange) {
+    const repo = this.d.state.requireRepo(wt.repoId);
+    log.info(wt.id, `landed on ${repo.defaultBranch} outside toyon: ${mark.base.slice(0, 7)}..${mark.tip.slice(0, 7)}`);
+    await this.noteLand(repo, wt, mark);
+    await this.restartFromMain(wt, repo.defaultBranch);
+    this.setLanding(wt.id, undefined);
+    this.setLanded(wt.id, true);
   }
 
   /** The one press. Commit what is uncommitted, take main in (a rebase for toyon's own branch),
@@ -1522,7 +1538,11 @@ export class WorktreeService {
     const repo = this.d.state.requireRepo(r.repoId);
     const own = r.wt ? hasOwnBranch(r.wt) : false;
     const result = await withRepoLock(repo.path, () => takeMainIn(r.path, repo.defaultBranch, own));
-    if (result.ok) this.headMoved(worktreeId);
+    if (result.ok) {
+      this.headMoved(worktreeId);
+      // the same work over a newer base: the sentence and the message still describe it
+      if (r.wt) await this.verdictSurvives(r.wt, { dropMessage: false });
+    }
     return { result, defaultBranch: repo.defaultBranch };
   }
 
@@ -1735,14 +1755,35 @@ export class WorktreeService {
         // new work after a merged PR is a new PR later; the old one is history
         if (r.wt.pr) this.setPr(r.wt.id, undefined);
       }
-      // a verdict describes one tree: an edit since (by hand, by another tool) retires it, so the
-      // composer never offers to land work the check and the message have not seen
+      // a landing git did without toyon: the branch is clean and level with main and has commits
+      // of its own. Asked once per HEAD; the land press and a PR merge mark their own.
       if (
-        r.wt?.landing &&
-        r.wt.landing.check !== "pending" &&
-        r.wt.landing.fingerprint !== (await treeFingerprint(r.path))
-      )
-        this.setLanding(r.wt.id, undefined);
+        r.wt &&
+        !isMain &&
+        !r.wt.landed &&
+        hasOwnBranch(r.wt) &&
+        files.length === 0 &&
+        ahead === 0 &&
+        head.ok &&
+        this.handChecked.get(r.wt.id) !== head.out
+      ) {
+        this.handChecked.set(r.wt.id, head.out);
+        const mark = await handLanding(r.path, r.wt.branch, r.defaultBranch, r.wt.lands?.at(-1)?.tip);
+        if (mark) {
+          await this.landedByHand(r.wt, mark);
+          return this.gitStatus(worktreeId);
+        }
+      }
+      // a verdict describes one tree: an edit since (by hand, by another tool) marks it stale, so
+      // the composer keeps the sentence and the message but withholds the word until the check
+      // runs again. A tree that comes back to what the verdict saw (an edit undone) clears the mark.
+      if (r.wt?.landing && r.wt.landing.check !== "pending") {
+        const moved = r.wt.landing.fingerprint !== (await treeFingerprint(r.path));
+        if (moved !== !!r.wt.landing.stale) {
+          const { stale: _was, ...rest } = r.wt.landing;
+          this.setLanding(r.wt.id, moved ? { ...rest, stale: true } : rest);
+        }
+      }
       // the empty-tree fact lives on main's record, so the rows frame carries it without git: a
       // task worktree of an empty repo is not the greenfield surface, so only main keeps it
       if (r.wt && isMain) this.setEmpty(r.wt, files.length === 0 ? await treeEmpty(r.path) : false);

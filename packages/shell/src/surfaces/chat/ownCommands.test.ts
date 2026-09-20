@@ -7,7 +7,7 @@ const planLine = PERMISSION_MODES.find((m) => m.id === "plan")?.description;
 
 describe("ownCommands", () => {
   test("one row per mode with the chip's line, then the seat's verbs", () => {
-    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "land", "archive"]);
+    expect(own.map((c) => c.name)).toEqual(["auto", "ask", "plan", "check", "land", "archive"]);
     for (const m of PERMISSION_MODES) expect(own.find((c) => c.name === m.id)?.description).toBe(m.description);
     expect(own.find((c) => c.name === "land")?.description).toBe("Commit and merge into main here");
   });

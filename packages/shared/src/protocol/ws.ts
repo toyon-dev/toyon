@@ -496,6 +496,10 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("find-element"), worktreeId: id, seq, element: elementTraitsSchema }),
   z.object({ t: z.literal("design-scan"), worktreeId: id }),
   z.object({ t: z.literal("discard-file"), worktreeId: id, path: relPath }),
+  /** run the repo's check here and write the recap and the commit message, by hand: for a verdict
+   * the tree moved under, a turn that stopped short of one, or none at all. Answered by the
+   * worktree's landing on the rows frame; refused while its agent is mid-turn. */
+  z.object({ t: z.literal("judge"), worktreeId: id }),
   z.object({ t: z.literal("reveal"), worktreeId: id, path: relPath.optional() }),
   z.object({ t: z.literal("stop-agent"), worktreeId: id }),
   /** the person is looking at this worktree right now: clears the rail's unseen ring */

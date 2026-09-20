@@ -1137,7 +1137,79 @@ describe("landing", () => {
     // an edit after the commit is a tree the verdict never saw
     writeFileSync(join(wt.path, "more.txt"), "y\n");
     await w.worktrees.gitStatus(wt.id);
-    expect(row.landing).toBeUndefined();
+    expect(row.landing?.stale).toBe(true);
+  });
+
+  test("a sync keeps the verdict, message and all: the same work over a newer base", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    const row = w.state.worktree(wt.id)!;
+    row.landing = {
+      at: 1,
+      check: "pass",
+      ready: true,
+      subject: "add feature",
+      body: "One file.",
+      fingerprint: await treeFingerprint(wt.path),
+    };
+    writeFileSync(join(w.repo, "other.txt"), "o\n");
+    sh(w.repo, GIT, "add", "-A");
+    sh(w.repo, GIT, "commit", "-qm", "other");
+    expect((await w.worktrees.sync(wt.id)).result.ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landing).toEqual({
+      at: 1,
+      check: "pass",
+      ready: true,
+      subject: "add feature",
+      body: "One file.",
+      fingerprint: await treeFingerprint(wt.path),
+    });
+  });
+
+  test("a landing git did without toyon marks the row landed, keeps the range, and restarts the branch", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const before = (await git(w.repo, "rev-parse", "main")).out;
+    // a row that only answered has no commits of its own: not a landing
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    // the agent fast-forwards main from the main checkout
+    expect((await git(w.repo, "merge", "--ff-only", wt.branch)).ok).toBe(true);
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], ahead: 0, behind: 0 });
+    const row = w.state.worktree(wt.id)!;
+    expect(row.landed).toBe(true);
+    expect(row.lands).toEqual([{ base: before, tip, at: expect.any(Number) }]);
+    expect((await git(w.repo, "rev-parse", `refs/toyon/lands/${wt.id}/0`)).out).toBe(tip);
+    // a second landing, under a merge commit this time, counts only the commits after the first
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    expect((await w.worktrees.commit(wt.id, "more")).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landed).toBe(false);
+    const second = (await git(wt.path, "rev-parse", "HEAD")).out;
+    expect((await git(w.repo, "merge", "--no-ff", "-m", "land more", wt.branch)).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(row.landed).toBe(true);
+    expect(row.lands?.[1]).toMatchObject({ base: tip, tip: second });
+    // restarted from main: level with the merge commit, as after the press
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(w.repo, "rev-parse", "main")).out);
+  });
+
+  test("commits reset away by hand are not a landing", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    expect((await git(wt.path, "reset", "--hard", "main")).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
   });
 
   /** a pre-commit hook for the repo that prints its complaint and refuses; repo-local hooksPath so
@@ -1318,23 +1390,27 @@ describe("landing", () => {
     expect((await git(w.repo, "log", "--format=%s", "-n", "4")).out.split("\n")).toContain("main moves on");
   });
 
-  test("a status read retires a verdict once the tree no longer matches it", async () => {
+  test("a status read marks a verdict stale once the tree no longer matches it, and clears the mark when it does again", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
-    const fingerprint = (await import("../git/status.ts")).treeFingerprint;
     w.worktrees.setLanding(wt.id, {
       at: 1,
       check: "none",
       ready: true,
       subject: "add the feature",
-      fingerprint: await fingerprint(wt.path),
+      fingerprint: await treeFingerprint(wt.path),
     });
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.landing?.ready).toBe(true);
+    expect(w.state.worktree(wt.id)?.landing?.stale).toBeUndefined();
     writeFileSync(join(wt.path, "feature.txt"), "x\ny\n");
     await w.worktrees.gitStatus(wt.id);
-    expect(w.state.worktree(wt.id)?.landing).toBeUndefined();
+    // the words stay for the box; the word waits on the check
+    expect(w.state.worktree(wt.id)?.landing).toMatchObject({ ready: true, subject: "add the feature", stale: true });
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landing?.stale).toBeUndefined();
   });
 
   test("land is refused from main, and with nothing to land", async () => {

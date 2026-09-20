@@ -169,12 +169,12 @@ const files = new FileService(state, runtime, (id) => worktrees.readable(id));
 const design = new DesignService((id) => worktrees.readable(id));
 const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
 // after the turn service: its verdict follows the turnSettled the turn service emits
-new LandingService({
+const landing = new LandingService({
   state,
   hub,
   worktrees,
   transcript: (id) => runtime.agentFor(id)?.transcript() ?? [],
-  check: (id, command) => exec.exec(id, command, CHECK_TOOL),
+  check: (id, command, opts) => exec.exec(id, command, CHECK_TOOL, opts),
   judge: makeLander(runtime, agents, state),
 });
 const refs = new RefSearch({ state });
@@ -266,6 +266,7 @@ const { branded, stop: stopServer } = startServer({
     chats,
     drafts,
     prs,
+    landing,
     themes,
     agents,
     accounts,

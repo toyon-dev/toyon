@@ -7,7 +7,7 @@
 import { type AgentCommand, PERMISSION_MODES, type PermissionMode } from "@toyon/shared";
 
 /** the names toyon answers itself: a mode, or the seat's verb */
-export type OwnName = PermissionMode | "land" | "archive";
+export type OwnName = PermissionMode | "check" | "land" | "archive";
 
 /** a draft that leads with one of toyon's own commands: the name, and whatever followed it */
 export type OwnInvocation = { name: OwnName; args: string };
@@ -19,6 +19,7 @@ export const isMode = (name: string): name is PermissionMode => PERMISSION_MODES
 export function ownCommands(landLine: string): AgentCommand[] {
   return [
     ...PERMISSION_MODES.map((m) => ({ name: m.id, description: m.description, hint: "[<description>]" })),
+    { name: "check", description: "run the repo's check here and write the recap and the commit message" },
     { name: "land", description: landLine },
     { name: "archive", description: "archive this worktree once its work has landed" },
   ];

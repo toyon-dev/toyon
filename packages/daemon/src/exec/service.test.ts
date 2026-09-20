@@ -86,6 +86,17 @@ describe("ExecService.exec", () => {
     expect(end?.type === "tool-end" && end.output).toContain("exit 3");
   });
 
+  test("a quiet run leaves no rows when it passes, and both when it fails", async () => {
+    const { exec, agent } = world();
+    expect((await exec.exec("w1", "true", CHECK_TOOL, { quiet: true })).exit).toBe(0);
+    expect(agent.recorded).toEqual([]);
+    const r = await exec.exec("w1", "echo broken; exit 2", CHECK_TOOL, { quiet: true });
+    expect(r.exit).toBe(2);
+    expect(agent.recorded.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    expect(agent.recorded[0]).toMatchObject({ type: "tool-start", name: CHECK_TOOL });
+    expect(agent.recorded[1]).toMatchObject({ type: "tool-end", isError: true });
+  });
+
   test("a command that passes is not an error, and run() is the same call without the answer", async () => {
     const { exec, agent } = world();
     expect((await exec.exec("w1", "true")).exit).toBe(0);

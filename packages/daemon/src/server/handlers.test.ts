@@ -138,6 +138,17 @@ function make() {
   const routes = new RouteService({ state, hub, readable: (id) => worktrees.readable(id) });
   // GitHub is not asked in a test: a PR is whatever the test says it is
   const prs = new PrService({ state, hub, worktrees, view: async () => null, everyMs: 60 * 60_000 });
+  // the verdict is the landing service's own business (landing.test.ts); here only that the
+  // right call reaches it
+  const landingCalls: string[] = [];
+  const landing = {
+    judge: async (id: string) => {
+      landingCalls.push(`judge ${id}`);
+    },
+    recheck: (id: string) => {
+      landingCalls.push(`recheck ${id}`);
+    },
+  };
   const planned: string[][] = [];
   const chosen: Array<string | null> = [];
   const restarts: number[] = [];
@@ -193,6 +204,7 @@ function make() {
     chats,
     drafts,
     prs,
+    landing,
     themes,
     agents,
     accounts,
@@ -228,7 +240,22 @@ function make() {
     watchTerminal: (id, stream) => terms.add(streamKey(id, stream)),
     unwatchTerminal: (id, stream) => terms.delete(streamKey(id, stream)),
   };
-  return { ...t, services, ctx, replies, broadcasts, subs, terms, views, planned, chosen, planArgs, restarts, ...f };
+  return {
+    ...t,
+    services,
+    ctx,
+    replies,
+    broadcasts,
+    subs,
+    terms,
+    views,
+    planned,
+    chosen,
+    planArgs,
+    restarts,
+    landingCalls,
+    ...f,
+  };
 }
 
 /** the repo registered, and its main row, which the file tests read and write through */
@@ -1526,5 +1553,27 @@ describe("handlers", () => {
     agent.status = "idle";
     services.hub.emit("agentStatus", main.id, "idle");
     expect(restarts).toHaveLength(1);
+  });
+});
+
+describe("the verdict by hand", () => {
+  test("discard-file hands the worktree to the check again, after the file is gone", async () => {
+    const { services, ctx, repo, landingCalls } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    writeFileSync(join(wt.path, "b.txt"), "b\n");
+    await dispatch({ t: "discard-file", worktreeId: wt.id, path: "b.txt" }, ctx, services);
+    expect(existsSync(join(wt.path, "b.txt"))).toBe(false);
+    expect(landingCalls).toEqual([`recheck ${wt.id}`]);
+  });
+
+  test("judge asks for the verdict on the worktree named", async () => {
+    const { services, ctx, repo, landingCalls } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    await dispatch({ t: "judge", worktreeId: wt.id }, ctx, services);
+    expect(landingCalls).toEqual([`judge ${wt.id}`]);
   });
 });

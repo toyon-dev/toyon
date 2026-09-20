@@ -57,7 +57,6 @@ import { excludeBlock } from "../git/exclude.ts";
 import { GIT, git, gitOrThrow, isGitRepo, NO_PROMPT, run } from "../git/exec.ts";
 import {
   commitWorktree,
-  fastForwardFetched,
   fastForwardMain,
   landLocally,
   mergePr,
@@ -72,7 +71,6 @@ import { withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
 import {
   aheadBehind,
-  behindUpstream,
   committedFiles,
   statusFiles,
   statusFilesWithCounts,
@@ -91,6 +89,7 @@ import { ArchivedGit } from "./archivedGit.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import { branchSlug, cleanTitle, shortId, slugify, titleFrom, variantLens } from "./naming.ts";
 import { SparePool } from "./spare.ts";
+import { mainOf, Trunk } from "./trunk.ts";
 import { isUnseen } from "./turns.ts";
 
 /** Gitignored local config a worktree needs and git will never bring over. Absent secrets fail
@@ -212,14 +211,10 @@ export interface WorktreeServiceDeps {
   record?: (worktreeId: string, command: string, text: string, exit: number | string | null) => void;
 }
 
-/** how often main's upstream is fetched while its row is being counted */
-const FETCH_EVERY_MS = 5 * 60_000;
-/** how soon after a fetch opening the plus fetches again: a fetch holds the network for seconds,
- * and one per open of a hot monorepo is the cost the plus is allowed */
-const TRUNK_FETCH_MIN_MS = 60_000;
-
 export class WorktreeService {
   readonly spare: SparePool;
+  /** every project's main checkout as it stands, and how it follows origin */
+  readonly trunk: Trunk;
   private archive: WorktreeArchive;
   /** archives under way, by worktree id: a click during a sweep joins the one already running */
   private archiving = new Map<string, Promise<ArchivedWorktree | null>>();
@@ -234,13 +229,18 @@ export class WorktreeService {
   /** the last usage figures per worktree: live from the stream, else read once from the transcript
    * on disk (null: read, and there were none) */
   private usage = new Map<string, WorktreeStatus["usage"] | null>();
-  /** per repo path, when main's upstream was last fetched */
-  private lastFetch = new Map<string, number>();
-  /** per repo, why main was last left where it was when origin had moved (see TrunkStatus) */
-  private trunkStale = new Map<string, TrunkStatus["stale"]>();
 
   constructor(private d: WorktreeServiceDeps) {
     this.archive = new WorktreeArchive(d.paths.archiveDir);
+    this.trunk = new Trunk({
+      state: d.state,
+      hub: d.hub,
+      counts: (main, defaultBranch, quick) =>
+        quick
+          ? Promise.resolve(this.countsQuick(main.id, quick))
+          : this.counts(main.id, main.path, defaultBranch, false),
+      invalidateCounts: () => this.invalidateCounts(),
+    });
     this.spare = new SparePool({
       state: d.state,
       hub: d.hub,
@@ -1545,71 +1545,14 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** this worktree's own HEAD moved (a sync or a commit): its cached ahead/behind describe the
-   * old one, and nothing watches a worktree's branch the way the repo watcher watches main, so
-   * the rail would keep the old badge until the TTL lapsed and something unrelated pushed a frame */
-  /** main's `behind` is against its upstream, refreshed by a fetch every few minutes while
-   * someone is looking: the count is only as good as the last fetch, and nobody runs one by hand
-   * for a tool to read. No upstream, no count and no fetch. A fetch that finds main behind takes
-   * origin in when main is clean, so the spare is the latest main whenever the plus is next used. */
-  private async mainCounts(id: string, path: string): Promise<{ behind?: number }> {
-    const behind = await behindUpstream(path);
-    if (behind === null) return {};
-    const last = this.lastFetch.get(path) ?? 0;
-    if (Date.now() - last > FETCH_EVERY_MS) {
-      this.lastFetch.set(path, Date.now());
-      fireAndForget(
-        "fetch",
-        run(GIT, ["fetch", "--quiet"], path, NO_PROMPT).then(async (r) => {
-          if (!r.ok) {
-            log.warn("fetch", `could not fetch ${path}: ${r.err.slice(0, 200)}`);
-            return;
-          }
-          this.invalidateCounts();
-          this.d.hub.emit("worktreesChanged");
-          if ((await behindUpstream(path)) ?? 0) await this.followOrigin(id);
-        }),
-      );
-    }
-    return { behind };
+  /** the plus was opened: the trunk fetches and, clean and behind, takes origin in (Trunk.sync) */
+  syncTrunk(repoId: string): Promise<void> {
+    return this.trunk.sync(repoId);
   }
 
-  /** The trunk follows origin when the plus is opened: one fetch, unless one ran within the last
-   * minute, then a fast-forward of main when it is clean and behind. The watcher resets the spare
-   * onto the moved main, so the row on screen is the latest main. A dirty or diverged main is
-   * left alone and the trunk says why, for the line under the composer's knobs. The fetch holds
-   * the network for seconds, so it runs with no lock held; only the fast-forward takes the repo
-   * lock, and git's own index lock only for the checkout, on a clean main. */
-  async syncTrunk(repoId: string): Promise<void> {
-    const repo = this.d.state.repo(repoId);
-    const main = this.mainOf(repoId);
-    if (!repo || !main) return;
-    const last = this.lastFetch.get(repo.path) ?? 0;
-    if (Date.now() - last < TRUNK_FETCH_MIN_MS) return;
-    this.lastFetch.set(repo.path, Date.now());
-    const f = await run(GIT, ["fetch", "--quiet"], repo.path, NO_PROMPT);
-    if (!f.ok) {
-      log.warn("fetch", `could not fetch ${repo.path}: ${f.err.slice(0, 200)}`);
-      return;
-    }
-    this.invalidateCounts();
-    await this.followOrigin(main.id);
-  }
-
-  /** main onto what the last fetch brought, when it is clean and behind; else why not, on the trunk */
-  private async followOrigin(mainId: string): Promise<void> {
-    const main = this.d.state.worktree(mainId);
-    const repo = main && this.d.state.repo(main.repoId);
-    if (!main || !repo) return;
-    const ff = await withRepoLock(repo.path, () => fastForwardFetched(repo.path, repo.defaultBranch));
-    const was = this.trunkStale.get(repo.id);
-    if (ff.stale) this.trunkStale.set(repo.id, ff.stale);
-    else this.trunkStale.delete(repo.id);
-    if (ff.moved) {
-      // every row's count is against the moved main now; the watcher resets the spare
-      this.invalidateCounts();
-      this.d.hub.emit("worktreesChanged");
-    } else if (was !== ff.stale) this.d.hub.emit("worktreesChanged");
+  /** every project's trunk beside the rows frame (Trunk.all) */
+  trunks(opts: { quick?: boolean } = {}): Promise<Record<string, TrunkStatus>> {
+    return this.trunk.all(opts);
   }
 
   /** the figures for a row: what the stream said last, else what the transcript on disk ends with */
@@ -1712,7 +1655,7 @@ export class WorktreeService {
     if (cached && Date.now() - cached.at < 10_000) return cached;
     if (this.going.has(id)) return cached ?? {};
     try {
-      const ab = countable ? await aheadBehind(path, defaultBranch) : await this.mainCounts(id, path);
+      const ab = countable ? await aheadBehind(path, defaultBranch) : await this.trunk.behind(id, path);
       const dirty = (await statusFiles(path)).length;
       // the removal started while those reads were in flight: the number is the tree being
       // deleted, not the work, and it must not reach the cache the rail reads
@@ -1887,42 +1830,14 @@ export class WorktreeService {
     return [...owned, ...found];
   }
 
-  /** the repo's main checkout record */
   private mainOf(repoId: string): WorktreeInfo | undefined {
-    return this.d.state.worktrees.find((w) => w.repoId === repoId && w.kind === "main");
+    return mainOf(this.d.state, repoId);
   }
 
   /** the spare the pool counts as the repo's: the row new work is typed in. An extra spare record
    * adopt() is still pruning, and one the pool has let go of, are nobody's. */
   private leadSpareOf(repoId: string): string | null {
     return this.spare.current(repoId)?.worktreeId ?? null;
-  }
-
-  /** Every project's main checkout as it stands: what the plus's row wears while a spare stands
-   * in for main, and what the composer's line under the knobs reads. `quick` answers from the
-   * counts already cached, like rows(). */
-  async trunks(opts: { quick?: boolean } = {}): Promise<Record<string, TrunkStatus>> {
-    const quick = opts.quick ? { missed: false } : null;
-    const out: Record<string, TrunkStatus> = {};
-    await Promise.all(
-      this.d.state.repos.map(async (repo) => {
-        const main = this.mainOf(repo.id);
-        if (!main) return;
-        const { behind, dirty } = quick
-          ? this.countsQuick(main.id, quick)
-          : await this.counts(main.id, main.path, repo.defaultBranch, false);
-        const stale = this.trunkStale.get(repo.id);
-        out[repo.id] = {
-          id: main.id,
-          ...(behind !== undefined ? { behind } : {}),
-          dirty: dirty ?? 0,
-          empty: main.empty === true,
-          ...(stale ? { stale } : {}),
-        };
-      }),
-    );
-    if (quick?.missed) setTimeout(() => this.d.hub.emit("worktreesChanged"), 0);
-    return out;
   }
 
   /** the cached counts for a row whatever their age, noting a miss for the quick pass */

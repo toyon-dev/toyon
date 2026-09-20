@@ -54,6 +54,18 @@ export class SparePool {
     return entry?.worktreeId ? { worktreeId: entry.worktreeId, ready: entry.ready } : null;
   }
 
+  /** Words are being typed into a box. On the plus that is the earliest sign a send is coming, so
+   * the spare's agent starts now and enter meets a process that is up: the adapter's boot is the
+   * seconds before the first token. Only a spare the pool counts as ready and whose process is not
+   * up; any box that is not a spare's is nothing to the pool, and the send reports a failure. */
+  typed(boxId: string, text: string): void {
+    if (!text.trim()) return;
+    const wt = this.d.state.worktree(boxId);
+    if (wt?.kind !== "spare" || !this.current(wt.repoId)?.ready) return;
+    const agent = this.d.runtime.ensureAgent(wt).agent;
+    if (agent.runningAgent === null) fireAndForget(wt.id, agent.warm(), "warm on the first keystroke");
+  }
+
   /** Take over a spare persisted by a previous daemon run, without touching it: bookkeeping only,
    * so boot stays cheap. Stale extras are removed. `warm` is what brings it up to date. */
   adopt(repoId: string) {

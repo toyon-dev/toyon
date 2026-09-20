@@ -24,11 +24,14 @@ export function CommitBox({
   active,
   ahead,
   behind,
+  unpushed,
   dirty,
 }: {
   active: WorktreeStatus;
   ahead: number;
   behind: number;
+  /** commits the open PR's branch on origin does not have; zero without a PR */
+  unpushed: number;
   dirty: boolean;
 }) {
   const sock = useSock();
@@ -80,7 +83,11 @@ export function CommitBox({
   const checkFailed = owned?.landing?.check === "fail";
   const pr = owned?.pr;
   const prOpen = pr?.state === "open";
+  // work since the PR opened: the same press sends it up to the PR, and merge waits until the
+  // branch on origin has all of it, since merging now would leave it behind
+  const prMissing = prOpen && (dirty || unpushed > 0);
   const canLand = !!owned && landable(owned) && (dirty || ahead > 0) && !checkFailed && !prOpen;
+  const canUpdate = !!owned && prMissing && !checkFailed;
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
   const landTip = describeLand(landPolicy(repo?.config ?? {}), repo?.defaultBranch);
   const base = repo?.defaultBranch ?? "main";
@@ -142,7 +149,18 @@ export function CommitBox({
               land
             </Button>
           )}
-          {prOpen && prCanMerge(pr) && (
+          {canUpdate && pr && (
+            <Button
+              tone="primary"
+              busy={op === "land"}
+              disabled={!!op}
+              data-tip={`Commit, take ${base} in and push the branch; PR #${pr.number} takes the new commits`}
+              onClick={land}
+            >
+              update
+            </Button>
+          )}
+          {prOpen && !prMissing && prCanMerge(pr) && (
             <Button
               tone="primary"
               busy={op === "land"}

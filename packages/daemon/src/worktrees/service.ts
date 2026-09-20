@@ -63,6 +63,7 @@ import {
   mergePr,
   openPr,
   pullMain,
+  pushBranch,
   pushMain,
   type ShipResult,
   squashMessage,
@@ -72,6 +73,7 @@ import { withRepoLock } from "../git/lock.ts";
 import { logCommits, commitFiles as readCommitFiles } from "../git/log.ts";
 import {
   aheadBehind,
+  aheadUpstream,
   committedFiles,
   statusFiles,
   statusFilesWithCounts,
@@ -139,6 +141,8 @@ export interface GitInfo {
   committed?: GitFileStatus[];
   ahead?: number;
   behind?: number;
+  /** commits origin's copy of the branch lacks, counted only while a PR is open */
+  unpushed?: number;
   /** HEAD's sha, so the history tab knows when its log went stale */
   head?: string;
 }
@@ -223,7 +227,10 @@ export class WorktreeService {
    * file still in it as deleted: 15k of them on a 20k-file tree. Reads answer from the last counts
    * while an id is in here, and the row goes a moment later anyway. */
   private going = new Set<string>();
-  private countsCache = new Map<string, { ahead?: number; behind?: number; dirty: number; at: number }>();
+  private countsCache = new Map<
+    string,
+    { ahead?: number; behind?: number; unpushed?: number; dirty: number; at: number }
+  >();
   /** the HEAD each clean, level worktree was last asked about a hand landing at: one reflog read per move */
   private handChecked = new Map<string, string>();
   /** per repo, because discovery asks git once for the whole repo rather than once per worktree */
@@ -1350,11 +1357,11 @@ export class WorktreeService {
 
   /** The one press. Commit what is uncommitted, take main in (a rebase for toyon's own branch),
    * then the repo's route: merge here, merge here and push main, or push the branch and open a
-   * PR; on a worktree whose PR is already open, merge the PR. Each step stops the rest when it
-   * fails, and the result says which: a commit stands even when the rebase after it conflicts,
-   * since the work is safer committed. The worktree stays, marked landed once the work is on main
-   * here, so the conversation can go on; closing it is its own press. Returns any variant
-   * siblings to offer up. */
+   * PR. On a worktree whose PR is already open: push the work the PR is missing when there is
+   * any, else merge the PR. Each step stops the rest when it fails, and the result says which: a
+   * commit stands even when the rebase after it conflicts, since the work is safer committed. The
+   * worktree stays, marked landed once the work is on main here, so the conversation can go on;
+   * closing it is its own press. Returns any variant siblings to offer up. */
   async land(worktreeId: string, message?: string): Promise<{ result: ShipResult; archiveIds?: string[] }> {
     const { wt, repo } = this.landable(worktreeId, "land");
     const policy = landPolicy(repo.config);
@@ -1368,8 +1375,22 @@ export class WorktreeService {
     if (policy.land === "pr") {
       // nothing here touches the main checkout, and gh holds the network for seconds: outside the lock
       if (wt.pr?.state === "open") {
-        const result = await mergePr(wt.path, wt.pr.number, policy.merge);
-        return { result };
+        // work since the PR opened goes to the PR, never under it: a merge now would take the
+        // PR as GitHub has it and strand what is here
+        const dirty = (await statusFiles(wt.path)).length > 0;
+        const missing = dirty || ((await aheadUpstream(wt.path)) ?? 0) > 0;
+        if (!missing) return { result: await mergePr(wt.path, wt.pr.number, policy.merge) };
+        const committed = await this.commitIfDirty(wt, message);
+        if (committed && !committed.ok) return { result: committed };
+        const taken = await takeMainIn(wt.path, repo.defaultBranch, own);
+        if (!taken.ok) return { result: taken };
+        this.headMoved(wt.id);
+        const pushed = await pushBranch(wt.path, wt.branch);
+        if (!pushed.ok) return { result: pushed };
+        this.headMoved(wt.id);
+        this.setLanding(wt.id, undefined);
+        const did = committed ? "committed and pushed" : "pushed";
+        return { result: { ok: true, url: wt.pr.url, message: `${did}; PR #${wt.pr.number} has the new commits` } };
       }
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return { result: committed };
@@ -1641,17 +1662,18 @@ export class WorktreeService {
     path: string,
     defaultBranch: string,
     countable: boolean,
-  ): Promise<{ ahead?: number; behind?: number; dirty?: number }> {
+  ): Promise<{ ahead?: number; behind?: number; unpushed?: number; dirty?: number }> {
     const cached = this.countsCache.get(id);
     if (cached && Date.now() - cached.at < 10_000) return cached;
     if (this.going.has(id)) return cached ?? {};
     try {
       const ab = countable ? await aheadBehind(path, defaultBranch) : await this.trunk.behind(id, path);
       const dirty = (await statusFiles(path)).length;
+      const unpushed = await this.unpushed(id, path);
       // the removal started while those reads were in flight: the number is the tree being
       // deleted, not the work, and it must not reach the cache the rail reads
       if (this.going.has(id)) return cached ?? {};
-      const fresh = { ...ab, dirty, at: Date.now() };
+      const fresh = { ...ab, ...(unpushed === undefined ? {} : { unpushed }), dirty, at: Date.now() };
       this.countsCache.set(id, fresh);
       return fresh;
     } catch {
@@ -1659,6 +1681,14 @@ export class WorktreeService {
       // and a count not known reads as work to the archive rule, so the row is kept
       return cached ?? {};
     }
+  }
+
+  /** what an open PR is missing: the commits here that origin's copy of the branch lacks. Only a
+   * row with a PR open is asked, since the count means nothing before the branch is on origin
+   * and the box reads it only to offer the push. */
+  private async unpushed(id: string, path: string): Promise<number | undefined> {
+    if (this.d.state.worktree(id)?.pr?.state !== "open") return undefined;
+    return (await aheadUpstream(path)) ?? undefined;
   }
 
   /** a worktree's dirty files and commits ahead of main, from git now rather than the rail's cached
@@ -1705,11 +1735,13 @@ export class WorktreeService {
       // only main is its own baseline; every other worktree, discovered ones included, has a
       // branch worth counting against the default one
       const isMain = r.wt?.kind === "main";
-      const [files, counts, head] = await Promise.all([
+      const [files, ab, unpushed, head] = await Promise.all([
         statusFilesWithCounts(r.path),
         isMain ? Promise.resolve({}) : aheadBehind(r.path, r.defaultBranch),
+        this.unpushed(worktreeId, r.path),
         git(r.path, "rev-parse", "HEAD"),
       ]);
+      const counts = { ...ab, ...(unpushed === undefined ? {} : { unpushed }) };
       const ahead = (counts as { ahead?: number }).ahead ?? 0;
       const committed = !isMain && ahead > 0 ? await committedFiles(r.path, r.defaultBranch) : undefined;
       if (r.wt?.landed && (files.length > 0 || ahead > 0)) {
@@ -1763,13 +1795,20 @@ export class WorktreeService {
    * reach the rail's badge with the changes list beside it, not at the end of the turn. A frame goes
    * out only when a number moved. Main's ahead and behind are counted against origin by the rows, so
    * it lends only its dirty count, and only once the rows have counted it the long way. */
-  private noteCounts(id: string, main: boolean, dirty: number, ab: { ahead?: number; behind?: number }) {
+  private noteCounts(
+    id: string,
+    main: boolean,
+    dirty: number,
+    ab: { ahead?: number; behind?: number; unpushed?: number },
+  ) {
     const prev = this.countsCache.get(id);
     if (main && !prev) return;
     const ahead = main ? prev?.ahead : ab.ahead;
     const behind = main ? prev?.behind : ab.behind;
-    this.countsCache.set(id, { ahead, behind, dirty, at: Date.now() });
-    if (prev?.dirty !== dirty || prev?.ahead !== ahead || prev?.behind !== behind) this.d.hub.emit("worktreesChanged");
+    const unpushed = main ? prev?.unpushed : ab.unpushed;
+    this.countsCache.set(id, { ahead, behind, unpushed, dirty, at: Date.now() });
+    if (prev?.dirty !== dirty || prev?.ahead !== ahead || prev?.behind !== behind || prev?.unpushed !== unpushed)
+      this.d.hub.emit("worktreesChanged");
   }
 
   /** the history tab's commit list. Unlike gitStatus this is asked for, not pushed: the panel
@@ -1856,7 +1895,10 @@ export class WorktreeService {
   }
 
   /** the cached counts for a row whatever their age, noting a miss for the quick pass */
-  private countsQuick(id: string, quick: { missed: boolean }): { ahead?: number; behind?: number; dirty?: number } {
+  private countsQuick(
+    id: string,
+    quick: { missed: boolean },
+  ): { ahead?: number; behind?: number; unpushed?: number; dirty?: number } {
     const c = this.countsCache.get(id);
     if (c) return c;
     quick.missed = true;
@@ -1880,7 +1922,7 @@ export class WorktreeService {
         .map(async (wt) => {
           const rt = this.d.runtime.get(wt.id);
           const { defaultBranch } = this.d.state.requireRepo(wt.repoId);
-          const { ahead, behind, dirty } = quick
+          const { ahead, behind, unpushed, dirty } = quick
             ? this.countsQuick(wt.id, quick)
             : await this.counts(wt.id, wt.path, defaultBranch, !isMain(wt));
           return {
@@ -1895,6 +1937,7 @@ export class WorktreeService {
             login: !!rt?.login,
             ahead,
             behind,
+            unpushed,
             dirty,
             queued: rt?.agent.queueLength || undefined,
             unseen: isUnseen(wt) || undefined,

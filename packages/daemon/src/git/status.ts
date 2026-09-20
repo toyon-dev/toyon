@@ -199,6 +199,13 @@ export async function behindUpstream(worktreePath: string): Promise<number | nul
   return r.ok ? Number(r.out) || 0 : null;
 }
 
+/** the commits here that the upstream copy of the branch lacks: what an open PR is missing.
+ * Null when the branch has no upstream, which one toyon pushed always has. */
+export async function aheadUpstream(worktreePath: string): Promise<number | null> {
+  const r = await git(worktreePath, "rev-list", "--count", "@{upstream}..HEAD");
+  return r.ok ? Number(r.out) || 0 : null;
+}
+
 export async function aheadBehind(worktreePath: string, defaultBr: string): Promise<{ ahead: number; behind: number }> {
   const [a, b] = await Promise.all([
     git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`),

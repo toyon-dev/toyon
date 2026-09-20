@@ -243,6 +243,8 @@ export function Composer({
   // this worktree's uncommitted files: the live status when the row is subscribed, else the
   // rail's ten-second count
   const dirty = git?.files.length ?? active?.dirty ?? 0;
+  // commits the PR on origin does not have yet; counted only while one is open
+  const unpushed = git?.unpushed ?? active?.unpushed ?? 0;
   const op = useStore((s) => (id ? s.shipping[id] : undefined));
   // main against origin, said while a worktree is about to start from it: what the daemon says of
   // the checkout itself, since main is not a row while its spare stands in for it
@@ -276,6 +278,10 @@ export function Composer({
   const hasLanded = !!active?.worktree.landed && dirty === 0 && (git?.ahead ?? 0) === 0;
   const landed = atRest && hasLanded;
   const pr = atRest && !landed ? active.worktree.pr : undefined;
+  // work since the PR opened, uncommitted or committed here only: what the PR is missing, and
+  // what a merge now would leave behind. It goes through the check and then up to the PR, so the
+  // PR's own rungs (merge, view) wait until the branch on origin has all of it.
+  const prMissing = pr?.state === "open" && (dirty > 0 || unpushed > 0);
   // a PR closed without merging is the end of the branch too: its work is not on main, and the
   // one thing left is to close the row
   const prClosed = active?.worktree.pr?.state === "closed";
@@ -442,6 +448,13 @@ export function Composer({
     (!verdict || !!verdict.stale);
   const archiveTip =
     "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.";
+  // the ship word and where it sends the work: onto main by the repo's route, or up to the open
+  // PR when the branch on origin is behind what is here
+  const shipWord = prMissing ? "update" : "land";
+  const shipHow =
+    prMissing && pr
+      ? `Commit, take ${repo?.defaultBranch ?? "main"} in and push the branch; PR #${pr.number} takes the new commits.`
+      : `${describeLand(policy, repo?.defaultBranch)}.`;
   // The next step, when the work has one, is the first word of the empty box's line: a word in the
   // sentence, bright and never the accent, which reads as an error. What it rests on (the facts,
   // the route, what the PR waits on) is its tooltip, opening above it so the line under it stays
@@ -455,7 +468,7 @@ export function Composer({
           tip: archiveTip,
           run: () => archiveWorktrees(sock, dispatch, [id]),
         }
-      : pr?.state === "open"
+      : pr?.state === "open" && !prMissing
         ? prCanMerge(pr)
           ? {
               word: "merge",
@@ -488,12 +501,12 @@ export function Composer({
               }
             : landing?.ready && !landingLine(landing)
               ? {
-                  word: "land",
+                  word: shipWord,
                   line: verbLine(said ?? landing.subject ?? (landFacts(landing, landCount) || "ready")),
                   tip: [
                     landFacts(landing, landCount),
                     behindFact(repo?.defaultBranch ?? "main", active?.behind),
-                    `${describeLand(policy, repo?.defaultBranch)}.`,
+                    shipHow,
                     landing.subject ? "Tab edits the message first." : "",
                   ]
                     .filter(Boolean)
@@ -514,8 +527,9 @@ export function Composer({
     }
     if (!active) return "no worktree selected";
     if (verb) return "";
-    if (pr) return prLine(pr);
+    // a verdict only exists for work the PR is missing, so the check's word comes before the PR's
     if (blocked) return blocked;
+    if (pr) return prLine(pr);
     if (standing) return recapLine(standing);
     if (greenfield) return `describe ${title}…`;
     if (spawning) return "describe a change";
@@ -532,7 +546,7 @@ export function Composer({
     text !== "" || ghost || !active
       ? null
       : verb
-        ? (verb.word === "land" || verb.word === "check") && landing
+        ? (verb.word === "land" || verb.word === "update" || verb.word === "check") && landing
           ? landCaveat(landing)
           : null
         : pr || blocked

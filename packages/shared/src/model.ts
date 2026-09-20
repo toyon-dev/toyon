@@ -608,6 +608,9 @@ export interface WorktreeStatus {
    * is absent: what main trails is origin, and what it leads is nobody's business here. */
   ahead?: number;
   behind?: number;
+  /** commits here that the branch on origin does not have, counted only while a PR is open: the
+   * work the PR is missing, which `update` pushes. Absent otherwise. */
+  unpushed?: number;
   /** uncommitted file count (cached, ~10s freshness) */
   dirty?: number;
   /** chat messages waiting behind the current turn */

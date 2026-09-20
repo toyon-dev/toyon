@@ -244,6 +244,14 @@ export interface OpenPr {
   method?: MergeMethod;
 }
 
+/** Push the branch to origin, tracking. Force with lease, since a branch already there was
+ * rebased onto main since; the lease refuses when origin's copy moved under it. */
+export async function pushBranch(worktreePath: string, branch: string): Promise<ShipResult> {
+  const push = await run(GIT, ["push", "-u", "--force-with-lease", "origin", branch], worktreePath, NO_PROMPT);
+  if (!push.ok) return { ok: false, message: `push failed: ${push.err.slice(0, 300)}` };
+  return { ok: true, message: `pushed ${branch}` };
+}
+
 /** Push the branch and open a PR through gh, or hand back the compare URL where gh is not
  * around. A branch already on origin from an earlier push is force-pushed with lease, since it
  * was rebased since; a PR that already exists is found rather than made twice. */
@@ -255,8 +263,8 @@ export async function openPr(o: OpenPr): Promise<ShipResult> {
   const remote = await git(o.worktreePath, "remote", "get-url", "origin");
   if (!remote.ok) return { ok: false, message: "no 'origin' remote: add one, or land by merging here" };
 
-  const push = await run(GIT, ["push", "-u", "--force-with-lease", "origin", o.branch], o.worktreePath, NO_PROMPT);
-  if (!push.ok) return { ok: false, message: `push failed: ${push.err.slice(0, 300)}` };
+  const push = await pushBranch(o.worktreePath, o.branch);
+  if (!push.ok) return push;
 
   const titled = o.subject ? ["--title", o.subject, "--body", o.body ?? ""] : ["--fill"];
   const created = await gh(["pr", "create", "--head", o.branch, "--base", o.defaultBr, ...titled], o.worktreePath);

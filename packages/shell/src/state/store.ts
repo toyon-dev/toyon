@@ -123,6 +123,8 @@ export interface GitInfo {
   committed?: GitFileStatus[];
   ahead?: number;
   behind?: number;
+  /** commits origin's copy of the branch lacks, counted only while a PR is open */
+  unpushed?: number;
   /** HEAD's sha; the history tab re-reads its log when this moves */
   head?: string;
 }
@@ -2035,7 +2037,14 @@ function onServer(s: State, msg: StoreServerMsg): State {
       // ranges go stale whenever the worktree's git state moves
       const next = withLocal(s, msg.worktreeId, (l) => ({
         ...l,
-        git: { files: msg.files, committed: msg.committed, ahead: msg.ahead, behind: msg.behind, head: msg.head },
+        git: {
+          files: msg.files,
+          committed: msg.committed,
+          ahead: msg.ahead,
+          behind: msg.behind,
+          unpushed: msg.unpushed,
+          head: msg.head,
+        },
         changedRanges: {},
       }));
       return { ...withLayout(next, { changes }), changesAuto };

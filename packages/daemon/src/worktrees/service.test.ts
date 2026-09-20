@@ -1370,6 +1370,35 @@ describe("landing", () => {
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
   });
 
+  test("with a PR open, land pushes the work the PR is missing rather than merging under it", async () => {
+    const repoId = await registered();
+    const origin = join(w.repo, "..", "origin.git");
+    sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
+    sh(w.repo, "git", "remote", "add", "origin", origin);
+    sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
+    w.state.requireRepo(repoId).config.land = { route: "pr" };
+    const wt = await w.worktrees.create(repoId, "feature");
+    // the branch as the first press left it: on origin, tracking, with a PR open on it
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ unpushed: 0 });
+    // a commit by hand and an edit since: the count says what the PR lacks
+    sh(wt.path, "git", "commit", "-q", "--allow-empty", "-m", "by hand");
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ unpushed: 1 });
+    const { result } = await w.worktrees.land(wt.id, "add more");
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("committed and pushed; PR #7 has the new commits");
+    expect(result.url).toBe("https://x/pull/7");
+    const pushed = (await git(origin, "log", "--format=%s", "-n", "3", wt.branch)).out.split("\n");
+    expect(pushed).toEqual(["add more", "by hand", "add feature"]);
+    expect(w.state.worktree(wt.id)?.pr).toMatchObject({ number: 7, state: "open" });
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ unpushed: 0 });
+  });
+
   test("land commits with the message it is given and merges; the worktree stays, marked landed", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");

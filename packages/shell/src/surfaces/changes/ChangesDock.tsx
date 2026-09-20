@@ -501,7 +501,13 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
         </div>
       )}
       {activeRow && !archived && (
-        <CommitBox active={activeRow} ahead={gitInfo?.ahead ?? 0} behind={gitInfo?.behind ?? 0} dirty={!clean} />
+        <CommitBox
+          active={activeRow}
+          ahead={gitInfo?.ahead ?? 0}
+          behind={gitInfo?.behind ?? 0}
+          unpushed={gitInfo?.unpushed ?? activeRow.unpushed ?? 0}
+          dirty={!clean}
+        />
       )}
     </div>
   );

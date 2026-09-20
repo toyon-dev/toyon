@@ -134,6 +134,8 @@ export type ServerMsg =
       committed?: GitFileStatus[];
       ahead?: number;
       behind?: number;
+      /** commits origin's copy of the branch lacks, counted only while a PR is open */
+      unpushed?: number;
       /** HEAD's sha: the history tab re-reads its log when this moves (the agent committed) */
       head?: string;
     }
@@ -461,7 +463,8 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("git-commit"), worktreeId: id, sha }),
   /** the one press: commit if dirty (with `message`, else the suggested one), take main in, then
    * the repo's route: merge here, merge and push, or push and open a PR. On a worktree whose PR
-   * is open it merges the PR. Stops at the first step that fails. */
+   * is open it pushes the work the PR lacks, or merges the PR once there is none. Stops at the
+   * first step that fails. */
   z.object({ t: z.literal("land"), worktreeId: id, message: z.string().max(5_000).optional() }),
   z.object({ t: z.literal("commit"), worktreeId: id, message: z.string().max(5_000) }),
   /** merge the sources' branches into the target worktree and remove them; a local merge, and the

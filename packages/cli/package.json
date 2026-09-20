@@ -1,6 +1,6 @@
 {
   "name": "toyon",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Toyon is where coding agents work on your web app while you check each change by using it. Every chat gets its own running copy with a live preview.",
   "license": "MIT",
   "type": "module",

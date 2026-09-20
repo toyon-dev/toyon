@@ -52,6 +52,17 @@
     align-items: baseline;
     gap: 12px;
   }
+  /* the state is a short phrase and reads as one: with a long lead beside it the box used to
+   break "Waiting for you" across two lines rather than grow, so the lead is the side that wraps */
+  .tooltip-text {
+    white-space: nowrap;
+  }
+  /* the line above the text, a tier under it like the lead and the detail: what the tip is about,
+   over what it says. In the text's own tier a title with its branch was the longest and loudest
+   line, and the state under it read as the aside. */
+  .tooltip-head {
+    color: var(--text1);
+  }
   /* two verbs of one gesture: the keys take a column of their own, started at its left edge, so
    the two ⌘ glyphs stand one over the other whatever the letters after them measure, and each
    verb ends against its key so the eye runs straight from the words to the chord */

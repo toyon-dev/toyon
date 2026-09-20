@@ -168,18 +168,20 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   // segment already is (a found worktree in a directory named for its branch) is left off: a
   // toyon worktree's name is prose and its directory is the slug, so those two rarely match.
   const unspelled = (d: WorktreeStatus) => (wtDirLabel(d).split("/").pop() === d.name ? null : d.name);
-  // the tip's lead: the project's name on main, whose row goes by its branch, then what its agent has
-  // cost and filled so far. Kept off the path's line so the path reads whole and the figures are
-  // found in one place.
-  const leadOf = (d: WorktreeStatus, project: string | null) => {
+  // the tip's lead: what the agent has cost and filled so far, on the state's line and nowhere
+  // else, so the figures are found in one place
+  const figuresOf = (d: WorktreeStatus) => {
     const u = d.usage;
-    const parts = [
-      project,
-      u?.cost !== undefined ? dollars(u.cost) : null,
-      u ? `${tokens(u.used)} of ${tokens(u.size)}` : null,
-    ].filter(Boolean);
-    return parts.length > 0 ? parts.join(" · ") : undefined;
+    const parts = [u?.cost !== undefined ? dollars(u.cost) : null, u ? `${tokens(u.used)} of ${tokens(u.size)}` : null];
+    return parts.some(Boolean) ? parts.filter(Boolean).join(" · ") : undefined;
   };
+  // the tip's head: the title, which the row truncates, and the branch, which the row never shows
+  // and is the half of the directory's name worth reading; the path itself is the menu's. The
+  // lead's row goes by its branch, so its head names the project ahead of it.
+  const headOf = (d: OwnedWorktree) =>
+    isLead(d.worktree)
+      ? [repoOf(d)?.name, rowLabel(d, repoOf(d))].filter(Boolean).join(" · ")
+      : [d.name, d.branch].filter(Boolean).join(" · ");
 
   const [graftMode, setGraftMode] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
@@ -326,30 +328,23 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         className={cx("row row-edge", owned ? "rail-item" : "row-quiet rail-disc-item", menuOpen && "menu-open")}
         // an archived worktree's page marks its own row, and the row underneath does not read as picked
         data-state={rowState({ current: id === activeId && !archivedPage, checked: sel.includes(id) })}
-        // one tip per row, on the row: the dot's state in words with the dot restated beside it,
-        // since the real one is at the far end of the row from where the tip sits, and where the
-        // worktree is on the line under. A tip per element would swap fifty times as the mouse
-        // crosses the panel.
+        // one tip per row, on the row: the name and branch over the dot's state in words, with the
+        // dot restated beside it, since the real one is at the far end of the row from where the
+        // tip sits. A tip per element would swap fifty times as the mouse crosses the panel.
         // Badges and the crashed dot keep their own, since those are what a hover over them is
         // asking about. A found row has no state to name, so the path is its text, unless
-        // something holds it. The lead's tip names the project and the branch, at the far start of
-        // the state's line, since its row says what its click does and names neither.
+        // something holds it; an owned row's path is in its menu, where it can be copied.
         // Offline, the state is whatever the daemon last said, and a tip restating it as live sat
         // over a row painted in the fault colour, a green "Running" over an orange dot: the tip
         // names the fault instead, with no dot, since there is no live state for one to restate.
         {...(owned
           ? tip(offline ? OFFLINE_LINE : op ? shipLabel(op) : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
               placement: tipSide,
-              // an unseen stop says what happened above the path, so a hover is enough to triage it
-              detail:
-                w.unseen && owned.worktree.lastTurn
-                  ? `${recapLine(owned.worktree.lastTurn)}\n${wtDirLabel(w)}`
-                  : wtDirLabel(w),
+              head: headOf(owned),
+              // an unseen stop says what happened under the state, so a hover is enough to triage it
+              detail: w.unseen && owned.worktree.lastTurn ? recapLine(owned.worktree.lastTurn) : undefined,
               dot: offline ? undefined : op ? "spinner" : dotClass(w),
-              lead: leadOf(
-                w,
-                onLead ? [repoOf(owned)?.name, rowLabel(w, repoOf(owned))].filter(Boolean).join(" · ") : unspelled(w),
-              ),
+              lead: figuresOf(w),
             })
           : offline
             ? tip(OFFLINE_LINE, undefined, {

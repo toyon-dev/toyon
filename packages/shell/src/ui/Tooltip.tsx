@@ -37,10 +37,14 @@ export type TipOptions = {
    * whose row has swapped its dot for one while an op runs. */
   dot?: string;
   /** the aside on the text's line, in the quiet tier and held against the box's far edge from the
-   * text, whichever edge that is for the tip's placement: which thing this is and what it has
-   * cost, apart from what it is doing. A worktree row puts `main` and its agent's spend here, with
-   * its path on the line under. */
+   * text, whichever edge that is for the tip's placement: what this has cost, apart from what it
+   * is doing. A worktree row puts its agent's spend and context here. */
   lead?: string;
+  /** a line above the text in the quiet tier, naming the thing the text is about: a worktree row's
+   * title and branch over its state, so every row's tip has the same shape whether or not the row
+   * truncated the name. The text stays the answer, and the one line in its tier; the head says
+   * whose. */
+  head?: string;
   /** the other verb of the same gesture, on a key of its own, as a row under the text in the quiet
    * tier: the inspector's button says ⌘E adds the element to chat under its own ⌘I. The two keys
    * stand in one column so the chords line up and read as a pair. A lead has no place in the grid
@@ -50,9 +54,10 @@ export type TipOptions = {
 
 export type TipAlso = { text: string; key: string };
 
-export function tip(text: string, key?: string, { placement, detail, dot, lead, also }: TipOptions = {}) {
+export function tip(text: string, key?: string, { placement, detail, dot, lead, head, also }: TipOptions = {}) {
   const line = lead ? `${lead} ${text}` : text;
-  const label = detail ? `${line}, ${detail}` : line;
+  const named = head ? `${head}: ${line}` : line;
+  const label = detail ? `${named}, ${detail}` : named;
   return {
     "data-tip": text,
     "data-tip-key": key,
@@ -60,6 +65,7 @@ export function tip(text: string, key?: string, { placement, detail, dot, lead, 
     "data-tip-detail": detail,
     "data-tip-dot": dot,
     "data-tip-lead": lead,
+    "data-tip-head": head,
     "data-tip-also": also?.text,
     "data-tip-also-key": also?.key,
     // the name stays this control's own: the other verb is a hint for the eye, not what it does
@@ -91,6 +97,7 @@ export type Anchor = {
   detail?: string;
   dot?: string;
   lead?: string;
+  head?: string;
   also?: TipAlso;
   placement: TipPlacement;
 };
@@ -169,6 +176,7 @@ export function Tooltips() {
         detail: el.dataset.tipDetail,
         dot: el.dataset.tipDot,
         lead: el.dataset.tipLead,
+        head: el.dataset.tipHead,
         also:
           el.dataset.tipAlso && el.dataset.tipAlsoKey
             ? { text: el.dataset.tipAlso, key: el.dataset.tipAlsoKey }
@@ -286,6 +294,7 @@ export function Tooltips() {
       track={false}
       raiseKey={anchor}
     >
+      {anchor.head && <div className="tooltip-head">{anchor.head}</div>}
       {anchor.also ? (
         <div className="tooltip-pair">
           <span>{words}</span>
@@ -299,13 +308,13 @@ export function Tooltips() {
         <div className="tooltip-line">
           {anchor.placement === "right" ? (
             <>
-              <span>{head}</span>
+              <span className="tooltip-text">{head}</span>
               <span className="tooltip-lead">{anchor.lead}</span>
             </>
           ) : (
             <>
               <span className="tooltip-lead">{anchor.lead}</span>
-              <span>{head}</span>
+              <span className="tooltip-text">{head}</span>
             </>
           )}
         </div>

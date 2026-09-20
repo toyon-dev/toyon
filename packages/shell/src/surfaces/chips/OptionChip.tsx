@@ -6,8 +6,9 @@ import { choiceRows } from "./choiceRows.ts";
 /** One of an agent's advertised select options (its model, its effort level), shown where the
  * prompt is typed so what will answer is never hidden. The list is what the agent advertised the
  * last time one of its sessions opened, so nothing shows until it has run once; `current` is
- * what the running session reported, which is the truth when the record names nothing. How the
- * agent's own default row folds into the list is `choiceRows`. */
+ * what the running session reported, which is the truth when the record names nothing: the chip
+ * reads it, while the mark stays on the default row the person left it at. How the agent's own
+ * default row folds into the list is `choiceRows`. */
 export function OptionChip({
   choices,
   value,
@@ -35,12 +36,16 @@ export function OptionChip({
   onClose?: () => void;
 }) {
   if (choices.length === 0) return null;
-  const { rows, shown } = choiceRows(choices, value, current, { label: defaultLabel, description: defaultDescription });
+  const { rows, shown, picked } = choiceRows(choices, value, current, {
+    label: defaultLabel,
+    description: defaultDescription,
+  });
   const row = rows.find((o) => o.id === shown);
   const label = row?.chip ?? row?.label ?? shown;
   return (
     <ChipPicker
-      value={shown}
+      value={picked}
+      reads={shown}
       options={rows}
       onChange={onChange}
       onClose={onClose}

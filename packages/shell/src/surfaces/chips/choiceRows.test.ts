@@ -113,9 +113,44 @@ describe("choiceRows", () => {
     ]);
   });
   test("the default's id, reported or asked for, reads as the row it names", () => {
-    expect(choiceRows(claudeModels, "", "default", empty).shown).toBe("opus[1m]");
-    expect(choiceRows(claudeModels, "default", undefined, empty).shown).toBe("opus[1m]");
-    expect(choiceRows(claudeModels, "sonnet", "default", empty).shown).toBe("sonnet");
+    expect(choiceRows(claudeModels, "", "default", empty)).toMatchObject({ shown: "opus[1m]", picked: "opus[1m]" });
+    expect(choiceRows(claudeModels, "default", undefined, empty)).toMatchObject({
+      shown: "opus[1m]",
+      picked: "opus[1m]",
+    });
+    expect(choiceRows(claudeModels, "sonnet", "default", empty)).toMatchObject({ shown: "sonnet", picked: "sonnet" });
+  });
+  test("nothing asked for: the chip reads what the session reported, the mark stays on the default row", () => {
+    const efforts = [
+      { id: "low", name: "Low", description: "Fast responses" },
+      { id: "xhigh", name: "Xhigh", description: "Extra high reasoning depth" },
+    ];
+    const { rows, shown, picked } = choiceRows(efforts, "", "xhigh", {
+      label: "default effort",
+      description: "the level the agent runs at",
+    });
+    expect(shown).toBe("xhigh");
+    expect(picked).toBe("");
+    expect(rows[0]).toEqual({
+      id: "",
+      label: "default effort",
+      description: "Xhigh now · the level the agent runs at",
+    });
+    expect(rows[2]).toEqual({ id: "xhigh", label: "Xhigh", description: "Extra high reasoning depth" });
+    // asked for it: the two rows agree and the default row's line says nothing about it
+    const pinned = choiceRows(efforts, "xhigh", "xhigh", empty);
+    expect(pinned).toMatchObject({ shown: "xhigh", picked: "xhigh" });
+    expect(pinned.rows[0]?.description).toBe(empty.description);
+  });
+  test("an agent's own default row, naming no other, carries the mark and what it runs now", () => {
+    const efforts = [
+      { id: "default", name: "Default" },
+      { id: "high", name: "High" },
+    ];
+    const { rows, shown, picked } = choiceRows(efforts, "", "high", empty);
+    expect(shown).toBe("high");
+    expect(picked).toBe("default");
+    expect(rows[0]).toEqual({ id: "default", label: "Default", description: "High now" });
   });
   test("a default that names no row keeps its row and no empty option is added", () => {
     const efforts = [
@@ -132,9 +167,11 @@ describe("choiceRows", () => {
     expect(shown).toBe("");
   });
   test("a reported value the list lacks is shown rather than hidden", () => {
-    const { rows, shown } = choiceRows(codexModels, "", "gpt-c", empty);
+    const { rows, shown, picked } = choiceRows(codexModels, "", "gpt-c", empty);
     expect(rows.at(-1)).toEqual({ id: "gpt-c", label: "gpt-c" });
+    expect(rows[0]?.description).toBe(`gpt-c now · ${empty.description}`);
     expect(shown).toBe("gpt-c");
+    expect(picked).toBe("");
   });
 });
 

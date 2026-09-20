@@ -61,8 +61,15 @@ function claudeIdWords(name: string): { label: string; version: string; qualifie
   };
 }
 
-/** The rows for one of an agent's select options (its model, its effort level) and which row the
- * value is. `value` is the record's request, `current` what the session reported.
+/** The rows for one of an agent's select options (its model, its effort level), which row the
+ * chip reads (`shown`) and which one carries the mark (`picked`). `value` is the record's request,
+ * `current` what the session reported.
+ *
+ * The two part when nothing was asked for: the chip reads what the session reported, since what
+ * will answer is the point of the chip, but the mark stays on the default row, because leaving
+ * the choice to the agent is the choice the person made and a mark on the reported row would say
+ * they picked it. The default row's line then names what the default is right now, so the chip
+ * and the mark read as one thing.
  *
  * An agent that lists its own default row is taken at its word: that row stands in for the empty
  * option and no second "default" is drawn beside it. When that row only names another (Claude's
@@ -77,13 +84,14 @@ export function choiceRows(
   value: string,
   current: string | undefined,
   empty: { label: string; description: string },
-): { rows: ChipOption<string>[]; shown: string } {
+): { rows: ChipOption<string>[]; shown: string; picked: string } {
   const own = agentDefault(choices);
   const named = defaultStandsFor(choices);
   // the default's id (what the session reports when nothing is asked, or a record that asked for
   // it) reads as the row it names
-  const requested = value || current || own?.id || DEFAULT_OPTION;
-  const shown = named && requested === own?.id ? named.id : requested;
+  const asNamed = (id: string) => (named && id === own?.id ? named.id : id);
+  const shown = asNamed(value || current || own?.id || DEFAULT_OPTION);
+  const picked = asNamed(value || own?.id || DEFAULT_OPTION);
   const listed = named ? choices.filter((c) => c !== own) : choices;
   const known = listed.some((c) => c.id === shown);
   const split = listed.map((c) => ({ c, words: modelWords(c) }));
@@ -104,7 +112,16 @@ export function choiceRows(
     // the session reported something the list does not carry: show it rather than lie
     ...(shown && !known ? [{ id: shown, label: shown }] : []),
   ];
-  return { rows, shown };
+  if (shown !== picked) {
+    const now = rows.find((o) => o.id === shown);
+    const at = rows.findIndex((o) => o.id === picked);
+    const row = rows[at];
+    if (row) {
+      const word = now?.chip ?? now?.label ?? shown;
+      rows[at] = { ...row, description: [`${word} now`, row.description].filter(Boolean).join(" · ") };
+    }
+  }
+  return { rows, shown, picked };
 }
 
 /** A row on a new worktree's picker names the agent and its model together. Registry ids are

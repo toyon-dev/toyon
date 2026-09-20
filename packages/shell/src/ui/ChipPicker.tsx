@@ -39,6 +39,7 @@ export type ChipOption<T extends string> = {
  */
 export function ChipPicker<T extends string>({
   value,
+  reads,
   options,
   onChange,
   placeholder,
@@ -46,7 +47,11 @@ export function ChipPicker<T extends string>({
   className,
   onClose,
 }: {
+  /** the row that is set: marked down its edge, and where the cursor lands */
   value: T;
+  /** the row whose words the chip and the lead show when that is not the value: what the agent
+   * is running for a value that leaves the choice to it */
+  reads?: T;
   options: ChipOption<T>[];
   onChange: (id: T) => void;
   /** the field's placeholder: what the value is, as the person at the shell would say it */
@@ -63,8 +68,9 @@ export function ChipPicker<T extends string>({
     setOpen(false);
     onClose?.();
   };
-  const picked = options.find((o) => o.id === value);
-  const shown = picked?.chip ?? picked?.label ?? value;
+  const read = reads ?? value;
+  const picked = options.find((o) => o.id === read);
+  const shown = picked?.chip ?? picked?.label ?? read;
   return (
     <span className="chip-picker">
       <Button

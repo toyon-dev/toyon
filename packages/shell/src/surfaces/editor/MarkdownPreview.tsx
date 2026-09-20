@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import { readingView } from "../../state/store.ts";
@@ -7,19 +7,22 @@ import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { useMarkdown } from "../chat/markdown.ts";
 import { assetPath, dirOf } from "../chat/markdownPaths.ts";
+import { outlineDepths } from "./outline.ts";
 
 /** a heading the render produced, and the element it is, for the outline to read and scroll to.
  * `id` is its text with its place among the headings that share it, which is what stays put while
  * an agent is still writing the sections above it. */
-type Heading = { id: string; level: number; text: string; el: HTMLElement };
+type Heading = { id: string; level: number; depth: number; text: string; el: HTMLElement };
 
 function readHeadings(root: HTMLElement): Heading[] {
   const seen = new Map<string, number>();
-  return Array.from(root.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")).map((el) => {
+  const els = Array.from(root.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6"));
+  const depths = outlineDepths(els.map((el) => Number(el.tagName[1])));
+  return els.map((el, i) => {
     const text = el.textContent?.trim() ?? "";
     const nth = seen.get(text) ?? 0;
     seen.set(text, nth + 1);
-    return { id: `${nth}\n${text}`, level: Number(el.tagName[1]), text, el };
+    return { id: `${nth}\n${text}`, level: Number(el.tagName[1]), depth: depths[i]!, text, el };
   });
 }
 
@@ -52,6 +55,7 @@ export function MarkdownPreview({
   const dir = dirOf(path);
   const html = useMarkdown(text, version === undefined ? undefined : { base: { worktreeId, dir, version } });
   const ref = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const [heads, setHeads] = useState<Heading[]>([]);
   const [at, setAt] = useState(-1);
   // nothing rendered takes focus on its own, so the body does, as a picture's does: Escape then
@@ -105,11 +109,23 @@ export function MarkdownPreview({
     const target = assetPath(dir, href);
     if (target) openFile({ sock, dispatch }, { worktreeId, path: target, view: readingView(target) });
   };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    // the document is not editable, so the browser's select-all would take the whole shell with
+    // it; here it means the document
+    if (e.key === "a" && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && body.current) {
+      e.preventDefault();
+      const range = document.createRange();
+      range.selectNodeContents(body.current);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  };
   return (
     <>
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks */}
-      <div ref={ref} className="editor-viewer editor-preview" tabIndex={-1} onClick={onClick}>
+      <div ref={ref} className="editor-viewer editor-preview" tabIndex={-1} onClick={onClick} onKeyDown={onKeyDown}>
         <div
+          ref={body}
           className="md md-preview"
           // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
           dangerouslySetInnerHTML={{ __html: html }}
@@ -178,7 +194,9 @@ function Outline({ heads, at, onJump }: { heads: Heading[]; at: number; onJump: 
                   data-state={rowState({ current: i === at })}
                 />
               </span>
-              <span className="editor-outline-label">{h.text}</span>
+              <span className="editor-outline-label" style={{ "--outline-depth": h.depth } as CSSProperties}>
+                {h.text}
+              </span>
             </button>
           ))}
         </Float>

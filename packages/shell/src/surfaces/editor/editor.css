@@ -127,7 +127,10 @@
       flex: none;
       width: 18px;
     }
+    /* a title steps in under the heading above it, one step per open ancestor: an h2 with no h1
+     over it stands at the margin */
     & .editor-outline-label {
+      padding-left: calc(var(--outline-depth, 0) * 12px);
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;

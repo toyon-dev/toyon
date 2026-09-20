@@ -1189,15 +1189,17 @@ export class WorktreeService {
    * The base checkout's rules go into the repo's info/exclude rather than the file being copied
    * in: git reads info/exclude from the common dir, so one write covers every worktree of the
    * repo, and it leaves the tree clean, which a carried file would not. An untracked .gitignore is
-   * uncommitted work, and land and sync both refuse a worktree that has any. The block goes the
-   * moment the branch commits a .gitignore of its own, whose rules git reads ahead of
-   * info/exclude in any case. */
-  private async mirrorBaseIgnore(wt: WorktreeInfo, repo: RepoInfo, depsSource: string): Promise<void> {
-    const src = join(depsSource, ".gitignore");
-    // the worktree holds the branch's files, so one here is the branch's own and needs nothing:
-    // git reads a .gitignore in the tree ahead of info/exclude. One in the base checkout that the
-    // branch does not have is the uncommitted rules, and those are what the worktree is missing.
-    const mirror = existsSync(src) && !existsSync(join(wt.path, ".gitignore"));
+   * uncommitted work, and land and sync both refuse a worktree that has any.
+   *
+   * Keyed on the base checkout alone, never on the worktree being set up: info/exclude is one
+   * file for every worktree of the repo, so a setup for a branch that carries a .gitignore of its
+   * own must not clear the block an earlier worktree without one still reads. The block goes once
+   * the base's .gitignore is tracked, when every branch cut from then on carries the rules itself,
+   * and git reads a tree's own .gitignore ahead of info/exclude in any case. */
+  private async mirrorBaseIgnore(repo: RepoInfo): Promise<void> {
+    const src = join(repo.path, ".gitignore");
+    const tracked = existsSync(src) && (await git(repo.path, "ls-files", "--", ".gitignore")).out !== "";
+    const mirror = existsSync(src) && !tracked;
     const lines = mirror
       ? readFileSync(src, "utf8")
           .split("\n")
@@ -1212,7 +1214,7 @@ export class WorktreeService {
     depsSource: string,
     { setupCommands = true }: { setupCommands?: boolean },
   ): Promise<void> {
-    await this.mirrorBaseIgnore(wt, repo, depsSource);
+    await this.mirrorBaseIgnore(repo);
     // Copy-on-write where the fs allows it: `cp -c` (APFS clonefile), then GNU `--reflink=auto`
     // (btrfs/XFS), then a plain recursive copy (ext4). The log line records which
     // path ran and how long the fallback copy takes per worktree.

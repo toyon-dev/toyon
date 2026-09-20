@@ -182,6 +182,31 @@ describe("create / remove", () => {
     expect(text).toContain("dist/");
   });
 
+  // info/exclude is one file for the whole repo, so the block is keyed on the base checkout: a
+  // setup for a worktree that carries its own .gitignore leaves the block an earlier one reads
+  test("a worktree with a .gitignore of its own does not clear the block for the others", async () => {
+    const repoId = await registered();
+    writeFileSync(join(w.repo, ".gitignore"), "node_modules/\n");
+    mkdirSync(join(w.repo, "node_modules"), { recursive: true });
+    writeFileSync(join(w.repo, "node_modules", "dep.js"), "x\n");
+    const first = await w.worktrees.create(repoId, "first");
+    await settle();
+    const second = await w.worktrees.create(repoId, "second");
+    await settle();
+    writeFileSync(join(second.path, ".gitignore"), "dist/\n");
+    sh(second.path, GIT, "add", ".gitignore");
+    sh(second.path, GIT, "commit", "-qm", "ignore dist");
+    await w.worktrees.setupAndStart(second, w.state.repo(repoId)!, w.repo);
+    expect(readFileSync(join(w.repo, ".git/info/exclude"), "utf8")).toContain("node_modules/");
+    expect((await w.worktrees.gitStatus(first.id))?.files).toEqual([]);
+    // once the base tracks its .gitignore every branch cut from it carries the rules, and the
+    // block goes with the next setup
+    sh(w.repo, GIT, "add", ".gitignore");
+    sh(w.repo, GIT, "commit", "-qm", "ignore deps");
+    await w.worktrees.setupAndStart(first, w.state.repo(repoId)!, w.repo);
+    expect(readFileSync(join(w.repo, ".git/info/exclude"), "utf8")).not.toContain("node_modules/");
+  });
+
   test("a committed .gitignore is the branch's own, and nothing is mirrored over it", async () => {
     const repoId = await registered();
     writeFileSync(join(w.repo, ".gitignore"), "dist/\n");

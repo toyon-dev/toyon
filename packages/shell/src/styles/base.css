@@ -519,15 +519,17 @@
     & a {
       color: var(--blue);
     }
-    /* A file is a place inside Toyon, not a trip out to the web. It is set in the mono face, which
-       is what a path wears everywhere else in the shell, and keeps the colour of the words around
-       it, so a sentence naming five files still reads as one sentence; the underline alone says it
-       can be opened, and goes solid under the pointer. Never a tier down: the one thing in the line
-       you can click must not be its dimmest word. No chip: a wash under an underlined word is two
-       devices on one word, and the agent's two spellings, bare or backticked, render the same. */
+    /* A file is a place inside Toyon, not a trip out to the web, so it never takes the link blue. It
+       is set in the mono face, which is what a path wears everywhere else in the shell, and sits on
+       the scan tier: a filename is what a reader scans a sentence for, and at the prose tier the
+       mono and the underline alone did not lift it out of the words around it. Never the skip tier:
+       the one thing in the line you can click must not be its dimmest word. The underline says it
+       can be opened; under the pointer it goes solid and the word comes up to the read tier. No
+       chip: a wash under an underlined word is two devices on one word, and the agent's two
+       spellings, bare or backticked, render the same. */
     & a.file-link {
       font: var(--type-mono);
-      color: inherit;
+      color: var(--text1);
       text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
       text-underline-offset: 2px;
       overflow-wrap: anywhere;
@@ -537,6 +539,7 @@
       padding: 0;
     }
     :where([data-hover]) & a.file-link:hover {
+      color: var(--text0);
       text-decoration-color: currentColor;
     }
     /* a path outside the checkout has nowhere to open in Toyon, so it is a word and not a link: the

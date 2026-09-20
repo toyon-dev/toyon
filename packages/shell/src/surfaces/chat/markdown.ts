@@ -3,6 +3,7 @@ import { marked } from "marked";
 import { useEffect, useRef, useState } from "react";
 import { worktreeFileUrl } from "../../ws.ts";
 import { assetPath, worktreeLink } from "./markdownPaths.ts";
+import { table } from "./markdownTable.ts";
 import { languageOf, paintCode } from "./syntax.ts";
 
 // a fenced block the agent wrote in a message is the same code as a fenced block under a tool call,
@@ -22,6 +23,7 @@ marked.use({
         .join("\n");
       return `<pre><code>${body}</code></pre>\n`;
     },
+    table,
   },
 });
 

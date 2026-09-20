@@ -17,6 +17,10 @@ export interface TurnSlice {
   error?: string;
   auth?: true;
   stop?: string;
+  /** the last thing in it was a permission card answered with a refusal: a plan sent back ends
+   * the turn on that answer, so a stop right after one is the send-back and not a hand on the
+   * stop button. Anything the agent does after the card clears it. */
+  refused?: true;
   /** the newest timestamp in it; streamed events carry none and do not move it */
   newestTs: number;
 }
@@ -44,6 +48,8 @@ export function turnsSince(entries: readonly TranscriptEntry[], seenAt: number):
   let pending: string[] = [];
   let open: TurnSlice | null = null;
   const writes = new Set<string>();
+  /** the refusing choices of each permission card still open, by card */
+  const refusals = new Map<string, Set<string>>();
   const start = (ts: number) => {
     const t = slice(pending, ts);
     pending = [];
@@ -63,14 +69,31 @@ export function turnsSince(entries: readonly TranscriptEntry[], seenAt: number):
         open = start(e.ts);
         break;
       case "text-delta":
-        if (open) open.reply = (open.reply + e.text).slice(-REPLY_KEEP);
+        if (open) {
+          open.reply = (open.reply + e.text).slice(-REPLY_KEEP);
+          open.refused = undefined;
+        }
         break;
       case "tool-start":
         if (!open) break;
         // a subagent's tools are its own narration; only the main agent's calls end a reply
         if (!e.parentToolId) open.reply = "";
+        open.refused = undefined;
         countWrite(open, writes, e.toolId, e);
         break;
+      case "agent-permission":
+        refusals.set(e.id, new Set(e.choices.filter((c) => c.kind.startsWith("reject")).map((c) => c.id)));
+        if (open) open.refused = undefined;
+        break;
+      case "agent-question":
+        if (open) open.refused = undefined;
+        break;
+      case "agent-ask-end": {
+        const refusing = refusals.get(e.id);
+        refusals.delete(e.id);
+        if (open && e.outcome === "answered" && e.choiceId && refusing?.has(e.choiceId)) open.refused = true;
+        break;
+      }
       case "tool-update":
         // a placeholder call learns its kind later: an edit is still an edit, counted once
         if (open && e.kind) countWrite(open, writes, e.toolId, { name: e.name ?? "", kind: e.kind });
@@ -117,7 +140,8 @@ export function openAskOf(entries: readonly TranscriptEntry[]): string | undefin
 }
 
 /** the facts for a stop of kind `end`: an error only on a failure, a question only while asking,
- * an unusual stop reason only on a finish, since each is what that kind of stop is about */
+ * an unusual stop reason only on a finish, a plan sent back only on a stop, since each is what
+ * that kind of stop is about */
 export function factsOf(turns: readonly TurnSlice[], end: TurnEnd, ask?: string): TurnFacts {
   const last = turns.at(-1);
   const cut = last?.stop && last.stop !== "end_turn" && last.stop !== "interrupted" ? last.stop : undefined;
@@ -129,6 +153,7 @@ export function factsOf(turns: readonly TurnSlice[], end: TurnEnd, ask?: string)
     ...(end === "failed" && last?.auth ? { auth: true as const } : {}),
     ...(end === "done" && cut ? { cut } : {}),
     ...(end === "asking" && ask ? { ask } : {}),
+    ...(end === "stopped" && last?.refused ? { planBack: true as const } : {}),
   };
 }
 

@@ -103,7 +103,9 @@ function facts(end: LastTurn["end"], f: TurnFacts, age: string): string {
       if (f.auth) return `Stopped ${when}: not logged in.`;
       return f.error ? `Failed ${when}: ${ended(f.error)}` : `Failed ${when}.`;
     case "stopped":
-      return `Stopped ${when}.`;
+      // the agent ends its turn on a plan sent back and waits for the notes; this line is the
+      // composer's placeholder, so it says what to type
+      return f.planBack ? `Sent the plan back ${when}. Say what to change.` : `Stopped ${when}.`;
     case "done":
       return f.cut ? `Ended early ${when} (${f.cut}).` : `Finished ${when}.`;
   }

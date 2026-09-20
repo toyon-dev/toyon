@@ -134,6 +134,48 @@ describe("factsOf", () => {
     expect(factsOf(asking, "asking", "Which port?").ask).toBe("Which port?");
     expect(factsOf(asking, "done", "Which port?").ask).toBeUndefined();
   });
+
+  test("a stop right after a plan was sent back is the send-back, and only then", () => {
+    const card: AgentEvent = {
+      type: "agent-permission",
+      id: "p",
+      title: "Approve Plan",
+      plan: ".toyon/plans/1.md",
+      choices: [
+        { id: "yes", name: "Yes", kind: "allow_once" },
+        { id: "no", name: "No, keep planning", kind: "reject_once" },
+      ],
+      ts: 3,
+    };
+    const closed = (choiceId: string): AgentEvent => ({
+      type: "agent-ask-end",
+      id: "p",
+      outcome: "answered",
+      choiceId,
+      ts: 4,
+    });
+    const back = turnsSince(log(user("a", 1), start(2), card, closed("no"), end(5, "interrupted")), 0);
+    expect(factsOf(back, "stopped").planBack).toBe(true);
+    // approved, the turn goes on; a stop later is a stop
+    const approved = turnsSince(log(user("a", 1), start(2), card, closed("yes"), end(5, "interrupted")), 0);
+    expect(factsOf(approved, "stopped").planBack).toBeUndefined();
+    // the agent carried on after the refusal, so a stop after that is a hand on the button
+    const carriedOn = turnsSince(log(user("a", 1), start(2), card, closed("no"), say("ok"), end(5, "interrupted")), 0);
+    expect(factsOf(carriedOn, "stopped").planBack).toBeUndefined();
+    // a card the stop itself closed is not an answer
+    const cut = turnsSince(
+      log(
+        user("a", 1),
+        start(2),
+        card,
+        { type: "agent-ask-end", id: "p", outcome: "cancelled", ts: 4 },
+        end(5, "interrupted"),
+      ),
+      0,
+    );
+    expect(factsOf(cut, "stopped").planBack).toBeUndefined();
+    expect(factsOf(back, "done").planBack).toBeUndefined();
+  });
 });
 
 describe("openAskOf", () => {

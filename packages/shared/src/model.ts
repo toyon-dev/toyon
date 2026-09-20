@@ -322,6 +322,9 @@ export interface TurnFacts {
   cut?: string;
   /** what it is asking, while it is blocked on you */
   ask?: string;
+  /** it stopped because the plan was sent back: the agent ends its turn on that answer, the way
+   * its own terminal does, and waits to hear what should change */
+  planBack?: true;
 }
 
 export interface LastTurn {

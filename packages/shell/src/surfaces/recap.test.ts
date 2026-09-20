@@ -26,6 +26,7 @@ describe("recapLine", () => {
     [turn("done", { edits: 1 }, 0), "Finished just now."],
     [turn("done", { cut: "max_tokens" }, 5), "Ended early 5m ago (max_tokens)."],
     [turn("stopped", {}, 180), "Stopped 3h ago."],
+    [turn("stopped", { planBack: true }, 0), "Sent the plan back just now. Say what to change."],
     [turn("failed", { error: "rate limited" }, 5), "Failed 5m ago: rate limited."],
     [turn("failed", { auth: true }, 5), "Stopped 5m ago: not logged in."],
     [turn("asking", { ask: "Which port?" }, 20), "Waiting on you for 20m: Which port?"],

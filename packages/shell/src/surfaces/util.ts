@@ -10,6 +10,7 @@ import {
   type WorktreeInfo,
   type WorktreeStatus,
 } from "@toyon/shared";
+import type { ShipOp } from "../state/store.ts";
 
 /** Preview iframes hit the worktree's proxy port. Locally that is always loopback (the daemon
  * binds 127.0.0.1); in cloud mode the same port is a public TLS port on the host that served this
@@ -112,6 +113,27 @@ const DOT_LABEL: Record<DotState, string> = {
 export function stateLabel(w: WorktreeStatus, needsSetup = false): string {
   const d = dotClass(w);
   return d === "idle" && needsSetup ? "Not set up" : DOT_LABEL[d];
+}
+
+/** the git op a row is showing in its dot's slot, when one is out: the op was started from this
+ * row, and the control that started it may be off screen. `waiting` keeps the slot and the word,
+ * since a person being needed outranks a git op that finishes on its own. Every reader of the
+ * row's state asks this first, so the tip and the line under the name say what the slot shows and
+ * never restate the dot the spinner replaced. */
+export function shipShown(w: WorktreeStatus, op: ShipOp | undefined): ShipOp | null {
+  return op && dotClass(w) !== "waiting" ? op : null;
+}
+
+/** the op in words, the verb its own button showed in the present tense */
+const SHIP_LABEL: Record<ShipOp, string> = {
+  land: "Landing",
+  commit: "Committing",
+  "sync-main": "Syncing with main",
+  "pull-main": "Pulling",
+};
+
+export function shipLabel(op: ShipOp): string {
+  return SHIP_LABEL[op];
 }
 
 /** what the composer's terminal badge says. "crashed" and "unreachable" count as trouble:

@@ -1,6 +1,7 @@
 import { isLead, isOwned, type WorktreeStatus } from "@toyon/shared";
+import type { ShipOp } from "../../state/store.ts";
 import { recapLine } from "../recap.ts";
-import { type DotState, dotClass, stateLabel } from "../util.ts";
+import { type DotState, dotClass, shipLabel, stateLabel } from "../util.ts";
 
 /**
  * The line under a row's name on a screen.
@@ -38,11 +39,15 @@ export interface RowContext {
    * column that held the time on a desk is gone, and the time reads better after the state than
    * stacked in a column beside the counts */
   at?: string;
+  /** the git op the row's dot slot is showing as a spinner (`shipShown`), if one is out */
+  op?: ShipOp | null;
 }
 
 export function rowLine(w: WorktreeStatus, ctx: RowContext): string {
   if (ctx.offline) return OFFLINE_LINE;
   if (!isOwned(w)) return w.locked ? `Held by ${w.lockReason ?? "another tool"}` : ctx.path;
+  // the spinner in the dot's slot is the line's subject; the lead too, since a pull runs there
+  if (ctx.op) return shipLabel(ctx.op);
   if (isLead(w.worktree)) return LEAD_LINE;
   const state = stateLabel(w, ctx.needsSetup);
   const turn = w.worktree.lastTurn;

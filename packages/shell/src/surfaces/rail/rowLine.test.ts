@@ -94,4 +94,16 @@ describe("the line under a row's name", () => {
     expect(rowLine(owned(), ctx({ needsSetup: true }))).toBe("Not set up");
     expect(rowLine(owned({ procs: [{ name: "web", status: "running" } as never] }), ctx())).toBe("Running");
   });
+
+  test("a git op in the dot's slot is the line, on the lead too, over the state and the recap", () => {
+    const turn = { ...done, recap: { at: 2, text: "Dropped the second handler" } };
+    expect(rowLine(owned({ procs: [{ name: "web", status: "running" } as never] }), ctx({ op: "land" }))).toBe(
+      "Landing",
+    );
+    expect(rowLine(owned({}, { lastTurn: turn }), ctx({ op: "commit", at: "4m" }))).toBe("Committing");
+    expect(rowLine(owned({}, { kind: "main" }), ctx({ op: "pull-main" }))).toBe("Pulling");
+    // the caller has already let `waiting` keep the slot, so the line never sees an op then
+    expect(rowLine(owned({ agent: "waiting" }), ctx({ op: null }))).toBe("Waiting for you");
+    expect(rowLine(found(), ctx({ op: "land" }))).toBe("~/w/a");
+  });
 });

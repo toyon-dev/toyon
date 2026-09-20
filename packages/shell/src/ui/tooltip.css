@@ -83,8 +83,11 @@
   .tooltip-detail {
     color: var(--text1);
   }
-  /* the row's dot, restated beside the word for it; middle puts an 8px dot on the x-height */
-  .tooltip-dot {
+  /* the row's dot, restated beside the word for it; middle puts an 8px dot on the x-height. The
+   spinner standing in for it sits on the same line: its own dot size aligns to the baseline, and
+   two classes here outweigh that rather than trusting which stylesheet the page read last. */
+  .tooltip-dot,
+  .tooltip-dot.spinner {
     display: inline-block;
     vertical-align: middle;
     margin-right: 6px;

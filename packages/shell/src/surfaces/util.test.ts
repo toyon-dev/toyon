@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { ProcState, RepoInfo, WorktreeStatus } from "@toyon/shared";
-import { ancestors, commandSource, folderList, procTrouble, rowLabel, splitPath, stateLabel } from "./util.ts";
+import {
+  ancestors,
+  commandSource,
+  folderList,
+  procTrouble,
+  rowLabel,
+  shipLabel,
+  shipShown,
+  splitPath,
+  stateLabel,
+} from "./util.ts";
 
 describe("folders", () => {
   test("ancestors run outermost first, and a top-level file has none", () => {
@@ -81,6 +91,16 @@ describe("stateLabel", () => {
     expect(stateLabel(status("idle", proc("web", "asleep"), proc("api", "starting")))).toBe("Starting");
     expect(stateLabel(status("working", proc("web", "asleep")))).toBe("Agent working");
     expect(stateLabel(status("idle"), true)).toBe("Not set up");
+  });
+
+  test("a git op out from the row is its word, unless a person is needed", () => {
+    // the row swapped its dot for a spinner, so a tip saying "Running" named a dot nobody could see
+    expect(shipShown(status("idle", proc("web", "running")), "land")).toBe("land");
+    expect(shipShown(status("working"), "commit")).toBe("commit");
+    expect(shipShown(status("waiting"), "land")).toBeNull();
+    expect(shipShown(status("idle"), undefined)).toBeNull();
+    expect(shipLabel("land")).toBe("Landing");
+    expect(shipLabel("sync-main")).toBe("Syncing with main");
   });
 });
 

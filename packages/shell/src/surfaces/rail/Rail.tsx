@@ -37,7 +37,7 @@ import { Spinner } from "../../ui/Spinner.tsx";
 import { type TipPlacement, tip } from "../../ui/Tooltip.tsx";
 import { dollars, tokens } from "../chat/usage.ts";
 import { recapLine } from "../recap.ts";
-import { ago, chord, dotClass, procTrouble, rowLabel, stateLabel, wtDir } from "../util.ts";
+import { ago, chord, dotClass, procTrouble, rowLabel, shipLabel, shipShown, stateLabel, wtDir } from "../util.ts";
 import "./rail.css";
 import { cx } from "../../ui/cx.ts";
 import { useOnChange } from "../../ui/hooks.ts";
@@ -316,6 +316,9 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     const id = w.id;
     const menuOpen = menu?.owner === "rail" && menu.key === id;
     const showCheck = owned && graftMode && canGraft(owned.worktree) && id !== activeId;
+    // a landing op out from this row takes the dot's slot, and with it the row's word: the tip
+    // and the line under the name say what the spinner is doing, not the state it covers
+    const op = shipShown(w, shipping[id]);
     return (
       <button
         key={id}
@@ -335,14 +338,14 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
         // over a row painted in the fault colour, a green "Running" over an orange dot: the tip
         // names the fault instead, with no dot, since there is no live state for one to restate.
         {...(owned
-          ? tip(offline ? OFFLINE_LINE : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
+          ? tip(offline ? OFFLINE_LINE : op ? shipLabel(op) : stateLabel(w, asksSetup(repoOf(owned))), undefined, {
               placement: tipSide,
               // an unseen stop says what happened above the path, so a hover is enough to triage it
               detail:
                 w.unseen && owned.worktree.lastTurn
                   ? `${recapLine(owned.worktree.lastTurn)}\n${wtDirLabel(w)}`
                   : wtDirLabel(w),
-              dot: offline ? undefined : dotClass(w),
+              dot: offline ? undefined : op ? "spinner" : dotClass(w),
               lead: leadOf(
                 w,
                 onLead ? [repoOf(owned)?.name, rowLabel(w, repoOf(owned))].filter(Boolean).join(" · ") : unspelled(w),
@@ -512,10 +515,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
           )}
         </span>
         {(() => {
-          // a landing op is out: the dot's slot shows it working, since the op was started from
-          // this row and the control that started it may be off screen in the strip. `waiting`
-          // still wins: a person being needed outranks a git op that finishes on its own.
-          if (shipping[id] && dotClass(w) !== "waiting") return <Spinner size="dot" />;
+          if (op) return <Spinner size="dot" />;
           // held by another tool: that is its status, so the lock takes the dot's slot rather
           // than adding a column, and the hover on the row says who holds it
           if (w.locked)
@@ -571,6 +571,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               path: wtDirLabel(w),
               // the time the desk's control column carries; the lead is never sent to
               at: owned && !onLead ? ago(sentAt(owned.worktree)) : undefined,
+              op,
             })}
           </span>
         )}

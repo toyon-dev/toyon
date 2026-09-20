@@ -19,6 +19,7 @@ import type { DaemonSocket } from "../../ws.ts";
 import { profileNames, profileOf } from "../profiles.ts";
 import type { Action, ShipOp, State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
+import { editorItems } from "./editor.ts";
 
 type Dispatch = (a: Action) => void;
 
@@ -94,19 +95,21 @@ export type WorktreeItemState = Pick<State, "layout" | "shipping">;
 
 /** Everything a worktree of ours can do, in the order the rail's menu shows it; the palette reads
  * the same list with the title appended. `graft` is the rail's own multi-select, so only the rail
- * passes it and the palette has no graft line. */
+ * passes it and the palette has no graft line. `hostname` is where the page is open: the editor
+ * and Finder rows only mean something on the daemon's own machine. */
 export function worktreeItems(
   w: OwnedWorktree,
   repo: RepoInfo | null,
   s: WorktreeItemState,
   { sock, dispatch }: Deps,
-  ui: { graft?: (id: string) => void } = {},
+  ui: { graft?: (id: string) => void; hostname: string },
 ): MenuEntry[] {
   const id = w.worktree.id;
   const acts = worktreeActions(sock, dispatch);
-  // six groups: stop, look at it, start from it, run it, change it, land it; then remove on its own
+  // seven groups: stop, go to it, copy from it, run it, change it, land it; then remove on its own
   const stop: MenuItem[] = [];
-  const look: MenuItem[] = [];
+  const go: MenuItem[] = [];
+  const copy: MenuItem[] = [];
   const run: MenuItem[] = [];
   const change: MenuItem[] = [];
   const land: MenuItem[] = [];
@@ -117,7 +120,7 @@ export function worktreeItems(
     stop.push({ id: "stop", label: "stop agent", onClick: () => sock?.send({ t: "stop-agent", worktreeId: id }) });
   const idle = !s.shipping[id];
   if ((w.dirty ?? 0) > 0 || (w.ahead ?? 0) > 0 || !s.layout.changes) {
-    look.push({
+    go.push({
       id: "changes",
       label: `view changes${(w.dirty ?? 0) > 0 ? ` (${w.dirty})` : ""}`,
       onClick: () => {
@@ -126,7 +129,7 @@ export function worktreeItems(
       },
     });
   }
-  look.push({
+  go.push({
     id: "terminal",
     label: "open terminal",
     // asked for, so the terminal takes the keyboard even when the pane was already open elsewhere
@@ -135,23 +138,17 @@ export function worktreeItems(
       dispatch({ a: "focus-terminal" });
     },
   });
-  look.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: id }) });
-  look.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
+  go.push(...editorItems(w.path, () => sock?.send({ t: "reveal", worktreeId: id }), ui.hostname));
+  copy.push({ id: "copy-path", label: "copy path", onClick: () => copyText(w.path) });
+  copy.push({ id: "copy-branch", label: "copy branch name", onClick: () => copyText(w.worktree.branch) });
   // what a second agent is pointed at: the chat as a file it can read, and the id the agent's
   // own CLI resumes. A path rather than a link, since a link would carry the token. The lead has
   // no chat, so nothing to hand over there.
   const { transcript, sessionId } = w;
   if (transcript && !isLead(w.worktree)) {
-    look.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(transcript) });
+    copy.push({ id: "copy-transcript", label: "copy transcript path", onClick: () => copyText(transcript) });
   }
-  if (sessionId) look.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
-  // a ring to come back to; a row that already has one has nothing to add
-  look.push({
-    id: "unread",
-    label: "mark as unread",
-    disabled: w.unseen ? "already unread" : undefined,
-    onClick: () => markUnread(sock, dispatch, id),
-  });
+  if (sessionId) copy.push({ id: "copy-session", label: "copy session id", onClick: () => copyText(sessionId) });
   // main runs procs too, and is where switching is wanted most; flat items, the menu has no
   // submenus. The one running now is on the list with its check, so the list also answers which.
   // Not on the provisional row: the worktree it starts takes its profile from the intro's chip.
@@ -170,6 +167,13 @@ export function worktreeItems(
     const graft = ui.graft;
     change.push({ id: "graft", label: "graft with…", onClick: () => graft(id) });
   }
+  // a ring to come back to; a row that already has one has nothing to add
+  change.push({
+    id: "unread",
+    label: "mark as unread",
+    disabled: w.unseen ? "already unread" : undefined,
+    onClick: () => markUnread(sock, dispatch, id),
+  });
   // a landing op already out for this worktree keeps the others on the list but off, with the
   // reason under them, until it answers
   const busy = idle ? undefined : "waiting on the one in progress";
@@ -201,7 +205,7 @@ export function worktreeItems(
       onClick: () => acts.archive(w),
     });
   }
-  return grouped([stop, look, run, change, land, gone]);
+  return grouped([stop, go, copy, run, change, land, gone]);
 }
 
 /** A discovered worktree is a directory toyon does not own, so this stays short on purpose.
@@ -211,7 +215,12 @@ export function worktreeItems(
  * No "remove": the person made this directory outside toyon, and deleting it is the one thing
  * here that cannot be undone. Nothing in the daemon can delete a discovered worktree at all,
  * which is what keeps that true. `git worktree remove` is where it belongs. */
-export function discoveredItems(d: WorktreeStatus, s: Pick<State, "clientId">, { sock, dispatch }: Deps): MenuEntry[] {
+export function discoveredItems(
+  d: WorktreeStatus,
+  s: Pick<State, "clientId">,
+  { sock, dispatch }: Deps,
+  hostname: string,
+): MenuEntry[] {
   const items: MenuItem[] = [];
   // held by another tool: the line stays, off, saying who has it
   const adopt: MenuItem[] = [
@@ -238,6 +247,6 @@ export function discoveredItems(d: WorktreeStatus, s: Pick<State, "clientId">, {
       dispatch({ a: "focus-terminal" });
     },
   });
-  items.push({ id: "reveal", label: "reveal in Finder", onClick: () => sock?.send({ t: "reveal", worktreeId: d.id }) });
+  items.push(...editorItems(d.path, () => sock?.send({ t: "reveal", worktreeId: d.id }), hostname));
   return grouped([adopt, items, [{ id: "copy-path", label: "copy path", onClick: () => copyText(d.path) }]]);
 }

@@ -810,13 +810,14 @@ export function localOf(s: State, id: string | null | undefined): WorktreeLocal 
   return (id && s.local[id]) || EMPTY_LOCAL;
 }
 
-/** any row by id, owned or not */
-export function rowById(s: State, id: string | null | undefined): WorktreeStatus | null {
+/** any row by id, owned or not. Reads only the rows, so the app menu and the palette can ask with
+ * the state they already hold. */
+export function rowById(s: Pick<State, "rows">, id: string | null | undefined): WorktreeStatus | null {
   return (id && s.rows.find((w) => w.id === id)) || null;
 }
 
 /** a row toyon owns, by id: what the chat, the composer and landing read */
-export function worktreeById(s: State, id: string | null | undefined): OwnedWorktree | null {
+export function worktreeById(s: Pick<State, "rows">, id: string | null | undefined): OwnedWorktree | null {
   const row = rowById(s, id);
   return row && isOwned(row) ? row : null;
 }
@@ -874,7 +875,7 @@ function revealChat(s: State): State {
   return isChatCentred(s) ? s : withLayout(s, { chat: true });
 }
 
-export function repoById(s: State, id: string | null | undefined): RepoInfo | null {
+export function repoById(s: Pick<State, "repos">, id: string | null | undefined): RepoInfo | null {
   return (id && s.repos.find((r) => r.id === id)) || null;
 }
 

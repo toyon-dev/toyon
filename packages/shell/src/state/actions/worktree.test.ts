@@ -32,19 +32,32 @@ const owned = (over: Partial<OwnedWorktree> = {}): OwnedWorktree =>
   }) as OwnedWorktree;
 
 const deps = { sock: null, dispatch: () => {} };
+/** the page open on the daemon's own machine, where an editor or Finder can open the path */
+const here = { hostname: "localhost" };
 /** the list as read: a label per item, a bar where a rule sits between groups */
 const labels = (items: MenuEntry[]) => items.map((i) => (isItem(i) ? i.label : "|"));
 
 describe("a worktree's actions", () => {
   test("read the same in the menu and the palette: one list, grouped, gated by state", () => {
-    const quiet = worktreeItems(owned(), null, { layout: { ...defaultLayout, changes: true }, shipping: {} }, deps);
+    const quiet = worktreeItems(
+      owned(),
+      null,
+      { layout: { ...defaultLayout, changes: true }, shipping: {} },
+      deps,
+      here,
+    );
     expect(labels(quiet)).toEqual([
       "open terminal",
+      "open in Zed",
+      "open in VS Code",
+      "open in Cursor",
       "reveal in Finder",
+      "|",
       "copy path",
-      "mark as unread",
+      "copy branch name",
       "|",
       "rename…",
+      "mark as unread",
       "|",
       "land",
       "|",
@@ -56,19 +69,24 @@ describe("a worktree's actions", () => {
       null,
       { layout: { ...defaultLayout, changes: false }, shipping: {} },
       deps,
-      { graft: () => {} },
+      { graft: () => {}, ...here },
     );
     expect(labels(busy)).toEqual([
       "stop agent",
       "|",
       "view changes (2)",
       "open terminal",
+      "open in Zed",
+      "open in VS Code",
+      "open in Cursor",
       "reveal in Finder",
+      "|",
       "copy path",
-      "mark as unread",
+      "copy branch name",
       "|",
       "rename…",
       "graft with…",
+      "mark as unread",
       "|",
       "sync from main (3 behind)",
       "land",
@@ -77,15 +95,23 @@ describe("a worktree's actions", () => {
     ]);
   });
 
+  test("from another device the editor and Finder rows go, since nothing there could open", () => {
+    const away = worktreeItems(owned(), null, { layout: { ...defaultLayout, changes: true }, shipping: {} }, deps, {
+      hostname: "box.tail1234.ts.net",
+    });
+    expect(labels(away).slice(0, 4)).toEqual(["open terminal", "|", "copy path", "copy branch name"]);
+  });
+
   test("hands the chat over as a file path and a session id, but not from main, which has no chat", () => {
     const s = { layout: { ...defaultLayout, changes: true }, shipping: {} };
-    const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps);
-    expect(labels(chat).slice(2, 5)).toEqual(["copy path", "copy transcript path", "copy session id"]);
+    const copies = (items: MenuEntry[]) => labels(items).slice(6, 10);
+    const chat = worktreeItems(owned({ transcript: "/t/w1.jsonl", sessionId: "s-1" }), null, s, deps, here);
+    expect(copies(chat)).toEqual(["copy path", "copy branch name", "copy transcript path", "copy session id"]);
     // a session not opened yet has no id to copy
-    const cold = worktreeItems(owned({ transcript: "/t/w1.jsonl" }), null, s, deps);
-    expect(labels(cold).slice(2, 5)).toEqual(["copy path", "copy transcript path", "mark as unread"]);
+    const cold = worktreeItems(owned({ transcript: "/t/w1.jsonl" }), null, s, deps, here);
+    expect(copies(cold)).toEqual(["copy path", "copy branch name", "copy transcript path", "|"]);
     const main = owned({ transcript: "/t/m.jsonl", sessionId: "s-2", worktree: { ...info, kind: "main" } });
-    expect(labels(worktreeItems(main, null, s, deps))).not.toContain("copy transcript path");
+    expect(labels(worktreeItems(main, null, s, deps, here))).not.toContain("copy transcript path");
   });
 
   test("a landing op in flight keeps the other landing ops on the list, off, until it answers", () => {
@@ -94,6 +120,7 @@ describe("a worktree's actions", () => {
       null,
       { layout: { ...defaultLayout, changes: true }, shipping: { w1: "land" } },
       deps,
+      here,
     );
     const off = items.filter(isItem).filter((i) => i.disabled !== undefined);
     expect(off.map((i) => i.label)).toEqual(["sync from main (3 behind)", "land"]);
@@ -106,9 +133,16 @@ describe("a worktree's actions", () => {
       null,
       { layout: { ...defaultLayout, changes: true }, shipping: {} },
       deps,
+      here,
     );
     expect(ringed.filter(isItem).find((i) => i.id === "unread")?.disabled).toBe("already unread");
-    const quiet = worktreeItems(owned(), null, { layout: { ...defaultLayout, changes: true }, shipping: {} }, deps);
+    const quiet = worktreeItems(
+      owned(),
+      null,
+      { layout: { ...defaultLayout, changes: true }, shipping: {} },
+      deps,
+      here,
+    );
     expect(quiet.filter(isItem).find((i) => i.id === "unread")?.disabled).toBeUndefined();
   });
 
@@ -126,7 +160,13 @@ describe("a worktree's actions", () => {
       configFile: ".toyon/settings.json",
       needsSetup: false,
     };
-    const items = worktreeItems(owned(), repo, { layout: { ...defaultLayout, changes: true }, shipping: {} }, deps);
+    const items = worktreeItems(
+      owned(),
+      repo,
+      { layout: { ...defaultLayout, changes: true }, shipping: {} },
+      deps,
+      here,
+    );
     const run = items.filter(isItem).filter((i) => i.id.startsWith("profile:"));
     expect(run.map((i) => `${i.label}${i.checked ? " *" : ""}`)).toEqual(["run with fe *", "run with full"]);
   });
@@ -141,18 +181,26 @@ describe("a worktree's actions", () => {
       agent: "idle",
       behind: 1,
     } as WorktreeStatus;
-    const items = discoveredItems(found, { clientId: "c" }, deps);
+    const items = discoveredItems(found, { clientId: "c" }, deps, "localhost");
     expect(labels(items)).toEqual([
       "take over",
       "|",
       "sync from main (1 behind)",
       "open a shell here",
+      "open in Zed",
+      "open in VS Code",
+      "open in Cursor",
       "reveal in Finder",
       "|",
       "copy path",
     ]);
-    const held = discoveredItems({ ...found, locked: true, lockReason: "zed", behind: 0 }, { clientId: "c" }, deps);
-    expect(labels(held)).toEqual(["take over", "|", "open a shell here", "reveal in Finder", "|", "copy path"]);
+    const held = discoveredItems(
+      { ...found, locked: true, lockReason: "zed", behind: 0 },
+      { clientId: "c" },
+      deps,
+      "box.tail1234.ts.net",
+    );
+    expect(labels(held)).toEqual(["take over", "|", "open a shell here", "|", "copy path"]);
     expect(held.filter(isItem).find((i) => i.id === "adopt")?.disabled).toBe("held by zed");
   });
 });

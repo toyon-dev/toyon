@@ -87,7 +87,10 @@ export function buildCommands(
   if (wt && id) {
     // the active worktree's menu, line for line, each saying whose it is
     const repo = state.repos.find((r) => r.id === wt.worktree.repoId) ?? null;
-    addItems(worktreeItems(wt, repo, state, deps), { scope: "wt", name: rowLabel(wt, repo) });
+    addItems(worktreeItems(wt, repo, state, deps, { hostname: state.hostname }), {
+      scope: "wt",
+      name: rowLabel(wt, repo),
+    });
     for (const p of wt.procs) addItems(procItems(p, id, deps));
   }
   state.visible.forEach((w, i) => {
@@ -132,7 +135,10 @@ export type CommandState = Pick<
   | "self"
   | "archivedPage"
   | "archived"
->;
+> & {
+  /** where the page is open: a worktree's editor and Finder rows only exist on the daemon's machine */
+  hostname: string;
+};
 
 export function useCommands(): Command[] {
   const dispatch = useDispatch();
@@ -181,8 +187,9 @@ export function useCommands(): Command[] {
       self,
       archivedPage,
       archived,
+      hostname: location.hostname,
     };
-    return buildCommands(st, dispatch, sock, worktreeById(st as State, activeId), repoById(st as State, activeRepoId));
+    return buildCommands(st, dispatch, sock, worktreeById(st, activeId), repoById(st, activeRepoId));
   }, [
     picking,
     layout,

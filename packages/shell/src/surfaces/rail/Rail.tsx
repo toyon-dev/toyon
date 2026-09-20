@@ -209,8 +209,8 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   /** what a row can do: the long list for ours, the short one for a found worktree */
   const rowItems = (w: WorktreeStatus) =>
     isOwned(w)
-      ? worktreeItems(w, repoOf(w), { layout, shipping }, deps, { graft: graftWith })
-      : discoveredItems(w, { clientId }, deps);
+      ? worktreeItems(w, repoOf(w), { layout, shipping }, deps, { graft: graftWith, hostname: location.hostname })
+      : discoveredItems(w, { clientId }, deps, location.hostname);
 
   /* the archive keeps its own count column, reserved list-wide the way the worktrees' are, and not
      drawn at all when no archived row has a number to put in it */

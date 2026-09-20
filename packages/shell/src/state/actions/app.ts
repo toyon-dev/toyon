@@ -28,7 +28,7 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
   const show = (open: boolean) => (open ? "hide" : "show");
   const repo = s.repos.some((r) => r.id === s.activeRepoId);
   // a found worktree has no session to list files for: the go group reads the active one we run
-  const id = worktreeById(s as State, s.activeId)?.worktree.id;
+  const id = worktreeById(s, s.activeId)?.worktree.id;
   const go: MenuItem[] = [];
   if (repo) {
     go.push({

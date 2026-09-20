@@ -53,6 +53,7 @@ describe("buildCommands", () => {
     shipping: {},
     remote: null,
     frame: "desk",
+    hostname: "localhost",
   } as unknown as CommandState;
 
   // the rows are keyed by id, so an id twice leaves a stale row behind when the list changes

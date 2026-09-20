@@ -16,7 +16,7 @@ describe("message menus", () => {
   });
 
   test("a link out leads with the page and its address", () => {
-    const link = { href: "https://example.com/docs", file: null };
+    const link = { kind: "out", href: "https://example.com/docs" } as const;
     expect(ids(messageItems({ kind: "assistant", text: "see" }, "w", deps, { link }))).toEqual([
       "open-out",
       "copy-link",
@@ -25,9 +25,22 @@ describe("message menus", () => {
   });
 
   test("a link to a worktree file is about the file: its path, not the address", () => {
-    const link = { href: "/w/src/a.ts#L3", file: { path: "src/a.ts", line: 3 } };
+    const link = { kind: "file", file: { path: "src/a.ts", line: 3 } } as const;
     // with no directory to read the path in there is no file on disk for an editor to open
     expect(ids(messageItems({ kind: "assistant", text: "see" }, "w", deps, { link, dir: null }))).toEqual([
+      "copy-path",
+      "copy",
+    ]);
+  });
+
+  test("a path outside the worktree is a file on disk: the editors that open it, and the path as text", () => {
+    // the editor rows read the page's host to know the disk is this machine's; the test has no page
+    Object.defineProperty(globalThis, "location", { value: { hostname: "localhost" }, configurable: true });
+    const link = { kind: "path", path: "/Users/me/.cache/driver.mjs" } as const;
+    expect(ids(messageItems({ kind: "assistant", text: "see" }, "w", deps, { link, dir: null }))).toEqual([
+      "open:zed",
+      "open:vscode",
+      "open:cursor",
       "copy-path",
       "copy",
     ]);

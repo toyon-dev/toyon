@@ -50,3 +50,16 @@ export function worktreeLink(root: string, ref: string): WorktreeLink | null {
   const line = lineText ? Number.parseInt(lineText, 10) : undefined;
   return line && line > 0 ? { path, line } : { path };
 }
+
+/** A root-absolute link that is not a worktree file: a path on the daemon's disk, as the agent
+ * wrote it. The browser would resolve it against the page and ask the daemon for a page it does not
+ * serve, so it is never followed; the path is shown as text and offered to the editors instead.
+ * Null for a URL, a page anchor and a relative reference. */
+export function outsidePath(ref: string): string | null {
+  if (!ref.startsWith("/") || ref.startsWith("//")) return null;
+  try {
+    return decodeURIComponent(ref);
+  } catch {
+    return null;
+  }
+}

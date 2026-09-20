@@ -32,9 +32,14 @@ import { toolRowItems } from "./toolRowItems.ts";
 /** the link at or around an element of a rendered message, and the worktree file it names when
  * the checkout root is known; null when the element is not in a link */
 function chatLink(target: Element, root: string | undefined): ChatLink | null {
-  const href = target.closest("a")?.getAttribute("href");
+  const a = target.closest("a");
+  if (!a) return null;
+  const path = a.getAttribute("data-path");
+  if (path) return { kind: "path", path };
+  const href = a.getAttribute("href");
   if (!href) return null;
-  return { href, file: root ? worktreeLink(root, href) : null };
+  const file = root ? worktreeLink(root, href) : null;
+  return file ? { kind: "file", file } : { kind: "out", href };
 }
 
 function openChatLink(
@@ -43,8 +48,9 @@ function openChatLink(
   worktreeId: string | null | undefined,
   deps: { dispatch: ReturnType<typeof useDispatch>; sock: ReturnType<typeof useSock> },
 ) {
-  const target = chatLink(e.target as Element, root)?.file;
-  if (!target || !worktreeId) return;
+  const link = chatLink(e.target as Element, root);
+  if (link?.kind !== "file" || !worktreeId) return;
+  const target = link.file;
   e.preventDefault();
   // a message names a file because the agent touched it, so the view is left unsaid and the read
   // opens the diff when there is one, the file otherwise. A line is an address into the file.

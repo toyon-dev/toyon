@@ -2,7 +2,7 @@ import createDOMPurify from "dompurify";
 import { marked } from "marked";
 import { useEffect, useRef, useState } from "react";
 import { worktreeFileUrl } from "../../ws.ts";
-import { assetPath, worktreeLink } from "./markdownPaths.ts";
+import { assetPath, outsidePath, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
 import { languageOf, paintCode } from "./syntax.ts";
 
@@ -59,6 +59,20 @@ purify.addHook("afterSanitizeAttributes", (node) => {
     node.classList.add("file-link");
     node.setAttribute("data-tip", `${file.path}${file.line ? `:${file.line}` : ""}`);
     node.setAttribute("data-tip-placement", "follow");
+  } else if (href) {
+    const path = outsidePath(href);
+    if (path) {
+      // a path the daemon cannot serve is not a link: without its href the anchor is text, and the
+      // path stands in the mono like any other path the agent names in prose
+      node.removeAttribute("href");
+      node.classList.add("path-text");
+      node.setAttribute("data-path", path);
+      if (!(node.childNodes.length === 1 && node.firstElementChild?.tagName === "CODE")) {
+        const code = node.ownerDocument.createElement("code");
+        code.append(...Array.from(node.childNodes));
+        node.append(code);
+      }
+    }
   }
   const base = rendering?.base;
   if (node.tagName === "IMG" && base) {

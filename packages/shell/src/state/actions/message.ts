@@ -30,9 +30,12 @@ export function pasteItems(paste: { text?: string; href?: string }, ui: ChipUi =
   return grouped([copy, ...chipTail(ui)]);
 }
 
-/** the link a message was right-clicked on: its address, and the worktree file it names when it
- * is one of those, so the menu is about the file rather than the address */
-export type ChatLink = { href: string; file: { path: string; line?: number } | null };
+/** the link a message was right-clicked on: a page out on the web, a file in this worktree, or a
+ * path on the daemon's disk outside it, so the menu is about the file rather than the address */
+export type ChatLink =
+  | { kind: "out"; href: string }
+  | { kind: "file"; file: { path: string; line?: number } }
+  | { kind: "path"; path: string };
 
 /** a link out of the chat: the page outside the shell, and its address as text */
 function linkItems(href: string): MenuItem[] {
@@ -51,9 +54,11 @@ export function messageItems(
   const link = at.link;
   const lead: MenuItem[][] = !link
     ? []
-    : link.file
+    : link.kind === "file"
       ? pathGroups(link.file.path, at.dir ?? null)
-      : [linkItems(link.href)];
+      : link.kind === "path"
+        ? pathGroups(link.path, at.dir ?? null)
+        : [linkItems(link.href)];
   const copy: MenuItem[] = [{ id: "copy", label: "copy message", onClick: () => copyText(item.text) }];
   const again: MenuItem[] = [];
   if (item.kind === "user" && worktreeId) {

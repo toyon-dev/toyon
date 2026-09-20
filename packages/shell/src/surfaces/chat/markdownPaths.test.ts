@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { assetPath, dirOf, worktreeLink } from "./markdownPaths.ts";
+import { assetPath, dirOf, outsidePath, worktreeLink } from "./markdownPaths.ts";
 
 describe("a markdown file's relative references", () => {
   test("resolve against the file's folder", () => {
@@ -42,5 +42,20 @@ describe("a file link in chat", () => {
     expect(worktreeLink(root, "src/App.tsx")).toBeNull();
     expect(worktreeLink(root, "/Users/me/project-two/App.tsx")).toBeNull();
     expect(worktreeLink(root, "/Users/me/project/../outside.ts")).toBeNull();
+  });
+});
+
+describe("a path outside the worktree", () => {
+  test("is the path the agent wrote, decoded", () => {
+    expect(outsidePath("/Users/me/.cache/driver.mjs")).toBe("/Users/me/.cache/driver.mjs");
+    expect(outsidePath("/Users/me/my%20notes/plan.md:12")).toBe("/Users/me/my notes/plan.md:12");
+  });
+
+  test("is not a URL, an anchor, a relative reference or a protocol-relative address", () => {
+    expect(outsidePath("https://example.com/a")).toBeNull();
+    expect(outsidePath("#top")).toBeNull();
+    expect(outsidePath("src/App.tsx")).toBeNull();
+    expect(outsidePath("//example.com/a")).toBeNull();
+    expect(outsidePath("/bad%")).toBeNull();
   });
 });

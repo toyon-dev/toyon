@@ -223,7 +223,7 @@
       /* hover intent: a pointer that crosses the strip on its way to the window edge or the dock
          is over it for well under this, and a hand that stops on a dot is past it before it feels
          a wait */
-      --rail-wait: 250ms;
+      --rail-wait: 200ms;
     }
     :where([data-hover]) &:hover .rail-panel,
     &.hold .rail-panel {
@@ -350,10 +350,22 @@
    states, and it is safe where the rail-list comment above is not: everything here sits below the
    worktree rows, so nothing anyone aims at moves when it appears.
    Marked by type and colour alone, like .section-title: a rule across the rail read as a
-   divider between two peers, and these rows are not main's peers. */
+   divider between two peers, and these rows are not main's peers.
+   They show on the panel's own timing. Otherwise the labels and their dots land in the strip the
+   instant the pointer touches it, a fifth of a second before the panel moves, and leave the same
+   way. Opacity carries the fade and rides the same wait and slide; display cannot ease, so the
+   discrete transition holds the rows in the flow until the fade out ends. The fade in starts from
+   a starting style nested in the open rule, where it has the rule's own specificity (a top-level
+   one loses the cascade to it and never applies). That starting style names opacity alone: with
+   display: none in it, Chromium starts no transition at all, in either direction, so the rows are
+   laid out, invisible, for the length of the wait. */
   .rail-disc-head,
   .rail-disc-item {
     display: none;
+    opacity: 0;
+    transition:
+      display var(--rail-slide) allow-discrete var(--rail-wait),
+      opacity var(--rail-slide) ease var(--rail-wait);
   }
   .rail {
     :where([data-hover]) &:hover .rail-disc-head,
@@ -363,6 +375,7 @@
       height: var(--row-height-sm);
       width: 100%;
       display: flex;
+      opacity: 1;
       align-items: center;
       position: relative;
       gap: 8px;
@@ -372,6 +385,9 @@
       font: var(--type-ui-sm);
       color: var(--text2);
       text-align: left;
+      @starting-style {
+        opacity: 0;
+      }
     }
   }
   .rail-disc-head {
@@ -385,11 +401,15 @@
     &.pinned .rail-disc-item,
     &.rail-screen .rail-disc-item {
       display: flex;
+      opacity: 1;
       /* the same padding as .rail-item: these rows sit in the same column and
      their dots have to land on the same centre line. A rung down in height as well as colour,
      because these are not main's peers and nine of them should not outweigh one of yours. */
       padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
       min-height: var(--row-height-sm);
+      @starting-style {
+        opacity: 0;
+      }
     }
   }
   /* selected the same way a worktree row is: it is the same selection, and the pane beside it is

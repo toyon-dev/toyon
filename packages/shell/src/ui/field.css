@@ -14,6 +14,14 @@
     &:focus {
       border-color: var(--border1);
     }
+    /* the prompt in an empty box sits on the scan tier, the same one the composer's own drawn
+       placeholder uses, so the two never differ by which path drew them. Left to the browser it is
+       a neutral grey that reads cool against a warm ladder and ignores the theme. Firefox dims a
+       placeholder by opacity rather than colour, so that is pinned too. */
+    &::placeholder {
+      color: var(--text1);
+      opacity: 1;
+    }
   }
   /* three sizes, the same way .btn has three: the compact default, the form's input, and prose */
   .field-md {

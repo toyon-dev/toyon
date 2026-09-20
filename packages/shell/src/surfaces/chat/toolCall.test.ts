@@ -25,6 +25,13 @@ describe("parseToolOutput", () => {
     expect(parseToolOutput("```\n```")).toEqual([]);
   });
 
+  test("a longer fence around a file that holds a fence keeps the inner one as code", () => {
+    const blocks = parseToolOutput("````\n1\t# readme\n2\t```sh\n3\tbun install\n4\t```\n````");
+    expect(blocks).toEqual([
+      { code: true, diff: false, lang: "", text: "1\t# readme\n2\t```sh\n3\tbun install\n4\t```" },
+    ]);
+  });
+
   test("marks git diffs, hunks and the daemon's own diff blocks", () => {
     expect(parseToolOutput("diff --git a/x b/x\n+one")[0]?.diff).toBe(true);
     expect(parseToolOutput("@@ -1,2 +1,3 @@\n+one")[0]?.diff).toBe(true);

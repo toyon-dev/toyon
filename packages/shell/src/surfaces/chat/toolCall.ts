@@ -206,13 +206,16 @@ export function relPath(detail: string, roots: string[]): string {
   return detail;
 }
 
-const FENCE = /^```([\w+#.-]*)\s*$/;
+/** three backticks or more: an adapter fencing a file that holds a fence of its own writes a
+ * longer one around it, and the block closes on a fence at least that long */
+const FENCE = /^(`{3,})([\w+#.-]*)\s*$/;
 
 export function parseToolOutput(out: string): OutputBlock[] {
   const blocks: OutputBlock[] = [];
   let lines: string[] = [];
   let lang = "";
   let fenced = false;
+  let open = 0;
   const flush = () => {
     // blank lines around a block go; the indentation inside it stays, being the shape of the code.
     // A block that is nothing but whitespace is not a block: a command that printed one newline
@@ -223,14 +226,17 @@ export function parseToolOutput(out: string): OutputBlock[] {
   };
   for (const line of out.split("\n")) {
     const fence = FENCE.exec(line);
-    if (!fence) {
+    const ticks = fence?.[1]?.length ?? 0;
+    // inside a block, a shorter fence is a line of the code and not the end of it
+    if (!fence || (fenced && (ticks < open || fence[2]))) {
       lines.push(line);
       continue;
     }
     flush();
     // an opening fence names the language; the closing one carries nothing
     fenced = !fenced;
-    lang = fenced ? (fence[1] ?? "").toLowerCase() : "";
+    open = fenced ? ticks : 0;
+    lang = fenced ? (fence[2] ?? "").toLowerCase() : "";
   }
   flush();
   return blocks;

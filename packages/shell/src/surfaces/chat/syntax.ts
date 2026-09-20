@@ -221,10 +221,25 @@ export interface Piece {
   scope: string;
 }
 
-/** a fenced block, coloured. Nothing changed in it, so its pieces carry the scope alone. */
+const GUTTER = /^\d+\t/;
+
+/** a fenced block, coloured. Nothing changed in it, so its pieces carry the scope alone.
+ *
+ * A file read arrives with its line numbers on, `12<tab>code`, and the grammar must not see them:
+ * it would paint every gutter in the number colour, and a literal that runs over several lines
+ * would swallow the numbers inside it. The numbers come off before tokenizing and go back on as
+ * plain text, which is what a gutter reads as. */
 export function paintCode(text: string, language: string | null): Piece[][] {
   if (!language) return [];
-  return tokenLines(text, language).map((toks) => toks.map((t) => ({ text: t.text, changed: false, scope: t.scope })));
+  const lines = text.split("\n");
+  const numbered = GUTTER.test(lines[0] ?? "");
+  const gutters = numbered ? lines.map((line) => GUTTER.exec(line)?.[0] ?? "") : [];
+  const body = numbered ? lines.map((line, i) => line.slice((gutters[i] as string).length)).join("\n") : text;
+  return tokenLines(body, language).map((toks, i) => {
+    const pieces = toks.map((t) => ({ text: t.text, changed: false, scope: t.scope }));
+    const gutter = gutters[i];
+    return gutter ? [{ text: gutter, changed: false, scope: "" }, ...pieces] : pieces;
+  });
 }
 
 /** a diff block, coloured. The two sides are tokenized apart and stitched back together: a grammar

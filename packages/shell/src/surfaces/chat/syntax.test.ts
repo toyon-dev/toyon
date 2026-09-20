@@ -128,4 +128,14 @@ describe("paintCode", () => {
   test("a block we do carry comes back a line at a time", () => {
     expect(paintCode("let a = 1;\nlet b = 2;", "typescript")).toHaveLength(2);
   });
+
+  test("a file read keeps its line numbers as plain text and colours the code beside them", () => {
+    const painted = paintCode("1\tconst a = `x\n2\ty`;\n3\t\n[File truncated]", "typescript");
+    expect(painted.map(scopes)).toEqual([
+      "1\t|keyword:const| a = |string:`x",
+      "2\t|string:y`|;",
+      "3\t",
+      "[|type:File| truncated]",
+    ]);
+  });
 });

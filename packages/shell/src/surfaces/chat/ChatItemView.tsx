@@ -98,12 +98,13 @@ type PaintedBlock = ReturnType<typeof paintBlocks>[number];
  * render should redo, so every caller holds the result behind a memo */
 function paintBlocks(blocks: OutputBlock[], path: string) {
   return blocks.map((b) => {
-    const language = languageOf(b.lang, b.diff ? path || pathInDiff(b.text) : "");
+    // a read's output is a bare fence, so the file the call names is the only word on its language
+    const language = languageOf(b.lang, path || (b.diff ? pathInDiff(b.text) : ""));
     if (b.diff) {
       const lines = diffLines(b.text);
       return { ...b, lines, painted: paintDiff(lines, language) };
     }
-    return { ...b, lines: [], painted: paintCode(b.text, language) };
+    return { ...b, lines: [], painted: b.code ? paintCode(b.text, language) : [] };
   });
 }
 

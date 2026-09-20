@@ -3,11 +3,12 @@ import { askAgent, mentionInChat, mentionOf, treeBox } from "../attach.ts";
 import type { Store } from "../context.tsx";
 import { readingView } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
-import { editorItems } from "./editor.ts";
+import { editorItems, revealItems } from "./editor.ts";
 import { openFile } from "./file.ts";
 
-/** A row in the files tab. The tree reads and points: open the file, name it to the agent, copy
- * where it is, open it elsewhere. Renaming and deleting are the agent's, because a rename breaks
+/** A row in the files tab. The tree reads and points: open the file or name it to the agent, then
+ * show where it is, then hand it to the agent. Editor rows stay off this menu, since the file's own
+ * view carries them once it is open. Renaming and deleting are the agent's, because a rename breaks
  * imports and a moved page changes its URL, and the agent fixes both where a file operation would
  * not; so those entries leave a sentence in the box and send nothing. */
 export function treeItems(
@@ -44,13 +45,13 @@ export function treeItems(
       onClick: () => askAgent(store, worktreeId, `Delete ${named} and update whatever still uses it`),
     },
   ];
-  const abs = `${dir}/${path}`;
-  const copy: MenuItem[] = [
-    { id: "copy-path", label: "copy path", onClick: () => copyText(abs) },
+  // where the file is: shown in Finder, or its path on the clipboard
+  const where: MenuItem[] = [
+    ...revealItems(() => deps.sock?.send({ t: "reveal", worktreeId, path })),
+    { id: "copy-path", label: "copy path", onClick: () => copyText(`${dir}/${path}`) },
     { id: "copy-relative-path", label: "copy relative path", onClick: () => copyText(path) },
   ];
-  const elsewhere = editorItems(abs, () => deps.sock?.send({ t: "reveal", worktreeId, path }));
-  return grouped([chat, ask, copy, elsewhere]);
+  return grouped([chat, where, ask]);
 }
 
 /** the tree's empty space: the worktree itself, in an editor or in Finder */

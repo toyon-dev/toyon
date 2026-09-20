@@ -1,9 +1,24 @@
-import { isLead, isProvisional, type LogLine, type OwnedWorktree, type ProcState } from "@toyon/shared";
+import {
+  isLead,
+  isProvisional,
+  type LogLine,
+  type OwnedWorktree,
+  type ProcState,
+  type SparePhase,
+} from "@toyon/shared";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { View } from "../../ui/View.tsx";
 import { procFixPrompt } from "./fixPrompt.ts";
+
+/** the line before any proc exists. A spare says how far along it is, since the plus is looked at
+ * while it is made and "starting dev servers" would be a lie for a row still copying deps. */
+function startingText(phase: SparePhase | undefined): string {
+  if (phase === "reserved") return "checking out a fresh worktree…";
+  if (phase === "warming") return "copying dependencies and running setup…";
+  return "starting dev servers…";
+}
 
 /** how much of the tail the pane shows: enough to read a stack trace, not a scrollback */
 const TAIL = 30;
@@ -33,7 +48,7 @@ export function Boot({ worktree, log }: { worktree: OwnedWorktree; log: LogLine[
   return (
     <View wide>
       {procs.length === 0 ? (
-        <div className="status-line">starting dev servers…</div>
+        <div className="status-line">{startingText(worktree.worktree.phase)}</div>
       ) : (
         <ul className="boot-procs">
           {procs.map((p) => (

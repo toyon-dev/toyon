@@ -80,7 +80,6 @@ import {
 } from "../git/status.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { isInside } from "../repos/create.ts";
-import { STAGGER_MS } from "../runtime/idle.ts";
 import { allocateProxyPort, releasePort } from "../runtime/ports.ts";
 import { resolveRun } from "../runtime/profile.ts";
 import { DEFAULT_AGENT_ID, type RuntimeRegistry, worktreeEnv } from "../runtime/registry.ts";
@@ -306,14 +305,6 @@ export class WorktreeService {
   async create(repoId: string, prompt: string, opts: CreateOpts = {}): Promise<WorktreeInfo> {
     const { variant, context, attachments } = opts;
     const repo = this.d.state.requireRepo(repoId);
-    // A checkout that git stops treating as one (`core.bare` set in the config its worktrees share)
-    // fails every step below with git's own words, after the worktree exists and before its message
-    // is sent. Refused here, nothing is made.
-    if (!(await isGitRepo(repo.path))) {
-      throw new UserError(
-        `git no longer reads ${repo.name} as a checkout, so there is nothing to start a worktree from. If \`git config core.bare\` says true there, \`git config --unset core.bare\` puts it back.`,
-      );
-    }
     // validated up front: an unknown or uninstalled agent is a refusal now, not a dead worktree later
     const agent = this.d.agents.require(opts.agent ?? this.d.state.defaultAgent ?? DEFAULT_AGENT_ID).id;
     const profile = this.checkProfile(repo, opts.profile);
@@ -366,17 +357,19 @@ export class WorktreeService {
       if (rt.agent.runningAgent !== null && rt.agent.runningAgent !== agent) await rt.agent.restart();
       rt.agent.send(agentPrompt, { context: withCarry(context, carried), attachments });
       this.scheduleNaming(claimed, task, variant);
-      // the next spare warms once this one's preview has answered, so its boot never shares the
-      // core with the send the person is waiting on
-      fireAndForget(
-        repoId,
-        this.d.runtime.awaitPreview(claimed.id, STAGGER_MS).then(() => this.spare.ensure(repoId)),
-        "spare refill",
-      );
       if (carried.unmoved) throw new UserError(carried.unmoved);
       return claimed;
     }
 
+    // A checkout that git stops treating as one (`core.bare` set in the config its worktrees share)
+    // fails every step below with git's own words, after the worktree exists and before its message
+    // is sent. Refused here, nothing is made. The claim above needs no such check: its switch
+    // fails with git's words before anything changes, and the spare goes back to the pool.
+    if (!(await isGitRepo(repo.path))) {
+      throw new UserError(
+        `git no longer reads ${repo.name} as a checkout, so there is nothing to start a worktree from. If \`git config core.bare\` says true there, \`git config --unset core.bare\` puts it back.`,
+      );
+    }
     const wtPath = join(this.d.paths.worktreesDir, repo.name, slug);
     await withRepoLock(repo.path, () =>
       gitOrThrow(repo.path, "worktree", "add", "-b", branch, wtPath, repo.defaultBranch),
@@ -432,7 +425,12 @@ export class WorktreeService {
 
   private async carryMainOrThrow(repo: RepoInfo, wt: WorktreeInfo, move: boolean): Promise<Carried> {
     const main = repo.defaultBranch;
-    if (!move) return { branch: main, moved: false, count: (await statusFiles(repo.path)).length };
+    // left behind, so only a number for the agent: the rail's count of main, at most a few seconds
+    // old, rather than a status of the whole checkout between enter and the message showing
+    if (!move) {
+      const count = this.countsCache.get(this.mainOf(repo.id)?.id ?? "")?.dirty ?? 0;
+      return { branch: main, moved: false, count };
+    }
     let count = 0;
     const unmoved = await withRepoLock(repo.path, async (): Promise<string | undefined> => {
       count = (await statusFiles(repo.path)).length;
@@ -1907,9 +1905,9 @@ export class WorktreeService {
   }
 
   /** Whether a record is a rail row. A task always is. The repo's spare is, as the row new work
-   * is typed in, ready or still warming; main is one only while the repo has no spare to stand in
-   * for it (setup unconfirmed, an empty project, a warm-up that failed), so the first-run screens
-   * and the setup pane keep a row to sit on. A spare record the pool has let go of is nobody's. */
+   * is typed in, from the moment it is reserved; main is one only while the repo has no spare to
+   * stand in for it (setup unconfirmed, an empty project, a warm-up that failed), so the first-run
+   * screens and the setup pane keep a row to sit on. A stale extra spare being pruned is nobody's. */
   private isRow(wt: WorktreeInfo): boolean {
     if (wt.kind === "worktree") return true;
     const lead = this.leadSpareOf(wt.repoId);

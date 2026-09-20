@@ -504,16 +504,10 @@ describe("spare pool", () => {
     expect(changed).toBeGreaterThan(0);
   });
 
-  test("the next spare warms only once the claimed one's preview has answered, never from the claim itself", async () => {
+  test("a claim reserves the next spare at once; its deps and servers wait for the claimed one's preview", async () => {
     const repoId = await registered();
     await w.worktrees.spare.ensure(repoId);
-    // the claim alone warms nothing
-    const first = await w.worktrees.spare.claim(repoId, "toyon/first", "first");
-    expect(first?.kind).toBe("worktree");
-    await settle();
-    expect(w.state.worktrees.filter((x) => x.kind === "spare")).toHaveLength(0);
-    await w.worktrees.spare.ensure(repoId);
-    // a preview that takes its time: the refill waits on it
+    // a preview that takes its time: the finish waits on it
     const awaited: string[] = [];
     let answer: (() => void) | null = null;
     w.runtime.awaitPreview = async (id) => {
@@ -524,11 +518,52 @@ describe("spare pool", () => {
       return null;
     };
     const wt = await w.worktrees.create(repoId, "task");
+    // the row is there from the claim, so the plus never leaves the rail and main never stands
+    // in; nothing slow has run on it
+    const next = w.state.worktrees.find((x) => x.kind === "spare")!;
+    expect(next).toBeDefined();
+    await until(() => awaited.length > 0);
     expect(awaited).toEqual([wt.id]);
+    expect(next.id).not.toBe(wt.id);
+    expect((await w.worktrees.rows()).map((r) => r.id).sort()).toEqual([next.id, wt.id].sort());
     await settle();
-    expect(w.state.worktrees.filter((x) => x.kind === "spare")).toHaveLength(0);
+    expect(next.phase).toBe("reserved");
+    expect(w.runtime.get(next.id)?.procs ?? null).toBeNull();
     answer!();
-    await until(() => w.state.worktrees.some((x) => x.kind === "spare"));
+    await until(() => next.phase === "ready");
+    expect(w.runtime.get(next.id)?.procs).toBeTruthy();
+    // the phase is the record's: written, so a restart would know where it was
+    expect(w.state.worktree(next.id)?.phase).toBe("ready");
+  });
+
+  test("a send into the reserved row claims it as it is, and its finish runs on for the task", async () => {
+    const repoId = await registered();
+    await w.worktrees.spare.ensure(repoId);
+    // every finish waits on a preview that never answers until told; from then on they all do
+    const waiting: (() => void)[] = [];
+    let answered = false;
+    const answer = () => {
+      answered = true;
+      for (const r of waiting.splice(0)) r();
+    };
+    w.runtime.awaitPreview = async () => {
+      if (!answered) await new Promise<void>((r) => waiting.push(r));
+      return null;
+    };
+    await w.worktrees.create(repoId, "first");
+    const held = w.state.worktrees.find((x) => x.kind === "spare")!;
+    expect(held.phase).toBe("reserved");
+    // typed into before the stagger released it: the message does not wait for deps
+    const wt = await w.worktrees.create(repoId, "typed at once", { worktreeId: held.id });
+    expect(wt.id).toBe(held.id);
+    expect(wt.kind).toBe("worktree");
+    expect(wt.phase).toBeUndefined();
+    expect(w.agents.get(wt.id)?.sent[0]?.text).toBe("typed at once");
+    // the finish is the task's: its procs come up from it, and the next row is reserved beside it
+    expect(w.state.worktrees.some((x) => x.kind === "spare" && x.id !== wt.id)).toBe(true);
+    answer();
+    await until(() => !!w.runtime.get(wt.id)?.procs);
+    await until(() => w.worktrees.spare.current(repoId)?.ready === true);
   });
 
   test("a spare warmed under one agent is restarted for a task that asks for another", async () => {
@@ -552,7 +587,7 @@ describe("spare pool", () => {
     expect(nextAgent.sent[0]?.text).toBe("other agent");
   });
 
-  test("a claim naming a spare still warming waits for it; one naming a row already claimed goes cold", async () => {
+  test("a claim naming a spare still warming takes it now; one naming a row already claimed goes cold", async () => {
     const repoId = await registered();
     // a setup step that takes its time, so the warm-up is still under way when the send arrives
     w.state.requireRepo(repoId).config.setup = ["sleep 0.5"];

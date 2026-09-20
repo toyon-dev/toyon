@@ -168,6 +168,11 @@ export interface PendingRepo {
 
 export type WorktreeKind = "main" | "worktree" | "spare";
 
+/** how far along the repo's spare is: its record and row exist from `reserved`; `warming` is deps,
+ * setup and servers under way; `ready` is a warm copy waiting to be typed into. Persisted, so a
+ * daemon that restarts picks a half-made spare up where it was. */
+export type SparePhase = "reserved" | "warming" | "ready";
+
 /** How much the agent may do in a worktree without a person in the loop. Agent-neutral: the
  * daemon maps each onto the agent's own session mode and its permission policy.
  * - `auto`: the default. Every write inside the worktree and every sandboxed command runs; a
@@ -204,6 +209,11 @@ export interface WorktreeInfo {
    * with the title without ever being it. */
   branch: string;
   kind: WorktreeKind;
+  /** a spare's progress toward warm; absent on every other kind, and gone the moment it is claimed */
+  phase?: SparePhase;
+  /** the lockfile a ready spare's deps were copied under, so a main that moved re-runs setup only
+   * when the deps changed; spare only, like `phase` */
+  lockfile?: string;
   /** port of this worktree's reverse proxy (preview iframe target) */
   proxyPort: number;
   /** what the rail calls it, in words a person would say: spaces and capitals and all. Nothing is

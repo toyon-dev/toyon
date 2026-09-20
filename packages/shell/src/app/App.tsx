@@ -112,11 +112,18 @@ export function App() {
     sock.send({ t: "subscribe", worktreeId: archivedId });
     return () => sock.send({ t: "unsubscribe", worktreeId: archivedId });
   }, [archivedId, connected, sock]);
-  // worktrees that disappeared drop out of the set
+  // Worktrees that disappeared drop out of the set, and the daemon hears it: its set is per socket
+  // and outlives the worktree, so an archived one this tab had looked at would still count as
+  // subscribed there, and the subscribe its archived page sends under the same id would be taken
+  // for a repeat and get no backfill, leaving the page's chat empty until it was left and reopened.
   useEffect(() => {
     const alive = new Set(rows.map((w) => w.id));
+    const gone = subsRef.current.filter((id) => !alive.has(id));
+    if (gone.length === 0) return;
     subsRef.current = subsRef.current.filter((id) => alive.has(id));
-  }, [rows]);
+    if (!sock || !connected) return;
+    for (const id of gone) sock.send({ t: "unsubscribe", worktreeId: id });
+  }, [rows, connected, sock]);
 
   const pageName = archivedPage?.title ?? activeRow?.name ?? null;
   useEffect(() => {

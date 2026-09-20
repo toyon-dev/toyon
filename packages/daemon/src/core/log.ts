@@ -24,10 +24,19 @@ function fmtExtra(extra: unknown): string {
   }
 }
 
+/** the day the last line was written on; the file spans restarts and days, and a reader working
+ * out why something was up needs to know which morning a line belongs to */
+let lastDay = "";
+
 function write(level: LogLevel, tag: string, message: string, extra?: unknown) {
   if (LEVELS[level] < threshold) return;
-  const ts = new Date().toISOString().slice(11, 19);
-  process.stderr.write(`${ts} ${level.padEnd(5)} [${tag}] ${message}${fmtExtra(extra)}\n`);
+  const iso = new Date().toISOString();
+  const day = iso.slice(0, 10);
+  if (day !== lastDay) {
+    lastDay = day;
+    process.stderr.write(`-------- ${day} --------\n`);
+  }
+  process.stderr.write(`${iso.slice(11, 19)} ${level.padEnd(5)} [${tag}] ${message}${fmtExtra(extra)}\n`);
 }
 
 export const log = {

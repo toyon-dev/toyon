@@ -255,7 +255,7 @@ export class AcpSession implements AgentAdapter {
   async warm(): Promise<void> {
     if (this.stopped) return;
     try {
-      await this.ensureLive();
+      await this.ensureLive("warm-up");
       // nothing is running, so let the idle reaper take the process back on its usual schedule
       this.maybeArmReaper();
     } catch (e) {
@@ -285,7 +285,7 @@ export class AcpSession implements AgentAdapter {
    * under the default agent, claimed for a task that asked for another */
   async restart(): Promise<void> {
     this.clearReaper();
-    await this.dropConn();
+    await this.dropConn("restart");
   }
 
   private setCommands(next: AgentCommand[]) {
@@ -464,7 +464,7 @@ export class AcpSession implements AgentAdapter {
     this.steered = [];
     this.queueChanged();
     this.stop();
-    await this.dropConn();
+    await this.dropConn("closing");
     await this.log.flush();
   }
 
@@ -512,7 +512,7 @@ export class AcpSession implements AgentAdapter {
         this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
         this.setStatus("error");
         // whatever state the adapter is in, the next prompt starts from a fresh process
-        fireAndForget(this.d.worktreeId, this.dropConn(), "drop agent after error");
+        fireAndForget(this.d.worktreeId, this.dropConn("error"), "drop agent after error");
       }
     } finally {
       this.interrupted = false;
@@ -527,7 +527,7 @@ export class AcpSession implements AgentAdapter {
     this.asking++;
     this.clearReaper();
     try {
-      const conn = await this.ensureConn();
+      const conn = await this.ensureConn("an ask");
       return await askOnce(conn.ctx, {
         cwd: this.d.cwd,
         system,
@@ -555,7 +555,7 @@ export class AcpSession implements AgentAdapter {
   }
 
   async authenticate(methodId: string, apiKey?: string): Promise<AuthOutcome> {
-    const conn = await this.ensureConn();
+    const conn = await this.ensureConn("login");
     const method = conn.authMethods.find((m) => m.id === methodId);
     if (!method) throw new UserError(`${conn.spec.name} offers no login method "${methodId}"`);
     const login = terminalLogin(method);
@@ -648,7 +648,7 @@ export class AcpSession implements AgentAdapter {
   private async runTurn(item: QueueItem) {
     item.recorded ??= await this.record(item);
     this.emit({ type: "turn-start", ts: Date.now() });
-    const live = await this.ensureLive();
+    const live = await this.ensureLive("a turn");
     await this.applyMode(live);
     await this.applyOption(live, "model");
     await this.applyOption(live, "thought_level");
@@ -675,17 +675,18 @@ export class AcpSession implements AgentAdapter {
     return ambientBlock([...(item.context ?? []), this.d.preview?.()]);
   }
 
-  /** the adapter process, spawned and initialized once; concurrent callers share the spawn */
-  private ensureConn(): Promise<Conn> {
+  /** the adapter process, spawned and initialized once; concurrent callers share the spawn.
+   * `why` names what wanted it, for the log: what keeps adapters up is read from these lines */
+  private ensureConn(why: string): Promise<Conn> {
     if (this.conn) return Promise.resolve(this.conn);
     if (this.connecting) return this.connecting;
-    this.connecting = this.openConn().finally(() => {
+    this.connecting = this.openConn(why).finally(() => {
       this.connecting = null;
     });
     return this.connecting;
   }
 
-  private async openConn(): Promise<Conn> {
+  private async openConn(why: string): Promise<Conn> {
     const spec = this.d.spec();
     const prepared = await (this.d.prepare ?? prepareLaunch)(this.d.cwd, spec);
     const { bounds } = prepared;
@@ -703,6 +704,7 @@ export class AcpSession implements AgentAdapter {
       });
     const link = this.d.connect(app, spec, prepared);
     this.noteProcess(link, true);
+    log.info(this.d.worktreeId, `agent ${spec.id} started for ${why} (pid ${link.pid ?? "unknown"})`);
     const ctx = link.conn.agent;
     // the process dying while idle must not leave a dead handle for the next prompt to use
     link.exited.then(() => {
@@ -755,8 +757,8 @@ export class AcpSession implements AgentAdapter {
   }
 
   /** the worktree's session on the connection: resumed when the agent remembers it, else new */
-  private async ensureLive(): Promise<Live> {
-    const conn = await this.ensureConn();
+  private async ensureLive(why: string): Promise<Live> {
+    const conn = await this.ensureConn(why);
     if (this.live?.conn === conn) return this.live;
     const additionalDirectories = conn.bounds.gitDir ? [conn.bounds.gitDir] : [];
     let sessionId = this.d.getSessionId();
@@ -1136,12 +1138,12 @@ export class AcpSession implements AgentAdapter {
 
   private armReaper() {
     this.clearReaper();
+    const idleMs = this.d.idleMs ?? DEFAULT_IDLE_MS;
     const t = setTimeout(() => {
       this.reaper = null;
       if (this.running || this.own || this.asking || this.asks.size > 0 || !this.conn) return;
-      log.debug(this.d.worktreeId, "agent idle; stopping its process");
-      fireAndForget(this.d.worktreeId, this.dropConn(), "reap agent");
-    }, this.d.idleMs ?? DEFAULT_IDLE_MS);
+      fireAndForget(this.d.worktreeId, this.dropConn(`idle for ${Math.round(idleMs / 60_000)} min`), "reap agent");
+    }, idleMs);
     // a sleeping timer must not keep a test (or a shutdown) waiting
     t.unref?.();
     this.reaper = t;
@@ -1152,7 +1154,7 @@ export class AcpSession implements AgentAdapter {
     this.reaper = null;
   }
 
-  private async dropConn() {
+  private async dropConn(why: string) {
     // closing the connection aborts outbound requests only, so a card the agent is blocked on
     // would otherwise sit here forever with no process left to answer
     this.cancelAsks();
@@ -1160,6 +1162,7 @@ export class AcpSession implements AgentAdapter {
     this.conn = null;
     this.live = null;
     if (!conn) return;
+    log.info(this.d.worktreeId, `agent ${conn.spec.id} stopped: ${why} (pid ${conn.link.pid ?? "unknown"})`);
     conn.link.conn.close();
     await conn.link.kill();
     this.noteProcess(conn.link, false);

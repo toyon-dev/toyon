@@ -328,14 +328,16 @@ describe("summarizeToolOutput / truncate / stop reasons", () => {
 });
 
 describe("network asks", () => {
+  // the shape the Claude adapter sends: no `name`, the tool's name in the meta and as the title
   const call = (name: string): SessionUpdate => ({
+    _meta: { claudeCode: { toolName: name } },
     sessionUpdate: "tool_call",
     toolCallId: "n1",
-    name,
     title: name,
     kind: "other",
     status: "pending",
     rawInput: { host: "fonts.googleapis.com" },
+    content: [],
   });
   const ask = (name = "SandboxNetworkAccess"): RequestPermissionRequest => ({
     sessionId: "s",

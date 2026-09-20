@@ -23,10 +23,12 @@ export type ChatEntry =
   | ToolEntry
   | { at: number; spawn: ToolItem; run: ToolEntry[] };
 
-/** kinds whose hint is a path, where several calls on one file is the ordinary way to work. A run
- * row's hint is the sentence the agent wrote for it, and two identical sentences are two different
- * commands as often as they are one command repeated, so those stay a row each. */
-const GROUPABLE: ReadonlySet<string> = new Set(["read", "edit"]);
+/** kinds whose hint names the thing the call was about, where a repeat is the same call again:
+ * several reads or edits of one file is the ordinary way to work, and a fetch row is a host or a
+ * URL, so three asks to reach one host are one question asked three times. A run row's hint is the
+ * sentence the agent wrote for it, and two identical sentences are two different commands as often
+ * as they are one command repeated, so those stay a row each. */
+const GROUPABLE: ReadonlySet<string> = new Set(["read", "edit", "fetch"]);
 
 /** what two calls have to share to print as one row: the glyph, the tool behind it and the file it
  * names. The agent's own tool name is in the key even where the row does not print it, so an edit

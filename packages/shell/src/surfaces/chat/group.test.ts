@@ -100,6 +100,18 @@ describe("groupTools", () => {
     ]);
   });
 
+  test("three asks to reach one host are one row; a refused one and another host are not", () => {
+    // a network ask as the daemon hands it over: no name, the host as the title and in the input
+    const ask = (host: string, extra: Partial<ChatItem> = {}) =>
+      tool("fetch", "", { name: "", title: host, input: { host }, ...extra });
+    expect(shape([ask("example.com"), ask("example.com"), ask("example.com")])).toEqual([{ at: 0, n: 3 }]);
+    expect(shape([ask("example.com"), ask("example.com", { isError: true }), ask("npmjs.org")])).toEqual([
+      { at: 0, n: 1 },
+      { at: 1, n: 1 },
+      { at: 2, n: 1 },
+    ]);
+  });
+
   test("the same file under two tool names stays two rows", () => {
     const items = [tool("edit", "/wt/a.ts"), tool("edit", "/wt/a.ts", { name: "Write", title: "Write" })];
     expect(shape(items, ["/wt"])).toEqual([

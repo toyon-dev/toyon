@@ -56,17 +56,31 @@ function asRecord(v: unknown): Record<string, unknown> {
  * call named for the check, with the host only in its input, and no tool ever runs behind it. */
 const NETWORK_ASK = "SandboxNetworkAccess";
 
+/** whether a call is the network ask. Claude's adapter sends no `name` on a tool_call: the tool's
+ * name is in its `_meta`, and the title repeats it. Only this check reads the meta; the row's name
+ * stays what the adapter sent, since a Bash call whose name became "Bash" would print that word
+ * beside every command in the transcript. */
+function isNetworkAsk(update: { name?: string | null; _meta?: Record<string, unknown> | null }): boolean {
+  return update.name === NETWORK_ASK || asRecord(asRecord(update._meta).claudeCode).toolName === NETWORK_ASK;
+}
+
 /** the words a call's row starts with: the agent's own, except a network ask's, which reads as the
  * host it named under the fetch glyph rather than as the check's internal name. No word beside it:
  * the answer under the row says allowed or refused, which is all that tells it from a fetch */
-function heading(update: { name?: string | null; title: string; kind?: ToolKind | null; rawInput?: unknown }): {
+function heading(update: {
+  name?: string | null;
+  title: string;
+  kind?: ToolKind | null;
+  rawInput?: unknown;
+  _meta?: Record<string, unknown> | null;
+}): {
   name: string;
   title: string;
   kind?: ToolKind;
 } {
   const name = typeof update.name === "string" ? update.name : "";
   const host = asRecord(update.rawInput).host;
-  if (name === NETWORK_ASK && typeof host === "string") return { name: "", title: host, kind: "fetch" };
+  if (isNetworkAsk(update) && typeof host === "string") return { name: "", title: host, kind: "fetch" };
   return { name, title: update.title, ...(update.kind ? { kind: update.kind } : {}) };
 }
 

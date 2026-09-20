@@ -100,8 +100,9 @@
       background: var(--text0);
     }
   }
-  /* the strip with its titles beside the ticks: the menu's box, laid over the strip so the ticks
-   read as the rows' own and the pointer that opened it is already inside */
+  /* the titles in the strip's place: the menu's box, laid over the strip so it hides the ticks and
+   the pointer that opened it is already inside. A contents page carries no ticks of its own; the
+   indent alone says the level, the way a paper's does */
   .editor-outline-list {
     width: max-content;
     max-width: 320px;
@@ -114,23 +115,14 @@
     box-shadow: var(--elevation-float);
     display: flex;
     flex-direction: column;
-    /* the strip's ticks stand 14px in from the body's edge, and the rows' stand on the same line:
-     the box's border, the row's inset and the gutter add up to it */
     & .editor-outline-row {
       min-height: var(--row-height-sm);
-      padding-left: 5px;
-      gap: 10px;
       font: var(--type-ui);
-    }
-    /* the widest tick's column, so every title starts on one line whatever its level */
-    & .editor-outline-gutter {
-      flex: none;
-      width: 18px;
     }
     /* a title steps in under the heading above it, one step per open ancestor: an h2 with no h1
      over it stands at the margin */
     & .editor-outline-label {
-      padding-left: calc(var(--outline-depth, 0) * 12px);
+      padding-left: calc(var(--outline-depth, 0) * 16px);
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;

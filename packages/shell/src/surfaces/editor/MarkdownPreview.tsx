@@ -135,8 +135,9 @@ export function MarkdownPreview({
 
 /** The document's headings as a strip of ticks down the left of the body, one per heading and as
  * wide as its level is high, with the section being read set darker. Pointing at the strip opens
- * the same list with its titles, and a title jumps to its heading. The strip stays outside the
- * scroll box, so it holds still while the document moves under it. */
+ * the titles in its place, stepped in by depth with no ticks beside them, the way a paper's
+ * contents read; a title jumps to its heading. The strip stays outside the scroll box, so it
+ * holds still while the document moves under it. */
 function Outline({ heads, at, onJump }: { heads: Heading[]; at: number; onJump: (i: number) => void }) {
   const [open, setOpen] = useState(false);
   const strip = useRef<HTMLDivElement>(null);
@@ -167,7 +168,7 @@ function Outline({ heads, at, onJump }: { heads: Heading[]; at: number; onJump: 
         <Float
           className="editor-outline-list"
           anchor={() => strip.current?.getBoundingClientRect() ?? null}
-          // over the strip, so its ticks become the rows' own and the pointer never leaves it on the way
+          // over the strip, so the box hides the ticks and the pointer never leaves it on the way
           placement={{ side: "right", align: "center", cover: true }}
           trigger={strip.current}
           onDismiss={() => setOpen(false)}
@@ -184,13 +185,6 @@ function Outline({ heads, at, onJump }: { heads: Heading[]; at: number; onJump: 
               data-state={rowState({ current: i === at })}
               onClick={() => onJump(i)}
             >
-              <span className="editor-outline-gutter">
-                <span
-                  className="editor-outline-tick"
-                  data-level={h.level}
-                  data-state={rowState({ current: i === at })}
-                />
-              </span>
               <span className="editor-outline-label" style={{ "--outline-depth": h.depth } as CSSProperties}>
                 {h.text}
               </span>

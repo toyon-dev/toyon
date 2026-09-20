@@ -187,10 +187,14 @@ export function openRow(entries: ChatEntry[]): number {
   return -1;
 }
 
-/** a message still waiting for its first words has nothing to read yet, so it closes nothing; every
- * other item is there to be read the moment it lands */
+/** a message still waiting for its first words has nothing to read yet, so it closes nothing, and
+ * nor does a question still open: it is asked in the box, not the log, and the thought that led to
+ * it is what the person reads while deciding. Every other item is there to be read the moment it
+ * lands, an answered question included. */
 function says(item: Exclude<ChatItem, { kind: "tool" | "thinking" }>): boolean {
-  return item.kind === "assistant" ? !!item.text.trim() : true;
+  if (item.kind === "assistant") return !!item.text.trim();
+  if (item.kind === "ask") return !!item.outcome;
+  return true;
 }
 
 /** The row a transcript seq names: the last one stamped with a seq at or before it. A row carries

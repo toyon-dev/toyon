@@ -288,6 +288,18 @@ describe("groupTools", () => {
     expect(open([think, text("Checking the caller.")])).toBe(-1);
   });
 
+  test("a question still open leaves the thought before it open; answered, it closes it", () => {
+    const think = thought("Two ways to do this.");
+    const ask = (outcome?: "answered"): ChatItem => ({
+      kind: "ask",
+      id: "k1",
+      ask: { kind: "question", message: "Which?", questions: [] },
+      ...(outcome ? { outcome } : {}),
+    });
+    expect(open([think, ask()])).toBe(0);
+    expect(open([think, ask("answered")])).toBe(-1);
+  });
+
   test("the open row: the next thought takes it, but only once it has words of its own", () => {
     const items = [thought("The caller next."), tool("edit", "/wt/a.ts", { output: DIFF }), thought(" ")];
     expect(open(items)).toBe(0);

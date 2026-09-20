@@ -170,9 +170,12 @@ export function ChatLog({
   // calls that did the same thing to the same file, back to back, are one row carrying a count,
   // and a subagent's calls are the run under the row that started it
   const entries = useMemo(() => groupTools(items, roots), [items, roots]);
-  // the one row that opens itself while the agent runs; everything else in the turn is a line
+  // the one row that opens itself while the agent runs; everything else in the turn is a line.
+  // A turn stopped on a question is still the turn: the thought before the ask stays open while
+  // the box waits, since it is the case the question is made from.
   const working = active?.agent === "working";
-  const liveRow = useMemo(() => (working ? openRow(entries) : -1), [working, entries]);
+  const inTurn = working || active?.agent === "waiting";
+  const liveRow = useMemo(() => (inTurn ? openRow(entries) : -1), [inTurn, entries]);
   // the live marks and the word are about now, not about what is open: the agent is thinking only
   // while the thought is the newest thing in the log, and the thought stays open well past that
   const last = entries.at(-1);

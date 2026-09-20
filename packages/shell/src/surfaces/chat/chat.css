@@ -1076,6 +1076,17 @@
     --picker-bleed: -10px;
     --picker-inset: 10px;
   }
+  /* the questions as a tab strip heading the box, full bleed like the key strip that closes it:
+   the recess is the strip's floor, and the open tab is the strip's own ground showing through, so
+   it joins the question under it. First in the strip it takes the strip's top padding back. */
+  .ask-tabs {
+    margin: 0 var(--picker-bleed) 8px;
+    --tabs-strip: var(--sunken-floor);
+    --tabs-ground: var(--sunken);
+  }
+  .ask-box:first-child .ask-tabs {
+    margin-top: -10px;
+  }
   .ask-head {
     color: var(--text0);
   }
@@ -1142,8 +1153,8 @@
     overflow-x: auto;
     white-space: pre;
   }
-  /* the person's own answer, under the options: the composer's textarea in this mode, so the
-   strip still ends in a place to type. Two rows, since it rides with a pick rather than replacing it. */
+  /* the typed answer, under the options once its row or `n` opened it: the composer's textarea in
+   this mode. Two rows, since it can ride with a pick rather than replace it. */
   .ask-own {
     margin-top: 8px;
     flex: none;
@@ -1154,29 +1165,11 @@
     gap: 8px;
     margin-top: 10px;
   }
-  /* one dot per question, first in the row: the ones answered filled, the one on screen ringed the
-   way a rail row a turn finished on is, with the ring's gap cut in the strip's own ground. A count
-   beside them, since three dots say less than "2 of 3" does. */
-  .ask-steps {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    margin-right: auto;
-    color: var(--text2);
-    font-variant-numeric: tabular-nums;
-    & .ask-count {
-      margin-left: 4px;
-    }
-  }
+  /* the dot on each tab: filled once that question has an answer */
   .ask-step {
     background: var(--surface2);
     &.answered {
       background: var(--ink1);
-    }
-    &.here {
-      box-shadow:
-        0 0 0 1px var(--sunken),
-        0 0 0 2.5px var(--ink2);
     }
   }
   /* the key strip closes the box the way it closes a picker: its own band under the actions, ruled

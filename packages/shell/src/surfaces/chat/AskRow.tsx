@@ -1,10 +1,12 @@
-// The ask's row in the transcript. While the question is open it is one line saying what is being
-// asked: the box holds the question itself, and in a long log this row is what says the turn is
-// waiting on you. Pressing it brings a parked question back into the box. Once closed, the row
-// reads the answers back.
+// The ask's row in the transcript. While the question holds the box the transcript shows nothing
+// for it: the box is right there with the question in full, and a row above it naming the same
+// questions read as the ask said twice. Parked, the ask is out of sight, so the row is one line
+// saying what is being asked, and pressing it brings the question back into the box. Once closed,
+// the row reads the answers back.
 
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
+import { useLocalField } from "../../state/selectors.ts";
 import { Button } from "../../ui/Button.tsx";
 import { CLOSED } from "./AskBox.tsx";
 import { type AskItem, answerText, askLine } from "./ask.ts";
@@ -12,7 +14,9 @@ import { type AskItem, answerText, askLine } from "./ask.ts";
 export function AskRow({ item, worktreeId }: { item: AskItem; worktreeId?: string | null }) {
   const dispatch = useDispatch();
   const sock = useSock();
+  const parked = useLocalField(worktreeId, "askParked");
   if (!item.outcome) {
+    if (parked !== item.id) return null;
     return (
       <button
         type="button"

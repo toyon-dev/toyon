@@ -8,13 +8,19 @@ import {
   canSubmit,
   choose,
   cursorFor,
+  dropBlankNote,
   emptyDraft,
+  isOwnRow,
   nextUnanswered,
   openAsk,
-  optionForDigit,
+  openNote,
+  ownChosen,
   recommended,
+  rowForDigit,
+  rowsOf,
   setNote,
   stripRecommended,
+  walk,
 } from "./ask.ts";
 
 const q = (id: string, labels: string[], extra: Partial<AskQuestion> = {}): AskQuestion => ({
@@ -96,11 +102,62 @@ describe("canSubmit", () => {
   });
 });
 
+describe("the typed answer", () => {
+  const noted = q("auth", ["Cookies", "JWT"], { note: { label: "Other" } });
+  const multi = q("auth", ["Cookies", "JWT"], { note: { label: "Other" }, multi: true });
+
+  test("the other row comes after the options, only when the agent takes typed text", () => {
+    expect(rowsOf(noted)).toBe(3);
+    expect(rowsOf(one[0])).toBe(2);
+    expect(rowsOf(undefined)).toBe(0);
+    expect(isOwnRow(noted, 2)).toBe(true);
+    expect(isOwnRow(noted, 1)).toBe(false);
+    expect(isOwnRow(one[0], 2)).toBe(false);
+  });
+
+  test("the other row drops a single pick; a note keeps it; a multi-select keeps its picks either way", () => {
+    const picked = choose(emptyDraft([noted]), 0, "jwt", false);
+    expect(openNote(picked, 0, true, false)).toEqual([{ selected: [], note: "" }]);
+    expect(openNote(picked, 0, false, false)).toEqual([{ selected: ["jwt"], note: "" }]);
+    expect(openNote(picked, 0, true, true)).toEqual([{ selected: ["jwt"], note: "" }]);
+    // reopening keeps what was typed
+    expect(openNote(setNote(picked, 0, "why"), 0, false, false)).toEqual([{ selected: ["jwt"], note: "why" }]);
+  });
+
+  test("the other row is the pick while the field is open with nothing else chosen", () => {
+    expect(ownChosen({ selected: [], note: "" }, false)).toBe(true);
+    expect(ownChosen({ selected: ["jwt"], note: "" }, false)).toBe(false);
+    expect(ownChosen({ selected: ["jwt"], note: "" }, true)).toBe(true);
+    expect(ownChosen({ selected: [] }, false)).toBe(false);
+    expect(ownChosen(undefined, false)).toBe(false);
+    expect(cursorFor(noted, { selected: [], note: "" })).toBe(2);
+    expect(cursorFor(multi, { selected: ["jwt"], note: "x" })).toBe(2);
+  });
+
+  test("a field left blank closes; one written in stays", () => {
+    const open = openNote(emptyDraft([noted]), 0, true, false);
+    expect(dropBlankNote(open, 0)).toEqual([{ selected: [] }]);
+    expect(dropBlankNote(setNote(open, 0, "  "), 0)).toEqual([{ selected: [] }]);
+    const written = setNote(open, 0, "neither");
+    expect(dropBlankNote(written, 0)).toBe(written);
+    expect(dropBlankNote(emptyDraft([noted]), 0)).toEqual([{ selected: [] }]);
+  });
+
+  test("taking the note away leaves no key behind", () => {
+    expect(setNote([{ selected: ["a"], note: "x" }], 0, undefined)).toEqual([{ selected: ["a"] }]);
+    expect(Object.keys(setNote([{ selected: ["a"], note: "x" }], 0, undefined)[0]!)).toEqual(["selected"]);
+  });
+});
+
 describe("the keyboard's view of the ask", () => {
-  test("a digit means the nth option of the question on screen", () => {
-    expect(optionForDigit(two[1], 2)?.label).toBe("SQLite");
-    expect(optionForDigit(two[1], 9)).toBeUndefined();
-    expect(optionForDigit(undefined, 1)).toBeUndefined();
+  test("a digit means the nth row of the question on screen, the other row counted", () => {
+    expect(rowForDigit(two[1], 2)).toBe(1);
+    expect(rowForDigit(two[1], 4)).toBe(-1);
+    expect(rowForDigit(two[1], 0)).toBe(-1);
+    expect(rowForDigit(undefined, 1)).toBe(-1);
+    const noted = q("auth", ["Cookies", "JWT"], { note: { label: "Other" } });
+    expect(rowForDigit(noted, 3)).toBe(2);
+    expect(rowForDigit(noted, 4)).toBe(-1);
   });
 
   test("arriving at a question lands on its pick, else its first option", () => {
@@ -108,6 +165,13 @@ describe("the keyboard's view of the ask", () => {
     expect(cursorFor(two[1], { selected: ["mysql"] })).toBe(2);
     // a value the question no longer offers is no pick
     expect(cursorFor(two[1], { selected: ["gone"] })).toBe(0);
+  });
+
+  test("left and right stop at the ends instead of coming round", () => {
+    expect(walk(0, -1, 3)).toBe(0);
+    expect(walk(0, 1, 3)).toBe(1);
+    expect(walk(2, 1, 3)).toBe(2);
+    expect(walk(0, 1, 1)).toBe(0);
   });
 
   test("the next unanswered question is found in order, wrapping round to one skipped over", () => {

@@ -1,8 +1,8 @@
 // The agent asked something and its turn is stopped until this is answered, so the question takes
 // the message box: the keyboard is already there, the box never scrolls away, and it is where a
 // reply is written anyway. Two bodies behind one root: a question (one of up to four on screen at
-// a time, the keys walking them, one send for the lot) and a permission (the agent's own options,
-// one press each).
+// a time, a tab strip of their headers across the top, one send for the lot) and a permission
+// (the agent's own options, one press each).
 //
 // The root is the focused element and reads its own keys, and every key has a button behind it:
 // the digit and the click run the same handler, so nothing here is keyboard-only. Escape parks the
@@ -21,6 +21,7 @@ import { Kbd } from "../../ui/Kbd.tsx";
 import { KeyHints } from "../../ui/KeyHints.tsx";
 import { step } from "../../ui/listNav.ts";
 import { rowState } from "../../ui/rowState.ts";
+import { Tabs } from "../../ui/Tabs.tsx";
 import {
   type AskItem,
   advance,
@@ -28,11 +29,17 @@ import {
   canSubmit,
   choose,
   cursorFor,
+  dropBlankNote,
   emptyDraft,
-  optionForDigit,
+  isOwnRow,
+  openNote,
+  ownChosen,
   recommended,
+  rowForDigit,
+  rowsOf,
   setNote,
   stripRecommended,
+  walk,
 } from "./ask.ts";
 import { renderMarkdown } from "./markdown.ts";
 
@@ -105,7 +112,9 @@ function QuestionBody({
   );
   const { draft, current } = held;
   const q = questions[current];
-  const [cursor, setCursor] = useState(() => cursorFor(q, draft[current]));
+  const answer = draft[current];
+  const multi = !!q?.multi;
+  const [cursor, setCursor] = useState(() => cursorFor(q, answer));
   // the cursor is where the keyboard is, and a touch window has none: drawn there, it sat on the
   // first row before anything was tapped and read as a choice already made, beside the badge
   const touch = useTouch();
@@ -123,11 +132,22 @@ function QuestionBody({
     setCursor(cursorFor(questions[at], draft[at]));
     write(draft, at);
   };
+  /** the typed answer's field, opened as the "other" row or as a note on the pick; the caret goes
+   * in once the field is painted, which is the commit after this one */
+  const type = (asOwn: boolean) => {
+    if (!q?.note) return;
+    write(openNote(draft, current, asOwn, multi), current);
+    requestAnimationFrame(() => own.current?.focus());
+  };
   const pick = (oi: number) => {
+    if (isOwnRow(q, oi)) {
+      setCursor(oi);
+      return type(true);
+    }
     const option = q?.options[oi];
     if (!q || !option) return;
-    const next = choose(draft, current, option.value, !!q.multi);
-    if (q.multi) {
+    const next = choose(draft, current, option.value, multi);
+    if (multi) {
       setCursor(oi);
       write(next, current);
       return;
@@ -140,15 +160,38 @@ function QuestionBody({
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.target instanceof HTMLTextAreaElement) {
-      // the own-answer field reads its own keys: it is prose, so enter breaks a line and the
-      // chord sends; escape and tab go back to the options
+      // the typed answer's field reads its own keys. Enter is the answer, the way it is on a row:
+      // on to what is still open, or the send when nothing is, since what is typed here is one
+      // line nearly every time; shift+enter is the line break for the other times, and the chord
+      // sends from anywhere. Escape and tab go back to the options, and a field left blank goes
+      // with them.
       if (e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) {
         e.preventDefault();
         e.stopPropagation();
+        const next = dropBlankNote(draft, current);
+        if (next !== draft) {
+          write(next, current);
+          setCursor(cursorFor(q, next[current]));
+        }
         root.current?.focus();
       } else if (isEnter(e) && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         submit();
+      } else if (isEnter(e) && !e.shiftKey) {
+        e.preventDefault();
+        const next = dropBlankNote(draft, current);
+        root.current?.focus();
+        if (!answered(next[current])) {
+          if (next !== draft) {
+            write(next, current);
+            setCursor(cursorFor(q, next[current]));
+          }
+          return;
+        }
+        const to = advance(questions, next, current);
+        setCursor(to.cursor);
+        write(next, to.current);
+        if (to.send && canSubmit(questions, next)) send(next);
       }
       return;
     }
@@ -162,33 +205,33 @@ function QuestionBody({
       e.preventDefault();
       return submit();
     }
-    if (isEnter(e) || (e.key === " " && q?.multi)) {
+    if (isEnter(e) || (e.key === " " && multi)) {
       // a button the mouse just focused would press itself on enter too
       e.preventDefault();
       return pick(cursor);
     }
     if (e.key === "ArrowUp" || e.key === "ArrowDown") {
       e.preventDefault();
-      return setCursor(step(cursor, e.key === "ArrowUp" ? -1 : 1, q?.options.length ?? 0));
+      return setCursor(step(cursor, e.key === "ArrowUp" ? -1 : 1, rowsOf(q)));
     }
     if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Tab") {
       e.preventDefault();
       const back = e.key === "ArrowLeft" || (e.key === "Tab" && e.shiftKey);
-      return go(step(current, back ? -1 : 1, questions.length));
+      return go(walk(current, back ? -1 : 1, questions.length));
     }
     if (e.key === "n" && q?.note) {
       e.preventDefault();
-      return own.current?.focus();
+      return type(false);
     }
     if (e.key === "s") {
       e.preventDefault();
       return send();
     }
     if (isDigit(e.key)) {
-      const option = optionForDigit(q, Number(e.key));
-      if (!option) return;
+      const row = rowForDigit(q, Number(e.key));
+      if (row === -1) return;
       e.preventDefault();
-      return pick(Number(e.key) - 1);
+      return pick(row);
     }
   };
 
@@ -196,21 +239,44 @@ function QuestionBody({
     ...(questions.length > 1 ? [["←→", "question"] as [string, string]] : []),
     ["↑↓", "move"],
     ["⏎", "choose"],
-    ...(q?.note ? [["n", "own answer"] as [string, string]] : []),
+    ...(q?.note ? [["n", "add a note"] as [string, string]] : []),
     ["⌘⏎", "send"],
     ["esc", "reply instead"],
   ];
   const under = q?.options[cursor];
+  const owning = ownChosen(answer, multi);
+  const noteOpen = answer?.note !== undefined;
 
   return (
     <div ref={root} className="ask-box" tabIndex={-1} onKeyDown={onKeyDown} onBlur={onBlur}>
+      {/* the questions as tabs across the top: the headers are the agent's short names for them,
+          and the one open joins the question under it. A dot on each says which are answered. */}
+      {questions.length > 1 && (
+        <div className="ask-tabs">
+          <Tabs
+            label="questions"
+            owner="ask"
+            items={questions.map((qq, i) => ({
+              id: qq.id,
+              label: qq.header || `question ${i + 1}`,
+              lead: <span className={cx("dot ask-step", answered(draft[i]) && "answered")} />,
+            }))}
+            current={q?.id ?? ""}
+            onPick={(id) => {
+              go(questions.findIndex((qq) => qq.id === id));
+              // the tab took focus on the press; the keys belong to the root
+              root.current?.focus();
+            }}
+          />
+        </div>
+      )}
       <div className="ask-head">
-        {q?.header && <div className="section-title ask-header">{q.header}</div>}
+        {questions.length === 1 && q?.header && <div className="section-title ask-header">{q.header}</div>}
         <div className="ask-text">{q?.text || message}</div>
       </div>
       <div className="ask-options">
         {q?.options.map((o, oi) => {
-          const on = draft[current]?.selected.includes(o.value);
+          const on = answer?.selected.includes(o.value);
           return (
             <button
               key={o.value}
@@ -234,34 +300,36 @@ function QuestionBody({
             </button>
           );
         })}
+        {/* the typed answer as one more row, numbered after the options so it lines up with them
+            and is reached the same way; it opens the field rather than moving on */}
+        {q?.note && (
+          <button
+            type="button"
+            className="picker-item ask-opt row-edge"
+            data-state={rowState({ cursor: !touch && cursor === q.options.length, checked: owning })}
+            onMouseMove={() => cursor !== q.options.length && setCursor(q.options.length)}
+            onClick={() => pick(q.options.length)}
+          >
+            <Kbd k={String(q.options.length + 1)} className="ask-num row-dim" />
+            <span className="ask-label">{q.note.label}</span>
+            <span className="ask-desc row-dim">your own answer</span>
+          </button>
+        )}
       </div>
       {under?.preview && <pre className="ask-preview">{under.preview}</pre>}
-      {q?.note && (
+      {q?.note && noteOpen && (
         <TextArea
           ref={own}
           bare
           font="ui"
           rows={2}
           className="ask-own"
-          placeholder={`${q.note.label}: your own answer, sent with your pick`}
-          value={draft[current]?.note ?? ""}
+          placeholder={owning ? `${q.note.label}: your own answer` : "a note for the agent, sent with your pick"}
+          value={answer?.note ?? ""}
           onChange={(e) => write(setNote(draft, current, e.target.value), current)}
         />
       )}
       <div className="ask-foot">
-        {questions.length > 1 && (
-          <span className="ask-steps">
-            {questions.map((qq, i) => (
-              <span
-                key={qq.id}
-                className={cx("dot ask-step", answered(draft[i]) && "answered", i === current && "here")}
-              />
-            ))}
-            <span className="ask-count">
-              {current + 1} of {questions.length}
-            </span>
-          </span>
-        )}
         <Button variant="outline" size="md" disabled={!canSubmit(questions, draft)} onClick={submit}>
           send
         </Button>

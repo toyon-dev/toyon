@@ -1352,7 +1352,7 @@ describe("landing", () => {
     w.worktrees.setLanding(wt.id, { at: 1, check: "pass", ready: true, subject: "old words", fingerprint: "f" });
     const { result, archiveIds } = await w.worktrees.land(wt.id, "add feature\n\nOne file.");
     expect(result.ok).toBe(true);
-    expect(result.message).toBe(`${wt.title} is on main`);
+    expect(result.message).toBe("committed and merged into main");
     expect(archiveIds).toEqual([]);
     expect(existsSync(join(w.repo, "feature.txt"))).toBe(true);
     // main had not moved, so the merge fast-forwards onto the commit itself

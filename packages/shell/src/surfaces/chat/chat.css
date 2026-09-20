@@ -632,8 +632,10 @@
    not marked this way and does not need to be, since its words appearing is the signal, and a
    band sweeping the whole block would travel back over the sentences already read to say what the
    arriving ones say better. */
-  /* the graft divider and the landed row are the blocked row's box with the accent's edge: all
-   three are the daemon writing into the transcript itself, and only the last two are good news */
+  /* the graft divider and the landed row are the blocked row's box with another edge: all three
+   are the daemon writing into the transcript itself, and only the last two are good news. The
+   landed row takes the aqua that says "landed" everywhere else, not the accent: on the red edge
+   the blocked row uses, a land read as a failure */
   .blocked-row,
   .graft-row,
   .landed-row {
@@ -666,9 +668,9 @@
     overflow-wrap: anywhere;
   }
   .landed-row {
-    border-left-color: var(--accent);
+    border-left-color: var(--aqua);
     & .landed-tag {
-      color: var(--accent);
+      color: var(--aqua);
     }
   }
   /* the composer's answer under the field: the knobs row's tier, and it wraps, since it is the

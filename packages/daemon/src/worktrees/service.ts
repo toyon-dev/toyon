@@ -1436,9 +1436,11 @@ export class WorktreeService {
     }
 
     let mergedHere = false;
+    let committedHere = false;
     const result = await withRepoLock(repo.path, async (): Promise<ShipResult> => {
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return committed;
+      committedHere = committed !== null;
       // main here first takes what origin has, so the push at the end is not refused; a main
       // with no upstream has nothing to take
       if (policy.land === "push") {
@@ -1473,8 +1475,11 @@ export class WorktreeService {
     }
     if (!result.ok) return { result };
     const archiveIds = siblingsOf(wt, this.d.state.worktrees).map((w) => w.id);
-    const where = policy.land === "push" ? `${repo.defaultBranch}, pushed` : repo.defaultBranch;
-    return { result: { ...result, message: `${wt.title} is on ${where}` }, archiveIds };
+    // the row says what the press did, not where the work sits: "is on main" read as the press
+    // having found it there and done nothing
+    const did = committedHere ? "committed and merged" : "merged";
+    const then = policy.land === "push" ? " and pushed" : "";
+    return { result: { ...result, message: `${did} into ${repo.defaultBranch}${then}` }, archiveIds };
   }
 
   /** A landing onto the record, oldest first, with its tip kept under a ref: the branch restarts from

@@ -157,6 +157,13 @@ export function mapUpdate(update: SessionUpdate, memos: ToolMemos, tag: string):
           ...spawnOf(update._meta),
         });
       }
+      // an update with input but neither content nor status is the Claude adapter's partial-input
+      // refine, sent each time a top-level field of the streaming input closes; the consolidated
+      // call that follows carries the same fields plus a content list (every tool, empty or not).
+      // Forwarding the partial repaints the row once per field, the command and then the sentence
+      // that replaces it, so it is held back and the row reads as still being written until the
+      // whole call is in.
+      if (update.rawInput !== undefined && update.content === undefined && update.status === undefined) return out;
       const refined: Extract<AgentEvent, { type: "tool-update" }> = { type: "tool-update", toolId: update.toolCallId };
       if (update.title && update.title !== memo.title) {
         memo.title = update.title;

@@ -236,20 +236,24 @@ describe("toolLabel", () => {
     expect(toolLabel(call)).toEqual({ label: "tool", name: "", icon: "dot", hint: "cc main.c", command: "" });
   });
 
-  test("a call whose input has not streamed yet is being written, not stalled", () => {
+  test("a call whose input has not streamed yet says what is being written, not the tool's name", () => {
     // the adapter's placeholder rows: Bash before its command closes, Write before its path
-    expect(composing({ name: "Terminal", title: "Terminal", toolKind: "execute", input: {} })).toBe(true);
-    expect(composing({ name: "Preparing file…", title: "Preparing file…", toolKind: "edit", input: {} })).toBe(true);
-    expect(composing({ name: "Read File", title: "Read File", toolKind: "read", input: { locations: [] } })).toBe(true);
-    // the first field closing ends it: the row has a path to print
-    expect(composing({ name: "Edit", title: "Edit x.ts", toolKind: "edit", input: { file_path: "/r/x.ts" } })).toBe(
-      false,
+    expect(composing({ name: "Terminal", title: "Terminal", toolKind: "execute", input: {} })).toBe(
+      "writing the command",
     );
+    expect(composing({ name: "Preparing file…", title: "Preparing file…", toolKind: "edit", input: {} })).toBe(
+      "writing the change",
+    );
+    expect(composing({ name: "Read File", title: "Read File", toolKind: "read", input: { locations: [] } })).toBe(
+      "writing the path",
+    );
+    // the input landing ends it: the row has a path to print
+    expect(composing({ name: "Edit", title: "Edit x.ts", toolKind: "edit", input: { file_path: "/r/x.ts" } })).toBe("");
     // a call with nothing to write is whole on arrival, however empty its input
     expect(
       composing({ name: "Compact conversation", title: "Compact conversation", toolKind: "think", input: {} }),
-    ).toBe(false);
-    expect(composing({ name: "tool", title: "tool", input: {} })).toBe(false);
+    ).toBe("");
+    expect(composing({ name: "tool", title: "tool", input: {} })).toBe("");
   });
 
   test("the glyph follows the command's verb where the kind only says `run`", () => {

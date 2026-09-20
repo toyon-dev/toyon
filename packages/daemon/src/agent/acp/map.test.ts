@@ -41,11 +41,14 @@ describe("mapUpdate", () => {
           rawInput: { file_path: "/a" },
         },
         { sessionUpdate: "tool_call_update", toolCallId: "c1", status: "in_progress" },
+        // the first field closing, with nothing else: a partial input, not yet the call
+        { sessionUpdate: "tool_call_update", toolCallId: "c1", title: "Write /a", rawInput: { file_path: "/a" } },
         {
           sessionUpdate: "tool_call_update",
           toolCallId: "c1",
           title: "Write /a",
           rawInput: { file_path: "/a", content: "y" },
+          content: [],
         },
         {
           sessionUpdate: "tool_call_update",

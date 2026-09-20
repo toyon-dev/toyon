@@ -448,12 +448,12 @@ export const ToolRow = memo(
     // and the message after it says what came of it.
     const auto = !!live || (!!run && running);
     const text = toolLabel(head, roots);
-    // the agent is still typing the call: the row says so in the kind's own word, in place of the
-    // adapter's name for the tool it has not run yet
-    const writing = running && composing(head);
+    // the agent is still typing the call: the row says what it is typing, in the slot the path or
+    // command will take, and the glyph alone names the kind, as on every row that has its detail
+    const writing = running ? composing(head) : "";
     const { label, icon } = text;
-    const name = writing ? label : text.name;
-    const hint = writing ? "writing" : text.hint;
+    const name = writing ? "" : text.name;
+    const hint = writing || text.hint;
     // nothing under the line: no subagent rows, no net change, and no call that ran a command or
     // printed a block (ToolPart draws nothing for those). Read the same way ToolPart does, so the
     // row is a leaf exactly when opening it would show nothing.

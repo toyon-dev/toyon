@@ -143,21 +143,34 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   };
 }
 
-/** kinds whose input the agent writes out token by token: a command, a path and a replacement, a
- * pattern. A think or a mode switch has nothing to write, so an empty input there is the whole
- * call, not a call still being written. */
-const WRITTEN: ReadonlySet<ToolKind> = new Set(["read", "edit", "delete", "move", "search", "execute", "fetch"]);
+/** what the row says while a kind's input streams in, in place of the path or command it has not
+ * got yet: the thing being typed, so the line reads as a status and not as a file called
+ * "writing". Only kinds whose input the agent writes out token by token are here; a think or a
+ * mode switch has nothing to write, so an empty input there is the whole call, not a call still
+ * being written. */
+const WRITING: Partial<Record<ToolKind, string>> = {
+  read: "writing the path",
+  edit: "writing the change",
+  delete: "writing the path",
+  move: "writing the paths",
+  search: "writing the pattern",
+  execute: "writing the command",
+  fetch: "writing the url",
+};
 
-/** The agent has opened the call but none of its input has streamed yet. The adapter names such a
- * row after the tool ("Terminal", "Preparing file…"), which reads as the tool stalled rather than
- * as the agent typing, so the row says what is happening instead. A field arrives as it closes,
- * and a command is one field, so a long script stays here for as long as it takes to write. */
-export function composing(call: ToolCall): boolean {
-  if (!call.toolKind || !WRITTEN.has(call.toolKind)) return false;
+/** The agent has opened the call but its input has not arrived: what the row says meanwhile, or
+ * "" once the input is in. The adapter names such a row after the tool ("Terminal", "Preparing
+ * file…"), which reads as the tool stalled rather than as the agent typing, so the row says what is
+ * happening instead. The input lands whole (the daemon holds back the field-by-field refines), so
+ * a long script stays here for as long as it takes to write. */
+export function composing(call: ToolCall): string {
+  const phrase = call.toolKind ? WRITING[call.toolKind] : undefined;
+  if (!phrase) return "";
   const input = call.input as Record<string, unknown> | null;
-  if (!input || typeof input !== "object") return true;
+  if (!input || typeof input !== "object") return phrase;
   // a call with no raw input starts as an empty list of locations (acp/map.ts)
-  return Object.keys(input).every((k) => k === "locations" && Array.isArray(input[k]) && input[k].length === 0);
+  const empty = Object.keys(input).every((k) => k === "locations" && Array.isArray(input[k]) && input[k].length === 0);
+  return empty ? phrase : "";
 }
 
 /** the blocks to show under the row: the adapter repeats the description as the first line of the

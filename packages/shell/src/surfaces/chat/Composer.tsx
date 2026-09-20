@@ -858,7 +858,10 @@ export function Composer({
                 }
                 if (nav.onKeyDown(e)) return;
               }
-              if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              // ⌥↑/↓ and ⌥⇧↑/↓ walk the rail (app/keys.ts hears them after this handler), and a
+              // modified arrow is never a recall: with the box otherwise empty the walk would load
+              // the last message into the chat being left, to be found again on the way back
+              if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.altKey && !e.ctrlKey && !e.metaKey) {
                 // a message still waiting in the queue is the nearest thing sent and the likeliest to
                 // want changing: up in an empty box takes the newest one back, as its edit button does
                 const queued = queue.at(-1);

@@ -5,6 +5,7 @@ import { readingView } from "../../state/store.ts";
 import { Float } from "../../ui/Float.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { rowState } from "../../ui/rowState.ts";
+import { isSelectAll, selectContents } from "../../ui/selectAll.ts";
 import { useMarkdown } from "../chat/markdown.ts";
 import { assetPath, dirOf } from "../chat/markdownPaths.ts";
 import { outlineDepths } from "./outline.ts";
@@ -112,13 +113,9 @@ export function MarkdownPreview({
   const onKeyDown = (e: React.KeyboardEvent) => {
     // the document is not editable, so the browser's select-all would take the whole shell with
     // it; here it means the document
-    if (e.key === "a" && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && body.current) {
+    if (isSelectAll(e) && body.current) {
       e.preventDefault();
-      const range = document.createRange();
-      range.selectNodeContents(body.current);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
+      selectContents(body.current);
     }
   };
   return (

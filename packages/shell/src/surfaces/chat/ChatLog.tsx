@@ -7,6 +7,7 @@ import { localOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { useSelectAllWithin } from "../../ui/selectAll.ts";
 import { isBusy, pickLabel } from "../util.ts";
 import { ChatItemView, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { groupTools, indexOfSeq, openRow } from "./group.ts";
@@ -59,6 +60,8 @@ export function ChatLog({
   const queue = useLocalField(id, "queue");
   const restoring = useLocalField(id, "restoring");
   const logRef = useRef<HTMLDivElement>(null);
+  // a hand resting on the transcript: select-all is the conversation, not the shell around it
+  useSelectAllWithin(logRef);
 
   // pin to bottom while streaming; offer a jump-down pill when scrolled up
   const atBottomRef = useRef(true);

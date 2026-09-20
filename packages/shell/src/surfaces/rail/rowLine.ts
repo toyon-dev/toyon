@@ -23,6 +23,9 @@ import { type DotState, dotClass, shipLabel, stateLabel } from "../util.ts";
 /** what every row and the panel's ground say while the socket is down */
 export const OFFLINE_LINE = "Lost the daemon; retrying";
 
+/** a found worktree's state: git knows it, and nothing of ours runs there */
+export const FOUND_LINE = "Not run by Toyon";
+
 /** what the lead's tap does, the verb the desk shows on hover */
 const LEAD_LINE = "new worktree";
 

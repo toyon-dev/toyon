@@ -8,6 +8,15 @@ import { copyText, type Deps } from "./deps.ts";
 /** what an archived worktree's row says beside its title, in the picker and on the rail: how it
  * ended, what came with it, what its agent cost, and how long ago. The spend alone, no context
  * figure: the context it filled is gone with the session, the money is not. */
+/** The archived row's state, the way a live row's dot is one in words: how it went, then what the
+ * archive holds of it. Merged outranks uncommitted, since the changes were kept beside a branch
+ * that already landed; the count column says how many. The time is the row's gutter, and the
+ * cost is a figure, so neither is in the phrase. */
+export function archivedState(a: ArchivedWorktree): string {
+  const what = a.landed ? "Merged" : a.uncommitted ? "Archived with uncommitted changes" : "Archived";
+  return a.restorable ? what : `${what}, commits not kept`;
+}
+
 export function archivedHint(a: ArchivedWorktree): string {
   const parts = [a.landed ? "merged" : a.uncommitted ? "uncommitted changes" : null];
   if (!a.restorable) parts.push("commits not kept");

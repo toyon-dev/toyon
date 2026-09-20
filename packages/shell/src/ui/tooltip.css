@@ -42,26 +42,23 @@
     margin-left: 12px;
     color: var(--text1);
   }
-  /* a line with a lead spans the box, text at the row's edge and lead at the far one: the text
-   stays against the row it describes, and the lead sits clear of it rather than reading as the
-   start of a phrase. Which edge is which follows the placement, so the markup orders the two. The
-   gap is the key's, the least the two ever get when the line is the widest one. */
-  .tooltip-line {
+  /* the line under the text, a tier under it like the detail: what the tip is about, under what
+   it says. In the text's own tier a branch was the longest and loudest line, and the state read
+   as the aside. It spans the box, name at the row's edge and aside at the far one, so the aside
+   sits clear of the name rather than reading as the end of it; which edge is which follows the
+   placement, so the markup orders the two. The gap is the key's, the least the two ever get when
+   the line is the widest one. */
+  .tooltip-name {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: 12px;
-  }
-  /* the state is a short phrase and reads as one: with a long lead beside it the box used to
-   break "Waiting for you" across two lines rather than grow, so the lead is the side that wraps */
-  .tooltip-text {
-    white-space: nowrap;
-  }
-  /* the line above the text, a tier under it like the lead and the detail: what the tip is about,
-   over what it says. In the text's own tier a title with its branch was the longest and loudest
-   line, and the state under it read as the aside. */
-  .tooltip-head {
     color: var(--text1);
+  }
+  /* the figures are one piece: with a long branch beside them the box used to break "39k of
+   1000k" across two lines rather than grow, so the name is the side that wraps */
+  .tooltip-aside {
+    white-space: nowrap;
   }
   /* two verbs of one gesture: the keys take a column of their own, started at its left edge, so
    the two ⌘ glyphs stand one over the other whatever the letters after them measure, and each
@@ -82,15 +79,7 @@
   .tooltip-also {
     color: var(--text1);
   }
-  .tooltip-lead {
-    color: var(--text1);
-    text-align: left;
-    /* at the far edge of a right-standing tip, a wrapped lead rags toward the text */
-    &:last-child {
-      text-align: right;
-    }
-  }
-  /* the line under the text, a tier under it: the key's tier, since both are the aside */
+  /* the line under the name, in the same tier: the key's tier, since both are the aside */
   .tooltip-detail {
     color: var(--text1);
   }

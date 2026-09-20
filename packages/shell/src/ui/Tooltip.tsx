@@ -36,15 +36,14 @@ export type TipOptions = {
    * itself is at the other end of the row. `spinner` draws the Spinner's dot instead, for a tip
    * whose row has swapped its dot for one while an op runs. */
   dot?: string;
-  /** the aside on the text's line, in the quiet tier and held against the box's far edge from the
-   * text, whichever edge that is for the tip's placement: what this has cost, apart from what it
-   * is doing. A worktree row puts its agent's spend and context here. */
-  lead?: string;
-  /** a line above the text in the quiet tier, naming the thing the text is about: a worktree row's
-   * title and branch over its state, so every row's tip has the same shape whether or not the row
-   * truncated the name. The text stays the answer, and the one line in its tier; the head says
-   * whose. */
-  head?: string;
+  /** a line under the text in the quiet tier, naming the thing the text is about: a worktree row's
+   * branch under its state, so every row's tip has the same shape whatever the row itself shows.
+   * The text is the answer and leads; the name says whose, and takes the aside on its line. */
+  name?: string;
+  /** the aside on the name's line, held against the box's far edge from the row, whichever edge
+   * that is for the tip's placement: what this has cost, apart from what it is and what it is
+   * doing. A worktree row puts its agent's spend and context here. Drawn only with a name. */
+  aside?: string;
   /** the other verb of the same gesture, on a key of its own, as a row under the text in the quiet
    * tier: the inspector's button says ⌘E adds the element to chat under its own ⌘I. The two keys
    * stand in one column so the chords line up and read as a pair. A lead has no place in the grid
@@ -54,18 +53,17 @@ export type TipOptions = {
 
 export type TipAlso = { text: string; key: string };
 
-export function tip(text: string, key?: string, { placement, detail, dot, lead, head, also }: TipOptions = {}) {
-  const line = lead ? `${lead} ${text}` : text;
-  const named = head ? `${head}: ${line}` : line;
-  const label = detail ? `${named}, ${detail}` : named;
+export function tip(text: string, key?: string, { placement, detail, dot, name, aside, also }: TipOptions = {}) {
+  const named = name ? `${text}: ${name}` : text;
+  const label = [named, name ? aside : undefined, detail].filter(Boolean).join(", ");
   return {
     "data-tip": text,
     "data-tip-key": key,
     "data-tip-placement": placement,
     "data-tip-detail": detail,
     "data-tip-dot": dot,
-    "data-tip-lead": lead,
-    "data-tip-head": head,
+    "data-tip-name": name,
+    "data-tip-aside": aside,
     "data-tip-also": also?.text,
     "data-tip-also-key": also?.key,
     // the name stays this control's own: the other verb is a hint for the eye, not what it does
@@ -96,8 +94,8 @@ export type Anchor = {
   key?: string;
   detail?: string;
   dot?: string;
-  lead?: string;
-  head?: string;
+  name?: string;
+  aside?: string;
   also?: TipAlso;
   placement: TipPlacement;
 };
@@ -175,8 +173,8 @@ export function Tooltips() {
         key: el.dataset.tipKey,
         detail: el.dataset.tipDetail,
         dot: el.dataset.tipDot,
-        lead: el.dataset.tipLead,
-        head: el.dataset.tipHead,
+        name: el.dataset.tipName,
+        aside: el.dataset.tipAside,
         also:
           el.dataset.tipAlso && el.dataset.tipAlsoKey
             ? { text: el.dataset.tipAlso, key: el.dataset.tipAlsoKey }
@@ -294,7 +292,6 @@ export function Tooltips() {
       track={false}
       raiseKey={anchor}
     >
-      {anchor.head && <div className="tooltip-head">{anchor.head}</div>}
       {anchor.also ? (
         <div className="tooltip-pair">
           <span>{words}</span>
@@ -302,24 +299,17 @@ export function Tooltips() {
           <span className="tooltip-also">{anchor.also.text}</span>
           <Kbd k={anchor.also.key} className="tooltip-key" />
         </div>
-      ) : anchor.lead ? (
-        // the text stays against the row it describes: a tip standing to the row's right leads
-        // with the text and holds the aside at the far edge
-        <div className="tooltip-line">
-          {anchor.placement === "right" ? (
-            <>
-              <span className="tooltip-text">{head}</span>
-              <span className="tooltip-lead">{anchor.lead}</span>
-            </>
-          ) : (
-            <>
-              <span className="tooltip-lead">{anchor.lead}</span>
-              <span className="tooltip-text">{head}</span>
-            </>
-          )}
-        </div>
       ) : (
         head
+      )}
+      {anchor.name && (
+        // the name stays against the row it describes: a tip standing to the row's left ends
+        // with the name and holds the aside at the far edge, which is its first
+        <div className="tooltip-name">
+          {anchor.placement === "left" && anchor.aside && <span className="tooltip-aside">{anchor.aside}</span>}
+          <span>{anchor.name}</span>
+          {anchor.placement !== "left" && anchor.aside && <span className="tooltip-aside">{anchor.aside}</span>}
+        </div>
       )}
       {anchor.detail && <div className="tooltip-detail">{anchor.detail}</div>}
     </Float>

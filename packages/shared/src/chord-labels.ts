@@ -43,8 +43,9 @@ export const CHORD_LABELS: Record<ChordId, ChordLabel> = {
   "term-tab": { label: "next terminal tab", section: "Panels" },
   routes: { label: "go to page", section: "Preview" },
   reload: { label: "reload the preview", section: "Preview" },
-  // worded because the map is total; never on the card, since a key that does nothing has no row
-  close: { label: "leave the window open", section: "Preview", hidden: true },
+  // never on the card: it is only live in an installed app, and there it is the key the hand
+  // already presses to close a pane
+  close: { label: "close the pane", section: "Panels", hidden: true },
   pick: { label: "element to chat", section: "Preview" },
   inspect: { label: "element to code", section: "Preview" },
   zen: { label: "full-bleed preview", section: "Preview" },

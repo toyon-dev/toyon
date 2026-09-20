@@ -57,6 +57,16 @@ export function useChords() {
     };
     const onKeyUp = (e: KeyboardEvent) => walkPeek.keyup(e.key);
     const onMods = (e: KeyboardEvent | PointerEvent) => walkPeek.mods(e);
+    /** the pane holding the keyboard, since a click into a pane says which is meant. With none
+     * holding it, terminal first (a full-screen program in it keeps Escape for itself). */
+    const closePane = () => {
+      const s = store.getState();
+      const held = document.activeElement?.closest<HTMLElement>("[data-pane]")?.dataset.pane as PaneKind | undefined;
+      const pane = held ?? (s.layout.term ? "terminal" : s.editor ? "editor" : s.layout.design ? "design" : null);
+      if (pane === "terminal") store.dispatch({ a: "toggle-terminal" });
+      else if (pane === "editor") store.dispatch({ a: "close-editor" });
+      else if (pane === "design") store.dispatch({ a: "toggle-design" });
+    };
     const onKey = (e: KeyboardEvent) => {
       onMods(e);
       const s = store.getState();
@@ -176,7 +186,11 @@ export function useChords() {
             dispatch({ a: "toggle-zen" });
             break;
           case "close":
-            // the preventDefault above is the whole chord: the window stays
+            // the preventDefault above keeps the window; what closes is the pane Escape would, the
+            // one the hand pressing ⌘W was closing in the terminal or editor it learned it from. In
+            // zen the panes are off screen, and under a palette the pane is not what is being
+            // looked at, so there the window staying is the whole chord.
+            if (!(s.zen && !isChatCentred(s)) && !s.overlay) closePane();
             break;
           // the panel chords answer where the keyboard is. From anywhere else they open the panel if
           // it is shut and hand it the keyboard (the changes list, the chat box, the terminal, the
@@ -272,18 +286,9 @@ export function useChords() {
         // keeps running and stays in the switcher: it is a key people hit reflexively, and losing
         // a five-minute download to one is not a trade worth making. Stopping it is the button.
         else if (s.activeImportId) dispatch({ a: "watch-import", id: null });
-        // bottom panes: the one holding the keyboard, since a click into a pane says which is meant.
-        // With none holding it, terminal first (a full-screen program in it keeps Escape for itself).
+        // bottom panes, the ladder's last rung, which ⌘W reaches directly.
         // Zen is not on this ladder: it only leaves on ⌘., so Escape stays the page's own key
-        else {
-          const held = document.activeElement?.closest<HTMLElement>("[data-pane]")?.dataset.pane as
-            | PaneKind
-            | undefined;
-          const pane = held ?? (s.layout.term ? "terminal" : s.editor ? "editor" : s.layout.design ? "design" : null);
-          if (pane === "terminal") dispatch({ a: "toggle-terminal" });
-          else if (pane === "editor") dispatch({ a: "close-editor" });
-          else if (pane === "design") dispatch({ a: "toggle-design" });
-        }
+        else closePane();
       }
     };
     window.addEventListener("keydown", onKey);

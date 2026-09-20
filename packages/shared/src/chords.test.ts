@@ -148,7 +148,7 @@ describe("matchChord", () => {
     expect(matchChord(ev("f"))).toBeNull(); // ⌘F stays the page's own find
     expect(matchChord(ev("q"))).toBeNull(); // ⌘Q never reaches a page; the app menu quits
   });
-  test("⌘W is a chord that does nothing, so an installed app's window stays; from the preview too", () => {
+  test("⌘W closes a pane and keeps an installed app's window; from the preview too", () => {
     expect(matchChord(ev("w"))).toEqual({ id: "close" });
     expect(matchChord(ev("w"), { guest: true })).toEqual({ id: "close" });
     expect(matchChord(ev("W", { shift: true }))).toBeNull();
@@ -213,7 +213,7 @@ describe("labels", () => {
     expect(chordLabel("wt-unseen-prev")).toBeTruthy();
     for (const section of CHORD_SECTIONS) {
       expect(chordsInSection(section)).not.toContain("wt-unseen-prev");
-      // a key that does nothing has no row to read
+      // a key only an installed app ever sees has no row to read
       expect(chordsInSection(section)).not.toContain("close");
     }
     expect(chordsInSection("Worktrees")).toContain("wt-unseen-next");

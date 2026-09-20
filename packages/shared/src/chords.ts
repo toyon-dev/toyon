@@ -173,18 +173,19 @@ export const CHORDS: readonly Chord[] = [
   // bigger reload should mean. With no preview up there is no frame to mean, so the shell lets ⌘R
   // through to the browser (app/keys.ts). An installed app always hands ⌘R over; a tab may keep it.
   { id: "reload", key: "r" },
-  // ⌘W does nothing. In an installed app it would close the window, and the hand that presses it
-  // there was closing a terminal tab or an editor tab the way iTerm and VS Code taught it; the
-  // daemon keeps every agent and process, so nothing is lost, but nothing is gained either and the
-  // shell is a dock click away. The row exists so the bridge forwards it from a focused preview
-  // instead of letting that frame's ⌘W close the window. A browser tab takes ⌘W before the page
-  // sees it, and the shell lets it through in one that does not (app/keys.ts). ⌘Q stays the app
-  // menu's: no key event reaches the page, and quitting is what it says. Never advertised.
+  // ⌘W closes the bottom pane Escape would (app/keys.ts), and keeps the window. In an installed app
+  // the browser would close the window on it, and the hand that presses it there was closing a
+  // terminal tab or an editor tab the way iTerm and VS Code taught it; the daemon keeps every agent
+  // and process, so nothing is lost, but the shell is a dock click away for nothing gained. The row
+  // also makes the bridge forward it from a focused preview instead of letting that frame's ⌘W
+  // close the window. A browser tab takes ⌘W before the page sees it, and the shell lets it
+  // through in one that does not, so the chord is only ever live in an installed app. ⌘Q stays the
+  // app menu's: no key event reaches the page, and quitting is what it says. Never advertised.
   { id: "close", key: "w" },
 ];
 
 /** the chords that still act in zen, where the preview owns the keyboard: the one that leaves
- * zen, and ⌘W, whose whole job is to keep the app's window where it is */
+ * zen, and ⌘W, which with the panes off screen only keeps the app's window where it is */
 export const ZEN_CHORDS: ReadonlySet<ChordId> = new Set<ChordId>(["zen", "close"]);
 
 export type ChordMatch = { id: Exclude<ChordId, "worktree"> } | { id: "worktree"; digit: number };

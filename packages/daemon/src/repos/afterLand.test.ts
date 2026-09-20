@@ -17,7 +17,7 @@ import { RepoRegistry } from "./registry.ts";
 
 type World = ReturnType<typeof world>;
 /** `own` makes the repo the checkout this daemon runs from, the one whose runs the self notice reports */
-function world(own = false) {
+function world(own = false, settled?: () => Promise<void>) {
   const t = tmpRepo();
   const state = new StateStore(t.paths);
   const hub = new Hub();
@@ -27,7 +27,7 @@ function world(own = false) {
   const worktrees = new WorktreeService({ state, hub, runtime, paths: t.paths, agents, namer: async () => null });
   // the registry keeps a repo at the root git reports, its real path, and the self watch matches on it exactly
   const self = new SelfWatch(own ? realpathSync(t.repo) : null);
-  const afterLand = new AfterLand({ state, hub, self });
+  const afterLand = new AfterLand({ state, hub, self, settled });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self });
   const failed: Array<{ worktreeId: string; message: string }> = [];
   hub.on("failed", (worktreeId, message) => failed.push({ worktreeId, message }));
@@ -71,6 +71,22 @@ describe("afterLand", () => {
     w.afterLand.run(repo.id);
     await settled(repo.id);
     expect(readFileSync(join(w.repo, "ran.txt"), "utf8")).toBe("ran\nran\n");
+  });
+
+  test("a run waits for the wake queue to drain before it starts", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    w = world(false, () => gate);
+    const { repo } = await registered(["echo ran >> ran.txt"]);
+    w.afterLand.run(repo.id);
+    expect(w.afterLand.busy(repo.id)).toBe(true);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(existsSync(join(w.repo, "ran.txt"))).toBe(false);
+    release();
+    await settled(repo.id);
+    expect(readFileSync(join(w.repo, "ran.txt"), "utf8")).toBe("ran\n");
   });
 
   test("a clean run says nothing", async () => {

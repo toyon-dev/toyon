@@ -19,6 +19,10 @@ export interface AfterLandDeps {
   hub: Hub;
   /** kept in step so the shell's notice can say "rebuilding" rather than stay on "rebuild" */
   self: SelfWatch;
+  /** resolves once no worktree is queued to wake. A restart brings back the previews tabs
+   * showed, one boot at a time; a build started beside them fights every one of those boots for
+   * the core, and the person pressed restart for the tabs, not the build. */
+  settled?: () => Promise<void>;
 }
 
 export class AfterLand {
@@ -54,6 +58,7 @@ export class AfterLand {
   }
 
   private async exec(repo: RepoInfo, commands: string[]): Promise<void> {
+    await this.d.settled?.();
     if (this.d.self.building(true)) this.d.hub.emit("selfChanged");
     let failure: string | undefined;
     let notice: string | undefined;

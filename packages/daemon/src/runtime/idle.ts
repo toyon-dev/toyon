@@ -68,6 +68,8 @@ export class IdlePolicy {
   private viewing = new Map<unknown, string>();
   private queue: Array<{ key: string; run: () => Promise<void> }> = [];
   private draining = false;
+  /** who is waiting for the queue to empty */
+  private drained: Array<() => void> = [];
   private readonly sleepMs: number | null;
   private readonly now: () => number;
 
@@ -343,7 +345,15 @@ export class IdlePolicy {
       for (let next = this.queue.shift(); next; next = this.queue.shift()) await next.run();
     } finally {
       this.draining = false;
+      for (const r of this.drained.splice(0)) r();
     }
+  }
+
+  /** resolves once nothing is queued to wake: a build that would otherwise run beside the
+   * previews a restart is bringing back waits for them, since those are what was asked for */
+  settled(): Promise<void> {
+    if (!this.draining) return Promise.resolve();
+    return new Promise((r) => this.drained.push(r));
   }
 }
 

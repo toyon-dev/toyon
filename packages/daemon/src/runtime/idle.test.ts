@@ -402,3 +402,33 @@ describe("IdlePolicy wakes", () => {
     ]);
   });
 });
+
+describe("IdlePolicy settled", () => {
+  test("resolves at once with nothing queued, and after the last queued wake once there is one", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    class Gated extends FakeRuntime {
+      override async awaitPreview(id: string, ms: number) {
+        await gate;
+        return super.awaitPreview(id, ms);
+      }
+    }
+    const runtime = new Gated();
+    const { policy, woken } = make({ runtime, worktrees: [row("a", { viewedAt: 1_000_000 - 10 })] });
+    runtime.up("a");
+    await policy.settled();
+    policy.boot();
+    let done = false;
+    const waiting = policy.settled().then(() => {
+      done = true;
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(woken).toEqual(["a"]);
+    expect(done).toBe(false);
+    release();
+    await waiting;
+    expect(done).toBe(true);
+  });
+});

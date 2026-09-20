@@ -189,7 +189,8 @@ const prs = new PrService({ state, hub, worktrees, view: viewPr });
 // toyon opened on its own checkout: what landing there leaves behind for the process serving it
 const self = new SelfWatch(SOURCE_ROOT);
 await self.start();
-const afterLand = new AfterLand({ state, hub, self });
+// the policy comes after; a land cannot arrive before boot, so the closure never runs early
+const afterLand = new AfterLand({ state, hub, self, settled: () => idle.settled() });
 const repos = new RepoRegistry({ state, hub, runtime, worktrees, afterLand, self, drafts });
 // which worktrees run: the ones being looked at, plus what a turn or a command holds; the rest
 // sleep on the clock, or sooner when the OS says memory is short

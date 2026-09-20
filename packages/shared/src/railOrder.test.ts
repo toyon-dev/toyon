@@ -31,14 +31,24 @@ const turned = (at: number): WorktreeInfo["lastTurn"] => ({
 });
 
 describe("railOrder", () => {
-  test("main leads, then the most recently sent to, then landed work", () => {
+  test("main leads, then the most recently sent to; landing does not move a row", () => {
     const rows = [
       row("old", { promptedAt: 1 }),
       row("done", { promptedAt: 9, landed: true }),
       row("main", { kind: "main" }),
       row("new", { promptedAt: 5 }),
     ];
-    expect(ids(rows)).toEqual(["main", "new", "old", "done"]);
+    expect(ids(rows)).toEqual(["main", "done", "new", "old"]);
+  });
+
+  test("the attempt that landed stays beside the ones it beat", () => {
+    const v = (id: string, index: number, w: Partial<WorktreeInfo> = {}) =>
+      row(id, { promptedAt: 1, variant: { group: "g", index, of: 2 }, ...w });
+    expect(ids([v("v2", 2), row("other", { promptedAt: 5 }), v("v1", 1, { landed: true, promptedAt: 9 })])).toEqual([
+      "v1",
+      "v2",
+      "other",
+    ]);
   });
 
   test("the spare leads the same way: it is the row new work is typed in", () => {

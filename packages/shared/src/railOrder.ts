@@ -5,19 +5,21 @@ import { isLead } from "./worktree-caps.ts";
  * before sends were stamped, else when it was made */
 export const sentAt = (w: WorktreeInfo) => w.promptedAt ?? w.lastTurn?.at ?? w.createdAt;
 
-/** where a row sits in the rail's order: the lead (the spare, or main without one), open work,
- * landed work */
-const tierOf = (w: WorktreeInfo) => (isLead(w) ? 0 : w.landed ? 2 : 1);
+/** where a row sits in the rail's order: the lead (the spare, or main without one), then everything
+ * else */
+const tierOf = (w: WorktreeInfo) => (isLead(w) ? 0 : 1);
 
-/** what a row moves with on the rail: itself, or its variant group on its tier, since a landed
- * attempt goes with landed work and the ones it beat stay where they were */
-export const railUnitOf = (w: WorktreeInfo): string => (w.variant ? `${tierOf(w)}:${w.variant.group}` : `row:${w.id}`);
+/** what a row moves with on the rail: itself, or its variant group */
+export const railUnitOf = (w: WorktreeInfo): string => (w.variant ? `group:${w.variant.group}` : `row:${w.id}`);
 
-/** The rail's order: the lead, then the rows most recently sent to, then landed ones. Only a send moves
- * a row, never an agent finishing or asking, so a row does not slide out from under the pointer
- * while agents run; what needs you is the dot's and the jump chord's to say. A variant group moves
- * as one, at its newest sibling's time and in index order, so a follow-up to one attempt does not
- * pull it away from the attempts it is being compared with. Rows that tie keep the daemon's order. */
+/** The rail's order: the lead, then the rows most recently sent to. Only a send moves a row, never
+ * an agent finishing or asking, and never a landing: a row does not slide out from under the
+ * pointer while agents run, and a landed row stays where you were working in it, where its dot and
+ * kebab are the archive affordance, and drifts down as other rows are sent to. What needs you is
+ * the dot's and the jump chord's to say. A variant group moves as one, at its newest sibling's time
+ * and in index order, so a follow-up to one attempt does not pull it away from the attempts it is
+ * being compared with, and the attempt that landed stays beside the ones it beat. Rows that tie
+ * keep the daemon's order. */
 export function railOrder<T extends { worktree: WorktreeInfo }>(rows: readonly T[]): T[] {
   const units: { tier: number; at: number; rows: T[] }[] = [];
   const groups = new Map<string, (typeof units)[number]>();

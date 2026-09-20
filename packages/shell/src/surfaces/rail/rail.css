@@ -359,7 +359,10 @@
    a starting style nested in the open rule, where it has the rule's own specificity (a top-level
    one loses the cascade to it and never applies). That starting style names opacity alone: with
    display: none in it, Chromium starts no transition at all, in either direction, so the rows are
-   laid out, invisible, for the length of the wait. */
+   laid out, invisible, for the length of the wait.
+   The open rule flips display and opacity and nothing else. The layout sits here, at rest, because
+   the discrete transition keeps the rows in the flow after the pointer leaves, and anything the
+   open rule alone declared would drop out on that first frame while the rows were still visible. */
   .rail-disc-head,
   .rail-disc-item {
     display: none;
@@ -368,46 +371,40 @@
       display var(--rail-slide) allow-discrete var(--rail-wait),
       opacity var(--rail-slide) ease var(--rail-wait);
   }
-  .rail {
-    :where([data-hover]) &:hover .rail-disc-head,
-    &.hold .rail-disc-head,
-    &.pinned .rail-disc-head,
-    &.rail-screen .rail-disc-head {
-      height: var(--row-height-sm);
-      width: 100%;
-      display: flex;
-      opacity: 1;
-      align-items: center;
-      position: relative;
-      gap: 8px;
-      padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
-      /* a section's worth of air above it, not a row's: at 6px it read as one more worktree row */
-      margin-top: 14px;
-      font: var(--type-ui-sm);
-      color: var(--text2);
-      text-align: left;
-      @starting-style {
-        opacity: 0;
-      }
-    }
-  }
   .rail-disc-head {
+    height: var(--row-height-sm);
+    width: 100%;
+    align-items: center;
+    position: relative;
+    gap: 8px;
+    padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
+    /* a section's worth of air above it, not a row's: at 6px it read as one more worktree row */
+    margin-top: 14px;
+    font: var(--type-ui-sm);
+    color: var(--text2);
+    text-align: left;
     :where([data-hover]) &:hover {
       color: var(--text1);
     }
   }
+  /* the same padding as .rail-item: these rows sit in the same column and their dots have to land
+   on the same centre line. A rung down in height as well as colour, because these are not main's
+   peers and nine of them should not outweigh one of yours. */
+  .rail-disc-item {
+    padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
+    min-height: var(--row-height-sm);
+  }
   .rail {
+    :where([data-hover]) &:hover .rail-disc-head,
+    &.hold .rail-disc-head,
+    &.pinned .rail-disc-head,
+    &.rail-screen .rail-disc-head,
     :where([data-hover]) &:hover .rail-disc-item,
     &.hold .rail-disc-item,
     &.pinned .rail-disc-item,
     &.rail-screen .rail-disc-item {
       display: flex;
       opacity: 1;
-      /* the same padding as .rail-item: these rows sit in the same column and
-     their dots have to land on the same centre line. A rung down in height as well as colour,
-     because these are not main's peers and nine of them should not outweigh one of yours. */
-      padding: 0 var(--rail-pad-r) 0 var(--rail-pad-l);
-      min-height: var(--row-height-sm);
       @starting-style {
         opacity: 0;
       }
